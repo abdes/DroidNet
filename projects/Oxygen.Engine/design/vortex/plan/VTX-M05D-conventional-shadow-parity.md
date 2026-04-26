@@ -78,15 +78,21 @@ complete.
 | `DirectionalLightComponent.cpp::GetSplitDistance` split distribution | Oxygen already supports manual distances and generated distribution from canonicalized scene CSM settings. | Keep. Oxygen does not mirror UE far-shadow or distance-field cascade extensions in M05D. |
 | `GetShadowSplitBoundsDepthRange` no-AA projection | Oxygen previously extracted cascade corners from the current inverse view-projection, which can include temporal jitter. | Remediate by extracting corners from `StableProjectionMatrix() * ViewMatrix()`. |
 | UE sphere-fitted cascade bounds | Oxygen previously used tight light-space AABB bounds around split corners. | Remediate with a sphere-derived square projection for stable extents. |
+| UE directional light basis / `FaceMatrix` convention | UE builds light-space matrices from the directional light proxy and remaps axes through `FaceMatrix`. Oxygen stores the directional-light vector as direction from shaded point toward source. | Accepted Oxygen convention: `CascadeShadowSetup` builds a right-handed light basis from direction-to-source, places the light eye along that direction, looks back toward the cascade center, and uses the same direction for receiver and slope-bias math. No extra axis-remap layer is required. |
 | `SetupWholeSceneProjection` texel snapping with `MaxDownsampleFactor = 4` | Oxygen had no cascade-center snapping. | Remediate with light-space XY snapping at four shadow texels. |
 | `SetupWholeSceneProjection` directional `DepthRangeClamp = 5000` | Oxygen used tight receiver-corner depth range. This can clip valid casters and explained the malformed/truncated right-frustum shadows. | Remediate with a 5000-unit directional depth extent minimum. |
+| Directional depth encoding and receiver compare | UE normalizes directional shadow depth for projection and compares receiver depth against the stored shadow depth in projection/filtering shaders. Oxygen uses a reversed-Z depth surface, clears to 0, writes with `GreaterOrEqual`, and treats larger stored depth as closer to the light. | Accepted Oxygen convention: the sign is internally consistent for the dedicated `Texture2DArray` path. Receiver-side subtraction of CSM depth bias was removed because UE's opaque projection path does not subtract the CSM depth bias a second time. |
 | `UpdateShaderDepthBias` per-shadow depth-bias publication | Oxygen previously treated the authored scene `shadow.bias` as a raw clip-space bias. UE computes CSM bias as `r.Shadow.CSMDepthBias / depth_span`, scales it by cascade radius over resolution when `ShadowCascadeBiasDistribution == 1`, then multiplies by the user shadow-bias multiplier. | Remediate by computing the UE-style per-cascade clip-depth bias in setup, binding it to the shadow-depth pass, and not subtracting it again during opaque receiver comparison. |
+| `ShadowDepthVertexShader.usf` constant/slope bias application | Oxygen's depth shader previously had only a constant depth-bias field. UE applies constant plus slope bias in the shadow-depth pass. | Remediate by passing constant/slope/max-slope terms to the depth shader. Oxygen keeps UE's default slope-bias multiplier internally for nonzero `shadow.bias`; with the current `0.0` authored bias both terms evaluate to zero. |
 | Directional shadow resolution quality | Oxygen's conventional allocator ignored the Environment panel's directional shadow resolution hint and always allocated 2048. A first wiring pass also exposed that the shadow-depth pass kept stale DSVs after surface reallocation. | Remediate by carrying the selected `ShadowResolutionHint` through frame-light selection, resolving it through the renderer shadow-quality budget at Low 1024, Medium 2048, High 3072, or Ultra 4096, and invalidating cached cascade DSVs when the surface changes. |
 | `ShadowProjectionPixelShader.usf` / `ShadowFilteringCommon.ush` filtering | Oxygen has a compact reversed-Z 3x3 PCF path rather than UE's full projection shader permutations. | Accepted for M05D if proof shows stable conventional projected shadows; no PCSS/subsurface/transmission parity claimed. |
-| `GetShadowSplitBounds` transition/fade extension | Oxygen keeps authored split distances as the published cascade boundaries and blends in shader over the configured terminal band, instead of extending non-last cascade bounds. | Accepted ABI simplification unless physics-domain proof exposes visible cascade seams. |
-| UE caster/receiver frusta and per-cascade culling | Oxygen submits all prepared shadow casters to each cascade. | Accepted conservative correctness divergence for M05D; performance culling is not required to fix projected-shadow correctness. |
+| `GetShadowSplitBounds` transition/fade extension | Oxygen previously kept authored split distances as the published cascade boundaries while blending against the next cascade inside the pre-split band, which could sample a next cascade outside the region it was fitted to cover. | Remediate by extending every non-last cascade projection and published coverage far bound by the transition width, while keeping the next cascade's logical near split unchanged. This mirrors UE's overlap/fade-plane coverage shape within Oxygen's single-pass receiver shader. |
+| `ShadowRendering.cpp::SetDepthBoundsTest` and split-depth projection scissoring | UE uses split near/far depth bounds while projecting each cascade. Oxygen performs cascade selection in shader using view depth and does not use depth-bounds/scissor rejection. | Accepted correctness-preserving divergence for M05D. It may be less efficient, but it does not explain missing or unstable projected shadows. |
+| UE caster/receiver frusta and per-cascade culling | UE builds accurate culling volumes and subject primitive lists per projected shadow. Oxygen filters shadow casters by `PassMaskBit::kShadowCaster`, then submits the prepared shadow-caster draw list to every cascade. | Accepted conservative correctness divergence for M05D; performance culling is not required to fix projected-shadow correctness. |
+| Shadow-depth raster state and masked casters | UE shadow-depth mesh passes support masked materials through the shadow-depth pixel shader and material clipping. Oxygen has `VortexShadowDepthMaskedPS` selected per draw via `PassMaskBit::kMasked`, and the opaque path uses the same depth target contract. | Keep. This covers the correctness requirement for masked alpha casters in the conventional directional path. |
 | UE atlas/tile storage | Oxygen uses a dedicated directional `Texture2DArray`. | Accepted Oxygen resource convention; public ABI stays `ShadowFrameBindings`. |
 | UE CSM caching/scrolling | Oxygen has no CSM cache. | Accepted M05D divergence; stability is provided by no-AA frusta, stable bounds, and snapping. |
+| Debug and proof observability | UE has extensive shadow debug/profiling infrastructure around shadow setup, rendering, and projection. Oxygen has the Diagnostics panel, the `directional-shadow-mask` debug mode, shadow frame publication, and RenderDoc/CDB capture scripts. | Accepted for the audit gate. Runtime proof still has to use small-scene captures after the user allows validation; no completion claim depends on city deep captures. |
 
 ## 5. Implementation Slices
 
@@ -106,7 +112,7 @@ Validation:
 
 ### Slice B - Directional CSM UE5.7 Parity Audit
 
-**Status:** `in_progress`
+**Status:** `completed_source_audit`
 
 Tasks:
 
@@ -119,7 +125,7 @@ Tasks:
 Validation:
 
 - Source-to-target mapping recorded in section 4.1.
-- No implementation status upgrade without this mapping.
+- No runtime/build validation is implied by this source audit.
 
 ### Slice C - City-Scale Instability Reproduction
 

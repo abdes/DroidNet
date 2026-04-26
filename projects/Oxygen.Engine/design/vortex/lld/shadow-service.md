@@ -126,15 +126,21 @@ behaviors:
 | Split generation | `FDirectionalLightSceneProxy::GetSplitDistance` | Keep Oxygen manual/generated settings, already canonicalized from scene authoring. |
 | No-AA frustum source | `GetShadowSplitBoundsDepthRange` uses `GetProjectionNoAAMatrix` | Use `ResolvedView::StableProjectionMatrix()` for cascade corner extraction so TAA jitter cannot move cascades. |
 | Stable bounds | UE fits a cascade sphere around the split frustum | Use a square sphere-derived light projection instead of a tight per-frame light-space AABB. |
+| Light-space convention | UE uses the directional light proxy direction and a renderer `FaceMatrix` axis remap | Oxygen's contract is direction from shaded point toward source. Build a right-handed light basis from that vector, place the light eye along it, and look back at the cascade center. |
 | Texel snapping | `SetupWholeSceneProjection` snaps XY with `MaxDownsampleFactor = 4` | Snap cascade center in light-space XY at `world_texel_size * 4`. |
 | Directional depth range | UE clamps directional CSM subject range to at least `[-5000,+5000]` | Use a 5000-unit directional depth extent minimum to avoid clipping casters between the light and receivers. |
+| Depth encoding/compare | UE writes normalized directional shadow depth and projects receiver depth through shadow filtering | Oxygen keeps its reversed-Z D3D depth convention: clear 0, depth test `GreaterOrEqual`, and receiver visible when receiver depth is greater than or equal to stored shadow depth. |
 | Bias routing | `UpdateShaderDepthBias` derives CSM clip-space depth bias from `r.Shadow.CSMDepthBias / (MaxSubjectZ - MinSubjectZ)`, scales it by `ShadowBounds.W / ResolutionX` when `ShadowCascadeBiasDistribution == 1`, then multiplies by the light user shadow bias | Mirror that contract for conventional directional shadows when `shadow.bias` is nonzero: `sampling_metadata1.z` stores the computed per-cascade clip-depth bias, not a raw scene-authored constant. Oxygen's default `shadow.bias` remains `0.0` because current meter-scale validation needs contact shadows at caster feet without peter-panning. |
+| Slope bias routing | `ShadowDepthVertexShader.usf` multiplies the computed depth bias by `r.Shadow.CSMSlopeScaleDepthBias` and the light `ShadowSlopeBias` default `0.5` | Oxygen has no authored slope-bias knob yet. The depth pass keeps UE's internal default multiplier for the optional nonzero depth-bias path, but `shadow.bias == 0.0` still produces zero constant and zero slope depth bias. |
 | Receiver filtering | `ShadowProjectionPixelShader.usf` + `ShadowFilteringCommon.ush` apply PCF and receiver-bias scaling | Keep Oxygen's compact 3x3 reversed-Z PCF for now. The computed CSM depth bias is applied in the shadow-depth pass, not subtracted again during opaque receiver comparison. Receiver-side normal/world-texel offset remains Oxygen's compact substitute for UE's broader receiver-bias/PCF machinery until the filter parity pass. |
-| Cascade transitions | UE extends non-last cascade far bounds by the transition region and uses fade-plane data for the last cascade | Oxygen keeps non-overlapped authored split distances and blends the current/next cascade over the configured terminal band. This is an accepted ABI simplification unless proof shows visible seams. |
-| Caster culling | UE builds accurate caster/receiver frusta per cascade | Oxygen currently submits all prepared shadow casters to every cascade. This is conservative for correctness and accepted for M05D unless profiling makes it a blocker. |
+| Cascade transitions | UE extends non-last cascade far bounds by the transition region and uses fade-plane data for split overlap/fade-out | Oxygen builds non-last cascade projections to the extended far bound and publishes that extended bound as the cascade coverage limit. The next cascade still starts at the logical split, so the receiver's current/next blend samples two cascades that both cover the overlap region. |
+| Depth bounds/scissor | UE can use cascade split depth bounds during projection | Oxygen uses shader cascade selection and does not rely on depth-bounds/scissor rejection for correctness. This is less aggressive but acceptable for M05D. |
+| Caster culling | UE builds accurate caster/receiver frusta per cascade | Oxygen currently submits all prepared `PassMaskBit::kShadowCaster` draws to every cascade. This is conservative for correctness and accepted for M05D unless profiling makes it a blocker. |
+| Masked casters | UE shadow-depth passes run material clipping for masked materials | Oxygen selects `VortexShadowDepthMaskedPS` for masked shadow-caster draws. |
 | Storage layout | UE packs conventional shadows in atlas/tile resources | Oxygen keeps the dedicated directional `Texture2DArray` contract; this is an intentional engine convention, not a parity defect. |
 | Resolution selection | UE resolves runtime shadow-map budgets from light settings and renderer scalability | Oxygen resolves the directional `ShadowResolutionHint` selected in the Environment panel into concrete conventional shadow-map dimensions, clamped by the renderer shadow-quality tier: Low 1024, Medium 2048, High 3072, Ultra 4096. The allocator must reallocate when this hint changes, and the shadow-depth pass must invalidate cached DSVs when the surface changes. |
 | Caching/scrolling | UE supports cached/scrolling CSM work | Oxygen does not implement CSM caching in M05D; stability comes from no-AA frusta, sphere bounds, and texel snapping. |
+| Debug/proof surface | UE has built-in shadow debugging and GPU profiling hooks | Oxygen uses Diagnostics, `directional-shadow-mask`, frame publication, RenderDoc proof scripts, and CDB/debug-layer capture. Full runtime proof remains a separate gate. |
 
 ## 2. Interface Contracts
 
@@ -253,7 +259,7 @@ defines the metadata as:
 | `sampling_metadata0.x` | array layer / cascade index |
 | `sampling_metadata0.yz` | inverse shadow resolution |
 | `sampling_metadata0.w` | cascade world texel size |
-| `sampling_metadata1.x` | cascade-transition width in view-depth units |
+| `sampling_metadata1.x` | cascade-transition width in view-depth units; non-last `split_far` already includes this extension |
 | `sampling_metadata1.y` | last-cascade fade-begin depth |
 | `sampling_metadata1.z` | UE-style computed clip-depth bias for the shadow-depth pass |
 | `sampling_metadata1.w` | authored normal receiver bias |
@@ -403,7 +409,7 @@ ShadowVSOutput ShadowDepthVS(float3 pos : POSITION,
   float4 world_pos = mul(world, float4(pos, 1.0));
   ShadowVSOutput output;
   output.position = mul(LightViewProjection, world_pos);
-  output.position.z -= DepthBias;
+  output.position.z -= ConstantDepthBias + SlopeDepthBias * ClampedSlope;
   return output;
 }
 ```
