@@ -74,91 +74,88 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M04F — Single-View Composition And Presentation Closeout
+### NEXT: VTX-M05A — Diagnostics Product Service
 
-**Status:** `in_progress`
+**Status:** `planned`
 
-**Purpose:** Close the single-view runtime composition and presentation path
-after the canonical Async runtime migration proof. This gate proves the
-primary view handoff, composition, post-process, and present path as an
-intentional Vortex runtime contract instead of example-specific plumbing.
+**Purpose:** Build the concrete diagnostics product surface on top of the
+validated runtime publication, composition, and presentation contracts. This
+gate turns the existing proof tooling and debug vocabulary into product-owned
+diagnostics service files, overlays/panels, timeline/debug bindings, and stable
+debug-mode naming.
 
-**Why this is next:** `Examples/Async` now has a Vortex-backed runtime proof
-with Stage 3/8/12/15/22 ordering, environment products, final present output,
-and overlay composition evidence. The remaining migration-capable baseline
-risk is the single-view composition/presentation contract that later
-diagnostics, translucency, multi-view, and offscreen proof gates depend on.
+**Why this is next:** `Examples/Async` now has Vortex-backed runtime proof
+through Stage 3/8/12/15/22, environment products, single-view Stage 22
+handoff, composition copy, overlay blend, final present output, and focused
+composition queue tests. The next baseline risk is making diagnostics a
+first-class product feature instead of relying on ad hoc proof scripts.
 
 **Validated prerequisite work packages:** `VTX-M04D.1 — Environment Publication And Sky/Fog
 Contract Truth`, `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`,
 `VTX-M04D.3 — UE5.7 Local Fog Volume Parity`, `VTX-M04D.4 — UE5.7
 Volumetric Fog Parity`, `VTX-M04D.5 — Environment Runtime Proof And Async
 Preparation`, `VTX-M04D.6 — UE5.7 Aerial Perspective Parity`, and
-`VTX-M04E — Async Migration Parity Gate`.
+`VTX-M04E — Async Migration Parity Gate`, and `VTX-M04F — Single-View
+Composition And Presentation Closeout`.
 These stabilize truthful environment publication, validated exponential height
 fog, analytical local-fog volumes, the validated integrated volumetric-fog
 product path, validated main-view camera aerial perspective, and a consolidated
 VortexBasic runtime proof before Async migration, then validate the canonical
-Async runtime path on Vortex.
+Async runtime path on Vortex and the single-view composition/presentation
+contract.
 
-**Active work packages:** `VTX-M04F — Single-View Composition And
-Presentation Closeout`.
+**Active work packages:** `VTX-M05A — Diagnostics Product Service`.
 
-**Detailed plan:** follow the single-view composition and presentation scope in
-this section; create a dedicated M04F plan before widening implementation
-scope.
+**Detailed plan:** follow the diagnostics product-service scope in section 7.1;
+create a dedicated M05A plan before widening implementation scope.
 
 **Immediate priority correction:** Do not spend the next iteration on
 height-fog cubemap inscattering. Cubemap fog and real SkyLight cubemap
 capture/filtering are explicitly deferred to later resource work. The next
-implementation focus is `VTX-M04F` single-view composition and presentation
-closeout. AP LUT
+implementation focus is `VTX-M05A` diagnostics product service. AP LUT
 resolution/depth mapping, DemoShell override behavior, local-fog request
 plumbing, volumetric-fog runtime behavior, height-fog runtime/capture proof,
 main-view aerial-perspective runtime/capture proof, city-scale fog/AP capture
-proof, the consolidated VortexBasic environment runtime proof, and the
-canonical Async runtime proof now have evidence.
+proof, the consolidated VortexBasic environment runtime proof, the canonical
+Async runtime proof, and single-view composition/presentation proof now have
+evidence.
 
 **In scope:**
 
-- Identify the current single-view runtime composition contract from
-  `Renderer`, composition submission, post-process handoff, and presentation
-  paths.
-- Remove or narrow example-specific compatibility seams that are no longer
-  justified after the Async migration proof.
-- Prove the final single-view path with RenderDoc-backed product evidence:
-  scene color handoff, Stage 22 tonemap input/output, composition copy/blend,
-  final present output, and overlay behavior.
+- Define the diagnostics product-service ownership boundary and file layout.
+- Map proof-script/debug-mode vocabulary into stable product-facing
+  diagnostics names without cross-domain option payload leakage.
+- Add the initial diagnostics overlays/panels/timeline/debug bindings needed
+  by the production-complete desktop deferred baseline.
 - Update this plan and `IMPLEMENTATION_STATUS.md` with evidence.
 
 **Out of scope:**
 
 - Multi-view routing and per-view heterogeneous presentation.
 - Offscreen preview/capture proof.
-- Diagnostics product service, translucency, and full occlusion consumer
-  policy.
+- Translucency and full occlusion consumer policy.
 - Real SkyLight cubemap capture/filtering and reflection/360 AP resource
   behavior.
 
 **Dependencies:**
 
-- Validated VTX-M04E Async runtime proof.
-- Existing `Renderer` runtime composition queue and post-process service.
-- Current single-view framebuffer and surface ownership model.
+- Validated VTX-M04F single-view composition/presentation proof.
+- Existing proof tooling and debug-mode vocabulary.
+- Current DemoShell/Vortex diagnostics and UI substrate.
 
 **Exit gate:**
 
-- Implementation exists for any needed composition/presentation cleanup.
-- Runtime/capture proof records the single-view handoff through Stage 22,
-  composition, and final present.
+- Concrete DiagnosticsService product surface exists.
+- Debug modes, overlays/panels, and timeline/debug bindings have focused tests
+  and runtime proof where applicable.
 - Required docs/status are updated with changed files, validation commands,
   report paths, and accepted residual gaps.
 
 **Recommended verification:**
 
 ```powershell
-cmake --build out\build-ninja --config Debug --target oxygen-examples-async --parallel 4
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-AsyncRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m04f-single-view-proof\current -Frame 90 -RunFrames 94 -Fps 30 -BuildJobs 4
+cmake --build out\build-ninja --config Debug --target oxygen-vortex --parallel 4
+ctest --preset test-debug -R "Diagnostics|Vortex" --output-on-failure
 ```
 
 ## 5. Milestone Roadmap
@@ -180,7 +177,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M04D.5 | Environment runtime proof and Async preparation | `validated` | VTX-M04D.2, VTX-M04D.3, VTX-M04D.4, VTX-M04D.6 | `Run-VortexBasicRuntimeValidation.ps1` now builds, runs a CDB/D3D12 audit, captures RenderDoc frame 5, and asserts one runtime path exercising atmosphere, main-view AP, height fog, local fog, volumetric fog, and authored SkyLight unavailable/volumetric state. Real SkyLight cubemap capture/filtering remains a separate IBL/indirect-lighting resource implementation before usable IBL output can be claimed. |
 | VTX-M04D.6 | UE5.7 aerial perspective parity | `validated` | VTX-M04D.1, VTX-M04D.2 | Main-view camera aerial-perspective volume generation/sampling, main-pass application, height-fog coupling boundary, focused enabled/disabled proof, and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP resource behavior is explicitly deferred to the future reflection-capture resource path. |
 | VTX-M04E | Async migration parity gate | `validated` | VTX-M03, VTX-M04D.5 | `Examples/Async` runs through Vortex with no long-lived compatibility clutter and has RenderDoc-backed structural/product/presentation proof. |
-| VTX-M04F | Single-view composition and presentation closeout | `planned` | VTX-M04E | Single-view composition, resolve, handoff, post-process, and presentation proof. |
+| VTX-M04F | Single-view composition and presentation closeout | `validated` | VTX-M04E | Single-view composition, resolve, handoff, post-process, and presentation proof with RenderDoc-backed Stage 22 copy, overlay blend, and final present evidence. |
 | VTX-M05A | Diagnostics product service | `planned` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
 | VTX-M05B | Occlusion consumer closeout | `planned` | VTX-M02 | Full occlusion/query/visibility policy over the landed generic Screen HZB. |
 | VTX-M05C | Translucency stage | `planned` | VTX-M03, VTX-M04D.5 | Stage 18 forward-lit translucency consuming lighting/shadow/environment publications. |
@@ -558,6 +555,7 @@ Parallelism rules:
 | Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
 | Volumetric fog | VTX-M04D.4 | `validated` | Integrated-light-scattering runtime path is proven with focused RenderDoc proof for Stage-14 dispatch/product write, captured Stage-15 fog `EnvironmentStaticData` SRV/flag/grid proof, integrated-volume min/max/slice proof, term-isolated VortexBasic captures, and city-scale RenderScene capture proof. UE5.7-style log froxel depth, spatial primary/secondary height-fog media density, primary directional CSM shadowed-light sampling, local-fog participating-media injection through validated Stage-14 tiled products, Oxygen distant-SkyLight volumetric ambient injection, and UE-shaped temporal jitter/reset/history-miss reprojection are validated for the Oxygen product shape. Real SkyLight cubemap capture/filtering is deferred to the IBL/indirect-lighting resource track. |
 | Async runtime migration | VTX-M04E | `validated` | Canonical Async runtime proof path with no compatibility clutter, Stage 3/8/12/15/22 RenderDoc evidence, final present output, and overlay composition proof. |
+| Single-view composition/presentation | VTX-M04F | `validated` | Async RenderDoc proof validates Stage 22 tonemap output, exactly one composition copy from `Async.SceneColor` after Stage 22, exactly one overlay blend after the scene copy, final present output, and focused `RendererCompositionQueue` tests. |
 | DiagnosticsService | VTX-M05A | `planned` | Product diagnostics surface, overlays/panels/timeline/debug bindings. |
 | OcclusionModule | VTX-M05B | `planned` | Full occlusion query/consumer policy over Screen HZB. |
 | TranslucencyModule | VTX-M05C | `planned` | Stage 18 forward-lit translucent rendering. |
