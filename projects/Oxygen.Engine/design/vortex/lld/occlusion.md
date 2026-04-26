@@ -90,8 +90,14 @@ Oxygen keeps the UE-shaped behavior but maps it to existing Vortex ownership:
   spheres from `PreparedSceneFrame`; it does not add Nanite, GPU Scene, or
   instance-culling infrastructure.
 - Hardware occlusion query heaps are not the first implementation path. UE5.7's
-  HZB tester already uses a GPU visibility texture plus readback, which fits
+  HZB tester already uses GPU-produced visibility plus readback, which fits
   Vortex's Stage 5 HZB and diagnostics model better.
+- UE5.7 stores candidate bounds/results in fixed-size textures. Oxygen uses
+  fixed-capacity structured buffers for the first implementation because the
+  existing graphics layer already provides structured UAV/SRV descriptors and
+  `GpuBufferReadback`; the behavioral contract remains the UE-shaped one:
+  fixed capacity, current-frame submission, previous-result consumption, and
+  conservative visible fallback.
 - First-frame, missing-HZB, invalid-readback, and overflow cases are
   conservative: publish visible, record the fallback reason, and keep rendering
   correct.
@@ -239,13 +245,12 @@ and counted by diagnostics.
 ### 4.2 GPU Test Shape
 
 The UE5.7 reference stores bounds in fixed-size textures and writes a fixed-size
-visibility texture. Oxygen should keep that shape unless a measured engine
-constraint proves otherwise:
+visibility texture. Oxygen maps those fixed tables to structured buffers:
 
-- fixed maximum candidate grid, initially UE-shaped at 256 x 256
+- fixed maximum candidate count, initially UE-shaped at 256 x 256
 - center/extent upload for candidate bounds
-- result texture with one visible/occluded byte-class value per candidate
-- GPU-to-CPU readback for next-frame `IsVisible` decisions
+- result buffer with one visible/occluded value per candidate
+- GPU-to-CPU buffer readback for next-frame `IsVisible` decisions
 - unused/padded entries are visible
 
 The shader projects bounds with current view matrices, rejects objects outside
