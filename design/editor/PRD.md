@@ -110,8 +110,8 @@ recorded by the owning LLD/work package.
 | `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
 | `REQ-025` | Embedded preview renders visible scene content through Vortex. |
 | `REQ-026` | Embedded preview syncs authored V0.1 scene content, materials, and environment where supported by engine APIs. |
-| `REQ-027` | One/two/four viewport layouts remain stable and do not abort. |
-| `REQ-028` | Each visible viewport presents to the correct surface/view. |
+| `REQ-027` | The supported V0.1 live viewport layout remains stable and does not abort; multi-viewport layouts are deferred engine/editor work. |
+| `REQ-028` | Each supported visible viewport presents to the correct surface/view; V0.1 support is single live viewport unless multi-viewport is explicitly re-scoped. |
 | `REQ-029` | Users can navigate the editor camera and frame all/selected. |
 | `REQ-030` | Preview parity means the same authored scene content is rendered. Editor overlays, gizmos, selection outlines, node icons, and diagnostics may differ from standalone runtime. |
 | `REQ-031` | Late V0.1 viewport UX includes selection highlight. |
@@ -130,7 +130,7 @@ recorded by the owning LLD/work package.
 | `SUCCESS-002` | Supported scene and material edits survive save/reopen. |
 | `SUCCESS-003` | Live editor preview shows authored scene content. |
 | `SUCCESS-004` | Cooked output loads in standalone runtime with expected geometry, materials, camera, directional light, atmosphere, exposure, and tone mapping. |
-| `SUCCESS-005` | One/two/four viewport layouts do not abort and present to the correct surfaces. |
+| `SUCCESS-005` | The supported V0.1 live viewport does not abort and presents to the correct surface; multi-viewport is deferred. |
 | `SUCCESS-006` | Source import, descriptor generation, cook, mount, and standalone load have visible success/failure states. |
 | `SUCCESS-007` | Material assets can be created, edited, assigned, cooked, and previewed through real editor UI. |
 | `SUCCESS-008` | Viewport selection, node icons, and transform gizmo UX are delivered late in V0.1 rather than blocking early engine/editor plumbing. |

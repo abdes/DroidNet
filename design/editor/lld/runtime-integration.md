@@ -19,8 +19,8 @@ the runtime contracts defined here.
 | ID | Coverage |
 | --- | --- |
 | `REQ-025` | Embedded viewport renders the active scene through the live engine. |
-| `REQ-027` | Runtime surface/view lifecycle supports one/two/four viewport layouts. |
-| `REQ-028` | Runtime presentation is routed to the correct editor surface. |
+| `REQ-027` | Runtime surface/view lifecycle supports the V0.1 single live viewport; multi-viewport is deferred. |
+| `REQ-028` | Runtime presentation is routed to the correct editor surface for the supported live viewport. |
 | `REQ-030` | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
 | `SUCCESS-003` | Live editor viewport presents correctly. |
 | `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation. |
@@ -412,8 +412,7 @@ ED-M02 can be validated when:
 - runtime DLL discovery loads native engine DLLs from the engine install runtime
   directory.
 - one-pane layout presents the live viewport.
-- two-pane layout presents every visible viewport to the correct surface.
-- four-pane layout presents every visible viewport to the correct surface.
+- multi-viewport validation is recorded as deferred, not as an ED-M02 gate.
 - resizing panes/windows does not leave stale or blank surfaces.
 - closing/reopening a scene releases old document surfaces and creates new
   surfaces without surface-limit leakage.

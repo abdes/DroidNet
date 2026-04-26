@@ -41,10 +41,14 @@ Current execution focus:
       `project-services.md`, and `diagnostics-operation-results.md`.
 - [x] Implement and validate `ED-M01` from
       [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md).
-- [ ] Review `ED-M02` LLDs and detailed plan, then validate live viewport
-      stabilization with one/two/four viewport layouts, correct surface
-      presentation, sane camera framing, native runtime discovery, and runtime
-      settings.
+- [x] Review `ED-M02` LLDs and detailed plan, then implement live viewport
+      stabilization for the single live viewport path, sane camera framing,
+      native runtime discovery, and runtime settings.
+- [x] Defer multi-viewport stability out of `ED-M02`; later engine
+      multi-surface/multi-view work must own it.
+- [ ] Validate `ED-M02` manually with the supported single live viewport,
+      correct surface presentation, cooked-root warning behavior, runtime
+      settings, and camera preset failure handling.
 - [ ] Prepare `ED-M03` by reviewing its required LLDs and producing a detailed
       implementation plan.
 
@@ -54,10 +58,12 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Review and accept the `ED-M02` LLDs and detailed implementation plan before
-   any further ED-M02 implementation or validation closure.
-2. Continue `ED-M02` validation only after that planning gate is accepted.
-3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
+1. Validate or record the supported single live viewport behavior for `ED-M02`.
+2. Move to `ED-M03` LLD review and detailed planning; multi-viewport is
+   deferred and must not block `ED-M03`.
+3. Record the `ED-M02` validation ledger row only after visual validation
+   passes.
+4. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
 
@@ -155,8 +161,9 @@ Trace: `GOAL-001`, `GOAL-003`, `GOAL-006`; `REQ-022`, `REQ-023`,
 `REQ-024`, `REQ-025`, `REQ-027`, `REQ-028`, `REQ-030`; `SUCCESS-003`,
 `SUCCESS-005`
 
-Outcome: embedded Vortex preview, surface/view lifecycle, native runtime
-discovery, runtime settings, and viewport presentation are stable.
+Outcome: embedded Vortex preview, native runtime discovery, runtime settings,
+and the supported single live viewport path are landed. Multi-viewport layout
+stability is deferred out of ED-M02.
 
 Implementation:
 
@@ -165,25 +172,30 @@ Implementation:
       directory instead of being copied into editor output.
 - [x] A live Vortex-rendered editor viewport is visible.
 - [x] Editor viewport camera uses sane projection/framing defaults.
-- [ ] Required LLDs are reviewed:
+- [x] Required LLDs are reviewed:
       `runtime-integration`, `viewport-and-tools`,
       `diagnostics-operation-results`.
-- [ ] Detailed `ED-M02` implementation plan exists and is accepted.
+- [x] Detailed `ED-M02` implementation plan exists and is accepted.
+- [x] Runtime, single-surface view, cooked-root, viewport-layout, and
+      runtime-settings workflows publish stable operation-kind diagnostics.
+- [x] Runtime FPS setter clamps before applying to the engine runner.
+- [x] Cooked-root refresh warnings are non-fatal and leave the workspace usable.
+- [x] Targeted MSBuild builds and executable test runs pass for the ED-M02
+      touched projects.
+- [x] Multi-viewport stability is deferred out of ED-M02 and must be handled by
+      later engine multi-surface/multi-view work.
 
 Validation:
 
 - [ ] One-pane viewport layout is validated after clean editor launch.
-- [ ] Two-pane viewport layout is validated without surface/view mismatch or
-      abort.
-- [ ] Four-pane viewport layout is validated without surface/view mismatch or
-      abort.
-- [ ] Correct surface presentation is validated for every visible viewport.
+- [ ] Correct surface presentation is validated for the supported live
+      viewport.
 - [ ] Engine FPS/runtime settings are validated in the embedded engine.
 
 Exit evidence required:
 
 - [ ] One `ED-M02` validation ledger row records launch path, build config,
-      viewport layout matrix, runtime DLL discovery path, runtime settings
+      single viewport result, runtime DLL discovery path, runtime settings
       result, and outcome.
 
 ### ED-M03 - Authoring Foundation
@@ -373,12 +385,12 @@ gizmos, node icons, and overlays are usable in supported viewport layouts.
 - [ ] Selection highlight is implemented.
 - [ ] Transform gizmo UX mutates through commands.
 - [ ] Non-geometry node icons exist for cameras/lights.
-- [ ] One/two/four viewport layouts remain stable with overlays enabled.
+- [ ] Supported viewport layouts remain stable with overlays enabled.
 
 Exit evidence required:
 
 - [ ] One `ED-M09` validation ledger row records viewport UX coverage across
-      one/two/four layouts.
+      supported viewport layouts.
 
 ### ED-M10 - V0.1 Acceptance
 
@@ -419,7 +431,7 @@ the current milestone ID after the `ED-M01` insertion.
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
-| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `review` | Review and accept before any further ED-M02 implementation or validation closure. |
+| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
@@ -454,3 +466,4 @@ work package. Do not use it to list unfinished implementation work.
 | ID | Affects | Status | Decision/Blocker | Required Action |
 | --- | --- | --- | --- | --- |
 | `DB-001` | `ED-M00` | `closed` | Top-level `PLAN.md` review feedback was applied and accepted. | No further action. |
+| `DB-002` | `ED-M02` | `closed` | Multi-viewport stability is deferred out of ED-M02; V0.1 proceeds on the supported single live viewport unless multi-viewport is explicitly re-scoped later. | No further action for ED-M02. |
