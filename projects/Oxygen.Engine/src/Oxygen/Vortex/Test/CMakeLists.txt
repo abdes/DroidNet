@@ -61,6 +61,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DiagnosticsFrameLedger
+  SOURCES
+    "DiagnosticsFrameLedger_test.cpp"
+)
+
+m_gtest_program(
   ShaderDebugModeRegistry
   SOURCES
     "ShaderDebugModeRegistry_test.cpp"
@@ -154,6 +160,12 @@ add_custom_target(
   Oxygen.Vortex.DiagnosticsService
   DEPENDS
     Oxygen.Vortex.DiagnosticsService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsFrameLedger
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsFrameLedger.Tests
 )
 
 add_custom_target(

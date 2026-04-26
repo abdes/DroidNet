@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -69,16 +70,14 @@ private:
   [[nodiscard]] auto ComputeEffectiveFeatures() const noexcept
     -> DiagnosticsFeatureSet;
   [[nodiscard]] auto IsFrameLedgerEnabled() const noexcept -> bool;
-  auto RefreshSnapshotState(DiagnosticsFrameSnapshot& snapshot) const -> void;
+  auto RefreshLedgerState() -> void;
 
   mutable std::mutex mutex_;
   CapabilitySet renderer_capabilities_ { RendererCapabilityFamily::kNone };
   DiagnosticsFeatureSet requested_features_ { DiagnosticsFeature::kNone };
   DiagnosticsFeatureSet enabled_features_ { DiagnosticsFeature::kNone };
   ShaderDebugMode shader_debug_mode_ { ShaderDebugMode::kDisabled };
-  DiagnosticsFrameSnapshot frame_snapshot_ {};
-  DiagnosticsFrameSnapshot latest_snapshot_ {};
-  bool frame_open_ { false };
+  DiagnosticsFrameLedger frame_ledger_ {};
 };
 
 } // namespace oxygen::vortex
