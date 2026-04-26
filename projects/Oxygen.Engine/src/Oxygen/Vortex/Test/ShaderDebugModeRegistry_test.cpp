@@ -138,21 +138,25 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
     switch (info.path) {
     case DiagnosticsDebugPath::kForwardMeshVariant:
       EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
-        "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl")
+                    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl")
         || CatalogContainsDefineForPath(info.shader_define,
           "Vortex/Stages/Translucency/ForwardDebug_PS.hlsl"))
         << info.canonical_name << " define=" << info.shader_define;
       break;
     case DiagnosticsDebugPath::kDeferredFullscreen:
-      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
-        "Vortex/Stages/BasePass/BasePassDebugView.hlsl"))
+      EXPECT_TRUE(CatalogContainsDefineForPath(
+        info.shader_define, "Vortex/Stages/BasePass/BasePassDebugView.hlsl"))
         << info.canonical_name << " define=" << info.shader_define;
       break;
     case DiagnosticsDebugPath::kNone:
-    case DiagnosticsDebugPath::kServicePass:
     case DiagnosticsDebugPath::kExternalToolOnly:
       ADD_FAILURE() << info.canonical_name
                     << " has a shader define but no catalog-backed debug path";
+      break;
+    case DiagnosticsDebugPath::kServicePass:
+      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
+        "Vortex/Services/Lighting/DeferredLightDirectional.hlsl"))
+        << info.canonical_name << " define=" << info.shader_define;
       break;
     }
   }
@@ -163,11 +167,11 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, CanonicalToolNamesStayStable)
   EXPECT_EQ(FindShaderDebugModeInfo(ShaderDebugMode::kDirectionalShadowMask)
               ->canonical_name,
     "directional-shadow-mask");
-  EXPECT_EQ(FindShaderDebugModeInfo(ShaderDebugMode::kSceneDepthLinear)
-              ->canonical_name,
+  EXPECT_EQ(
+    FindShaderDebugModeInfo(ShaderDebugMode::kSceneDepthLinear)->canonical_name,
     "scene-depth-linear");
-  EXPECT_EQ(FindShaderDebugModeInfo(ShaderDebugMode::kBaseColor)
-              ->canonical_name,
+  EXPECT_EQ(
+    FindShaderDebugModeInfo(ShaderDebugMode::kBaseColor)->canonical_name,
     "base-color");
 }
 
@@ -184,12 +188,7 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, HelperClassificationMatchesRegistry)
         || info.mode == ShaderDebugMode::kIblFaceIndex)
       << info.canonical_name;
     EXPECT_EQ(UsesForwardMeshDebugVariant(info.mode),
-      info.mode == ShaderDebugMode::kDirectLightingOnly
-        || info.mode == ShaderDebugMode::kIblOnly
-        || info.mode == ShaderDebugMode::kDirectPlusIbl
-        || info.mode == ShaderDebugMode::kDirectLightingFull
-        || info.mode == ShaderDebugMode::kDirectLightGates
-        || info.mode == ShaderDebugMode::kDirectBrdfCore)
+      info.path == DiagnosticsDebugPath::kForwardMeshVariant)
       << info.canonical_name;
 
     const bool is_legacy_non_ibl
@@ -227,8 +226,7 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, ShaderDefineNamesMatchLegacyHelper)
   }
 }
 
-NOLINT_TEST(
-  ShaderDebugModeRegistryTest, DocumentsKnownUnwiredIblNoBrdfLutMode)
+NOLINT_TEST(ShaderDebugModeRegistryTest, DocumentsKnownUnwiredIblNoBrdfLutMode)
 {
   const auto* info = FindShaderDebugModeInfo(ShaderDebugMode::kIblNoBrdfLut);
   ASSERT_NE(info, nullptr);

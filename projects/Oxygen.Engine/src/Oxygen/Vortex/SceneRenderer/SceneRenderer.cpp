@@ -430,8 +430,7 @@ namespace {
       const auto primary_atmosphere_light
         = environment::internal::BuildAtmosphereLightModel(
           primary, 0U, atmosphere);
-      auto atmosphere_mode_flags
-        = kDirectionalLightAtmosphereModeFlagAuthority;
+      auto atmosphere_mode_flags = kDirectionalLightAtmosphereModeFlagAuthority;
       if ((primary_atmosphere_light.direct_light_authority_flags
             & environment::kAtmosphereDirectLightFlagPerPixelTransmittance)
         != 0U) {
@@ -439,7 +438,8 @@ namespace {
           |= kDirectionalLightAtmosphereModeFlagPerPixelTransmittance;
       }
       if ((primary_atmosphere_light.direct_light_authority_flags
-            & environment::kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
+            & environment::
+              kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
         != 0U) {
         atmosphere_mode_flags
           |= kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance;
@@ -459,9 +459,8 @@ namespace {
           ? kDirectionalLightShadowFlagCastsShadows
           : 0U,
         .light_function_atlas_index = 0xFFFFFFFFU,
-        .cascade_count = primary.Light().Common().casts_shadows
-          ? csm.cascade_count
-          : 0U,
+        .cascade_count
+        = primary.Light().Common().casts_shadows ? csm.cascade_count : 0U,
         .light_flags = kDirectionalLightFlagAffectsWorld
           | (primary.Light().GetEnvironmentContribution()
               ? kDirectionalLightFlagEnvContribution
@@ -768,6 +767,7 @@ namespace {
     case ShaderDebugMode::kDirectionalShadowMask:
     case ShaderDebugMode::kSceneDepthRaw:
     case ShaderDebugMode::kSceneDepthLinear:
+    case ShaderDebugMode::kMaskedAlphaCoverage:
       return true;
     default:
       return false;
@@ -792,6 +792,8 @@ namespace {
       return "SceneDepthRaw";
     case ShaderDebugMode::kSceneDepthLinear:
       return "SceneDepthLinear";
+    case ShaderDebugMode::kMaskedAlphaCoverage:
+      return "MaskedAlphaCoverage";
     default:
       return "Disabled";
     }
@@ -1027,8 +1029,7 @@ namespace {
     }
 
     if (desc.depth_attachment.IsValid()) {
-      const auto& texture_desc
-        = desc.depth_attachment.texture->GetDescriptor();
+      const auto& texture_desc = desc.depth_attachment.texture->GetDescriptor();
       return glm::uvec2 {
         std::max(1U, texture_desc.width),
         std::max(1U, texture_desc.height),
@@ -1247,7 +1248,8 @@ namespace {
       }
     }
 
-    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled) {
+    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+      || ctx.render_mode == RenderMode::kWireframe) {
       config.enable_auto_exposure = false;
       config.fixed_exposure = 1.0F;
       config.tone_mapper = engine::ToneMapper::kNone;
@@ -1392,13 +1394,19 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
-    target_extent.has_value() && *target_extent != scene_textures_.GetExtent()) {
+    target_extent.has_value()
+    && *target_extent != scene_textures_.GetExtent()) {
     ResizeSceneTextureFamily(*target_extent);
   }
 
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
-  ctx.current_view.screen_hzb_request
-    = ResolveScreenHzbRequest(ctx, shading_mode);
+  const auto wireframe_only = ctx.render_mode == RenderMode::kWireframe;
+  ctx.current_view.screen_hzb_request = wireframe_only
+    ? RenderContext::ScreenHzbRequest {}
+    : ResolveScreenHzbRequest(ctx, shading_mode);
+  if (wireframe_only) {
+    ctx.current_view.depth_prepass_mode = DepthPrePassMode::kDisabled;
+  }
   ctx.current_view.scene_depth_product_valid = false;
   // Renderer Core materializes the eligible views and selects the current
   // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
@@ -1606,8 +1614,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
   if (environment_ != nullptr) {
     published_view_frame_bindings_.environment_frame_slot
-      = environment_->PublishEnvironmentBindings(ctx, kInvalidShaderVisibleIndex,
-        kInvalidShaderVisibleIndex, false, &scene_textures_);
+      = environment_->PublishEnvironmentBindings(ctx,
+        kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
+        &scene_textures_);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1639,6 +1648,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .write_velocity = scene_textures_.GetVelocity() != nullptr,
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
       .shading_mode = shading_mode,
+      .render_mode = ctx.render_mode,
     });
     const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
     base_pass_published = base_pass_result.published_base_pass_products;
@@ -1694,9 +1704,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
-      .name = rendered_debug_visualization
-        ? "Vortex.Stage12.DebugVisualization"
-        : "Vortex.Stage12.DeferredLighting",
+      .name = rendered_debug_visualization ? "Vortex.Stage12.DebugVisualization"
+                                           : "Vortex.Stage12.DeferredLighting",
       .kind = DiagnosticsPassKind::kGraphics,
       .executed = true,
       .inputs = { "Vortex.SceneColor", "Vortex.GBuffer",
@@ -1709,7 +1718,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
-  if (environment_ != nullptr && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
+  if (environment_ != nullptr && !wireframe_only
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures_);
     const auto& stage14_state = environment_->GetLastStage14State();
     environment_lighting_state_.stage14_requested = stage14_state.requested;
@@ -1756,8 +1766,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_
       .stage14_volumetric_fog_height_fog_media_requested
       = stage14_state.volumetric_fog_height_fog_media_requested;
-    environment_lighting_state_
-      .stage14_volumetric_fog_height_fog_media_executed
+    environment_lighting_state_.stage14_volumetric_fog_height_fog_media_executed
       = stage14_state.volumetric_fog_height_fog_media_executed;
     environment_lighting_state_
       .stage14_volumetric_fog_sky_light_injection_requested
@@ -1770,10 +1779,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = stage14_state.volumetric_fog_temporal_history_requested;
     environment_lighting_state_
       .stage14_volumetric_fog_temporal_history_reprojection_executed
-      = stage14_state
-          .volumetric_fog_temporal_history_reprojection_executed;
-    environment_lighting_state_
-      .stage14_volumetric_fog_temporal_history_reset
+      = stage14_state.volumetric_fog_temporal_history_reprojection_executed;
+    environment_lighting_state_.stage14_volumetric_fog_temporal_history_reset
       = stage14_state.volumetric_fog_temporal_history_reset;
     environment_lighting_state_
       .stage14_volumetric_fog_local_fog_injection_requested
@@ -1781,8 +1788,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_
       .stage14_volumetric_fog_local_fog_injection_executed
       = stage14_state.volumetric_fog_local_fog_injection_executed;
-    environment_lighting_state_
-      .stage14_volumetric_fog_local_fog_instance_count
+    environment_lighting_state_.stage14_volumetric_fog_local_fog_instance_count
       = stage14_state.volumetric_fog_local_fog_instance_count;
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1815,8 +1821,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       DiagnosticsProductRecord {
         .name = "Vortex.Environment.IntegratedLightScattering",
         .producer_pass = "Vortex.Stage14.VolumetricAndLocalFog",
-        .descriptor
-        = ShaderVisibleDescriptor(stage14_state.integrated_light_scattering_srv),
+        .descriptor = ShaderVisibleDescriptor(
+          stage14_state.integrated_light_scattering_srv),
         .published = stage14_state.integrated_light_scattering_srv
           != kInvalidShaderVisibleIndex,
         .valid = stage14_state.integrated_light_scattering_valid,
@@ -1839,6 +1845,21 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 18: Translucency
 
   // Stage 19: reserved - DistortionModule
+
+  if (base_pass_ != nullptr && ctx.render_mode == RenderMode::kOverlayWireframe
+    && !wireframe_only) {
+    const auto overlay_draws
+      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures_);
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage20.WireframeOverlay",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = overlay_draws > 0U,
+        .inputs = { "Vortex.SceneColor", "Vortex.SceneDepth",
+          "Vortex.PreparedSceneFrame" },
+        .outputs = { "Vortex.SceneColor" },
+      });
+  }
 
   // Maintain late scene-texture publication before the output handoff stages.
   PublishCustomDepthProducts();
@@ -1944,7 +1965,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
 
   // Stage 20: Ground grid
-  if (ground_grid_pass_ != nullptr) {
+  if (ground_grid_pass_ != nullptr && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
       ctx, scene_textures_, ResolveLateOverlayTarget(ctx)));
     RecordDiagnosticsPass(renderer_,
@@ -2244,10 +2265,9 @@ void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
     return;
   }
 
-  LOG_F(INFO,
-    "SceneRenderer resizing scene textures from {}x{} to {}x{}",
-    scene_textures_.GetExtent().x, scene_textures_.GetExtent().y,
-    new_extent.x, new_extent.y);
+  LOG_F(INFO, "SceneRenderer resizing scene textures from {}x{} to {}x{}",
+    scene_textures_.GetExtent().x, scene_textures_.GetExtent().y, new_extent.x,
+    new_extent.y);
   scene_textures_.Resize(new_extent);
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
@@ -2392,7 +2412,8 @@ auto SceneRenderer::RenderDebugVisualization(
     || mode == ShaderDebugMode::kWorldNormals
     || mode == ShaderDebugMode::kRoughness
     || mode == ShaderDebugMode::kMetalness
-    || mode == ShaderDebugMode::kDirectionalShadowMask;
+    || mode == ShaderDebugMode::kDirectionalShadowMask
+    || mode == ShaderDebugMode::kMaskedAlphaCoverage;
   const auto requires_scene_depth = mode == ShaderDebugMode::kSceneDepthRaw
     || mode == ShaderDebugMode::kSceneDepthLinear
     || mode == ShaderDebugMode::kDirectionalShadowMask;

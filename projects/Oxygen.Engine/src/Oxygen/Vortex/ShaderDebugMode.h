@@ -128,17 +128,7 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
 constexpr auto UsesForwardMeshDebugVariant(const ShaderDebugMode mode) noexcept
   -> bool
 {
-  switch (mode) {
-  case ShaderDebugMode::kDirectLightingOnly:
-  case ShaderDebugMode::kIblOnly:
-  case ShaderDebugMode::kDirectPlusIbl:
-  case ShaderDebugMode::kDirectLightingFull:
-  case ShaderDebugMode::kDirectLightGates:
-  case ShaderDebugMode::kDirectBrdfCore:
-    return true;
-  default:
-    return false;
-  }
+  return mode == ShaderDebugMode::kSceneDepthMismatch;
 }
 
 constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept

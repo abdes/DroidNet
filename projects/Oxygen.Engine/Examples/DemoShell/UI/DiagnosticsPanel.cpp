@@ -32,8 +32,7 @@ namespace {
     return info->display_name;
   }
 
-  [[nodiscard]] auto MissingReason(
-    const vortex::ShaderDebugModeInfo& info,
+  [[nodiscard]] auto MissingReason(const vortex::ShaderDebugModeInfo& info,
     const vortex::CapabilitySet capabilities) -> std::string
   {
     if (!info.supported) {
@@ -91,27 +90,22 @@ namespace {
   };
 
   constexpr auto kCapabilityUiRows = std::to_array<CapabilityUiRow>({
-    { vortex::RendererCapabilityFamily::kScenePreparation,
-      "Scene preparation",
+    { vortex::RendererCapabilityFamily::kScenePreparation, "Scene preparation",
       "Scene extraction, view setup, and per-frame scene inputs." },
     { vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding,
       "GPU upload/binding",
       "GPU upload and asset descriptor binding support." },
-    { vortex::RendererCapabilityFamily::kDeferredShading,
-      "Deferred shading",
+    { vortex::RendererCapabilityFamily::kDeferredShading, "Deferred shading",
       "G-buffer, depth publication, and deferred debug views." },
-    { vortex::RendererCapabilityFamily::kLightingData,
-      "Lighting data",
+    { vortex::RendererCapabilityFamily::kLightingData, "Lighting data",
       "Analytic light data, clustered lighting, and lighting buffers." },
-    { vortex::RendererCapabilityFamily::kShadowing,
-      "Shadowing",
+    { vortex::RendererCapabilityFamily::kShadowing, "Shadowing",
       "Directional shadow map rendering and shadow-mask products." },
     { vortex::RendererCapabilityFamily::kEnvironmentLighting,
       "Environment lighting",
       "Sky, atmosphere, image-based lighting, and fog passes." },
     { vortex::RendererCapabilityFamily::kFinalOutputComposition,
-      "Final composition",
-      "Final scene composition and presentation output." },
+      "Final composition", "Final scene composition and presentation output." },
     { vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling,
       "Diagnostics/profiling",
       "Built-in diagnostics service and GPU timeline profiling support." },
@@ -185,8 +179,8 @@ void DiagnosticsPanel::DrawRuntimeStatus()
   }
   ImGui::Text("Active debug view: %s", DisplayNameFor(effective).data());
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "The debug view currently applied by the renderer after capability checks.");
+    ImGui::SetTooltip("The debug view currently applied by the renderer after "
+                      "capability checks.");
   }
   DrawRendererCapabilities();
 }
@@ -219,12 +213,15 @@ void DiagnosticsPanel::DrawViewModeControls()
   auto mode = vm_->GetRenderMode();
 
   if (ImGui::RadioButton("Solid", mode == r::kSolid)) {
+    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
     vm_->SetRenderMode(r::kSolid);
   }
   if (ImGui::RadioButton("Wireframe", mode == r::kWireframe)) {
+    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
     vm_->SetRenderMode(r::kWireframe);
   }
   if (ImGui::RadioButton("Overlay Wireframe", mode == r::kOverlayWireframe)) {
+    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
     vm_->SetRenderMode(r::kOverlayWireframe);
   }
 }
@@ -262,7 +259,8 @@ void DiagnosticsPanel::DrawDebugModes()
   }
 
   for (const auto family : kDebugModeFamilies) {
-    if (!ImGui::TreeNodeEx(FamilyLabel(family), ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (!ImGui::TreeNodeEx(
+          FamilyLabel(family), ImGuiTreeNodeFlags_DefaultOpen)) {
       continue;
     }
 
@@ -284,7 +282,8 @@ void DiagnosticsPanel::DrawDebugModes()
       }
       if (!supported) {
         ImGui::EndDisabled();
-        if (!reason.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        if (!reason.empty()
+          && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
           ImGui::SetTooltip("%s", reason.c_str());
         }
         ImGui::SameLine();

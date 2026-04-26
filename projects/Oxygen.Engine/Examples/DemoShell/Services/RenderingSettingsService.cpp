@@ -29,7 +29,8 @@ namespace {
     -> engine::ShaderDebugMode
   {
     try {
-      return static_cast<engine::ShaderDebugMode>(std::stoi(std::string(value)));
+      return static_cast<engine::ShaderDebugMode>(
+        std::stoi(std::string(value)));
     } catch (const std::exception&) {
       return engine::ShaderDebugMode::kDisabled;
     }
@@ -42,7 +43,8 @@ namespace {
     if (info == nullptr || !info->supported) {
       return false;
     }
-    return vortex::HasAllCapabilities(capabilities, info->required_capabilities);
+    return vortex::HasAllCapabilities(
+      capabilities, info->required_capabilities);
   }
 
 } // namespace
@@ -98,6 +100,7 @@ auto RenderingSettingsService::SetRenderMode(renderer::RenderMode mode) -> void
   }
   settings->SetString(kViewModeKey, value);
   epoch_++;
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetWireframeColor() const -> graphics::Color
@@ -121,6 +124,7 @@ auto RenderingSettingsService::SetWireframeColor(const graphics::Color& color)
   settings->SetFloat(kWireColorGKey, color.g);
   settings->SetFloat(kWireColorBKey, color.b);
   epoch_++;
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
@@ -206,12 +210,12 @@ auto RenderingSettingsService::OnMainViewReady(
 
 auto RenderingSettingsService::SupportsRenderModeControls() const -> bool
 {
-  return false;
+  return IsVortexRuntimeBound();
 }
 
 auto RenderingSettingsService::SupportsWireframeColorControl() const -> bool
 {
-  return false;
+  return IsVortexRuntimeBound();
 }
 
 auto RenderingSettingsService::SupportsGpuDebugPassControl() const -> bool
@@ -255,7 +259,10 @@ auto RenderingSettingsService::ApplyVortexSettings() -> void
     return;
   }
 
-  vortex_renderer_->SetShaderDebugMode(ToVortexDebugMode(GetEffectiveDebugMode()));
+  vortex_renderer_->SetShaderDebugMode(
+    ToVortexDebugMode(GetEffectiveDebugMode()));
+  vortex_renderer_->SetRenderMode(GetRenderMode());
+  vortex_renderer_->SetWireframeColor(GetWireframeColor());
 }
 
 } // namespace oxygen::examples

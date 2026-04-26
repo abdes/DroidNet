@@ -69,6 +69,15 @@ static float3 EvaluateBasePassDebugView(
         data.world_normal,
         normalize(shadow_bindings.light_direction_to_source.xyz));
     return saturate(visibility).xxx;
+#elif defined(DEBUG_MASKED_ALPHA_COVERAGE)
+    const GBufferData data = ReadGBuffer(uv, bindings);
+    if (data.custom_data.x < 0.5f)
+    {
+        return 0.15f.xxx;
+    }
+    return data.custom_data.y >= data.custom_data.z
+        ? float3(0.0f, 1.0f, 0.0f)
+        : float3(1.0f, 0.0f, 0.0f);
 #else
     return float3(1.0f, 0.0f, 1.0f);
 #endif

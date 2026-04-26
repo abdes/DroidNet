@@ -16,6 +16,12 @@ namespace {
     = RendererCapabilityFamily::kDeferredShading;
   constexpr auto kLightingCapabilities = RendererCapabilityFamily::kLightingData;
   constexpr auto kShadowCapabilities = RendererCapabilityFamily::kShadowing;
+  constexpr auto kIblUnavailableReason
+    = "IBL debug views are disabled until Oxygen has a real deferred IBL "
+      "product and capture/proof path";
+  constexpr auto kLightCullingUnavailableReason
+    = "Light-culling debug views are disabled until the deferred light-grid "
+      "visualization path is implemented";
 
   constexpr auto kShaderDebugModeRegistry = std::array {
     ShaderDebugModeInfo {
@@ -28,59 +34,54 @@ namespace {
       .canonical_name = "light-culling-heat-map",
       .display_name = "Light Culling Heat Map",
       .family = ShaderDebugModeFamily::kLightCulling,
-      .shader_define = "DEBUG_LIGHT_HEATMAP",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kLightCullingUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kDepthSlice,
       .canonical_name = "depth-slice",
       .display_name = "Depth Slice",
       .family = ShaderDebugModeFamily::kLightCulling,
-      .shader_define = "DEBUG_DEPTH_SLICE",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
-      .requires_scene_depth = true,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kLightCullingUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kClusterIndex,
       .canonical_name = "cluster-index",
       .display_name = "Cluster Index",
       .family = ShaderDebugModeFamily::kLightCulling,
-      .shader_define = "DEBUG_CLUSTER_INDEX",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
-      .requires_scene_depth = true,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kLightCullingUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kIblSpecular,
       .canonical_name = "ibl-specular",
       .display_name = "IBL Specular",
       .family = ShaderDebugModeFamily::kIbl,
-      .shader_define = "DEBUG_IBL_SPECULAR",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kIblRawSky,
       .canonical_name = "ibl-raw-sky",
       .display_name = "IBL Raw Sky",
       .family = ShaderDebugModeFamily::kIbl,
-      .shader_define = "DEBUG_IBL_RAW_SKY",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kIblIrradiance,
       .canonical_name = "ibl-irradiance",
       .display_name = "IBL Irradiance",
       .family = ShaderDebugModeFamily::kIbl,
-      .shader_define = "DEBUG_IBL_IRRADIANCE",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kBaseColor,
@@ -127,9 +128,9 @@ namespace {
       .canonical_name = "ibl-face-index",
       .display_name = "IBL Face Index",
       .family = ShaderDebugModeFamily::kIbl,
-      .shader_define = "DEBUG_IBL_FACE_INDEX",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kIblNoBrdfLut,
@@ -139,8 +140,7 @@ namespace {
       .path = DiagnosticsDebugPath::kNone,
       .requires_lighting_products = true,
       .supported = false,
-      .unsupported_reason = "SKIP_BRDF_LUT variant exists but runtime mode "
-                            "selection is not wired yet",
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kDirectLightingOnly,
@@ -148,8 +148,10 @@ namespace {
       .display_name = "Direct Lighting Only",
       .family = ShaderDebugModeFamily::kDirectLighting,
       .shader_define = "DEBUG_DIRECT_LIGHTING_ONLY",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
+      .path = DiagnosticsDebugPath::kServicePass,
+      .required_capabilities = kDeferredCapabilities | kLightingCapabilities,
+      .requires_scene_depth = true,
+      .requires_gbuffer = true,
       .requires_lighting_products = true,
     },
     ShaderDebugModeInfo {
@@ -157,19 +159,19 @@ namespace {
       .canonical_name = "ibl-only",
       .display_name = "IBL Only",
       .family = ShaderDebugModeFamily::kIbl,
-      .shader_define = "DEBUG_IBL_ONLY",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = kIblUnavailableReason,
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kDirectPlusIbl,
       .canonical_name = "direct-plus-ibl",
       .display_name = "Direct + IBL",
       .family = ShaderDebugModeFamily::kDirectLighting,
-      .shader_define = "DEBUG_DIRECT_PLUS_IBL",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
-      .requires_lighting_products = true,
+      .path = DiagnosticsDebugPath::kNone,
+      .supported = false,
+      .unsupported_reason = "Direct + IBL is disabled until the IBL term is "
+                            "implemented as a real deferred product",
     },
     ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kDirectLightingFull,
@@ -177,8 +179,10 @@ namespace {
       .display_name = "Direct Lighting Full",
       .family = ShaderDebugModeFamily::kDirectLighting,
       .shader_define = "DEBUG_DIRECT_LIGHTING_FULL",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
+      .path = DiagnosticsDebugPath::kServicePass,
+      .required_capabilities = kDeferredCapabilities | kLightingCapabilities,
+      .requires_scene_depth = true,
+      .requires_gbuffer = true,
       .requires_lighting_products = true,
     },
     ShaderDebugModeInfo {
@@ -187,8 +191,10 @@ namespace {
       .display_name = "Direct Light Gates",
       .family = ShaderDebugModeFamily::kDirectLighting,
       .shader_define = "DEBUG_DIRECT_LIGHT_GATES",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
+      .path = DiagnosticsDebugPath::kServicePass,
+      .required_capabilities = kDeferredCapabilities | kLightingCapabilities,
+      .requires_scene_depth = true,
+      .requires_gbuffer = true,
       .requires_lighting_products = true,
     },
     ShaderDebugModeInfo {
@@ -197,8 +203,10 @@ namespace {
       .display_name = "Direct BRDF Core",
       .family = ShaderDebugModeFamily::kDirectLighting,
       .shader_define = "DEBUG_DIRECT_BRDF_CORE",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-      .required_capabilities = kLightingCapabilities,
+      .path = DiagnosticsDebugPath::kServicePass,
+      .required_capabilities = kDeferredCapabilities | kLightingCapabilities,
+      .requires_scene_depth = true,
+      .requires_gbuffer = true,
       .requires_lighting_products = true,
     },
     ShaderDebugModeInfo {
@@ -248,7 +256,9 @@ namespace {
       .display_name = "Masked Alpha Coverage",
       .family = ShaderDebugModeFamily::kMasked,
       .shader_define = "DEBUG_MASKED_ALPHA_COVERAGE",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
+      .path = DiagnosticsDebugPath::kDeferredFullscreen,
+      .required_capabilities = kDeferredCapabilities,
+      .requires_gbuffer = true,
     },
   };
 

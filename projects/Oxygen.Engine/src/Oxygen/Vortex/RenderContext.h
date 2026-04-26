@@ -18,6 +18,8 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -97,6 +99,8 @@ struct RenderContext {
   std::shared_ptr<const graphics::Buffer> view_constants;
   std::shared_ptr<const graphics::Buffer> material_constants;
   ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
+  RenderMode render_mode { RenderMode::kSolid };
+  graphics::Color wireframe_color { 1.0F, 1.0F, 1.0F, 1.0F };
 
   struct ViewSpecific {
     oxygen::ViewId view_id { kInvalidViewId };
@@ -230,6 +234,8 @@ struct RenderContext {
     view_constants.reset();
     material_constants.reset();
     shader_debug_mode = ShaderDebugMode::kDisabled;
+    render_mode = RenderMode::kSolid;
+    wireframe_color = graphics::Color { 1.0F, 1.0F, 1.0F, 1.0F };
     pass_target.reset(nullptr);
     current_view = ViewSpecific {};
     frame_views.clear();
