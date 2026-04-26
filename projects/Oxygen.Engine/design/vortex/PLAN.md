@@ -74,28 +74,35 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M05D - Local-Light Conventional Shadow Expansion
+### NEXT: VTX-M05D - Conventional Shadow Parity And Local-Light Expansion
 
 **Status:** `planned`
 
-**Purpose:** Expand the conventional shadow-map path beyond the validated
-directional-light baseline, starting with spot-light shadows and then the
-explicit point-light strategy selected for Oxygen.
+**Purpose:** First complete a UE5.7 parity audit and remediation pass for the
+directional CSM path, then expand the conventional shadow-map path beyond the
+directional-light baseline with spot-light shadows and the explicit point-light
+strategy selected for Oxygen.
 
 **Why this is next:** `VTX-M05A` diagnostics, `VTX-M05B` occlusion consumers,
 and `VTX-M05C` translucency are validated. The next desktop-deferred baseline
-gap is local-light conventional shadow coverage.
+gap is conventional shadow robustness: city-scale directional CSM projected
+shadows are unstable under camera movement, and local-light shadows are not
+implemented.
 
 **Validated prerequisite work packages:** `VTX-M03`, `VTX-M04D.4`,
 `VTX-M05A`, `VTX-M05B`, and `VTX-M05C`.
 
-**Active work packages:** `VTX-M05D - Local-light conventional shadow expansion`.
+**Active work packages:** `VTX-M05D - Conventional shadow parity and local-light
+expansion`.
 
-**Detailed plan:** create or refresh the dedicated VTX-M05D milestone plan
-before implementation.
+**Detailed plan:** follow
+[`plan/VTX-M05D-conventional-shadow-parity.md`](plan/VTX-M05D-conventional-shadow-parity.md).
 
 **In scope:**
 
+- UE5.7-informed directional CSM parity audit and Oxygen divergence record.
+- Remediation of directional CSM instability in `CityEnvironmentValidation`
+  under camera movement.
 - UE5.7-informed local-light shadow-map design and Oxygen divergence record.
 - Spot-light conventional shadow implementation and proof.
 - Explicit point-light shadow strategy, implementation, and proof if retained
@@ -111,19 +118,24 @@ before implementation.
 
 **Dependencies:**
 
-- Validated directional CSM baseline.
+- Existing directional CSM baseline, treated as a starting point rather than a
+  full stability/parity closure.
 - Validated diagnostics and capture tooling.
 - Existing LightingService and ShadowService publication substrate.
 
 **Exit gate:**
 
+- Directional CSM parity audit is recorded against local UE5.7 source.
+- City-scale CSM projected-shadow instability is reproduced, explained,
+  remediated, and proven stable under camera movement.
 - Implementation exists and is wired through ShadowService/LightingService.
 - Focused tests and RenderDoc/CDB proof validate local-light shadow products,
   projected shadows, and no D3D12/DXGI debug-layer errors.
 - User visual confirmation is recorded for any milestone scenario that requires
   visual validation.
 
-**Recommended verification:** to be finalized in the VTX-M05D detailed plan.
+**Recommended verification:** see the dedicated M05D plan; CSM and local-light
+visual scenarios require user confirmation before closure.
 
 ## 5. Milestone Roadmap
 
@@ -148,7 +160,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M05A | Diagnostics product service | `validated` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
 | VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
 | VTX-M05C | Translucency stage | `validated` | VTX-M03, VTX-M04D.5, VTX-M05A, VTX-M05B | Stage 18 standard forward-lit translucency consuming prepared transparent draws plus lighting/shadow/environment publications. Focused build/tests, CDB/D3D12 audit, RenderDoc proof, UE5.7 re-check, and user visual confirmation passed. |
-| VTX-M05D | Local-light conventional shadow expansion | `planned` | VTX-M03 | Spot-light conventional shadows, then explicit point-light strategy under ShadowService. |
+| VTX-M05D | Conventional shadow parity and local-light expansion | `planned` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | UE5.7 directional CSM parity audit/remediation first, including city-scale camera-stability proof; then spot-light conventional shadows and explicit point-light strategy under ShadowService. |
 | VTX-M06A | Multi-view proof closeout | `planned` | VTX-M05A, VTX-M05B, VTX-M05C | Heterogeneous per-view rendering, PiP/multi-surface routing, per-view capability gating. |
 | VTX-M06B | Offscreen proof closeout | `planned` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios. |
 | VTX-M06C | Feature-gated runtime variants | `planned` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants. |
@@ -382,12 +394,14 @@ Scope:
   translucency, post-DOF, holdout/modulate, OIT, distortion/refraction, and
   translucent shadows are future scope.
 
-### 7.4 VTX-M05D — Local-Light Conventional Shadows
+### 7.4 VTX-M05D — Conventional Shadow Parity And Local-Light Shadows
 
 Scope:
 
+- Audit directional CSM against UE5.7 before local-light work starts.
+- Reproduce, root-cause, and fix city-scale camera-movement instability.
 - Extend ShadowService beyond the directional-first baseline.
-- Deliver spot-light conventional shadows first.
+- Deliver spot-light conventional shadows after CSM stability proof.
 - Define and implement the point-light conventional strategy explicitly.
 - Keep VSM as a future ShadowService strategy, not part of this milestone.
 
@@ -521,7 +535,7 @@ Parallelism rules:
 | Base pass and velocity | VTX-M02 | `landed_needs_validation` | GBuffer MRT, masked/deformed/skinned/WPO-capable velocity policy. |
 | Deferred lighting | VTX-M02 / VTX-M03 | `landed_needs_validation` | Directional fullscreen plus bounded point/spot deferred lighting owned by LightingService. |
 | LightingService | VTX-M03 | `landed_needs_validation` | Light selection, forward light publication, light grid, Stage 12 service ownership. |
-| ShadowService directional baseline | VTX-M03 / VTX-M04D.4 prerequisite | `validated` | Directional conventional shadow data publication and projected receiver shadows are validated for the directional CSM path. The city-scale loader follow-up now preserves cooked manual CSM split mode, max distance, transition, and fadeout settings on runtime directional lights. VTX-M04D.4 consumes this product for volumetric directional shadowing rather than treating projection correctness as open. |
+| ShadowService directional baseline | VTX-M03 / VTX-M04D.4 prerequisite / VTX-M05D | `validated_for_static_projection_reaudit_required` | Directional conventional shadow data publication and projected receiver shadows were validated enough for M04D.4 volumetric consumption, and the city-scale loader preserves cooked manual CSM settings. M05D now owns full UE5.7 CSM parity and camera-stability remediation because `CityEnvironmentValidation` projected shadows are unstable under camera movement. |
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `validated` for main-view AP | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; main-view aerial perspective has focused VortexBasic enabled/disabled proof and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP remains explicitly deferred. |
 | SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
@@ -533,8 +547,8 @@ Parallelism rules:
 | Single-view composition/presentation | VTX-M04F | `validated` | Async RenderDoc proof validates Stage 22 tonemap output, exactly one composition copy from `Async.SceneColor` after Stage 22, exactly one overlay blend after the scene copy, final present output, and focused `RendererCompositionQueue` tests. |
 | DiagnosticsService | VTX-M05A | `validated` | Product diagnostics surface, overlays/panels/timeline/debug bindings. |
 | OcclusionModule | VTX-M05B | `validated` | HZB occlusion consumer and visibility publisher over Screen HZB. |
-| TranslucencyModule | VTX-M05C | `in_progress` | Stage 18 standard forward-lit translucent rendering has internal proof; user visual validation remains the closure gate. |
-| Local-light shadows | VTX-M05D | `planned` | Spot and point conventional shadows under ShadowService. |
+| TranslucencyModule | VTX-M05C | `validated` | Stage 18 standard forward-lit translucent rendering has focused build/test/CDB/RenderDoc proof and user visual confirmation. |
+| Conventional/local-light shadows | VTX-M05D | `planned` | Directional CSM parity/stability audit and remediation first; spot and point conventional shadows after that gate. |
 | Multi-view | VTX-M06A | `planned` | Multi-view, PiP, per-view shading/capability proof. |
 | Offscreen rendering | VTX-M06B | `planned` | Scene-derived offscreen facade with deferred/forward coverage. |
 | Feature-gated variants | VTX-M06C | `planned` | PRD runtime variant matrix. |

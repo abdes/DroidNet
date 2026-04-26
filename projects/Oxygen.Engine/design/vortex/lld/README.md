@@ -91,7 +91,7 @@ reviewed.
 | [hzb.md](hzb.md) | D.16 supplement | Generic Stage-5 screen-HZB production, publication, history handoff, and consumer-facing bindings separate from occlusion policy |
 | [multi-view-composition.md](multi-view-composition.md) | D.17 | Multi-view dispatch, per-view ShadingMode, multi-surface output, PiP, editor viewport |
 | [offscreen-rendering.md](offscreen-rendering.md) | D.18 | ForOffscreenScene facade, deferred/forward mode selection, thumbnail/preview |
-| [shadow-local-lights.md](shadow-local-lights.md) | reserved future LLD | ShadowService expansion for spot-light and point-light conventional shadows after the directional-first baseline |
+| [shadow-local-lights.md](shadow-local-lights.md) | VTX-M05D | ShadowService expansion for spot-light and point-light conventional shadows after the M05D directional CSM parity/stability gate |
 
 ### Phase 7 — Reserved Future Families
 
