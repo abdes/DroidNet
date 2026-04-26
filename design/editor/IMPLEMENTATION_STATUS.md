@@ -37,8 +37,10 @@ Current program target: **Oxygen Editor V0.1**.
 
 Current execution focus:
 
-- [ ] Prepare `ED-M01` by reviewing `project-workspace-shell.md`,
+- [x] Prepare `ED-M01` by reviewing `project-workspace-shell.md`,
       `project-services.md`, and `diagnostics-operation-results.md`.
+- [ ] Implement `ED-M01` from
+      [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md).
 - [ ] Validate `ED-M02` live viewport stabilization with one/two/four viewport
       layouts, correct surface presentation, sane camera framing, native
       runtime discovery, and runtime settings.
@@ -51,8 +53,9 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Start `ED-M01` only after its required LLDs and detailed implementation plan
-   are ready.
+1. Implement `ED-M01` from
+   [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md),
+   starting with `ED-M01.1 - Diagnostics Contracts And Host Store`.
 2. Continue `ED-M02` validation in parallel where it does not block `ED-M01`.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
@@ -92,7 +95,7 @@ Exit evidence required:
 
 ### ED-M01 - Project Browser And Workspace Activation
 
-Status: `planned`
+Status: `active`
 
 Trace: `GOAL-001`, `GOAL-006`; `REQ-001`, `REQ-002`, `REQ-003`,
 `REQ-022`, `REQ-024`; `SUCCESS-001`
@@ -101,10 +104,10 @@ Outcome: Project Browser startup, project open/create, invalid project
 handling, workspace transition, and restoration failure visibility work as
 product behavior.
 
-- [ ] Required LLDs are reviewed:
+- [x] Required LLDs are reviewed:
       `project-workspace-shell`, `project-services`,
       `diagnostics-operation-results`.
-- [ ] Detailed `ED-M01` implementation plan exists.
+- [x] Detailed `ED-M01` implementation plan exists.
 - [ ] Editor starts at Project Browser.
 - [ ] Recent project, create project, open project, and invalid project states
       are usable.
@@ -385,6 +388,7 @@ the current milestone ID after the `ED-M01` insertion.
 
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Implement `ED-M01`, starting with `ED-M01.1 - Diagnostics Contracts And Host Store`. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
