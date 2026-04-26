@@ -18,7 +18,6 @@ using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -28,7 +27,6 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <summary>
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
-/// <param name="currentProject">The current project.</param>
 /// <param name="assetCatalog">The asset catalog.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
@@ -37,7 +35,6 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="importService">The import service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
-    IProject currentProject,
     IAssetCatalog assetCatalog,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
@@ -82,7 +79,8 @@ public partial class AssetsViewModel(
             this.isInitialized = true;
 
             // If the project has an active scene, navigate to Scenes folder and request it to be opened
-            if (currentProject.ActiveScene is not null)
+            var currentProject = projectManagerService.CurrentProject;
+            if (currentProject?.ActiveScene is not null)
             {
                 // Navigate to the Scenes folder to show scene assets
                 contentBrowserState.SetSelectedFolders(["Scenes"]);
@@ -157,6 +155,12 @@ public partial class AssetsViewModel(
 
         if (args.InvokedItem.AssetType == AssetType.Scene)
         {
+            var currentProject = projectManagerService.CurrentProject;
+            if (currentProject is null)
+            {
+                return;
+            }
+
             // Update the scene explorer
             var scene = currentProject.Scenes.FirstOrDefault(scene =>
                 string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.OrdinalIgnoreCase));
@@ -237,7 +241,7 @@ public partial class AssetsViewModel(
     {
         // For now, create a default name. In a full implementation,
         // this would show a dialog to get the scene name from the user.
-        var sceneCount = currentProject.Scenes.Count;
+        var sceneCount = projectManagerService.CurrentProject?.Scenes.Count ?? 0;
         var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
 
         await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
