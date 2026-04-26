@@ -74,55 +74,61 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M06A - Multi-View Proof Closeout
+### NEXT: VTX-M05D - Conventional Shadow Parity And Local-Light Expansion
 
-**Status:** `planned`
+**Status:** `in_progress`
 
-**Purpose:** Prove the Vortex renderer's multi-view substrate with heterogeneous
-per-view rendering, PiP/multi-surface routing, and per-view capability/product
-isolation.
+**Purpose:** Complete the conventional shadow-map baseline for the desktop
+deferred path. Directional CSM parity/remediation is validated; the remaining
+work is spot-light conventional shadows and the explicit point-light
+strategy/implementation or approved deferral.
 
 **Why this is next:** `VTX-M05A` diagnostics, `VTX-M05B` occlusion consumers,
-`VTX-M05C` translucency, and `VTX-M05D` conventional shadow parity closeout are
-validated. The next desktop-deferred baseline gap is proving more than one
-view/surface without leaking products, options, or capabilities between views.
+and `VTX-M05C` translucency are validated. `VTX-M05D` is still active because
+the directional CSM proof is not the full milestone scope.
 
 **Validated prerequisite work packages:** `VTX-M03`, `VTX-M04D.4`,
-`VTX-M05A`, `VTX-M05B`, `VTX-M05C`, and `VTX-M05D`.
+`VTX-M05A`, `VTX-M05B`, and `VTX-M05C`.
 
-**Active work packages:** `VTX-M06A - Multi-view proof closeout`.
+**Active work packages:** `VTX-M05D - Conventional shadow parity and local-light
+expansion`.
 
-**Detailed plan:** prepare the VTX-M06A proof plan from the row below before
-implementation.
+**Detailed plan:** follow
+[`plan/VTX-M05D-conventional-shadow-parity.md`](plan/VTX-M05D-conventional-shadow-parity.md).
 
 **In scope:**
 
-- Heterogeneous multi-view frame setup and publication proof.
-- PiP or multi-surface routing through the existing composition path.
-- Per-view capability/product isolation in diagnostics and frame products.
-- Runtime proof scene/tooling that makes product leakage visible.
+- Spot-light conventional shadow-map depth rendering, publication, and deferred
+  lighting consumption.
+- Point-light conventional shadow strategy and implementation/proof, or explicit
+  approved deferral.
+- Diagnostics/proof surfaces for local-light shadow products and projected
+  receiver shadows.
 
 **Out of scope:**
 
-- Offscreen-only preview/capture scenarios owned by `VTX-M06B`.
-- Feature-gated runtime variants owned by `VTX-M06C`.
-- Reflection/360-view environment resource parity.
+- Virtual shadow maps.
+- Ray-traced shadows.
+- Area-light soft-shadow parity beyond the conventional shadow-map baseline.
 
 **Dependencies:**
 
-- Existing CompositionView/ViewLifecycle/CompositionPlanner substrate.
-- Validated diagnostics and frame-product publication.
-- Validated composition/presentation closeout.
+- Validated directional CSM baseline and current Stage 8/12 shadow product
+  substrate.
+- Validated diagnostics and capture tooling.
+- Existing LightingService and ShadowService publication substrate.
 
 **Exit gate:**
 
-- A detailed VTX-M06A proof plan is created before implementation.
-- Multi-view runtime implementation exists without cross-view product leakage.
-- Focused tests and RenderDoc/CDB proof validate per-view routing and products.
-- User visual confirmation is requested and recorded for visual scenarios.
+- Spot-light conventional shadows are implemented and proven.
+- Point-light conventional shadows are implemented and proven or explicitly
+  deferred with approval.
+- Focused tests and RenderDoc/CDB proof validate local-light shadow products,
+  projected shadows, and no D3D12/DXGI debug-layer errors.
+- User visual confirmation is recorded for visual proof scenarios.
 
-**Recommended verification:** define in the VTX-M06A detailed proof plan before
-implementation.
+**Recommended verification:** see the dedicated M05D plan; local-light visual
+scenarios require user confirmation before closure.
 
 ## 5. Milestone Roadmap
 
@@ -147,7 +153,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M05A | Diagnostics product service | `validated` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
 | VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
 | VTX-M05C | Translucency stage | `validated` | VTX-M03, VTX-M04D.5, VTX-M05A, VTX-M05B | Stage 18 standard forward-lit translucency consuming prepared transparent draws plus lighting/shadow/environment publications. Focused build/tests, senior-review regression remediation, CDB/D3D12 audit, RenderDoc proof, UE5.7 re-check, and user visual confirmation passed. |
-| VTX-M05D | Conventional shadow parity and local-light expansion | `validated` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | Directional CSM UE5.7 audit/remediation and local-scale `VsmTwoCubes` validation are closed with Release smoke, recook, RenderDoc capture, and sequential shadow/base-pass analysis proof. Spot/point conventional local-light shadows are deferred to future ShadowService/local-light work by closeout approval. |
+| VTX-M05D | Conventional shadow parity and local-light expansion | `in_progress` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | Directional CSM UE5.7 audit/remediation and local-scale `VsmTwoCubes` validation are closed with Release smoke, recook, RenderDoc capture, and sequential shadow/base-pass analysis proof. Spot-light conventional shadows and point-light strategy/implementation remain. |
 | VTX-M06A | Multi-view proof closeout | `planned` | VTX-M05A, VTX-M05B, VTX-M05C | Heterogeneous per-view rendering, PiP/multi-surface routing, per-view capability gating. |
 | VTX-M06B | Offscreen proof closeout | `planned` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios. |
 | VTX-M06C | Feature-gated runtime variants | `planned` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants. |
