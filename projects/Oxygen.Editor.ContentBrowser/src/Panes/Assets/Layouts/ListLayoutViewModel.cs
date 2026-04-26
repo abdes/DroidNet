@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Models;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -16,10 +16,10 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <param name="assetCatalog">The asset catalog.</param>
 public partial class ListLayoutViewModel(
     IAssetCatalog assetCatalog,
-    IProject currentProject,
+    IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext)
-    : AssetsLayoutViewModel(assetCatalog, currentProject, contentBrowserState, hostingContext)
+    : AssetsLayoutViewModel(assetCatalog, projectContextService, contentBrowserState, hostingContext)
 {
     /// <summary>
     /// Invokes the item.

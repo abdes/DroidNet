@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
@@ -32,6 +33,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
+/// <param name="storage">The storage provider.</param>
 /// <param name="importService">The import service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
@@ -40,6 +42,7 @@ public partial class AssetsViewModel(
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectManagerService projectManagerService,
+    IStorageProvider storage,
     IMessenger messenger,
     IImportService importService,
     IWindowManagerService windowManagerService) : AbstractOutletContainer, IRoutingAware
@@ -179,9 +182,7 @@ public partial class AssetsViewModel(
 
         try
         {
-            // Get the storage provider and create an IFolder instance
-            var storageProvider = projectManagerService.GetCurrentProjectStorageProvider();
-            var folder = await storageProvider.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
+            var folder = await storage.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
 
             Debug.WriteLine($"[AssetsViewModel] Requesting navigation to folder: {folder.Location}");
 
