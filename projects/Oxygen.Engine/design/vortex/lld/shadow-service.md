@@ -2,7 +2,7 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** `directional_baseline_validated_m05d_reaudit_required`
+**Status:** `m05d_directional_csm_reaudit_in_progress`
 
 ## Mandatory Vortex Rule
 
@@ -91,6 +91,7 @@ The CSM audit must be grounded only in the local UE5.7 source tree:
 - `Engine/Private/Components/DirectionalLightComponent.cpp`
 - `Shaders/Private/ForwardShadowingCommon.ush`
 - `Shaders/Private/ShadowFilteringCommon.ush`
+- `Shaders/Private/ShadowProjectionPixelShader.usf`
 - `Shaders/Private/DeferredLightPixelShaders.usf`
 
 The audit must compare these UE concerns against Oxygen:
@@ -108,6 +109,32 @@ The city-scale instability report is a first-class blocker: if the parity audit
 does not identify the cause, the implementation work must continue with
 focused capture/debugging until the unstable projected shadows are explained and
 fixed. "Projected shadows exist in a static view" is not sufficient for M05D.
+
+Deep validation captures are not required on the city scene. The city scene is
+large enough that full RenderDoc inspection is expensive and noisy. Once the CSM
+audit/remediation is complete, detailed capture proof should use the smaller
+`physics_domain` scene, while city remains a runtime smoke/stability scenario
+unless a city-only regression requires targeted inspection.
+
+### 1.5 Directional CSM Audit Conclusions
+
+The M05D UE5.7 audit maps the production directional CSM path to these required
+behaviors:
+
+| Concern | UE5.7 authority | Oxygen decision |
+| --- | --- | --- |
+| Split generation | `FDirectionalLightSceneProxy::GetSplitDistance` | Keep Oxygen manual/generated settings, already canonicalized from scene authoring. |
+| No-AA frustum source | `GetShadowSplitBoundsDepthRange` uses `GetProjectionNoAAMatrix` | Use `ResolvedView::StableProjectionMatrix()` for cascade corner extraction so TAA jitter cannot move cascades. |
+| Stable bounds | UE fits a cascade sphere around the split frustum | Use a square sphere-derived light projection instead of a tight per-frame light-space AABB. |
+| Texel snapping | `SetupWholeSceneProjection` snaps XY with `MaxDownsampleFactor = 4` | Snap cascade center in light-space XY at `world_texel_size * 4`. |
+| Directional depth range | UE clamps directional CSM subject range to at least `[-5000,+5000]` | Use a 5000-unit directional depth extent minimum to avoid clipping casters between the light and receivers. |
+| Bias routing | `UpdateShaderDepthBias` derives CSM clip-space depth bias from `r.Shadow.CSMDepthBias / (MaxSubjectZ - MinSubjectZ)`, scales it by `ShadowBounds.W / ResolutionX` when `ShadowCascadeBiasDistribution == 1`, then multiplies by the light user shadow bias | Mirror that contract for conventional directional shadows when `shadow.bias` is nonzero: `sampling_metadata1.z` stores the computed per-cascade clip-depth bias, not a raw scene-authored constant. Oxygen's default `shadow.bias` remains `0.0` because current meter-scale validation needs contact shadows at caster feet without peter-panning. |
+| Receiver filtering | `ShadowProjectionPixelShader.usf` + `ShadowFilteringCommon.ush` apply PCF and receiver-bias scaling | Keep Oxygen's compact 3x3 reversed-Z PCF for now. The computed CSM depth bias is applied in the shadow-depth pass, not subtracted again during opaque receiver comparison. Receiver-side normal/world-texel offset remains Oxygen's compact substitute for UE's broader receiver-bias/PCF machinery until the filter parity pass. |
+| Cascade transitions | UE extends non-last cascade far bounds by the transition region and uses fade-plane data for the last cascade | Oxygen keeps non-overlapped authored split distances and blends the current/next cascade over the configured terminal band. This is an accepted ABI simplification unless proof shows visible seams. |
+| Caster culling | UE builds accurate caster/receiver frusta per cascade | Oxygen currently submits all prepared shadow casters to every cascade. This is conservative for correctness and accepted for M05D unless profiling makes it a blocker. |
+| Storage layout | UE packs conventional shadows in atlas/tile resources | Oxygen keeps the dedicated directional `Texture2DArray` contract; this is an intentional engine convention, not a parity defect. |
+| Resolution selection | UE resolves runtime shadow-map budgets from light settings and renderer scalability | Oxygen resolves the directional `ShadowResolutionHint` selected in the Environment panel into concrete conventional shadow-map dimensions, clamped by the renderer shadow-quality tier: Low 1024, Medium 2048, High 3072, Ultra 4096. The allocator must reallocate when this hint changes, and the shadow-depth pass must invalidate cached DSVs when the surface changes. |
+| Caching/scrolling | UE supports cached/scrolling CSM work | Oxygen does not implement CSM caching in M05D; stability comes from no-AA frusta, sphere bounds, and texel snapping. |
 
 ## 2. Interface Contracts
 
@@ -228,7 +255,7 @@ defines the metadata as:
 | `sampling_metadata0.w` | cascade world texel size |
 | `sampling_metadata1.x` | cascade-transition width in view-depth units |
 | `sampling_metadata1.y` | last-cascade fade-begin depth |
-| `sampling_metadata1.z` | authored constant receiver bias |
+| `sampling_metadata1.z` | UE-style computed clip-depth bias for the shadow-depth pass |
 | `sampling_metadata1.w` | authored normal receiver bias |
 
 These fields follow the UE-shaped contract in which cascade distribution,
@@ -387,9 +414,11 @@ orthographic projection is built with the engine reversed-Z helper, and the
 receiver comparison treats larger stored depth as closer to the light.
 
 The shadow-depth pass constants are bound as a per-cascade CBV through
-`g_PassConstantsIndex`. They carry the light view-projection matrix plus direct
-draw metadata, current-worlds, and instance-data slots. The depth shader must
-not reload draw bindings through mutable per-view frame binding payloads.
+`g_PassConstantsIndex`. They carry the light view-projection matrix, UE-style
+CSM constant/slope depth-bias terms derived from `sampling_metadata1.z`, the
+light direction, and direct draw metadata/current-worlds/instance-data slots.
+The depth shader must not reload draw bindings through mutable per-view frame
+binding payloads.
 
 ### 5.2 Directional Shadow Sampling Contract
 
@@ -447,8 +476,8 @@ Requires `kShadowing`.
 1. **Directional cascade validation:** single directional light, known scene ->
    verify cascade splits cover the camera frustum correctly.
 2. **Directional shadow visual:** ground plane under the selected directional
-   light -> visible occluder shadow. This requires user visual confirmation
-   before the VTX-M04D.4 blocker can be considered closed.
+   light -> visible occluder shadow. For M05D proof, use `physics_domain` for
+   detailed capture evidence after the CSM audit/remediation is complete.
 3. **Per-view publication:** inspect `ShadowFrameBindings` for multiple views ->
    verify view-specific matrices/addressing metadata remain isolated.
 4. **RenderDoc:** inspect conventional shadow backing resources and verify

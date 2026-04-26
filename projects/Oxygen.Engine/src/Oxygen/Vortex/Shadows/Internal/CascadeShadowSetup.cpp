@@ -14,6 +14,7 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
@@ -25,12 +26,28 @@ namespace oxygen::vortex::shadows::internal {
 namespace {
 
 constexpr float kMinCascadeSpan = 0.1F;
-constexpr float kLightPullbackPadding = 32.0F;
-constexpr float kShadowDepthPadding = 32.0F;
+constexpr float kDirectionalDepthRangeClamp = 5000.0F;
+constexpr float kShadowSnapDownsampleFactor = 4.0F;
+constexpr float kUeCsmShadowDepthBias = 10.0F;
+constexpr float kUeCascadeBiasDistribution = 1.0F;
+constexpr float kUeMaxUserShadowBias = 10.0F;
 
 struct CascadeMatrixData {
   glm::mat4 light_view_projection { 1.0F };
   float world_texel_size { 0.0F };
+  float cascade_radius { 1.0F };
+  float depth_span { 1.0F };
+};
+
+struct LightBasis {
+  glm::vec3 right { 1.0F, 0.0F, 0.0F };
+  glm::vec3 up { 0.0F, 1.0F, 0.0F };
+  glm::vec3 forward { 0.0F, 0.0F, 1.0F };
+};
+
+struct CascadeSphere {
+  glm::vec3 center { 0.0F };
+  float radius { 1.0F };
 };
 
 auto ResolveSafeLightDirection(const glm::vec3 direction) -> glm::vec3
@@ -57,13 +74,142 @@ auto ExtractFrustumCornersWorld(const ResolvedView& resolved_view)
   };
 
   auto corners = std::array<glm::vec3, 8> {};
-  const auto inverse_view_projection = resolved_view.InverseViewProjection();
+  const auto inverse_view_projection = glm::inverse(
+    resolved_view.StableProjectionMatrix() * resolved_view.ViewMatrix());
   for (std::size_t i = 0; i < kNdcCorners.size(); ++i) {
     const auto clip
       = inverse_view_projection * glm::vec4(kNdcCorners[i], 1.0F);
     corners[i] = glm::vec3(clip) / clip.w;
   }
   return corners;
+}
+
+auto BuildLightBasis(const glm::vec3 light_direction_to_source) -> LightBasis
+{
+  const auto forward = ResolveSafeLightDirection(light_direction_to_source);
+  auto world_up = glm::vec3 { 0.0F, 1.0F, 0.0F };
+  if (std::abs(glm::dot(world_up, forward)) > 0.98F) {
+    world_up = glm::vec3 { 0.0F, 0.0F, 1.0F };
+  }
+
+  const auto view_forward = -forward;
+  const auto right = glm::normalize(glm::cross(view_forward, world_up));
+  const auto up = glm::cross(right, view_forward);
+  return LightBasis {
+    .right = right,
+    .up = up,
+    .forward = forward,
+  };
+}
+
+auto ProjectToLightBasis(const LightBasis& basis, const glm::vec3 world_position)
+  -> glm::vec3
+{
+  return glm::vec3 {
+    glm::dot(basis.right, world_position),
+    glm::dot(basis.up, world_position),
+    glm::dot(basis.forward, world_position),
+  };
+}
+
+auto UnprojectFromLightBasis(
+  const LightBasis& basis, const glm::vec3 light_position) -> glm::vec3
+{
+  return basis.right * light_position.x + basis.up * light_position.y
+    + basis.forward * light_position.z;
+}
+
+auto SnapCascadeCenterToTexelGrid(const LightBasis& basis,
+  const glm::vec3 cascade_center, const float cascade_radius,
+  const std::uint32_t shadow_resolution) -> glm::vec3
+{
+  const auto resolution = (std::max)(shadow_resolution, 1U);
+  const auto world_texel_size
+    = (2.0F * cascade_radius) / static_cast<float>(resolution);
+  const auto snap_interval = world_texel_size * kShadowSnapDownsampleFactor;
+  if (!std::isfinite(snap_interval) || snap_interval <= 0.0F) {
+    return cascade_center;
+  }
+
+  auto light_center = ProjectToLightBasis(basis, cascade_center);
+  light_center.x -= std::fmod(light_center.x, snap_interval);
+  light_center.y -= std::fmod(light_center.y, snap_interval);
+  return UnprojectFromLightBasis(basis, light_center);
+}
+
+auto ComputeStableCascadeSphere(const std::array<glm::vec3, 8>& corners)
+  -> CascadeSphere
+{
+  auto near_center = glm::vec3 { 0.0F };
+  auto far_center = glm::vec3 { 0.0F };
+  for (std::size_t i = 0; i < 4U; ++i) {
+    near_center += corners[i];
+    far_center += corners[i + 4U];
+  }
+  near_center *= 0.25F;
+  far_center *= 0.25F;
+
+  const auto split_axis = far_center - near_center;
+  const auto split_length = glm::length(split_axis);
+  if (!std::isfinite(split_length) || split_length <= kMinCascadeSpan) {
+    return CascadeSphere {
+      .center = near_center,
+      .radius = 1.0F,
+    };
+  }
+
+  const auto camera_direction = split_axis / split_length;
+  auto near_diagonal_sq = 0.0F;
+  auto far_diagonal_sq = 0.0F;
+  for (std::size_t i = 0; i < 4U; ++i) {
+    const auto near_offset = corners[i] - near_center;
+    const auto far_offset = corners[i + 4U] - far_center;
+    near_diagonal_sq = (std::max)(
+      near_diagonal_sq, glm::dot(near_offset, near_offset));
+    far_diagonal_sq = (std::max)(
+      far_diagonal_sq, glm::dot(far_offset, far_offset));
+  }
+
+  const auto optimal_offset = ((near_diagonal_sq - far_diagonal_sq)
+                                / (2.0F * split_length))
+    + split_length * 0.5F;
+  const auto center_distance = std::clamp(
+    split_length - optimal_offset, 0.0F, split_length);
+  const auto sphere_center = near_center + camera_direction * center_distance;
+
+  auto radius_sq = 0.0F;
+  for (const auto& corner : corners) {
+    const auto corner_offset = corner - sphere_center;
+    radius_sq = (std::max)(
+      radius_sq, glm::dot(corner_offset, corner_offset));
+  }
+
+  return CascadeSphere {
+    .center = sphere_center,
+    .radius = (std::max)(std::sqrt(radius_sq), 1.0F),
+  };
+}
+
+auto ComputeDirectionalCsmDepthBias(const float user_shadow_bias,
+  const float cascade_radius, const float projection_depth_span,
+  const std::uint32_t shadow_resolution) -> float
+{
+  if (!std::isfinite(user_shadow_bias) || user_shadow_bias <= 0.0F) {
+    return 0.0F;
+  }
+
+  const auto safe_depth_span
+    = (std::max)(projection_depth_span, kMinCascadeSpan);
+  const auto resolution = (std::max)(shadow_resolution, 1U);
+  const auto world_space_texel_scale
+    = cascade_radius / static_cast<float>(resolution);
+  const auto base_depth_bias = kUeCsmShadowDepthBias / safe_depth_span;
+  const auto scaled_depth_bias = base_depth_bias * world_space_texel_scale;
+  const auto distributed_depth_bias = base_depth_bias
+    + (scaled_depth_bias - base_depth_bias) * kUeCascadeBiasDistribution;
+  const auto clamped_user_bias
+    = std::clamp(user_shadow_bias, 0.0F, kUeMaxUserShadowBias);
+  return (std::max)(distributed_depth_bias * clamped_user_bias, 0.0F);
 }
 
 auto ComputeAccumulatedScale(const float exponent,
@@ -138,48 +284,27 @@ auto BuildCascadeMatrix(const ResolvedView& resolved_view,
     slice_corners[i + 4U] = near_corner + ray * far_t;
   }
 
-  auto slice_center = glm::vec3 { 0.0F };
-  for (const auto& corner : slice_corners) {
-    slice_center += corner;
-  }
-  slice_center /= static_cast<float>(slice_corners.size());
-
-  auto max_radius = 0.0F;
-  for (const auto& corner : slice_corners) {
-    max_radius = (std::max)(max_radius, glm::length(corner - slice_center));
-  }
-
-  const auto safe_light_direction = ResolveSafeLightDirection(light_direction);
-  auto up = glm::vec3 { 0.0F, 1.0F, 0.0F };
-  if (std::abs(glm::dot(up, safe_light_direction)) > 0.98F) {
-    up = glm::vec3 { 0.0F, 0.0F, 1.0F };
-  }
-
-  const auto eye
-    = slice_center + safe_light_direction * (max_radius + kLightPullbackPadding);
-  const auto light_view = glm::lookAtRH(eye, slice_center, up);
-
-  auto min_bounds = glm::vec3 { (std::numeric_limits<float>::max)() };
-  auto max_bounds = glm::vec3 { (std::numeric_limits<float>::lowest)() };
-  for (const auto& corner : slice_corners) {
-    const auto light_space = glm::vec3(light_view * glm::vec4(corner, 1.0F));
-    min_bounds = glm::min(min_bounds, light_space);
-    max_bounds = glm::max(max_bounds, light_space);
-  }
-
-  const auto near_plane = (std::max)(0.1F, -max_bounds.z - kShadowDepthPadding);
-  const auto far_plane
-    = (std::max)(near_plane + kMinCascadeSpan, -min_bounds.z + kShadowDepthPadding);
+  const auto cascade_sphere = ComputeStableCascadeSphere(slice_corners);
+  const auto cascade_radius = cascade_sphere.radius;
+  const auto light_basis = BuildLightBasis(light_direction);
+  const auto snapped_center = SnapCascadeCenterToTexelGrid(
+    light_basis, cascade_sphere.center, cascade_radius, shadow_resolution);
+  const auto depth_extent = (std::max)({
+    kDirectionalDepthRangeClamp,
+    cascade_radius,
+    split_far,
+  });
+  const auto eye = snapped_center + light_basis.forward * depth_extent;
+  const auto light_view = glm::lookAtRH(eye, snapped_center, light_basis.up);
   const auto light_projection = MakeReversedZOrthographicProjectionRH_ZO(
-    min_bounds.x, max_bounds.x,
-    min_bounds.y, max_bounds.y, near_plane, far_plane);
-  const auto width = (std::max)(max_bounds.x - min_bounds.x, kMinCascadeSpan);
-  const auto height = (std::max)(max_bounds.y - min_bounds.y, kMinCascadeSpan);
+    -cascade_radius, cascade_radius,
+    -cascade_radius, cascade_radius, 0.1F, 2.0F * depth_extent);
   const auto resolution = (std::max)(shadow_resolution, 1U);
   return CascadeMatrixData {
     .light_view_projection = light_projection * light_view,
-    .world_texel_size = (std::max)(width, height)
-      / static_cast<float>(resolution),
+    .world_texel_size = (2.0F * cascade_radius) / static_cast<float>(resolution),
+    .cascade_radius = cascade_radius,
+    .depth_span = 2.0F * depth_extent,
   };
 }
 
@@ -253,8 +378,11 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     cascade.sampling_metadata0 = glm::vec4(
       static_cast<float>(cascade_index), inverse_resolution_x,
       inverse_resolution_y, cascade_matrix.world_texel_size);
+    const auto depth_bias = ComputeDirectionalCsmDepthBias(
+      directional_light.shadow_bias, cascade_matrix.cascade_radius,
+      cascade_matrix.depth_span, allocation.resolution.x);
     cascade.sampling_metadata1 = glm::vec4(transition_width, fade_begin,
-      directional_light.shadow_bias, directional_light.shadow_normal_bias);
+      depth_bias, directional_light.shadow_normal_bias);
     cascade_begin = cascade_end;
   }
 

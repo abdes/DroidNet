@@ -187,7 +187,7 @@
           "mobility": 0,
           "casts_shadows": true,
           "shadow": {
-            "bias": 0.0005,
+            "bias": 0.0,
             "normal_bias": 0.5
           }
         },

@@ -20,9 +20,45 @@ namespace oxygen::vortex::shadows::internal {
 
 namespace {
 
-auto ResolveDirectionalResolution() -> std::uint32_t
+auto ResolveDirectionalResolutionRequest(const std::uint32_t resolution_hint)
+  -> std::uint32_t
 {
-  return 2048U;
+  switch (resolution_hint) {
+  case 0U:
+    return 1024U;
+  case 1U:
+    return 2048U;
+  case 2U:
+    return 3072U;
+  case 3U:
+    return 4096U;
+  default:
+    return 2048U;
+  }
+}
+
+auto ResolveDirectionalResolutionBudget(const ShadowQualityTier quality_tier)
+  -> std::uint32_t
+{
+  switch (quality_tier) {
+  case ShadowQualityTier::kLow:
+    return 1024U;
+  case ShadowQualityTier::kMedium:
+    return 2048U;
+  case ShadowQualityTier::kHigh:
+    return 3072U;
+  case ShadowQualityTier::kUltra:
+    return 4096U;
+  default:
+    return 2048U;
+  }
+}
+
+auto ResolveDirectionalResolution(const std::uint32_t resolution_hint,
+  const ShadowQualityTier quality_tier) -> std::uint32_t
+{
+  return (std::min)(ResolveDirectionalResolutionRequest(resolution_hint),
+    ResolveDirectionalResolutionBudget(quality_tier));
 }
 
 auto ResolveDepthSrvFormat(const Format format) -> Format
@@ -45,9 +81,10 @@ auto ConventionalShadowTargetAllocator::OnFrameStart() -> void
 }
 
 auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
-  const std::uint32_t cascade_count) -> DirectionalAllocation
+  const std::uint32_t cascade_count, const std::uint32_t resolution_hint)
+  -> DirectionalAllocation
 {
-  EnsureDirectionalSurface(cascade_count);
+  EnsureDirectionalSurface(cascade_count, resolution_hint);
   return {
     .surface = directional_surface_,
     .surface_srv = directional_surface_srv_,
@@ -57,12 +94,14 @@ auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
 }
 
 auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
-  const std::uint32_t cascade_count) -> void
+  const std::uint32_t cascade_count, const std::uint32_t resolution_hint) -> void
 {
   const auto array_size
     = (std::max)(1U, (std::min)(cascade_count, 4U));
-  const auto resolution = glm::uvec2 { ResolveDirectionalResolution(),
-    ResolveDirectionalResolution() };
+  const auto resolved_resolution = ResolveDirectionalResolution(
+    resolution_hint, renderer_.GetShadowQualityTier());
+  const auto resolution
+    = glm::uvec2 { resolved_resolution, resolved_resolution };
   const auto needs_reallocation = !directional_surface_
     || directional_resolution_ != resolution
     || directional_array_size_ != array_size;

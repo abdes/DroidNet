@@ -104,7 +104,7 @@ static inline float SampleDirectionalShadowSurface(
         for (int x = -1; x <= 1; ++x) {
             const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
             const float stored_depth = shadow_surface.Load(int4(coord, (int)layer, 0));
-            visibility += receiver_depth >= stored_depth - 0.0008f ? 1.0f : 0.0f;
+            visibility += receiver_depth >= stored_depth ? 1.0f : 0.0f;
         }
     }
 
@@ -125,8 +125,7 @@ static inline float ComputeDirectionalCascadeVisibility(
         max(cascade.sampling_metadata1.w, 0.0f)
         + world_texel_size * lerp(0.55f, 1.5f, slope_factor);
     const float constant_bias =
-        max(cascade.sampling_metadata1.z, 0.0f)
-        + world_texel_size * lerp(0.03f, 0.18f, slope_factor);
+        world_texel_size * lerp(0.03f, 0.18f, slope_factor);
     const float3 biased_world_position =
         world_position + safe_normal * normal_bias + safe_light_dir * constant_bias;
 

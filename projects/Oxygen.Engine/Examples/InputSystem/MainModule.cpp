@@ -151,7 +151,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       .camera_controls = true,
       .environment = true,
       .lighting = false,
-      .rendering = false,
       .post_process = true,
       .ground_grid = true,
     },

@@ -530,6 +530,11 @@ public:
     return capability_families_;
   }
 
+  [[nodiscard]] auto GetShadowQualityTier() const noexcept -> ShadowQualityTier
+  {
+    return config_.shadow_quality_tier;
+  }
+
   [[nodiscard]] auto HasCapability(
     const RendererCapabilityFamily family) const noexcept -> bool
   {

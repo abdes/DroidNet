@@ -510,6 +510,8 @@ namespace {
         .distance_fadeout_fraction = csm.distance_fadeout_fraction,
         .shadow_bias = primary.Light().Common().shadow.bias,
         .shadow_normal_bias = primary.Light().Common().shadow.normal_bias,
+        .shadow_resolution_hint = static_cast<std::uint32_t>(
+          primary.Light().Common().shadow.resolution_hint),
       };
     }
 

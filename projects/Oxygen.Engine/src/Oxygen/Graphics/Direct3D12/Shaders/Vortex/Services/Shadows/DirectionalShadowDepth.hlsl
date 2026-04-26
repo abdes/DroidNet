@@ -20,12 +20,12 @@ cbuffer RootConstants : register(b2, space0)
 struct ShadowPassConstants
 {
     float4x4 light_view_projection;
-    float depth_bias;
-    float normal_bias;
+    float4 shadow_bias_parameters;
+    float4 light_direction_to_source;
     uint draw_metadata_slot;
     uint current_worlds_slot;
     uint instance_data_slot;
-    float _padding1;
+    uint _padding0;
 };
 
 struct ShadowDepthVSOutput
@@ -78,7 +78,22 @@ ShadowDepthVSOutput VortexShadowDepthVS(
         instance_id);
     float4 world_position = mul(world_matrix, float4(vertex.position, 1.0f));
     output.position = mul(pass_constants.light_view_projection, world_position);
-    output.position.z -= pass_constants.depth_bias;
+    const float3 world_normal_unnormalized =
+        mul((float3x3)world_matrix, vertex.normal);
+    const float3 world_normal =
+        dot(world_normal_unnormalized, world_normal_unnormalized) > 1.0e-8f
+            ? normalize(world_normal_unnormalized)
+            : float3(0.0f, 1.0f, 0.0f);
+    const float no_l = abs(dot(
+        normalize(pass_constants.light_direction_to_source.xyz), world_normal));
+    const float max_slope_depth_bias = pass_constants.shadow_bias_parameters.z;
+    const float slope = clamp(
+        no_l > 1.0e-4f
+            ? sqrt(saturate(1.0f - no_l * no_l)) / no_l
+            : max_slope_depth_bias,
+        0.0f, max_slope_depth_bias);
+    output.position.z -= pass_constants.shadow_bias_parameters.x
+        + pass_constants.shadow_bias_parameters.y * slope;
     return output;
 }
 

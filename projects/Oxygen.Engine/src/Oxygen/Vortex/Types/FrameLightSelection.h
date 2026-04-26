@@ -67,8 +67,9 @@ struct FrameDirectionalLightSelection {
 
   float transition_fraction { 0.1F };
   float distance_fadeout_fraction { 0.1F };
-  float shadow_bias { 0.0006F };
+  float shadow_bias { 0.0F };
   float shadow_normal_bias { 0.02F };
+  std::uint32_t shadow_resolution_hint { 1U };
 };
 
 struct FrameLocalLightSelection {
