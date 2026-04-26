@@ -370,6 +370,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
+  diagnostics_service_
+    = std::make_unique<DiagnosticsService>(capability_families_);
   gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
     observer_ptr { gfx.get() });
   render_context_pool_
@@ -647,6 +649,7 @@ auto Renderer::OnShutdown() noexcept -> void
   view_const_manager_.reset();
   render_context_pool_.reset();
   gpu_timeline_profiler_.reset();
+  diagnostics_service_.reset();
   compositing_pass_.reset();
   compositing_pass_config_.reset();
   inline_transfers_.reset();
@@ -796,8 +799,7 @@ auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
 
 auto Renderer::SetShaderDebugMode(const ShaderDebugMode mode) noexcept -> void
 {
-  shader_debug_mode_.store(
-    static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
+  diagnostics_service_->SetShaderDebugMode(mode);
 }
 
 auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
@@ -808,8 +810,18 @@ auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
 
 auto Renderer::GetShaderDebugMode() const noexcept -> ShaderDebugMode
 {
-  return static_cast<ShaderDebugMode>(
-    shader_debug_mode_.load(std::memory_order_relaxed));
+  return diagnostics_service_->GetShaderDebugMode();
+}
+
+auto Renderer::GetDiagnosticsService() noexcept -> DiagnosticsService&
+{
+  return *diagnostics_service_;
+}
+
+auto Renderer::GetDiagnosticsService() const noexcept
+  -> const DiagnosticsService&
+{
+  return *diagnostics_service_;
 }
 
 auto Renderer::GetLastEnvironmentLightingState() const noexcept
@@ -859,6 +871,9 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   last_frame_dt_seconds_ = dt_seconds;
   if (gpu_timeline_profiler_) {
     gpu_timeline_profiler_->OnFrameStart(context->GetFrameSequenceNumber());
+  }
+  if (diagnostics_service_) {
+    diagnostics_service_->BeginFrame(context->GetFrameSequenceNumber());
   }
 
   const auto tag = internal::RendererTagFactory::Get();
@@ -1165,6 +1180,9 @@ auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
     && scene_renderer_started_frame_ == context->GetFrameSequenceNumber()) {
     scene_renderer_->OnFrameEnd(*context);
     scene_renderer_started_frame_ = frame::SequenceNumber {};
+  }
+  if (diagnostics_service_ != nullptr) {
+    diagnostics_service_->EndFrame();
   }
   rigid_transform_history_cache_.EndFrame();
   deformation_history_cache_.EndFrame();

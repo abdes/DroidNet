@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -31,6 +30,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
@@ -546,6 +546,10 @@ public:
 
   OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
   OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
+  OXGN_VRTX_NDAPI auto GetDiagnosticsService() noexcept
+    -> DiagnosticsService&;
+  OXGN_VRTX_NDAPI auto GetDiagnosticsService() const noexcept
+    -> const DiagnosticsService&;
   OXGN_VRTX_API auto SetGroundGridConfig(
     const GroundGridConfig& config) noexcept -> void;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetGroundGridConfig() const noexcept
@@ -666,6 +670,7 @@ private:
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
   std::shared_ptr<internal::CompositingPass> compositing_pass_;
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
+  std::unique_ptr<DiagnosticsService> diagnostics_service_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
   std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
   GroundGridConfig ground_grid_config_ {};
@@ -699,8 +704,6 @@ private:
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
   float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };
-  std::atomic<std::uint8_t> shader_debug_mode_ { static_cast<std::uint8_t>(
-    ShaderDebugMode::kDisabled) };
   bool shutdown_called_ { false };
   observer_ptr<console::Console> console_ { nullptr };
 };

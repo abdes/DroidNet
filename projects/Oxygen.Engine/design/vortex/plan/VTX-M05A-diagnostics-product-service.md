@@ -1,6 +1,6 @@
 # VTX-M05A Diagnostics Product Service
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Milestone:** `VTX-M05A - Diagnostics Product Service`
 **Scope owner:** Vortex runtime diagnostics
 **Primary LLD:** [../lld/diagnostics-service.md](../lld/diagnostics-service.md)
@@ -91,7 +91,26 @@ Validation:
 
 ### Slice B - DiagnosticsService Shell And Ownership Boundary
 
-**Status:** `planned`
+**Status:** `in_progress`
+
+Current evidence:
+
+- `DiagnosticsTypes` and `DiagnosticsService` exist with feature flags,
+  enum/string helpers, capability clamping, shader-debug state, frame
+  begin/end, pass/product/issue recording, snapshot publication, and disabled
+  ledger no-op behavior.
+- `Renderer` owns a `DiagnosticsService` instance and forwards
+  `SetShaderDebugMode`/`GetShaderDebugMode` through it.
+- Focused build and tests passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsService --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsService|GpuTimelineProfiler)" --output-on-failure`.
+
+Remaining gap:
+
+- `NDEBUG` default policy is implemented by compile-time branch but not proven
+  in a release build.
+- GPU timeline facade integration, capture manifest, registry, panel, and
+  automation hardening remain later slices.
 
 Tasks:
 
