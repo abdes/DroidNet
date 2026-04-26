@@ -1,0 +1,21 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace Oxygen.Core.Diagnostics;
+
+/// <summary>
+/// Diagnostic code prefixes reserved for editor operation results.
+/// </summary>
+public static class DiagnosticCodes
+{
+    /// <summary>
+    /// Project-domain diagnostic code prefix.
+    /// </summary>
+    public const string ProjectPrefix = "OXE.PROJECT.";
+
+    /// <summary>
+    /// Workspace-domain diagnostic code prefix.
+    /// </summary>
+    public const string WorkspacePrefix = "OXE.WORKSPACE.";
+}

@@ -28,9 +28,11 @@ using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Gltf;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Import.Textures;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -258,6 +260,7 @@ public static partial class Program
         container.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
 
         RegisterEditorDataServices(container);
+        RegisterDiagnosticsServices(container);
         RegisterAssetServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
 
@@ -301,6 +304,21 @@ public static partial class Program
 
         // Register the project instance using a delegate that will request the currently open project from the project browser service.
         container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
+    }
+
+    private static void RegisterDiagnosticsServices(IContainer container)
+    {
+        container.Register<IStatusReducer, OperationStatusReducer>(Reuse.Singleton);
+        container.Register<IExceptionDiagnosticAdapter, ExceptionDiagnosticAdapter>(Reuse.Singleton);
+        container.Register<OperationResultStore>(Reuse.Singleton);
+        container.RegisterDelegate<IOperationResultStore>(
+            resolverContext => resolverContext.Resolve<OperationResultStore>(),
+            Reuse.Singleton);
+        container.RegisterDelegate<IOperationResultPublisher>(
+            resolverContext => resolverContext.Resolve<OperationResultStore>(),
+            Reuse.Singleton);
+        container.Register<OperationResultOutputLogAdapter>(Reuse.Singleton);
+        _ = container.Resolve<OperationResultOutputLogAdapter>();
     }
 
     private static void ConfigureWindows(IContainer container)
