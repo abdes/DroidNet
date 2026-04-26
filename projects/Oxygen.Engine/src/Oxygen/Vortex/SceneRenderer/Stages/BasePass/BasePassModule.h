@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -69,9 +71,11 @@ public:
     -> const BasePassExecutionResult&;
 
 private:
-  auto EnsureWireframeConstantsBuffer(Graphics& gfx) -> std::uint32_t;
+  static constexpr std::size_t kWireframePassConstantsSlots = 8U;
+
+  auto EnsureWireframeConstantsBuffer(Graphics& gfx) -> void;
   auto WriteWireframeConstants(Graphics& gfx, const RenderContext& ctx,
-    bool compensate_exposure) -> std::uint32_t;
+    bool compensate_exposure) -> ShaderVisibleIndex;
   auto ReleaseWireframeConstantsBuffer() -> void;
 
   Renderer& renderer_;
@@ -80,6 +84,9 @@ private:
   std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
   std::shared_ptr<oxygen::graphics::Buffer> wireframe_constants_buffer_ {};
   std::byte* wireframe_constants_mapped_ptr_ { nullptr };
+  std::array<ShaderVisibleIndex, kWireframePassConstantsSlots>
+    wireframe_constants_indices_ {};
+  std::size_t wireframe_constants_slot_ { 0U };
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_ {};
