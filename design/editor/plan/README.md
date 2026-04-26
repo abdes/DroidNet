@@ -46,3 +46,4 @@ current milestone ID after the `ED-M01` insertion.
 | Plan | Milestone | Purpose |
 | --- | --- | --- |
 | [ED-M01-project-browser-workspace-activation.md](./ED-M01-project-browser-workspace-activation.md) | `ED-M01` | Project Browser startup, project open/create, invalid project handling, workspace activation, restoration visibility, and operation results. |
+| [ED-M02-live-viewport-stabilization.md](./ED-M02-live-viewport-stabilization.md) | `ED-M02` | Embedded runtime startup, surface/view lifecycle, viewport layout validation, runtime settings diagnostics, and visual validation. |
