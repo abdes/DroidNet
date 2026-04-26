@@ -76,7 +76,6 @@ public partial class OpenProjectViewModel
         => LogFailedToLoadColumnWidths(this.logger, ex);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Toggled file list sort: comparer={Comparer}, direction={Direction}.")]
     private static partial void LogToggledSort(ILogger logger, string comparer, string direction);
@@ -84,12 +83,19 @@ public partial class OpenProjectViewModel
     [Conditional("DEBUG")]
     private void LogToggledSort()
     {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
         var desc = this.byNameSortDescription ?? this.byDateSortDescription;
         if (desc is null)
         {
             return;
         }
 
+#pragma warning disable CA1873 // Guarded by explicit IsEnabled check above.
         LogToggledSort(this.logger, desc.Comparer.GetType().Name, desc.Direction.ToString());
+#pragma warning restore CA1873
     }
 }

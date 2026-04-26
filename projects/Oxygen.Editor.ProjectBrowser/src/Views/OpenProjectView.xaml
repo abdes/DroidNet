@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="Oxygen.Editor.ProjectBrowser.Views.OpenProjectView"
@@ -10,6 +10,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.ProjectBrowser.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:storage="using:Oxygen.Storage"
     xmlns:vm="using:Oxygen.Editor.ProjectBrowser.ViewModels"
@@ -125,6 +126,7 @@
     <Grid Margin="20,10" VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -141,8 +143,18 @@
             Style="{ThemeResource TitleTextBlockStyle}"
             Text="Open" />
 
-        <pbc:KnownLocationsListView
+        <muxc:InfoBar
+            Title="{x:Bind ViewModel.OperationResultTitle, Mode=OneWay}"
             Grid.Row="1"
+            Grid.ColumnSpan="3"
+            Margin="0,0,0,12"
+            IsClosable="True"
+            IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
+            Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
+            Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}" />
+
+        <pbc:KnownLocationsListView
+            Grid.Row="2"
             Grid.Column="0"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
@@ -154,12 +166,12 @@
             SelectionChanged="OnKnownLocationSelectionChanged" />
 
         <Border
-            Grid.Row="1"
+            Grid.Row="2"
             Grid.Column="1"
             Style="{StaticResource VerticalSeparator}" />
 
         <!--  The right file list view area  -->
-        <Grid Grid.Row="1" Grid.Column="2">
+        <Grid Grid.Row="2" Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />

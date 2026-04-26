@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
@@ -17,7 +16,16 @@ public interface IProjectBrowserService
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the enumeration.</param>
     /// <returns>An async enumerable of project information for recently used projects.</returns>
-    public IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
+    public IAsyncEnumerable<RecentProjectEntry> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a recent project record after explicit user action.
+    /// </summary>
+    /// <param name="name">The stored project name.</param>
+    /// <param name="location">The stored project location.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task RemoveRecentProjectAsync(string name, string location, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Validates whether a project can be created with the specified name at the given location.

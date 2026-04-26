@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
     x:Class="Oxygen.Editor.ProjectBrowser.Views.HomeView"
@@ -6,6 +6,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
     KeyDown="OnHomeViewKeyDown"
@@ -15,6 +16,7 @@
 
     <Grid Margin="20,10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -26,7 +28,16 @@
             Hello!
         </TextBlock>
 
-        <ScrollView Grid.Row="1">
+        <muxc:InfoBar
+            Title="{x:Bind ViewModel.OperationResultTitle, Mode=OneWay}"
+            Grid.Row="1"
+            Margin="0,0,0,12"
+            IsClosable="True"
+            IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
+            Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
+            Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}" />
+
+        <ScrollView Grid.Row="2">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />

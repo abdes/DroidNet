@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="Oxygen.Editor.ProjectBrowser.Controls.RecentProjectsList"
@@ -18,7 +18,7 @@
         <DataTemplate x:Key="RecentProjectTemplate" x:DataType="local:ProjectItemWithThumbnail">
             <Grid
                 Height="60"
-                AutomationProperties.Name="{x:Bind ProjectInfo.Name}"
+                AutomationProperties.Name="{x:Bind DisplayName}"
                 BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,0,0,1">
                 <Grid.ColumnDefinitions>
@@ -45,18 +45,29 @@
                     <TextBlock
                         Grid.Row="0"
                         VerticalAlignment="Bottom"
-                        Text="{x:Bind ProjectInfo.Name}" />
-                    <TextBlock
-                        Grid.Row="1"
-                        VerticalAlignment="Top"
-                        FontSize="11"
-                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
-                        Text="{x:Bind ProjectInfo.Location}" />
+                        Text="{x:Bind DisplayName}" />
+                    <StackPanel Grid.Row="1" VerticalAlignment="Top">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                            Text="{x:Bind Location}" />
+                        <StackPanel Orientation="Horizontal" Visibility="{x:Bind InvalidStatusVisibility}">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind StatusText}" />
+                            <HyperlinkButton
+                                Margin="12,-8,0,-8"
+                                Command="{Binding Data.RemoveProjectCommand, Source={StaticResource ViewModelProxy}}"
+                                CommandParameter="{Binding}"
+                                Content="Remove" />
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
                 <TextBlock
                     Grid.Column="2"
                     VerticalAlignment="Center"
-                    Text="{x:Bind ProjectInfo.LastUsedOn}" />
+                    Text="{x:Bind LastUsedOn}" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
