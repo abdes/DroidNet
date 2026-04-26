@@ -42,6 +42,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
     private readonly IProjectManagerService projectManager;
     private readonly IEngineService engineService;
     private readonly ILogger logger;
+    private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
     private IMessenger? messenger;
 
     /// <summary>
@@ -122,14 +123,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
 
         // Mount the project's cooked assets root in the engine's virtual path resolver.
         // This allows the engine to resolve asset:/// URIs to actual files on disk.
-        this.RefreshCookedRoots();
+        await this.RefreshCookedRootsAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
     public void Receive(AssetsCookedMessage message)
     {
         this.logger.LogInformation("Received AssetsCookedMessage, refreshing cooked roots.");
-        this.RefreshCookedRoots();
+        _ = this.RefreshCookedRootsAsync();
     }
 
     /// <inheritdoc />
@@ -191,14 +192,22 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
     {
         if (disposing)
         {
-            this.engineService.UnmountProjectCookedRoot();
+            if (this.engineService.State == EngineServiceState.Running)
+            {
+                this.engineService.UnmountProjectCookedRoot();
+            }
         }
 
         base.Dispose(disposing);
     }
 
-    private void RefreshCookedRoots()
+    private async Task RefreshCookedRootsAsync()
     {
+        if (!await this.EnsureEngineRunningAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
         // Mount the project's cooked assets roots (per mount point) in the engine's virtual path resolver.
         // This allows the engine to resolve asset:/// URIs to actual files on disk.
         if (this.projectManager.CurrentProject?.ProjectInfo.Location is null)
@@ -302,6 +311,51 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         }
 
         this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+    }
+
+    private async Task<bool> EnsureEngineRunningAsync()
+    {
+        if (this.engineService.State == EngineServiceState.Running)
+        {
+            return true;
+        }
+
+        await this.engineStartupGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            switch (this.engineService.State)
+            {
+                case EngineServiceState.Running:
+                    return true;
+
+                case EngineServiceState.NoEngine:
+                case EngineServiceState.Faulted:
+                    this.logger.LogInformation("Starting embedded engine for workspace activation.");
+                    _ = await this.engineService.InitializeAsync().ConfigureAwait(true);
+                    await this.engineService.StartAsync().ConfigureAwait(true);
+                    return this.engineService.State == EngineServiceState.Running;
+
+                case EngineServiceState.Ready:
+                    this.logger.LogInformation("Starting initialized embedded engine for workspace activation.");
+                    await this.engineService.StartAsync().ConfigureAwait(true);
+                    return this.engineService.State == EngineServiceState.Running;
+
+                default:
+                    this.logger.LogWarning(
+                        "Cannot refresh cooked roots while engine is in state {EngineState}.",
+                        this.engineService.State);
+                    return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to start embedded engine for workspace activation.");
+            return false;
+        }
+        finally
+        {
+            _ = this.engineStartupGate.Release();
+        }
     }
 
     private bool IsCookedIndexMountable(string indexPath)
