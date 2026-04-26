@@ -10,11 +10,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Core.Services;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Storage;
 using Oxygen.Storage.Native;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
@@ -31,7 +30,6 @@ namespace Oxygen.Editor.ProjectBrowser.Projects;
 /// </para>
 /// <para>
 /// Key responsibilities include:
-/// - Managing project templates and creation
 /// - Handling project storage locations
 /// - Tracking recently used projects
 /// - Managing project browser settings.
@@ -42,21 +40,19 @@ public partial class ProjectBrowserService : IProjectBrowserService
     private readonly ILogger logger;
 
     private readonly IOxygenPathFinder finder;
-    private readonly IProjectManagerService projectManager;
+    private readonly IProjectCreationService projectCreation;
+    private readonly IRecentProjectAdapter recentProjects;
     private readonly NativeStorageProvider localStorage;
     private readonly IEditorSettingsManager settingsManager;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
-    private readonly IProjectUsageService projectUsage;
-    private readonly ITemplateUsageService templateUsage;
     private readonly Lazy<Task<ProjectBrowserSettings>> lazySettings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
     /// </summary>
-    /// <param name="projectUsage">Service for reading and updating project usage data.</param>
-    /// <param name="templateUsage">Service for recording template usage metrics.</param>
-    /// <param name="projectManager">Service for managing project operations.</param>
+    /// <param name="projectCreation">Project creation validation service.</param>
+    /// <param name="recentProjects">Recent project adapter.</param>
     /// <param name="finder">Service for locating system paths.</param>
     /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
     /// <param name="settingsManager">Manager for handling project browser settings.</param>
@@ -70,18 +66,16 @@ public partial class ProjectBrowserService : IProjectBrowserService
     /// <para>- Known locations for project storage.</para>
     /// </remarks>
     public ProjectBrowserService(
-        IProjectUsageService projectUsage,
-        ITemplateUsageService templateUsage,
-        IProjectManagerService projectManager,
+        IProjectCreationService projectCreation,
+        IRecentProjectAdapter recentProjects,
         IOxygenPathFinder finder,
         IStorageProvider localStorage,
         IEditorSettingsManager settingsManager,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<ProjectBrowserService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectBrowserService>();
-        this.projectUsage = projectUsage;
-        this.templateUsage = templateUsage;
-        this.projectManager = projectManager;
+        this.projectCreation = projectCreation;
+        this.recentProjects = recentProjects;
         this.finder = finder;
         this.settingsManager = settingsManager;
 
@@ -110,221 +104,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
 
     /// <inheritdoc/>
     public async Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath)
-    {
-        // Containing folder must exist
-        if (!await this.localStorage.FolderExistsAsync(atLocationPath).ConfigureAwait(true))
-        {
-            return false;
-        }
-
-        // Project folder should not exist, but if it does, it should be empty
-        var projectFolderPath = this.localStorage.NormalizeRelativeTo(atLocationPath, projectName);
-        var projectFolder = await this.localStorage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(true);
-        return !await projectFolder.ExistsAsync().ConfigureAwait(true) ||
-               !await projectFolder.HasItemsAsync().ConfigureAwait(true);
-    }
-
-    /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Project creation reports errors as boolean results and logs details for diagnostics.")]
-    public async Task<bool> NewProjectFromTemplate(
-        ITemplateInfo templateInfo,
-        string projectName,
-        string atLocationPath)
-    {
-        this.LogNewProjectFromTemplate(templateInfo.Category.Name, templateInfo.Name, projectName, atLocationPath);
-
-        if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(true))
-        {
-            this.LogCannotCreateNewProject(projectName, atLocationPath);
-            return false;
-        }
-
-        if (string.IsNullOrEmpty(templateInfo.Location))
-        {
-            this.LogInvalidTemplateLocation(templateInfo.Location);
-            return false;
-        }
-
-        var templateDirInfo = new DirectoryInfo(templateInfo.Location);
-
-        IFolder? projectFolder = null;
-        try
-        {
-            // Create project folder
-            projectFolder = await this.localStorage
-                .GetFolderFromPathAsync(this.localStorage.NormalizeRelativeTo(atLocationPath, projectName))
-                .ConfigureAwait(true);
-            await projectFolder.CreateAsync().ConfigureAwait(true);
-
-            // Copy all content from template to the new project folder
-            await CopyTemplateAssetsToProjectAsync(CancellationToken.None).ConfigureAwait(true);
-
-            // After copying the template assets, patch Project.oxy at the project root (if present)
-            UpdateProjectManifest(projectFolder.Location, projectName);
-
-            // Load the project info, update it, and save it
-            var projectInfo = await this.projectManager.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(true);
-            if (projectInfo != null)
-            {
-                projectInfo.Name = projectName;
-                if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
-                {
-                    return await this.FinalizeProjectCreationAsync(projectInfo, templateInfo.Location).ConfigureAwait(true);
-                }
-            }
-
-            RemoveFailedProject(projectFolder);
-        }
-        catch (Exception ex)
-        {
-            this.LogProjectCreationFailed(ex);
-        }
-
-        return false;
-
-        async Task CopyTemplateAssetsToProjectAsync(CancellationToken cancellationToken)
-        {
-            // Recursively enumerate directories and files using an async iterator so we can honor cancellation.
-            this.LogBeginCopyTemplateAssets(templateDirInfo.FullName, projectFolder.Location);
-            await foreach (var entry in EnumerateTemplateEntriesAsync(templateDirInfo, cancellationToken).ConfigureAwait(true))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var relativePath = entry.FullName[templateDirInfo.FullName.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                var targetPath = Path.Combine(projectFolder.Location, relativePath);
-
-                if (entry is DirectoryInfo)
-                {
-                    Directory.CreateDirectory(targetPath);
-                    this.LogCreatedDirectory(targetPath);
-                }
-                else if (entry is FileInfo file && !string.Equals(file.Name, "Template.json", StringComparison.Ordinal))
-                {
-                    _ = file.CopyTo(targetPath, overwrite: true);
-                    this.LogCopiedFile(file.FullName, targetPath);
-                }
-                else if (entry is FileInfo skipped && string.Equals(skipped.Name, "Template.json", StringComparison.Ordinal))
-                {
-                    this.LogSkippedTemplateMetadataFile(skipped.FullName);
-                }
-            }
-        }
-
-        async IAsyncEnumerable<FileSystemInfo> EnumerateTemplateEntriesAsync(
-            DirectoryInfo root,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            // Depth-first traversal: yield directory, then recurse, then files.
-            foreach (var dir in root.EnumerateDirectories())
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                this.LogEnumeratingDirectory(dir.FullName);
-                yield return dir;
-                await foreach (var nested in EnumerateTemplateEntriesAsync(dir, cancellationToken).ConfigureAwait(false))
-                {
-                    yield return nested;
-                }
-            }
-
-            foreach (var file in root.EnumerateFiles())
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                yield return file;
-            }
-        }
-
-        void UpdateProjectManifest(string projectFolderPath, string newName)
-        {
-            string? projectOxyPath = null;
-            try
-            {
-                projectOxyPath = Path.Combine(projectFolderPath, Constants.ProjectFileName);
-                if (!File.Exists(projectOxyPath))
-                {
-                    return;
-                }
-
-                // Read JSON and update Id and Name
-                var text = File.ReadAllText(projectOxyPath);
-                try
-                {
-                    // Use System.Text.Json to parse and modify
-                    var node = System.Text.Json.Nodes.JsonNode.Parse(text);
-                    if (node is null)
-                    {
-                        return;
-                    }
-
-                    // Set Name
-                    node["Name"] = newName;
-
-                    // Set Id to a new GUID
-                    node["Id"] = System.Guid.NewGuid().ToString("D");
-
-                    // Write back with indentation
-                    var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-                    var serialized = node.ToJsonString(options);
-                    File.WriteAllText(projectOxyPath, serialized);
-                }
-                catch (System.Text.Json.JsonException)
-                {
-                    // If parsing fails, leave the file as-is (do not crash project creation)
-                }
-            }
-            catch (Exception ex)
-            {
-                this.LogFailedToPatchProjectManifest(projectOxyPath, ex);
-            }
-        }
-
-        void RemoveFailedProject(IFolder? storageLocation)
-        {
-            if (storageLocation == null)
-            {
-                return;
-            }
-
-            try
-            {
-                Directory.Delete(storageLocation.Location, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                this.LogFailedProjectCleanupError(storageLocation.Location, ex);
-                throw;
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Project opening should not crash the UI; errors are logged and surfaced via the return value.")]
-    public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
-    {
-        try
-        {
-            var success = await this.projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(true);
-            if (success)
-            {
-                // Update the recently used project entry for the project being saved
-                await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
-            }
-
-            return success;
-        }
-        catch (Exception ex)
-        {
-            this.LogOpenProjectFailed(ex);
-            return false;
-        }
-    }
-
-    /// <inheritdoc/>
-    public async Task<bool> OpenProjectAsync(string location)
-    {
-        var projectInfo = await this.projectManager.LoadProjectInfoAsync(location!).ConfigureAwait(true);
-        return projectInfo is not null
-            && await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
-    }
+        => await this.projectCreation.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(true);
 
     /// <inheritdoc/>
     public IList<QuickSaveLocation> GetQuickSaveLocations()
@@ -346,22 +126,11 @@ public partial class ProjectBrowserService : IProjectBrowserService
     /// <inheritdoc/>
     public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        foreach (var item in await this.projectUsage.GetMostRecentlyUsedProjectsAsync().ConfigureAwait(true))
+        await foreach (var item in this.recentProjects.GetRecentProjectsAsync(cancellationToken: cancellationToken).ConfigureAwait(true))
         {
-            if (cancellationToken.IsCancellationRequested)
+            if (item.Validation.ProjectInfo is { } projectInfo)
             {
-                break;
-            }
-
-            var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(true);
-            if (projectInfo != null)
-            {
-                projectInfo.LastUsedOn = item.LastUsedOn;
                 yield return projectInfo;
-            }
-            else
-            {
-                await this.projectUsage.DeleteProjectUsageAsync(item.Name, item.Location).ConfigureAwait(true);
             }
         }
     }
@@ -392,35 +161,6 @@ public partial class ProjectBrowserService : IProjectBrowserService
         {
             this.LogFailedToUpdateLastSaveLocation(ex);
             throw;
-        }
-    }
-
-    private async Task<bool> FinalizeProjectCreationAsync(IProjectInfo projectInfo, string templateLocation)
-    {
-        await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
-
-        await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName).ConfigureAwait(true);
-
-        var opened = await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
-        if (!opened)
-        {
-            return false;
-        }
-
-        await this.TryUpdateTemplateUsageAsync(templateLocation).ConfigureAwait(true);
-        return true;
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Template usage tracking failures must not block project creation; log and continue.")]
-    private async Task TryUpdateTemplateUsageAsync(string templateLocation)
-    {
-        try
-        {
-            await this.templateUsage.UpdateTemplateUsageAsync(templateLocation).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.LogFailedToUpdateTemplateUsage(templateLocation, ex);
         }
     }
 
