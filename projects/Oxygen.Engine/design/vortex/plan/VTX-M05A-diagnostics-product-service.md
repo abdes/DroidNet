@@ -254,7 +254,25 @@ Validation:
 
 ### Slice E - GPU Timeline Facade
 
-**Status:** `planned`
+**Status:** `validated`
+
+Current evidence:
+
+- `DiagnosticsService` exposes the existing `Internal::GpuTimelineProfiler`
+  through a service-owned facade for profiler attachment, requested/effective
+  enablement, max scopes, latest-frame retention, sinks, one-shot export, and
+  latest published frame access.
+- `Renderer` wires its profiler instance into `DiagnosticsService` and syncs
+  timeline diagnostics at frame start after the profiler publishes the previous
+  resolved frame.
+- Profiler overflow and incomplete-scope diagnostics are converted into the
+  frame ledger's minimal recoverable issue vocabulary while retaining the
+  profiler as the implementation owner.
+- Focused build and tests passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.GpuTimelineProfiler.Tests Oxygen.Vortex.DiagnosticsFrameLedger --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsService|GpuTimelineProfiler|DiagnosticsFrameLedger)" --output-on-failure`
+  with `DiagnosticsService` 8/8, `GpuTimelineProfiler` 8/8, and
+  `DiagnosticsFrameLedger` 5/5.
 
 Tasks:
 

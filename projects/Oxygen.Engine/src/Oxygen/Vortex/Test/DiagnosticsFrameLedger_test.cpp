@@ -27,7 +27,8 @@ NOLINT_TEST(DiagnosticsFrameLedgerTest, BeginFrameResetsPreviousRecords)
 {
   auto ledger = DiagnosticsFrameLedger {};
   ledger.UpdateState(ShaderDebugMode::kDirectionalShadowMask,
-    DiagnosticsFeature::kFrameLedger, DiagnosticsFeature::kFrameLedger);
+    DiagnosticsFeature::kFrameLedger, DiagnosticsFeature::kFrameLedger, false,
+    false);
 
   ledger.BeginFrame(SequenceNumber { 1U });
   ledger.RecordPass(DiagnosticsPassRecord { .name = "A", .executed = true });

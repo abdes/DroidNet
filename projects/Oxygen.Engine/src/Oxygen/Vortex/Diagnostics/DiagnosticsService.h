@@ -6,15 +6,19 @@
 
 #pragma once
 
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <span>
+#include <memory>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -57,6 +61,22 @@ public:
     std::string_view canonical_name) const noexcept
     -> std::optional<ShaderDebugMode>;
 
+  OXGN_VRTX_API auto SetGpuTimelineProfiler(
+    observer_ptr<internal::GpuTimelineProfiler> profiler) -> void;
+  OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
+  OXGN_VRTX_API auto SetGpuTimelineMaxScopesPerFrame(std::uint32_t max_scopes)
+    -> void;
+  OXGN_VRTX_API auto SetGpuTimelineRetainLatestFrame(bool retain_latest_frame)
+    -> void;
+  OXGN_VRTX_API auto AddGpuTimelineSink(
+    std::shared_ptr<internal::GpuTimelineSink> sink) -> void;
+  OXGN_VRTX_API auto RequestGpuTimelineExport(
+    const std::filesystem::path& path) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto GetLatestGpuTimelineFrame() const
+    -> std::optional<internal::GpuTimelineFrame>;
+  OXGN_VRTX_API auto SyncGpuTimelineDiagnostics() -> void;
+
   OXGN_VRTX_API auto BeginFrame(frame::SequenceNumber frame) -> void;
   OXGN_VRTX_API auto RecordPass(DiagnosticsPassRecord record) -> void;
   OXGN_VRTX_API auto RecordProduct(DiagnosticsProductRecord record) -> void;
@@ -70,13 +90,20 @@ private:
   [[nodiscard]] auto ComputeEffectiveFeatures() const noexcept
     -> DiagnosticsFeatureSet;
   [[nodiscard]] auto IsFrameLedgerEnabled() const noexcept -> bool;
+  [[nodiscard]] auto IsGpuTimelineFeatureEnabled() const noexcept -> bool;
+  [[nodiscard]] auto HasAvailableGpuTimelineFrame() const -> bool;
+  auto ApplyGpuTimelineEnabled() -> void;
   auto RefreshLedgerState() -> void;
+  auto ReportGpuTimelineIssue(const internal::GpuTimelineDiagnostic& diagnostic)
+    -> void;
 
   mutable std::mutex mutex_;
   CapabilitySet renderer_capabilities_ { RendererCapabilityFamily::kNone };
   DiagnosticsFeatureSet requested_features_ { DiagnosticsFeature::kNone };
   DiagnosticsFeatureSet enabled_features_ { DiagnosticsFeature::kNone };
   ShaderDebugMode shader_debug_mode_ { ShaderDebugMode::kDisabled };
+  observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ { nullptr };
+  bool gpu_timeline_enabled_requested_ { false };
   DiagnosticsFrameLedger frame_ledger_ {};
 };
 

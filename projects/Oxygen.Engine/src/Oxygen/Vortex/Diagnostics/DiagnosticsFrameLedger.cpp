@@ -15,11 +15,15 @@ namespace oxygen::vortex {
 
 auto DiagnosticsFrameLedger::UpdateState(const ShaderDebugMode debug_mode,
   const DiagnosticsFeatureSet requested_features,
-  const DiagnosticsFeatureSet enabled_features) -> void
+  const DiagnosticsFeatureSet enabled_features,
+  const bool gpu_timeline_enabled,
+  const bool gpu_timeline_frame_available) -> void
 {
   debug_mode_ = debug_mode;
   requested_features_ = requested_features;
   enabled_features_ = enabled_features;
+  gpu_timeline_enabled_ = gpu_timeline_enabled;
+  gpu_timeline_frame_available_ = gpu_timeline_frame_available;
   ApplyState(latest_snapshot_);
   if (frame_open_) {
     ApplyState(frame_snapshot_);
@@ -140,6 +144,8 @@ auto DiagnosticsFrameLedger::ApplyState(DiagnosticsFrameSnapshot& snapshot) cons
   snapshot.active_shader_debug_mode = debug_mode_;
   snapshot.requested_features = requested_features_;
   snapshot.enabled_features = enabled_features_;
+  snapshot.gpu_timeline_enabled = gpu_timeline_enabled_;
+  snapshot.gpu_timeline_frame_available = gpu_timeline_frame_available_;
 }
 
 } // namespace oxygen::vortex

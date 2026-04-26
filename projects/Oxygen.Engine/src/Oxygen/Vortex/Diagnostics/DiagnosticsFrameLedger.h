@@ -30,7 +30,8 @@ public:
 
   OXGN_VRTX_API auto UpdateState(ShaderDebugMode debug_mode,
     DiagnosticsFeatureSet requested_features,
-    DiagnosticsFeatureSet enabled_features) -> void;
+    DiagnosticsFeatureSet enabled_features, bool gpu_timeline_enabled,
+    bool gpu_timeline_frame_available) -> void;
   OXGN_VRTX_API auto BeginFrame(frame::SequenceNumber frame) -> void;
   OXGN_VRTX_API auto RecordPass(DiagnosticsPassRecord record) -> void;
   OXGN_VRTX_API auto RecordProduct(DiagnosticsProductRecord record) -> void;
@@ -53,6 +54,8 @@ private:
   ShaderDebugMode debug_mode_ { ShaderDebugMode::kDisabled };
   DiagnosticsFeatureSet requested_features_ { DiagnosticsFeature::kNone };
   DiagnosticsFeatureSet enabled_features_ { DiagnosticsFeature::kNone };
+  bool gpu_timeline_enabled_ { false };
+  bool gpu_timeline_frame_available_ { false };
   DiagnosticsFrameSnapshot frame_snapshot_ {};
   DiagnosticsFrameSnapshot latest_snapshot_ {};
   bool frame_open_ { false };
