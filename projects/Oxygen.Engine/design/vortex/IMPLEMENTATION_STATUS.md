@@ -50,10 +50,12 @@ manifest export, DemoShell diagnostics panel registry, automation hardening for
 M05A-owned or touched proof scripts, and optional GPU debug primitives only if a
 required spatial-debug proof gap demands them.
 
-**Current M05A status:** `planned`. The LLD and detailed plan are updated, but
-no runtime DiagnosticsService implementation, hardened proof-wrapper code, build,
-unit test, ShaderBake, runtime capture, or debug-layer audit has been run for
-M05A yet.
+**Current M05A status:** `in_progress`. The LLD and detailed plan are updated.
+The first runtime slice now has a DiagnosticsService shell, diagnostics types,
+renderer-owned lifetime, shader-debug forwarding, and focused tests. Capture
+manifest, debug-mode registry, GPU timeline facade, panel integration, proof
+script hardening, runtime capture, ShaderBake, and debug-layer evidence remain
+open until their slices land.
 
 ## 4. Milestone Ledger
 
@@ -72,7 +74,7 @@ M05A yet.
 | VTX-M04D.6 | UE5.7 aerial perspective parity | `validated` for main-view AP | Vortex AP sampling uses UE5.7-shaped camera-volume lookup helpers, preserves raw camera-volume generation with apply-time strength control, exposes effective DemoShell/VortexBasic AP controls, fixes city-scale reversed-Z far-depth AP composition, and has focused enabled/disabled plus city-scale RenderDoc proof. | Reflection/360-view AP is explicitly deferred to the future reflection-capture resource path. |
 | VTX-M04E | Async migration parity gate | `validated` | Async authors a Vortex-ready scene environment, sun directional light, shadow receiver ground, lifted sphere/two-submesh geometry, and Vortex runtime view metadata. DemoShell no longer overrides the scene-authored environment. `Run-AsyncRuntimeValidation.ps1` passed with RenderDoc structural/product proof, final present proof, and overlay composition proof on 2026-04-26. | No open M04E closure gap. |
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | Runtime composition registration, queued single-view composition copy, Stage 22 post-process routing, and overlay blend path exist. `AnalyzeRenderDocAsyncProducts.py` proves exactly one post-Stage-22 composition copy from `Async.SceneColor`, exactly one overlay blend after scene copy, final present output, and focused `RendererCompositionQueue` tests passed. | No open M04F closure gap. |
-| VTX-M05A | Diagnostics product service | `planned` | The LLD and detailed plan define the compact diagnostics toolkit and have been corrected for gating policy, single-module naming, debug-mode registry naming, enum/logging conventions, Tracy positioning, automation hardening, DemoShell diagnostics panel UX, deferred GPU debug primitives, and minimal recoverable issue policy. | Concrete DiagnosticsService code, frame ledger, GPU timeline facade, shader debug-mode registry, capture manifest export, diagnostics panel integration or recorded deferral, hardened touched proof wrappers, focused tests, and runtime/capture/debug-layer evidence for touched runtime-visible or GPU-resource features. |
+| VTX-M05A | Diagnostics product service | `in_progress` | LLD/plan define the compact diagnostics toolkit. First runtime slice landed `src/Oxygen/Vortex/Diagnostics/DiagnosticsTypes.{h,cpp}` and `DiagnosticsService.{h,cpp}`, CMake/test wiring, renderer-owned service lifetime, shader-debug forwarding, feature flags using `OXYGEN_FLAG`/`OXYGEN_DEFINE_FLAGS_OPERATORS`, enum `to_string` helpers, capability clamping, frame begin/end snapshots, pass/product/issue recording, and disabled-ledger no-op behavior. Validation passed: `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsService --parallel 4`; `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsService|GpuTimelineProfiler)" --output-on-failure` with DiagnosticsService 6/6 and GpuTimelineProfiler 8/8. | Release/`NDEBUG` default policy is implemented but not proven in a release build. ShaderDebugModeRegistry, GPU timeline facade integration, capture manifest export, diagnostics panel integration or recorded deferral, hardened touched proof wrappers, runtime/capture/debug-layer evidence, and any ShaderBake evidence for later shader-visible changes remain open. |
 | VTX-M05B | Occlusion consumer closeout | `planned` | Generic Screen HZB implementation and bindings exist. | Full occlusion query/consumer policy, visibility classifications, batching, temporal handoff, and proof. |
 | VTX-M05C | Translucency stage | `planned` | Directory placeholders and LLD exist. | Stage 18 implementation consuming lighting/shadow/environment publications and validation proof. |
 | VTX-M05D | Local-light conventional shadow expansion | `planned` | Directional ShadowService baseline exists; local-light LLD exists. | Spot-light shadows, point-light strategy, publication, capture proof, and debug-layer evidence. |

@@ -54,6 +54,13 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DiagnosticsService
+  SOURCES
+    "Fakes/Graphics.h"
+    "DiagnosticsService_test.cpp"
+)
+
+m_gtest_program(
   RenderContext
   SOURCES
     "RenderContext_test.cpp"
@@ -135,6 +142,12 @@ add_custom_target(
   Oxygen.Vortex.PostProcessService
   DEPENDS
     Oxygen.Vortex.PostProcessService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsService
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsService.Tests
 )
 
 add_custom_target(
