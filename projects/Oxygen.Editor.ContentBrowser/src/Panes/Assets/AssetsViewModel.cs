@@ -30,6 +30,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="assetCatalog">The asset catalog.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
+/// <param name="projectContextService">The active project context service.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="importService">The import service.</param>
@@ -38,6 +39,7 @@ public partial class AssetsViewModel(
     IAssetCatalog assetCatalog,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
+    IProjectContextService projectContextService,
     IProjectManagerService projectManagerService,
     IStorageProvider storage,
     IMessenger messenger,
@@ -79,14 +81,18 @@ public partial class AssetsViewModel(
             this.isInitialized = true;
 
             // If no browser state was restored, default to the active scene's folder and request it to be opened.
+            var activeContext = projectContextService.ActiveProject;
             var currentProject = projectManagerService.CurrentProject;
-            if (currentProject?.ActiveScene is not null && contentBrowserState.SelectedFolders.Count == 0)
+            if (activeContext?.Scenes.Count > 0 && contentBrowserState.SelectedFolders.Count == 0)
             {
                 // Navigate to the Scenes folder to show scene assets
                 contentBrowserState.SetSelectedFolders(["Scenes"]);
 
                 // Request the scene document to be opened
-                _ = messenger.Send(new OpenSceneRequestMessage(currentProject.ActiveScene));
+                if (currentProject?.ActiveScene is not null)
+                {
+                    _ = messenger.Send(new OpenSceneRequestMessage(currentProject.ActiveScene));
+                }
             }
         }
 
@@ -219,6 +225,8 @@ public partial class AssetsViewModel(
             var newScene = await projectManagerService.CreateSceneAsync(sceneName).ConfigureAwait(true);
             if (newScene is not null)
             {
+                projectContextService.Activate(ProjectContext.FromProject(newScene.Project));
+
                 // File watcher will automatically detect and index the new scene
                 // TODO: Could add success notification here
             }
@@ -241,7 +249,7 @@ public partial class AssetsViewModel(
     {
         // For now, create a default name. In a full implementation,
         // this would show a dialog to get the scene name from the user.
-        var sceneCount = projectManagerService.CurrentProject?.Scenes.Count ?? 0;
+        var sceneCount = projectContextService.ActiveProject?.Scenes.Count ?? 0;
         var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
 
         await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
