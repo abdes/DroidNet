@@ -102,11 +102,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage5_occlusion_scope_name = "Vortex.Stage5.OcclusionTest"
     stage9_scope_name = "Vortex.Stage9.BasePass"
     stage9_main_scope_name = "Vortex.Stage9.BasePass.MainPass"
+    stage20_ground_grid_scope_name = "Vortex.Stage20.GroundGrid"
 
     stage3_scope = records_with_name(action_records, stage3_scope_name)
     stage5_hzb_scope = records_with_name(action_records, stage5_hzb_scope_name)
     stage5_occlusion_scope = records_with_name(action_records, stage5_occlusion_scope_name)
     stage9_scope = records_with_name(action_records, stage9_scope_name)
+    stage20_ground_grid_scope = records_with_name(action_records, stage20_ground_grid_scope_name)
 
     stage3_records = records_under_prefix(action_records, stage3_scope_name)
     stage5_occlusion_records = records_under_prefix(action_records, stage5_occlusion_scope_name)
@@ -131,6 +133,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_exact_count_check(report, "stage5_occlusion_scope_count", len(stage5_occlusion_scope), 1)
     append_exact_count_check(report, "stage5_occlusion_dispatch_count", stage5_occlusion_dispatch_count, 1)
     append_exact_count_check(report, "stage9_scope_count", len(stage9_scope), 1)
+    append_exact_count_check(report, "stage20_ground_grid_scope_count", len(stage20_ground_grid_scope), 0)
     append_exact_count_check(report, "stage3_draw_count", stage3_draw_count, 3)
     append_less_than_check(report, "stage9_draw_count_less_than_stage3", stage9_draw_count, stage3_draw_count)
     append_exact_count_check(report, "stage9_draw_count", stage9_draw_count, 2)

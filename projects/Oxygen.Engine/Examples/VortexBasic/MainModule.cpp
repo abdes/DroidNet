@@ -324,6 +324,9 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       }
       vortex_renderer_
         = observer_ptr { static_cast<vortex::Renderer*>(event.module.get()) };
+      vortex_renderer_->SetGroundGridConfig(vortex::GroundGridConfig {
+        .enabled = false,
+      });
     },
     true);
 
@@ -367,6 +370,9 @@ auto MainModule::ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>
   if (app_.engine) {
     if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
       vortex_renderer_ = observer_ptr { &renderer->get() };
+      vortex_renderer_->SetGroundGridConfig(vortex::GroundGridConfig {
+        .enabled = false,
+      });
       return vortex_renderer_;
     }
   }
@@ -704,7 +710,7 @@ auto MainModule::EnsureScene() -> void
     occlusion_probe_node_ = scene_->CreateNode("OcclusionProbe");
     occlusion_probe_node_.GetRenderable().SetGeometry(
       std::move(occlusion_probe_geo));
-    SetShadowParticipation(occlusion_probe_node_, true, true);
+    SetShadowParticipation(occlusion_probe_node_, false, true);
     occlusion_probe_node_.GetTransform().SetLocalScale(
       kOcclusionProbeScale);
     occlusion_probe_node_.GetTransform().SetLocalPosition(
