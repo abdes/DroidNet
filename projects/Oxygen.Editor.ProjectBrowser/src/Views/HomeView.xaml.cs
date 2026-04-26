@@ -67,10 +67,10 @@ public sealed partial class HomeView
 
         try
         {
-            var success = await this.ViewModel.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(true);
+            var success = await this.ViewModel.OpenProjectAsync(args.Entry).ConfigureAwait(true);
             if (!success)
             {
-                this.LogFailedToOpenProject(args.ProjectInfo.Name);
+                this.LogFailedToOpenProject(args.Entry.Name);
 
                 // TODO: Show error and reset activation state
                 this.recentProjectsListViewModel.ResetActivationState();
@@ -81,7 +81,7 @@ public sealed partial class HomeView
 #pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
-            this.LogFailedToOpenProject(args.ProjectInfo.Name, ex);
+            this.LogFailedToOpenProject(args.Entry.Name, ex);
             this.recentProjectsListViewModel.ResetActivationState();
         }
 #pragma warning restore CA1031 // Do not catch general exception types
@@ -108,7 +108,7 @@ public sealed partial class HomeView
 
             if (!success)
             {
-                // TODO: display an error message
+                await dialog.ViewModel.ShowFeedbackMessageAsync(this.ViewModel.OperationResultMessage).ConfigureAwait(true);
                 this.LogFailedToCreateProjectFromTemplate();
             }
         }

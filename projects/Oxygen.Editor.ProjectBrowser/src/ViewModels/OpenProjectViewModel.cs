@@ -12,6 +12,7 @@ using CommunityToolkit.WinUI.Collections;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -105,6 +106,18 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 
     [ObservableProperty]
     public partial bool IsActivating { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsOperationResultVisible { get; set; }
+
+    [ObservableProperty]
+    public partial string OperationResultTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string OperationResultMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
     [ObservableProperty]
     public partial Dictionary<string, KnownLocation?> Locations { get; set; } = [];
@@ -235,6 +248,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
                     ProjectLocation = location,
                 })
             .ConfigureAwait(true);
+        this.ApplyOperationResult(result);
         if (result.Status is OperationStatus.Failed or OperationStatus.Cancelled)
         {
             this.IsActivating = false;
@@ -376,6 +390,20 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// <returns><see langword="true"/> if the current folder has a parent folder; otherwise, <see langword="false"/>.</returns>
     private bool CurrentFolderHasParent()
         => this.CurrentFolder is INestedItem;
+
+    private void ApplyOperationResult(OperationResult result)
+    {
+        this.OperationResultTitle = result.Title;
+        this.OperationResultMessage = result.Message;
+        this.OperationResultSeverity = result.Status switch
+        {
+            OperationStatus.Succeeded => InfoBarSeverity.Success,
+            OperationStatus.SucceededWithWarnings or OperationStatus.PartiallySucceeded => InfoBarSeverity.Warning,
+            OperationStatus.Cancelled => InfoBarSeverity.Informational,
+            _ => InfoBarSeverity.Error,
+        };
+        this.IsOperationResultVisible = result.Status is not OperationStatus.Succeeded;
+    }
 
     /// <summary>
     /// Compares storage items by whether they are folders or files.

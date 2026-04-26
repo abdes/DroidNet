@@ -55,7 +55,7 @@ Current resume point:
 
 1. Implement `ED-M01` from
    [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md),
-   continuing with `ED-M01.5 - Project Browser Service/UI Migration`.
+   continuing with `ED-M01.6 - Workspace Activation And Restoration`.
 2. Continue `ED-M02` validation in parallel where it does not block `ED-M01`.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
@@ -119,6 +119,11 @@ product behavior.
       implementation are implemented; Project Browser open/create view models
       submit activation requests instead of loading projects and navigating to
       `/we` directly.
+- [x] `ED-M01.5` Project Browser service/UI migration is implemented:
+      Project Browser support services are narrowed, view models route through
+      the activation coordinator, open/create failures surface inline operation
+      results, and stale recent entries stay visible with an explicit remove
+      action.
 - [ ] Editor starts at Project Browser.
 - [ ] Recent project, create project, open project, and invalid project states
       are usable.

@@ -91,7 +91,7 @@ public sealed partial class NewProjectView
 
             if (!success)
             {
-                // TODO: display an error message
+                await dialog.ViewModel.ShowFeedbackMessageAsync(this.ViewModel.OperationResultMessage).ConfigureAwait(true);
                 dialog.ViewModel.ResetActivationState();
             }
         }

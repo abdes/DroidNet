@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -38,6 +39,18 @@ public partial class NewProjectViewModel(
 
     [ObservableProperty]
     public partial bool IsActivating { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsOperationResultVisible { get; set; }
+
+    [ObservableProperty]
+    public partial string OperationResultTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string OperationResultMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
     /// <summary>
     /// Gets the collection of project templates.
@@ -74,6 +87,7 @@ public partial class NewProjectViewModel(
                     Thumbnail = template.Icon,
                 })
             .ConfigureAwait(true);
+        this.ApplyOperationResult(result);
         if (result.Status is OperationStatus.Failed or OperationStatus.Cancelled)
         {
             this.LogNewProjectFailed();
@@ -127,5 +141,19 @@ public partial class NewProjectViewModel(
         {
             this.SelectedItem = this.Templates[0];
         }
+    }
+
+    private void ApplyOperationResult(OperationResult result)
+    {
+        this.OperationResultTitle = result.Title;
+        this.OperationResultMessage = result.Message;
+        this.OperationResultSeverity = result.Status switch
+        {
+            OperationStatus.Succeeded => InfoBarSeverity.Success,
+            OperationStatus.SucceededWithWarnings or OperationStatus.PartiallySucceeded => InfoBarSeverity.Warning,
+            OperationStatus.Cancelled => InfoBarSeverity.Informational,
+            _ => InfoBarSeverity.Error,
+        };
+        this.IsOperationResultVisible = result.Status is not OperationStatus.Succeeded;
     }
 }

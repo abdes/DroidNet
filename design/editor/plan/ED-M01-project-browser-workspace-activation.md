@@ -334,7 +334,7 @@ Tasks:
 
 Validation:
 
-- `dotnet build` for touched projects.
+- MSBuild for touched projects through the repository build configuration.
 - Targeted test projects for changed shared contracts and project services.
 - Manual/editor run validation for startup and workspace transition if UI
   automation is not yet practical.
