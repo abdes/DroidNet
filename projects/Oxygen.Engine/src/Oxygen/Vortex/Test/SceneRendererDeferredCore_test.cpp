@@ -39,6 +39,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -1434,6 +1435,131 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   ASSERT_EQ(draw_commands.size(), 2U);
   EXPECT_EQ(draw_commands[0].draw_index, 1U);
   EXPECT_EQ(draw_commands[1].draw_index, 0U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  TranslucencyMeshProcessorAcceptsOnlyMainVisibleTransparentDraws)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+  }
+  draw_metadata[0].flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kTransparent,
+    oxygen::vortex::PassMaskBit::kMainViewVisible,
+  };
+  draw_metadata[1].flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+    oxygen::vortex::PassMaskBit::kMainViewVisible,
+  };
+  draw_metadata[2].flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kTransparent,
+  };
+  draw_metadata[3].flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kMasked,
+    oxygen::vortex::PassMaskBit::kMainViewVisible,
+  };
+
+  auto draw_bounds = std::array<glm::vec4, 4> {
+    glm::vec4 { 0.0F, 0.0F, -3.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -5.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -6.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 1U);
+  EXPECT_EQ(draw_commands.front().draw_index, 0U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  TranslucencyMeshProcessorSortsTransparentDrawsBackToFront)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 3> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kTransparent,
+      oxygen::vortex::PassMaskBit::kMainViewVisible,
+    };
+  }
+
+  auto draw_bounds = std::array<glm::vec4, 3> {
+    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -9.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -5.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 3U);
+  EXPECT_EQ(draw_commands[0].draw_index, 1U);
+  EXPECT_EQ(draw_commands[1].draw_index, 2U);
+  EXPECT_EQ(draw_commands[2].draw_index, 0U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  TranslucencyMeshProcessorPreservesRelativeOrderForEqualDepthKeys)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kTransparent,
+      oxygen::vortex::PassMaskBit::kMainViewVisible,
+    };
+  }
+
+  auto draw_bounds = std::array<glm::vec4, 2> {
+    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 2U);
+  EXPECT_EQ(draw_commands[0].draw_index, 0U);
+  EXPECT_EQ(draw_commands[1].draw_index, 1U);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,

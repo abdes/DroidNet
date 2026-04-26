@@ -31,19 +31,16 @@ gap.
 
 ## 3. Current Next Step
 
-**Next milestone:** `VTX-M05C - Translucency Stage`
+**Next milestone:** `VTX-M05D - Local-light conventional shadow expansion`
 
-**Why:** `VTX-M05A` and `VTX-M05B` are validated. The next planned gate is the
-translucency stage consuming the existing lighting, shadow, environment, and
-diagnostics substrate.
+**Why:** `VTX-M05A`, `VTX-M05B`, and `VTX-M05C` are validated. The next planned
+gate expands conventional shadow coverage beyond the directional baseline.
 
-**Active work package:** `VTX-M05C - Translucency Stage`
+**Active work package:** `VTX-M05D - Local-light conventional shadow expansion`
 
-**Plan:** pending detailed milestone plan refresh before implementation.
+**Plan:** prepare or refresh the dedicated VTX-M05D plan before implementation.
 
-**Current M05C scope:** Stage 18 translucency implementation and proof.
-
-**Current M05C status:** `planned`.
+**Current M05C status:** `validated`.
 
 ## 4. Milestone Ledger
 
@@ -64,7 +61,7 @@ diagnostics substrate.
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | Runtime composition registration, queued single-view composition copy, Stage 22 post-process routing, and overlay blend path exist. `AnalyzeRenderDocAsyncProducts.py` proves exactly one post-Stage-22 composition copy from `Async.SceneColor`, exactly one overlay blend after scene copy, final present output, and focused `RendererCompositionQueue` tests passed. | No open M04F closure gap. |
 | VTX-M05A | Diagnostics product service | `validated` | Diagnostics runtime service, authoritative shader-debug registry, frame ledger, capture manifest, GPU timeline facade, Diagnostics panel, proof script hardening, direct/masked debug corrections, unsupported IBL/light-culling mode handling, and solid/wireframe/wireframe-overlay render controls are implemented and documented in the LLD/plan. Validation evidence: focused Vortex/DemoShell builds and tests, release DiagnosticsService test, VortexBasic runtime RenderDoc/debug-layer proof, TexturedCube panel-registration smoke, RenderScene build/ShaderBake validation, and user visual confirmation for solid plus wireframe overlay. | No open M05A closure gap. Optional GPU debug primitives remain deferred until a concrete proof gap requires them. |
 | VTX-M05B | Occlusion consumer closeout | `validated` | LLD/plan updated; result substrate, HZB tester, base-pass consumers, diagnostics facts, `vtx.occlusion.*` controls, and VortexBasic `--with-occlusion` proof scene/tooling exist. Validation: ShaderBake rebuilt 186 modules; focused `RendererCapability`, `OcclusionModule`, `SceneRendererPublication`, and `SceneRendererDeferredCore` tests passed 62/62; CDB/D3D12 audit report `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt` passed with 0 D3D12/DXGI errors; RenderDoc proof `vortex-occlusion.proof.report.txt` shows Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, Stage 9 base-pass scene draws 2, and Stage 20 ground grid absent; user visual confirmation approved. | No open M05B closure gap. |
-| VTX-M05C | Translucency stage | `planned` | Directory placeholders and LLD exist. | Stage 18 implementation consuming lighting/shadow/environment publications and validation proof. |
+| VTX-M05C | Translucency stage | `validated` | Stage 18 `TranslucencyModule`/`TranslucencyMeshProcessor`, SceneRenderer wiring, forward unlit-material exposure contract fix, VortexBasic cyan sphere + magenta cylinder proof scene, and RenderDoc/CDB proof tooling are present. UE5.7 re-check covered standard straight-alpha blending and read-only depth state. Validation: focused ShaderBake/catalog and SceneRendererDeferredCore tests passed; CDB report `out/build-ninja/analysis/vortex/translucency/m05c-final/vortexbasic-translucency-m05c-final.debug-layer.report.txt` passed with 0 D3D12/DXGI errors; RenderDoc report `out/build-ninja/analysis/vortex/translucency/m05c-final/vortexbasic-translucency-m05c-final_capture.rdc_vortex_translucency_report.txt` proves Stage 18 scope count 1, Stage 18 draw count 2, Stage 9 draw count 2, ground grid absent, cyan pixels 2161, magenta pixels 225, and Stage 18 RGB delta 2682.43359. User visual confirmation approved the final scene. | No open M05C closure gap. |
 | VTX-M05D | Local-light conventional shadow expansion | `planned` | Directional ShadowService baseline exists; local-light LLD exists. | Spot-light shadows, point-light strategy, publication, capture proof, and debug-layer evidence. |
 | VTX-M06A | Multi-view proof closeout | `planned` | CompositionView/ViewLifecycle/CompositionPlanner substrate exists. | Heterogeneous per-view runtime proof, PiP/multi-surface routing, and per-view product isolation. |
 | VTX-M06B | Offscreen proof closeout | `planned` | `ForOffscreenScene` API and presets exist. | Focused tests and runtime/capture validation for offscreen deferred/forward scenarios. |

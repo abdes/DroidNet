@@ -1,212 +1,308 @@
-# Translucency Module LLD
+# Translucency Stage LLD
 
-**Phase:** 5B — Remaining Services
-**Deliverable:** D.15
-**Status:** `ready`
+**Phase:** 5C - Remaining Services
+**Deliverable:** `VTX-M05C`
+**Status:** `validated`
 
 ## Mandatory Vortex Rule
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
+- `Oxygen.Renderer` is legacy dead code. It is not a reference
+  implementation, fallback, compatibility layer, or shortcut for this work.
+- Vortex translucency is a native SceneRenderer stage. Parity claims must be
+  grounded in UE5.7 renderer/shader source under
   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
   `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+- If the implemented scope is narrower than UE5.7, the accepted Oxygen
+  divergence must be documented here and in the detailed milestone plan before
+  status can advance.
 
-## 1. Scope and Context
+## 1. Goal
 
-### 1.1 What This Covers
+Implement Stage 18 standard forward-lit translucency for the production
+desktop deferred baseline. The stage consumes the prepared scene, draws
+alpha-blended transparent meshes with the forward lighting shader family, depth
+tests against the deferred opaque depth buffer, and composites directly into
+`SceneColor`.
 
-`TranslucencyModule` — the stage-18 owner responsible for forward-lit
-translucent rendering. Translucent objects (glass, particles, effects) are
-rendered with forward lighting using the published forward-light family from
-`LightingService`, composited over the deferred opaque result in
-SceneColor.
+The milestone is intentionally not a full UE translucency stack. It is the
+minimal professional stage needed by Vortex now: ordinary alpha-blended meshes
+that are lit, sorted, depth-tested, diagnosable, and visually provable.
 
-### 1.2 Classification
+## 2. UE5.7 Source Mapping
 
-TranslucencyModule is a **stage module** (not a full-lifecycle service).
-It has no persistent state between frames and is dispatched per-view.
+The implementation must be reviewed against these UE5.7 files before closure:
 
-### 1.3 Stage Position
+| UE5.7 area | Files | Oxygen decision |
+| --- | --- | --- |
+| Translucency pass orchestration | `Renderer/Private/TranslucentRendering.cpp`, `.h` | Oxygen implements the standard main translucency pass shape only. |
+| Translucent render state | `Renderer/Private/BasePassRendering.cpp`, `.h` | Oxygen uses standard alpha blending over scene color and read-only scene depth. |
+| Mesh-pass classification | `Renderer/Private/SceneVisibility.cpp`, `BasePassRendering.cpp` | Oxygen consumes prepared draws tagged with `PassMaskBit::kTransparent`. |
+| Translucent sorting | `Renderer/Private/MeshDrawCommands.cpp`, `.h` | Oxygen starts with per-view back-to-front distance sorting; richer priority/axis policies are deferred. |
+| Forward/base pass shader contracts | `Shaders/Private/BasePass*.usf`, `BasePassCommon.ush` | Oxygen uses the existing `Vortex/Stages/Translucency/ForwardMesh_*` shader family. |
+| Separate translucency composition | `Shaders/Private/ComposeSeparateTranslucency.usf` | Deferred; M05C composites directly into `SceneColor`. |
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 17 (reserved post-opaque extensions) | |
-| **This** | **Stage 18 — Translucency** | Forward-lit translucent rendering |
-| Successor | Stage 19 (Distortion — reserved) | |
+Important UE behaviors used as the target:
 
-### 1.4 Architectural Authority
+- Translucent meshes are rendered after opaque/deferred lighting work.
+- Standard translucency uses the scene depth buffer for depth testing and does
+  not write depth for ordinary alpha-blended surfaces.
+- Translucency is sorted back-to-front within a view before blending.
+- UE has many pass families: standard, standard modulate, after-DOF,
+  after-DOF modulate, after-motion-blur, holdout, separate translucency,
+  sorted-pixels/OIT, distortion, and translucency lighting volumes.
 
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 18
-- Published forward-light family consumption from LightingService
+M05C parity re-check result:
 
-## 2. Interface Contracts
+- `Renderer/Private/BasePassRendering.cpp` `SetTranslucentRenderState` maps
+  ordinary translucent materials to straight alpha color blending. Oxygen uses
+  `SrcAlpha` over `InvSrcAlpha`.
+- UE's standard translucent pass processor uses depth testing with depth writes
+  disabled. Oxygen binds `SceneDepth` read-only and disables depth writes.
+- Oxygen's validation materials may use `MATERIAL_FLAG_UNLIT` to isolate color
+  and blend proof. This is not a separate translucency mode; it is the existing
+  material shading contract, now honored by the forward translucency shader.
+- The UE re-check does not remove Oxygen's internal exposure-domain contract:
+  Vortex Stage 18 writes linear HDR `SceneColor` before Stage 22 tonemap. Any
+  constant-color/unlit validation material that is meant to preserve authored
+  material color must be written in the same exposure domain consumed by the
+  post-process path.
 
-### 2.1 File Placement
+## 3. Oxygen Scope
+
+### 3.1 In Scope For M05C
+
+- `TranslucencyModule` as the Stage 18 owner.
+- `TranslucencyMeshProcessor` that builds draw commands from the current
+  `PreparedSceneFrame` transparent pass partition.
+- Standard alpha-blended material domain support through
+  `MaterialDomain::kAlphaBlended` and `PassMaskBit::kTransparent`.
+- Forward-lit shading through the existing
+  `Vortex/Stages/Translucency/ForwardMesh_VS.hlsl` and
+  `ForwardMesh_PS.hlsl` shader entries.
+- Direct composition into the active `SceneColor` render target.
+- Read-only `SceneDepth` depth testing with no depth writes.
+- Back-to-front sorting for transparent draws.
+- Diagnostics pass/product facts sufficient for RenderDoc/proof scripts.
+- A validation scene in `Examples/VortexBasic` with overlapping transparent
+  meshes, opaque blockers, lit surfaces, and a floor that makes blending and
+  depth testing visible.
+- An authored post-process exposure setup for the validation scene. M05C proof
+  must not rely on auto exposure, because auto exposure can hide whether the
+  translucency shader or the post-process stage owns a color error.
+
+### 3.2 Out Of Scope
+
+- Separate translucency textures and post-DOF composition.
+- Modulate, holdout, after-motion-blur, distortion, refraction, water, hair,
+  translucent velocity, and transmission.
+- Order-independent transparency or UE sorted-pixels OIT.
+- Translucent shadow depth rendering and colored/transmittance shadows.
+- Per-primitive translucent sort priority, distance offset, and sort axis.
+- Translucency lighting volume injection. Oxygen's existing forward-lighting
+  payload is used directly.
+
+These are not hidden gaps in the M05C claim. They are future scope because the
+current Vortex baseline needs correct standard alpha-blended meshes before the
+larger UE translucency family is worth implementing.
+
+## 4. Stage Position
+
+| Position | Stage | Contract |
+| --- | --- | --- |
+| Predecessor | Stage 15/17 post-opaque environment work | Opaque scene color/depth are available. |
+| This | Stage 18 - Translucency | Draw sorted forward-lit transparent meshes into `SceneColor`. |
+| Successor | Stage 20+ overlays, resolve, post-process | Debug overlays and final output observe the composited scene. |
+
+Stage 18 must be skipped in wireframe-only render mode because that mode is a
+diagnostic geometry view, not an exposed/tonemapped scene render.
+
+## 5. Runtime Contracts
+
+### 5.1 File Layout
 
 ```text
-src/Oxygen/Vortex/
-└── SceneRenderer/
-    └── Stages/
-        └── Translucency/
-            ├── TranslucencyModule.h
-            ├── TranslucencyModule.cpp
-            ├── TranslucencyMeshProcessor.h
-            └── TranslucencyMeshProcessor.cpp
+src/Oxygen/Vortex/SceneRenderer/Stages/Translucency/
+  TranslucencyModule.h
+  TranslucencyModule.cpp
+  TranslucencyMeshProcessor.h
+  TranslucencyMeshProcessor.cpp
 ```
 
-### 2.2 Public API
+### 5.2 Module API
 
 ```cpp
 namespace oxygen::vortex {
+
+struct TranslucencyExecutionResult {
+  bool requested = false;
+  bool executed = false;
+  std::uint32_t draw_count = 0;
+};
 
 class TranslucencyModule {
  public:
   explicit TranslucencyModule(Renderer& renderer);
   ~TranslucencyModule();
 
-  TranslucencyModule(const TranslucencyModule&) = delete;
-  auto operator=(const TranslucencyModule&) -> TranslucencyModule& = delete;
-
-  /// Stage 18 entry point. Per-view execution.
-  void Execute(RenderContext& ctx, SceneTextures& scene_textures);
-
- private:
-  Renderer& renderer_;
-  std::unique_ptr<TranslucencyMeshProcessor> mesh_processor_;
+  auto Execute(RenderContext& ctx, SceneTextures& scene_textures)
+      -> TranslucencyExecutionResult;
 };
 
-}  // namespace oxygen::vortex
+} // namespace oxygen::vortex
 ```
 
-## 3. Data Flow and Dependencies
+The module owns no cross-frame rendering policy. It may cache graphics
+resources and helper objects, but visibility, sorting, and pass execution are
+derived from the current view.
 
-### 3.1 Inputs
+### 5.3 Inputs
 
 | Source | Data | Purpose |
-| ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Translucent geometry refinement without scene re-traversal |
-| LightingService | `LightingFrameBindings` publication | Forward lighting evaluation |
-| ShadowService | `ShadowFrameBindings` publication | Shadow terms |
-| EnvironmentLightingService | `EnvironmentFrameBindings` publication | Ambient contribution |
-| SceneTextures | SceneColor (RTV) | Composite target |
-| SceneTextures | SceneDepth (DSV, read) | Depth test (no write) |
+| --- | --- | --- |
+| Stage 2 InitViews | `PreparedSceneFrame` | Transparent draw metadata, materials, bounds, geometry handles. |
+| Renderer/Core | bindless scene buffers and view constants | Same draw contract used by Vortex base/forward shaders. |
+| LightingService | `LightingFrameBindings` | Forward direct and positional light evaluation. |
+| ShadowService | `ShadowFrameBindings` | Directional shadow sampling where the shader supports it. |
+| EnvironmentLightingService | `EnvironmentFrameBindings` | Ambient, aerial-perspective, and environment terms currently exposed to forward shaders. |
+| SceneTextures | `SceneColor` RTV | Alpha-blended destination. |
+| SceneTextures | `SceneDepth` read-only DSV | Opaque depth test, no transparent depth write. |
 
-### 3.2 Outputs
+### 5.4 Outputs
 
-| Product | Target | Blend Mode |
-| ------- | ------ | ---------- |
-| SceneColor | SceneTextures::GetSceneColor() | Alpha blend (SRC_ALPHA, INV_SRC_ALPHA) |
+| Product | Producer | Notes |
+| --- | --- | --- |
+| `Vortex.SceneColor` | Stage 18 | Same texture, now containing opaque + standard translucency. |
+| `Vortex.TranslucencyDrawCommands` | Diagnostics fact | Draw count and skip reason, not a new GPU product. |
 
-### 3.3 Execution Flow
+No new scene texture is allocated in M05C.
 
-```text
-TranslucencyModule::Execute(ctx, scene_textures)
-  │
-  ├─ Read current view prepared-scene payload from ctx
-  │     ├─ Refine the prepared-scene payload to translucent participants only
-  │     ├─ Sort back-to-front by distance_sq (painter's algorithm)
-  │     │
-  │     ├─ Set render targets:
-  │     │     RTV = SceneColor (alpha blend)
-  │     │     DSV = SceneDepth (depth read, no write)
-  │     │
-  │     └─ for each translucent draw command:
-  │           ├─ Bind forward-lit PSO (per-material variant)
-  │           ├─ Bind published lighting / shadow / environment bindings
-  │           ├─ Bind material resources
-  │           └─ DrawIndexedInstanced(...)
-  └─ (SceneColor now contains opaque + translucent)
-```
+## 6. Mesh Processing
 
-## 4. Resource Management
+`TranslucencyMeshProcessor` builds commands from the current prepared scene:
 
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| Forward-lit PSOs | Persistent | Per-material variants, alpha blend |
-| No new GPU textures | — | Uses existing SceneColor and SceneDepth |
+1. Accept only draws tagged with `PassMaskBit::kTransparent` and main-view
+   visibility.
+2. Reuse the existing prepared draw metadata: material handle, geometry handle,
+   submesh range, draw index, and bounding sphere.
+3. Reject invalid material/geometry ranges rather than generating dummy draws.
+4. Sort accepted draws back-to-front for the active view.
 
-## 5. Shader Contracts
+Sorting policy:
 
-### 5.1 Forward Translucency Shader
+- Preferred path: use the resolved view camera and prepared draw bounding
+  spheres to compute a conservative far-side depth/distance key.
+- Fallback path: use `RenderItemData::sort_distance2` for older prepared items.
+- Stable ordering is required for equal keys.
 
-```hlsl
-// Stages/Translucency/TranslucencyForward.hlsl
+This deliberately matches UE's requirement that translucent work is sorted for
+blending, while deferring UE's richer `ETranslucentSortPolicy`, priority, axis,
+and distance-offset controls until Oxygen has those authoring fields.
 
-#include "../../Shared/BRDFCommon.hlsli"
-#include "../../Shared/ForwardLightingCommon.hlsli"
-#include "../../Contracts/SceneTextures.hlsli"
+## 7. Render State
 
-struct TranslucencyPSOutput {
-  float4 color : SV_Target0;   // Alpha-blended to SceneColor
-};
+| State | M05C value |
+| --- | --- |
+| Color target | `SceneColor` |
+| Depth target | `SceneDepth`, read-only |
+| Depth test | Enabled |
+| Depth write | Disabled |
+| Blend | Standard straight-alpha: source alpha over destination |
+| Color space | HDR/linear scene color, before final post-process |
+| Rasterizer | No culling for the first stage implementation; material-sided policy can refine this later. |
 
-TranslucencyPSOutput TranslucencyForwardPS(ForwardVSOutput input) {
-  MaterialSurface surface = EvaluateMaterial(input);
+The pixel shader must emit straight alpha. It must not tonemap or output LDR
+color when writing to internal `SceneColor`.
 
-  // Forward lighting: iterate visible lights from the published forward-light package
-  float3 lighting = EvaluateForwardLighting(
-    surface, input.worldPos, CameraPosition,
-    ForwardLightBindings);
+### 7.1 Exposure-Domain Contract
 
-  float3 ambient = EvaluateEnvironmentAmbient(surface, EnvironmentBindings);
+Stage 18 writes before Stage 22. Stage 22 applies the resolved post-process
+exposure before tonemapping. Therefore Stage 18 shader output must be in the
+same linear scene-color domain expected by Stage 22.
 
-  TranslucencyPSOutput output;
-  output.color = float4(lighting + ambient + surface.emissive,
-                          surface.opacity);
-  return output;
-}
-```
+Rules:
 
-### 5.2 Catalog Registration
+- Lit translucency writes physical linear HDR lighting results and leaves final
+  display exposure to Stage 22.
+- Unlit/constant-color material output that is intended to preserve authored
+  color through the post-process path must use inverse exposure compensation in
+  HDR output mode: write `authored_linear_rgb / max(GetExposure(), epsilon)`.
+  Stage 22 then multiplies by exposure and recovers the intended authored
+  color before tonemapping.
+- This mirrors the existing Vortex wireframe/debug-line exposure compensation
+  pattern. It is not emissive cheating, not LDR output, and not an extra
+  tonemap inside Stage 18.
+- Validation scenes must author a deterministic post-process exposure volume.
+  They must not depend on auto exposure when proving material color, blend
+  contribution, or depth order.
 
-| Entrypoint | Profile | Notes |
-| ---------- | ------- | ----- |
-| `VortexTranslucencyVS` | vs_6_0 | Standard world-space VS |
-| `VortexTranslucencyPS` | ps_6_0 | Forward-lit, alpha blend output |
+## 8. Capability And Skip Policy
 
-## 6. Stage Integration
+Stage 18 requires the same runtime substrate as the deferred scene path:
 
-### 6.1 Dispatch Contract
+- `RendererCapability::kScenePreparation`
+- `RendererCapability::kDeferredShading`
+- `RendererCapability::kLightingData`
 
-`translucency_->Execute(ctx, scene_textures)` at stage 18.
-Per-view execution.
+Shadowing and environment lighting are consumed when present, but absence of a
+shadow/environment product must not crash the standard translucent pass. Missing
+optional products produce weaker lighting, not fake product publication.
 
-### 6.2 Null-Safe Behavior
+Skip rules:
 
-When null: no translucent rendering. Only opaque deferred result visible.
+- No prepared scene: skip and record a diagnostics fact.
+- No transparent draws: skip and record zero draws.
+- Wireframe-only render mode: skip.
+- Missing required core capabilities: do not construct the module.
 
-### 6.3 Capability Gate
+## 9. Diagnostics And Proof Surface
 
-Requires `kLightingData` (for published forward-light access).
+Stage 18 must record one compact diagnostics pass entry:
 
-## 7. Sorting
+- pass name: `Vortex.Stage18.Translucency`
+- inputs: `Vortex.PreparedSceneFrame`, `Vortex.SceneColor`,
+  `Vortex.SceneDepth`, plus lighting/shadow/environment binding products when
+  available
+- output: `Vortex.SceneColor`
+- facts: transparent draw count and skip reason
 
-Translucent geometry must be sorted back-to-front per view to ensure
-correct alpha blending. The mesh processor sorts by `distance_sq` from the
-camera. This is a simple painter's algorithm; OIT (order-independent
-transparency) is a future enhancement.
+This is enough for the Diagnostics panel, capture manifest, RenderDoc analyzer,
+and CDB/debug-layer workflow without adding a new diagnostics subsystem.
 
-## 8. Testability Approach
+## 10. Validation Scene Requirements
 
-1. **Alpha blend validation:** Translucent quad in front of opaque object →
-   verify correct color blending in SceneColor.
-2. **Forward lighting:** Translucent object under point light → verify
-   correct lighting (specular highlight, diffuse).
-3. **Depth test:** Translucent object behind opaque → verify not visible
-   (depth read from prepass/basepass).
-4. **RenderDoc:** Frame 10, inspect stage 18 draw calls. Verify
-   back-to-front ordering and alpha blend state.
+The VortexBasic M05C scenario exists to prove the rendering contract, not to be
+an attractive sample scene. It must remain deliberately unambiguous:
 
-## 9. Open Questions
+- one opaque cube and one opaque floor in the base pass;
+- exactly two transparent Stage 18 draws for the proof path;
+- a cyan sphere and magenta cylinder with distinct silhouettes and authored
+  alpha low enough that the opaque cube/background remain visible through them;
+- no emissive boost used to fake visibility;
+- a deterministic authored post-process exposure volume;
+- no ground grid during proof captures;
+- the sphere placed clearly in front of the cube and high enough to avoid
+  ambiguous overlap with the cylinder/floor.
 
-1. **Order-independent transparency:** OIT techniques (weighted blended OIT,
-   per-pixel linked lists) are a Phase 7+ enhancement. Phase 5B uses
-   painter's algorithm.
+## 11. Validation Requirements
+
+M05C cannot be marked `validated` until the single VTX-M05C ledger row records:
+
+- Changed engine files and scene/proof files.
+- UE5.7 reference files checked.
+- Focused build success.
+- Focused tests for transparent filtering, sort order, no-depth-write behavior
+  where practical, and diagnostics facts.
+- ShaderBake/catalog validation if shader catalog or shader requests change.
+- Runtime/capture proof from the improved VortexBasic translucency scene:
+  Stage 18 exists, transparent draw count is nonzero, draw order is
+  back-to-front, alpha blend is enabled, depth is read-only, visible cyan and
+  magenta material-color pixels are detected after Stage 18, `SceneColor`
+  changes from the pre-Stage-18 baseline, and D3D12 debug layer reports no
+  errors.
+- User visual confirmation that the validation scene shows translucent
+  blending and depth occlusion correctly.
+
+Closure evidence is recorded in
+[`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md): focused
+build/tests, CDB/D3D12 audit, RenderDoc analyzer proof, UE5.7 re-check, and
+user visual confirmation all passed for the final validation scene.

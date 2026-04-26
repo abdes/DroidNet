@@ -202,8 +202,6 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   : SV_Target0
 {
   SamplerState linear_sampler = SamplerDescriptorHeap[0];
-  const float3 shadow_normal = ComputeShadowSurfaceNormal(
-    input.world_pos, input.world_normal, input.is_front_face);
 
 #ifdef ALPHA_TEST
   ApplyMaskedAlphaClip(
@@ -215,6 +213,18 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   const MaterialSurface surf = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
     g_DrawIndex, input.is_front_face);
+
+  if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
+    const float3 unlit_color = surf.base_rgb * input.color + surf.emissive;
+#  ifdef OXYGEN_HDR_OUTPUT
+    return float4(unlit_color / max(GetExposure(), 1.0e-6f), surf.base_a);
+#  else
+    return float4(LinearToSrgb(unlit_color * GetExposure()), surf.base_a);
+#  endif
+  }
+
+  const float3 shadow_normal = ComputeShadowSurfaceNormal(
+    input.world_pos, input.world_normal, input.is_front_face);
   const ForwardEnvironmentState env_state = ResolveForwardEnvironmentState();
   const ForwardLightingTerms lighting = ComputeForwardLightingTerms(
     input, surf, shadow_normal, env_state, linear_sampler);

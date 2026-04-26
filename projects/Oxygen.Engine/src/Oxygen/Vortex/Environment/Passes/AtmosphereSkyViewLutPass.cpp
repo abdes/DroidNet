@@ -173,6 +173,22 @@ namespace {
                     : glm::vec3 { 0.0F, 0.0F, 0.0F });
   }
 
+  auto ReleaseLiveTextures(Graphics& gfx,
+    std::vector<std::shared_ptr<graphics::Texture>>& live_textures) -> void
+  {
+    auto& registry = gfx.GetResourceRegistry();
+    for (auto& texture : live_textures) {
+      if (texture == nullptr) {
+        continue;
+      }
+      if (registry.Contains(*texture)) {
+        registry.UnRegisterResource(*texture);
+      }
+      gfx.RegisterDeferredRelease(std::move(texture));
+    }
+    live_textures.clear();
+  }
+
 } // namespace
 
 AtmosphereSkyViewLutPass::AtmosphereSkyViewLutPass(Renderer& renderer)
@@ -192,12 +208,7 @@ AtmosphereSkyViewLutPass::~AtmosphereSkyViewLutPass()
     return;
   }
 
-  auto& registry = gfx->GetResourceRegistry();
-  for (const auto& texture : live_textures_) {
-    if (texture != nullptr && registry.Contains(*texture)) {
-      registry.UnRegisterResource(*texture);
-    }
-  }
+  ReleaseLiveTextures(*gfx, live_textures_);
 }
 
 auto AtmosphereSkyViewLutPass::OnFrameStart(
@@ -205,14 +216,10 @@ auto AtmosphereSkyViewLutPass::OnFrameStart(
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    for (const auto& texture : live_textures_) {
-      if (texture != nullptr && registry.Contains(*texture)) {
-        registry.UnRegisterResource(*texture);
-      }
-    }
+    ReleaseLiveTextures(*gfx, live_textures_);
+  } else {
+    live_textures_.clear();
   }
-  live_textures_.clear();
   pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
 

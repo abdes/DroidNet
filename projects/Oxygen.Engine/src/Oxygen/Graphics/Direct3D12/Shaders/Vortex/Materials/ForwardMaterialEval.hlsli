@@ -23,6 +23,7 @@ struct MaterialSurface
     float  roughness;
     float  ao;
     float3 emissive;
+    uint   flags;
 
     float3 N;
     float3 V;
@@ -113,6 +114,7 @@ MaterialSurface EvaluateMaterialSurface(
     s.roughness = 1.0;
     s.ao        = 1.0;
     s.emissive  = float3(0.0, 0.0, 0.0);
+    s.flags     = 0u;
 
     s.N = SafeNormalize(world_normal);
     // Fallback for degenerate normals from vertex data
@@ -144,6 +146,7 @@ MaterialSurface EvaluateMaterialSurface(
 
         s.base_rgb  = mat.base_color.rgb;
         s.base_a    = mat.base_color.a;
+        s.flags     = mat.flags;
         s.metalness = saturate(mat.metalness);
         s.roughness = saturate(mat.roughness);
         s.ao        = saturate(mat.ambient_occlusion);

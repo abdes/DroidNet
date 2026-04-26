@@ -22,6 +22,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -38,6 +39,7 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
@@ -70,10 +72,16 @@ constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
 constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
 constexpr glm::vec3 kOcclusionProbeCenter { 0.0F, -1.45F, 1.55F };
 constexpr glm::vec3 kOcclusionProbeScale { 0.45F, 0.45F, 0.45F };
+constexpr glm::vec3 kTranslucentSphereCenter { 0.0F, 5.20F, 3.15F };
+constexpr glm::vec3 kTranslucentCylinderCenter { 1.65F, 4.80F, 2.20F };
+constexpr glm::vec3 kTranslucentSphereScale { 0.85F, 0.85F, 0.85F };
+constexpr glm::vec3 kTranslucentCylinderScale { 0.48F, 0.48F, 1.05F };
 constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
 constexpr glm::vec4 kOcclusionProbeColor { 1.0F, 0.12F, 0.08F, 1.0F };
+constexpr glm::vec4 kTranslucentSphereColor { 0.00F, 0.95F, 1.0F, 0.18F };
+constexpr glm::vec4 kTranslucentCylinderColor { 1.0F, 0.10F, 0.82F, 0.16F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
-constexpr glm::vec3 kSunPosition { 0.0F, -16.0F, 18.0F };
+constexpr glm::vec3 kSunPosition { -10.0F, 10.0F, 16.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
 constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
 constexpr float kSpotlightOscillationAmplitude = 3.0F;
@@ -179,7 +187,11 @@ auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
 }
 
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
-  const float roughness = 0.9F, const float metalness = 0.0F)
+  const float roughness = 0.9F, const float metalness = 0.0F,
+  const oxygen::data::MaterialDomain domain
+  = oxygen::data::MaterialDomain::kOpaque,
+  const glm::vec3 emissive = glm::vec3 { 0.0F },
+  const uint32_t extra_flags = 0U)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   // NOLINTBEGIN(*-magic-numbers)
@@ -194,8 +206,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.name[n] = '\0';
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
-  desc.material_domain = static_cast<uint8_t>(d::MaterialDomain::kOpaque);
-  desc.flags = pak::render::kMaterialFlag_DoubleSided;
+  desc.material_domain = static_cast<uint8_t>(domain);
+  desc.flags = pak::render::kMaterialFlag_DoubleSided
+    | pak::render::kMaterialFlag_NoTextureSampling | extra_flags;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -205,6 +218,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.metalness = d::Unorm16 { metalness };
   desc.roughness = d::Unorm16 { roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
+  desc.emissive_factor[0] = d::HalfFloat { emissive.r };
+  desc.emissive_factor[1] = d::HalfFloat { emissive.g };
+  desc.emissive_factor[2] = d::HalfFloat { emissive.b };
   const auto key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/VortexBasic/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(
@@ -212,32 +228,36 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   // NOLINTEND(*-magic-numbers)
 }
 
-auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
-  const glm::vec4& rgba, const float roughness = 0.9F,
-  const float metalness = 0.0F) -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildPrimitiveGeometry(const char* geometry_name,
+  const char* material_name, std::vector<Vertex> vertices,
+  std::vector<uint32_t> indices, const glm::vec4& rgba,
+  const float roughness = 0.9F, const float metalness = 0.0F,
+  const oxygen::data::MaterialDomain domain
+  = oxygen::data::MaterialDomain::kOpaque,
+  const glm::vec3 emissive = glm::vec3 { 0.0F },
+  const uint32_t extra_material_flags = 0U)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   namespace d = oxygen::data;
   namespace pak = d::pak;
 
-  auto cube_data = d::MakeCubeMeshAsset();
-  CHECK_F(cube_data.has_value());
+  const auto material = MakeSolidColorMaterial(material_name, rgba, roughness,
+    metalness, domain, emissive, extra_material_flags);
 
-  const auto material
-    = MakeSolidColorMaterial(material_name, rgba, roughness, metalness);
-
-  auto mesh
-    = d::MeshBuilder(0, geometry_name)
-        .WithVertices(cube_data->first)
-        .WithIndices(cube_data->second)
-        .BeginSubMesh("full", material)
-        .WithMeshView(pak::geometry::MeshViewDesc {
-          .first_index = 0,
-          .index_count = static_cast<uint32_t>(cube_data->second.size()),
-          .first_vertex = 0,
-          .vertex_count = static_cast<uint32_t>(cube_data->first.size()),
-        })
-        .EndSubMesh()
-        .Build();
+  const auto vertex_count = static_cast<uint32_t>(vertices.size());
+  const auto index_count = static_cast<uint32_t>(indices.size());
+  auto mesh = d::MeshBuilder(0, geometry_name)
+                .WithVertices(std::move(vertices))
+                .WithIndices(std::move(indices))
+                .BeginSubMesh("full", material)
+                .WithMeshView(pak::geometry::MeshViewDesc {
+                  .first_index = 0,
+                  .index_count = index_count,
+                  .first_vertex = 0,
+                  .vertex_count = vertex_count,
+                })
+                .EndSubMesh()
+                .Build();
 
   pak::geometry::GeometryAssetDesc geo_desc {};
   geo_desc.lod_count = 1;
@@ -254,6 +274,48 @@ auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
     d::AssetKey::FromVirtualPath("/Engine/Examples/VortexBasic/Geometry/"
       + std::string(geometry_name) + ".ogeo"),
     geo_desc, std::vector<std::shared_ptr<d::Mesh>> { std::move(mesh) });
+}
+
+auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
+  const glm::vec4& rgba, const float roughness = 0.9F,
+  const float metalness = 0.0F,
+  const oxygen::data::MaterialDomain domain
+  = oxygen::data::MaterialDomain::kOpaque,
+  const glm::vec3 emissive = glm::vec3 { 0.0F },
+  const uint32_t extra_material_flags = 0U)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  auto cube_data = oxygen::data::MakeCubeMeshAsset();
+  CHECK_F(cube_data.has_value());
+  return BuildPrimitiveGeometry(geometry_name, material_name,
+    std::move(cube_data->first), std::move(cube_data->second), rgba, roughness,
+    metalness, domain, emissive, extra_material_flags);
+}
+
+auto BuildSphereGeometry(const char* geometry_name, const char* material_name,
+  const glm::vec4& rgba, const float roughness,
+  const oxygen::data::MaterialDomain domain, const glm::vec3 emissive,
+  const uint32_t extra_material_flags = 0U)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  auto sphere_data = oxygen::data::MakeSphereMeshAsset(32U, 48U);
+  CHECK_F(sphere_data.has_value());
+  return BuildPrimitiveGeometry(geometry_name, material_name,
+    std::move(sphere_data->first), std::move(sphere_data->second), rgba,
+    roughness, 0.0F, domain, emissive, extra_material_flags);
+}
+
+auto BuildCylinderGeometry(const char* geometry_name, const char* material_name,
+  const glm::vec4& rgba, const float roughness,
+  const oxygen::data::MaterialDomain domain, const glm::vec3 emissive,
+  const uint32_t extra_material_flags = 0U)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  auto cylinder_data = oxygen::data::MakeCylinderMeshAsset(32U, 1.0F, 0.5F);
+  CHECK_F(cylinder_data.has_value());
+  return BuildPrimitiveGeometry(geometry_name, material_name,
+    std::move(cylinder_data->first), std::move(cylinder_data->second), rgba,
+    roughness, 0.0F, domain, emissive, extra_material_flags);
 }
 
 } // namespace
@@ -340,6 +402,8 @@ auto MainModule::OnShutdown() noexcept -> void
   ClearSceneFb();
   camera_node_ = {};
   cube_node_ = {};
+  translucent_sphere_node_ = {};
+  translucent_cylinder_node_ = {};
   scene_.reset();
   vortex_renderer_.reset(nullptr);
 }
@@ -656,6 +720,20 @@ auto MainModule::EnsureScene() -> void
     sky_light->SetAffectReflections(true);
     sky_light->SetAffectGlobalIllumination(true);
 
+    auto* post_process
+      = environment->TryGetSystem<scene::environment::PostProcessVolume>()
+          .get();
+    if (post_process == nullptr) {
+      post_process
+        = &environment->AddSystem<scene::environment::PostProcessVolume>();
+    }
+    post_process->SetExposureEnabled(true);
+    post_process->SetExposureMode(engine::ExposureMode::kManual);
+    post_process->SetManualExposureEv(13.0F);
+    post_process->SetExposureCompensationEv(0.0F);
+    post_process->SetExposureKey(engine::kExposureCalibrationKey);
+    post_process->SetToneMapper(engine::ToneMapper::kAcesFitted);
+
     auto* fog = environment->TryGetSystem<scene::environment::Fog>().get();
     if (fog == nullptr) {
       fog = &environment->AddSystem<scene::environment::Fog>();
@@ -678,12 +756,10 @@ auto MainModule::EnsureScene() -> void
     fog->SetDirectionalInscatteringStartDistance(0.0F);
     fog->SetVolumetricFogScatteringDistribution(0.20F);
     fog->SetVolumetricFogAlbedo({ 0.62F, 0.70F, 0.82F });
-    const auto volumetric_emissive_scale = std::max(
-      app_.vortex_volumetric_fog_emissive_scale, 0.0F);
-    fog->SetVolumetricFogEmissive(
-      { 0.20F * volumetric_emissive_scale,
-        0.26F * volumetric_emissive_scale,
-        0.32F * volumetric_emissive_scale });
+    const auto volumetric_emissive_scale
+      = std::max(app_.vortex_volumetric_fog_emissive_scale, 0.0F);
+    fog->SetVolumetricFogEmissive({ 0.20F * volumetric_emissive_scale,
+      0.26F * volumetric_emissive_scale, 0.32F * volumetric_emissive_scale });
     fog->SetVolumetricFogExtinctionScale(1.50F);
     fog->SetVolumetricFogDistance(120.0F);
     fog->SetVolumetricFogStartDistance(0.0F);
@@ -695,6 +771,15 @@ auto MainModule::EnsureScene() -> void
     "ValidationCube", "ValidationCube", kCubeColor, 0.28F, 0.85F);
   auto occlusion_probe_geo = BuildCubeGeometry("OcclusionProbeCube",
     "OcclusionProbeCube", kOcclusionProbeColor, 0.5F, 0.0F);
+  auto translucent_sphere_geo = BuildSphereGeometry("TranslucentCyanSphere",
+    "TranslucentCyanSphere", kTranslucentSphereColor, 0.12F,
+    oxygen::data::MaterialDomain::kAlphaBlended, glm::vec3 { 0.0F },
+    oxygen::data::pak::render::kMaterialFlag_Unlit);
+  auto translucent_cylinder_geo
+    = BuildCylinderGeometry("TranslucentMagentaCylinder",
+      "TranslucentMagentaCylinder", kTranslucentCylinderColor, 0.22F,
+      oxygen::data::MaterialDomain::kAlphaBlended, glm::vec3 { 0.0F },
+      oxygen::data::pak::render::kMaterialFlag_Unlit);
   auto floor_geo = BuildCubeGeometry(
     "ValidationFloor", "ValidationFloor", kFloorColor, 0.90F);
 
@@ -711,10 +796,32 @@ auto MainModule::EnsureScene() -> void
     occlusion_probe_node_.GetRenderable().SetGeometry(
       std::move(occlusion_probe_geo));
     SetShadowParticipation(occlusion_probe_node_, false, true);
-    occlusion_probe_node_.GetTransform().SetLocalScale(
-      kOcclusionProbeScale);
+    occlusion_probe_node_.GetTransform().SetLocalScale(kOcclusionProbeScale);
     occlusion_probe_node_.GetTransform().SetLocalPosition(
       kOcclusionProbeCenter);
+  }
+
+  if (app_.with_translucency) {
+    translucent_sphere_node_ = scene_->CreateNode("TranslucentCyanSphere");
+    translucent_sphere_node_.GetRenderable().SetGeometry(
+      std::move(translucent_sphere_geo));
+    SetShadowParticipation(translucent_sphere_node_, false, true);
+    translucent_sphere_node_.GetTransform().SetLocalScale(
+      kTranslucentSphereScale);
+    translucent_sphere_node_.GetTransform().SetLocalPosition(
+      kTranslucentSphereCenter);
+
+    translucent_cylinder_node_
+      = scene_->CreateNode("TranslucentMagentaCylinder");
+    translucent_cylinder_node_.GetRenderable().SetGeometry(
+      std::move(translucent_cylinder_geo));
+    SetShadowParticipation(translucent_cylinder_node_, false, true);
+    translucent_cylinder_node_.GetTransform().SetLocalScale(
+      kTranslucentCylinderScale);
+    translucent_cylinder_node_.GetTransform().SetLocalPosition(
+      kTranslucentCylinderCenter);
+    translucent_cylinder_node_.GetTransform().SetLocalRotation(
+      glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
   }
 
   floor_node_ = scene_->CreateNode("Floor");
@@ -739,8 +846,7 @@ auto MainModule::EnsureScene() -> void
       const auto local_fog_emissive_scale
         = std::max(app_.vortex_local_fog_emissive_scale, 0.0F);
       local_fog.SetFogEmissive({ 7.5F * local_fog_emissive_scale,
-        0.4F * local_fog_emissive_scale,
-        5.5F * local_fog_emissive_scale });
+        0.4F * local_fog_emissive_scale, 5.5F * local_fog_emissive_scale });
       local_fog.SetSortPriority(2);
     }
     local_fog_volume_node_.GetTransform().SetLocalPosition(
@@ -829,6 +935,20 @@ auto MainModule::UpdateValidationScene(
     occlusion_probe_node_.GetTransform().SetLocalPosition(
       kOcclusionProbeCenter);
   }
+  if (translucent_sphere_node_.IsAlive()) {
+    translucent_sphere_node_.GetTransform().SetLocalScale(
+      kTranslucentSphereScale);
+    translucent_sphere_node_.GetTransform().SetLocalPosition(
+      kTranslucentSphereCenter);
+  }
+  if (translucent_cylinder_node_.IsAlive()) {
+    translucent_cylinder_node_.GetTransform().SetLocalScale(
+      kTranslucentCylinderScale);
+    translucent_cylinder_node_.GetTransform().SetLocalPosition(
+      kTranslucentCylinderCenter);
+    translucent_cylinder_node_.GetTransform().SetLocalRotation(
+      glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
+  }
 
   if (directional_light_node_.IsAlive()) {
     directional_light_node_.GetTransform().SetLocalPosition(kSunPosition);
@@ -836,23 +956,22 @@ auto MainModule::UpdateValidationScene(
       LookRotation(kSunPosition, kSceneFocusPoint));
   }
   if (point_light_node_.IsAlive()) {
-    const float point_phase = (animation_time_seconds_
-                                / kPointLightOrbitPeriodSeconds)
+    const float point_phase
+      = (animation_time_seconds_ / kPointLightOrbitPeriodSeconds)
       * oxygen::math::TwoPi;
-    const auto offset = glm::vec3 { std::cos(point_phase),
-      std::sin(point_phase), 0.65F }
+    const auto offset
+      = glm::vec3 { std::cos(point_phase), std::sin(point_phase), 0.65F }
       * kPointLightOrbitRadius;
     point_light_node_.GetTransform().SetLocalPosition(
       kSceneFocusPoint + offset);
   }
   if (spot_light_node_.IsAlive()) {
-    const float spot_phase = (animation_time_seconds_
-                               / kSpotlightOscillationPeriodSeconds)
+    const float spot_phase
+      = (animation_time_seconds_ / kSpotlightOscillationPeriodSeconds)
       * oxygen::math::TwoPi;
     const auto spot_position = kSceneFocusPoint
-      + glm::vec3 { -3.0F, -5.0F + std::sin(spot_phase)
-            * kSpotlightOscillationAmplitude,
-        4.0F };
+      + glm::vec3 { -3.0F,
+          -5.0F + std::sin(spot_phase) * kSpotlightOscillationAmplitude, 4.0F };
     spot_light_node_.GetTransform().SetLocalPosition(spot_position);
     spot_light_node_.GetTransform().SetLocalRotation(
       LookRotation(spot_position, kSceneFocusPoint));
