@@ -260,10 +260,13 @@ Remaining gap:
 
 ### Slice F - Runtime Proof And Closeout
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 Tasks:
 
+- Add a clean runtime enable path for proof. Implemented through archived
+  renderer CVars `vtx.occlusion.enable` (default off) and
+  `vtx.occlusion.max_candidate_count`.
 - Run focused builds/tests.
 - Run ShaderBake when shader catalog changes.
 - Capture a controlled runtime scene that proves occlusion skips hidden draws
@@ -274,7 +277,15 @@ Tasks:
 
 Validation:
 
-- The milestone remains `in_progress` until all proof artifacts are recorded.
+- `cmake --build out\build-ninja --config Debug --target
+  Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.OcclusionModule
+  Oxygen.Vortex.SceneRendererPublication Oxygen.Vortex.SceneRendererDeferredCore
+  --parallel 4` passed.
+- `ctest --preset test-debug -R
+  "Oxygen\.Vortex\.(RendererCapability|OcclusionModule|SceneRendererPublication|SceneRendererDeferredCore)"
+  --output-on-failure` passed: 62/62.
+- The milestone remains `in_progress` until runtime/capture/debug-layer proof
+  artifacts and user visual confirmation are recorded.
 
 ## 7. Exit Gate
 

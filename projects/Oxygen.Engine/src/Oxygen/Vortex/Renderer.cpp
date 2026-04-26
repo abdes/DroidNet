@@ -122,6 +122,9 @@ namespace {
     = "vtx.sky_atmosphere.aerial_perspective_lut.depth_km";
   constexpr auto kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice
     = "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice";
+  constexpr auto kCVarVortexOcclusionEnabled = "vtx.occlusion.enable";
+  constexpr auto kCVarVortexOcclusionMaxCandidateCount
+    = "vtx.occlusion.max_candidate_count";
 
   constexpr auto kRendererStagingAlignment
     = packing::kStructuredBufferAlignment;
@@ -582,6 +585,24 @@ auto Renderer::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
     .min_value = 1.0,
     .max_value = 64.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexOcclusionEnabled),
+    .help = "Enable Screen HZB occlusion testing and consumer culling",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexOcclusionMaxCandidateCount),
+    .help = "Maximum prepared draws submitted to the HZB occlusion tester",
+    .default_value = int64_t { 256 * 256 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1,
+    .max_value = 256 * 256,
   });
 }
 
@@ -1742,6 +1763,30 @@ auto Renderer::GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept
     }
   }
   return 2.0F;
+}
+
+auto Renderer::GetOcclusionEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    bool value = false;
+    if (console_->TryGetCVarValue<bool>(kCVarVortexOcclusionEnabled, value)) {
+      return value;
+    }
+  }
+  return false;
+}
+
+auto Renderer::GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 256 * 256 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexOcclusionMaxCandidateCount, value)) {
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 1, 256 * 256));
+    }
+  }
+  return 256U * 256U;
 }
 
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&

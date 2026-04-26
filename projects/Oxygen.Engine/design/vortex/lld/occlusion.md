@@ -293,6 +293,13 @@ if (occlusion.valid && !occlusion.visible_by_draw[draw_index]) {
 The visibility payload must not leak rendering-mode, diagnostics, or UI options
 into pass builders. Pass builders only see visibility.
 
+Runtime enablement is explicit and conservative. `vtx.occlusion.enable`
+defaults to `false` and is the only runtime on/off switch for Stage 5 HZB
+occlusion testing plus consumer culling. `vtx.occlusion.max_candidate_count`
+caps submitted prepared draws for proof and stress testing. There is no
+compile-time `OXYGEN_WITH_*` gate for M05B; the code is part of Vortex and the
+runtime switch controls behavior.
+
 ## 6. Diagnostics And Proof Surface
 
 M05B diagnostics must be compact and useful:
