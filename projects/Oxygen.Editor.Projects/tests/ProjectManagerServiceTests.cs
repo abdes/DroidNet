@@ -8,8 +8,8 @@ using AwesomeAssertions;
 using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Oxygen.Storage;
 using Oxygen.Editor.World;
+using Oxygen.Storage;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -45,9 +45,11 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var projectFolderMock = new Mock<IFolder>();
         var projectFileMock = new Mock<IDocument>();
         var projectInfo = new ProjectInfo("name", Category.Games, projectFolderPath, "Media/Preview.png");
+        projectInfo.AuthoringMounts.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
         var json = /*lang=json,strict*/
             $$"""
               {
+                "SchemaVersion": 1,
                 "Id": "{{projectInfo.Id}}",
                 "Name": "name",
                 "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
@@ -184,13 +186,13 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
         _ = sceneDocumentMock.Setup(d => d.Name).Returns("scene1.scene");
 
-                // Provide valid scene JSON via the real serializer (keeps the test aligned with the schema)
-                var sceneToSerialize = new Scene(new Project(projectInfo) { Name = projectInfo.Name }) { Name = "scene1" };
-                var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(sceneToSerialize.Project);
-                using var stream = new System.IO.MemoryStream();
-                await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
-                var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
-                _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
+        // Provide valid scene JSON via the real serializer (keeps the test aligned with the schema)
+        var sceneToSerialize = new Scene(new Project(projectInfo) { Name = projectInfo.Name }) { Name = "scene1" };
+        var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(sceneToSerialize.Project);
+        using var stream = new System.IO.MemoryStream();
+        await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
+        var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
         _ = sceneDocumentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
 
         // Act
@@ -486,6 +488,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string json = /*lang=json,strict*/
             """
             {
+              "SchemaVersion": 1,
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
             }
@@ -496,11 +499,45 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void FromJson_ThrowsJsonException_WhenSchemaVersionMissing()
+    {
+        const string json = /*lang=json,strict*/
+            """
+            {
+              "Id": "2F8B4E5F-754E-4A4F-B4B4-4D40BD2E5E32",
+              "Name": "name",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
+            }
+            """;
+
+        Action act = () => _ = ProjectInfo.FromJson(json);
+        _ = act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    public void FromJson_ThrowsUnsupportedProjectSchemaException_WhenSchemaVersionUnsupported()
+    {
+        const string json = /*lang=json,strict*/
+            """
+            {
+              "SchemaVersion": 999,
+              "Id": "2F8B4E5F-754E-4A4F-B4B4-4D40BD2E5E32",
+              "Name": "name",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
+            }
+            """;
+
+        Action act = () => _ = ProjectInfo.FromJson(json);
+        _ = act.Should().Throw<UnsupportedProjectSchemaException>();
+    }
+
+    [TestMethod]
     public void FromJson_ThrowsJsonException_WhenIdEmpty()
     {
         const string json = /*lang=json,strict*/
             """
             {
+              "SchemaVersion": 1,
               "Id": "",
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
@@ -518,5 +555,20 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var json = ProjectInfo.ToJson(pi);
         var des = ProjectInfo.FromJson(json);
         _ = des.Id.Should().Be(pi.Id);
+    }
+
+    [TestMethod]
+    public void ToJson_ShouldWriteSchemaVersionAndIgnoreRuntimeFields()
+    {
+        var pi = new ProjectInfo("name", Category.Games, "loc", "thumb")
+        {
+            LastUsedOn = new DateTime(year: 2024, month: 1, day: 2),
+        };
+
+        var json = ProjectInfo.ToJson(pi);
+
+        _ = json.Should().Contain("\"SchemaVersion\": 1");
+        _ = json.Should().NotContain(nameof(ProjectInfo.Location));
+        _ = json.Should().NotContain(nameof(ProjectInfo.LastUsedOn));
     }
 }

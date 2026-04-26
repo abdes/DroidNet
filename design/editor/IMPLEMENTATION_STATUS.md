@@ -55,7 +55,7 @@ Current resume point:
 
 1. Implement `ED-M01` from
    [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md),
-   continuing with `ED-M01.3 - Project Validation And Context Services`.
+   continuing with `ED-M01.4 - Shell Activation Coordinator`.
 2. Continue `ED-M02` validation in parallel where it does not block `ED-M01`.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
@@ -112,6 +112,9 @@ product behavior.
       adapter, and reducer/exception-adapter tests are implemented.
 - [x] `ED-M01.2` removes eager engine startup and `IEngineService` injection
       from Project Browser application launch.
+- [x] `ED-M01.3` project validation, V0.1 manifest schema, active project
+      context, project creation, recent-project adapter, and cook-scope service
+      contracts are implemented and covered by project-service tests.
 - [ ] Editor starts at Project Browser.
 - [ ] Recent project, create project, open project, and invalid project states
       are usable.
@@ -392,7 +395,7 @@ the current milestone ID after the `ED-M01` insertion.
 
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
-| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Continue implementation with `ED-M01.3 - Project Validation And Context Services`. |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Continue implementation with `ED-M01.4 - Shell Activation Coordinator`. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |

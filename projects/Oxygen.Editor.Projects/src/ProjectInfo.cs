@@ -22,6 +22,11 @@ namespace Oxygen.Editor.Projects;
 /// </remarks>
 public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 {
+    /// <summary>
+    ///     The current supported project manifest schema version.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         AllowTrailingCommas = true,
@@ -53,9 +58,16 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <param name="category">Project category.</param>
     /// <param name="location">Optional project location.</param>
     /// <param name="thumbnail">Optional thumbnail path.</param>
+    /// <param name="schemaVersion">Project manifest schema version.</param>
     [JsonConstructor]
     [SetsRequiredMembers]
-    public ProjectInfo(Guid id, string name, Category category, string? location = null, string? thumbnail = null)
+    public ProjectInfo(
+        Guid id,
+        string name,
+        Category category,
+        string? location = null,
+        string? thumbnail = null,
+        int schemaVersion = CurrentSchemaVersion)
     {
         if (id == Guid.Empty)
         {
@@ -63,13 +75,12 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         }
 
         this.Id = id;
+        this.SchemaVersion = schemaVersion;
         this.Name = name ?? throw new ArgumentNullException(nameof(name));
         this.Category = category;
         this.Location = location;
         this.Thumbnail = thumbnail;
         this.LastUsedOn = DateTime.Now;
-
-        this.EnsureDefaultAuthoringMounts();
     }
 
     /// <summary>
@@ -77,6 +88,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     ///     This property is required and must not be <see cref="Guid.Empty" />.
     /// </summary>
     public required Guid Id { get; init; }
+
+    /// <inheritdoc />
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
     /// <inheritdoc />
     public required string Name { get; set; }
@@ -120,6 +134,18 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         // First check that the JSON contains a valid, non-empty id property to provide a clear JsonException
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        if (!root.TryGetProperty(nameof(SchemaVersion), out var schemaVersionProp)
+            || schemaVersionProp.ValueKind is not JsonValueKind.Number
+            || !schemaVersionProp.TryGetInt32(out var schemaVersion))
+        {
+            throw new JsonException("ProjectInfo JSON is missing required 'SchemaVersion' property.");
+        }
+
+        if (schemaVersion != CurrentSchemaVersion)
+        {
+            throw new UnsupportedProjectSchemaException(schemaVersion, CurrentSchemaVersion);
+        }
+
         if (!root.TryGetProperty(nameof(Id), out var idProp))
         {
             throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.");
@@ -134,7 +160,6 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
             ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
 
-        obj.EnsureDefaultAuthoringMounts();
         return obj.Id == Guid.Empty
             ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
             : (IProjectInfo)obj;
@@ -146,14 +171,4 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <param name="projectInfo">The <see cref="IProjectInfo" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="IProjectInfo" /> object.</returns>
     internal static string ToJson(IProjectInfo projectInfo) => JsonSerializer.Serialize(projectInfo, JsonOptions);
-
-    private void EnsureDefaultAuthoringMounts()
-    {
-        // "Works just like that": a project always has a default authoring mount point.
-        // Keep it minimal and deterministic.
-        if (this.AuthoringMounts.Count == 0)
-        {
-            this.AuthoringMounts.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
-        }
-    }
 }

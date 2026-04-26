@@ -30,6 +30,11 @@ public static class Constants
     public const string ScenesFolderName = "Scenes";
 
     /// <summary>
+    /// The name of the project-local cooked output folder.
+    /// </summary>
+    public const string CookedOutputFolderName = ".cooked";
+
+    /// <summary>
     /// The file extension for scene files.
     /// </summary>
     /// <remarks>
