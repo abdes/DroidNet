@@ -918,16 +918,6 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     pending_compositions_.clear();
   }
 
-  const auto& anchor = submissions.front();
-  for (const auto& pending : submissions) {
-    const bool same_composite_target = anchor.submission.composite_target.get()
-      == pending.submission.composite_target.get();
-    const bool same_target_surface
-      = anchor.target_surface.get() == pending.target_surface.get();
-    CHECK_F(same_composite_target && same_target_surface,
-      "Phase-1 composition queue requires a single target per frame");
-  }
-
   std::ranges::stable_sort(submissions,
     [](const PendingComposition& lhs, const PendingComposition& rhs) -> bool {
       return lhs.sequence_in_frame < rhs.sequence_in_frame;
@@ -1397,15 +1387,6 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
   std::shared_ptr<graphics::Surface> target_surface) -> void
 {
   std::scoped_lock lock(composition_mutex_);
-  if (!pending_compositions_.empty()) {
-    const auto& anchor = pending_compositions_.front();
-    const bool same_composite_target = anchor.submission.composite_target.get()
-      == submission.composite_target.get();
-    const bool same_target_surface
-      = anchor.target_surface.get() == target_surface.get();
-    CHECK_F(same_composite_target && same_target_surface,
-      "Phase-1 composition queue requires a single target per frame");
-  }
   pending_compositions_.push_back(PendingComposition {
     .submission = std::move(submission),
     .target_surface = std::move(target_surface),
