@@ -69,6 +69,7 @@ from renderdoc_ui_analysis import (  # noqa: E402
 
 REPORT_SUFFIX = "_async_products_report.txt"
 DRAW_NAME = "ID3D12GraphicsCommandList::DrawInstanced()"
+COPY_NAME = "ID3D12GraphicsCommandList::CopyTextureRegion()"
 COLOR_EXPORT_ENV = "OXYGEN_ASYNC_EXPORT_COLOR_PATH"
 DEPTH_EXPORT_ENV = "OXYGEN_ASYNC_EXPORT_DEPTH_PATH"
 
@@ -763,9 +764,16 @@ def build_report(
     stage22_tonemap_last_draw = find_last_named_record(
         stage22_tonemap_records, DRAW_NAME
     )
+    compositing_copy_records = records_with_name(compositing_records, COPY_NAME)
+    compositing_copy_record = (
+        compositing_copy_records[0] if compositing_copy_records else None
+    )
+    imgui_overlay_blend_draw = find_last_named_record(
+        imgui_overlay_blend_records, DRAW_NAME
+    )
     compositing_last_action = find_last_work_record(compositing_records)
     final_present_action = (
-        find_last_named_record(imgui_overlay_blend_records, DRAW_NAME)
+        imgui_overlay_blend_draw
         or compositing_last_action
     )
 
@@ -956,6 +964,35 @@ def build_report(
             "vortex.environment.atmospherecameraaerialperspective",
         )
     atmosphere_camera_aerial_consumed = len(atmosphere_camera_aerial_usage) > 0
+    compositing_copy_scope_count_match = len(compositing_scopes) == 1
+    compositing_copy_event_count_match = len(compositing_copy_records) == 1
+    compositing_copy_after_stage22 = (
+        compositing_copy_record is not None
+        and stage22_tonemap_last_draw is not None
+        and compositing_copy_record.event_id > stage22_tonemap_last_draw.event_id
+    )
+    compositing_copy_uses_stage22_output = False
+    compositing_copy_source_resource_name = ""
+    if compositing_copy_record is not None:
+        compositing_copy_usage = find_named_resource_usage(
+            controller,
+            resource_records,
+            {compositing_copy_record.event_id},
+            "async.scenecolor",
+        )
+        compositing_copy_uses_stage22_output = len(compositing_copy_usage) > 0
+        compositing_copy_source_resource_name = (
+            compositing_copy_usage[0]["name"] if compositing_copy_usage else ""
+        )
+    imgui_overlay_blend_scope_count_match = len(imgui_overlay_blend_scopes) == 1
+    imgui_overlay_blend_draw_count_match = (
+        len(records_with_name(imgui_overlay_blend_records, DRAW_NAME)) == 1
+    )
+    imgui_overlay_after_scene_copy = (
+        imgui_overlay_blend_draw is not None
+        and compositing_copy_record is not None
+        and imgui_overlay_blend_draw.event_id > compositing_copy_record.event_id
+    )
     stage15_async_scene_color_delta = max(
         max_sample_delta(stage12_final_scene_color, stage15_fog_scene_color),
         dense_grid_delta(
@@ -1059,6 +1096,11 @@ def build_report(
         "compositing_last_event={}".format(compositing_last_action.event_id)
     )
     report.append(
+        "compositing_copy_event={}".format(
+            compositing_copy_record.event_id if compositing_copy_record else ""
+        )
+    )
+    report.append(
         "final_present_event={}".format(final_present_action.event_id)
     )
     report.append(
@@ -1137,6 +1179,46 @@ def build_report(
     report.append(
         "atmosphere_camera_aerial_resource_name={}".format(
             atmosphere_camera_aerial_usage[0]["name"] if atmosphere_camera_aerial_usage else ""
+        )
+    )
+    report.append(
+        "compositing_copy_scope_count_match={}".format(
+            str(compositing_copy_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "compositing_copy_event_count_match={}".format(
+            str(compositing_copy_event_count_match).lower()
+        )
+    )
+    report.append(
+        "compositing_copy_after_stage22={}".format(
+            str(compositing_copy_after_stage22).lower()
+        )
+    )
+    report.append(
+        "compositing_copy_uses_stage22_output={}".format(
+            str(compositing_copy_uses_stage22_output).lower()
+        )
+    )
+    report.append(
+        "compositing_copy_source_resource_name={}".format(
+            compositing_copy_source_resource_name
+        )
+    )
+    report.append(
+        "imgui_overlay_blend_scope_count_match={}".format(
+            str(imgui_overlay_blend_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "imgui_overlay_blend_draw_count_match={}".format(
+            str(imgui_overlay_blend_draw_count_match).lower()
+        )
+    )
+    report.append(
+        "imgui_overlay_after_scene_copy={}".format(
+            str(imgui_overlay_after_scene_copy).lower()
         )
     )
     report.append(
@@ -1257,6 +1339,13 @@ def build_report(
         and stage15_sky_quality["valid"]
         and tonemap_output_nonzero
         and tonemap_clipping_ratio_ok
+        and compositing_copy_scope_count_match
+        and compositing_copy_event_count_match
+        and compositing_copy_after_stage22
+        and compositing_copy_uses_stage22_output
+        and imgui_overlay_blend_scope_count_match
+        and imgui_overlay_blend_draw_count_match
+        and imgui_overlay_after_scene_copy
         and final_present_nonzero
         and imgui_overlay_composited_on_scene
         and color_exported
