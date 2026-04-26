@@ -45,6 +45,7 @@ public:
   bool with_local_fog { false };
   bool with_volumetric_fog { false };
   bool with_occlusion { false };
+  bool with_translucency { false };
   bool vortex_local_fog_into_volumetric { true };
   bool vortex_volumetric_directional_shadows { true };
   bool vortex_volumetric_temporal_reprojection { true };

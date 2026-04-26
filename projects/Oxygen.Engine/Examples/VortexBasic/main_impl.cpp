@@ -266,6 +266,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_occlusion)
         .Build());
+    vortex_options->Add(clap::Option::WithKey("with-translucency")
+        .About("Enable translucent validation meshes for Stage 18 proof")
+        .Long("with-translucency")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_translucency)
+        .Build());
     vortex_options->Add(clap::Option::WithKey("volumetric-local-fog")
         .About("Inject local fog into volumetric fog when both are enabled")
         .Long("volumetric-local-fog")
@@ -381,6 +389,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(
       INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
     LOG_F(INFO, "Parsed with-occlusion option = {}", app.with_occlusion);
+    LOG_F(INFO, "Parsed with-translucency option = {}",
+      app.with_translucency);
     LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
       app.vortex_local_fog_into_volumetric);
     LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",

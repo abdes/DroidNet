@@ -60,6 +60,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
@@ -360,6 +361,11 @@ namespace {
     return "draws=" + std::to_string(draw_count)
       + " occlusion_culled="
       + std::to_string(occlusion_culled_draw_count);
+  }
+
+  auto TranslucencyDrawDescriptor(const std::uint32_t draw_count) -> std::string
+  {
+    return "draws=" + std::to_string(draw_count);
   }
 
   auto RecordDiagnosticsPass(Renderer& renderer, DiagnosticsPassRecord record)
@@ -1345,6 +1351,11 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     base_pass_ = std::make_unique<BasePassModule>(
       renderer_, scene_textures_.GetConfig());
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
+    && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
+    translucency_ = std::make_unique<TranslucencyModule>(renderer_);
+  }
   if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
     && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
     lighting_ = std::make_unique<LightingService>(renderer_);
@@ -1914,6 +1925,32 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 17: reserved - post-opaque extensions
 
   // Stage 18: Translucency
+  auto translucency_result = TranslucencyExecutionResult {};
+  if (translucency_ != nullptr && !wireframe_only
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
+    translucency_result = translucency_->Execute(ctx, scene_textures_);
+  }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage18.Translucency",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = translucency_result.executed,
+      .inputs = { "Vortex.PreparedSceneFrame", "Vortex.SceneColor",
+        "Vortex.SceneDepth", "Vortex.LightingFrameBindings",
+        "Vortex.ShadowFrameBindings", "Vortex.EnvironmentFrameBindings" },
+      .outputs = { "Vortex.SceneColor" },
+      .missing_inputs = translucency_ == nullptr
+        ? std::vector<std::string> { "TranslucencyModule" }
+        : std::vector<std::string> {},
+    });
+  RecordDiagnosticsProduct(renderer_,
+    DiagnosticsProductRecord {
+      .name = "Vortex.TranslucencyDrawCommands",
+      .producer_pass = "Vortex.Stage18.Translucency",
+      .descriptor = TranslucencyDrawDescriptor(translucency_result.draw_count),
+      .published = translucency_result.requested,
+      .valid = translucency_result.executed || translucency_result.draw_count == 0U,
+    });
 
   // Stage 19: reserved - DistortionModule
 

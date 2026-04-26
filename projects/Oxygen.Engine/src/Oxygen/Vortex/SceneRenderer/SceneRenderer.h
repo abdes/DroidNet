@@ -53,6 +53,7 @@ class GroundGridPass;
 class EnvironmentLightingService;
 class ScreenHzbModule;
 class OcclusionModule;
+class TranslucencyModule;
 namespace testing {
   struct RendererPublicationProbe;
 }
@@ -276,6 +277,7 @@ private:
   std::unique_ptr<ScreenHzbModule> screen_hzb_;
   std::unique_ptr<OcclusionModule> occlusion_;
   std::unique_ptr<BasePassModule> base_pass_;
+  std::unique_ptr<TranslucencyModule> translucency_;
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;
   std::unique_ptr<EnvironmentLightingService> environment_;

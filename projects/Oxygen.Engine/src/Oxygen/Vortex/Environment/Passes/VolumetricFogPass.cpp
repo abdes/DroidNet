@@ -10,6 +10,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -178,6 +179,37 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial, true);
   }
 
+  auto ReleaseTexture(Graphics& gfx,
+    std::shared_ptr<graphics::Texture>& texture,
+    std::unordered_set<const graphics::Texture*>& released) -> void
+  {
+    if (texture == nullptr) {
+      return;
+    }
+
+    const auto* raw_texture = texture.get();
+    if (!released.insert(raw_texture).second) {
+      texture.reset();
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (registry.Contains(*texture)) {
+      registry.UnRegisterResource(*texture);
+    }
+    gfx.RegisterDeferredRelease(std::move(texture));
+  }
+
+  auto ReleaseLiveTextures(Graphics& gfx,
+    std::vector<std::shared_ptr<graphics::Texture>>& live_textures,
+    std::unordered_set<const graphics::Texture*>& released) -> void
+  {
+    for (auto& texture : live_textures) {
+      ReleaseTexture(gfx, texture, released);
+    }
+    live_textures.clear();
+  }
+
   auto SetVec4(float (&target)[4], const glm::vec3 value, const float w = 0.0F)
     -> void
   {
@@ -266,20 +298,17 @@ VolumetricFogPass::~VolumetricFogPass()
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
+    live_textures_.clear();
+    history_by_view_.clear();
     return;
   }
 
-  auto& registry = gfx->GetResourceRegistry();
-  for (const auto& texture : live_textures_) {
-    if (texture != nullptr && registry.Contains(*texture)) {
-      registry.UnRegisterResource(*texture);
-    }
+  std::unordered_set<const graphics::Texture*> released;
+  ReleaseLiveTextures(*gfx, live_textures_, released);
+  for (auto& [_, history] : history_by_view_) {
+    ReleaseTexture(*gfx, history.texture, released);
   }
-  for (const auto& [_, history] : history_by_view_) {
-    if (history.texture != nullptr && registry.Contains(*history.texture)) {
-      registry.UnRegisterResource(*history.texture);
-    }
-  }
+  history_by_view_.clear();
 }
 
 auto VolumetricFogPass::OnFrameStart(
@@ -287,14 +316,11 @@ auto VolumetricFogPass::OnFrameStart(
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    for (const auto& texture : live_textures_) {
-      if (texture != nullptr && registry.Contains(*texture)) {
-        registry.UnRegisterResource(*texture);
-      }
-    }
+    std::unordered_set<const graphics::Texture*> released;
+    ReleaseLiveTextures(*gfx, live_textures_, released);
+  } else {
+    live_textures_.clear();
   }
-  live_textures_.clear();
   pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
 
