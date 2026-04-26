@@ -38,16 +38,16 @@ occlusion consumer path over the existing generic Screen HZB implementation.
 
 **Active work package:** `VTX-M05B - Occlusion Consumer Closeout`
 
-**Plan:** no dedicated detailed milestone plan exists yet. The starting design
-documents are [lld/occlusion.md](./lld/occlusion.md) and
-[lld/hzb.md](./lld/hzb.md); the first M05B task is to review/update those docs
-and create `plan/VTX-M05B-...md` before implementation claims.
+**Plan:** [plan/VTX-M05B-occlusion-consumer-closeout.md](./plan/VTX-M05B-occlusion-consumer-closeout.md)
+defines the detailed work slices. The design authority is
+[lld/occlusion.md](./lld/occlusion.md), with [lld/hzb.md](./lld/hzb.md) as the
+existing Screen HZB producer contract.
 
 **Current M05B scope:** full occlusion/query/visibility policy over Screen HZB,
 including visibility classifications, batching, temporal handoff, consumers, and
 proof.
 
-**Current M05B status:** `planned`.
+**Current M05B status:** `in_progress`.
 
 ## 4. Milestone Ledger
 
@@ -67,7 +67,7 @@ proof.
 | VTX-M04E | Async migration parity gate | `validated` | Async authors a Vortex-ready scene environment, sun directional light, shadow receiver ground, lifted sphere/two-submesh geometry, and Vortex runtime view metadata. DemoShell no longer overrides the scene-authored environment. `Run-AsyncRuntimeValidation.ps1` passed with RenderDoc structural/product proof, final present proof, and overlay composition proof on 2026-04-26. | No open M04E closure gap. |
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | Runtime composition registration, queued single-view composition copy, Stage 22 post-process routing, and overlay blend path exist. `AnalyzeRenderDocAsyncProducts.py` proves exactly one post-Stage-22 composition copy from `Async.SceneColor`, exactly one overlay blend after scene copy, final present output, and focused `RendererCompositionQueue` tests passed. | No open M04F closure gap. |
 | VTX-M05A | Diagnostics product service | `validated` | Diagnostics runtime service, authoritative shader-debug registry, frame ledger, capture manifest, GPU timeline facade, Diagnostics panel, proof script hardening, direct/masked debug corrections, unsupported IBL/light-culling mode handling, and solid/wireframe/wireframe-overlay render controls are implemented and documented in the LLD/plan. Validation evidence: focused Vortex/DemoShell builds and tests, release DiagnosticsService test, VortexBasic runtime RenderDoc/debug-layer proof, TexturedCube panel-registration smoke, RenderScene build/ShaderBake validation, and user visual confirmation for solid plus wireframe overlay. | No open M05A closure gap. Optional GPU debug primitives remain deferred until a concrete proof gap requires them. |
-| VTX-M05B | Occlusion consumer closeout | `planned` | Generic Screen HZB implementation and bindings exist. | Full occlusion query/consumer policy, visibility classifications, batching, temporal handoff, and proof. |
+| VTX-M05B | Occlusion consumer closeout | `in_progress` | Generic Screen HZB implementation and bindings exist; M05B LLD/plan now map UE5.7 `FHZBOcclusionTester`/`HZBOcclusion.usf` behavior onto a Vortex-native HZB consumer over `ScreenHzbModule`. | Implement result substrate, HZB tester pass/readback, consumer filtering, diagnostics, ShaderBake/catalog validation, runtime/capture proof, and D3D12 debug-layer evidence. |
 | VTX-M05C | Translucency stage | `planned` | Directory placeholders and LLD exist. | Stage 18 implementation consuming lighting/shadow/environment publications and validation proof. |
 | VTX-M05D | Local-light conventional shadow expansion | `planned` | Directional ShadowService baseline exists; local-light LLD exists. | Spot-light shadows, point-light strategy, publication, capture proof, and debug-layer evidence. |
 | VTX-M06A | Multi-view proof closeout | `planned` | CompositionView/ViewLifecycle/CompositionPlanner substrate exists. | Heterogeneous per-view runtime proof, PiP/multi-surface routing, and per-view product isolation. |
