@@ -61,6 +61,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  ShaderDebugModeRegistry
+  SOURCES
+    "ShaderDebugModeRegistry_test.cpp"
+)
+
+m_gtest_program(
   RenderContext
   SOURCES
     "RenderContext_test.cpp"
@@ -148,6 +154,12 @@ add_custom_target(
   Oxygen.Vortex.DiagnosticsService
   DEPENDS
     Oxygen.Vortex.DiagnosticsService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.ShaderDebugModeRegistry
+  DEPENDS
+    Oxygen.Vortex.ShaderDebugModeRegistry.Tests
 )
 
 add_custom_target(

@@ -94,6 +94,19 @@ auto DiagnosticsService::GetShaderDebugMode() const noexcept -> ShaderDebugMode
   return shader_debug_mode_;
 }
 
+auto DiagnosticsService::EnumerateShaderDebugModes() const noexcept
+  -> std::span<const ShaderDebugModeInfo>
+{
+  return vortex::EnumerateShaderDebugModes();
+}
+
+auto DiagnosticsService::FindShaderDebugMode(
+  const std::string_view canonical_name) const noexcept
+  -> std::optional<ShaderDebugMode>
+{
+  return ResolveShaderDebugMode(canonical_name);
+}
+
 auto DiagnosticsService::BeginFrame(const frame::SequenceNumber frame) -> void
 {
   std::scoped_lock lock(mutex_);

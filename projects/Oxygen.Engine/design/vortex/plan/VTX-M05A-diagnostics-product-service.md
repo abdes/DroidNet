@@ -149,7 +149,29 @@ Validation:
 
 ### Slice C - ShaderDebugModeRegistry
 
-**Status:** `planned`
+**Status:** `in_progress`
+
+Current evidence:
+
+- `ShaderDebugModeRegistry` exists with one entry per `ShaderDebugMode`,
+  canonical tool names, display names, UI families, shader define linkage,
+  debug path, capability/product requirements, and explicit support state.
+- `DiagnosticsService` exposes registry enumeration and canonical-name
+  resolution.
+- VortexBasic CLI debug-mode parsing now consumes the registry while preserving
+  the old `normal` alias for disabled mode.
+- The registry documents `ibl-no-brdf-lut` as currently unsupported because the
+  `SKIP_BRDF_LUT` shader variant exists but runtime mode selection is not wired.
+- Focused build and tests passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target oxygen-examples-vortexbasic Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.ShaderDebugModeRegistry --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(ShaderDebugModeRegistry|DiagnosticsService)" --output-on-failure`.
+
+Remaining gap:
+
+- DemoShell still has hard-coded debug-mode UI/support lists. It must move to
+  registry consumption before the panel/debug-mode slice can close.
+- Consistency with `EngineShaderCatalog.h` is tested through current helper
+  define mapping, not yet by direct shader-catalog introspection.
 
 Tasks:
 

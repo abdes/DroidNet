@@ -36,6 +36,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -60,26 +61,13 @@ auto ParseVortexShaderDebugMode(std::string_view text)
   if (text.empty() || text == "disabled") {
     return ShaderDebugMode::kDisabled;
   }
-  if (text == "base-color") {
-    return ShaderDebugMode::kBaseColor;
+  if (text == "normal") {
+    return ShaderDebugMode::kDisabled;
   }
-  if (text == "world-normals") {
-    return ShaderDebugMode::kWorldNormals;
-  }
-  if (text == "roughness") {
-    return ShaderDebugMode::kRoughness;
-  }
-  if (text == "metalness") {
-    return ShaderDebugMode::kMetalness;
-  }
-  if (text == "directional-shadow-mask") {
-    return ShaderDebugMode::kDirectionalShadowMask;
-  }
-  if (text == "scene-depth-raw") {
-    return ShaderDebugMode::kSceneDepthRaw;
-  }
-  if (text == "scene-depth-linear") {
-    return ShaderDebugMode::kSceneDepthLinear;
+
+  if (const auto* info = oxygen::vortex::FindShaderDebugModeInfo(text);
+    info != nullptr && info->supported) {
+    return info->mode;
   }
 
   throw std::runtime_error(
