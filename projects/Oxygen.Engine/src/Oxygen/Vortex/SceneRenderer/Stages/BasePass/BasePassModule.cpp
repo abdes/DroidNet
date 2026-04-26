@@ -129,29 +129,6 @@ namespace {
     return index->get();
   }
 
-  auto RegisterBufferView(Graphics& gfx, graphics::Buffer& buffer,
-    const graphics::BufferViewDescription& desc) -> std::uint32_t
-  {
-    auto& registry = gfx.GetResourceRegistry();
-    if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
-      existing.has_value()) {
-      return existing->get();
-    }
-
-    auto& allocator = gfx.GetDescriptorAllocator();
-    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
-    CHECK_F(handle.IsValid(),
-      "BasePassModule: failed to allocate a {} descriptor for '{}'",
-      graphics::to_string(desc.view_type), buffer.GetName());
-
-    const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-    const auto view = registry.RegisterView(buffer, std::move(handle), desc);
-    CHECK_F(view->IsValid(),
-      "BasePassModule: failed to register a {} descriptor for '{}'",
-      graphics::to_string(desc.view_type), buffer.GetName());
-    return shader_visible_index.get();
-  }
-
   auto ResetStageTexture(
     Graphics& gfx, std::shared_ptr<graphics::Texture>& texture) -> void
   {
@@ -892,6 +869,7 @@ BasePassModule::BasePassModule(
   , mesh_processor_(std::make_unique<BasePassMeshProcessor>(renderer))
 {
   static_cast<void>(scene_textures_config);
+  wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 BasePassModule::~BasePassModule()
@@ -903,16 +881,18 @@ BasePassModule::~BasePassModule()
   }
 }
 
-auto BasePassModule::EnsureWireframeConstantsBuffer(Graphics& gfx)
-  -> std::uint32_t
+auto BasePassModule::EnsureWireframeConstantsBuffer(Graphics& gfx) -> void
 {
   if (wireframe_constants_buffer_ == nullptr
-    || wireframe_constants_mapped_ptr_ == nullptr) {
+    || wireframe_constants_mapped_ptr_ == nullptr
+    || !wireframe_constants_indices_[0].IsValid()) {
     ReleaseWireframeConstantsBuffer();
 
     auto& registry = gfx.GetResourceRegistry();
+    auto& allocator = gfx.GetDescriptorAllocator();
     const auto desc = graphics::BufferDesc {
-      .size_bytes = kWireframePassConstantsStride,
+      .size_bytes
+      = kWireframePassConstantsStride * kWireframePassConstantsSlots,
       .usage = graphics::BufferUsage::kConstant,
       .memory = graphics::BufferMemory::kUpload,
       .debug_name = "Vortex.Stage20.Wireframe.PassConstants",
@@ -928,33 +908,58 @@ auto BasePassModule::EnsureWireframeConstantsBuffer(Graphics& gfx)
       wireframe_constants_buffer_->Map(0U, desc.size_bytes));
     CHECK_NOTNULL_F(wireframe_constants_mapped_ptr_,
       "BasePassModule: failed to map wireframe constants buffer");
-  }
 
-  return RegisterBufferView(gfx, *wireframe_constants_buffer_,
-    graphics::BufferViewDescription {
-      .view_type = graphics::ResourceViewType::kConstantBuffer,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { 0U, kWireframePassConstantsStride },
-    });
+    wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
+    for (std::size_t slot = 0U; slot < kWireframePassConstantsSlots; ++slot) {
+      auto handle
+        = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
+          graphics::DescriptorVisibility::kShaderVisible);
+      CHECK_F(handle.IsValid(),
+        "BasePassModule: failed to allocate wireframe constants descriptor");
+      wireframe_constants_indices_[slot]
+        = allocator.GetShaderVisibleIndex(handle);
+
+      const auto offset
+        = static_cast<std::uint64_t>(slot * kWireframePassConstantsStride);
+      const auto view_desc = graphics::BufferViewDescription {
+        .view_type = graphics::ResourceViewType::kConstantBuffer,
+        .visibility = graphics::DescriptorVisibility::kShaderVisible,
+        .range = { offset, kWireframePassConstantsStride },
+      };
+      const auto view = registry.RegisterView(
+        *wireframe_constants_buffer_, std::move(handle), view_desc);
+      CHECK_F(view->IsValid(),
+        "BasePassModule: failed to register wireframe constants descriptor");
+    }
+  }
 }
 
-auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
-  const RenderContext& ctx, const bool compensate_exposure) -> std::uint32_t
+auto BasePassModule::WriteWireframeConstants(
+  Graphics& gfx, const RenderContext& ctx, const bool compensate_exposure)
+  -> ShaderVisibleIndex
 {
-  const auto index = EnsureWireframeConstantsBuffer(gfx);
+  EnsureWireframeConstantsBuffer(gfx);
+  CHECK_NOTNULL_F(wireframe_constants_mapped_ptr_);
+
   const auto constants = WireframePassConstants {
     .wire_color = { ctx.wireframe_color.r, ctx.wireframe_color.g,
       ctx.wireframe_color.b, ctx.wireframe_color.a },
     .apply_exposure_compensation = compensate_exposure ? 1.0F : 0.0F,
   };
-  std::memcpy(wireframe_constants_mapped_ptr_, &constants, sizeof(constants));
-  return index;
+  const auto slot = wireframe_constants_slot_ % kWireframePassConstantsSlots;
+  ++wireframe_constants_slot_;
+  std::memcpy(
+    wireframe_constants_mapped_ptr_ + (slot * kWireframePassConstantsStride),
+    &constants, sizeof(constants));
+  return wireframe_constants_indices_[slot];
 }
 
 auto BasePassModule::ReleaseWireframeConstantsBuffer() -> void
 {
   if (wireframe_constants_buffer_ == nullptr) {
     wireframe_constants_mapped_ptr_ = nullptr;
+    wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
+    wireframe_constants_slot_ = 0U;
     return;
   }
 
@@ -973,6 +978,8 @@ auto BasePassModule::ReleaseWireframeConstantsBuffer() -> void
   }
 
   wireframe_constants_mapped_ptr_ = nullptr;
+  wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
+  wireframe_constants_slot_ = 0U;
 }
 
 auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
@@ -1071,7 +1078,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       recorder->SetGraphicsRoot32BitConstant(
         root_constants_param, draw_command.draw_index, 0U);
       recorder->SetGraphicsRoot32BitConstant(
-        root_constants_param, wireframe_constants_index, 1U);
+        root_constants_param, wireframe_constants_index.get(), 1U);
       recorder->Draw(draw_command.is_indexed ? draw_command.index_count
                                              : draw_command.vertex_count,
         draw_command.instance_count, 0U, draw_command.start_instance);
@@ -1335,7 +1342,7 @@ auto BasePassModule::ExecuteWireframeOverlay(
     recorder->SetGraphicsRoot32BitConstant(
       root_constants_param, draw_command.draw_index, 0U);
     recorder->SetGraphicsRoot32BitConstant(
-      root_constants_param, wireframe_constants_index, 1U);
+      root_constants_param, wireframe_constants_index.get(), 1U);
     recorder->Draw(draw_command.is_indexed ? draw_command.index_count
                                            : draw_command.vertex_count,
       draw_command.instance_count, 0U, draw_command.start_instance);
