@@ -19,8 +19,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'VortexProofCommon.ps1')
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$repoRoot = Get-VortexProofRepoRoot
 $captureFullPath = (Resolve-Path $CapturePath).Path
 $runtimeLogFullPath = (Resolve-Path $RuntimeLogPath).Path
 
@@ -36,17 +37,17 @@ if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
 $captureReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CaptureReportPath)
 $validationReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ValidationReportPath)
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\shadows\Invoke-RenderDocUiAnalysis.ps1') `
+Invoke-VortexRenderDocAnalysis `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $repoRoot 'tools\vortex\AnalyzeRenderDocVortexBasicDebugCapture.py') `
   -PassName 'VortexBasicDebugView' `
   -ReportPath $captureReportFullPath
-if ($LASTEXITCODE -ne 0) {
-  exit $LASTEXITCODE
-}
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\vortex\Assert-VortexBasicDebugViewProof.ps1') `
-  -RuntimeLogPath $runtimeLogFullPath `
-  -CaptureReportPath $captureReportFullPath `
-  -ReportPath $validationReportFullPath
-exit $LASTEXITCODE
+Invoke-VortexPowerShellProofScript `
+  -ScriptPath (Join-Path $repoRoot 'tools\vortex\Assert-VortexBasicDebugViewProof.ps1') `
+  -ArgumentList @(
+    '-RuntimeLogPath', $runtimeLogFullPath,
+    '-CaptureReportPath', $captureReportFullPath,
+    '-ReportPath', $validationReportFullPath
+  ) `
+  -Label 'VortexBasic debug-view proof assertion'

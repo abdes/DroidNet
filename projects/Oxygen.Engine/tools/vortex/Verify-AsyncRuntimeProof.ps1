@@ -40,7 +40,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '..\shadows\PowerShellCommon.ps1')
+. (Join-Path $PSScriptRoot 'VortexProofCommon.ps1')
 
 function Set-ScopedProcessEnvironmentVariable {
   param(
@@ -63,23 +63,6 @@ function Restore-ScopedProcessEnvironmentVariables {
   }
 }
 
-function Read-ReportMap {
-  param([Parameter(Mandatory = $true)][string]$Path)
-
-  $map = @{}
-  foreach ($line in Get-Content -LiteralPath $Path) {
-    if ($line -notmatch '=') {
-      continue
-    }
-    $split = $line.Split('=', 2)
-    if ($split.Count -ne 2) {
-      continue
-    }
-    $map[$split[0]] = $split[1]
-  }
-  return $map
-}
-
 function Test-SourceContains {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -91,19 +74,6 @@ function Test-SourceContains {
   }
   $content = Get-Content -LiteralPath $Path -Raw
   return $content.Contains($Needle)
-}
-
-function Get-ReportValue {
-  param(
-    [Parameter(Mandatory = $true)][hashtable]$Report,
-    [Parameter(Mandatory = $true)][string]$Key,
-    [Parameter()][string]$Default = 'unknown'
-  )
-
-  if ($Report.ContainsKey($Key)) {
-    return $Report[$Key]
-  }
-  return $Default
 }
 
 function Write-BehaviorSummary {
@@ -124,16 +94,16 @@ function Write-BehaviorSummary {
     "Capture: $CaptureFullPath"
     ''
     '## Runtime Evidence'
-    "- atmosphere_enabled_main_view: $(Get-ReportValue -Report $ProductsReport -Key 'stage15_sky_scene_color_changed')"
-    "- spotlight_presence: $(Get-ReportValue -Report $ProductsReport -Key 'stage12_spot_scene_color_nonzero')"
-    "- directional_shadow_path: $(Get-ReportValue -Report $CaptureReport -Key 'stage8_draw_count_present')"
-    "- post_processed_visible_output: $(Get-ReportValue -Report $ProductsReport -Key 'stage22_tonemap_output_nonzero')"
-    "- imgui_overlay_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_scope_present')"
-    "- imgui_overlay_blend_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_blend_scope_present')"
-    "- imgui_overlay_after_tonemap: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_after_tonemap')"
-    "- imgui_overlay_composited_on_scene: $(Get-ReportValue -Report $ProductsReport -Key 'imgui_overlay_composited_on_scene')"
-    "- final_present_nonzero: $(Get-ReportValue -Report $ProductsReport -Key 'final_present_nonzero')"
-    "- final_present_vs_tonemap_changed: $(Get-ReportValue -Report $ProductsReport -Key 'final_present_vs_tonemap_changed')"
+    "- atmosphere_enabled_main_view: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'stage15_sky_scene_color_changed' -Default 'unknown')"
+    "- spotlight_presence: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'stage12_spot_scene_color_nonzero' -Default 'unknown')"
+    "- directional_shadow_path: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage8_draw_count_present' -Default 'unknown')"
+    "- post_processed_visible_output: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'stage22_tonemap_output_nonzero' -Default 'unknown')"
+    "- imgui_overlay_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'imgui_overlay_scope_present' -Default 'unknown')"
+    "- imgui_overlay_blend_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'imgui_overlay_blend_scope_present' -Default 'unknown')"
+    "- imgui_overlay_after_tonemap: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'imgui_overlay_after_tonemap' -Default 'unknown')"
+    "- imgui_overlay_composited_on_scene: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'imgui_overlay_composited_on_scene' -Default 'unknown')"
+    "- final_present_nonzero: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'final_present_nonzero' -Default 'unknown')"
+    "- final_present_vs_tonemap_changed: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'final_present_vs_tonemap_changed' -Default 'unknown')"
     ''
     '## Supplemental Source Audit (Non-Blocking)'
     "- main_view_with_atmosphere: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'view_ctx.metadata.with_atmosphere = true;') { 'pass' } else { 'fail' })"
@@ -142,19 +112,19 @@ function Write-BehaviorSummary {
     "- spotlight_shadows_default_off: $(if (Test-SourceContains -Path $asyncSettingsPath -Needle 'return settings->GetBool(kSpotlightShadowsKey).value_or(false);') { 'pass' } else { 'fail' })"
     ''
     '## Structural Notes'
-    "- stage3_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage3_scope_present')"
-    "- stage8_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage8_scope_present')"
-    "- stage12_directional_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage12_directional_scope_present')"
-    "- stage12_spot_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage12_spot_scope_present')"
-    "- stage15_atmosphere_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage15_atmosphere_scope_present')"
-    "- stage22_tonemap_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage22_tonemap_scope_present')"
+    "- stage3_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage3_scope_present' -Default 'unknown')"
+    "- stage8_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage8_scope_present' -Default 'unknown')"
+    "- stage12_directional_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage12_directional_scope_present' -Default 'unknown')"
+    "- stage12_spot_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage12_spot_scope_present' -Default 'unknown')"
+    "- stage15_atmosphere_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage15_atmosphere_scope_present' -Default 'unknown')"
+    "- stage22_tonemap_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage22_tonemap_scope_present' -Default 'unknown')"
   )
 
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputPath) | Out-Null
   Set-Content -LiteralPath $OutputPath -Value $lines -Encoding utf8
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$repoRoot = Get-VortexProofRepoRoot
 $captureFullPath = (Resolve-Path (Resolve-RepoPath -RepoRoot $repoRoot -Path $CapturePath)).Path
 $captureDirectory = Split-Path -Parent $captureFullPath
 
@@ -217,14 +187,11 @@ $comparisonDepthFullPath = if ($InitializeBaselineArtifacts) {
   Join-Path $captureDirectory 'baseline_depth.verify.png'
 }
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\shadows\Invoke-RenderDocUiAnalysis.ps1') `
+Invoke-VortexRenderDocAnalysis `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $repoRoot 'tools\vortex\AnalyzeRenderDocAsyncCapture.py') `
   -PassName 'AsyncRuntimeCapture' `
   -ReportPath $captureReportFullPath
-if ($LASTEXITCODE -ne 0) {
-  exit $LASTEXITCODE
-}
 
 $environmentSnapshot = @{}
 try {
@@ -237,20 +204,17 @@ try {
     -Value $comparisonDepthFullPath `
     -OriginalValues $environmentSnapshot
 
-  & powershell -NoProfile -File (Join-Path $repoRoot 'tools\shadows\Invoke-RenderDocUiAnalysis.ps1') `
+  Invoke-VortexRenderDocAnalysis `
     -CapturePath $captureFullPath `
     -UiScriptPath (Join-Path $repoRoot 'tools\vortex\AnalyzeRenderDocAsyncProducts.py') `
     -PassName 'AsyncRuntimeProducts' `
     -ReportPath $productsReportFullPath
-  if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
-  }
 } finally {
   Restore-ScopedProcessEnvironmentVariables -OriginalValues $environmentSnapshot
 }
 
-$captureReportMap = Read-ReportMap -Path $captureReportFullPath
-$productsReportMap = Read-ReportMap -Path $productsReportFullPath
+$captureReportMap = Read-VortexProofReportMap -Path $captureReportFullPath
+$productsReportMap = Read-VortexProofReportMap -Path $productsReportFullPath
 
 Write-BehaviorSummary `
   -RepoRoot $repoRoot `
@@ -259,12 +223,15 @@ Write-BehaviorSummary `
   -ProductsReport $productsReportMap `
   -CaptureFullPath $captureFullPath
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\vortex\Assert-AsyncRuntimeProof.ps1') `
-  -CaptureReportPath $captureReportFullPath `
-  -ProductsReportPath $productsReportFullPath `
-  -BaselineFramePath $baselineFrameFullPath `
-  -ComparisonFramePath $comparisonFrameFullPath `
-  -BaselineDepthPath $baselineDepthFullPath `
-  -ComparisonDepthPath $comparisonDepthFullPath `
-  -ReportPath $validationReportFullPath
-exit $LASTEXITCODE
+Invoke-VortexPowerShellProofScript `
+  -ScriptPath (Join-Path $repoRoot 'tools\vortex\Assert-AsyncRuntimeProof.ps1') `
+  -ArgumentList @(
+    '-CaptureReportPath', $captureReportFullPath,
+    '-ProductsReportPath', $productsReportFullPath,
+    '-BaselineFramePath', $baselineFrameFullPath,
+    '-ComparisonFramePath', $comparisonFrameFullPath,
+    '-BaselineDepthPath', $baselineDepthFullPath,
+    '-ComparisonDepthPath', $comparisonDepthFullPath,
+    '-ReportPath', $validationReportFullPath
+  ) `
+  -Label 'Async runtime proof assertion'

@@ -35,8 +35,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'VortexProofCommon.ps1')
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$repoRoot = Get-VortexProofRepoRoot
 $captureFullPath = (Resolve-Path $CapturePath).Path
 $runtimeLogFullPath = (Resolve-Path $RuntimeLogPath).Path
 $debugLayerReportFullPath = (Resolve-Path $DebugLayerReportPath).Path
@@ -60,28 +61,25 @@ $captureReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProvid
 $productsReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ProductsReportPath)
 $validationReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ValidationReportPath)
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\shadows\Invoke-RenderDocUiAnalysis.ps1') `
+Invoke-VortexRenderDocAnalysis `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $repoRoot 'tools\vortex\AnalyzeRenderDocVortexBasicCapture.py') `
   -PassName 'VortexBasicRuntime' `
   -ReportPath $captureReportFullPath
-if ($LASTEXITCODE -ne 0) {
-  exit $LASTEXITCODE
-}
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\shadows\Invoke-RenderDocUiAnalysis.ps1') `
+Invoke-VortexRenderDocAnalysis `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $repoRoot 'tools\vortex\AnalyzeRenderDocVortexBasicProducts.py') `
   -PassName 'VortexBasicProducts' `
   -ReportPath $productsReportFullPath
-if ($LASTEXITCODE -ne 0) {
-  exit $LASTEXITCODE
-}
 
-& powershell -NoProfile -File (Join-Path $repoRoot 'tools\vortex\Assert-VortexBasicRuntimeProof.ps1') `
-  -DebugLayerReportPath $debugLayerReportFullPath `
-  -RuntimeLogPath $runtimeLogFullPath `
-  -CaptureReportPath $captureReportFullPath `
-  -ProductsReportPath $productsReportFullPath `
-  -ReportPath $validationReportFullPath
-exit $LASTEXITCODE
+Invoke-VortexPowerShellProofScript `
+  -ScriptPath (Join-Path $repoRoot 'tools\vortex\Assert-VortexBasicRuntimeProof.ps1') `
+  -ArgumentList @(
+    '-DebugLayerReportPath', $debugLayerReportFullPath,
+    '-RuntimeLogPath', $runtimeLogFullPath,
+    '-CaptureReportPath', $captureReportFullPath,
+    '-ProductsReportPath', $productsReportFullPath,
+    '-ReportPath', $validationReportFullPath
+  ) `
+  -Label 'VortexBasic runtime proof assertion'
