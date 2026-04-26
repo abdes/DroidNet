@@ -15,6 +15,7 @@
 
 namespace oxygen::vortex {
 
+struct OcclusionFrameResults;
 struct PreparedSceneFrame;
 class Renderer;
 
@@ -39,21 +40,24 @@ public:
   OXGN_VRTX_API ~BasePassMeshProcessor();
 
   BasePassMeshProcessor(const BasePassMeshProcessor&) = delete;
-  auto operator=(const BasePassMeshProcessor&) -> BasePassMeshProcessor&
-    = delete;
+  auto operator=(const BasePassMeshProcessor&)
+    -> BasePassMeshProcessor& = delete;
   BasePassMeshProcessor(BasePassMeshProcessor&&) = delete;
   auto operator=(BasePassMeshProcessor&&) -> BasePassMeshProcessor& = delete;
 
-  OXGN_VRTX_API void BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene, ShadingMode mode,
-    bool write_velocity);
+  OXGN_VRTX_API void BuildDrawCommands(const PreparedSceneFrame& prepared_scene,
+    ShadingMode mode, bool write_velocity,
+    const OcclusionFrameResults* occlusion_results = nullptr);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const BasePassDrawCommand>;
+  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionCulledDrawCount() const noexcept
+    -> std::uint32_t;
 
 private:
   Renderer& renderer_;
   std::vector<BasePassDrawCommand> draw_commands_ {};
+  std::uint32_t occlusion_culled_draw_count_ { 0U };
 };
 
 } // namespace oxygen::vortex

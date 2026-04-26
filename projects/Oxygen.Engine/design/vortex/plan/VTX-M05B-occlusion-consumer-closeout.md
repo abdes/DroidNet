@@ -194,7 +194,19 @@ Remaining gap:
 
 ### Slice D - Consumer Integration
 
-**Status:** `planned`
+**Status:** `in_progress`
+
+Current evidence:
+
+- `BasePassMeshProcessor` consumes `OcclusionFrameResults` as an optional
+  prepared-draw filter. Missing or invalid occlusion results remain all-visible.
+- `BasePassModule` passes the current view's occlusion results into solid and
+  wireframe-overlay base-pass command building and records the number of
+  otherwise-eligible base-pass draws culled by occlusion.
+- Validation passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
+  with 33/33 tests passing.
 
 Tasks:
 
@@ -208,6 +220,11 @@ Validation:
 - Focused tests proving filtered draws are skipped and visible fallback keeps
   all draws.
 - Runtime proof in a controlled occluder/occludee scene.
+
+Remaining gap:
+
+- Runtime/capture proof is still required before Slice D can be marked
+  `validated`.
 
 ### Slice E - Diagnostics And Capture Surface
 

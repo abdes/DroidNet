@@ -46,6 +46,7 @@ struct BasePassExecutionResult {
   bool completed_velocity_for_dynamic_geometry { false };
   bool wrote_velocity_target { false };
   std::uint32_t draw_count { 0U };
+  std::uint32_t occlusion_culled_draw_count { 0U };
 };
 
 class BasePassModule {

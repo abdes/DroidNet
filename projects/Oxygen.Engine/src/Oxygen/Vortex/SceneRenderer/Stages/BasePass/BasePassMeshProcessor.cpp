@@ -9,6 +9,7 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
@@ -16,81 +17,91 @@ namespace oxygen::vortex {
 
 namespace {
 
-auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
-  const PreparedSceneFrame& prepared_scene, const DrawMetadata& metadata,
-  const std::uint32_t draw_index, const bool write_velocity) -> void
-{
-  auto material_handle = metadata.material_handle;
-  auto geometry_lod_index = 0U;
+  auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
+    const PreparedSceneFrame& prepared_scene, const DrawMetadata& metadata,
+    const std::uint32_t draw_index, const bool write_velocity) -> void
+  {
+    auto material_handle = metadata.material_handle;
+    auto geometry_lod_index = 0U;
 
-  if (draw_index < prepared_scene.render_items.size()) {
-    const auto& render_item = prepared_scene.render_items[draw_index];
-    if (render_item.material_handle.IsValid()) {
-      material_handle = render_item.material_handle.get();
+    if (draw_index < prepared_scene.render_items.size()) {
+      const auto& render_item = prepared_scene.render_items[draw_index];
+      if (render_item.material_handle.IsValid()) {
+        material_handle = render_item.material_handle.get();
+      }
+      geometry_lod_index = render_item.geometry.IsValid()
+        ? render_item.geometry.lod_index
+        : render_item.submesh_index;
     }
-    geometry_lod_index = render_item.geometry.IsValid()
-      ? render_item.geometry.lod_index
-      : render_item.submesh_index;
-  }
 
-  draw_commands.push_back(BasePassDrawCommand {
-    .draw_index = draw_index,
-    .material_handle = material_handle,
-    .geometry_lod_index = geometry_lod_index,
-    .submesh_index = metadata.submesh_index,
-    .index_count = metadata.index_count,
-    .vertex_count = metadata.vertex_count,
-    .instance_count = (std::max)(metadata.instance_count, 1U),
-    .start_index = metadata.first_index,
-    .base_vertex = metadata.base_vertex,
-    .start_instance = 0U,
-    .is_indexed = metadata.is_indexed != 0U,
-    .writes_velocity = write_velocity,
-  });
-}
-
-auto AppendRenderItemCommand(std::vector<BasePassDrawCommand>& draw_commands,
-  const PreparedSceneFrame& prepared_scene, const std::uint32_t draw_index,
-  const bool write_velocity)
-  -> void
-{
-  const auto& render_item = prepared_scene.render_items[draw_index];
-  if (!render_item.main_view_visible) {
-    return;
-  }
-
-  draw_commands.push_back(BasePassDrawCommand {
-    .draw_index = draw_index,
-    .material_handle = render_item.material_handle.IsValid()
-      ? render_item.material_handle.get()
-      : 0U,
-    .geometry_lod_index = render_item.geometry.IsValid()
-      ? render_item.geometry.lod_index
-      : 0U,
-    .submesh_index = render_item.submesh_index,
-    .instance_count = 1U,
-    .is_indexed = render_item.geometry.IsValid(),
-    .writes_velocity = write_velocity,
-  });
-}
-
-auto SortDrawCommands(std::vector<BasePassDrawCommand>& draw_commands) -> void
-{
-  std::ranges::stable_sort(draw_commands,
-    [](const BasePassDrawCommand& lhs,
-      const BasePassDrawCommand& rhs) -> bool {
-      if (lhs.material_handle != rhs.material_handle) {
-        return lhs.material_handle < rhs.material_handle;
-      }
-      if (lhs.geometry_lod_index != rhs.geometry_lod_index) {
-        return lhs.geometry_lod_index < rhs.geometry_lod_index;
-      }
-      if (lhs.submesh_index != rhs.submesh_index) {
-        return lhs.submesh_index < rhs.submesh_index;
-      }
-      return lhs.draw_index < rhs.draw_index;
+    draw_commands.push_back(BasePassDrawCommand {
+      .draw_index = draw_index,
+      .material_handle = material_handle,
+      .geometry_lod_index = geometry_lod_index,
+      .submesh_index = metadata.submesh_index,
+      .index_count = metadata.index_count,
+      .vertex_count = metadata.vertex_count,
+      .instance_count = (std::max)(metadata.instance_count, 1U),
+      .start_index = metadata.first_index,
+      .base_vertex = metadata.base_vertex,
+      .start_instance = 0U,
+      .is_indexed = metadata.is_indexed != 0U,
+      .writes_velocity = write_velocity,
     });
-}
+  }
+
+  auto IsOcclusionVisible(const OcclusionFrameResults* occlusion_results,
+    const std::uint32_t draw_index) noexcept -> bool
+  {
+    return occlusion_results == nullptr
+      || occlusion_results->IsDrawVisible(draw_index);
+  }
+
+  auto AppendRenderItemCommand(std::vector<BasePassDrawCommand>& draw_commands,
+    const PreparedSceneFrame& prepared_scene, const std::uint32_t draw_index,
+    const bool write_velocity, const OcclusionFrameResults* occlusion_results,
+    std::uint32_t& occlusion_culled_draw_count) -> void
+  {
+    const auto& render_item = prepared_scene.render_items[draw_index];
+    if (!render_item.main_view_visible) {
+      return;
+    }
+    if (!IsOcclusionVisible(occlusion_results, draw_index)) {
+      ++occlusion_culled_draw_count;
+      return;
+    }
+
+    draw_commands.push_back(BasePassDrawCommand {
+      .draw_index = draw_index,
+      .material_handle = render_item.material_handle.IsValid()
+        ? render_item.material_handle.get()
+        : 0U,
+      .geometry_lod_index
+      = render_item.geometry.IsValid() ? render_item.geometry.lod_index : 0U,
+      .submesh_index = render_item.submesh_index,
+      .instance_count = 1U,
+      .is_indexed = render_item.geometry.IsValid(),
+      .writes_velocity = write_velocity,
+    });
+  }
+
+  auto SortDrawCommands(std::vector<BasePassDrawCommand>& draw_commands) -> void
+  {
+    std::ranges::stable_sort(draw_commands,
+      [](const BasePassDrawCommand& lhs,
+        const BasePassDrawCommand& rhs) -> bool {
+        if (lhs.material_handle != rhs.material_handle) {
+          return lhs.material_handle < rhs.material_handle;
+        }
+        if (lhs.geometry_lod_index != rhs.geometry_lod_index) {
+          return lhs.geometry_lod_index < rhs.geometry_lod_index;
+        }
+        if (lhs.submesh_index != rhs.submesh_index) {
+          return lhs.submesh_index < rhs.submesh_index;
+        }
+        return lhs.draw_index < rhs.draw_index;
+      });
+  }
 
 } // namespace
 
@@ -103,10 +114,11 @@ BasePassMeshProcessor::~BasePassMeshProcessor() = default;
 
 void BasePassMeshProcessor::BuildDrawCommands(
   const PreparedSceneFrame& prepared_scene, const ShadingMode mode,
-  const bool write_velocity)
+  const bool write_velocity, const OcclusionFrameResults* occlusion_results)
 {
   (void)renderer_;
   draw_commands_.clear();
+  occlusion_culled_draw_count_ = 0U;
 
   if (mode != ShadingMode::kDeferred) {
     return;
@@ -120,6 +132,10 @@ void BasePassMeshProcessor::BuildDrawCommands(
     };
     for (const auto [metadata, draw_index] :
       AcceptedDrawView(prepared_scene, accept_mask)) {
+      if (!IsOcclusionVisible(occlusion_results, draw_index)) {
+        ++occlusion_culled_draw_count_;
+        continue;
+      }
       AppendMetadataCommand(
         draw_commands_, prepared_scene, *metadata, draw_index, write_velocity);
     }
@@ -129,8 +145,8 @@ void BasePassMeshProcessor::BuildDrawCommands(
 
   for (std::uint32_t draw_index = 0U;
     draw_index < prepared_scene.render_items.size(); ++draw_index) {
-    AppendRenderItemCommand(
-      draw_commands_, prepared_scene, draw_index, write_velocity);
+    AppendRenderItemCommand(draw_commands_, prepared_scene, draw_index,
+      write_velocity, occlusion_results, occlusion_culled_draw_count_);
   }
 
   SortDrawCommands(draw_commands_);
@@ -140,6 +156,12 @@ auto BasePassMeshProcessor::GetDrawCommands() const
   -> std::span<const BasePassDrawCommand>
 {
   return draw_commands_;
+}
+
+auto BasePassMeshProcessor::GetOcclusionCulledDrawCount() const noexcept
+  -> std::uint32_t
+{
+  return occlusion_culled_draw_count_;
 }
 
 } // namespace oxygen::vortex
