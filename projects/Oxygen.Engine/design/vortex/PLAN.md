@@ -106,8 +106,10 @@ contract.
 
 **Active work packages:** `VTX-M05A — Diagnostics Product Service`.
 
-**Detailed plan:** follow the diagnostics product-service scope in section 7.1;
-create a dedicated M05A plan before widening implementation scope.
+**Detailed plan:** follow
+[`plan/VTX-M05A-diagnostics-product-service.md`](plan/VTX-M05A-diagnostics-product-service.md)
+and the diagnostics product-service scope in section 7.1 before widening
+implementation scope.
 
 **Immediate priority correction:** Do not spend the next iteration on
 height-fog cubemap inscattering. Cubemap fog and real SkyLight cubemap
@@ -378,6 +380,8 @@ Scope:
   publishing, UI/panel/overlay hooks, and failure surfaces.
 - Diagnostics may inspect environment, occlusion, lighting, and scene texture
   state through published contracts only.
+- Detailed implementation plan:
+  [`plan/VTX-M05A-diagnostics-product-service.md`](plan/VTX-M05A-diagnostics-product-service.md).
 
 Out of scope:
 

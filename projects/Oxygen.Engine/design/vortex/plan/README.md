@@ -17,6 +17,7 @@ implementation-ready workstream.
 | [VTX-M04D.3-local-fog-volume-parity.md](VTX-M04D.3-local-fog-volume-parity.md) | Detailed implementation plan for UE5.7 local fog volume parity. |
 | [VTX-M04D.4-directional-csm-blocker.md](VTX-M04D.4-directional-csm-blocker.md) | Corrective prerequisite plan for conventional directional CSM projection proof before VTX-M04D.4 shadowed-light injection. |
 | [VTX-M04D.6-aerial-perspective-parity.md](VTX-M04D.6-aerial-perspective-parity.md) | Detailed remediation plan for UE5.7 aerial perspective parity proof. |
+| [VTX-M05A-diagnostics-product-service.md](VTX-M05A-diagnostics-product-service.md) | Detailed implementation plan for the diagnostics product-service milestone and its runtime/tooling boundary. |
 
 ## Planning Rule
 
