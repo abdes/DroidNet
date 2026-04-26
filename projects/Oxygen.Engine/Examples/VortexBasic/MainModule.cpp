@@ -68,7 +68,10 @@ constexpr glm::vec3 kFloorCenter { 0.0F, 0.0F, -0.125F };
 constexpr glm::vec3 kFloorScale { 60.0F, 60.0F, 0.25F };
 constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
 constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
+constexpr glm::vec3 kOcclusionProbeCenter { 0.0F, -1.45F, 1.55F };
+constexpr glm::vec3 kOcclusionProbeScale { 0.45F, 0.45F, 0.45F };
 constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
+constexpr glm::vec4 kOcclusionProbeColor { 1.0F, 0.12F, 0.08F, 1.0F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
 constexpr glm::vec3 kSunPosition { 0.0F, -16.0F, 18.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
@@ -684,6 +687,8 @@ auto MainModule::EnsureScene() -> void
 
   auto cube_geo = BuildCubeGeometry(
     "ValidationCube", "ValidationCube", kCubeColor, 0.28F, 0.85F);
+  auto occlusion_probe_geo = BuildCubeGeometry("OcclusionProbeCube",
+    "OcclusionProbeCube", kOcclusionProbeColor, 0.5F, 0.0F);
   auto floor_geo = BuildCubeGeometry(
     "ValidationFloor", "ValidationFloor", kFloorColor, 0.90F);
 
@@ -694,6 +699,17 @@ auto MainModule::EnsureScene() -> void
   cube_rotation_ = glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
   cube_rotation_axis_ = RandomUnitAxis(cube_rotation_rng_);
   cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
+
+  if (app_.with_occlusion) {
+    occlusion_probe_node_ = scene_->CreateNode("OcclusionProbe");
+    occlusion_probe_node_.GetRenderable().SetGeometry(
+      std::move(occlusion_probe_geo));
+    SetShadowParticipation(occlusion_probe_node_, true, true);
+    occlusion_probe_node_.GetTransform().SetLocalScale(
+      kOcclusionProbeScale);
+    occlusion_probe_node_.GetTransform().SetLocalPosition(
+      kOcclusionProbeCenter);
+  }
 
   floor_node_ = scene_->CreateNode("Floor");
   floor_node_.GetRenderable().SetGeometry(std::move(floor_geo));
@@ -801,6 +817,11 @@ auto MainModule::UpdateValidationScene(
       * cube_rotation_);
     cube_node_.GetTransform().SetLocalPosition(kCubeCenter);
     cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
+  }
+  if (occlusion_probe_node_.IsAlive()) {
+    occlusion_probe_node_.GetTransform().SetLocalScale(kOcclusionProbeScale);
+    occlusion_probe_node_.GetTransform().SetLocalPosition(
+      kOcclusionProbeCenter);
   }
 
   if (directional_light_node_.IsAlive()) {

@@ -225,8 +225,9 @@ void VortexOcclusionTestCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    ConstantBuffer<OcclusionPassConstants> pass_constants
+    StructuredBuffer<OcclusionPassConstants> pass_constants_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const OcclusionPassConstants pass_constants = pass_constants_buffer[0];
     if (dispatch_thread_id.x >= pass_constants.candidate_count
         || pass_constants.candidates_srv == K_INVALID_BINDLESS_INDEX
         || pass_constants.result_uav == K_INVALID_BINDLESS_INDEX)

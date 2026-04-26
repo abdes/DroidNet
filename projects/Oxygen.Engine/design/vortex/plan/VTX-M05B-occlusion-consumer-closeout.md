@@ -284,8 +284,21 @@ Validation:
 - `ctest --preset test-debug -R
   "Oxygen\.Vortex\.(RendererCapability|OcclusionModule|SceneRendererPublication|SceneRendererDeferredCore)"
   --output-on-failure` passed: 62/62.
-- The milestone remains `in_progress` until runtime/capture/debug-layer proof
-  artifacts and user visual confirmation are recorded.
+- `cmake --build out\build-ninja --config Debug --target
+  Oxygen.Graphics.Direct3D12.ShaderBake oxygen-examples-vortexbasic
+  Oxygen.Vortex.OcclusionModule Oxygen.Vortex.SceneRendererDeferredCore
+  --parallel 4` passed; ShaderBake repacked 186 modules after the occlusion
+  compute shader fix.
+- CDB/D3D12 debug-layer audit passed:
+  `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt`
+  records runtime exit code 0, no debugger break, 0 D3D12 errors, 0 DXGI
+  errors, and `overall_verdict=pass`.
+- RenderDoc proof passed:
+  `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.proof.report.txt`
+  records Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, and Stage 9
+  base-pass draws 2 for the VortexBasic `--with-occlusion` proof scene.
+- The milestone remains `in_progress` until required user visual confirmation
+  is recorded.
 
 ## 7. Exit Gate
 

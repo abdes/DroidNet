@@ -258,6 +258,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_volumetric_fog)
         .Build());
+    vortex_options->Add(clap::Option::WithKey("with-occlusion")
+        .About("Enable Screen HZB occlusion proof geometry and runtime culling")
+        .Long("with-occlusion")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_occlusion)
+        .Build());
     vortex_options->Add(clap::Option::WithKey("volumetric-local-fog")
         .About("Inject local fog into volumetric fog when both are enabled")
         .Long("volumetric-local-fog")
@@ -372,6 +380,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed with-local-fog option = {}", app.with_local_fog);
     LOG_F(
       INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
+    LOG_F(INFO, "Parsed with-occlusion option = {}", app.with_occlusion);
     LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
       app.vortex_local_fog_into_volumetric);
     LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
@@ -467,6 +476,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection",
       oxygen::console::CVarValue {
         app.vortex_volumetric_temporal_reprojection });
+    if (app.with_occlusion) {
+      startup_cvars.Set(
+        "vtx.occlusion.enable", oxygen::console::CVarValue { true });
+    }
     if (app.with_local_fog) {
       startup_cvars.Set(
         "vtx.local_fog.enable", oxygen::console::CVarValue { true });
