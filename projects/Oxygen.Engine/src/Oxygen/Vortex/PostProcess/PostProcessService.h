@@ -86,6 +86,7 @@ public:
   OXGN_VRTX_API auto Execute(
     ViewId view_id, RenderContext& ctx, const SceneTextures& scene_textures,
     const Inputs& inputs) -> void;
+  OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const PostProcessFrameBindings*;

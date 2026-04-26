@@ -191,6 +191,7 @@ ExposurePass::ExposurePass(Renderer& renderer)
 
 ExposurePass::~ExposurePass()
 {
+  ReleaseExposureResources();
   ReleasePassConstantsBuffer();
 
   if (init_upload_buffer_ && init_upload_buffer_->IsMapped()) {
@@ -217,7 +218,6 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   }
 
   EnsurePipelines();
-  EnsureHistogramBuffer();
   EnsurePassConstantsBuffer();
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
@@ -230,30 +230,40 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
 
-  auto& state = EnsureExposureStateForView(
-    ctx, *recorder, ctx.current_view.view_id, config);
+  const auto exposure_view_id = ctx.current_view.exposure_view_id
+    != kInvalidViewId
+    ? ctx.current_view.exposure_view_id
+    : ctx.current_view.view_id;
+  auto& state
+    = EnsureExposureStateForView(ctx, *recorder, exposure_view_id, config);
   DCHECK_NOTNULL_F(state.buffer.get());
-  if (!recorder->IsResourceTracked(*histogram_buffer_)) {
+  const auto histogram_created = state.histogram_buffer == nullptr;
+  EnsureHistogramBuffer(state);
+  DCHECK_NOTNULL_F(state.histogram_buffer.get());
+  if (histogram_created) {
     recorder->BeginTrackingResourceState(
-      *histogram_buffer_, graphics::ResourceStates::kCommon, false);
+      *state.histogram_buffer, graphics::ResourceStates::kCommon, false);
+  } else if (!recorder->IsResourceTracked(*state.histogram_buffer)) {
+    recorder->BeginTrackingResourceState(
+      *state.histogram_buffer, graphics::ResourceStates::kCommon, false);
   }
 
   recorder->RequireResourceState(
-    *histogram_buffer_, graphics::ResourceStates::kUnorderedAccess);
+    *state.histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->RequireResourceState(
     *state.buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(*clear_pipeline_);
-  UpdateHistogramConstants(*recorder, inputs, config);
+  UpdateHistogramConstants(*recorder, inputs, config, state);
   recorder->Dispatch(1U, 1U, 1U);
 
   recorder->RequireResourceState(
-    *histogram_buffer_, graphics::ResourceStates::kUnorderedAccess);
+    *state.histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(*histogram_pipeline_);
-  UpdateHistogramConstants(*recorder, inputs, config);
+  UpdateHistogramConstants(*recorder, inputs, config, state);
   const auto& tex_desc = inputs.scene_signal->GetDescriptor();
   recorder->Dispatch((tex_desc.width + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
@@ -262,7 +272,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     1U);
 
   recorder->RequireResourceState(
-    *histogram_buffer_, graphics::ResourceStates::kUnorderedAccess);
+    *state.histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->RequireResourceState(
     *state.buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->FlushBarriers();
@@ -272,7 +282,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->Dispatch(1U, 1U, 1U);
 
   recorder->RequireResourceStateFinal(
-    *histogram_buffer_, graphics::ResourceStates::kCommon);
+    *state.histogram_buffer, graphics::ResourceStates::kCommon);
   recorder->RequireResourceStateFinal(
     *state.buffer, graphics::ResourceStates::kShaderResource);
 
@@ -282,6 +292,21 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   result.exposure_buffer_srv = state.srv_index;
   result.exposure_buffer_uav = state.uav_index;
   return result;
+}
+
+auto ExposurePass::RemoveViewState(const ViewId view_id) -> void
+{
+  if (view_id == kInvalidViewId) {
+    return;
+  }
+
+  const auto it = exposure_states_.find(view_id);
+  if (it == exposure_states_.end()) {
+    return;
+  }
+
+  ReleaseExposureState(it->second);
+  exposure_states_.erase(it);
 }
 
 auto ExposurePass::EnsurePipelines() -> void
@@ -300,24 +325,24 @@ auto ExposurePass::EnsurePipelines() -> void
   }
 }
 
-auto ExposurePass::EnsureHistogramBuffer() -> void
+auto ExposurePass::EnsureHistogramBuffer(PerViewExposureState& state) -> void
 {
-  if (histogram_buffer_ != nullptr) {
+  if (state.histogram_buffer != nullptr) {
     return;
   }
 
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
-  histogram_buffer_ = gfx->CreateBuffer({
+  state.histogram_buffer = gfx->CreateBuffer({
     .size_bytes = kHistogramBinCount * sizeof(std::uint32_t),
     .usage = graphics::BufferUsage::kStorage,
     .memory = graphics::BufferMemory::kDeviceLocal,
     .debug_name = "Vortex.PostProcess.Exposure.Histogram",
   });
-  CHECK_NOTNULL_F(histogram_buffer_.get());
-  histogram_buffer_->SetName("Vortex.PostProcess.Exposure.Histogram");
+  CHECK_NOTNULL_F(state.histogram_buffer.get());
+  state.histogram_buffer->SetName("Vortex.PostProcess.Exposure.Histogram");
 
-  RegisterResourceIfNeeded(*gfx, histogram_buffer_);
+  RegisterResourceIfNeeded(*gfx, state.histogram_buffer);
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
   auto handle
@@ -325,7 +350,7 @@ auto ExposurePass::EnsureHistogramBuffer() -> void
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(handle.IsValid(),
     "ExposurePass: failed to allocate histogram UAV descriptor");
-  histogram_uav_index_ = allocator.GetShaderVisibleIndex(handle);
+  state.histogram_uav_index = allocator.GetShaderVisibleIndex(handle);
   const auto view_desc = graphics::BufferViewDescription {
     .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
@@ -333,7 +358,8 @@ auto ExposurePass::EnsureHistogramBuffer() -> void
     .stride = 0U,
   };
   const auto view
-    = registry.RegisterView(*histogram_buffer_, std::move(handle), view_desc);
+    = registry.RegisterView(
+      *state.histogram_buffer, std::move(handle), view_desc);
   CHECK_F(
     view->IsValid(), "ExposurePass: failed to register histogram UAV view");
 }
@@ -388,36 +414,34 @@ auto ExposurePass::EnsurePassConstantsBuffer() -> void
 auto ExposurePass::EnsureExposureInitUploadBuffer(
   graphics::CommandRecorder& recorder, const PostProcessConfig& config) -> void
 {
-  if (init_upload_buffer_ != nullptr) {
-    return;
+  if (init_upload_buffer_ == nullptr) {
+    auto gfx = renderer_.GetGraphics();
+    CHECK_NOTNULL_F(gfx.get());
+    init_upload_buffer_ = gfx->CreateBuffer({
+      .size_bytes = kExposureStateBufferSizeBytes,
+      .usage = graphics::BufferUsage::kNone,
+      .memory = graphics::BufferMemory::kUpload,
+      .debug_name = "Vortex.PostProcess.Exposure.InitUpload",
+    });
+    CHECK_NOTNULL_F(init_upload_buffer_.get());
+    exposure_init_upload_mapped_ptr_
+      = init_upload_buffer_->Map(0, kExposureStateBufferSizeBytes);
+    CHECK_NOTNULL_F(exposure_init_upload_mapped_ptr_,
+      "ExposurePass: failed to map init upload buffer");
+
+    const auto base_luminance
+      = std::max(config.auto_exposure_target_luminance, 0.0001F);
+    const auto ev100
+      = engine::AverageLuminanceToEv100(std::max(base_luminance, 1.0e-4F));
+    const std::array<float, kExposureStateElementCount> init_values {
+      base_luminance,
+      1.0F,
+      ev100,
+      0.0F,
+    };
+    std::memcpy(exposure_init_upload_mapped_ptr_, init_values.data(),
+      sizeof(init_values));
   }
-
-  auto gfx = renderer_.GetGraphics();
-  CHECK_NOTNULL_F(gfx.get());
-  init_upload_buffer_ = gfx->CreateBuffer({
-    .size_bytes = kExposureStateBufferSizeBytes,
-    .usage = graphics::BufferUsage::kNone,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "Vortex.PostProcess.Exposure.InitUpload",
-  });
-  CHECK_NOTNULL_F(init_upload_buffer_.get());
-  exposure_init_upload_mapped_ptr_
-    = init_upload_buffer_->Map(0, kExposureStateBufferSizeBytes);
-  CHECK_NOTNULL_F(exposure_init_upload_mapped_ptr_,
-    "ExposurePass: failed to map init upload buffer");
-
-  const auto base_luminance
-    = std::max(config.auto_exposure_target_luminance, 0.0001F);
-  const auto ev100
-    = engine::AverageLuminanceToEv100(std::max(base_luminance, 1.0e-4F));
-  const std::array<float, kExposureStateElementCount> init_values {
-    base_luminance,
-    1.0F,
-    ev100,
-    0.0F,
-  };
-  std::memcpy(
-    exposure_init_upload_mapped_ptr_, init_values.data(), sizeof(init_values));
 
   if (!recorder.IsResourceTracked(*init_upload_buffer_)) {
     recorder.BeginTrackingResourceState(
@@ -446,10 +470,8 @@ auto ExposurePass::EnsureExposureStateForView(RenderContext& ctx,
     CHECK_NOTNULL_F(state.buffer.get());
     state.buffer->SetName("Vortex.PostProcess.Exposure.State");
 
-    if (!recorder.IsResourceTracked(*state.buffer)) {
-      recorder.BeginTrackingResourceState(
-        *state.buffer, graphics::ResourceStates::kCommon, false);
-    }
+    recorder.BeginTrackingResourceState(
+      *state.buffer, graphics::ResourceStates::kCommon, false);
 
     EnsureExposureInitUploadBuffer(recorder, config);
     recorder.RequireResourceState(
@@ -511,14 +533,15 @@ auto ExposurePass::EnsureExposureStateForView(RenderContext& ctx,
 }
 
 auto ExposurePass::UpdateHistogramConstants(graphics::CommandRecorder& recorder,
-  const Inputs& inputs, const PostProcessConfig& config) -> void
+  const Inputs& inputs, const PostProcessConfig& config,
+  const PerViewExposureState& state) -> void
 {
   DCHECK_NOTNULL_F(pass_constants_mapped_ptr_);
   DCHECK_F(inputs.scene_signal != nullptr);
   const auto& desc = inputs.scene_signal->GetDescriptor();
   const auto constants = AutoExposureHistogramConstants {
     .source_texture_index = inputs.scene_signal_srv.get(),
-    .histogram_buffer_index = histogram_uav_index_.get(),
+    .histogram_buffer_index = state.histogram_uav_index.get(),
     .min_log_luminance = config.auto_exposure_min_log_luminance,
     .inv_log_luminance_range = 1.0F
       / std::max(
@@ -554,7 +577,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
 {
   DCHECK_NOTNULL_F(pass_constants_mapped_ptr_);
   const auto constants = AutoExposureAverageConstants {
-    .histogram_buffer_index = histogram_uav_index_.get(),
+    .histogram_buffer_index = state.histogram_uav_index.get(),
     .exposure_buffer_index = state.uav_index.get(),
     .min_log_luminance = config.auto_exposure_min_log_luminance,
     .log_luminance_range
@@ -610,6 +633,46 @@ auto ExposurePass::ReleasePassConstantsBuffer() -> void
   pass_constants_mapped_ptr_ = nullptr;
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
   pass_constants_slot_ = 0U;
+}
+
+auto ExposurePass::ReleaseExposureState(PerViewExposureState& state) -> void
+{
+  if (auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
+    auto& registry = gfx->GetResourceRegistry();
+    if (auto buffer = std::move(state.buffer); buffer != nullptr) {
+      gfx->ForgetKnownResourceState(*buffer);
+      if (registry.Contains(*buffer)) {
+        registry.UnRegisterResource(*buffer);
+      }
+      gfx->RegisterDeferredRelease(std::move(buffer));
+    }
+    if (auto histogram_buffer = std::move(state.histogram_buffer);
+      histogram_buffer != nullptr) {
+      gfx->ForgetKnownResourceState(*histogram_buffer);
+      if (registry.Contains(*histogram_buffer)) {
+        registry.UnRegisterResource(*histogram_buffer);
+      }
+      gfx->RegisterDeferredRelease(std::move(histogram_buffer));
+    }
+  }
+
+  state.uav_index = kInvalidShaderVisibleIndex;
+  state.srv_index = kInvalidShaderVisibleIndex;
+  state.histogram_uav_index = kInvalidShaderVisibleIndex;
+  state.last_seen_sequence = frame::SequenceNumber { 0U };
+}
+
+auto ExposurePass::ReleaseExposureResources() -> void
+{
+  if (exposure_states_.empty()) {
+    return;
+  }
+
+  for (auto& [_, state] : exposure_states_) {
+    ReleaseExposureState(state);
+  }
+
+  exposure_states_.clear();
 }
 
 } // namespace oxygen::vortex::postprocess
