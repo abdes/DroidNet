@@ -999,10 +999,13 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   const auto writes_velocity
     = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
-  mesh_processor_->BuildDrawCommands(
-    *ctx.current_view.prepared_frame, config_.shading_mode, writes_velocity);
+  mesh_processor_->BuildDrawCommands(*ctx.current_view.prepared_frame,
+    config_.shading_mode, writes_velocity,
+    ctx.current_view.occlusion_results.get());
   last_execution_result_.draw_count
     = static_cast<std::uint32_t>(mesh_processor_->GetDrawCommands().size());
+  last_execution_result_.occlusion_culled_draw_count
+    = mesh_processor_->GetOcclusionCulledDrawCount();
 
   auto* gfx = renderer_.GetGraphics().get();
   if (gfx == nullptr || ctx.view_constants == nullptr) {
@@ -1282,8 +1285,8 @@ auto BasePassModule::ExecuteWireframeOverlay(
   }
 
   const auto& prepared_frame = *ctx.current_view.prepared_frame;
-  mesh_processor_->BuildDrawCommands(
-    prepared_frame, config_.shading_mode, false);
+  mesh_processor_->BuildDrawCommands(prepared_frame, config_.shading_mode,
+    false, ctx.current_view.occlusion_results.get());
   const auto draw_count
     = static_cast<std::uint32_t>(mesh_processor_->GetDrawCommands().size());
   if (draw_count == 0U) {
