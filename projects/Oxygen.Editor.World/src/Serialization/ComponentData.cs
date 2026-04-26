@@ -14,4 +14,7 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonDerivedType(typeof(GeometryComponentData), "GeometryComponent")]
 [JsonDerivedType(typeof(PerspectiveCameraData), "PerspectiveCamera")]
 [JsonDerivedType(typeof(OrthographicCameraData), "OrthographicCamera")]
+[JsonDerivedType(typeof(DirectionalLightData), "DirectionalLight")]
+[JsonDerivedType(typeof(PointLightData), "PointLight")]
+[JsonDerivedType(typeof(SpotLightData), "SpotLight")]
 public abstract record ComponentData : NamedData;

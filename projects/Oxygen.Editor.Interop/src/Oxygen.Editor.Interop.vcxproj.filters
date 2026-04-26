@@ -258,6 +258,9 @@
     <ClInclude Include="Commands\SetGeometryCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Commands\AttachCameraCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EditorModule">

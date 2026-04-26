@@ -27,10 +27,15 @@ namespace Oxygen.Editor.Runtime.Engine;
 public sealed partial class EngineService(
     HostingContext hostingContext,
     ILoggerFactory? loggerFactory = null,
-    ISettingsService<IEngineSettings>? engineSettings = null) : IEngineService
+    ISettingsService<IEngineSettings>? engineSettings = null,
+    IPathFinder? pathFinder = null) : IEngineService
 {
+    private const string EngineDefaultCVarsArchivePath = "bin/Oxygen/cvars.json";
+    private const string EditorCVarsArchiveFileName = "engine-cvars.json";
+
     private readonly HostingContext hostingContext = hostingContext;
     private readonly IEngineSettings engineSettings = engineSettings?.Settings ?? new EngineSettings();
+    private readonly IPathFinder? pathFinder = pathFinder;
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private readonly SemaphoreSlim leaseGate = new(1, 1);
@@ -218,6 +223,7 @@ public sealed partial class EngineService(
             config.Engine ??= new EngineConfig();
             config.Engine.Graphics ??= new GraphicsConfigManaged();
             this.engineSettings.ApplyTo(config);
+            this.ApplyEditorRuntimePathDefaults(config);
             config.Platform.Headless = true;
             config.Engine.Graphics.Headless = true;
             config.Engine.EnableAssetLoader = true;
@@ -227,6 +233,10 @@ public sealed partial class EngineService(
             {
                 throw new InvalidOperationException("Failed to create engine context.");
             }
+
+            var startupTargetFps = Math.Clamp(config.Engine.TargetFps, 0, EngineConfig.MaxTargetFps);
+            this.engineRunner.SetTargetFps(this.engineContext, startupTargetFps);
+            this.LogTargetFpsSet(startupTargetFps, startupTargetFps);
 
             this.World = new OxygenWorld(this.engineContext);
             this.Input = new OxygenInput(this.engineContext);
@@ -400,6 +410,37 @@ public sealed partial class EngineService(
         Debug.Assert(this.engineRunner is not null, $"Engine runner should be initialized when state is in [{string.Join(", ", validStates)}].");
         return this.engineRunner;
     }
+
+    private void ApplyEditorRuntimePathDefaults(EditorEngineConfigManaged config)
+    {
+        if (this.pathFinder is null)
+        {
+            return;
+        }
+
+        var editorCVarsArchivePath = this.pathFinder.GetConfigFilePath(EditorCVarsArchiveFileName);
+        config.Engine ??= new EngineConfig();
+        config.Renderer ??= new RendererConfigManaged();
+        config.Engine.PathFinder ??= new PathFinderConfigManaged();
+        if (this.ShouldUseEditorCVarsArchive(config.Engine.PathFinder.CVarsArchivePath))
+        {
+            config.Engine.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
+        }
+
+        config.Renderer.PathFinder ??= config.Engine.PathFinder;
+        if (this.ShouldUseEditorCVarsArchive(config.Renderer.PathFinder.CVarsArchivePath))
+        {
+            config.Renderer.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Kept as an instance member to preserve local member ordering in this partial service.")]
+    private bool ShouldUseEditorCVarsArchive(string? cvarsArchivePath)
+        => string.IsNullOrWhiteSpace(cvarsArchivePath)
+            || string.Equals(
+                cvarsArchivePath.Replace('\\', '/'),
+                EngineDefaultCVarsArchivePath,
+                StringComparison.OrdinalIgnoreCase);
 
     private void EnsureInStates(params EngineServiceState[] validStates)
     {

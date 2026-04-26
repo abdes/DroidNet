@@ -34,28 +34,16 @@ namespace oxygen::interop::module {
       }
       view->Initialize(*scene);
 
-      engine::ViewContext vc{
-          .view = View{},
-          .metadata =
-              engine::ViewMetadata{
-                  .name = config.name,
-                  .purpose = config.purpose,
-                  .is_scene_view = true,
-              },
-          .render_target = {},
-          .composite_source = {},
-      };
+      const ViewId view_id { next_view_id_++ };
+      view->SetViewId(view_id);
 
-      ViewId engine_id = active_frame_ctx_->RegisterView(std::move(vc));
-      view->SetViewId(engine_id);
-
-      views_[engine_id] = ViewEntry{ std::move(view), true };
+      views_[view_id] = ViewEntry{ std::move(view), true };
 
       LOG_F(INFO, "CreateViewNow created view '{}' id {}", config.name,
-        engine_id.get());
+        view_id.get());
 
       if (callback)
-        callback(true, engine_id);
+        callback(true, view_id);
     }
     catch (const std::exception& e) {
       LOG_F(ERROR, "CreateViewNow failed for '{}': {}", config.name, e.what());
@@ -106,7 +94,10 @@ namespace oxygen::interop::module {
     }
 
     it->second.is_registered = true;
-    LOG_F(INFO, "Registered view {}", engine_id.get());
+    if (it->second.view) {
+      it->second.view->Show();
+    }
+    LOG_F(INFO, "Registered editor view intent {}", engine_id.get());
     return true;
   }
 
@@ -115,8 +106,11 @@ namespace oxygen::interop::module {
 
     auto it = views_.find(engine_id);
     if (it != views_.end()) {
-      it->second.is_registered = false;
-      LOG_F(INFO, "Unregistered view {}", engine_id.get());
+    it->second.is_registered = false;
+    if (it->second.view) {
+      it->second.view->Hide();
+    }
+    LOG_F(INFO, "Unregistered editor view intent {}", engine_id.get());
     }
   }
 
@@ -218,13 +212,10 @@ namespace oxygen::interop::module {
   // EndFrame removed: FinalizeViews is used instead.
 
   void ViewManager::FinalizeViews() {
-    // Update FrameContext for all registered views while frame_ctx pointer is
-    // still valid. Use the transient pointer set in OnFrameStart.
     CHECK_NOTNULL_F(active_frame_ctx_.get());
 
     if (!active_frame_ctx_->GetScene()) {
-      DLOG_F(WARNING, "FinalizeViews: active FrameContext has no scene; skipping UpdateView");
-      // Clear transient pointers to denote end of frame processing window.
+      DLOG_F(WARNING, "FinalizeViews: active FrameContext has no scene");
       active_frame_ctx_ = {};
       return;
     }
@@ -237,46 +228,9 @@ namespace oxygen::interop::module {
         ++registered_count;
       }
     }
-    DLOG_F(INFO, "ViewManager::FinalizeViews (registered_views={})", registered_count);
-
-    for (auto& [id, entry] : views_) {
-      if (entry.is_registered) {
-        const float w = entry.view->GetWidth();
-        const float h = entry.view->GetHeight();
-
-        View view;
-        view.viewport = ViewPort{
-            .top_left_x = 0.0f,
-            .top_left_y = 0.0f,
-            .width = w,
-            .height = h,
-            .min_depth = 0.0f,
-            .max_depth = 1.0f,
-        };
-        view.scissor = Scissors{
-            .left = 0,
-            .top = 0,
-            .right = static_cast<int32_t>(w),
-            .bottom = static_cast<int32_t>(h),
-        };
-
-        engine::ViewContext vc{
-            .view = view,
-            .metadata =
-                engine::ViewMetadata{.name = entry.view->GetConfig().name,
-                                     .purpose = entry.view->GetConfig().purpose,
-                                     .is_scene_view = true},
-            .render_target = {},
-            .composite_source = {},
-        };
-
-        active_frame_ctx_->UpdateView(id, std::move(vc));
-
-        DLOG_F(INFO,
-          "ViewManager::FinalizeViews updated view={} size={}x{} name='{}'",
-          id.get(), w, h, entry.view->GetConfig().name);
-      }
-    }
+    DLOG_F(INFO,
+      "ViewManager::FinalizeViews (registered_editor_view_intents={})",
+      registered_count);
 
     // Clear transient pointers to denote end of frame processing window.
     active_frame_ctx_ = {};

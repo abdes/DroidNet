@@ -25,6 +25,8 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
+#include <Commands/AttachCameraCommand.h>
+#include <Commands/AttachLightCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
 #include <Commands/RemoveSceneNodeCommand.h>
@@ -78,6 +80,75 @@ namespace Oxygen::Interop::World {
         }
         delete ptr;
         };
+    }
+
+    static void EnqueueAttachLight(EngineContext^ context,
+      System::Guid nodeId, LightKind kind, float intensity, float range,
+      float innerConeAngle, float outerConeAngle,
+      float sourceRadius, float decayExponent, float angularSize,
+      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+      float exposureCompensation,
+      bool environmentContribution, bool isSunLight)
+    {
+      auto native_ctx = context->NativePtr();
+      if (!native_ctx || !native_ctx->engine) {
+        return;
+      }
+
+      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+      if (!editor_module) {
+        return;
+      }
+
+      auto b = nodeId.ToByteArray();
+      std::array<uint8_t, 16> key {};
+      for (int i = 0; i < 16; ++i) {
+        key[i] = b[i];
+      }
+
+      auto opt = NodeRegistry::Lookup(key);
+      if (!opt.has_value()) {
+        return;
+      }
+
+      LightCommonParams common {};
+      common.color = oxygen::Vec3 { color.X, color.Y, color.Z };
+      common.affects_world = affectsWorld;
+      common.casts_shadows = castsShadows;
+      common.exposure_compensation_ev = exposureCompensation;
+
+      auto cmd = std::make_unique<AttachLightCommand>(opt.value(), kind,
+        common, intensity, range, innerConeAngle, outerConeAngle,
+        sourceRadius, decayExponent, angularSize, environmentContribution,
+        isSunLight);
+      editor_module->get().Enqueue(std::move(cmd));
+    }
+
+    static void EnqueueDetachLight(EngineContext^ context, System::Guid nodeId)
+    {
+      auto native_ctx = context->NativePtr();
+      if (!native_ctx || !native_ctx->engine) {
+        return;
+      }
+
+      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+      if (!editor_module) {
+        return;
+      }
+
+      auto b = nodeId.ToByteArray();
+      std::array<uint8_t, 16> key {};
+      for (int i = 0; i < 16; ++i) {
+        key[i] = b[i];
+      }
+
+      auto opt = NodeRegistry::Lookup(key);
+      if (!opt.has_value()) {
+        return;
+      }
+
+      auto cmd = std::make_unique<DetachLightCommand>(opt.value());
+      editor_module->get().Enqueue(std::move(cmd));
     }
   }
 
@@ -423,6 +494,57 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
+  void OxygenWorld::AttachPerspectiveCamera(System::Guid nodeId,
+    float fieldOfViewYRadians, float aspectRatio, float nearPlane,
+    float farPlane) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    auto b = nodeId.ToByteArray();
+    std::array<uint8_t, 16> key{};
+    for (int i = 0; i < 16; ++i)
+      key[i] = b[i];
+
+    auto opt = NodeRegistry::Lookup(key);
+    if (!opt.has_value())
+      return;
+
+    const auto& handle = opt.value();
+    auto cmd = std::unique_ptr<AttachPerspectiveCameraCommand>(
+      commandFactory_->CreateAttachPerspectiveCamera(handle,
+        fieldOfViewYRadians, aspectRatio, nearPlane, farPlane));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::DetachCamera(System::Guid nodeId) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    auto b = nodeId.ToByteArray();
+    std::array<uint8_t, 16> key{};
+    for (int i = 0; i < 16; ++i)
+      key[i] = b[i];
+
+    auto opt = NodeRegistry::Lookup(key);
+    if (!opt.has_value())
+      return;
+
+    const auto& handle = opt.value();
+    auto cmd = std::unique_ptr<DetachCameraCommand>(
+      commandFactory_->CreateDetachCamera(handle));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
   void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine)
@@ -445,6 +567,39 @@ namespace Oxygen::Interop::World {
     auto cmd = std::unique_ptr<SetVisibilityCommand>(
       commandFactory_->CreateSetVisibility(handle, visible));
     editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::AttachDirectionalLight(System::Guid nodeId,
+    float intensityLux, float angularSizeRadians, System::Numerics::Vector3 color,
+    bool affectsWorld, bool castsShadows, float exposureCompensation,
+    bool environmentContribution, bool isSunLight) {
+    EnqueueAttachLight(context_, nodeId, LightKind::kDirectional, intensityLux,
+      0.0F, 0.0F, 0.0F, 0.0F, 2.0F, angularSizeRadians, color, affectsWorld,
+      castsShadows, exposureCompensation, environmentContribution, isSunLight);
+  }
+
+  void OxygenWorld::AttachPointLight(System::Guid nodeId,
+    float luminousFluxLumens, float range, float sourceRadius, float decayExponent,
+    System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+    float exposureCompensation) {
+    EnqueueAttachLight(context_, nodeId, LightKind::kPoint,
+      luminousFluxLumens, range, 0.0F, 0.0F, sourceRadius, decayExponent, 0.0F,
+      color, affectsWorld, castsShadows, exposureCompensation, false, false);
+  }
+
+  void OxygenWorld::AttachSpotLight(System::Guid nodeId,
+    float luminousFluxLumens, float range, float sourceRadius,
+    float decayExponent, float innerConeAngleRadians, float outerConeAngleRadians,
+    System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+    float exposureCompensation) {
+    EnqueueAttachLight(context_, nodeId, LightKind::kSpot, luminousFluxLumens,
+      range, innerConeAngleRadians, outerConeAngleRadians, sourceRadius,
+      decayExponent, 0.0F, color, affectsWorld, castsShadows,
+      exposureCompensation, false, false);
+  }
+
+  void OxygenWorld::DetachLight(System::Guid nodeId) {
+    EnqueueDetachLight(context_, nodeId);
   }
 
   void OxygenWorld::ReparentSceneNode(System::Guid child,

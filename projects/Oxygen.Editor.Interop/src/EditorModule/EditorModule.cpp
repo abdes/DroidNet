@@ -27,6 +27,9 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::interop::module {
@@ -564,6 +567,150 @@ namespace oxygen::interop::module {
     co_return;
   }
 
+  auto EditorModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> {
+    if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
+      co_return;
+    }
+
+    if (graphics_.expired()) {
+      co_return;
+    }
+
+    auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
+    if (!renderer_opt.has_value()) {
+      co_return;
+    }
+
+    auto gfx = graphics_.lock();
+    if (!gfx) {
+      co_return;
+    }
+
+    auto& renderer = renderer_opt->get();
+    auto registered_views = view_manager_->GetAllRegisteredViews();
+    if (registered_views.empty()) {
+      LOG_F(INFO, "EditorModule::OnPublishViews: no registered editor views");
+      co_return;
+    }
+
+    auto surfaces = registry_->SnapshotSurfaces();
+    LOG_F(INFO, "EditorModule::OnPublishViews: registered_views={} surfaces={}",
+      registered_views.size(), surfaces.size());
+    const auto find_target_surface =
+      [&surfaces](const graphics::Surface* target)
+      -> std::shared_ptr<graphics::Surface> {
+      if (target == nullptr) {
+        return {};
+      }
+      for (const auto& [_, surface] : surfaces) {
+        if (surface.get() == target) {
+          return surface;
+        }
+      }
+      return {};
+    };
+
+    for (auto* view : registered_views) {
+      if (!view || !view->IsVisible()) {
+        LOG_F(INFO,
+          "EditorModule::OnPublishViews: skipping null/hidden editor view");
+        continue;
+      }
+
+      const auto intent_view_id = view->GetViewId();
+      if (intent_view_id == kInvalidViewId) {
+        LOG_F(INFO,
+          "EditorModule::OnPublishViews: view '{}' has invalid intent id",
+          view->GetName());
+        continue;
+      }
+
+      const auto& config = view->GetConfig();
+      if (!config.compositing_target.has_value()
+        || config.compositing_target.value() == nullptr) {
+        LOG_F(INFO,
+          "EditorModule::OnPublishViews: view '{}' has no compositing target",
+          view->GetName());
+        continue;
+      }
+
+      auto* target_surface_raw = config.compositing_target.value();
+      auto target_surface = find_target_surface(target_surface_raw);
+      if (!target_surface) {
+        LOG_F(INFO,
+          "OnPublishViews: view '{}' targets an unregistered surface; skipping",
+          view->GetName());
+        continue;
+      }
+
+      view->EnsureRenderTarget(*gfx);
+      const auto scene_fb = view->GetFramebuffer();
+      if (!scene_fb) {
+        LOG_F(INFO, "OnPublishViews: no scene framebuffer for view '{}'",
+          view->GetName());
+        continue;
+      }
+
+      const auto width = view->GetWidth();
+      const auto height = view->GetHeight();
+      if (width <= 0.0F || height <= 0.0F) {
+        LOG_F(INFO,
+          "EditorModule::OnPublishViews: view '{}' has invalid extent {}x{}",
+          view->GetName(), width, height);
+        continue;
+      }
+
+      const auto camera_node = view->GetCameraNode();
+      if (!camera_node.IsAlive()) {
+        LOG_F(INFO, "OnPublishViews: view '{}' has no live camera; skipping",
+          view->GetName());
+        continue;
+      }
+
+      View view_desc {};
+      view_desc.viewport = ViewPort {
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = width,
+        .height = height,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      };
+      view_desc.scissor = Scissors {
+        .left = 0,
+        .top = 0,
+        .right = static_cast<int32_t>(width),
+        .bottom = static_cast<int32_t>(height),
+      };
+
+      auto composition_view =
+        vortex::CompositionView::ForScene(intent_view_id, view_desc, camera_node);
+      composition_view.name = config.name;
+      composition_view.clear_color = config.clear_color;
+      composition_view.with_atmosphere = true;
+      composition_view.with_height_fog = false;
+      composition_view.with_local_fog = false;
+      composition_view.shading_mode = vortex::ShadingMode::kDeferred;
+
+      const auto published_view_id = renderer.PublishRuntimeCompositionView(
+        *context,
+        vortex::Renderer::RuntimeViewPublishInput {
+          .composition_view = composition_view,
+          .render_target = observer_ptr { scene_fb.get() },
+          .composite_source = observer_ptr { scene_fb.get() },
+        },
+        vortex::ShadingMode::kDeferred);
+      LOG_F(INFO,
+        "EditorModule::OnPublishViews: published editor view '{}' intent={} "
+        "published={} extent={}x{} scene_fb={}",
+        view->GetName(), intent_view_id.get(), published_view_id.get(), width,
+        height, fmt::ptr(scene_fb.get()));
+    }
+
+    co_return;
+  }
+
   auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
     if (context == nullptr) {
       co_return;
@@ -615,13 +762,126 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::Co<> {
-    (void)context;
-    if (!compositor_) {
+    if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
+      LOG_F(INFO,
+        "EditorModule::OnCompositing: missing context/engine/view_manager/"
+        "compositor");
       co_return;
     }
 
-    // Delegate all compositing logic to the compositor
-    compositor_->OnCompositing();
+    auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
+    if (!renderer_opt.has_value()) {
+      LOG_F(INFO, "EditorModule::OnCompositing: Vortex renderer not available");
+      co_return;
+    }
+
+    auto surfaces = registry_->SnapshotSurfaces();
+    auto registered_views = view_manager_->GetAllRegisteredViews();
+    LOG_F(INFO, "EditorModule::OnCompositing: registered_views={} surfaces={}",
+      registered_views.size(), surfaces.size());
+    const auto find_target_surface =
+      [&surfaces](const graphics::Surface* target)
+      -> std::shared_ptr<graphics::Surface> {
+      if (target == nullptr) {
+        return {};
+      }
+      for (const auto& [_, surface] : surfaces) {
+        if (surface.get() == target) {
+          return surface;
+        }
+      }
+      return {};
+    };
+
+    auto& renderer = renderer_opt->get();
+    for (auto* view : registered_views) {
+      if (!view || !view->IsVisible()) {
+        LOG_F(INFO,
+          "EditorModule::OnCompositing: skipping null/hidden editor view");
+        continue;
+      }
+
+      const auto intent_view_id = view->GetViewId();
+      if (intent_view_id == kInvalidViewId) {
+        LOG_F(INFO,
+          "EditorModule::OnCompositing: view '{}' has invalid intent id",
+          view->GetName());
+        continue;
+      }
+
+      const auto published_view_id =
+        renderer.ResolvePublishedRuntimeViewId(intent_view_id);
+      if (published_view_id == kInvalidViewId) {
+        LOG_F(INFO,
+          "OnCompositing: view '{}' has no published runtime view; skipping",
+          view->GetName());
+        continue;
+      }
+
+      const auto& config = view->GetConfig();
+      if (!config.compositing_target.has_value()
+        || config.compositing_target.value() == nullptr) {
+        LOG_F(INFO,
+          "EditorModule::OnCompositing: view '{}' has no compositing target",
+          view->GetName());
+        continue;
+      }
+
+      auto* target_surface_raw = config.compositing_target.value();
+      auto target_surface = find_target_surface(target_surface_raw);
+      if (!target_surface) {
+        LOG_F(INFO,
+          "OnCompositing: view '{}' targets an unregistered surface; skipping",
+          view->GetName());
+        continue;
+      }
+
+      auto target_fb = compositor_->GetCurrentFramebufferForSurface(
+        *target_surface_raw);
+      if (!target_fb) {
+        LOG_F(INFO,
+          "OnCompositing: no current presentation framebuffer for view '{}'",
+          view->GetName());
+        continue;
+      }
+
+      const auto width = view->GetWidth();
+      const auto height = view->GetHeight();
+      if (width <= 0.0F || height <= 0.0F) {
+        LOG_F(INFO,
+          "EditorModule::OnCompositing: view '{}' has invalid extent {}x{}",
+          view->GetName(), width, height);
+        continue;
+      }
+
+      const ViewPort viewport {
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = width,
+        .height = height,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      };
+
+      const auto* target_fb_raw = target_fb.get();
+      renderer.RegisterRuntimeComposition(
+        vortex::Renderer::RuntimeCompositionInput {
+          .layers = {
+            vortex::Renderer::RuntimeCompositionLayer {
+              .intent_view_id = intent_view_id,
+              .viewport = viewport,
+              .opacity = 1.0F,
+            },
+          },
+          .composite_target = std::move(target_fb),
+          .target_surface = std::move(target_surface),
+        });
+      LOG_F(INFO,
+        "EditorModule::OnCompositing: registered composition for view '{}' "
+        "intent={} published={} surface={} target_fb={} viewport={}x{}",
+        view->GetName(), intent_view_id.get(), published_view_id.get(),
+        fmt::ptr(target_surface_raw), fmt::ptr(target_fb_raw), width, height);
+    }
 
     co_return;
   }
@@ -653,6 +913,13 @@ namespace oxygen::interop::module {
       }
     }
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name), 1024U);
+
+    auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+    (void)environment
+      ->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+    (void)environment
+      ->AddSystem<oxygen::scene::environment::PostProcessVolume>();
+    scene_->SetEnvironment(std::move(environment));
   }
 
   auto EditorModule::EnsureFramebuffers() -> bool {
@@ -693,6 +960,13 @@ namespace oxygen::interop::module {
   void EditorModule::DestroyView(ViewId view_id) {
     if (!view_manager_)
       return;
+
+    if (engine_) {
+      if (auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
+        renderer_opt.has_value()) {
+        renderer_opt->get().RemovePublishedRuntimeView(view_id);
+      }
+    }
 
     // Enqueue a destroy command so the actual destruction runs on the engine
     // thread and cannot race with frame-phase iteration (OnSceneMutation /
@@ -768,6 +1042,16 @@ namespace oxygen::interop::module {
     // Ensure all views are destroyed/cleaned up before releasing the scene.
     if (view_manager_) {
       try {
+        if (engine_) {
+          if (auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
+            renderer_opt.has_value()) {
+            for (auto* view : view_manager_->GetAllViews()) {
+              if (view != nullptr && view->GetViewId() != kInvalidViewId) {
+                renderer_opt->get().RemovePublishedRuntimeView(view->GetViewId());
+              }
+            }
+          }
+        }
         view_manager_->DestroyAllViews();
       } catch (const std::exception& e) {
         LOG_F(ERROR, "ApplyDestroyScene: DestroyAllViews failed: {}", e.what());
@@ -837,14 +1121,9 @@ namespace oxygen::interop::module {
       }
     }
 
-    // Mark all as presentable
-    // We need to find indices again because additions happened at the end
-    current_surfaces = context.GetSurfaces();
-    for (size_t i = 0; i < current_surfaces.size(); ++i) {
-      if (current_surfaces[i] && desired.contains(current_surfaces[i].get())) {
-        context.SetSurfacePresentable(i, true);
-      }
-    }
+    // Presentation ownership belongs to the renderer. A surface becomes
+    // presentable only after Vortex composites into that exact target in the
+    // compositing phase.
   }
 
 } // namespace oxygen::interop::module

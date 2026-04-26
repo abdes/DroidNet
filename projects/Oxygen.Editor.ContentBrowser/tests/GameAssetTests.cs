@@ -13,12 +13,14 @@ public sealed class GameAssetTests
     [DataRow("Foo.oscene.json", AssetType.Scene)]
     [DataRow("Foo.omat.json", AssetType.Material)]
     [DataRow("Foo.ogeo.json", AssetType.Mesh)]
-    [DataRow("Foo.otex.json", AssetType.Image)]
+    [DataRow("Foo.otex.json", AssetType.Texture)]
     [DataRow("Foo.oscene", AssetType.Scene)]
     [DataRow("Foo.omat", AssetType.Material)]
     [DataRow("Foo.ogeo", AssetType.Mesh)]
-    [DataRow("Foo.otex", AssetType.Image)]
-    [DataRow("Foo.glb", AssetType.Scene)]
+    [DataRow("Foo.otex", AssetType.Texture)]
+    [DataRow("Foo.glb", AssetType.ForeignAsset)]
+    [DataRow("Foo.gltf", AssetType.ForeignAsset)]
+    [DataRow("Foo.fbx", AssetType.ForeignAsset)]
     [DataRow("Foo.png", AssetType.Image)]
     public void GetAssetType_ShouldHandleCompoundOxygenSourceExtensions(string fileName, AssetType expected)
     {

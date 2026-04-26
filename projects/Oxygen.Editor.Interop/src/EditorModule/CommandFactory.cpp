@@ -23,6 +23,7 @@
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
+#include <Commands/AttachCameraCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
@@ -75,6 +76,19 @@ namespace Oxygen::Interop::World {
   DetachGeometryCommand*
     CommandFactory::CreateDetachGeometry(oxygen::scene::NodeHandle handle) {
     return new DetachGeometryCommand(handle);
+  }
+
+  AttachPerspectiveCameraCommand*
+    CommandFactory::CreateAttachPerspectiveCamera(
+      oxygen::scene::NodeHandle handle, float fieldOfViewYRadians,
+      float aspectRatio, float nearPlane, float farPlane) {
+    return new AttachPerspectiveCameraCommand(handle, fieldOfViewYRadians,
+      aspectRatio, nearPlane, farPlane);
+  }
+
+  DetachCameraCommand*
+    CommandFactory::CreateDetachCamera(oxygen::scene::NodeHandle handle) {
+    return new DetachCameraCommand(handle);
   }
 
   SetVisibilityCommand*

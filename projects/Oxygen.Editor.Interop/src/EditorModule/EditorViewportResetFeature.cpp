@@ -22,8 +22,8 @@ namespace oxygen::interop::module {
   namespace {
 
     struct ResetParams {
-      glm::vec3 default_focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
-      glm::vec3 default_camera_position = glm::vec3(10.0f, -10.0f, 7.0f);
+      glm::vec3 fallback_focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
+      glm::vec3 camera_offset = glm::vec3(15.0f, -27.0f, 13.0f);
       glm::vec3 up = oxygen::space::move::Up;
     };
 
@@ -71,13 +71,16 @@ namespace oxygen::interop::module {
 
     const ResetParams params {};
 
-    focus_point = params.default_focus_point;
+    if (!viewport::IsFinite(focus_point)) {
+      focus_point = params.fallback_focus_point;
+    }
 
     auto transform = camera_node.GetTransform();
-    (void)transform.SetLocalPosition(params.default_camera_position);
+    const glm::vec3 camera_position = focus_point + params.camera_offset;
+    (void)transform.SetLocalPosition(camera_position);
 
     const glm::quat look_rotation = viewport::LookRotationFromPositionToTarget(
-      params.default_camera_position,
+      camera_position,
       focus_point,
       params.up);
     (void)transform.SetLocalRotation(look_rotation);

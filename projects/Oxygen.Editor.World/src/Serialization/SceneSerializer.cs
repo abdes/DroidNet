@@ -24,6 +24,9 @@ public class SceneSerializer(IProject project)
         RuntimeHelpers.RunClassConstructor(typeof(GeometryComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(PerspectiveCamera).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(OrthographicCamera).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(DirectionalLightComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(PointLightComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
 
         // Slots
         RuntimeHelpers.RunClassConstructor(typeof(RenderingSlot).TypeHandle);
