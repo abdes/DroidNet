@@ -1662,6 +1662,14 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
 
 void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
+void SceneRenderer::RemoveViewState(const ViewId view_id)
+{
+  InvalidatePublishedViewFrameBindings();
+  if (post_process_ != nullptr) {
+    post_process_->RemoveViewState(view_id);
+  }
+}
+
 void SceneRenderer::PublishDepthPrepassProducts()
 {
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth

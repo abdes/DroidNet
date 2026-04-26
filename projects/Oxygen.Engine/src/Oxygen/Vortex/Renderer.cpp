@@ -1182,6 +1182,21 @@ auto Renderer::PublishRuntimeCompositionView(
     "Renderer::PublishRuntimeCompositionView requires a composite_source or "
     "render_target framebuffer");
 
+  const auto previous_published_view_id
+    = ResolvePublishedRuntimeViewId(composition_view.id);
+  auto resolved_exposure_view_id = previous_published_view_id != kInvalidViewId
+    ? previous_published_view_id
+    : kInvalidViewId;
+  if (composition_view.exposure_source_view_id != kInvalidViewId
+    && composition_view.exposure_source_view_id != composition_view.id) {
+    resolved_exposure_view_id
+      = ResolvePublishedRuntimeViewId(composition_view.exposure_source_view_id);
+    CHECK_F(resolved_exposure_view_id != kInvalidViewId,
+      "Renderer::PublishRuntimeCompositionView exposure source intent view {} "
+      "is not published",
+      composition_view.exposure_source_view_id);
+  }
+
   engine::ViewContext view_context {};
   view_context.view = composition_view.view;
   view_context.metadata = {
@@ -1191,7 +1206,7 @@ auto Renderer::PublishRuntimeCompositionView(
     .with_atmosphere = composition_view.with_atmosphere,
     .with_height_fog = composition_view.with_height_fog,
     .with_local_fog = composition_view.with_local_fog,
-    .exposure_view_id = composition_view.exposure_source_view_id,
+    .exposure_view_id = resolved_exposure_view_id,
   };
   view_context.render_target = render_target;
   view_context.composite_source = composite_source;
@@ -1280,6 +1295,9 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
     return;
   }
 
+  if (scene_renderer_) {
+    scene_renderer_->RemoveViewState(published_view_id);
+  }
   UnregisterViewRenderGraph(published_view_id);
   if (view_const_manager_) {
     view_const_manager_->RemoveView(published_view_id);
@@ -1297,6 +1315,9 @@ auto Renderer::RemovePublishedRuntimeView(
   }
 
   frame_context.RemoveView(published_view_id);
+  if (scene_renderer_) {
+    scene_renderer_->RemoveViewState(published_view_id);
+  }
   UnregisterViewRenderGraph(published_view_id);
   if (view_const_manager_) {
     view_const_manager_->RemoveView(published_view_id);
@@ -1327,6 +1348,9 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 
   for (const auto published_view_id : stale_published_ids) {
     frame_context.RemoveView(published_view_id);
+    if (scene_renderer_) {
+      scene_renderer_->RemoveViewState(published_view_id);
+    }
     UnregisterViewRenderGraph(published_view_id);
     if (view_const_manager_) {
       view_const_manager_->RemoveView(published_view_id);

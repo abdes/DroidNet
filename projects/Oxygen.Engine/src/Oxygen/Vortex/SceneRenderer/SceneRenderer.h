@@ -159,6 +159,7 @@ public:
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
+  OXGN_VRTX_API void RemoveViewState(ViewId view_id);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
   OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
