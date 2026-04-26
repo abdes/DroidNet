@@ -78,9 +78,9 @@ public partial class AssetsViewModel(
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
 
-            // If the project has an active scene, navigate to Scenes folder and request it to be opened
+            // If no browser state was restored, default to the active scene's folder and request it to be opened.
             var currentProject = projectManagerService.CurrentProject;
-            if (currentProject?.ActiveScene is not null)
+            if (currentProject?.ActiveScene is not null && contentBrowserState.SelectedFolders.Count == 0)
             {
                 // Navigate to the Scenes folder to show scene assets
                 contentBrowserState.SetSelectedFolders(["Scenes"]);
