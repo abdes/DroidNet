@@ -16,11 +16,13 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Interop;
 
@@ -432,6 +434,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             this.Metadata.IsDirty = false;
             _ = await this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata).ConfigureAwait(true);
+            _ = this.messenger.Send(new AssetsCookedMessage());
             this.LogSaveSuccessful();
         }
         else
@@ -475,11 +478,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // Lights submenu
         _ = builder.AddSubmenu("Lights", lights =>
         {
-            _ = lights.AddMenuItem("Directional Light", new RelayCommand(() => this.AddLight("Directional")));
-            _ = lights.AddMenuItem("Point Light", new RelayCommand(() => this.AddLight("Point")));
-            _ = lights.AddMenuItem("Spot Light", new RelayCommand(() => this.AddLight("Spot")));
-            _ = lights.AddMenuItem("Rect Light", new RelayCommand(() => this.AddLight("Rect")));
-            _ = lights.AddMenuItem("Sky Light", new RelayCommand(() => this.AddLight("Sky")));
+            _ = lights.AddMenuItem("Directional Light", new AsyncRelayCommand(() => this.AddLight("Directional")));
+            _ = lights.AddMenuItem("Point Light", new AsyncRelayCommand(() => this.AddLight("Point")));
+            _ = lights.AddMenuItem("Spot Light", new AsyncRelayCommand(() => this.AddLight("Spot")));
         });
 
         return builder.Build();
@@ -494,11 +495,63 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     }
 
     [RelayCommand]
-    private void AddLight(string kind)
+    private async Task AddLight(string kind)
     {
         this.LogRequestToAddLight(kind);
 
-        // TODO: Implement real add logic via document/engine APIs.
+        if (this.scene is null)
+        {
+            this.LogSaveRequestedButSceneNotReady();
+            return;
+        }
+
+        var node = new Oxygen.Editor.World.SceneNode(this.scene) { Name = $"{kind} Light" };
+        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+        if (transform is not null)
+        {
+            transform.LocalPosition = kind switch
+            {
+                "Point" => new System.Numerics.Vector3(0f, 2f, 0f),
+                "Spot" => new System.Numerics.Vector3(0f, 3f, 3f),
+                _ => System.Numerics.Vector3.Zero,
+            };
+            transform.LocalRotation = kind switch
+            {
+                "Directional" => DirectionalLightComponent.DefaultLocalRotation,
+                "Spot" => System.Numerics.Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
+                _ => System.Numerics.Quaternion.Identity,
+            };
+        }
+
+        _ = kind switch
+        {
+            "Directional" => node.AddComponent(new DirectionalLightComponent
+            {
+                Name = "Directional Light",
+            }),
+            "Point" => node.AddComponent(new PointLightComponent
+            {
+                Name = "Point Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 10f,
+            }),
+            "Spot" => node.AddComponent(new SpotLightComponent
+            {
+                Name = "Spot Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 15f,
+            }),
+            _ => false,
+        };
+
+        this.scene.RootNodes.Add(node);
+        if (this.container.Resolve<ISceneEngineSync>(IfUnresolved.ReturnDefault) is { } sceneEngineSync)
+        {
+            await sceneEngineSync.CreateNodeAsync(node).ConfigureAwait(true);
+        }
+
+        this.Metadata.IsDirty = true;
+        _ = await this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata).ConfigureAwait(true);
     }
 
     private void OnSceneLoadedMessage(object? recipient, SceneLoadedMessage msg)

@@ -111,6 +111,7 @@ namespace oxygen::interop::module {
     void Initialize(scene::Scene& scene);
     void OnSceneMutation(); // Uses context from SetRenderingContext
     auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
+    void EnsureRenderTarget(Graphics& graphics);
 
     // State management
     void Show();
@@ -133,6 +134,10 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto GetColorTexture() const
       -> std::shared_ptr<graphics::Texture> {
       return color_texture_;
+    }
+    [[nodiscard]] auto GetFramebuffer() const
+      -> std::shared_ptr<graphics::Framebuffer> {
+      return framebuffer_;
     }
     [[nodiscard]] auto GetConfig() const -> const Config& { return config_; }
     [[nodiscard]] auto GetWidth() const -> float { return width_; }
@@ -181,6 +186,7 @@ namespace oxygen::interop::module {
 
   private:
     void ResizeIfNeeded();
+    void ResizeIfNeeded(Graphics& graphics);
     // Camera setup helpers (all scene mutations happen here)
     void CreateCamera(scene::Scene& scene);
     void UpdateCameraForFrame();
@@ -188,6 +194,7 @@ namespace oxygen::interop::module {
     ViewState state_{ ViewState::kCreating };
     bool visible_{ true };
     bool initial_orientation_set_{ false };
+    bool initial_scene_frame_applied_{ false };
     float width_{ 0.0f };
     float height_{ 0.0f };
 

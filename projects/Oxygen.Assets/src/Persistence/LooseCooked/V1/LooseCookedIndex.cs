@@ -21,8 +21,8 @@ public static class LooseCookedIndex
 {
     // Must match oxygen::data::loose_cooked::v1::IndexHeader (see Oxygen/Data/LooseCookedIndexFormat.h)
     public const int HeaderSize = 256;
-    public const int AssetEntrySize = 76;
-    public const int FileRecordSize = 64;
+    public const int AssetEntrySize = 65;
+    public const int FileRecordSize = 14;
     public const int Sha256Size = 32;
 
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
@@ -80,7 +80,7 @@ public static class LooseCookedIndex
         EnsureSeekable(stream, nameof(Write));
 
         var computedFlags = ComputeEffectiveFlags(document);
-        var sourceGuid = document.SourceGuid == Guid.Empty ? Guid.NewGuid() : document.SourceGuid;
+        var sourceGuid = EnsureValidSourceGuid(document.SourceGuid);
         var (stringTableBytes, offsets) = BuildStringTable(document);
         var layout = ComputeLayout(document, stringTableBytes.Length);
 
@@ -201,18 +201,18 @@ public static class LooseCookedIndex
         var flagsRaw = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(12, 4));
         var flags = (IndexFeatures)flagsRaw;
 
-        var stringTableOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(16, 8));
-        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(24, 8));
+        var sourceGuid = ReadCanonicalGuid(header.Slice(16, 16));
 
-        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(32, 8));
-        var assetCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(40, 4));
-        var assetEntrySize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(44, 4));
+        var stringTableOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(32, 8));
+        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(40, 8));
 
-        var fileRecordsOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(48, 8));
-        var fileRecordCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(56, 4));
-        var fileRecordSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(60, 4));
+        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(48, 8));
+        var assetCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(56, 4));
+        var assetEntrySize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(60, 4));
 
-        var sourceGuid = new Guid(header.Slice(64, 16));
+        var fileRecordsOffset = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(64, 8));
+        var fileRecordCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(72, 4));
+        var fileRecordSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(76, 4));
 
         ValidateKnownFlags(flagsRaw);
 
@@ -244,6 +244,12 @@ public static class LooseCookedIndex
         {
             var assetsBytes = (ulong)headerFields.AssetCount * headerFields.AssetEntrySize;
             ValidateRange(headerFields.AssetEntriesOffset, assetsBytes, length, "asset entries");
+
+            var fileRecordsMinimumOffset = headerFields.AssetEntriesOffset + assetsBytes;
+            if (headerFields.FileRecordsOffset < fileRecordsMinimumOffset)
+            {
+                throw new InvalidDataException("File records must start after the end of the asset entries.");
+            }
         }
 
         if (headerFields.FileRecordCount > 0)
@@ -281,11 +287,11 @@ public static class LooseCookedIndex
                 var entrySpan = (ReadOnlySpan<byte>)assetBuffer.AsSpan(0, (int)assetEntrySize);
 
                 var key = AssetKey.FromBytes(entrySpan[..16]);
-                var descRelOffset = BinaryPrimitives.ReadUInt32LittleEndian(entrySpan.Slice(16, 4));
-                var virtualOffset = BinaryPrimitives.ReadUInt32LittleEndian(entrySpan.Slice(20, 4));
-                var assetType = entrySpan[24];
-                var descriptorSize = BinaryPrimitives.ReadUInt64LittleEndian(entrySpan.Slice(28, 8));
-                var sha = entrySpan.Slice(36, Sha256Size).ToArray();
+                var assetType = entrySpan[16];
+                var descRelOffset = BinaryPrimitives.ReadUInt32LittleEndian(entrySpan.Slice(17, 4));
+                var virtualOffset = BinaryPrimitives.ReadUInt32LittleEndian(entrySpan.Slice(21, 4));
+                var descriptorSize = BinaryPrimitives.ReadUInt64LittleEndian(entrySpan.Slice(25, 8));
+                var sha = entrySpan.Slice(33, Sha256Size).ToArray();
 
                 var descRel = ReadNullTerminatedUtf8(stringTable, descRelOffset);
                 var virtualPath = virtualOffset == 0 ? null : ReadNullTerminatedUtf8(stringTable, virtualOffset);
@@ -320,11 +326,10 @@ public static class LooseCookedIndex
                 var recordSpan = (ReadOnlySpan<byte>)fileBuffer.AsSpan(0, (int)fileRecordSize);
 
                 var kind = (FileKind)BinaryPrimitives.ReadUInt16LittleEndian(recordSpan[..2]);
-                var relOffset = BinaryPrimitives.ReadUInt32LittleEndian(recordSpan.Slice(4, 4));
-                var size = BinaryPrimitives.ReadUInt64LittleEndian(recordSpan.Slice(8, 8));
-                var sha = recordSpan.Slice(16, Sha256Size).ToArray();
+                var size = BinaryPrimitives.ReadUInt64LittleEndian(recordSpan.Slice(2, 8));
+                var relOffset = BinaryPrimitives.ReadUInt32LittleEndian(recordSpan.Slice(10, 4));
                 var relPath = ReadNullTerminatedUtf8(stringTable, relOffset);
-                files.Add(new FileRecord(kind, relPath, size, sha));
+                files.Add(new FileRecord(kind, relPath, size, ReadOnlyMemory<byte>.Empty));
             }
         }
         finally
@@ -343,20 +348,15 @@ public static class LooseCookedIndex
             assetEntriesOffset + checked((ulong)document.Assets.Count * (ulong)AssetEntrySize),
             8);
 
-        return new FileLayout(stringTableOffset, assetEntriesOffset, document.Files.Count > 0 ? fileRecordsOffset : 0);
+        return new FileLayout(stringTableOffset, assetEntriesOffset, fileRecordsOffset);
     }
 
     private static IndexFeatures ComputeEffectiveFlags(Document document)
     {
-        var flags = document.Flags;
+        var flags = document.Flags | IndexFeatures.HasVirtualPaths;
         if (document.Files.Count > 0)
         {
             flags |= IndexFeatures.HasFileRecords;
-        }
-
-        if (document.Assets.Any(a => !string.IsNullOrEmpty(a.VirtualPath)))
-        {
-            flags |= IndexFeatures.HasVirtualPaths;
         }
 
         return flags;
@@ -413,15 +413,15 @@ public static class LooseCookedIndex
         BinaryPrimitives.WriteUInt16LittleEndian(header.Slice(8, 2), 1);
         BinaryPrimitives.WriteUInt16LittleEndian(header.Slice(10, 2), contentVersion);
         BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(12, 4), (uint)flags);
-        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(16, 8), stringTableOffset);
-        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(24, 8), stringTableSize);
-        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(32, 8), assetEntriesOffset);
-        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(40, 4), assetCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(44, 4), (uint)AssetEntrySize);
-        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(48, 8), fileRecordCount > 0 ? fileRecordsOffset : 0);
-        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(56, 4), fileRecordCount);
-        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(60, 4), (uint)FileRecordSize);
-        sourceGuid.TryWriteBytes(header.Slice(64, 16));
+        WriteCanonicalGuid(sourceGuid, header.Slice(16, 16));
+        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(32, 8), stringTableOffset);
+        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(40, 8), stringTableSize);
+        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(48, 8), assetEntriesOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(56, 4), assetCount);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(60, 4), (uint)AssetEntrySize);
+        BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(64, 8), fileRecordsOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(72, 4), fileRecordCount);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(76, 4), (uint)FileRecordSize);
         stream.Write(header);
     }
 
@@ -438,7 +438,8 @@ public static class LooseCookedIndex
                 throw new InvalidOperationException("DescriptorRelativePath missing from string table.");
             }
 
-            BinaryPrimitives.WriteUInt32LittleEndian(entry.Slice(16, 4), descOffset);
+            entry[16] = asset.AssetType;
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.Slice(17, 4), descOffset);
             if (!string.IsNullOrEmpty(asset.VirtualPath))
             {
                 if (!offsets.TryGetValue(asset.VirtualPath, out var virtOffset))
@@ -446,18 +447,17 @@ public static class LooseCookedIndex
                     throw new InvalidOperationException("VirtualPath missing from string table.");
                 }
 
-                BinaryPrimitives.WriteUInt32LittleEndian(entry.Slice(20, 4), virtOffset);
+                BinaryPrimitives.WriteUInt32LittleEndian(entry.Slice(21, 4), virtOffset);
             }
 
-            entry[24] = asset.AssetType;
-            BinaryPrimitives.WriteUInt64LittleEndian(entry.Slice(28, 8), asset.DescriptorSize);
+            BinaryPrimitives.WriteUInt64LittleEndian(entry.Slice(25, 8), asset.DescriptorSize);
 
             if (asset.DescriptorSha256.Length != Sha256Size)
             {
                 throw new ArgumentException($"DescriptorSha256 must be {Sha256Size} bytes.", nameof(document));
             }
 
-            asset.DescriptorSha256.Span.CopyTo(entry.Slice(36, Sha256Size));
+            asset.DescriptorSha256.Span.CopyTo(entry.Slice(33, Sha256Size));
             stream.Write(entry);
         }
     }
@@ -469,24 +469,93 @@ public static class LooseCookedIndex
         {
             record.Clear();
             BinaryPrimitives.WriteUInt16LittleEndian(record[..2], (ushort)file.Kind);
+            BinaryPrimitives.WriteUInt64LittleEndian(record.Slice(2, 8), file.Size);
 
             if (!offsets.TryGetValue(file.RelativePath, out var relOffset))
             {
                 throw new InvalidOperationException("RelativePath missing from string table.");
             }
 
-            BinaryPrimitives.WriteUInt32LittleEndian(record.Slice(4, 4), relOffset);
-            BinaryPrimitives.WriteUInt64LittleEndian(record.Slice(8, 8), file.Size);
-
-            if (file.Sha256.Length != Sha256Size)
-            {
-                throw new ArgumentException($"Sha256 must be {Sha256Size} bytes.", nameof(document));
-            }
-
-            file.Sha256.Span.CopyTo(record.Slice(16, Sha256Size));
+            BinaryPrimitives.WriteUInt32LittleEndian(record.Slice(10, 4), relOffset);
             stream.Write(record);
         }
     }
+
+    private static Guid EnsureValidSourceGuid(Guid sourceGuid)
+        => IsValidUuidV7(sourceGuid) ? sourceGuid : GenerateUuidV7Guid();
+
+    private static Guid GenerateUuidV7Guid()
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        var timestampMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() & 0x0000FFFFFFFFFFFFUL;
+
+        bytes[0] = (byte)((timestampMs >> 40) & 0xFF);
+        bytes[1] = (byte)((timestampMs >> 32) & 0xFF);
+        bytes[2] = (byte)((timestampMs >> 24) & 0xFF);
+        bytes[3] = (byte)((timestampMs >> 16) & 0xFF);
+        bytes[4] = (byte)((timestampMs >> 8) & 0xFF);
+        bytes[5] = (byte)(timestampMs & 0xFF);
+
+        RandomNumberGenerator.Fill(bytes[6..]);
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x70);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+
+        return ReadCanonicalGuid(bytes);
+    }
+
+    private static bool IsValidUuidV7(Guid guid)
+    {
+        if (guid == Guid.Empty)
+        {
+            return false;
+        }
+
+        Span<byte> bytes = stackalloc byte[16];
+        WriteCanonicalGuid(guid, bytes);
+        return (bytes[6] & 0xF0) == 0x70 && (bytes[8] & 0xC0) == 0x80;
+    }
+
+    private static Guid ReadCanonicalGuid(ReadOnlySpan<byte> bytes)
+    {
+        Span<char> chars = stackalloc char[36];
+        var charIndex = 0;
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            if (i is 4 or 6 or 8 or 10)
+            {
+                chars[charIndex++] = '-';
+            }
+
+            var value = bytes[i];
+            chars[charIndex++] = ToLowerHex(value >> 4);
+            chars[charIndex++] = ToLowerHex(value & 0x0F);
+        }
+
+        return Guid.ParseExact(chars, "D");
+    }
+
+    private static void WriteCanonicalGuid(Guid guid, Span<byte> destination)
+    {
+        var text = guid.ToString("N");
+        for (var i = 0; i < destination.Length; i++)
+        {
+            var hi = FromHex(text[i * 2]);
+            var lo = FromHex(text[(i * 2) + 1]);
+            destination[i] = (byte)((hi << 4) | lo);
+        }
+    }
+
+    private static char ToLowerHex(int value)
+        => (char)(value < 10 ? '0' + value : 'a' + value - 10);
+
+    private static int FromHex(char c)
+        => c switch
+        {
+            >= '0' and <= '9' => c - '0',
+            >= 'a' and <= 'f' => c - 'a' + 10,
+            >= 'A' and <= 'F' => c - 'A' + 10,
+            _ => throw new FormatException("Invalid hex character in GUID."),
+        };
 
     private static byte[] ReadBlock(Stream stream, ulong offset, int size)
     {

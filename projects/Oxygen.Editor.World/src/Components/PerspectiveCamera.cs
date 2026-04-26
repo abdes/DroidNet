@@ -12,6 +12,16 @@ namespace Oxygen.Editor.World;
 /// </summary>
 public partial class PerspectiveCamera : CameraComponent
 {
+    /// <summary>
+    /// Default vertical field of view stored by the editor, in degrees.
+    /// </summary>
+    public const float DefaultFieldOfViewDegrees = 60f;
+
+    /// <summary>
+    /// Default camera aspect ratio (width / height).
+    /// </summary>
+    public const float DefaultAspectRatio = 16f / 9f;
+
     static PerspectiveCamera()
     {
         Register<PerspectiveCameraData>(d =>
@@ -25,12 +35,12 @@ public partial class PerspectiveCamera : CameraComponent
     /// <summary>
     /// Gets or sets the field of view in degrees.
     /// </summary>
-    public float FieldOfView { get; set; } = 60f;
+    public float FieldOfView { get; set; } = DefaultFieldOfViewDegrees;
 
     /// <summary>
     /// Gets or sets the aspect ratio (width / height).
     /// </summary>
-    public float AspectRatio { get; set; } = 16f / 9f;
+    public float AspectRatio { get; set; } = DefaultAspectRatio;
 
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)

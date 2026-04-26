@@ -230,7 +230,7 @@ public static class LooseCookedIndexValidator
                 $"Size mismatch for {label}: expected {expectedSize}, got {actualSize}."));
         }
 
-        if (!actualSha256.SequenceEqual(expectedSha256))
+        if (expectedSha256.Length > 0 && !actualSha256.SequenceEqual(expectedSha256))
         {
             issues.Add(new LooseCookedValidationIssue(
                 shaCode,

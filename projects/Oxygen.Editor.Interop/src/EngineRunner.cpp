@@ -31,6 +31,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 #include <EditorModule/EditorModule.h>
 #include <EngineRunner.h>
@@ -53,6 +54,29 @@ using namespace oxygen::interop::module;
 using oxygen::engine::interop::LogInfoMessage;
 
 namespace Oxygen::Interop {
+
+  namespace {
+
+    auto MakeEditorVortexCapabilities(const oxygen::RendererConfig& config)
+      -> oxygen::vortex::CapabilitySet
+    {
+      using oxygen::vortex::RendererCapabilityFamily;
+
+      auto capabilities = RendererCapabilityFamily::kScenePreparation
+        | RendererCapabilityFamily::kGpuUploadAndAssetBinding
+        | RendererCapabilityFamily::kLightingData
+        | RendererCapabilityFamily::kDeferredShading
+        | RendererCapabilityFamily::kEnvironmentLighting
+        | RendererCapabilityFamily::kFinalOutputComposition;
+
+      if (config.enable_imgui) {
+        capabilities |= RendererCapabilityFamily::kDiagnosticsAndProfiling;
+      }
+
+      return capabilities;
+    }
+
+  } // namespace
 
   EngineRunner::EngineRunner()
     : log_handler_(nullptr), disposed_(false), surface_registry_(nullptr) {
@@ -178,9 +202,14 @@ namespace Oxygen::Interop {
             shared->queue_strategy.KeyFor(QueueRole::kTransfer).get();
         }
 
-        auto renderer_unique =
-          std::make_unique<oxygen::vortex::Renderer>(
-            shared->gfx_weak, std::move(renderer_config));
+        const auto renderer_capabilities =
+          MakeEditorVortexCapabilities(renderer_config);
+        interop::LogInfoMessage(fmt::format(fmt::runtime(
+          "Creating editor Vortex renderer with capabilities: {}"),
+          oxygen::vortex::to_string(renderer_capabilities)).c_str());
+
+        auto renderer_unique = std::make_unique<oxygen::vortex::Renderer>(
+          shared->gfx_weak, std::move(renderer_config), renderer_capabilities);
         shared->renderer = oxygen::observer_ptr<oxygen::vortex::Renderer>(
           renderer_unique.get());
         shared->engine->RegisterModule(std::move(renderer_unique));

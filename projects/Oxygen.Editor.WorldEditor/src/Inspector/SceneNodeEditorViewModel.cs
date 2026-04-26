@@ -333,6 +333,20 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 {
                     // Record undo that removes this component
                     this.History.AddChange($"Remove Component ({op.Component.Name})", this.ApplyRemoveComponent, op);
+
+                    if (op.Component is LightComponent light)
+                    {
+                        if (op.Component is DirectionalLightComponent)
+                        {
+                            _ = this.sceneEngineSync.UpdateNodeTransformAsync(op.Node);
+                        }
+
+                        _ = this.sceneEngineSync.AttachLightAsync(op.Node, light);
+                    }
+                    else if (op.Component is CameraComponent camera)
+                    {
+                        _ = this.sceneEngineSync.AttachCameraAsync(op.Node, camera);
+                    }
                 }
 
                 // Notify result
@@ -371,6 +385,14 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 if (op.Component is GeometryComponent)
                 {
                     _ = this.sceneEngineSync.DetachGeometryAsync(op.Node.Id);
+                }
+                else if (op.Component is CameraComponent)
+                {
+                    _ = this.sceneEngineSync.DetachCameraAsync(op.Node.Id);
+                }
+                else if (op.Component is LightComponent)
+                {
+                    _ = this.sceneEngineSync.DetachLightAsync(op.Node.Id);
                 }
 
                 WeakReferenceMessenger.Default.Send(new Messages.ComponentRemovedMessage(op.Node, op.Component, removed: true));

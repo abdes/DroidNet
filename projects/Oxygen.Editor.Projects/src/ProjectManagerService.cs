@@ -218,6 +218,8 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
             await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
 
+            await this.CookSceneAssetAsync(scene).ConfigureAwait(true);
+
             return true;
         }
         catch (Exception ex)
@@ -259,6 +261,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
                 this.CouldNotLoadSceneMetadata(ex, item.Location);
             }
         }
+    }
+
+    private async Task CookSceneAssetAsync(Scene scene)
+    {
+        await EngineImportDescriptorCooker.CookSceneAsync(scene, this.logger).ConfigureAwait(false);
     }
 
     [SuppressMessage(

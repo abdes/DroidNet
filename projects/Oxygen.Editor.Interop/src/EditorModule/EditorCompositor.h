@@ -43,6 +43,10 @@ namespace oxygen::interop::module {
     // Ensure framebuffers exist for the surface's current backbuffer
     void EnsureFramebuffersForSurface(const graphics::Surface& surface);
 
+    // Returns the framebuffer wrapping the surface's current backbuffer.
+    [[nodiscard]] auto GetCurrentFramebufferForSurface(
+      const graphics::Surface& surface) -> std::shared_ptr<graphics::Framebuffer>;
+
     // Main compositing entry point - handles all view-to-surface compositing
     void OnCompositing();
 

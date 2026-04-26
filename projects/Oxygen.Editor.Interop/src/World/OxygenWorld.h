@@ -59,7 +59,25 @@ namespace Oxygen::Interop::World {
     // Geometry management
     void SetGeometry(System::Guid nodeId, String^ assetUri);
     void DetachGeometry(System::Guid nodeId);
+    void AttachPerspectiveCamera(System::Guid nodeId,
+      float fieldOfViewYRadians, float aspectRatio, float nearPlane,
+      float farPlane);
+    void DetachCamera(System::Guid nodeId);
     void SetVisibility(System::Guid nodeId, bool visible);
+    void AttachDirectionalLight(System::Guid nodeId, float intensityLux,
+      float angularSizeRadians, System::Numerics::Vector3 color,
+      bool affectsWorld, bool castsShadows, float exposureCompensation,
+      bool environmentContribution, bool isSunLight);
+    void AttachPointLight(System::Guid nodeId, float luminousFluxLumens,
+      float range, float sourceRadius, float decayExponent,
+      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+      float exposureCompensation);
+    void AttachSpotLight(System::Guid nodeId, float luminousFluxLumens,
+      float range, float sourceRadius, float decayExponent,
+      float innerConeAngleRadians, float outerConeAngleRadians,
+      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+      float exposureCompensation);
+    void DetachLight(System::Guid nodeId);
 
     // Selection (Editor-side state)
     void SelectNode(System::Guid nodeId);

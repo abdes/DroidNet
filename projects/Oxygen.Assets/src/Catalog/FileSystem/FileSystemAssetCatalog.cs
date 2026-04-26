@@ -58,11 +58,25 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         this.storage = storage;
         this.options = options;
 
-        // Watching is optional in tests via injected source.
-        this.eventSource = eventSource
-            ?? new FileSystemWatcherEventSource(
-                rootPath: this.storage.Normalize(options.RootFolderPath),
-                filter: options.WatcherFilter);
+        // Watching is optional in tests via injected source. The catalog may
+        // be created for generated project folders that do not exist yet
+        // (.cooked, .imported, .build). Snapshot enumeration already treats a
+        // missing root as empty, so construction must not require the exact
+        // root directory to exist either.
+        if (eventSource is not null)
+        {
+            this.eventSource = eventSource;
+        }
+        else
+        {
+            var watchRoot = FindNearestExistingDirectory(
+                this.storage.Normalize(options.RootFolderPath));
+            this.eventSource = string.IsNullOrEmpty(watchRoot)
+                ? new NoopFileSystemCatalogEventSource()
+                : new FileSystemWatcherEventSource(
+                    rootPath: watchRoot,
+                    filter: options.WatcherFilter);
+        }
 
         // Coalesce bursts to avoid watcher noise (rename often appears as many events).
         this.eventSubscription = this.eventSource.Events
@@ -139,6 +153,33 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
 
     private static bool IsAllowedDotName(string name)
         => false;
+
+    private static string FindNearestExistingDirectory(string start)
+    {
+        if (string.IsNullOrWhiteSpace(start))
+        {
+            return string.Empty;
+        }
+
+        var current = start;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (Directory.Exists(current))
+            {
+                return current;
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        return string.Empty;
+    }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
@@ -376,6 +417,15 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
             {
                 this.changes.OnNext(new AssetChange(AssetChangeKind.Added, kvp.Key));
             }
+        }
+    }
+
+    private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource
+    {
+        public IObservable<FileSystemCatalogEvent> Events { get; } = Observable.Empty<FileSystemCatalogEvent>();
+
+        public void Dispose()
+        {
         }
     }
 }

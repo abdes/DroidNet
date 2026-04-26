@@ -140,7 +140,7 @@ public sealed class LooseCookedBuildService
         var updatedDoc = new Document(
             ContentVersion: doc.ContentVersion,
             Flags: doc.Flags,
-            SourceGuid: doc.SourceGuid == Guid.Empty ? Guid.NewGuid() : doc.SourceGuid,
+            SourceGuid: doc.SourceGuid,
             Assets: doc.Assets,
             Files: fileRecords.Values.OrderBy(static f => f.RelativePath, StringComparer.Ordinal).ToList());
 
@@ -227,7 +227,7 @@ public sealed class LooseCookedBuildService
         await RunBestEffortAsync(
                 stage: "CookScene",
                 mountPoint,
-                () => CookSceneAsync(files, loader, group, cancellationToken))
+                () => CookSceneAsync(files, loader, group, existingAssets.Values, cancellationToken))
             .ConfigureAwait(false);
 
         await RunBestEffortAsync(
@@ -240,7 +240,7 @@ public sealed class LooseCookedBuildService
 
         var dedupedAssets = DeduplicateAssetsByVirtualPath(existingAssets.Values, updatedAssetKeys);
 
-        var sourceGuid = existingSourceGuid == Guid.Empty ? Guid.NewGuid() : existingSourceGuid;
+        var sourceGuid = existingSourceGuid;
 
         var document = new Document(
             ContentVersion: ContentVersion,
@@ -307,6 +307,11 @@ public sealed class LooseCookedBuildService
         catch (FileNotFoundException)
         {
             // Index doesn't exist yet.
+        }
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or ArgumentException or FormatException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LooseCookedBuildService] Ignoring incompatible existing index '{indexPath}': {ex.Message}");
         }
 
         return (existingSourceGuid, existingAssets, existingFiles);
@@ -511,6 +516,7 @@ public sealed class LooseCookedBuildService
         IImportFileAccess files,
         IntermediateAssetLoader loader,
         IGrouping<string, ImportedAsset> group,
+        IEnumerable<AssetEntry> existingAssets,
         CancellationToken cancellationToken)
     {
         var scenes = group
@@ -535,16 +541,25 @@ public sealed class LooseCookedBuildService
             var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
             var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
 
-            // MVP: Just write the JSON source as the cooked descriptor for now.
-            // In the future, this should use CookedSceneWriter to produce a binary format.
-            if (string.IsNullOrEmpty(asset.GeneratedSourcePath))
+            var descriptor = new MemoryStream();
+            await using (descriptor.ConfigureAwait(false))
             {
-                continue;
+                CookedSceneWriter.Write(descriptor, source, ResolveGeometryKey);
             }
 
-            var jsonBytes = await files.ReadAllBytesAsync(asset.GeneratedSourcePath, cancellationToken).ConfigureAwait(false);
+            await files.WriteAllBytesAsync(cookedDescriptorPath, descriptor.ToArray(), cancellationToken).ConfigureAwait(false);
+        }
 
-            await files.WriteAllBytesAsync(cookedDescriptorPath, jsonBytes, cancellationToken).ConfigureAwait(false);
+        AssetKey? ResolveGeometryKey(string virtualPath)
+        {
+            var groupMatch = group.FirstOrDefault(a => string.Equals(a.VirtualPath, virtualPath, StringComparison.Ordinal));
+            if (groupMatch is not null)
+            {
+                return groupMatch.AssetKey;
+            }
+
+            var existingMatch = existingAssets.FirstOrDefault(a => string.Equals(a.VirtualPath, virtualPath, StringComparison.Ordinal));
+            return existingMatch?.AssetKey;
         }
     }
 

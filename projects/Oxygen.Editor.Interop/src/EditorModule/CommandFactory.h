@@ -29,6 +29,8 @@ class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
 class RemoveSceneNodesCommand;
+class AttachPerspectiveCameraCommand;
+class DetachCameraCommand;
 } // namespace oxygen::interop::module
 
 namespace oxygen::scene {
@@ -60,6 +62,14 @@ namespace Oxygen::Interop::World {
 
     virtual oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);
+
+    virtual oxygen::interop::module::AttachPerspectiveCameraCommand*
+      CreateAttachPerspectiveCamera(oxygen::scene::NodeHandle handle,
+        float fieldOfViewYRadians, float aspectRatio, float nearPlane,
+        float farPlane);
+
+    virtual oxygen::interop::module::DetachCameraCommand*
+      CreateDetachCamera(oxygen::scene::NodeHandle handle);
 
     virtual oxygen::interop::module::SetVisibilityCommand*
       CreateSetVisibility(oxygen::scene::NodeHandle handle, bool visible);

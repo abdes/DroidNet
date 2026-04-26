@@ -52,6 +52,37 @@ using oxygen::engine::interop::LogInfoMessage;
 
 namespace Oxygen::Interop {
 
+  static void CleanupSwapChainAttachResources(IUnknown*& panelUnknown,
+    IDXGISwapChain*& swapChain,
+    std::shared_ptr<oxygen::graphics::Surface>*& surfaceHandlePtr)
+  {
+    if (surfaceHandlePtr != nullptr) {
+      try {
+        auto cleanupLog = fmt::format(
+          fmt::runtime(
+            "AttachSwapChainCallback cleaning surface_handle_ptr={} "
+            "pre-delete use_count={}"),
+          fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
+        LogInfoMessage(cleanupLog.c_str());
+      }
+      catch (...) {
+        LogInfoMessage("AttachSwapChainCallback: error logging cleanup info.");
+      }
+      delete surfaceHandlePtr;
+      surfaceHandlePtr = nullptr;
+    }
+
+    if (swapChain != nullptr) {
+      swapChain->Release();
+      swapChain = nullptr;
+    }
+
+    if (panelUnknown != nullptr) {
+      panelUnknown->Release();
+      panelUnknown = nullptr;
+    }
+  }
+
   ref class SwapChainAttachState sealed {
   public:
     SwapChainAttachState(IntPtr panel, IntPtr swapChain, IntPtr surfaceHandle,
@@ -484,17 +515,43 @@ namespace Oxygen::Interop {
       return;
     }
 
+    auto panelUnknown = reinterpret_cast<IUnknown*>(panelPtr.ToPointer());
+    auto swapChain = reinterpret_cast<IDXGISwapChain*>(swapChainPtr.ToPointer());
+    if (panelUnknown == nullptr || swapChain == nullptr) {
+      return;
+    }
+
+    panelUnknown->AddRef();
+    swapChain->AddRef();
+
     auto state = gcnew SwapChainAttachState(panelPtr, swapChainPtr, surfaceHandle,
       compositionScale);
     if (ui_dispatcher_ == nullptr || !ui_dispatcher_->IsCaptured) {
+      panelUnknown->Release();
+      swapChain->Release();
+      if (surfaceHandle != IntPtr::Zero) {
+        delete reinterpret_cast<std::shared_ptr<oxygen::graphics::Surface>*>(
+          surfaceHandle.ToPointer());
+      }
       throw gcnew InvalidOperationException(gcnew String(
         L"SwapChain attachment requires a captured UI SynchronizationContext. "
         L"Ensure CreateEngine() was called on the UI thread."));
     }
 
-    ui_dispatcher_->Post(
-      gcnew SendOrPostCallback(this, &EngineRunner::AttachSwapChainCallback),
-      state);
+    try {
+      ui_dispatcher_->Post(
+        gcnew SendOrPostCallback(this, &EngineRunner::AttachSwapChainCallback),
+        state);
+    }
+    catch (...) {
+      panelUnknown->Release();
+      swapChain->Release();
+      if (surfaceHandle != IntPtr::Zero) {
+        delete reinterpret_cast<std::shared_ptr<oxygen::graphics::Surface>*>(
+          surfaceHandle.ToPointer());
+      }
+      throw;
+    }
   }
 
   void EngineRunner::AttachSwapChainCallback(Object^ state) {
@@ -510,6 +567,7 @@ namespace Oxygen::Interop {
     auto surfaceHandlePtr =
       reinterpret_cast<std::shared_ptr<oxygen::graphics::Surface> *>(
         attachState->SurfaceHandle.ToPointer());
+
     // Log the incoming attach with timestamp and surface reference info (if
     // provided).
     try {
@@ -529,91 +587,76 @@ namespace Oxygen::Interop {
       LogInfoMessage(
         "AttachSwapChainCallback: failed to format attach diagnostics.");
     }
-    if (panelUnknown == nullptr || swapChain == nullptr) {
-      return;
-    }
 
-    ISwapChainPanelNative* panelNative = nullptr;
-    HRESULT hr = panelUnknown->QueryInterface(
-      __uuidof(ISwapChainPanelNative), reinterpret_cast<void**>(&panelNative));
-    if (FAILED(hr) || panelNative == nullptr) {
-      LogInfoMessage(
-        "Failed to acquire ISwapChainPanelNative from SwapChainPanel.");
-      return;
-    }
-
-    hr = panelNative->SetSwapChain(swapChain);
-    panelNative->Release();
-    if (FAILED(hr)) {
-      LogInfoMessage("ISwapChainPanelNative::SetSwapChain failed.");
-      // cleanup surface handle if present
-      if (surfaceHandlePtr != nullptr) {
-        try {
-          auto errLog = fmt::format(
-            fmt::runtime(
-              "AttachSwapChainCallback: SetSwapChain failed, cleaning "
-              "surface_handle_ptr={} pre-delete use_count={}"),
-            fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
-          LogInfoMessage(errLog.c_str());
-        }
-        catch (...) {
-          LogInfoMessage("AttachSwapChainCallback: error logging before delete.");
-        }
-        delete surfaceHandlePtr;
+    try {
+      if (panelUnknown == nullptr || swapChain == nullptr) {
+        CleanupSwapChainAttachResources(panelUnknown, swapChain,
+          surfaceHandlePtr);
+        return;
       }
-      return;
-    }
 
-    LogInfoMessage("SwapChain attached to panel.");
-
-    // Apply inverse scale transform to counteract SwapChainPanel's automatic DPI
-    // scaling.
-    //
-    // CRITICAL FIX FOR HIGH DPI SCREENS (Issue #8219):
-    // WinUI's SwapChainPanel automatically applies a scale transform based on the
-    // CompositionScale (DPI scale) to the content. When rendering at full
-    // physical resolution (1:1 pixel mapping), this automatic scaling causes the
-    // content to be "zoomed in" and truncated/cropped at the bottom-right.
-    //
-    // To fix this, we must apply an INVERSE scale transform to the SwapChain
-    // itself. This cancels out the compositor's scaling, ensuring that our 1:1
-    // rendered pixels map exactly to the physical screen pixels without being
-    // stretched or cropped.
-    if (attachState->CompositionScale > 0.0f) {
-      IDXGISwapChain2* swapChain2 = nullptr;
-      HRESULT hr2 = swapChain->QueryInterface(
-        __uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&swapChain2));
-      if (SUCCEEDED(hr2) && swapChain2 != nullptr) {
-        DXGI_MATRIX_3X2_F inverseScale = {};
-        inverseScale._11 = 1.0f / attachState->CompositionScale;
-        inverseScale._22 = 1.0f / attachState->CompositionScale;
-        swapChain2->SetMatrixTransform(&inverseScale);
-        swapChain2->Release();
-        LogInfoMessage("Applied inverse scale transform to SwapChain.");
-      }
-      else {
+      ISwapChainPanelNative* panelNative = nullptr;
+      HRESULT hr = panelUnknown->QueryInterface(
+        __uuidof(ISwapChainPanelNative), reinterpret_cast<void**>(&panelNative));
+      if (FAILED(hr) || panelNative == nullptr) {
         LogInfoMessage(
-          "Failed to query IDXGISwapChain2 for inverse scale transform.");
+          "Failed to acquire ISwapChainPanelNative from SwapChainPanel.");
+        CleanupSwapChainAttachResources(panelUnknown, swapChain,
+          surfaceHandlePtr);
+        return;
       }
+
+      hr = panelNative->SetSwapChain(swapChain);
+      panelNative->Release();
+      if (FAILED(hr)) {
+        LogInfoMessage("ISwapChainPanelNative::SetSwapChain failed.");
+        CleanupSwapChainAttachResources(panelUnknown, swapChain,
+          surfaceHandlePtr);
+        return;
+      }
+
+      LogInfoMessage("SwapChain attached to panel.");
+
+      // Apply inverse scale transform to counteract SwapChainPanel's automatic
+      // DPI scaling.
+      //
+      // CRITICAL FIX FOR HIGH DPI SCREENS (Issue #8219):
+      // WinUI's SwapChainPanel automatically applies a scale transform based on
+      // the CompositionScale (DPI scale) to the content. When rendering at full
+      // physical resolution (1:1 pixel mapping), this automatic scaling causes
+      // the content to be "zoomed in" and truncated/cropped at the bottom-right.
+      //
+      // To fix this, we must apply an INVERSE scale transform to the SwapChain
+      // itself. This cancels out the compositor's scaling, ensuring that our 1:1
+      // rendered pixels map exactly to the physical screen pixels without being
+      // stretched or cropped.
+      if (attachState->CompositionScale > 0.0f) {
+        IDXGISwapChain2* swapChain2 = nullptr;
+        HRESULT hr2 = swapChain->QueryInterface(
+          __uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&swapChain2));
+        if (SUCCEEDED(hr2) && swapChain2 != nullptr) {
+          DXGI_MATRIX_3X2_F inverseScale = {};
+          inverseScale._11 = 1.0f / attachState->CompositionScale;
+          inverseScale._22 = 1.0f / attachState->CompositionScale;
+          swapChain2->SetMatrixTransform(&inverseScale);
+          swapChain2->Release();
+          LogInfoMessage("Applied inverse scale transform to SwapChain.");
+        }
+        else {
+          LogInfoMessage(
+            "Failed to query IDXGISwapChain2 for inverse scale transform.");
+        }
+      }
+    }
+    catch (...) {
+      LogInfoMessage(
+        "AttachSwapChainCallback: swallowed exception while attaching "
+        "swapchain; panel was likely unloaded or closed.");
     }
 
-    // if we received a temporary owning pointer, drop it now to return ownership
-    // to the registry/engine. We intentionally log the use_count for diagnostics
-    // before deleting the heap-held shared_ptr.
-    if (surfaceHandlePtr != nullptr) {
-      try {
-        auto cleanupLog = fmt::format(
-          fmt::runtime(
-            "AttachSwapChainCallback cleaning surface_handle_ptr={} pre-delete "
-            "use_count={}"),
-          fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
-        LogInfoMessage(cleanupLog.c_str());
-      }
-      catch (...) {
-        LogInfoMessage("AttachSwapChainCallback: error logging cleanup info.");
-      }
-      delete surfaceHandlePtr;
-    }
+    // If we received a temporary owning pointer, drop it now to return ownership
+    // to the registry/engine. Also release the callback-owned COM references.
+    CleanupSwapChainAttachResources(panelUnknown, swapChain, surfaceHandlePtr);
   }
 
 } // namespace Oxygen::Interop

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World.Services;
@@ -112,6 +113,44 @@ public interface ISceneEngineSync
     /// <param name="nodeId">The GUID of the node.</param>
     /// <returns>A task that completes when the geometry is detached.</returns>
     public Task DetachGeometryAsync(Guid nodeId);
+
+    // ============================================================================
+    // Light Operations
+    // ============================================================================
+
+    /// <summary>
+    ///     Attaches or replaces the light component on a scene node.
+    /// </summary>
+    /// <param name="node">The scene node that will receive the light.</param>
+    /// <param name="light">The light component to attach.</param>
+    /// <returns>A task that completes when the light is attached.</returns>
+    public Task AttachLightAsync(SceneNode node, LightComponent light);
+
+    /// <summary>
+    ///     Detaches the light component from a scene node.
+    /// </summary>
+    /// <param name="nodeId">The GUID of the node.</param>
+    /// <returns>A task that completes when the light is detached.</returns>
+    public Task DetachLightAsync(Guid nodeId);
+
+    // ============================================================================
+    // Camera Operations
+    // ============================================================================
+
+    /// <summary>
+    ///     Attaches or replaces the camera component on a scene node.
+    /// </summary>
+    /// <param name="node">The scene node that will receive the camera.</param>
+    /// <param name="camera">The camera component to attach.</param>
+    /// <returns>A task that completes when the camera is attached.</returns>
+    public Task AttachCameraAsync(SceneNode node, CameraComponent camera);
+
+    /// <summary>
+    ///     Detaches the camera component from a scene node.
+    /// </summary>
+    /// <param name="nodeId">The GUID of the node.</param>
+    /// <returns>A task that completes when the camera is detached.</returns>
+    public Task DetachCameraAsync(Guid nodeId);
 
     // ============================================================================
     // Geometry Operations - Fine-Grained Material Updates

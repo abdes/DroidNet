@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
@@ -12,10 +14,10 @@ public record PerspectiveCameraData : CameraComponentData
     /// <summary>
     /// Gets the vertical field of view in degrees.
     /// </summary>
-    public float FieldOfView { get; init; }
+    public float FieldOfView { get; init; } = PerspectiveCamera.DefaultFieldOfViewDegrees;
 
     /// <summary>
     /// Gets the camera aspect ratio (width / height).
     /// </summary>
-    public float AspectRatio { get; init; }
+    public float AspectRatio { get; init; } = PerspectiveCamera.DefaultAspectRatio;
 }

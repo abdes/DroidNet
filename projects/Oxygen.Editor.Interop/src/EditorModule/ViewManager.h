@@ -31,7 +31,7 @@ namespace oxygen::interop::module {
 
   class ViewManager {
   public:
-    using OnViewCreated = std::function<void(bool success, ViewId engine_id)>;
+    using OnViewCreated = std::function<void(bool success, ViewId view_id)>;
 
     ViewManager();
     ~ViewManager();
@@ -39,10 +39,9 @@ namespace oxygen::interop::module {
     OXYGEN_MAKE_NON_COPYABLE(ViewManager)
       OXYGEN_MAKE_NON_MOVABLE(ViewManager)
 
-      // Immediate: Create and register a view now using the active FrameContext.
-      // This must be called while OnFrameStart has set a valid FrameContext.
-      // If no active FrameContext exists this will fail and invoke the callback
-      // with failure.
+      // Immediate: create a stable editor view intent. The Vortex renderer is
+      // the only owner of FrameContext view publication; this manager keeps the
+      // editor lifecycle id used as the runtime composition intent id.
       void CreateViewNow(EditorView::Config config, OnViewCreated callback);
 
     // Sync: Fire-and-forget operations
@@ -51,9 +50,9 @@ namespace oxygen::interop::module {
     // while holding the frame-phase invariants (no concurrent frame updates).
     void DestroyAllViews();
     bool RegisterView(
-      ViewId engine_id); // Add to FrameContext (returns false if bad ID)
+      ViewId view_id); // Marks visible for publication (returns false if bad ID)
     void UnregisterView(
-      ViewId engine_id); // Remove from FrameContext (keeps resources)
+      ViewId view_id); // Marks hidden for publication (keeps resources)
 
     // Engine thread hooks called by EditorModule for FrameStart processing.
     // Hooks used in the engine frame cycle.
@@ -63,8 +62,8 @@ namespace oxygen::interop::module {
     void OnFrameStart(engine::FrameContext& frame_ctx);
 
     // FinalizeViews - called by EditorModule after FrameStart command
-    // processing completes. FinalizeViews performs per-view updates using the
-    // previously-provided FrameContext and then clears the transient pointers.
+    // processing completes. It only clears transient FrameStart state; runtime
+    // view publication is handled by EditorModule::OnPublishViews.
     void FinalizeViews();
 
     // Called when a surface is resized to update dependent views
@@ -97,6 +96,7 @@ namespace oxygen::interop::module {
     // pending_creates_ removed; EditorModule manages command queuing.
     observer_ptr<engine::FrameContext> active_frame_ctx_{}; // non-owning pointer
     std::unordered_map<ViewId, ViewEntry> views_;
+    uint64_t next_view_id_ { 1U };
   };
 
 } // namespace oxygen::interop::module
