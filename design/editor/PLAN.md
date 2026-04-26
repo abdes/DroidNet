@@ -366,7 +366,7 @@ Exit gate:
 | `runtime-integration.md` | `ED-M02` | Re-reviewed in `ED-M04` for sync completion, `ED-M07` for mount, `ED-M08` for parity, and `ED-M09` for input bridge. |
 | `live-engine-sync.md` | `ED-M04` | Needed once command-driven mutations are in place. |
 | `viewport-and-tools.md` | `ED-M02` | Initial stabilization in `ED-M02`, authoring tools in `ED-M09`. |
-| `diagnostics-operation-results.md` | `ED-M01` | Starts with project failures and becomes foundational in `ED-M03`. |
+| `diagnostics-operation-results.md` | `ED-M01` | Starts with project failures, is extended in `ED-M02` for runtime/viewport failure domains, and becomes foundational in `ED-M03`. |
 | `standalone-runtime-validation.md` | `ED-M08` | Needed before runtime parity milestone implementation. |
 
 ## 7. Detailed Implementation Plans
@@ -400,6 +400,13 @@ with this milestone structure as each milestone starts:
 | [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` |
 | [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` |
 | [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` |
+
+Active milestone plans:
+
+| Plan | Milestone |
+| --- | --- |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` |
+| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` |
 
 ## 8. Milestone Closure
 

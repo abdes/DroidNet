@@ -16,8 +16,8 @@ what the user can do next.
 | ID | Coverage |
 | --- | --- |
 | `REQ-022` | Save, sync, project, runtime, and pipeline workflows expose visible results. |
-| `REQ-023` | Diagnostics identify affected project/document/asset/node/component when possible. |
-| `REQ-024` | Failures are not log-only. |
+| `REQ-023` | Engine/runtime and pipeline failures produce useful logs. |
+| `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
 | `SUCCESS-006` | Import, descriptor generation, cook, mount, and standalone load states are visible in later milestones. |
 | `SUCCESS-009` | V0.1 acceptance includes visible failure reporting across the workflow. |
 
@@ -202,38 +202,32 @@ their assigned prefix.
 
 ### Failure Domain
 
-ED-M01 active domains:
-
-- `ProjectBrowser`.
-- `ProjectValidation`.
-- `ProjectPersistence`.
-- `ProjectTemplate`.
-- `ProjectUsage`.
-- `ProjectContentRoots`.
-- `WorkspaceActivation`.
-- `WorkspaceRestoration`.
-- `Unknown`.
-
-Reserved V0.1 domains for later milestones:
-
-- `ProjectSettings`.
-- `Document`.
-- `SceneAuthoring`.
-- `LiveSync`.
-- `ContentPipeline`.
-- `AssetImport`.
-- `AssetCook`.
-- `StandaloneRuntime`.
-
-ED-M02 active runtime domains:
-
-- `RuntimeDiscovery`.
-- `RuntimeSurface`.
-- `RuntimeView`.
-- `AssetMount`.
-- `Settings`.
-
 Domains are stable vocabulary, not class names.
+
+| Domain | Active Milestone | Producer |
+| --- | --- | --- |
+| `ProjectBrowser` | ED-M01 | Project Browser open/create surfaces. |
+| `ProjectValidation` | ED-M01 | Project validation service. |
+| `ProjectPersistence` | ED-M01 | Project manifest/persistent-state service. |
+| `ProjectTemplate` | ED-M01 | Project creation/template service. |
+| `ProjectUsage` | ED-M01 | Recent project usage service. |
+| `ProjectContentRoots` | ED-M01 | Project content-root validation. |
+| `WorkspaceActivation` | ED-M01 | Shell activation coordinator. |
+| `WorkspaceRestoration` | ED-M01; reused by ED-M02 | Workspace restoration adapter and restored viewport-layout issues. |
+| `Unknown` | ED-M01 | Exception adapters when the narrow domain is not known. |
+| `RuntimeDiscovery` | ED-M02 | Workspace activation/runtime startup. |
+| `RuntimeSurface` | ED-M02 | Viewport control/runtime surface lease. |
+| `RuntimeView` | ED-M02 | Viewport control/runtime view calls. |
+| `AssetMount` | ED-M02 | Workspace cooked-root refresh when content availability is affected. |
+| `Settings` | ED-M02 | Scene editor runtime settings surface. |
+| `ProjectSettings` | ED-M07 | Project-scoped settings for content roots/cook scope. |
+| `Document` | ED-M03 | Document save/open workflow. |
+| `SceneAuthoring` | ED-M03 | Scene commands/property editing. |
+| `LiveSync` | ED-M03 | Live scene sync. |
+| `ContentPipeline` | ED-M07 | Content pipeline orchestration. |
+| `AssetImport` | ED-M05 | Asset import. |
+| `AssetCook` | ED-M07 | Cook execution. |
+| `StandaloneRuntime` | ED-M08 | Standalone load validation. |
 
 `ProjectSettings` is reserved for project-scoped settings. `Settings` is the
 global editor settings domain and is active in ED-M02 for runtime FPS/logging
@@ -306,8 +300,8 @@ Examples:
 - project validation result -> `Project.Open` or `Project.Create`.
 - asset import result -> `Content.Import`.
 - cook result -> `Content.Cook`.
-- runtime service failure -> `Runtime.Start`, `Runtime.Mount`,
-  `Runtime.View.Create`, etc.
+- runtime service failure -> `Runtime.Start`,
+  `Runtime.CookedRoot.Refresh`, `Runtime.View.Create`, etc.
 
 ### Log Correlation Adapter
 
@@ -436,6 +430,20 @@ Required mappings:
 Every later LLD must state which operation kinds it emits and which domains it
 uses.
 
+ED-M02 producers and operation kinds:
+
+| Producer | Operation Kind | Domain |
+| --- | --- | --- |
+| workspace activation/runtime startup | `Runtime.Start` | `RuntimeDiscovery` |
+| scene editor settings UI | `Runtime.Settings.Apply` | `Settings` |
+| viewport control/runtime service | `Runtime.Surface.Attach` | `RuntimeSurface` |
+| viewport control/runtime service | `Runtime.Surface.Resize` | `RuntimeSurface` |
+| viewport control/runtime service | `Runtime.View.Create` | `RuntimeView` |
+| viewport control/runtime service | `Runtime.View.Destroy` | `RuntimeView` |
+| viewport control/runtime service | `Runtime.View.SetCameraPreset` | `RuntimeView` |
+| scene editor viewport host | `Viewport.Layout.Change` | `WorkspaceRestoration` |
+| workspace cooked-root refresh | `Runtime.CookedRoot.Refresh` | `AssetMount` |
+
 ## 12. Operation Results And Diagnostics
 
 ### Status Reduction Rule
@@ -540,7 +548,8 @@ Straightforward tests should cover:
 - `IOperationResultPublisher`: UI-independent publication behavior.
 - `IOperationResultStore`: snapshot and scope-filter behavior.
 - output-log adapter: result summary entry includes `OperationId`.
-- failure-domain mapper: ED-M01 project/workspace domains.
+- failure-domain mapper: ED-M01 project/workspace domains and ED-M02
+  runtime/viewport domains where the mapper is touched by the milestone.
 - project activation integration is validated through the
   `project-services.md` `IProjectContextService` gates and
   `project-workspace-shell.md` activation-coordinator gates.

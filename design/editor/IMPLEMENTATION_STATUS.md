@@ -39,11 +39,12 @@ Current execution focus:
 
 - [x] Prepare `ED-M01` by reviewing `project-workspace-shell.md`,
       `project-services.md`, and `diagnostics-operation-results.md`.
-- [ ] Implement `ED-M01` from
+- [x] Implement and validate `ED-M01` from
       [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md).
-- [ ] Validate `ED-M02` live viewport stabilization with one/two/four viewport
-      layouts, correct surface presentation, sane camera framing, native
-      runtime discovery, and runtime settings.
+- [ ] Review `ED-M02` LLDs and detailed plan, then validate live viewport
+      stabilization with one/two/four viewport layouts, correct surface
+      presentation, sane camera framing, native runtime discovery, and runtime
+      settings.
 - [ ] Prepare `ED-M03` by reviewing its required LLDs and producing a detailed
       implementation plan.
 
@@ -53,11 +54,9 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Implement `ED-M01` from
-   [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md),
-   closing the remaining manual validation items for startup, open/create,
-   invalid project handling, workspace activation, and restoration visibility.
-2. Continue `ED-M02` validation in parallel where it does not block `ED-M01`.
+1. Review and accept the `ED-M02` LLDs and detailed implementation plan before
+   any further ED-M02 implementation or validation closure.
+2. Continue `ED-M02` validation only after that planning gate is accepted.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
@@ -152,8 +151,9 @@ Exit evidence required:
 
 Status: `landed`
 
-Trace: `GOAL-001`, `GOAL-003`; `REQ-025`, `REQ-027`, `REQ-028`,
-`REQ-030`; `SUCCESS-003`, `SUCCESS-005`
+Trace: `GOAL-001`, `GOAL-003`, `GOAL-006`; `REQ-022`, `REQ-023`,
+`REQ-024`, `REQ-025`, `REQ-027`, `REQ-028`, `REQ-030`; `SUCCESS-003`,
+`SUCCESS-005`
 
 Outcome: embedded Vortex preview, surface/view lifecycle, native runtime
 discovery, runtime settings, and viewport presentation are stable.
@@ -165,6 +165,10 @@ Implementation:
       directory instead of being copied into editor output.
 - [x] A live Vortex-rendered editor viewport is visible.
 - [x] Editor viewport camera uses sane projection/framing defaults.
+- [ ] Required LLDs are reviewed:
+      `runtime-integration`, `viewport-and-tools`,
+      `diagnostics-operation-results`.
+- [ ] Detailed `ED-M02` implementation plan exists and is accepted.
 
 Validation:
 
@@ -414,7 +418,8 @@ the current milestone ID after the `ED-M01` insertion.
 
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
-| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Complete manual validation and record one ED-M01 validation ledger row. |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
+| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `review` | Review and accept before any further ED-M02 implementation or validation closure. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
