@@ -96,7 +96,7 @@ Exit evidence required:
 
 ### ED-M01 - Project Browser And Workspace Activation
 
-Status: `active`
+Status: `validated`
 
 Trace: `GOAL-001`, `GOAL-006`; `REQ-001`, `REQ-002`, `REQ-003`,
 `REQ-022`, `REQ-024`; `SUCCESS-001`
@@ -134,17 +134,17 @@ product behavior.
       activation dependency, Content Browser uses project context for project
       metadata, and targeted `Oxygen.Core` / `Oxygen.Editor.Projects` tests
       pass.
-- [ ] Editor starts at Project Browser.
-- [ ] Recent project, create project, open project, and invalid project states
+- [x] Editor starts at Project Browser.
+- [x] Recent project, create project, open project, and invalid project states
       are usable.
-- [ ] Successful project open transitions into the editor workspace.
-- [ ] Workspace restoration is best effort and visible when partially
+- [x] Successful project open transitions into the editor workspace.
+- [x] Workspace restoration is best effort and visible when partially
       unsuccessful.
-- [ ] Project open/create failures produce visible operation results.
+- [x] Project open/create failures produce visible operation results.
 
 Exit evidence required:
 
-- [ ] One `ED-M01` validation ledger row records startup path, project
+- [x] One `ED-M01` validation ledger row records startup path, project
       open/create behavior, invalid project behavior, workspace activation, and
       restoration failure behavior.
 
@@ -430,7 +430,7 @@ checklist or detailed plan tracker instead.
 | Milestone | Status | Date | Evidence |
 | --- | --- | --- | --- |
 | `ED-M00` | `validated` | 2026-04-26 | Design package approved: README, RULES, PROJECT-LAYOUT, PRD, ARCHITECTURE, DESIGN, PLAN, LLD index/scaffolds, plan index, and status ledger are accepted as the V0.1 planning baseline. |
-| `ED-M01` | `pending` | - | Not validated. |
+| `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
 | `ED-M02` | `pending` | - | Not validated. |
 | `ED-M03` | `pending` | - | Not validated. |
 | `ED-M04` | `pending` | - | Not validated. |
