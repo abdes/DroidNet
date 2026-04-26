@@ -60,7 +60,21 @@ public sealed record ProjectContext
     {
         ArgumentNullException.ThrowIfNull(project);
 
-        var info = project.ProjectInfo;
+        return FromProjectInfo(
+            project.ProjectInfo,
+            project.Scenes.Select(scene => new ProjectSceneInfo(scene.Id, scene.Name)));
+    }
+
+    /// <summary>
+    ///     Creates a context snapshot from project metadata and known scene metadata.
+    /// </summary>
+    /// <param name="info">The project metadata.</param>
+    /// <param name="scenes">The known scene metadata.</param>
+    /// <returns>The project context.</returns>
+    public static ProjectContext FromProjectInfo(IProjectInfo info, IEnumerable<ProjectSceneInfo>? scenes = null)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+
         return new ProjectContext
         {
             ProjectId = info.Id,
@@ -70,7 +84,7 @@ public sealed record ProjectContext
             Thumbnail = info.Thumbnail,
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],
-            Scenes = [.. project.Scenes.Select(scene => new ProjectSceneInfo(scene.Id, scene.Name))],
+            Scenes = [.. scenes ?? []],
         };
     }
 }

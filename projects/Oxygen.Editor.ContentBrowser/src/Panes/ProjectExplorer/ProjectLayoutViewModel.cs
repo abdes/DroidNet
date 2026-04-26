@@ -29,7 +29,7 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Represents the ViewModel for the project layout in the content browser.
 ///     Acts as a mediator between the DynamicTree control and ContentBrowserState.
 /// </summary>
-/// <param name="projectManager">The project manager service for legacy project mount persistence.</param>
+/// <param name="projectManager">The project manager service for project manifest persistence.</param>
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
@@ -630,13 +630,13 @@ public partial class ProjectLayoutViewModel(
     [RelayCommand(CanExecute = nameof(HasUnsavedChanges))]
     private async Task SaveProjectMountsAsync()
     {
-        var project = projectManager.CurrentProject;
-        if (project is null || this.projectRoot is null)
+        var activeProject = projectContextService.ActiveProject;
+        var projectInfo = this.GetActiveProjectInfo();
+        if (activeProject is null || projectInfo is null || this.projectRoot is null)
         {
             return;
         }
 
-        var projectInfo = project.ProjectInfo;
         projectInfo.LocalFolderMounts.Clear();
         projectInfo.AuthoringMounts.Clear();
 
@@ -711,7 +711,11 @@ public partial class ProjectLayoutViewModel(
             }
         }
 
-        await projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true);
+        if (await projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
+        {
+            projectContextService.Activate(ProjectContext.FromProjectInfo(projectInfo, activeProject.Scenes));
+        }
+
         this.HasUnsavedChanges = false;
     }
 
