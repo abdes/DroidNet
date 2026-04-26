@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -338,6 +339,17 @@ auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
   if (fps > EngineConfig::kMaxTargetFps) {
     fps = EngineConfig::kMaxTargetFps;
   }
+
+  const auto fps_text = std::to_string(fps);
+  const auto result = console_.SetCVarFromText({
+    .name = kCVarEngineTargetFps,
+    .text = fps_text,
+  });
+  if (result.status != ExecutionStatus::kOk) {
+    DLOG_F(WARNING, "Failed to update {} CVar from SetTargetFps({}): {}",
+      kCVarEngineTargetFps, fps, result.error);
+  }
+
   if (config_.target_fps == fps) {
     return;
   }
