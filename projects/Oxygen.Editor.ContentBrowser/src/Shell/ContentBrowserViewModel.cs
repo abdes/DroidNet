@@ -290,6 +290,72 @@ public sealed partial class ContentBrowserViewModel(
         return state.SelectedFolders.Order(StringComparer.Ordinal).FirstOrDefault();
     }
 
+    private static bool TryNormalizeContentBrowserUrl(string persisted, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? url)
+    {
+        url = null;
+        var trimmed = persisted.Trim();
+        var assetsViewPath = trimmed.Contains("assets/list", StringComparison.Ordinal)
+            ? "assets/list"
+            : trimmed.Contains("assets/tiles", StringComparison.Ordinal)
+                ? "assets/tiles"
+                : null;
+
+        if (assetsViewPath is null)
+        {
+            return false;
+        }
+
+        var query = ExtractSelectedQuery(trimmed);
+        if (query is null && trimmed.Contains('?', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        url = "/(left:project//right:" + assetsViewPath + ")" + (query ?? string.Empty);
+        return true;
+        static string? ExtractSelectedQuery(string contentBrowserState)
+        {
+            var queryIndex = contentBrowserState.IndexOf('?', StringComparison.Ordinal);
+            if (queryIndex < 0 || queryIndex == contentBrowserState.Length - 1)
+            {
+                return null;
+            }
+
+            var pairs = contentBrowserState[(queryIndex + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries);
+            if (pairs.Length == 0)
+            {
+                return null;
+            }
+
+            var selected = new List<string>();
+            foreach (var pair in pairs)
+            {
+                var parts = pair.Split('=', 2);
+                if (parts.Length != 2 || !string.Equals(parts[0], RouteStateMapping.SelectedQueryKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var value = Uri.UnescapeDataString(parts[1]);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        selected.Add(value);
+                    }
+                }
+                catch (UriFormatException)
+                {
+                    return null;
+                }
+            }
+
+            return selected.Count == 0
+                ? null
+                : RouteStateMapping.BuildSelectedQuery(selected);
+        }
+    }
+
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal) && !this.isNavigatingFromHistory)
@@ -346,7 +412,7 @@ public sealed partial class ContentBrowserViewModel(
                 return DefaultLocalUrl;
             }
 
-            if (this.TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
+            if (TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
             {
                 return restoredUrl;
             }
@@ -417,72 +483,6 @@ public sealed partial class ContentBrowserViewModel(
         };
 
         operationResults.Publish(result);
-    }
-
-    private bool TryNormalizeContentBrowserUrl(string persisted, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? url)
-    {
-        url = null;
-        var trimmed = persisted.Trim();
-        var assetsViewPath = trimmed.Contains("assets/list", StringComparison.Ordinal)
-            ? "assets/list"
-            : trimmed.Contains("assets/tiles", StringComparison.Ordinal)
-                ? "assets/tiles"
-                : null;
-
-        if (assetsViewPath is null)
-        {
-            return false;
-        }
-
-        var query = ExtractSelectedQuery(trimmed);
-        if (query is null && trimmed.Contains('?', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        url = "/(left:project//right:" + assetsViewPath + ")" + (query ?? string.Empty);
-        return true;
-        static string? ExtractSelectedQuery(string contentBrowserState)
-        {
-            var queryIndex = contentBrowserState.IndexOf('?', StringComparison.Ordinal);
-            if (queryIndex < 0 || queryIndex == contentBrowserState.Length - 1)
-            {
-                return null;
-            }
-
-            var pairs = contentBrowserState[(queryIndex + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries);
-            if (pairs.Length == 0)
-            {
-                return null;
-            }
-
-            var selected = new List<string>();
-            foreach (var pair in pairs)
-            {
-                var parts = pair.Split('=', 2);
-                if (parts.Length != 2 || !string.Equals(parts[0], RouteStateMapping.SelectedQueryKey, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    var value = Uri.UnescapeDataString(parts[1]);
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        selected.Add(value);
-                    }
-                }
-                catch (UriFormatException)
-                {
-                    return null;
-                }
-            }
-
-            return selected.Count == 0
-                ? null
-                : RouteStateMapping.BuildSelectedQuery(selected);
-        }
     }
 
     private string BuildCurrentUrl()
