@@ -296,7 +296,26 @@ Validation:
 
 ### Slice F - Capture Manifest Export
 
-**Status:** `planned`
+**Status:** `validated`
+
+Current evidence:
+
+- `DiagnosticsCaptureManifest` builds
+  `vortex.diagnostics.capture-manifest.v1` JSON from a
+  `DiagnosticsFrameSnapshot` and writes it to a caller-provided path.
+- The runtime manifest records frame facts, active debug mode, requested and
+  enabled feature masks, GPU timeline state, passes, products, issues, and an
+  optional GPU timeline export path.
+- Transient descriptor indices are deliberately omitted from product records in
+  the manifest; products keep stable names, producer pass, resource name, and
+  validity/published/stale state.
+- `DiagnosticsService::ExportCaptureManifest` writes the latest snapshot and
+  converts writer failures into the minimal `capture-manifest.write-failed`
+  recoverable issue when a ledger frame is open.
+- Focused build and tests passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsCaptureManifest Oxygen.Vortex.DiagnosticsService --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsCaptureManifest|DiagnosticsService)" --output-on-failure`
+  with `DiagnosticsCaptureManifest` 2/2 and `DiagnosticsService` 8/8.
 
 Tasks:
 

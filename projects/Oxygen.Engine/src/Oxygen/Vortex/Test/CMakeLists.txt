@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED CONFIG)
 
 # ==============================================================================
 # Build instructions
@@ -64,6 +65,17 @@ m_gtest_program(
   DiagnosticsFrameLedger
   SOURCES
     "DiagnosticsFrameLedger_test.cpp"
+)
+
+m_gtest_program(
+  DiagnosticsCaptureManifest
+  SOURCES
+    "DiagnosticsCaptureManifest_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Vortex.DiagnosticsCaptureManifest.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
 )
 
 m_gtest_program(
@@ -166,6 +178,12 @@ add_custom_target(
   Oxygen.Vortex.DiagnosticsFrameLedger
   DEPENDS
     Oxygen.Vortex.DiagnosticsFrameLedger.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsCaptureManifest
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsCaptureManifest.Tests
 )
 
 add_custom_target(

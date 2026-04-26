@@ -6,6 +6,7 @@
 
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 
+#include <exception>
 #include <string>
 #include <utility>
 
@@ -189,6 +190,22 @@ auto DiagnosticsService::SyncGpuTimelineDiagnostics() -> void
     ReportGpuTimelineIssue(diagnostic);
   }
   RefreshLedgerState();
+}
+
+auto DiagnosticsService::ExportCaptureManifest(const std::filesystem::path& path,
+  const DiagnosticsCaptureManifestOptions& options) -> bool
+{
+  try {
+    WriteDiagnosticsCaptureManifest(path, GetLatestSnapshot(), options);
+    return true;
+  } catch (const std::exception& ex) {
+    auto issue = MakeDiagnosticsIssue(
+      DiagnosticsIssueCode::kManifestWriteFailed, DiagnosticsSeverity::kError,
+      ex.what());
+    issue.product_name = "Vortex.DiagnosticsCaptureManifest";
+    ReportIssue(std::move(issue));
+    return false;
+  }
 }
 
 auto DiagnosticsService::BeginFrame(const frame::SequenceNumber frame) -> void
