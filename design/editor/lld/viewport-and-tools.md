@@ -4,10 +4,10 @@ Status: `review`
 
 ## 1. Purpose
 
-Define the ED-M02 viewport design: live embedded viewport presentation,
-one/two/four pane layout stability, editor camera defaults/framing, runtime
-settings surface, and the boundary between current stabilization work and later
-authoring tools.
+Define the ED-M02 viewport design: live embedded viewport presentation for the
+supported single viewport, editor camera defaults/framing, runtime settings
+surface, and the boundary between current stabilization work and later authoring
+tools. Multi-viewport layout stability is deferred to later engine/editor work.
 
 Selection highlights, transform gizmos, node icons, picking, and advanced
 overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
@@ -17,8 +17,8 @@ overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
 | ID | Coverage |
 | --- | --- |
 | `REQ-025` | A live embedded viewport renders the active scene. |
-| `REQ-027` | One/two/four viewport layouts are stable. |
-| `REQ-028` | Each viewport presents to the correct editor surface. |
+| `REQ-027` | The supported single live viewport layout is stable; multi-viewport layouts are deferred. |
+| `REQ-028` | The supported live viewport presents to the correct editor surface; multi-viewport surface routing is deferred. |
 | `REQ-030` | Partial: ED-M02 verifies the active scene is visibly rendered in the embedded viewport; full preview parity remains ED-M08. |
 | `SUCCESS-003` | Users can see the scene in the editor viewport. |
 | `SUCCESS-005` | Live viewport is stable enough for later authoring work. |
@@ -57,12 +57,12 @@ Known ED-M02 gaps:
   production-ready authoring tools.
 - frame-all/frame-selected commands are not yet explicit user workflows.
 - runtime/viewport failures are logged more reliably than they are presented.
-- multi-view validation currently depends on manual visual inspection and logs.
+- multi-view validation is deferred out of ED-M02.
 
 Three-pane variants are existing UI but are not ED-M02 validation targets unless
 the implementation touches them. If they remain exposed, they must not
-catastrophically regress; correctness evidence is required for one/two/four
-layouts.
+catastrophically regress; correctness evidence is required only for the
+supported single viewport layout in ED-M02.
 
 ## 5. Target Design
 
@@ -94,8 +94,8 @@ Target invariants:
 3. Hidden/removed viewports release their engine view and surface lease.
 4. Layout changes update viewport metadata before surface/view requests rely on
    index/primary flags.
-5. One/two/four pane layouts must not route multiple visible viewports to the
-   same surface.
+5. The supported single viewport layout must route to the correct surface;
+   multi-viewport routing is deferred.
 6. The editor camera is owned by the runtime/editor view, not by scene camera
    authoring data.
 7. ED-M02 framing means the default camera observes authored content after
@@ -124,8 +124,7 @@ Target invariants:
 `SceneViewLayout` describes the requested pane arrangement. ED-M02 validates:
 
 - one pane.
-- representative two-pane layout.
-- four quadrants.
+- multi-viewport layouts are deferred.
 
 Other layout variants may exist but do not expand the ED-M02 validation matrix
 unless they are touched by the implementation.
@@ -296,14 +295,9 @@ Forbidden:
 ED-M02 viewport validation is complete when:
 
 - one-pane scene viewport renders the active scene.
-- representative two-pane layout renders each visible viewport to the correct
-  surface.
-- four-quadrant layout renders each visible viewport to the correct surface.
-- each visible viewport can be correlated to a distinct document/viewport ID in
-  logs and has visually distinguishable evidence, such as clear color, camera
-  orientation, or another accepted diagnostic cue.
-- switching between one/two/four layouts does not crash or leave blank/stale
-  panels.
+- multi-viewport validation is recorded as deferred, not as an ED-M02 gate.
+- the supported live viewport can be correlated to a distinct document/viewport
+  ID in logs.
 - resizing the workspace or split panes keeps viewports correctly scaled and
   non-overlapping.
 - closing/reopening a scene releases old surfaces/views and creates new ones.
@@ -312,9 +306,9 @@ ED-M02 viewport validation is complete when:
 - camera preset menu calls do not fault the runtime.
 - FPS/logging controls apply or produce visible diagnostics.
 
-Evidence must include manual one/two/four layout notes or screenshots, logs
-showing distinct document/viewport IDs, and targeted tests for pure
-layout/metadata helpers where practical.
+Evidence must include manual single-viewport notes or screenshots, logs showing
+the document/viewport ID, and targeted tests for pure layout/metadata helpers
+where practical.
 
 ## 15. Open Issues
 

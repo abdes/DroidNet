@@ -153,11 +153,18 @@ LLD work:
 
 Exit gate:
 
-- One/two/four viewport layouts do not abort.
-- Each visible viewport presents to the correct surface.
+- The supported single live viewport layout does not abort.
+- The supported live viewport presents to the correct surface.
 - Runtime DLL discovery works from the engine install runtime directory.
 - Editor camera can frame authored content with sane defaults.
 - Runtime/FPS settings are applied or a visible diagnostic explains why not.
+
+Deferred work:
+
+- Multi-viewport layout validation is deferred out of ED-M02. The existing UI
+  path may remain visible, but one/two/four stability is no longer an ED-M02
+  closure gate. Stable multi-viewport requires later engine multi-surface /
+  multi-view renderer work.
 
 ### ED-M03 - Authoring Foundation
 
@@ -322,7 +329,7 @@ Exit gate:
 - Selection highlight is implemented.
 - Transform gizmo UX mutates through commands.
 - Non-geometry node icons exist for cameras/lights.
-- One/two/four viewport layouts remain stable with overlays enabled.
+- Supported viewport layouts remain stable with overlays enabled.
 
 ### ED-M10 - V0.1 Acceptance
 
