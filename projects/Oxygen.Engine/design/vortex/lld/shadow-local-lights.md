@@ -1,7 +1,7 @@
 # ShadowService Local-Light Conventional Expansion LLD
 
-**Phase:** 5G — Remaining Services
-**Deliverable:** reserved future LLD
+**Phase:** 5D — Conventional Shadow Parity And Expansion
+**Deliverable:** `VTX-M05D`
 **Status:** `planned`
 
 ## Mandatory Vortex Rule
@@ -23,8 +23,8 @@
 
 ### 1.1 What This Covers
 
-This document captures the planned ShadowService expansion that follows the
-Phase 4C directional-first baseline:
+This document captures the ShadowService local-light expansion that follows the
+VTX-M05D directional CSM parity/stability gate:
 
 - spot-light conventional shadows
 - explicit point-light conventional shadow strategy
@@ -37,16 +37,22 @@ storage. This future LLD is the handoff artifact that closes that gap. The
 ShadowService roadmap now has a named later-phase owner for local-light
 conventional shadows instead of leaving the issue as an open-ended note.
 
-The corrected Phase 4C contract publishes **directional** conventional shadow
-data only. Phase 5G begins from that truthful baseline and extends
-`ShadowFrameBindings` without pretending that Phase 4 already shipped
-spot-light or point-light conventional shadow payloads.
+The corrected Phase 4C contract published **directional** conventional shadow
+data only. VTX-M05D first audits and stabilizes that directional CSM baseline,
+then extends `ShadowFrameBindings` without pretending that Phase 4 already
+shipped spot-light or point-light conventional shadow payloads.
+
+The local-light implementation is blocked until the M05D CSM audit/remediation
+gate records why city-scale projected shadows were unstable under camera
+movement and proves the corrected behavior.
 
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §8](../ARCHITECTURE.md) — `ShadowService` ownership
 - [PLAN.md §7](../PLAN.md) — Phase 5 expansion scope
 - [shadow-service.md](shadow-service.md) — Phase 4C directional-first baseline
+- [../plan/VTX-M05D-conventional-shadow-parity.md](../plan/VTX-M05D-conventional-shadow-parity.md)
+  — CSM-first M05D execution plan
 
 ## 2. Interface Contracts
 
@@ -58,12 +64,14 @@ expansion.
 ### 2.2 Published Payload Contract
 
 `ShadowFrameBindings` remains the canonical GPU-facing publication seam.
-Phase 5G may extend it with local-light-specific fields, but it must not bake
+VTX-M05D may extend it with local-light-specific fields, but it must not bake
 today's conventional storage choice into the long-lived binding ABI.
 
-Phase 5G therefore inherits these rules from the remediated Phase 4C baseline:
+VTX-M05D therefore inherits these rules from the remediated directional
+baseline:
 
-1. directional conventional shadow publication already exists
+1. directional conventional shadow publication exists but must pass the M05D
+   parity/stability gate before local-light work starts
 2. local-light conventional shadow publication is added here for the first time
 3. the public binding seam stays consumer-oriented and does not freeze one
    internal storage layout

@@ -2,7 +2,7 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** `in_progress`
+**Status:** `directional_baseline_validated_m05d_reaudit_required`
 
 ## Mandatory Vortex Rule
 
@@ -23,25 +23,34 @@
 
 ### 1.1 What This Covers
 
-`ShadowService` is the Stage-8 owner for **directional-first conventional
-shadow-map production** in Phase 4C.
+`ShadowService` is the Stage-8 owner for conventional shadow-map production.
+The Phase 4C directional baseline proved projected directional shadows exist,
+but VTX-M05D reopens the directional CSM parity surface before local-light
+expansion because city-scale shadows are unstable under camera movement.
 
-Phase 4C covers:
+Phase 4C covered:
 
 - directional conventional shadow-map setup
 - directional shadow depth rendering at Stage 8
 - per-view publication of the directional conventional shadow product
 - later consumption of that published directional shadow product by Stage 12
 
-Phase 4C does **not** claim:
+The Phase 4C closure does **not** claim full CSM parity or camera-stable
+city-scale behavior. VTX-M05D must audit and remediate directional CSM first.
 
+VTX-M05D covers:
+
+- full UE5.7-informed directional CSM parity audit and remediation
+- camera-movement stability proof in `CityEnvironmentValidation`
 - spot-light conventional shadows
-- point-light conventional shadows
-- local-light conventional shadow publication
+- explicit point-light conventional shadow strategy and proof
+
+Phase 4C/VTX-M05D still do **not** claim:
+
 - VSM activation
 
-Those remain future `ShadowService` work and are not part of the truthful Phase
-4C baseline.
+VSM remains future `ShadowService` work and is not part of the conventional
+shadow-map baseline.
 
 ### 1.2 Stage Position
 
@@ -61,8 +70,44 @@ The published directional shadow product is consumed later by:
 - [ARCHITECTURE.md](../ARCHITECTURE.md) Section 8 - subsystem service ownership
 - [ARCHITECTURE.md](../ARCHITECTURE.md) Section 6.2 - Stage 8 ownership
 - [PLAN.md](../PLAN.md) Section 6 - Phase 4C directional-first scope
-- [shadow-local-lights.md](./shadow-local-lights.md) - future local-light
-  conventional shadow expansion
+- [shadow-local-lights.md](./shadow-local-lights.md) - VTX-M05D local-light
+  conventional shadow expansion after the CSM parity/stability gate
+- [../plan/VTX-M05D-conventional-shadow-parity.md](../plan/VTX-M05D-conventional-shadow-parity.md)
+  - detailed M05D execution plan
+
+## 1.4 VTX-M05D Directional CSM Parity Gate
+
+VTX-M05D begins with directional CSM, not local lights. No spot-light or
+point-light implementation may start until the directional CSM audit has an
+evidence-backed conclusion and any required remediation is documented.
+
+The CSM audit must be grounded only in the local UE5.7 source tree:
+
+- `Renderer/Private/ShadowSetup.cpp`
+- `Renderer/Private/ShadowRendering.cpp`
+- `Renderer/Private/ShadowDepthRendering.cpp`
+- `Renderer/Private/SceneVisibility.cpp`
+- `Renderer/Private/MeshDrawCommands.cpp`
+- `Engine/Private/Components/DirectionalLightComponent.cpp`
+- `Shaders/Private/ForwardShadowingCommon.ush`
+- `Shaders/Private/ShadowFilteringCommon.ush`
+- `Shaders/Private/DeferredLightPixelShaders.usf`
+
+The audit must compare these UE concerns against Oxygen:
+
+- cascade split generation, manual split handling, and max shadow distance
+- cascade stabilization and snap-to-texel behavior under camera movement
+- light-view basis construction and world-space convention conversion
+- caster/receiver frustum bounds and cascade culling
+- per-cascade depth range, reversed-Z projection, and receiver comparison
+- cascade transition, last-cascade fade, and bias/normal-bias scaling
+- shadow-map resource addressing and sampler/filtering contract
+- shader-side cascade selection and blend behavior
+
+The city-scale instability report is a first-class blocker: if the parity audit
+does not identify the cause, the implementation work must continue with
+focused capture/debugging until the unstable projected shadows are explained and
+fixed. "Projected shadows exist in a static view" is not sufficient for M05D.
 
 ## 2. Interface Contracts
 

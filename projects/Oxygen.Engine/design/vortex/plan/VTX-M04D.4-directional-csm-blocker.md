@@ -130,6 +130,24 @@ shadow-casting flag and full CSM setup.
 User visual confirmation on 2026-04-26: `CityEnvironmentValidation` now has
 shadows after the hydration fix.
 
+## Superseding VTX-M05D Scope
+
+The M04D.4 blocker proved that directional projected shadows can exist and that
+volumetric fog could consume a directional CSM product. It did not close full
+directional CSM parity or stability under camera movement.
+
+VTX-M05D now owns the expanded conventional shadow scope:
+
+- complete UE5.7 directional CSM parity audit;
+- root cause and remediation for `CityEnvironmentValidation` projected-shadow
+  instability under camera movement;
+- proof that city-scale directional CSM remains stable while the camera moves;
+- local-light conventional shadow expansion only after the CSM stability gate.
+
+This document remains the historical projected-shadow blocker record. The
+active detailed plan is
+[`VTX-M05D-conventional-shadow-parity.md`](VTX-M05D-conventional-shadow-parity.md).
+
 ## Exit Gate
 
 This blocker is validated because all of the following are recorded in
