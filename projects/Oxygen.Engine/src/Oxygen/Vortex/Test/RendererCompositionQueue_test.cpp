@@ -209,7 +209,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 }
 
 NOLINT_TEST_F(RendererCompositionQueueTest,
-  RegisterCompositionRejectsMixedTargetsWithinFrame)
+  RegisterCompositionQueuesMultipleTargetsWithinFrame)
 {
   auto surface_a_texture = MakeColorTexture("Queue.SurfaceA");
   auto surface_b_texture = MakeColorTexture("Queue.SurfaceB");
@@ -217,6 +217,9 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface_b = std::make_shared<FakeSurface>(surface_b_texture);
   auto target_a = MakeFramebuffer(surface_a_texture);
   auto target_b = MakeFramebuffer(surface_b_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_a.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_b.get() });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
@@ -231,10 +234,18 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.SourceA", target_a), surface_a);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.SourceB", target_b), surface_b);
 
-  NOLINT_EXPECT_DEATH(renderer_->RegisterComposition(
-                        MakeSubmission("Queue.SourceB", target_b), surface_b),
-    ".*single target per frame.*");
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(1));
 }
 
 NOLINT_TEST_F(
