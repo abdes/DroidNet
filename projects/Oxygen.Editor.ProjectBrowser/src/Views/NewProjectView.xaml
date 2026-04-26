@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
     x:Class="Oxygen.Editor.ProjectBrowser.Views.NewProjectView"
@@ -7,6 +7,7 @@
     xmlns:core="using:DroidNet.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:pbdata="using:Oxygen.Editor.ProjectBrowser.Templates"
     mc:Ignorable="d">
@@ -19,6 +20,7 @@
 
     <Grid Margin="20,10" VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -36,7 +38,17 @@
             New
         </TextBlock>
 
-        <ScrollViewer Grid.Row="1" Grid.Column="0">
+        <muxc:InfoBar
+            Title="{x:Bind ViewModel.OperationResultTitle, Mode=OneWay}"
+            Grid.Row="1"
+            Grid.ColumnSpan="2"
+            Margin="0,0,0,12"
+            IsClosable="True"
+            IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
+            Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
+            Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}" />
+
+        <ScrollViewer Grid.Row="2" Grid.Column="0">
             <!--  Project Templates Area  -->
             <Grid>
                 <Grid.RowDefinitions>
@@ -58,7 +70,7 @@
         </ScrollViewer>
 
         <Grid
-            Grid.Row="1"
+            Grid.Row="2"
             Grid.Column="1"
             Visibility="{x:Bind Path=ViewModel.SelectedItem, Mode=OneWay, Converter={StaticResource NullToVis}, ConverterParameter=Collapsed}">
             <Grid.RowDefinitions>

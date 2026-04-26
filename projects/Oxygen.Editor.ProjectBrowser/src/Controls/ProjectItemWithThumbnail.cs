@@ -5,10 +5,10 @@
 using System.Collections;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Windows.Storage;
 
 namespace Oxygen.Editor.ProjectBrowser.Controls;
@@ -19,9 +19,41 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 internal sealed partial class ProjectItemWithThumbnail : ObservableObject
 {
     /// <summary>
-    /// Gets the project information.
+    /// Gets the recent project entry.
     /// </summary>
-    public required IProjectInfo ProjectInfo { get; init; }
+    public required RecentProjectEntry Entry { get; init; }
+
+    /// <summary>
+    /// Gets the project display name.
+    /// </summary>
+    public string DisplayName => this.Entry.ProjectInfo?.Name ?? this.Entry.Name;
+
+    /// <summary>
+    /// Gets the project location.
+    /// </summary>
+    public string Location => this.Entry.ProjectInfo?.Location ?? this.Entry.Location;
+
+    /// <summary>
+    /// Gets the last time this project was used.
+    /// </summary>
+    public DateTime LastUsedOn => this.Entry.ProjectInfo?.LastUsedOn ?? this.Entry.LastUsedOn;
+
+    /// <summary>
+    /// Gets a value indicating whether this entry can be opened.
+    /// </summary>
+    public bool IsUsable => this.Entry.IsUsable;
+
+    /// <summary>
+    /// Gets the validation status text shown for stale or invalid entries.
+    /// </summary>
+    public string StatusText => this.Entry.IsUsable
+        ? string.Empty
+        : this.Entry.Validation.Message ?? this.Entry.Validation.State.ToString();
+
+    /// <summary>
+    /// Gets visibility for invalid-entry status text.
+    /// </summary>
+    public Visibility InvalidStatusVisibility => this.Entry.IsUsable ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
     /// Gets local path or ms-appx URI for the thumbnail. This may be null when using a default thumbnail.
@@ -38,17 +70,17 @@ internal sealed partial class ProjectItemWithThumbnail : ObservableObject
     /// Create a project item and start asynchronous thumbnail loading. The loaded image will be
     /// assigned to <see cref="Thumbnail"/> when completed.
     /// </summary>
-    /// <param name="projectInfo">The project info.</param>
+    /// <param name="entry">The recent project entry.</param>
     /// <param name="defaultThumbnailPath">A default image URI to use when no thumbnail exists.</param>
     /// <returns>A new <see cref="ProjectItemWithThumbnail"/> instance with thumbnail loading started.</returns>
-    public static ProjectItemWithThumbnail Create(IProjectInfo projectInfo, string defaultThumbnailPath)
+    public static ProjectItemWithThumbnail Create(RecentProjectEntry entry, string defaultThumbnailPath)
     {
         var item = new ProjectItemWithThumbnail
         {
-            ProjectInfo = projectInfo,
-            ThumbnailPath = projectInfo.Thumbnail is null
+            Entry = entry,
+            ThumbnailPath = entry.ProjectInfo?.Thumbnail is null
                 ? null
-                : Path.GetFullPath(Path.Combine(projectInfo.Location ?? string.Empty, projectInfo.Thumbnail ?? string.Empty)),
+                : Path.GetFullPath(Path.Combine(entry.ProjectInfo.Location ?? string.Empty, entry.ProjectInfo.Thumbnail ?? string.Empty)),
         };
         _ = item.LoadThumbnailAsync(defaultThumbnailPath);
         return item;
@@ -168,7 +200,7 @@ internal sealed partial class ProjectItemWithThumbnail : ObservableObject
                     ? -1
                     : y is null
                         ? 1
-                        : string.CompareOrdinal(x.ProjectInfo.Name, y.ProjectInfo.Name);
+                        : string.CompareOrdinal(x.DisplayName, y.DisplayName);
 
         /// <inheritdoc />
         int IComparer.Compare(object? x, object? y) => this.Compare(x as ProjectItemWithThumbnail, y as ProjectItemWithThumbnail);
@@ -187,7 +219,7 @@ internal sealed partial class ProjectItemWithThumbnail : ObservableObject
                     ? -1
                     : y is null
                         ? 1
-                        : DateTime.Compare(x.ProjectInfo.LastUsedOn, y.ProjectInfo.LastUsedOn);
+                        : DateTime.Compare(x.LastUsedOn, y.LastUsedOn);
 
         /// <inheritdoc />
         int IComparer.Compare(object? x, object? y) => this.Compare(x as ProjectItemWithThumbnail, y as ProjectItemWithThumbnail);

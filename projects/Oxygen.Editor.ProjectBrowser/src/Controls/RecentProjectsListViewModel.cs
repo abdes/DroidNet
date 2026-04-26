@@ -28,7 +28,8 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     private readonly ProjectItemWithThumbnail.ByNameComparer byNameComparer = new();
     private readonly ProjectItemWithThumbnail.ByLastUsedOnComparer byLastUsedComparer = new();
     private SortDescription? currentSortDescription;
-    private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? transformedItems;
+    private DynamicObservableCollection<RecentProjectEntry, ProjectItemWithThumbnail>? transformedItems;
+    private ObservableCollection<RecentProjectEntry>? sourceProjects;
 
     // Column widths
     private double nameColumnWidth = 400.0;
@@ -134,16 +135,18 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     /// AdvancedCollectionView automatically reflects these changes with sorting/filtering.
     /// </summary>
     /// <param name="sourceProjects">The source collection of recent projects to display.</param>
-    public void SetRecentProjects(ObservableCollection<IProjectInfo>? sourceProjects)
+    public void SetRecentProjects(ObservableCollection<RecentProjectEntry>? sourceProjects)
     {
         this.transformedItems?.Dispose();
 
-        if (sourceProjects is null || sourceProjects.Count == 0)
+        if (sourceProjects is null)
         {
-            // Set empty collection
+            this.sourceProjects = null;
             this.ItemsView.Source = new ObservableCollection<ProjectItemWithThumbnail>();
             return;
         }
+
+        this.sourceProjects = sourceProjects;
 
         // Create transformed collection that auto-tracks source changes.
         // TransformComponent() handles all collection change notifications automatically.
@@ -206,9 +209,21 @@ internal partial class RecentProjectsListViewModel : ObservableObject
             return;
         }
 
-        this.LogActivatingProject(item.ProjectInfo.Name);
+        this.LogActivatingProject(item.DisplayName);
         this.IsBusy = true;
         this.ItemActivated?.Invoke(this, new RecentProjectActivatedEventArgs(item));
+    }
+
+    [RelayCommand]
+    private async Task RemoveProjectAsync(ProjectItemWithThumbnail? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        await this.projectBrowser.RemoveRecentProjectAsync(item.Entry.Name, item.Entry.Location).ConfigureAwait(true);
+        _ = this.sourceProjects?.Remove(item.Entry);
     }
 
     /// <summary>

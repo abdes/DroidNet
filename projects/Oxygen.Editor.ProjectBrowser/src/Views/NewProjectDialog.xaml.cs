@@ -49,10 +49,7 @@ public sealed partial class NewProjectDialog
     private void OnDialogLoaded(object sender, RoutedEventArgs e)
     {
         this.contentGrid = this.FindName("DialogContentGrid") as Grid;
-        if (this.ViewModel is not null)
-        {
-            this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
-        }
+        this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -65,9 +62,9 @@ public sealed partial class NewProjectDialog
 
     private void UpdateDialogState()
     {
-        if (this.contentGrid is not null && this.ViewModel is not null)
+        if (this.contentGrid is { } grid)
         {
-            this.contentGrid.IsHitTestVisible = !this.ViewModel.IsActivating;
+            grid.IsHitTestVisible = !this.ViewModel.IsActivating;
         }
     }
 

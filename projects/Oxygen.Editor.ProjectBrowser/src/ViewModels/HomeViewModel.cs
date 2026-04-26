@@ -11,6 +11,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -55,7 +56,19 @@ public partial class HomeViewModel(
     /// <summary>
     /// Gets the collection of recent projects.
     /// </summary>
-    public ObservableCollection<IProjectInfo> RecentProjects { get; } = [];
+    public ObservableCollection<RecentProjectEntry> RecentProjects { get; } = [];
+
+    [ObservableProperty]
+    public partial bool IsOperationResultVisible { get; set; }
+
+    [ObservableProperty]
+    public partial string OperationResultTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string OperationResultMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
     /// <summary>
     /// Gets the <see cref="ILoggerFactory"/> used to obtain an <see cref="ILogger"/> instance for logging.
@@ -97,6 +110,7 @@ public partial class HomeViewModel(
                     Thumbnail = template.Icon,
                 })
             .ConfigureAwait(true);
+        this.ApplyOperationResult(result);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return result.Status is not OperationStatus.Failed and not OperationStatus.Cancelled;
@@ -105,13 +119,13 @@ public partial class HomeViewModel(
     /// <summary>
     /// Opens an existing project.
     /// </summary>
-    /// <param name="projectInfo">The information of the project to open.</param>
+    /// <param name="entry">The recent project entry to open.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
-    public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
+    public async Task<bool> OpenProjectAsync(RecentProjectEntry entry)
     {
-        this.LogOpenProject(projectInfo.Name, projectInfo.Location ?? string.Empty);
+        this.LogOpenProject(entry.Name, entry.Location);
 
-        if (string.IsNullOrWhiteSpace(projectInfo.Location))
+        if (string.IsNullOrWhiteSpace(entry.Location))
         {
             return false;
         }
@@ -121,10 +135,11 @@ public partial class HomeViewModel(
                 {
                     Mode = ProjectActivationMode.OpenExisting,
                     SourceSurface = ProjectActivationSourceSurface.Home,
-                    ProjectLocation = projectInfo.Location,
-                    RecentEntryId = projectInfo.Id.ToString("D"),
+                    ProjectLocation = entry.Location,
+                    RecentEntryId = entry.Location,
                 })
             .ConfigureAwait(true);
+        this.ApplyOperationResult(result);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return result.Status is not OperationStatus.Failed and not OperationStatus.Cancelled;
@@ -219,35 +234,51 @@ public partial class HomeViewModel(
         // a dictionary keyed by project Id for fast lookup. Using Guid avoids
         // accidental reference-equality comparisons when the dictionary is
         // typed against the interface `IProjectInfo`.
-        var recentlyUsedProjectDict = new Dictionary<Guid, IProjectInfo>();
+        var recentlyUsedProjectDict = new Dictionary<string, RecentProjectEntry>(StringComparer.OrdinalIgnoreCase);
 
         // Update existing items and add new items in the RecentProjects collection
-        await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
+        await foreach (var entry in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
-            this.LogGotProjectInfo(projectInfo.Id, projectInfo.Name, projectInfo.LastUsedOn);
-            recentlyUsedProjectDict.Add(projectInfo.Id, projectInfo);
+            var projectInfo = entry.ProjectInfo;
+            this.LogGotProjectInfo(projectInfo?.Id ?? Guid.Empty, entry.Name, entry.LastUsedOn);
+            recentlyUsedProjectDict[entry.Location] = entry;
 
-            var existingItem = this.RecentProjects.FirstOrDefault(item => item.Equals(projectInfo));
+            var existingItem = this.RecentProjects.FirstOrDefault(item => string.Equals(item.Location, entry.Location, StringComparison.OrdinalIgnoreCase));
             if (existingItem != null)
             {
-                existingItem.LastUsedOn = projectInfo.LastUsedOn;
+                var index = this.RecentProjects.IndexOf(existingItem);
+                this.RecentProjects[index] = entry;
             }
             else
             {
-                this.RecentProjects.Add(projectInfo); // Add new item
+                this.RecentProjects.Add(entry);
             }
         }
 
         // Remove items not in the collection obtained from the project browser
         for (var index = this.RecentProjects.Count - 1; index >= 0; index--)
         {
-            if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index].Id))
+            if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index].Location))
             {
-                this.LogPurgeRecentProjectItem(this.RecentProjects[index].Id, this.RecentProjects[index].Name);
+                this.LogPurgeRecentProjectItem(this.RecentProjects[index].ProjectInfo?.Id ?? Guid.Empty, this.RecentProjects[index].Name);
                 this.RecentProjects.RemoveAt(index);
             }
         }
 
         this.LogCompletedLoadingRecentProjects(this.RecentProjects.Count);
+    }
+
+    private void ApplyOperationResult(OperationResult result)
+    {
+        this.OperationResultTitle = result.Title;
+        this.OperationResultMessage = result.Message;
+        this.OperationResultSeverity = result.Status switch
+        {
+            OperationStatus.Succeeded => InfoBarSeverity.Success,
+            OperationStatus.SucceededWithWarnings or OperationStatus.PartiallySucceeded => InfoBarSeverity.Warning,
+            OperationStatus.Cancelled => InfoBarSeverity.Informational,
+            _ => InfoBarSeverity.Error,
+        };
+        this.IsOperationResultVisible = result.Status is not OperationStatus.Succeeded;
     }
 }

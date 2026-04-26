@@ -95,9 +95,9 @@ public sealed partial class OpenProjectView
 
             // Sync scroll viewers
             var listScrollViewer = FindDescendantByName<ScrollViewer>(this.filesListView, "ScrollViewer");
-            if (listScrollViewer != null)
+            if (listScrollViewer is { } scrollViewer)
             {
-                listScrollViewer.ViewChanged += this.ListScrollViewer_ViewChanged;
+                scrollViewer.ViewChanged += this.ListScrollViewer_ViewChanged;
             }
         }
     }
@@ -177,7 +177,7 @@ public sealed partial class OpenProjectView
 
     private void OnOpenProjectViewUnloaded(object sender, RoutedEventArgs e)
     {
-        if (this.ViewModel != null)
+        if (this.ViewModel is not null)
         {
             this.ViewModel.SaveColumnWidths();
             this.ViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;

@@ -124,16 +124,20 @@ public partial class ProjectBrowserService : IProjectBrowserService
     }
 
     /// <inheritdoc/>
-    public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<RecentProjectEntry> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.recentProjects.GetRecentProjectsAsync(cancellationToken: cancellationToken).ConfigureAwait(true))
         {
-            if (item.Validation.ProjectInfo is { } projectInfo)
-            {
-                yield return projectInfo;
-            }
+            yield return item;
         }
     }
+
+    /// <inheritdoc/>
+    public async Task RemoveRecentProjectAsync(
+        string name,
+        string location,
+        CancellationToken cancellationToken = default)
+        => await this.recentProjects.RemoveAsync(name, location, cancellationToken).ConfigureAwait(true);
 
     /// <inheritdoc/>
     public async Task<KnownLocation[]> GetKnownLocationsAsync()

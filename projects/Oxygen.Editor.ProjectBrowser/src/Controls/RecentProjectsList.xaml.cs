@@ -93,5 +93,5 @@ internal sealed partial class RecentProjectsList : UserControl
     }
 
     private void OnViewModelItemActivated(object? sender, RecentProjectActivatedEventArgs args)
-        => this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(args.Item.ProjectInfo));
+        => this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(args.Item.Entry));
 }
