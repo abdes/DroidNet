@@ -43,7 +43,6 @@ public:
 private:
   void DrawRuntimeStatus();
   void DrawRendererCapabilities();
-  void DrawShadowSettings();
   void DrawViewModeControls();
   void DrawWireframeColor();
   void DrawDebugModes();

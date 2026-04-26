@@ -93,22 +93,6 @@ namespace {
       .requires_gbuffer = true,
     },
     ShaderDebugModeInfo {
-      .mode = ShaderDebugMode::kUv0,
-      .canonical_name = "uv0",
-      .display_name = "UV0",
-      .family = ShaderDebugModeFamily::kMaterial,
-      .shader_define = "DEBUG_UV0",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-    },
-    ShaderDebugModeInfo {
-      .mode = ShaderDebugMode::kOpacity,
-      .canonical_name = "opacity",
-      .display_name = "Opacity",
-      .family = ShaderDebugModeFamily::kMaterial,
-      .shader_define = "DEBUG_OPACITY",
-      .path = DiagnosticsDebugPath::kForwardMeshVariant,
-    },
-    ShaderDebugModeInfo {
       .mode = ShaderDebugMode::kWorldNormals,
       .canonical_name = "world-normals",
       .display_name = "World Normals",
@@ -268,7 +252,7 @@ namespace {
     },
   };
 
-  static_assert(kShaderDebugModeRegistry.size() == 26U);
+  static_assert(kShaderDebugModeRegistry.size() == 24U);
 
 } // namespace
 

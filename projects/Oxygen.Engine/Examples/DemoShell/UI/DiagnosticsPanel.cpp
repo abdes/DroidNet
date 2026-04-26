@@ -131,11 +131,6 @@ auto DiagnosticsPanel::DrawContents() -> void
     DrawRuntimeStatus();
   }
 
-  if (ImGui::CollapsingHeader(
-        "Directional Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawShadowSettings();
-  }
-
   if (vm_->SupportsRenderModeControls()
     && ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawViewModeControls();
@@ -215,26 +210,6 @@ void DiagnosticsPanel::DrawRendererCapabilities()
     ImGui::PopID();
   }
   ImGui::Unindent();
-}
-
-void DiagnosticsPanel::DrawShadowSettings()
-{
-  static constexpr const char* kShadowQualityLabels[] = {
-    "Low",
-    "Medium",
-    "High",
-    "Ultra",
-  };
-
-  auto quality = static_cast<int>(vm_->GetShadowQualityTier());
-  ImGui::SetNextItemWidth(180.0F);
-  if (ImGui::Combo("Quality", &quality, kShadowQualityLabels,
-        IM_ARRAYSIZE(kShadowQualityLabels))) {
-    vm_->SetShadowQualityTier(static_cast<ShadowQualityTier>(quality));
-  }
-
-  ImGui::TextDisabled(
-    "Renderer shadow quality is applied at startup; restart to apply changes.");
 }
 
 void DiagnosticsPanel::DrawViewModeControls()

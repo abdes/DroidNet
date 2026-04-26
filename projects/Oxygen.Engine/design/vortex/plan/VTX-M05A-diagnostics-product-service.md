@@ -163,6 +163,10 @@ Current evidence:
   the old `normal` alias for disabled mode.
 - The registry documents `ibl-no-brdf-lut` as currently unsupported because the
   `SKIP_BRDF_LUT` shader variant exists but runtime mode selection is not wired.
+- Post-validation cleanup removed the misleading UV0 and Opacity debug modes
+  from `ShaderDebugMode`, `ShaderDebugModeRegistry`, `EngineShaderCatalog.h`,
+  and `ForwardDebug_PS.hlsl` because the active deferred RenderScene path cannot
+  render those values as real fullscreen debug products.
 - Focused build and tests passed on 2026-04-26:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-vortexbasic Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.ShaderDebugModeRegistry --parallel 4`;
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(ShaderDebugModeRegistry|DiagnosticsService)" --output-on-failure`.
@@ -347,8 +351,10 @@ Tasks:
   `DiagnosticsPanel`/`DiagnosticsVm`; no migration alias is required.
 - Reuse the existing `PanelRegistry` and `ImGuiRuntime` draw path instead of
   adding a second panel registry.
-- Structure the compact built-in panel around runtime status, directional
-  shadow settings, and shader-debug mode selection.
+- Structure the compact built-in panel around runtime status, renderer
+  capabilities, render-mode controls when available, and shader-debug mode
+  selection. Directional-light shadow quality remains owned by the environment
+  light settings, not by Diagnostics.
 - Display selected versus active shader debug state so developers can
   distinguish the panel choice from renderer capability clamping without
   exposing service internals in the UI.
@@ -368,6 +374,9 @@ Implementation evidence:
 - The Diagnostics panel reports Vortex binding, selected/active debug view, a
   read-only renderer capability checklist, and registry-grouped debug controls
   with disabled reasons.
+- The stale Diagnostics-panel directional shadow quality control and its
+  `RenderingSettingsService` persistence key were removed; RenderScene no
+  longer reads `rendering.shadow_quality_tier` at startup.
 - `LightCullingDebugPanel` consumes the same registry for its visualization mode
   list.
 
@@ -384,6 +393,12 @@ Validation:
   `cmake --build out\build-ninja --config Debug --target Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests Oxygen.Examples.DemoShell.RenderingSettingsService.Tests --parallel 4`;
   `ctest --preset test-debug -R "Oxygen\.Examples\.DemoShell\.(DiagnosticsPanel|RenderingSettingsService)" --output-on-failure`
   with `DiagnosticsPanel` 1/1 and `RenderingSettingsService` 6/6.
+- Cleanup validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.ShaderDebugModeRegistry Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests Oxygen.Examples.DemoShell.RenderingSettingsService.Tests oxygen-examples-renderscene --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.(Vortex\.ShaderDebugModeRegistry|Examples\.DemoShell\.(DiagnosticsPanel|RenderingSettingsService))" --output-on-failure`
+  with `ShaderDebugModeRegistry` 9/9, `DiagnosticsPanel` 1/1, and
+  `RenderingSettingsService` 3/3. ShaderBake repacked `shaders.bin` and removed
+  the eight stale UV0/Opacity debug artifacts.
 - Runtime DemoShell registration smoke passed:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-texturedcube --parallel 4`;
   `Oxygen.Examples.TexturedCube.exe --frames 4 --fps 30 --vsync false --capture-provider off`

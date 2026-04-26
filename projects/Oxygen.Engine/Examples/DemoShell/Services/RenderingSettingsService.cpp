@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <exception>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -20,47 +18,6 @@
 namespace oxygen::examples {
 
 namespace {
-
-  auto ParseShadowQualityTierString(std::string_view value)
-    -> std::optional<ShadowQualityTier>
-  {
-    if (value == "low") {
-      return ShadowQualityTier::kLow;
-    }
-    if (value == "medium") {
-      return ShadowQualityTier::kMedium;
-    }
-    if (value == "high") {
-      return ShadowQualityTier::kHigh;
-    }
-    if (value == "ultra") {
-      return ShadowQualityTier::kUltra;
-    }
-    return std::nullopt;
-  }
-
-  auto ShadowQualityTierToString(const ShadowQualityTier tier)
-    -> std::string_view
-  {
-    switch (tier) {
-    case ShadowQualityTier::kLow:
-      return "low";
-    case ShadowQualityTier::kMedium:
-      return "medium";
-    case ShadowQualityTier::kHigh:
-      return "high";
-    case ShadowQualityTier::kUltra:
-      return "ultra";
-    default:
-      return "ultra";
-    }
-  }
-
-  auto ClampShadowQualityTierIndex(const float value) -> ShadowQualityTier
-  {
-    const auto clamped = static_cast<int>(std::clamp(value, 0.0F, 3.0F) + 0.5F);
-    return static_cast<ShadowQualityTier>(clamped);
-  }
 
   auto ToVortexDebugMode(const engine::ShaderDebugMode mode)
     -> vortex::ShaderDebugMode
@@ -222,32 +179,6 @@ auto RenderingSettingsService::SetAtmosphereBlueNoiseEnabled(bool enabled)
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetBool(kAtmosphereBlueNoiseEnabledKey, enabled);
-  epoch_++;
-}
-
-auto RenderingSettingsService::GetShadowQualityTier() const -> ShadowQualityTier
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  if (const auto value = settings->GetString(kShadowQualityTierKey)) {
-    if (const auto parsed = ParseShadowQualityTierString(*value)) {
-      return *parsed;
-    }
-  }
-  if (const auto value = settings->GetFloat(kShadowQualityTierKey)) {
-    return ClampShadowQualityTierIndex(*value);
-  }
-  // Keep RenderScene's current startup behavior unless the user overrides it.
-  return ShadowQualityTier::kUltra;
-}
-
-auto RenderingSettingsService::SetShadowQualityTier(
-  const ShadowQualityTier tier) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(
-    kShadowQualityTierKey, std::string(ShadowQualityTierToString(tier)));
   epoch_++;
 }
 

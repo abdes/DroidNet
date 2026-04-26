@@ -71,15 +71,6 @@ auto DiagnosticsVm::GetAtmosphereBlueNoiseEnabled() -> bool
   return atmosphere_blue_noise_enabled_;
 }
 
-auto DiagnosticsVm::GetShadowQualityTier() -> ShadowQualityTier
-{
-  std::lock_guard lock(mutex_);
-  if (IsStale()) {
-    Refresh();
-  }
-  return shadow_quality_tier_;
-}
-
 auto DiagnosticsVm::SupportsRenderModeControls() const -> bool
 {
   return service_->SupportsRenderModeControls();
@@ -161,18 +152,6 @@ auto DiagnosticsVm::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto DiagnosticsVm::SetShadowQualityTier(const ShadowQualityTier tier) -> void
-{
-  std::lock_guard lock(mutex_);
-  if (shadow_quality_tier_ == tier) {
-    return;
-  }
-
-  shadow_quality_tier_ = tier;
-  service_->SetShadowQualityTier(tier);
-  epoch_ = service_->GetEpoch();
-}
-
 auto DiagnosticsVm::GetWireframeColor() -> graphics::Color
 {
   std::lock_guard lock(mutex_);
@@ -208,7 +187,6 @@ auto DiagnosticsVm::Refresh() -> void
   wire_color_ = service_->GetWireframeColor();
   gpu_debug_pass_enabled_ = service_->GetGpuDebugPassEnabled();
   atmosphere_blue_noise_enabled_ = service_->GetAtmosphereBlueNoiseEnabled();
-  shadow_quality_tier_ = service_->GetShadowQualityTier();
   epoch_ = service_->GetEpoch();
 }
 

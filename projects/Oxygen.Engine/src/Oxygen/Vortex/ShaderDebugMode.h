@@ -20,8 +20,6 @@ enum class ShaderDebugMode : std::uint8_t {
   kIblRawSky = 5,
   kIblIrradiance = 6,
   kBaseColor = 7,
-  kUv0 = 8,
-  kOpacity = 9,
   kWorldNormals = 10,
   kRoughness = 11,
   kMetalness = 12,
@@ -53,8 +51,6 @@ constexpr auto to_string(const ShaderDebugMode mode) noexcept
       case ShaderDebugMode::kIblRawSky: return "IblRawSky";
       case ShaderDebugMode::kIblIrradiance: return "IblIrradiance";
       case ShaderDebugMode::kBaseColor: return "BaseColor";
-      case ShaderDebugMode::kUv0: return "Uv0";
-      case ShaderDebugMode::kOpacity: return "Opacity";
       case ShaderDebugMode::kWorldNormals: return "WorldNormals";
       case ShaderDebugMode::kRoughness: return "Roughness";
       case ShaderDebugMode::kMetalness: return "Metalness";
@@ -109,8 +105,6 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
   case ShaderDebugMode::kDepthSlice:
   case ShaderDebugMode::kClusterIndex:
   case ShaderDebugMode::kBaseColor:
-  case ShaderDebugMode::kUv0:
-  case ShaderDebugMode::kOpacity:
   case ShaderDebugMode::kWorldNormals:
   case ShaderDebugMode::kRoughness:
   case ShaderDebugMode::kMetalness:
@@ -167,10 +161,6 @@ constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
     return "DEBUG_IBL_FACE_INDEX";
   case ShaderDebugMode::kBaseColor:
     return "DEBUG_BASE_COLOR";
-  case ShaderDebugMode::kUv0:
-    return "DEBUG_UV0";
-  case ShaderDebugMode::kOpacity:
-    return "DEBUG_OPACITY";
   case ShaderDebugMode::kWorldNormals:
     return "DEBUG_WORLD_NORMALS";
   case ShaderDebugMode::kRoughness:
