@@ -13,7 +13,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Interop;
@@ -27,6 +29,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger logger;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
+    private readonly IOperationResultPublisher operationResults;
+    private readonly IStatusReducer statusReducer;
     private IMenuSource? viewMenu;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
@@ -46,13 +50,23 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    public ViewportViewModel(Guid documentId, IEngineService engineService, ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
+    /// <param name="operationResults">The host-level operation result publisher.</param>
+    /// <param name="statusReducer">The shared operation status reducer.</param>
+    public ViewportViewModel(
+        Guid documentId,
+        IEngineService engineService,
+        IOperationResultPublisher operationResults,
+        IStatusReducer statusReducer,
+        ISettingsService<IAppearanceSettings> appearanceSettings,
+        ILoggerFactory? loggerFactory = null)
     {
         this.LoggerFactory = loggerFactory;
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.LevelEditor.ViewportViewModel");
 
         this.DocumentId = documentId;
         this.EngineService = engineService;
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
         this.appearanceSettings = appearanceSettings;
 
         // Seed effective theme from settings and subscribe for changes.
@@ -209,6 +223,44 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.IsPrimaryViewport = isPrimary;
     }
 
+    internal void PublishRuntimeFailure(
+        string operationKind,
+        FailureDomain domain,
+        string code,
+        string title,
+        string message,
+        Exception? exception = null)
+        => RuntimeOperationResults.PublishFailure(
+            this.operationResults,
+            this.statusReducer,
+            operationKind,
+            domain,
+            code,
+            title,
+            message,
+            this.CreateAffectedScope(),
+            exception: exception,
+            technicalMessage: this.CreateViewportTechnicalMessage(exception));
+
+    internal void PublishRuntimeWarning(
+        string operationKind,
+        FailureDomain domain,
+        string code,
+        string title,
+        string message,
+        Exception? exception = null)
+        => RuntimeOperationResults.PublishWarning(
+            this.operationResults,
+            this.statusReducer,
+            operationKind,
+            domain,
+            code,
+            title,
+            message,
+            this.CreateAffectedScope(),
+            exception: exception,
+            technicalMessage: this.CreateViewportTechnicalMessage(exception));
+
     /// <summary>
     /// Protected dispose pattern implementation.
     /// </summary>
@@ -340,7 +392,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     {
         var builder = new MenuBuilder(this.LoggerFactory);
 
-        void ApplyCameraPreset(CameraType type)
+        async Task ApplyCameraPresetAsync(CameraType type)
         {
             this.CameraType = type;
 
@@ -361,16 +413,38 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 _ => CameraViewPresetManaged.Perspective,
             };
 
-            _ = this.EngineService.SetViewCameraPresetAsync(this.AssignedViewId, preset);
+            try
+            {
+                var accepted = await this.EngineService.SetViewCameraPresetAsync(this.AssignedViewId, preset).ConfigureAwait(true);
+                if (!accepted)
+                {
+                    this.PublishRuntimeWarning(
+                        RuntimeOperationKinds.ViewSetCameraPreset,
+                        FailureDomain.RuntimeView,
+                        DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_REJECTED",
+                        "Camera preset was not applied",
+                        "The runtime rejected the camera preset for this viewport.");
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.PublishRuntimeFailure(
+                    RuntimeOperationKinds.ViewSetCameraPreset,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_FAILED",
+                    "Camera preset failed",
+                    "The runtime could not apply the camera preset for this viewport.",
+                    ex);
+            }
         }
 
         _ = builder
-            .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => ApplyCameraPreset(CameraType.Perspective)))
+            .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => _ = ApplyCameraPresetAsync(CameraType.Perspective)))
             .AddSeparator();
 
         foreach (var type in new[] { CameraType.Top, CameraType.Bottom, CameraType.Left, CameraType.Right, CameraType.Front, CameraType.Back })
         {
-            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => ApplyCameraPreset(type)));
+            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => _ = ApplyCameraPresetAsync(type)));
         }
 
         return builder.Build();
@@ -429,5 +503,18 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         });
 
         return builder.Build();
+    }
+
+    private AffectedScope CreateAffectedScope()
+        => new()
+        {
+            DocumentId = this.DocumentId,
+        };
+
+    private string CreateViewportTechnicalMessage(Exception? exception)
+    {
+        var viewId = this.AssignedViewId.IsValid ? this.AssignedViewId.ToString() : "Invalid";
+        var message = $"DocumentId={this.DocumentId}; ViewportId={this.ViewportId}; ViewportIndex={this.ViewportIndex}; IsPrimary={this.IsPrimaryViewport}; ViewId={viewId}";
+        return exception is null ? message : $"{message}; {exception.Message}";
     }
 }

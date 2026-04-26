@@ -18,8 +18,11 @@ namespace Oxygen.Editor.World.Services;
 /// </summary>
 public sealed partial class SceneEngineSync : ISceneEngineSync
 {
+    private static readonly TimeSpan NodeCreationTimeout = TimeSpan.FromSeconds(10);
+
     private readonly IEngineService engineService;
     private readonly ILogger<SceneEngineSync> logger;
+    private readonly SemaphoreSlim sceneSyncGate = new(initialCount: 1, maxCount: 1);
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneEngineSync"/> class.
@@ -34,7 +37,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
-    public async Task SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default)
+    public async Task<bool> SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
@@ -54,67 +57,101 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             if (state is EngineServiceState.NoEngine or EngineServiceState.Faulted)
             {
                 this.LogEngineNotAvailableSkippingSceneSync(scene);
-                return;
+                return false;
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
         }
 
         if (cancellationToken.IsCancellationRequested)
         {
-            return;
+            return false;
         }
 
-        await this.SyncSceneAsync(scene).ConfigureAwait(false);
+        return await this.SyncSceneAsync(scene, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task SyncSceneAsync(Scene scene)
+    public async Task<bool> SyncSceneAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
+
+        try
+        {
+            await this.sceneSyncGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
 
         var world = this.TryGetWorld();
         if (world is null)
         {
+            this.sceneSyncGate.Release();
             this.LogOxygenWorldNotAvailableSkippingSceneSync(scene);
-            return;
+            return false;
         }
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Ensure any existing scene is torn down on the engine thread
             // before creating a new one to avoid races during traversal.
             world.DestroyScene();
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Create (or recreate) the scene in the engine and wait for
             // the native command to complete so subsequent node creation
             // occurs against the new scene.
             var created = await world.CreateSceneAsync(scene.Name).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!created)
             {
                 this.LogFailedToSyncSceneWithEngine(
                     new InvalidOperationException("CreateSceneAsync returned false"),
                     scene);
-                return;
+                return false;
             }
 
             this.LogCreatedSceneInEngine(scene);
             this.LogSceneTransforms(scene);
 
             // Phase 1: Create all nodes without parenting
-            await this.CreateAllNodesAsync(scene, world).ConfigureAwait(false);
+            var nodesCreated = await this.CreateAllNodesAsync(scene, world, cancellationToken).ConfigureAwait(false);
+            if (!nodesCreated)
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Phase 2: Resolve parent-child links and apply transforms/geometry
             this.logger.LogDebug("SyncSceneAsync: Applying hierarchy and components for {Count} root nodes", scene.RootNodes.Count);
             this.ApplyHierarchyAndComponents(scene, world);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Phase 3: Update world transforms
             this.logger.LogDebug("SyncSceneAsync: Propagating transforms");
             this.PropagateTransforms(scene, world);
+            return true;
         }
         catch (Exception ex)
         {
             this.LogFailedToSyncSceneWithEngine(ex, scene);
+            return false;
+        }
+        finally
+        {
+            this.sceneSyncGate.Release();
         }
     }
 
@@ -136,7 +173,8 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                 world,
                 node,
                 parentGuid,
-                initializeWorldAsRoot: parentGuid is null).ConfigureAwait(false);
+                initializeWorldAsRoot: parentGuid is null,
+                CancellationToken.None).ConfigureAwait(false);
 
             this.ApplyTransform(world, node);
             this.ApplyRenderableComponents(world, node);
@@ -478,14 +516,22 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// <summary>
     ///     Creates a scene node with a thread-safe callback that marshals property changes to the UI thread.
     /// </summary>
-    private Task<bool> CreateNodeWithCallbackAsync(
+    private async Task<bool> CreateNodeWithCallbackAsync(
         Oxygen.Interop.World.OxygenWorld world,
         SceneNode node,
         Guid? parentGuid,
-        bool initializeWorldAsRoot)
+        bool initializeWorldAsRoot,
+        CancellationToken cancellationToken)
     {
         var syncContext = SynchronizationContext.Current;
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(NodeCreationTimeout);
+        using var registration = timeout.Token.Register(static state =>
+        {
+            var completion = (TaskCompletionSource<bool>)state!;
+            _ = completion.TrySetCanceled();
+        }, tcs);
 
         world.CreateSceneNode(
             node.Name,
@@ -499,11 +545,11 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                     try
                     {
                         node.IsActive = true;
-                        tcs.SetResult(true);
+                        _ = tcs.TrySetResult(true);
                     }
                     catch (Exception ex)
                     {
-                        tcs.SetException(ex);
+                        _ = tcs.TrySetException(ex);
                     }
                 }
 
@@ -518,7 +564,14 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             },
             initializeWorldAsRoot);
 
-        return tcs.Task;
+        try
+        {
+            return await tcs.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -659,14 +712,18 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         }
     }
 
-    private async Task CreateAllNodesAsync(Scene scene, Oxygen.Interop.World.OxygenWorld world)
+    private async Task<bool> CreateAllNodesAsync(Scene scene, Oxygen.Interop.World.OxygenWorld world, CancellationToken cancellationToken)
     {
-        var syncContext = SynchronizationContext.Current;
         var createTasks = new List<Task<bool>>();
 
         void EnqueueCreateRecursive(SceneNode node)
         {
-            var task = this.CreateNodeWithCallbackAsync(world, node, parentGuid: null, initializeWorldAsRoot: true);
+            var task = this.CreateNodeWithCallbackAsync(
+                world,
+                node,
+                parentGuid: null,
+                initializeWorldAsRoot: true,
+                cancellationToken);
             createTasks.Add(task);
 
             foreach (var child in node.Children)
@@ -681,8 +738,24 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             EnqueueCreateRecursive(root);
         }
 
-        await Task.WhenAll(createTasks).ConfigureAwait(false);
+        var results = await Task.WhenAll(createTasks).ConfigureAwait(false);
         this.logger.LogDebug("CreateAllNodesAsync: All {Count} creation tasks completed", createTasks.Count);
+        if (results.All(static created => created))
+        {
+            return true;
+        }
+
+        // Some node creation callback timed out or was canceled. Wait for one
+        // final SceneMutation command before releasing the sync gate so stale
+        // queued node commands cannot leak into the next scene switch.
+        _ = await this.CreateNodeWithCallbackAsync(
+            world,
+            new SceneNode(scene) { Name = "__sync_barrier__" },
+            parentGuid: null,
+            initializeWorldAsRoot: false,
+            CancellationToken.None).ConfigureAwait(false);
+
+        return false;
     }
 
     private void ApplyHierarchyAndComponents(Scene scene, Oxygen.Interop.World.OxygenWorld world)

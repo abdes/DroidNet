@@ -49,6 +49,7 @@ namespace oxygen::interop::module {
     // Destroy all views immediately. Must be called on the engine thread
     // while holding the frame-phase invariants (no concurrent frame updates).
     void DestroyAllViews();
+    void RetargetAllViews(scene::Scene& scene);
     bool RegisterView(
       ViewId view_id); // Marks visible for publication (returns false if bad ID)
     void UnregisterView(

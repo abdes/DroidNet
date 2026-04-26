@@ -135,7 +135,9 @@ namespace oxygen::interop::module {
 
     // Request scene destruction (thread-safe; enqueued to engine thread)
     void DestroyScene();
-    void ApplyDestroyScene();
+    void ApplyDestroyScene(
+      bool destroy_views = true,
+      oxygen::engine::FrameContext* frame_context = nullptr);
 
     //! Enqueues a command to be executed during the SceneMutation phase.
     void Enqueue(std::unique_ptr<EditorCommand> cmd);
@@ -171,6 +173,9 @@ namespace oxygen::interop::module {
 
     void UpdateViewRoutingFromInputBatch(ViewId view_id,
       const AccumulatedInput& batch) noexcept;
+    void RemovePublishedRuntimeViewForIntent(
+      oxygen::ViewId view_id,
+      oxygen::engine::FrameContext* frame_context = nullptr);
 
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();

@@ -16,10 +16,13 @@
     </UserControl.Resources>
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <SwapChainPanel x:Name="SwapChainPanel" />
+        <SwapChainPanel x:Name="SwapChainPanel" Canvas.ZIndex="0" />
 
         <!--  Overlay  -->
-        <Grid Margin="8" VerticalAlignment="Top">
+        <Grid
+            Margin="8"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="100">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -57,6 +60,7 @@
         <Border
             BorderBrush="{StaticResource FocusedViewportBorderBrush}"
             BorderThickness="2"
+            Canvas.ZIndex="101"
             IsHitTestVisible="False"
             Visibility="{x:Bind ViewModel.IsFocused, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
     </Grid>

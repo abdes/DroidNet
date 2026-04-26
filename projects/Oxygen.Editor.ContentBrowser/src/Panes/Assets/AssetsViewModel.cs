@@ -80,19 +80,13 @@ public partial class AssetsViewModel(
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
 
-            // If no browser state was restored, default to the active scene's folder and request it to be opened.
+            // If no browser state was restored, default to the scene assets folder.
+            // Workspace activation owns initial scene opening/restoration.
             var activeContext = projectContextService.ActiveProject;
-            var currentProject = projectManagerService.CurrentProject;
             if (activeContext?.Scenes.Count > 0 && contentBrowserState.SelectedFolders.Count == 0)
             {
                 // Navigate to the Scenes folder to show scene assets
                 contentBrowserState.SetSelectedFolders(["Scenes"]);
-
-                // Request the scene document to be opened
-                if (currentProject?.ActiveScene is not null)
-                {
-                    _ = messenger.Send(new OpenSceneRequestMessage(currentProject.ActiveScene));
-                }
             }
         }
 
