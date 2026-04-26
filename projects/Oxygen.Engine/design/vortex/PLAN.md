@@ -181,7 +181,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M04E | Async migration parity gate | `validated` | VTX-M03, VTX-M04D.5 | `Examples/Async` runs through Vortex with no long-lived compatibility clutter and has RenderDoc-backed structural/product/presentation proof. |
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | VTX-M04E | Single-view composition, resolve, handoff, post-process, and presentation proof with RenderDoc-backed Stage 22 copy, overlay blend, and final present evidence. |
 | VTX-M05A | Diagnostics product service | `planned` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
-| VTX-M05B | Occlusion consumer closeout | `planned` | VTX-M02 | Full occlusion/query/visibility policy over the landed generic Screen HZB. |
+| VTX-M05B | Occlusion consumer closeout | `in_progress` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
 | VTX-M05C | Translucency stage | `planned` | VTX-M03, VTX-M04D.5 | Stage 18 forward-lit translucency consuming lighting/shadow/environment publications. |
 | VTX-M05D | Local-light conventional shadow expansion | `planned` | VTX-M03 | Spot-light conventional shadows, then explicit point-light strategy under ShadowService. |
 | VTX-M06A | Multi-view proof closeout | `planned` | VTX-M05A, VTX-M05B, VTX-M05C | Heterogeneous per-view rendering, PiP/multi-surface routing, per-view capability gating. |
@@ -393,9 +393,10 @@ Out of scope:
 
 Scope:
 
-- Full occlusion policy over the already-landed generic Stage 5 Screen HZB:
-  query/consumer behavior, visibility-state publication, batching, temporal
-  handoff, and consumers in base pass and lighting where applicable.
+- UE5.7-shaped occlusion consumer over the already-landed generic Stage 5
+  Screen HZB: visibility-state publication, HZB-test batching, readback
+  latency, conservative fallbacks, and consumers in base pass and other
+  compatible draw builders where proven.
 
 Dependency note:
 
@@ -561,7 +562,7 @@ Parallelism rules:
 | Async runtime migration | VTX-M04E | `validated` | Canonical Async runtime proof path with no compatibility clutter, Stage 3/8/12/15/22 RenderDoc evidence, final present output, and overlay composition proof. |
 | Single-view composition/presentation | VTX-M04F | `validated` | Async RenderDoc proof validates Stage 22 tonemap output, exactly one composition copy from `Async.SceneColor` after Stage 22, exactly one overlay blend after the scene copy, final present output, and focused `RendererCompositionQueue` tests. |
 | DiagnosticsService | VTX-M05A | `planned` | Product diagnostics surface, overlays/panels/timeline/debug bindings. |
-| OcclusionModule | VTX-M05B | `planned` | Full occlusion query/consumer policy over Screen HZB. |
+| OcclusionModule | VTX-M05B | `in_progress` | HZB occlusion consumer and visibility publisher over Screen HZB. |
 | TranslucencyModule | VTX-M05C | `planned` | Stage 18 forward-lit translucent rendering. |
 | Local-light shadows | VTX-M05D | `planned` | Spot and point conventional shadows under ShadowService. |
 | Multi-view | VTX-M06A | `planned` | Multi-view, PiP, per-view shading/capability proof. |

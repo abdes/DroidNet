@@ -1,8 +1,8 @@
-# Occlusion Module LLD
+# Occlusion Consumer LLD
 
-**Phase:** 5C — Remaining Services
+**Phase:** 5C - Remaining Services
 **Deliverable:** D.16
-**Status:** `ready`
+**Status:** `in_progress`
 
 ## Mandatory Vortex Rule
 
@@ -19,36 +19,85 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
-## 1. Scope and Context
+## 1. Scope And Context
 
 ### 1.1 What This Covers
 
-`OcclusionModule` — the stage-5 owner responsible for hierarchical Z-buffer
-(HZB) generation, occlusion query batching and testing, temporal HZB
-handoff, and feedback passes. It uses depth data from the depth prepass
-(stage 3) to cull occluded geometry, reducing draw-call counts for
-subsequent stages.
+`OcclusionModule` is the Stage 5 **HZB consumer and visibility publisher**. It
+tests prepared-scene bounds against the furthest Screen HZB, reads back the
+previous frame's results, and publishes conservative visibility for downstream
+draw command builders.
+
+This document covers:
+
+- occlusion candidate extraction from the current `PreparedSceneFrame`
+- UE5.7-shaped HZB occlusion tests over prepared draw bounds
+- result latency, readback, and conservative fallback behavior
+- per-view visibility publication for base/depth/shadow consumers
+- minimal diagnostics and proof requirements for draw-reduction claims
+
+This document does **not** own generic HZB generation. `ScreenHzbModule` owns
+current/previous HZB texture creation, bindless publication, and per-view HZB
+history as specified by [hzb.md](hzb.md). M05B must not duplicate that producer.
 
 ### 1.2 Classification
 
-OcclusionModule is a **stage module** with per-view persistent history
-state (HZB textures are stored on view state, not inline in the module).
+`OcclusionModule` is a Stage 5 module with per-view persistent history state.
+The persistent state is the occlusion result/readback history and frame
+validity, not the HZB textures themselves.
 
 ### 1.3 Stage Position
 
 | Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 3 (DepthPrepass) — SceneDepth written | |
-| Predecessor | Stage 4 (GeometryVirtualization — reserved) | |
-| **This** | **Stage 5 — Occlusion/HZB** | |
-| Successor | Stage 6 (LightGrid) | |
+| --- | --- | --- |
+| Predecessor | Stage 3 DepthPrepass | Current `SceneDepth` exists when HZB is requested. |
+| Predecessor | Stage 5 ScreenHzbModule | Builds current furthest HZB and exposes previous furthest HZB when available. |
+| **This** | **Stage 5 OcclusionModule** | Tests candidates and publishes conservative visibility. |
+| Successor | Base/depth/shadow draw command builders | May skip occluded prepared draw items once visibility is valid. |
 
-### 1.4 Architectural Authority
+### 1.4 UE5.7 Source Mapping
 
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 5
-- UE5 reference: `RenderOcclusion` family (~2.3 k lines)
+The parity reference is the HZB occlusion path, not a hardware-query-first
+path:
 
-## 2. Interface Contracts
+- `Renderer/Private/HZB.cpp`
+  - `InitHZBCommonParameter`
+  - `GetHZBParameters`
+  - `IsPreviousHZBValid`
+- `Renderer/Private/DeferredShadingRenderer.cpp`
+  - `RenderHzb`
+  - `RenderOcclusion`
+  - `FamilyPipelineState->bHZBOcclusion`
+- `Renderer/Private/SceneRendering.h`
+  - `FHZBOcclusionTester`
+- `Renderer/Private/SceneOcclusion.cpp`
+  - `FHZBOcclusionTester::AddBounds`
+  - `FHZBOcclusionTester::Submit`
+  - `FHZBOcclusionTester::MapResults`
+  - `FHZBOcclusionTester::IsVisible`
+- `Renderer/Private/SceneVisibility.cpp`
+  - mapping previous-frame HZB results into current visibility decisions
+- `Shaders/Private/HZBOcclusion.usf`
+  - AABB projection and `IsVisibleHZB` test over the furthest HZB
+
+### 1.5 Oxygen Divergences
+
+Oxygen keeps the UE-shaped behavior but maps it to existing Vortex ownership:
+
+- `ScreenHzbModule` already builds closest/furthest pyramids and publishes
+  `ScreenHzbFrameBindings`; `OcclusionModule` consumes those products.
+- The first M05B implementation targets prepared draw metadata and bounding
+  spheres from `PreparedSceneFrame`; it does not add Nanite, GPU Scene, or
+  instance-culling infrastructure.
+- Hardware occlusion query heaps are not the first implementation path. UE5.7's
+  HZB tester already uses a GPU visibility texture plus readback, which fits
+  Vortex's Stage 5 HZB and diagnostics model better.
+- First-frame, missing-HZB, invalid-readback, and overflow cases are
+  conservative: publish visible, record the fallback reason, and keep rendering
+  correct.
+- No `Oxygen.Renderer` fallback is permitted.
+
+## 2. Public Contracts
 
 ### 2.1 File Placement
 
@@ -59,172 +108,238 @@ src/Oxygen/Vortex/
         └── Occlusion/
             ├── OcclusionModule.h
             ├── OcclusionModule.cpp
+            ├── OcclusionConfig.h
             ├── Internal/
-            │   ├── HzbGenerator.h/.cpp
-            │   └── OcclusionQueryPool.h/.cpp
+            │   ├── HzbOcclusionTester.h
+            │   └── HzbOcclusionTester.cpp
             ├── Passes/
-            │   ├── HzbBuildPass.h/.cpp
-            │   └── OcclusionTestPass.h/.cpp
+            │   ├── OcclusionTestPass.h
+            │   └── OcclusionTestPass.cpp
             └── Types/
-                └── OcclusionResult.h
+                ├── OcclusionFrameResults.h
+                └── OcclusionStats.h
+
+src/Oxygen/Graphics/Direct3D12/
+└── Shaders/
+    └── Vortex/
+        └── Stages/
+            └── Occlusion/
+                └── OcclusionTest.hlsl
 ```
 
-### 2.2 Public API
+The `ScreenHzbBuild.hlsl` shader remains owned by `ScreenHzbModule` even though
+it lives in the `Vortex/Stages/Occlusion` shader folder for stage locality.
+
+### 2.2 Module API
 
 ```cpp
 namespace oxygen::vortex {
 
 class OcclusionModule {
- public:
+public:
   explicit OcclusionModule(Renderer& renderer);
   ~OcclusionModule();
 
   OcclusionModule(const OcclusionModule&) = delete;
   auto operator=(const OcclusionModule&) -> OcclusionModule& = delete;
 
-  /// Stage 5 entry point. Per-view execution.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
-  /// Query whether a prepared-scene item is visible (after Execute).
-  [[nodiscard]] auto IsVisible(uint32_t render_item_index) const -> bool;
+  [[nodiscard]] auto GetCurrentResults() const -> const OcclusionFrameResults&;
+  [[nodiscard]] auto GetStats() const -> const OcclusionStats&;
 
- private:
+private:
   Renderer& renderer_;
-  std::unique_ptr<HzbGenerator> hzb_generator_;
-  std::unique_ptr<OcclusionQueryPool> query_pool_;
 };
 
-}  // namespace oxygen::vortex
+} // namespace oxygen::vortex
 ```
 
-## 3. Data Flow and Dependencies
+`Execute` must read HZB availability through the current `RenderContext` and the
+landed `ScreenHzbModule` publications. The API intentionally does not expose an
+HZB builder.
+
+### 2.3 Visibility Result Shape
+
+The published result is keyed to prepared draw metadata indices, not scene
+objects:
+
+```cpp
+struct OcclusionFrameResults {
+  std::span<const std::uint8_t> visible_by_draw;
+  std::uint32_t draw_count;
+  bool valid;
+  OcclusionFallbackReason fallback_reason;
+};
+```
+
+Rules:
+
+- `valid == false` means downstream consumers must treat every draw as visible.
+- When `valid == true`, a zero byte means occluded and a non-zero byte means
+  visible.
+- The array length must match the prepared-scene draw metadata count for the
+  view that produced it.
+- Results are per view. Multi-view work must not share visibility arrays across
+  views.
+
+Every enum introduced for the occlusion API must use existing Oxygen enum
+patterns, include `to_string` overloads, and use `src/Oxygen/Base/Macros.h`
+flag helpers when flags are needed.
+
+## 3. Data Flow
 
 ### 3.1 Inputs
 
 | Source | Data | Purpose |
-| ------ | ---- | ------- |
-| SceneTextures | SceneDepth (SRV) | HZB source |
-| InitViewsModule | Current-view `PreparedSceneFrame` payload | Occlusion test candidates without scene re-traversal |
-| Previous frame | Temporal HZB | Two-phase occlusion test |
+| --- | --- | --- |
+| `PreparedSceneFrame` | draw metadata, render items, world matrices, bounding spheres | Candidate bounds and draw-index mapping. |
+| `RenderContext::ViewSpecific` | current/previous HZB fields | HZB availability and view-local HZB dimensions. |
+| `ScreenHzbFrameBindings` | HZB mapping parameters | UE-shaped HZB coordinate conversion. |
+| `SceneTextures` | current depth product validity | Stage precondition and diagnostics evidence. |
 
 ### 3.2 Outputs
 
 | Product | Consumer | Delivery |
-| ------- | -------- | -------- |
-| HZB texture (mip chain) | OcclusionModule (internal), SSR (future) | Per-view GPU texture |
-| Occlusion results | BasePassModule, LightingService | Refined prepared-scene visibility classification keyed to the current prepared payload |
-| Temporal HZB | Next frame | Per-view history state |
+| --- | --- | --- |
+| `OcclusionFrameResults` | Base/depth/shadow draw builders | Per-view prepared draw visibility. |
+| `OcclusionStats` | DiagnosticsService and capture manifests | Candidate/tested/occluded/fallback counts. |
+| Current test readback | Next frame | Per-view persistent tester history. |
 
-### 3.3 HZB Generation
+### 3.3 Execution Order
 
-1. Read SceneDepth over the active view rect.
-2. Derive HZB mip 0 from a half-resolution, power-of-two-padded extent per
-   axis: `max(round_up_pow2(view_rect_extent) / 2, 1)`.
-3. Derive the published mip count from that reduced extent:
-   `max(floor(log2(max(mip0_width, mip0_height))), 1)`.
-4. Build mip 0 by reducing full-resolution SceneDepth into that reduced root,
-   then reduce each subsequent mip from the previous HZB level with
-   conservative 2x2 downsampling.
-5. Result: a UE5.7-shaped hierarchical depth pyramid for fast AABB depth
-   testing and local-fog consumers.
+1. Map the previous frame's occlusion readback if it is available and valid for
+   the same view.
+2. Build the current frame's conservative visibility array from that previous
+   result. Missing history means all visible.
+3. Publish the visibility array before downstream draw command builders consume
+   it.
+4. If current furthest HZB is available, submit the current frame's candidate
+   bounds for next-frame readback.
+5. Record diagnostics counters and fallback reason.
 
-### 3.4 Occlusion Testing
+This matches UE5.7's latency model: visibility uses previous results while the
+current frame submits tests for later consumption.
 
-Two-phase approach:
+## 4. HZB Occlusion Test
 
-1. **Previous-frame HZB test:** Test AABB against previous frame's HZB.
-   Fast, but may have false positives (previously occluded objects that
-   moved into view).
-2. **Current-frame refinement:** Objects that pass previous-frame test are
-   drawn in depth prepass. After depth prepass, objects that failed
-   previous-frame test are re-tested against current HZB.
+### 4.1 Candidate Selection
 
-## 4. Resource Management
+M05B starts with the prepared draw metadata already accepted by scene prep.
+Candidates must have:
 
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| HZB texture (mip chain) | Per view (persistent) | Stored in view history |
-| Previous-frame HZB | Per view (persistent) | Swapped each frame |
-| Occlusion query heap | Persistent | D3D12 query heap, recycled |
-| HZB build PSO | Persistent | Compute or pixel shader |
+- a valid draw index
+- a finite world-space bounding sphere or bounds proxy
+- opaque or masked participation in the relevant pass
+- an object size above the configured tiny-object threshold
 
-## 5. Shader Contracts
+Invalid, tiny, transparent-only, or overflowing candidates are treated visible
+and counted by diagnostics.
 
-### 5.1 HZB Build Shader
+### 4.2 GPU Test Shape
 
-```hlsl
-// Stages/Occlusion/HzbBuild.hlsl (compute)
+The UE5.7 reference stores bounds in fixed-size textures and writes a fixed-size
+visibility texture. Oxygen should keep that shape unless a measured engine
+constraint proves otherwise:
 
-Texture2D<float> InputDepth : register(t0);
-RWTexture2D<float> OutputMip : register(u0);
+- fixed maximum candidate grid, initially UE-shaped at 256 x 256
+- center/extent upload for candidate bounds
+- result texture with one visible/occluded byte-class value per candidate
+- GPU-to-CPU readback for next-frame `IsVisible` decisions
+- unused/padded entries are visible
 
-[numthreads(8, 8, 1)]
-void HzbBuildCS(uint3 dtid : SV_DispatchThreadID) {
-  float2 uv = (float2(dtid.xy) + 0.5) / OutputDimensions;
-  // Sample 4 texels from input, take max (conservative depth)
-  float d0 = InputDepth.Load(int3(dtid.xy * 2, 0));
-  float d1 = InputDepth.Load(int3(dtid.xy * 2 + int2(1,0), 0));
-  float d2 = InputDepth.Load(int3(dtid.xy * 2 + int2(0,1), 0));
-  float d3 = InputDepth.Load(int3(dtid.xy * 2 + int2(1,1), 0));
-  OutputMip[dtid.xy] = max(max(d0, d1), max(d2, d3));
+The shader projects bounds with current view matrices, rejects objects outside
+the frustum, and tests the projected screen rectangle against the furthest HZB.
+Under reversed-Z, the furthest pyramid is the correct conservative occlusion
+surface for "hidden behind closer depth" decisions.
+
+### 4.3 Fallback Policy
+
+The fallback policy is part of correctness:
+
+| Condition | Behavior |
+| --- | --- |
+| Stage disabled | Publish invalid results; consumers render all draws. |
+| No prepared frame | Publish invalid results and no GPU test. |
+| No current furthest HZB | Publish all visible, skip current submission. |
+| No previous readback | Publish all visible, submit current test if possible. |
+| Candidate count exceeds capacity | Test first capacity-limited batch; overflow visible and counted. |
+| Readback failure | Publish all visible for that frame and mark previous result invalid. |
+
+No fallback may cull geometry.
+
+## 5. Consumer Integration
+
+Downstream stages consume visibility by prepared draw index. The first required
+consumers are:
+
+- base pass opaque/masked command building
+- any depth/shadow command path that rebuilds from the same prepared draw
+  metadata and can safely preserve its pass semantics
+
+Consumers must be simple:
+
+```cpp
+if (occlusion.valid && !occlusion.visible_by_draw[draw_index]) {
+  continue;
 }
 ```
 
-### 5.2 Occlusion Test Shader
+The visibility payload must not leak rendering-mode, diagnostics, or UI options
+into pass builders. Pass builders only see visibility.
 
-```hlsl
-// Stages/Occlusion/OcclusionTest.hlsl (compute)
+## 6. Diagnostics And Proof Surface
 
-// Test AABB screen-space bounds against HZB
-// Output: visibility flag per object
-```
+M05B diagnostics must be compact and useful:
 
-### 5.3 Catalog Registration
+- candidate count
+- submitted/tested count
+- visible/occluded count from mapped results
+- overflow-visible count
+- fallback reason
+- current furthest HZB availability
+- previous result validity
+- draw counts before/after occlusion for consumers that actually skip draws
 
-| Entrypoint | Profile | Notes |
-| ---------- | ------- | ----- |
-| `VortexHzbBuildCS` | cs_6_0 | HZB mip chain build |
-| `VortexOcclusionTestCS` | cs_6_0 | AABB vs HZB test |
+Diagnostics must integrate with the M05A `DiagnosticsService` pass/product
+ledger and capture manifest. A draw-reduction claim is not allowed until a
+capture or focused test proves that a consumer skipped draw commands because of
+occlusion.
 
-## 6. Stage Integration
+## 7. Validation Gates
 
-### 6.1 Dispatch Contract
+M05B cannot be marked `validated` until all gates are satisfied:
 
-`occlusion_->Execute(ctx, scene_textures)` at stage 5.
+1. UE5.7 mapping evidence is current in this LLD and the detailed milestone
+   plan.
+2. Implementation exists for the occlusion result substrate, HZB tester,
+   readback/fallback behavior, and at least the base-pass consumer.
+3. Shader changes are in the Direct3D12 shader catalog and pass ShaderBake.
+4. Focused tests prove conservative fallback, capacity overflow, result
+   indexing, and consumer filtering.
+5. Runtime/capture proof shows projected occlusion reducing draw submission in
+   a controlled scene while preserving visible geometry.
+6. D3D12 debug-layer/CDB validation records no relevant warnings or errors for
+   the occlusion path.
+7. `IMPLEMENTATION_STATUS.md` records one concise VTX-M05B ledger row with
+   implementation files/areas, validation artifacts, and no hidden residual
+   gap.
 
-### 6.2 Null-Safe Behavior
+## 8. Non-Goals
 
-When null: no occlusion culling. All primitives from InitViews pass through
-to downstream stages as originally published in the current view's
-prepared-scene payload. Functionally correct but potentially slower for complex
-scenes.
+- No `Oxygen.Renderer` reuse.
+- No Nanite, GPU Scene, instance culling, or GPU-driven indirect draw
+  compaction in M05B.
+- No broad editor showflag system.
+- No hardware-query path unless the HZB tester path proves insufficient and the
+  design/plan are updated before implementation claims.
+- No generic visibility framework outside the prepared-scene contract.
 
-### 6.3 Capability Gate
+## 9. Open Questions
 
-Requires `kScenePreparation`. Optional feature — scenes with low geometry
-count may disable occlusion for simpler dispatch.
-
-## 7. Testability Approach
-
-1. **HZB validation:** Known scene with one large occluder → verify HZB mip
-   chain contains correct max-depth values.
-2. **Occlusion test:** Place object fully behind occluder → verify
-   `IsVisible()` returns false.
-3. **Draw call reduction:** Complex scene with many occluded objects →
-   measure draw call count with/without occlusion module.
-4. **Temporal stability:** Moving camera → verify no visible popping
-   (temporal HZB prevents single-frame visibility gaps).
-
-## 8. Open Questions
-
-1. **GPU-driven indirect draw:** When integrated with GPU-driven rendering
-   pipeline (Phase 7+), occlusion results feed into indirect draw argument
-   buffers rather than stage-local CPU visibility lists.
-
-## 9. Parity Notes
-
-- Two-phase HZB behavior is required for this lane's UE5.7 parity target.
-  Previous-frame furthest-HZB publication is not optional follow-up work.
-- Current-frame HZB publication must include the view-to-HZB mapping terms
-  needed by downstream consumers; stages must not reconstruct those mappings
-  from raw width/height as an implementation shortcut.
+1. Whether shadow command consumers can share the first visibility mask without
+   breaking light-view-specific culling. If not, M05B closes with base/deferred
+   consumers and records shadow-specific occlusion as a later light-view task.
+2. Whether candidate bounds should upgrade from bounding spheres to full AABB
+   extents once the prepared-scene payload exposes stable per-draw boxes. The
+   first implementation may conservatively derive extents from spheres.
