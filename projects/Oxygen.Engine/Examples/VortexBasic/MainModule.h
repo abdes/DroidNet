@@ -132,6 +132,7 @@ private:
 
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode cube_node_ {};
+  scene::SceneNode occlusion_probe_node_ {};
   scene::SceneNode floor_node_ {};
   scene::SceneNode camera_node_ {};
   scene::SceneNode directional_light_node_ {};
