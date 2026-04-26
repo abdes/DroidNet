@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
@@ -39,7 +40,7 @@ namespace Oxygen.Editor.World.Workspace;
 public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<AssetsCookedMessage>
 {
     private readonly IContainer container;
-    private readonly IProjectManagerService projectManager;
+    private readonly IProjectContextService projectContextService;
     private readonly IEngineService engineService;
     private readonly ILogger logger;
     private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
@@ -50,20 +51,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
     /// </summary>
     /// <param name="container">The IoC container for dependency resolution.</param>
     /// <param name="router">The router for navigation within the workspace.</param>
-    /// <param name="projectManager">The project manager service.</param>
+    /// <param name="projectContextService">The active project context service.</param>
     /// <param name="engineService">The engine service for mounting cooked roots.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "will generate another warning due to capture of container arg")]
     public WorkspaceViewModel(
         IContainer container,
         IRouter router,
-        IProjectManagerService projectManager,
+        IProjectContextService projectContextService,
         IEngineService engineService,
         ILoggerFactory? loggerFactory = null)
         : base(container, router, loggerFactory)
     {
         this.container = container;
-        this.projectManager = projectManager;
+        this.projectContextService = projectContextService;
         this.engineService = engineService;
         this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
     }
@@ -196,6 +197,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             {
                 this.engineService.UnmountProjectCookedRoot();
             }
+
+            this.engineStartupGate.Dispose();
         }
 
         base.Dispose(disposing);
@@ -210,13 +213,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
 
         // Mount the project's cooked assets roots (per mount point) in the engine's virtual path resolver.
         // This allows the engine to resolve asset:/// URIs to actual files on disk.
-        if (this.projectManager.CurrentProject?.ProjectInfo.Location is null)
+        if (this.projectContextService.ActiveProject is not { } activeProject
+            || string.IsNullOrWhiteSpace(activeProject.ProjectRoot))
         {
-            this.logger.LogWarning("Cannot refresh cooked roots: No current project or project location is null.");
+            this.logger.LogWarning("Cannot refresh cooked roots: No active project context.");
             return;
         }
 
-        var projectLocation = this.projectManager.CurrentProject.ProjectInfo.Location;
+        var projectLocation = activeProject.ProjectRoot;
+
         // Source of Truth: Oxygen.Assets.AssetPipelineConstants
         const string cookedFolderName = ".cooked";
         const string indexFileName = "container.index.bin";
@@ -258,7 +263,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         }
 
         var mountPoints = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var mount in this.projectManager.CurrentProject.ProjectInfo.AuthoringMounts)
+        foreach (var mount in activeProject.AuthoringMounts)
         {
             if (!string.IsNullOrWhiteSpace(mount.Name))
             {
@@ -277,7 +282,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException)
         {
             this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
         }
@@ -313,6 +321,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Workspace activation must fail visibly without crashing the Project Browser when runtime startup fails.")]
     private async Task<bool> EnsureEngineRunningAsync()
     {
         if (this.engineService.State == EngineServiceState.Running)
