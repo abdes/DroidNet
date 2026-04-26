@@ -100,7 +100,8 @@ namespace oxygen::interop::module {
       -> oxygen::engine::ModulePhaseMask override {
       return oxygen::engine::MakeModuleMask<
         oxygen::core::PhaseId::kFrameStart, oxygen::core::PhaseId::kPreRender,
-        oxygen::core::PhaseId::kRender, oxygen::core::PhaseId::kCompositing,
+        oxygen::core::PhaseId::kPublishViews, oxygen::core::PhaseId::kRender,
+        oxygen::core::PhaseId::kCompositing,
         oxygen::core::PhaseId::kSceneMutation>();
     }
 
@@ -110,6 +111,9 @@ namespace oxygen::interop::module {
     auto OnSceneMutation(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
     auto OnPreRender(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
+      -> oxygen::co::Co<> override;
+    auto OnPublishViews(
+      oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
     auto OnRender(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;

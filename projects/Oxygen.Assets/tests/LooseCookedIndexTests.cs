@@ -38,7 +38,8 @@ public sealed class LooseCookedIndexTests
 
         _ = read.Files[0].Kind.Should().Be(doc.Files[0].Kind);
         _ = read.Files[0].RelativePath.Should().Be(doc.Files[0].RelativePath);
-        _ = read.Files[0].Sha256.Span.ToArray().Should().Equal(doc.Files[0].Sha256.Span.ToArray());
+        _ = read.Files[0].Size.Should().Be(doc.Files[0].Size);
+        _ = read.Files[0].Sha256.IsEmpty.Should().BeTrue();
     }
 
     [TestMethod]
@@ -108,15 +109,15 @@ public sealed class LooseCookedIndexTests
         }
 
         // Header layout:
-        // - string_table_size at offset 24 (u64)
-        // - asset_entries_offset at offset 32 (u64)
-        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(24, 8));
-        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(32, 8));
+        // - string_table_size at offset 40 (u64)
+        // - asset_entries_offset at offset 48 (u64)
+        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(40, 8));
+        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(48, 8));
 
         // Asset entry layout (v1 minimum):
-        // - desc_rel_offset at +16 (u32)
+        // - desc_rel_offset at +17 (u32)
         // Set it to an offset beyond the string table.
-        var firstAssetDescOffsetField = checked((int)assetEntriesOffset) + 16;
+        var firstAssetDescOffsetField = checked((int)assetEntriesOffset) + 17;
         BinaryPrimitives.WriteUInt32LittleEndian(
             bytes.AsSpan(firstAssetDescOffsetField, 4),
             checked((uint)stringTableSize + 1));
@@ -124,6 +125,48 @@ public sealed class LooseCookedIndexTests
         using var readStream = new MemoryStream(bytes, writable: false);
         Action act = () => _ = LooseCookedIndex.Read(readStream);
         _ = act.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Write_WithoutFileRecords_ShouldStillPlaceFileRecordsAfterAssetEntries()
+    {
+        var doc = CreateSampleDocument() with { Files = [] };
+
+        using var ms = new MemoryStream();
+        LooseCookedIndex.Write(ms, doc);
+        var bytes = ms.ToArray();
+
+        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(48, 8));
+        var assetCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(56, 4));
+        var fileRecordsOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(64, 8));
+        var fileRecordCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(72, 4));
+
+        _ = fileRecordCount.Should().Be(0);
+        _ = fileRecordsOffset.Should().BeGreaterThanOrEqualTo(
+            assetEntriesOffset + (assetCount * (ulong)LooseCookedIndex.AssetEntrySize));
+
+        ms.Position = 0;
+        _ = LooseCookedIndex.Read(ms).Files.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void Read_WhenFileRecordsOffsetPrecedesAssetEntriesEnd_ShouldThrow()
+    {
+        var doc = CreateSampleDocument() with { Files = [] };
+
+        byte[] bytes;
+        using (var ms = new MemoryStream())
+        {
+            LooseCookedIndex.Write(ms, doc);
+            bytes = ms.ToArray();
+        }
+
+        BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(64, 8), 0);
+
+        using var readStream = new MemoryStream(bytes, writable: false);
+        Action act = () => _ = LooseCookedIndex.Read(readStream);
+        _ = act.Should().Throw<InvalidDataException>()
+            .WithMessage("*File records must start after the end of the asset entries*");
     }
 
     private static Document CreateSampleDocument()
@@ -136,7 +179,7 @@ public sealed class LooseCookedIndexTests
         return new Document(
             ContentVersion: 7,
             Flags: IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords,
-            SourceGuid: Guid.ParseExact("00112233-4455-6677-8899-aabbccddeeff", "D"),
+            SourceGuid: Guid.ParseExact("01234567-89ab-7cde-8fed-ba9876543210", "D"),
             Assets:
             [
                 new AssetEntry(

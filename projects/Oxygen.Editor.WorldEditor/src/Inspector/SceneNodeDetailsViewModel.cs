@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -116,6 +117,9 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             this.AddGeometryCommand.NotifyCanExecuteChanged();
             this.AddPerspectiveCameraCommand.NotifyCanExecuteChanged();
             this.AddOrthographicCameraCommand.NotifyCanExecuteChanged();
+            this.AddDirectionalLightCommand.NotifyCanExecuteChanged();
+            this.AddPointLightCommand.NotifyCanExecuteChanged();
+            this.AddSpotLightCommand.NotifyCanExecuteChanged();
 
             return;
 
@@ -155,6 +159,22 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             "Geometry" => new GeometryComponent { Name = "Geometry" },
             "PerspectiveCamera" => new PerspectiveCamera { Name = "Perspective Camera" },
             "OrthographicCamera" => new OrthographicCamera { Name = "Orthographic Camera" },
+            "DirectionalLight" => new DirectionalLightComponent
+            {
+                Name = "Directional Light",
+            },
+            "PointLight" => new PointLightComponent
+            {
+                Name = "Point Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 10f,
+            },
+            "SpotLight" => new SpotLightComponent
+            {
+                Name = "Spot Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 15f,
+            },
             _ => null,
         };
 
@@ -178,6 +198,13 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             .AddMenuItem("Geometry", this.AddGeometryCommand)
             .AddMenuItem("Perspective Camera", this.AddPerspectiveCameraCommand)
             .AddMenuItem("Orthographic Camera", this.AddOrthographicCameraCommand)
+            .AddSeparator()
+            .AddSubmenu("Light", lights =>
+            {
+                _ = lights.AddMenuItem("Directional Light", this.AddDirectionalLightCommand);
+                _ = lights.AddMenuItem("Point Light", this.AddPointLightCommand);
+                _ = lights.AddMenuItem("Spot Light", this.AddSpotLightCommand);
+            })
             .Build();
 
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
@@ -194,6 +221,17 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     private void AddOrthographicCamera() => this.AddComponent("OrthographicCamera");
 
     private bool CanAddOrthographicCamera() => this.CanAddComponent("OrthographicCamera");
+
+    [RelayCommand(CanExecute = nameof(CanAddLight))]
+    private void AddDirectionalLight() => this.AddComponent("DirectionalLight");
+
+    [RelayCommand(CanExecute = nameof(CanAddLight))]
+    private void AddPointLight() => this.AddComponent("PointLight");
+
+    [RelayCommand(CanExecute = nameof(CanAddLight))]
+    private void AddSpotLight() => this.AddComponent("SpotLight");
+
+    private bool CanAddLight() => this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanDeleteComponent))]
     private void DeleteComponent(GameComponent? comp)
@@ -217,6 +255,11 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
         this.LogAddComponentRequested(typeId, this.Node.Name, this.Node.Components?.Count ?? 0, selectedComponentName: null);
 
+        if (typeId.EndsWith("Light", StringComparison.Ordinal) && !this.CanAddLight())
+        {
+            return;
+        }
+
         var comp = CreateComponentFromId(typeId);
         if (comp is null)
         {
@@ -224,8 +267,24 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
+        if (comp is DirectionalLightComponent)
+        {
+            this.ApplyDefaultDirectionalLightTransform();
+        }
+
         // Request the editor (single mutator) to perform the add; decoupled via messenger.
         WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, comp));
+    }
+
+    private void ApplyDefaultDirectionalLightTransform()
+    {
+        var transform = this.Node?.Components.OfType<TransformComponent>().FirstOrDefault();
+        if (transform is null || transform.LocalRotation != Quaternion.Identity)
+        {
+            return;
+        }
+
+        transform.LocalRotation = DirectionalLightComponent.DefaultLocalRotation;
     }
 
     private void SyncFromNode()

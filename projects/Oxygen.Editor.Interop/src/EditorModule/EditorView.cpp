@@ -14,6 +14,7 @@
 #include <cmath>
 #include <limits>
 
+#include <glm/common.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -22,10 +23,27 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 namespace oxygen::interop::module {
 
 namespace {
+
+constexpr float kDefaultPerspectiveFovY = 60.0F * oxygen::math::DegToRad;
+constexpr float kDefaultPerspectiveNearPlane = 0.05F;
+constexpr float kDefaultPerspectiveFarPlane = 1000.0F;
+constexpr float kDefaultSceneRadius = 12.0F;
+constexpr float kFrameMargin = 1.35F;
+constexpr glm::vec3 kDefaultFocusPoint { 0.0F, 0.0F, 0.0F };
+constexpr glm::vec3 kDefaultPerspectiveViewDirection { 0.75F, -1.35F, 0.65F };
+
+struct SceneFrameBounds {
+  glm::vec3 center { kDefaultFocusPoint };
+  float radius { kDefaultSceneRadius };
+  std::size_t renderable_count { 0 };
+};
 
 [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
   return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
@@ -57,6 +75,81 @@ namespace {
   look_matrix[2] = glm::vec4(-forward, 0.0f);
 
   return glm::quat_cast(look_matrix);
+}
+
+[[nodiscard]] auto IsUsableSphere(const Vec4& sphere) noexcept -> bool {
+  return std::isfinite(sphere.x) && std::isfinite(sphere.y)
+    && std::isfinite(sphere.z) && std::isfinite(sphere.w)
+    && sphere.w > 0.0F;
+}
+
+[[nodiscard]] auto ResolveSceneFrameBounds(scene::Scene& scene) noexcept
+  -> std::optional<SceneFrameBounds> {
+  scene.Update();
+
+  glm::vec3 min_bounds { std::numeric_limits<float>::max() };
+  glm::vec3 max_bounds { std::numeric_limits<float>::lowest() };
+  std::size_t renderable_count = 0;
+  const std::weak_ptr<const scene::Scene> scene_weak { scene.weak_from_this() };
+
+  (void)scene.Traverse().Traverse(
+    [&](const scene::MutableVisitedNode& visited,
+      [[maybe_unused]] const bool dry_run) -> scene::VisitResult {
+      DCHECK_F(!dry_run, "pre-order scene framing traversal should not dry-run");
+      scene::SceneNode node { scene_weak, visited.handle };
+      const auto renderable = node.GetRenderable();
+      if (!renderable.HasGeometry()) {
+        return scene::VisitResult::kContinue;
+      }
+
+      const auto sphere = renderable.GetWorldBoundingSphere();
+      if (!IsUsableSphere(sphere)) {
+        return scene::VisitResult::kContinue;
+      }
+
+      const glm::vec3 center { sphere.x, sphere.y, sphere.z };
+      const glm::vec3 extent { sphere.w };
+      min_bounds = glm::min(min_bounds, center - extent);
+      max_bounds = glm::max(max_bounds, center + extent);
+      ++renderable_count;
+      return scene::VisitResult::kContinue;
+    });
+
+  if (renderable_count == 0 || !IsFinite(min_bounds) || !IsFinite(max_bounds)) {
+    return std::nullopt;
+  }
+
+  const glm::vec3 center = 0.5F * (min_bounds + max_bounds);
+  const float radius = 0.5F * glm::length(max_bounds - min_bounds);
+  if (!IsFinite(center) || !std::isfinite(radius) || radius <= 0.0F) {
+    return std::nullopt;
+  }
+
+  return SceneFrameBounds {
+    .center = center,
+    .radius = std::max(radius, 1.0F),
+    .renderable_count = renderable_count,
+  };
+}
+
+[[nodiscard]] auto ResolveDefaultCameraDistance(const float radius) noexcept
+  -> float {
+  const float half_fov = kDefaultPerspectiveFovY * 0.5F;
+  const float fit_distance = radius / std::sin(half_fov);
+  return std::max(8.0F, fit_distance * kFrameMargin);
+}
+
+auto ApplyPerspectiveProjectionDefaults(scene::PerspectiveCamera& camera,
+  const float aspect,
+  const ViewPort& viewport,
+  const float scene_radius,
+  const float camera_distance) noexcept -> void {
+  camera.SetFieldOfView(kDefaultPerspectiveFovY);
+  camera.SetAspectRatio(std::max(0.001F, aspect));
+  camera.SetNearPlane(kDefaultPerspectiveNearPlane);
+  camera.SetFarPlane(std::max(kDefaultPerspectiveFarPlane,
+    camera_distance + scene_radius * 4.0F));
+  camera.SetViewport(viewport);
 }
 
 [[nodiscard]] auto ResolvePresetForward(CameraViewPreset preset) noexcept
@@ -210,48 +303,8 @@ void EditorView::OnSceneMutation() {
   // Update camera for this frame
   UpdateCameraForFrame();
 
-  LOG_F(2,
-        "EditorView '{}' OnSceneMutation: Updating ViewContext with size {}x{}",
-        config_.name, width_, height_);
-
-  View view;
-  view.viewport = ViewPort{
-      .top_left_x = 0.0f,
-      .top_left_y = 0.0f,
-      .width = width_,
-      .height = height_,
-      .min_depth = 0.0f,
-      .max_depth = 1.0f,
-  };
-  view.scissor = Scissors{
-      .left = 0,
-      .top = 0,
-      .right = static_cast<int32_t>(width_),
-      .bottom = static_cast<int32_t>(height_),
-  };
-
-  // Register with FrameContext
-  engine::ViewContext vc{
-      .view = view,
-      .metadata = engine::ViewMetadata{.name = config_.name,
-                                       .purpose = config_.purpose,
-                                       .is_scene_view = true},
-      .render_target = {},
-      .composite_source = {}
-  };
-
-  // We must never register views from EditorView.
-  // The owning manager (ViewManager or higher-level module) is responsible
-  // for registering views with FrameContext and assigning the engine ViewId.
-  // If we don't have an assigned id yet it indicates a lifecycle error; log
-  // and skip updating/registration here.
-  if (view_id_ != kInvalidViewId) {
-    current_context_->frame_context.UpdateView(view_id_, std::move(vc));
-  } else {
-    LOG_F(WARNING, "EditorView::OnSceneMutation invoked but EditorView has no "
-                   "engine-assigned ViewId. Owner must register the view "
-                   "before scenes are mutated.");
-  }
+  LOG_F(2, "EditorView '{}' OnSceneMutation: updated viewport camera for {}x{}",
+    config_.name, width_, height_);
 }
 
 auto EditorView::OnPreRender(vortex::Renderer &renderer) -> oxygen::co::Co<> {
@@ -264,7 +317,9 @@ auto EditorView::OnPreRender(vortex::Renderer &renderer) -> oxygen::co::Co<> {
     co_return;
   }
 
-  ResizeIfNeeded();
+  if (auto gfx = graphics_.lock()) {
+    EnsureRenderTarget(*gfx);
+  }
 
   // Set initial camera orientation (only once, after transform propagation)
   if (!initial_orientation_set_ && camera_node_.IsAlive()) {
@@ -288,29 +343,10 @@ auto EditorView::OnPreRender(vortex::Renderer &renderer) -> oxygen::co::Co<> {
     initial_orientation_set_ = true;
   }
 
-  // After resizing (or if resources previously existed) ensure the
-  // FrameContext gets a single SetViewOutput call so Renderer can find
-  // our framebuffer. This centralizes the SetViewOutput call — preventing
-  // duplicate updates from both the creation and the renderer-path.
-  if (framebuffer_ && view_id_ != kInvalidViewId && current_context_) {
-    current_context_->frame_context.SetViewRenderTarget(
-        view_id_,
-        oxygen::observer_ptr<graphics::Framebuffer>(framebuffer_.get()));
-    // Ensure FrameContext now has the output populated
-    DCHECK_NOTNULL_F(
-        current_context_->frame_context.GetViewContext(view_id_).render_target,
-        "EditorView::OnPreRender - framebuffer did not populate FrameContext "
-        "output for view {}",
-        view_id_);
-  }
-
-  // Update ViewRenderer with new framebuffer
-  if (renderer_) {
-    renderer_->SetFramebuffer(framebuffer_);
-
-    // Ensure registered with renderer
-    RegisterWithRenderer(renderer);
-  }
+  // Runtime view publication is owned by EditorModule::OnPublishViews. Keeping
+  // PreRender free of FrameContext view-output mutation prevents the legacy
+  // editor intent view from competing with the Vortex-published scene view.
+  (void)renderer;
 
   co_return;
 }
@@ -355,7 +391,17 @@ void EditorView::ReleaseResources() {
   state_ = ViewState::kDestroyed;
 }
 
+void EditorView::EnsureRenderTarget(Graphics& graphics) {
+  ResizeIfNeeded(graphics);
+}
+
 void EditorView::ResizeIfNeeded() {
+  if (auto gfx = graphics_.lock()) {
+    ResizeIfNeeded(*gfx);
+  }
+}
+
+void EditorView::ResizeIfNeeded(Graphics& gfx) {
   bool need_resize = false;
   if (!color_texture_ ||
       static_cast<float>(color_texture_->GetDescriptor().width) != width_ ||
@@ -364,8 +410,7 @@ void EditorView::ResizeIfNeeded() {
   }
 
   if (need_resize) {
-    if (auto gfx = graphics_.lock()) {
-      auto &reclaimer = gfx->GetDeferredReclaimer();
+      auto &reclaimer = gfx.GetDeferredReclaimer();
       if (color_texture_)
         graphics::DeferredObjectRelease(color_texture_, reclaimer);
       if (depth_texture_)
@@ -383,7 +428,7 @@ void EditorView::ResizeIfNeeded() {
       color_desc.use_clear_value = true; // better for performance
       color_desc.clear_value = config_.clear_color;
       color_desc.initial_state =
-          oxygen::graphics::ResourceStates::kShaderResource;
+          oxygen::graphics::ResourceStates::kCommon;
 
       // Assign a helpful debug name so runtime diagnostics show which
       // EditorView owns this texture (helps avoid generic "Texture" labels).
@@ -392,7 +437,7 @@ void EditorView::ResizeIfNeeded() {
                      : fmt::format(fmt::runtime("EditorView:{}"),
                        config_.name);
       color_desc.debug_name = dbg_base + ".Color";
-      color_texture_ = gfx->CreateTexture(color_desc);
+      color_texture_ = gfx.CreateTexture(color_desc);
 
       graphics::TextureDesc depth_desc = color_desc;
       depth_desc.format = oxygen::Format::kDepth32;
@@ -402,13 +447,13 @@ void EditorView::ResizeIfNeeded() {
       depth_desc.initial_state = oxygen::graphics::ResourceStates::kDepthWrite;
 
       depth_desc.debug_name = dbg_base + ".Depth";
-      depth_texture_ = gfx->CreateTexture(depth_desc);
+      depth_texture_ = gfx.CreateTexture(depth_desc);
 
       graphics::FramebufferDesc fb_desc;
       fb_desc.AddColorAttachment(color_texture_);
       fb_desc.SetDepthAttachment(depth_texture_);
 
-      framebuffer_ = gfx->CreateFramebuffer(fb_desc);
+      framebuffer_ = gfx.CreateFramebuffer(fb_desc);
 
       LOG_F(INFO,
             "EditorView '{}' resized resources to {}x{} "
@@ -416,7 +461,6 @@ void EditorView::ResizeIfNeeded() {
             config_.name, width_, height_, color_desc.use_clear_value,
             color_desc.clear_value.r, color_desc.clear_value.g,
             color_desc.clear_value.b, color_desc.clear_value.a);
-    }
   }
 }
 
@@ -425,12 +469,38 @@ void EditorView::CreateCamera(scene::Scene &scene) {
   camera_node_ = scene.CreateNode(config_.name + "_Camera");
 
   auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const float aspect =
+    (width_ > 0.0F && height_ > 0.0F) ? (width_ / height_) : 1.0F;
+  const ViewPort vp{
+      .top_left_x = 0.0f,
+      .top_left_y = 0.0f,
+      .width = width_,
+      .height = height_,
+      .min_depth = 0.0f,
+      .max_depth = 1.0f,
+  };
+  const float default_distance = ResolveDefaultCameraDistance(kDefaultSceneRadius);
+  ApplyPerspectiveProjectionDefaults(
+    *camera, aspect, vp, kDefaultSceneRadius, default_distance);
   camera_node_.AttachCamera(std::move(camera));
 
-  // Set initial position (orientation setup happens in OnPreRender)
-  camera_node_.GetTransform().SetLocalPosition(glm::vec3(10.0F, -10.0F, +7.0F));
+  focus_point_ = kDefaultFocusPoint;
+  const glm::vec3 view_direction = NormalizeSafe(
+    kDefaultPerspectiveViewDirection, glm::vec3(1.0F, -1.0F, 0.5F));
+  const glm::vec3 position = focus_point_ + view_direction * default_distance;
+  auto transform = camera_node_.GetTransform();
+  (void)transform.SetLocalPosition(position);
+  (void)transform.SetLocalRotation(LookRotationFromPositionToTarget(
+    position, focus_point_, oxygen::space::move::Up));
+  initial_orientation_set_ = true;
 
-  LOG_F(INFO, "EditorView '{}' created camera node", config_.name);
+  LOG_F(INFO,
+    "EditorView '{}' created camera node pos=({}, {}, {}) focus=({}, {}, {}) "
+    "fov_y_deg={} near={} far={}",
+    config_.name, position.x, position.y, position.z, focus_point_.x,
+    focus_point_.y, focus_point_.z,
+    kDefaultPerspectiveFovY / oxygen::math::DegToRad,
+    kDefaultPerspectiveNearPlane, kDefaultPerspectiveFarPlane);
 }
 
 void EditorView::UpdateCameraForFrame() {
@@ -456,8 +526,49 @@ void EditorView::UpdateCameraForFrame() {
 
   if (auto cam_ref = camera_node_.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
     auto& cam = cam_ref->get();
-    cam.SetAspectRatio(aspect);
-    cam.SetViewport(vp);
+    float scene_radius = kDefaultSceneRadius;
+    float camera_distance = ResolveDefaultCameraDistance(scene_radius);
+
+    if (!initial_scene_frame_applied_) {
+      if (auto scn = scene_.lock()) {
+        if (const auto frame_bounds = ResolveSceneFrameBounds(*scn)) {
+          focus_point_ = frame_bounds->center;
+          scene_radius = frame_bounds->radius;
+          camera_distance = ResolveDefaultCameraDistance(scene_radius);
+
+          const glm::vec3 view_direction = NormalizeSafe(
+            kDefaultPerspectiveViewDirection, glm::vec3(1.0F, -1.0F, 0.5F));
+          const glm::vec3 position = focus_point_ + view_direction * camera_distance;
+          auto transform = camera_node_.GetTransform();
+          (void)transform.SetLocalPosition(position);
+          (void)transform.SetLocalRotation(LookRotationFromPositionToTarget(
+            position, focus_point_, oxygen::space::move::Up));
+
+          ortho_half_height_ = std::max(1.0F, scene_radius * kFrameMargin);
+          initial_orientation_set_ = true;
+          initial_scene_frame_applied_ = true;
+
+          LOG_F(INFO,
+            "EditorView '{}' framed scene: renderables={} center=({}, {}, {}) "
+            "radius={} camera_pos=({}, {}, {}) distance={}",
+            config_.name, frame_bounds->renderable_count, focus_point_.x,
+            focus_point_.y, focus_point_.z, scene_radius, position.x,
+            position.y, position.z, camera_distance);
+        }
+      }
+    } else if (auto transform = camera_node_.GetTransform(); true) {
+      const glm::vec3 position =
+        transform.GetLocalPosition().value_or(focus_point_);
+      const glm::vec3 offset = position - focus_point_;
+      const float distance = std::sqrt(glm::dot(offset, offset));
+      if (std::isfinite(distance)) {
+        camera_distance = std::max(camera_distance, distance);
+      }
+      scene_radius = std::max(scene_radius, ortho_half_height_);
+    }
+
+    ApplyPerspectiveProjectionDefaults(
+      cam, aspect, vp, scene_radius, camera_distance);
     return;
   }
 

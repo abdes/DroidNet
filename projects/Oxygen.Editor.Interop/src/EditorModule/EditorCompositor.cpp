@@ -145,6 +145,27 @@ namespace oxygen::interop::module {
     }
   }
 
+  auto EditorCompositor::GetCurrentFramebufferForSurface(
+    const graphics::Surface& surface) -> std::shared_ptr<graphics::Framebuffer> {
+    EnsureFramebuffersForSurface(surface);
+
+    const auto iter = surface_framebuffers_.find(&surface);
+    if (iter == surface_framebuffers_.end()) {
+      return {};
+    }
+
+    const auto index = surface.GetCurrentBackBufferIndex();
+    if (index >= iter->second.size()) {
+      LOG_F(WARNING,
+        "EditorCompositor: current backbuffer index {} is outside framebuffer "
+        "cache size {} for surface '{}'",
+        index, iter->second.size(), surface.GetName());
+      return {};
+    }
+
+    return iter->second[index];
+  }
+
   void EditorCompositor::OnCompositing() {
     DLOG_SCOPE_FUNCTION(2);
 

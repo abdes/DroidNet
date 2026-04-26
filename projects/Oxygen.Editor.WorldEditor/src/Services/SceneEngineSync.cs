@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 
@@ -79,8 +80,6 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             return;
         }
 
-
-
         try
         {
             // Ensure any existing scene is torn down on the engine thread
@@ -98,6 +97,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                     scene);
                 return;
             }
+
             this.LogCreatedSceneInEngine(scene);
             this.LogSceneTransforms(scene);
 
@@ -139,6 +139,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                 initializeWorldAsRoot: parentGuid is null).ConfigureAwait(false);
 
             this.ApplyTransform(world, node);
+            this.ApplyRenderableComponents(world, node);
 
             this.LogCreatedAndInitializedNode(node);
         }
@@ -336,6 +337,96 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
+    public Task AttachLightAsync(SceneNode node, LightComponent light)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(light);
+
+        var world = this.TryGetWorld();
+        if (world is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            this.ApplyLight(world, node, light);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to attach light component to node {NodeId}", node.Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task DetachLightAsync(Guid nodeId)
+    {
+        var world = this.TryGetWorld();
+        if (world is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            world.DetachLight(nodeId);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to detach light component from node {NodeId}", nodeId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task AttachCameraAsync(SceneNode node, CameraComponent camera)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(camera);
+
+        var world = this.TryGetWorld();
+        if (world is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            this.ApplyCamera(world, node, camera);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to attach camera component to node {NodeId}", node.Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task DetachCameraAsync(Guid nodeId)
+    {
+        var world = this.TryGetWorld();
+        if (world is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            world.DetachCamera(nodeId);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to detach camera component from node {NodeId}", nodeId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot)
     {
         // TODO: Implement when engine API is available
@@ -459,6 +550,115 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         }
     }
 
+    private void ApplyRenderableComponents(Oxygen.Interop.World.OxygenWorld world, SceneNode node)
+    {
+        var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
+        if (geometryComp is not null)
+        {
+            try
+            {
+                this.ApplyGeometry(world, node, geometryComp);
+            }
+            catch (Exception ex)
+            {
+                this.LogFailedToAttachGeometry(ex, node);
+            }
+        }
+
+        if (node.Components.OfType<CameraComponent>().FirstOrDefault() is { } camera)
+        {
+            try
+            {
+                this.ApplyCamera(world, node, camera);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to attach camera component to node {NodeId}", node.Id);
+            }
+        }
+
+        if (node.Components.OfType<LightComponent>().FirstOrDefault() is { } light)
+        {
+            try
+            {
+                this.ApplyLight(world, node, light);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to attach light component to node {NodeId}", node.Id);
+            }
+        }
+    }
+
+    private void ApplyCamera(Oxygen.Interop.World.OxygenWorld world, SceneNode node, CameraComponent camera)
+    {
+        switch (camera)
+        {
+            case PerspectiveCamera perspective:
+                world.AttachPerspectiveCamera(
+                    node.Id,
+                    ToEngineFieldOfViewRadians(perspective.FieldOfView),
+                    perspective.AspectRatio,
+                    perspective.NearPlane,
+                    perspective.FarPlane);
+                break;
+
+            default:
+                this.logger.LogWarning(
+                    "Camera component type {CameraType} on node {NodeId} is not supported by live engine sync",
+                    camera.GetType().Name,
+                    node.Id);
+                break;
+        }
+    }
+
+    private void ApplyLight(Oxygen.Interop.World.OxygenWorld world, SceneNode node, LightComponent light)
+    {
+        switch (light)
+        {
+            case DirectionalLightComponent directional:
+                world.AttachDirectionalLight(
+                    node.Id,
+                    directional.IntensityLux,
+                    directional.AngularSizeRadians,
+                    directional.Color,
+                    directional.AffectsWorld,
+                    directional.CastsShadows,
+                    directional.ExposureCompensation,
+                    directional.EnvironmentContribution,
+                    directional.IsSunLight);
+                break;
+
+            case PointLightComponent point:
+                world.AttachPointLight(
+                    node.Id,
+                    point.LuminousFluxLumens,
+                    point.Range,
+                    point.SourceRadius,
+                    point.DecayExponent,
+                    point.Color,
+                    point.AffectsWorld,
+                    point.CastsShadows,
+                    point.ExposureCompensation);
+                break;
+
+            case SpotLightComponent spot:
+                world.AttachSpotLight(
+                    node.Id,
+                    spot.LuminousFluxLumens,
+                    spot.Range,
+                    spot.SourceRadius,
+                    spot.DecayExponent,
+                    spot.InnerConeAngleRadians,
+                    spot.OuterConeAngleRadians,
+                    spot.Color,
+                    spot.AffectsWorld,
+                    spot.CastsShadows,
+                    spot.ExposureCompensation);
+                break;
+        }
+    }
+
     private async Task CreateAllNodesAsync(Scene scene, Oxygen.Interop.World.OxygenWorld world)
     {
         var syncContext = SynchronizationContext.Current;
@@ -516,19 +716,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                 this.LogFailedToSetTransform(ex, node);
             }
 
-            // Attach geometry if present
-            var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
-            if (geometryComp is not null)
-            {
-                try
-                {
-                    this.ApplyGeometry(world, node, geometryComp);
-                }
-                catch (Exception ex)
-                {
-                    this.LogFailedToAttachGeometry(ex, node);
-                }
-            }
+            this.ApplyRenderableComponents(world, node);
 
             foreach (var child in node.Children)
             {
@@ -570,6 +758,15 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         {
             this.LogFailedToRequestTransformPropagation(ex);
         }
+    }
+
+    private static float ToEngineFieldOfViewRadians(float fieldOfViewDegrees)
+    {
+        var degrees = float.IsFinite(fieldOfViewDegrees) && fieldOfViewDegrees > 0.0f
+            ? fieldOfViewDegrees
+            : PerspectiveCamera.DefaultFieldOfViewDegrees;
+
+        return degrees * (MathF.PI / 180.0f);
     }
 
     private void LogSceneTransforms(Scene scene)

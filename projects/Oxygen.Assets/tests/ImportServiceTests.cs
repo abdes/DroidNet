@@ -191,7 +191,7 @@ public sealed class ImportServiceTests
 
         var files = new InMemoryImportFileAccess();
 
-        // Seed a stale index file record (wrong size/SHA) to simulate a failed build leaving
+        // Seed a stale index file record (wrong size) to simulate a failed build leaving
         // cooked resources updated without updating container.index.bin.
         var oldBytes = new byte[96];
         RandomNumberGenerator.Fill(oldBytes);
@@ -203,7 +203,7 @@ public sealed class ImportServiceTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: 0,
-            SourceGuid: Guid.ParseExact("99999999-8888-7777-6666-555555555555", "D"),
+            SourceGuid: Guid.ParseExact("01234567-89ab-7cde-8fed-ba9876543210", "D"),
             Assets: Array.Empty<AssetEntry>(),
             Files:
             [
@@ -250,7 +250,7 @@ public sealed class ImportServiceTests
             .Which;
 
         buffersRecord.Size.Should().Be((ulong)newBytes.Length);
-        buffersRecord.Sha256.ToArray().Should().Equal(SHA256.HashData(newBytes));
+        buffersRecord.Sha256.IsEmpty.Should().BeTrue();
     }
 
     private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy

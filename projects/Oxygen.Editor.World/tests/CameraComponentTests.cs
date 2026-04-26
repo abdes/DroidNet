@@ -12,6 +12,18 @@ namespace Oxygen.Editor.World.Tests;
 public class CameraComponentTests
 {
     [TestMethod]
+    public void PerspectiveCamera_Defaults_ShouldUseEditorDegreeUnits()
+    {
+        var cam = new PerspectiveCamera { Name = "Camera" };
+        var data = new PerspectiveCameraData { Name = "Camera" };
+
+        _ = cam.FieldOfView.Should().Be(60f);
+        _ = cam.AspectRatio.Should().Be(16f / 9f);
+        _ = data.FieldOfView.Should().Be(60f);
+        _ = data.AspectRatio.Should().Be(16f / 9f);
+    }
+
+    [TestMethod]
     public void PerspectiveCamera_Hydrate_Dehydrate_RoundTrip()
     {
         var cam = new PerspectiveCamera { Name = "MainCam", NearPlane = 0.3f, FarPlane = 500f, FieldOfView = 45f, AspectRatio = 4f / 3f };

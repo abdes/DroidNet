@@ -136,6 +136,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Commands\AttachCameraCommand.h" />
     <ClInclude Include="Commands\CreateSceneCommand.h" />
     <ClInclude Include="Commands\DestroySceneCommand.h" />
     <ClInclude Include="Commands\DetachGeometryCommand.h" />

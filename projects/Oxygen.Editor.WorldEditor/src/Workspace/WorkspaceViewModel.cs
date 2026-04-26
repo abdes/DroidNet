@@ -7,6 +7,7 @@ using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Assets.Catalog;
+using Oxygen.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
@@ -217,9 +218,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             projectLocation,
             cookedBaseRoot);
 
-        // The asset pipeline maintains one loose cooked index per mount point:
-        //   .cooked/<MountPoint>/container.index.bin
-        // so we must mount each mount root separately.
+        // The engine cooker owns the project-level loose cooked root:
+        //   .cooked/container.index.bin
+        // When that authoritative root exists, child directories are payload
+        // folders, not separate roots. Older editor builds produced legacy
+        // per-mount indexes under .cooked/<MountPoint>; use those only as a
+        // fallback for projects that have not been re-cooked yet.
         this.engineService.UnmountProjectCookedRoot();
 
         if (!System.IO.Directory.Exists(cookedBaseRoot))
@@ -227,6 +231,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             this.logger.LogWarning(
                 "Cooked root directory does not exist: {CookedBaseRoot}. Assets will not be available in the engine.",
                 cookedBaseRoot);
+            return;
+        }
+
+        var mounted = new List<string>();
+        var cookedBaseIndexPath = System.IO.Path.Combine(cookedBaseRoot, indexFileName);
+        if (System.IO.File.Exists(cookedBaseIndexPath))
+        {
+            if (this.IsCookedIndexMountable(cookedBaseIndexPath))
+            {
+                this.engineService.MountProjectCookedRoot(cookedBaseRoot);
+                mounted.Add(cookedBaseRoot);
+            }
+
+            this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
             return;
         }
 
@@ -255,13 +273,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
         }
 
-        var mounted = new List<string>();
         foreach (var mountPoint in mountPoints.OrderBy(static m => m, StringComparer.Ordinal))
         {
             var cookedMountRoot = System.IO.Path.Combine(cookedBaseRoot, mountPoint);
             var indexPath = System.IO.Path.Combine(cookedMountRoot, indexFileName);
 
             if (!System.IO.File.Exists(indexPath))
+            {
+                continue;
+            }
+
+            if (!this.IsCookedIndexMountable(indexPath))
             {
                 continue;
             }
@@ -280,5 +302,28 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         }
 
         this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+    }
+
+    private bool IsCookedIndexMountable(string indexPath)
+    {
+        try
+        {
+            using var stream = System.IO.File.OpenRead(indexPath);
+            _ = LooseCookedIndex.Read(stream);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidDataException
+            or NotSupportedException
+            or IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or FormatException)
+        {
+            this.logger.LogWarning(
+                ex,
+                "Skipping incompatible cooked index {IndexPath}. Re-cook the project to regenerate this mount point.",
+                indexPath);
+            return false;
+        }
     }
 }

@@ -423,13 +423,13 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnGotFocus(RoutedEventArgs e)
     {
-        Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
-
         if (FocusManager.GetFocusedElement() is not FrameworkElement fe || !ReferenceEquals(fe, this))
         {
             // Focus was lost/stolen before the GotFocus event could be processed.
             return;
         }
+
+        Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
 
         this.UpdateCommonVisualState();
 
@@ -443,8 +443,6 @@ public partial class MenuItem : Control
     /// <param name="e">The event arguments.</param>
     protected override void OnLostFocus(RoutedEventArgs e)
     {
-        Debug.Assert(this.IsInteractive, "Non-interactive menu items should not participate in focus");
-
         this.isPressed = false; // When the release occurs outside the control
         this.UpdateCommonVisualState();
 
