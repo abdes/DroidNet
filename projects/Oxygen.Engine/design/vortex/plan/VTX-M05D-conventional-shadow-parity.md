@@ -220,21 +220,59 @@ Validation:
 
 ### Slice F - Point-Light Conventional Shadows
 
-**Status:** `planned`
+**Status:** `validated`
 
-Tasks:
+UE5.7 source mapping:
 
-- Confirm or revise the one-pass cubemap depth-target strategy after UE5.7
-  review.
-- Implement point-light shadow depth, publication, and deferred consumption if
-  retained.
-- If deferred, document the approved reason and keep the milestone status
-  honest.
+- `ShadowSetup.cpp` uses a whole-scene point-light shadow cubemap with six
+  cube-face views, a 90-degree reversed-Z projection, and a one-pass path when
+  the runtime supports layered point-light shadow rendering.
+- `ShadowProjectionCommon.ush` samples point-light shadows through cube-face
+  selection and compares the receiver against the face depth convention.
 
-Validation:
+Oxygen implementation:
 
-- Focused tests and RenderDoc/CDB proof if implemented.
-- Explicit deferral record if not implemented.
+- `ShadowFrameBindings` now carries a conventional point-shadow surface handle,
+  point count, and up to four `PointShadowBinding` records with six
+  face-projection matrices per point light.
+- `PointShadowSetup` builds one binding per shadow-casting point light using a
+  90-degree reversed-Z projection and authored range/bias values.
+- `ConventionalShadowTargetAllocator` allocates a cube-array point shadow
+  surface. The current renderer records the six faces with
+  `ShadowDepthPass::RecordSlices` rather than UE's one-pass layered cubemap
+  draw. This is the accepted M05D divergence; the storage leaves a direct
+  upgrade path to layered cube rendering.
+- Stage 8 passes each point face direction and inverse range into the shared
+  shadow-depth shader so the depth pass writes the same reversed axial depth
+  that Stage 12 compares.
+- Stage 12 point deferred lighting samples the published point shadow surface
+  before BRDF evaluation and multiplies local-light attenuation by point-shadow
+  visibility.
+- The point-light proxy sphere had mixed winding in its middle bands, causing
+  the outside-volume deferred pass to behave like a solid light shell. The proxy
+  geometry is now factored into `DeferredLightProxyGeometry`, all point-proxy
+  triangles wind outward, and a regression test verifies that invariant.
+
+Validation evidence:
+
+- Focused build/shader validation passed:
+  `cmake --build out\build-ninja --target Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.ShadowService.Tests oxygen-graphics-direct3d12_shaders --parallel 4`.
+- Focused tests passed: `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+  `43/43`; `Oxygen.Vortex.ShadowService.Tests` `9/9`.
+- ShaderBake repacked `186` shader modules after the point-shadow HLSL change.
+- CDB/D3D12 audit
+  `point-shadow-validation.final.debug-layer.report.txt` passed with runtime
+  exit `0`, no debugger break, `0` D3D12 errors, `0` DXGI errors, and `0`
+  blocking warnings.
+- RenderDoc probe `point-shadow-validation.final.point-shadow-probe.txt` passed:
+  Stage 8 point shadow draws
+  `168,171,187,190,206,209,225,228,244,247,263,266`; non-clear point-shadow
+  cube-array slices `0`, `2`, and `5` with max depth about `0.69985/0.70000`;
+  Stage 12 point draw `343`; Stage 12 bound
+  `Vortex.PointShadowCubeSurface`; Stage 12 `SceneColor` changed with max
+  `[839.5, 772.5, 688.5, 1.0]`.
+- User visual validation on 2026-04-27 confirmed both the point-light shell bug
+  and the point-shadow cube artifact were fixed.
 
 ## 6. Exit Gate
 
@@ -255,12 +293,11 @@ M05D can move to `validated` only when:
 - RenderDoc proof validates shadow products and projected receiver shadows;
 - user visual validation is requested and received for visual proof scenarios.
 
-As of 2026-04-27, directional conventional shadow parity/remediation and the
-local-scale `VsmTwoCubes` proof are validated. Slice E spot-light conventional
-shadows are validated for deferred Stage 12 lighting with focused tests, shader
-validation, CDB/debug-layer audit, RenderDoc spot-shadow probe, and user visual
-confirmation in `SpotShadowValidation`. Stage 18 translucent spot-shadow
-consumption is explicitly deferred. Point-light strategy/implementation remains
-required by this milestone unless explicitly narrowed with approval.
+As of 2026-04-27, directional conventional shadow parity/remediation, Slice E
+spot-light conventional shadows, and Slice F point-light conventional shadows
+are implemented, documented, and validated. Stage 18 translucent local-light
+shadow consumption remains explicitly deferred outside M05D. The conventional
+local-light baseline is validated for deferred Stage 12 lighting.
 
-If any item lacks evidence, M05D remains `in_progress`.
+If any future regression invalidates one of the evidence items above, M05D must
+return to `in_progress` until the failed proof is replaced.

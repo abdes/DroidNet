@@ -105,25 +105,25 @@ ShadowService upgrades.
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
 | Spot-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
-| Point-light shadow publications | LightingService / translucency | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Point-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
 
 ## 4. Resource Management
 
 ### 4.1 Point-Light Decision Matrix
 
-The design must explicitly choose one point-light conventional storage strategy
-before implementation. The baseline options are:
+The design explicitly chose the first point-light conventional storage strategy
+for M05D. The baseline options were:
 
 | Option | Pros | Cons | Vortex Verdict |
 | ------ | ---- | ---- | -------------- |
-| One-pass cubemap depth targets | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Higher memory footprint than some niche alternatives | **Preferred baseline** |
-| Atlased six-face conventional targets | Reuses atlas infrastructure, may simplify allocation bookkeeping | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity | Acceptable only if it clearly improves Oxygen resource management |
+| One-pass cubemap depth targets | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Requires layered cubemap rendering support that Oxygen does not yet have wired through the shadow-depth pass | Future upgrade target |
+| Cube-array six-face conventional targets | Uses the same cube-family storage shape while reusing the existing `ShadowDepthPass::RecordSlices` path | Six face draws instead of UE's one-pass path; deterministic `Texture2DArray` sampling instead of texture-cube compare sampling | **M05D validated baseline** |
+| Atlased six-face conventional targets | Reuses atlas infrastructure, may simplify allocation bookkeeping | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity | Deferred unless it clearly improves Oxygen resource management |
 | Dual-paraboloid or other compressed representation | Lower target count in some cases | Projection / filtering complexity, less aligned with UE reference path, higher risk of bespoke artifact handling | Rejected unless a future profiling / platform constraint forces it |
 
-Vortex therefore chooses **one-pass cubemap depth targets** as the default
-conventional point-light direction unless later evidence overturns it. This is
-the closest useful match to UE 5.7 and avoids inventing a niche representation
-with little architectural value.
+Vortex therefore chooses **cube-array six-face conventional targets** as the
+M05D validated baseline. This stays close to UE 5.7's cubemap model without
+claiming one-pass layered rendering parity before Oxygen has that backend path.
 
 That choice remains an internal storage decision, not the definition of the
 published shadow-binding ABI.
@@ -150,7 +150,7 @@ upgrade:
 ### 5.1 Chosen First Activation Order
 
 1. Spot-light conventional shadows
-2. One-pass cubemap point-light shadows
+2. Six-face cube-array point-light shadows
 3. Validation that both flow through the same published binding seam
 
 This order is intentional. Spot lights are cheaper to land and validate first,
@@ -212,22 +212,63 @@ Slice E implementation evidence:
   runtime exit `0`, no debugger break, `0` D3D12/DXGI errors, and no blocking
   warnings.
 
+### 5.3 Slice F Point-Light Conventional Contract
+
+Slice F adds the point-light conventional payload to the same
+`ShadowFrameBindings` publication seam:
+
+- one conventional point-shadow binding per shadow-casting point light;
+- six 90-degree reversed-Z face matrices per point light;
+- cube-array shadow storage allocated by `ConventionalShadowTargetAllocator`;
+- Stage 8 renders six `ShadowDepthPass::DepthSlice` entries per point light;
+- each face slice carries the point-light position, inverse range, face
+  direction, and authored bias parameters into the shared shadow-depth shader;
+- Stage 12 point deferred lighting selects the face from the receiver vector,
+  samples the published point shadow surface, and compares the same reversed
+  axial depth convention written by Stage 8.
+
+UE5.7 uses a one-pass cubemap point-light path when the runtime supports layered
+point-light shadow rendering. Oxygen's M05D baseline intentionally renders the
+six faces through `RecordSlices` and samples them through a deterministic
+`Texture2DArray` view of the cube-array surface. This is an accepted first
+activation divergence, not a claim of one-pass parity. The binding/storage
+choice keeps the upgrade path open for a later layered cubemap implementation.
+
+Slice F implementation evidence:
+
+- `PointShadowSetup` builds point bindings from shadow-casting point lights.
+- `ShadowService` publishes point-shadow surface/count/bindings alongside the
+  existing directional and spot conventional products.
+- `LightingService` and `DeferredLightPass` consume the point-shadow product for
+  Stage 12 point lights.
+- `DirectionalShadowCommon.hlsli` implements point face selection, 3x3 PCF over
+  the point shadow surface, and receiver-depth comparison in the same axial
+  reversed-depth convention as the point depth pass.
+- `DeferredLightProxyGeometry` owns service point/spot proxy geometry. The point
+  sphere winding regression is covered so the outside-volume point-light path
+  does not reintroduce the solid-shell failure.
+- `PointShadowValidation` is the focused no-sun validation scene, and
+  `ProbeRenderDocPointShadow.py` proves Stage 8/Stage 12 point-shadow bindings
+  and SceneColor contribution in a capture.
+- On 2026-04-27 the user visually confirmed the point-light shell bug and the
+  point-shadow cube artifact were both fixed.
+
 ## 6. Design Decision
 
-The hard requirement for this future phase is not “implement point-light
-shadows somehow.” It is “make the storage choice explicit, bind it through the
-existing publication seam, and preserve a clean upgrade path to VSM later.”
+The hard requirement is not “implement point-light shadows somehow.” It is
+“make the storage choice explicit, bind it through the existing publication
+seam, and preserve a clean upgrade path to VSM later.”
 
-The concrete decision taken here is to prefer one-pass cubemap depth targets
-for conventional point-light shadows. That aligns with UE's mature path and
-gives Vortex a clear conventional baseline before 7C upgrades ShadowService to
-VSM.
+The concrete M05D decision is to use cube-array storage with six explicit face
+draws and deterministic array-face sampling. This is less efficient than UE's
+one-pass cubemap path, but it gives Vortex a validated conventional baseline
+before later work decides between layered cubemap rendering and VSM.
 
 ## 7. Testability Approach
 
 1. Spot-light conventional shadows render correctly in deferred lighting.
-2. Point-light conventional shadows render correctly using the one-pass
-   cubemap baseline.
+2. Point-light conventional shadows render correctly using the six-face
+   cube-array baseline.
 3. `ShadowFrameBindings` remains valid for both directional and local-light
    consumers.
 4. The same consuming shader path remains compatible with later VSM activation
@@ -235,7 +276,7 @@ VSM.
 
 ## 8. Open Questions
 
-1. Whether atlased six-face allocation offers any concrete Oxygen-specific win
-   over the preferred one-pass cubemap baseline.
+1. Whether layered one-pass cubemap rendering should replace the six-face
+   `RecordSlices` implementation before VSM work.
 2. Whether point-light conventional shadows should remain behind a capability
    gate until content justifies their runtime cost.
