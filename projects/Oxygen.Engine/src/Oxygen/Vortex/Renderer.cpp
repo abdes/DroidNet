@@ -374,6 +374,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     = std::make_unique<DiagnosticsService>(capability_families_);
   gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
     observer_ptr { gfx.get() });
+  diagnostics_service_->SetGpuTimelineProfiler(
+    observer_ptr { gpu_timeline_profiler_.get() });
   render_context_pool_
     = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
 }
@@ -874,6 +876,7 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   }
   if (diagnostics_service_) {
     diagnostics_service_->BeginFrame(context->GetFrameSequenceNumber());
+    diagnostics_service_->SyncGpuTimelineDiagnostics();
   }
 
   const auto tag = internal::RendererTagFactory::Get();

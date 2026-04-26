@@ -6,6 +6,7 @@
 
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 
+#include <string>
 #include <utility>
 
 namespace oxygen::vortex {
@@ -41,6 +42,7 @@ auto DiagnosticsService::SetRendererCapabilities(
   std::scoped_lock lock(mutex_);
   renderer_capabilities_ = capabilities;
   enabled_features_ = ComputeEffectiveFeatures();
+  ApplyGpuTimelineEnabled();
   RefreshLedgerState();
 }
 
@@ -56,6 +58,7 @@ auto DiagnosticsService::SetEnabledFeatures(
   std::scoped_lock lock(mutex_);
   requested_features_ = features;
   enabled_features_ = ComputeEffectiveFeatures();
+  ApplyGpuTimelineEnabled();
   RefreshLedgerState();
 }
 
@@ -98,10 +101,101 @@ auto DiagnosticsService::FindShaderDebugMode(
   return ResolveShaderDebugMode(canonical_name);
 }
 
+auto DiagnosticsService::SetGpuTimelineProfiler(
+  const observer_ptr<internal::GpuTimelineProfiler> profiler) -> void
+{
+  std::scoped_lock lock(mutex_);
+  gpu_timeline_profiler_ = profiler;
+  ApplyGpuTimelineEnabled();
+  RefreshLedgerState();
+}
+
+auto DiagnosticsService::SetGpuTimelineEnabled(const bool enabled) -> void
+{
+  std::scoped_lock lock(mutex_);
+  gpu_timeline_enabled_requested_ = enabled;
+  ApplyGpuTimelineEnabled();
+  RefreshLedgerState();
+}
+
+auto DiagnosticsService::IsGpuTimelineEnabled() const -> bool
+{
+  std::scoped_lock lock(mutex_);
+  return gpu_timeline_enabled_requested_ && gpu_timeline_profiler_ != nullptr
+    && IsGpuTimelineFeatureEnabled();
+}
+
+auto DiagnosticsService::SetGpuTimelineMaxScopesPerFrame(
+  const std::uint32_t max_scopes) -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_ != nullptr) {
+    gpu_timeline_profiler_->SetMaxScopesPerFrame(max_scopes);
+  }
+}
+
+auto DiagnosticsService::SetGpuTimelineRetainLatestFrame(
+  const bool retain_latest_frame) -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_ != nullptr) {
+    gpu_timeline_profiler_->SetRetainLatestFrame(retain_latest_frame);
+  }
+}
+
+auto DiagnosticsService::AddGpuTimelineSink(
+  std::shared_ptr<internal::GpuTimelineSink> sink) -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_ != nullptr) {
+    gpu_timeline_profiler_->AddSink(std::move(sink));
+  }
+}
+
+auto DiagnosticsService::RequestGpuTimelineExport(
+  const std::filesystem::path& path) -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_ != nullptr) {
+    gpu_timeline_profiler_->RequestOneShotExport(path);
+  }
+}
+
+auto DiagnosticsService::GetLatestGpuTimelineFrame() const
+  -> std::optional<internal::GpuTimelineFrame>
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_ == nullptr) {
+    return std::nullopt;
+  }
+  return gpu_timeline_profiler_->GetLastPublishedFrame();
+}
+
+auto DiagnosticsService::SyncGpuTimelineDiagnostics() -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (!frame_ledger_.IsFrameOpen() || !IsFrameLedgerEnabled()
+    || !IsGpuTimelineFeatureEnabled() || gpu_timeline_profiler_ == nullptr) {
+    RefreshLedgerState();
+    return;
+  }
+
+  const auto frame = gpu_timeline_profiler_->GetLastPublishedFrame();
+  if (!frame.has_value()) {
+    RefreshLedgerState();
+    return;
+  }
+  for (const auto& diagnostic : frame->diagnostics) {
+    ReportGpuTimelineIssue(diagnostic);
+  }
+  RefreshLedgerState();
+}
+
 auto DiagnosticsService::BeginFrame(const frame::SequenceNumber frame) -> void
 {
   std::scoped_lock lock(mutex_);
   frame_ledger_.BeginFrame(frame);
+  RefreshLedgerState();
 }
 
 auto DiagnosticsService::RecordPass(DiagnosticsPassRecord record) -> void
@@ -161,10 +255,48 @@ auto DiagnosticsService::IsFrameLedgerEnabled() const noexcept -> bool
   return HasAllFeatures(enabled_features_, DiagnosticsFeature::kFrameLedger);
 }
 
+auto DiagnosticsService::IsGpuTimelineFeatureEnabled() const noexcept -> bool
+{
+  return HasAllFeatures(enabled_features_, DiagnosticsFeature::kGpuTimeline);
+}
+
+auto DiagnosticsService::HasAvailableGpuTimelineFrame() const -> bool
+{
+  return gpu_timeline_profiler_ != nullptr
+    && gpu_timeline_profiler_->GetLastPublishedFrame().has_value();
+}
+
+auto DiagnosticsService::ApplyGpuTimelineEnabled() -> void
+{
+  if (gpu_timeline_profiler_ != nullptr) {
+    gpu_timeline_profiler_->SetEnabled(
+      gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled());
+  }
+}
+
 auto DiagnosticsService::RefreshLedgerState() -> void
 {
-  frame_ledger_.UpdateState(
-    shader_debug_mode_, requested_features_, enabled_features_);
+  frame_ledger_.UpdateState(shader_debug_mode_, requested_features_,
+    enabled_features_,
+    gpu_timeline_enabled_requested_ && gpu_timeline_profiler_ != nullptr
+      && IsGpuTimelineFeatureEnabled(),
+    HasAvailableGpuTimelineFrame());
+}
+
+auto DiagnosticsService::ReportGpuTimelineIssue(
+  const internal::GpuTimelineDiagnostic& diagnostic) -> void
+{
+  auto code = DiagnosticsIssueCode::kTimelineOverflow;
+  if (diagnostic.code == "gpu.timestamp.incomplete_scope") {
+    code = DiagnosticsIssueCode::kTimelineIncompleteScope;
+  }
+
+  auto issue = MakeDiagnosticsIssue(code, DiagnosticsSeverity::kWarning,
+    diagnostic.message.empty() ? diagnostic.code : diagnostic.message);
+  issue.pass_name = "Vortex.GpuTimeline";
+  issue.product_name = "Vortex.GpuTimelineFrame";
+  issue.view_name = "frame:" + std::to_string(diagnostic.frame_sequence);
+  frame_ledger_.ReportIssue(std::move(issue));
 }
 
 } // namespace oxygen::vortex
