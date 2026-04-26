@@ -279,6 +279,22 @@ void EditorView::Initialize(scene::Scene &scene) {
   LOG_F(INFO, "EditorView '{}' initialized.", config_.name);
 }
 
+void EditorView::RetargetScene(scene::Scene& scene) {
+  if (state_ == ViewState::kDestroyed) {
+    return;
+  }
+
+  scene_ = scene.weak_from_this();
+  camera_node_ = {};
+  initial_orientation_set_ = false;
+  initial_scene_frame_applied_ = false;
+  if (state_ == ViewState::kReleasing) {
+    state_ = ViewState::kReady;
+  }
+
+  LOG_F(INFO, "EditorView '{}' retargeted to replacement scene.", config_.name);
+}
+
 void EditorView::OnSceneMutation() {
   LOG_SCOPE_F(4, "EditorView::OnSceneMutation");
   if (!current_context_ || state_ == ViewState::kDestroyed) {

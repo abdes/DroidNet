@@ -19,7 +19,7 @@ namespace oxygen::interop::module {
       return;
 
     try {
-      module_->ApplyDestroyScene();
+      module_->ApplyDestroyScene(true, context.FrameContext.get());
     }
     catch (...) {
       // swallow exceptions across engine boundary

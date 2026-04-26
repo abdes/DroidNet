@@ -10,6 +10,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -26,12 +27,16 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IOperationResultPublisher operationResults;
+    private readonly IStatusReducer statusReducer;
     private readonly IProjectManagerService projectManager;
     private readonly IContainer container;
     private readonly WindowId windowId;
 
     private readonly IViewLocator viewLocator;
     private readonly Dictionary<Guid, object> activeEditors = [];
+    private readonly SemaphoreSlim activeEditorViewGate = new(initialCount: 1, maxCount: 1);
+    private long activeEditorViewRequestId;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentHostViewModel" /> class.
@@ -50,6 +55,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         IDocumentService documentService,
         IViewLocator viewLocator,
         IEngineService engineService,
+        IOperationResultPublisher operationResults,
+        IStatusReducer statusReducer,
         IProjectManagerService projectManager,
         IContainer container,
         WindowId windowId,
@@ -62,6 +69,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         this.DocumentService = documentService;
         this.viewLocator = viewLocator;
         this.engineService = engineService;
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
         this.projectManager = projectManager;
         this.windowId = windowId;
 
@@ -108,6 +117,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             {
                 _ = this.ReleaseDocumentSurfacesAsync(documentId);
             }
+
+            this.activeEditorViewGate.Dispose();
         }
     }
 
@@ -120,7 +131,17 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
             var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-            editor = new SceneEditorViewModel(sceneMeta, this.DocumentService, this.windowId, this.engineService, this.projectManager, this.container, messenger, this.loggerFactory);
+            editor = new SceneEditorViewModel(
+                sceneMeta,
+                this.DocumentService,
+                this.windowId,
+                this.engineService,
+                this.operationResults,
+                this.statusReducer,
+                this.projectManager,
+                this.container,
+                messenger,
+                this.loggerFactory);
         }
         else
         {
@@ -196,19 +217,65 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
 
     partial void OnActiveEditorChanged(object? value)
     {
-        if (value is null)
+        var requestId = Interlocked.Increment(ref this.activeEditorViewRequestId);
+        _ = this.SwitchActiveEditorViewAsync(value, requestId);
+    }
+
+    private async Task SwitchActiveEditorViewAsync(object? value, long requestId)
+    {
+        await this.activeEditorViewGate.WaitAsync().ConfigureAwait(true);
+        try
         {
-            this.ActiveEditorView = null;
-            return;
+            if (requestId != Volatile.Read(ref this.activeEditorViewRequestId) || !ReferenceEquals(value, this.ActiveEditor))
+            {
+                return;
+            }
+
+            if (this.ActiveEditorView is SceneEditorView previousSceneView)
+            {
+                try
+                {
+                    await previousSceneView.DeactivateAsync().ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogWarning(ex, "Failed to deactivate previous scene editor view during document switch.");
+                }
+            }
+
+            if (requestId != Volatile.Read(ref this.activeEditorViewRequestId) || !ReferenceEquals(value, this.ActiveEditor))
+            {
+                return;
+            }
+
+            if (value is null)
+            {
+                this.ActiveEditorView = null;
+                return;
+            }
+
+            var view = this.viewLocator.ResolveView(value);
+
+            if (view is DroidNet.Mvvm.IViewFor nonGeneric)
+            {
+                nonGeneric.ViewModel = value;
+            }
+
+            if (requestId != Volatile.Read(ref this.activeEditorViewRequestId) || !ReferenceEquals(value, this.ActiveEditor))
+            {
+                if (view is SceneEditorView staleSceneView)
+                {
+                    await staleSceneView.DeactivateAsync().ConfigureAwait(true);
+                }
+
+                return;
+            }
+
+            this.ActiveEditorView = view;
         }
-
-        var view = this.viewLocator.ResolveView(value);
-
-        if (view is DroidNet.Mvvm.IViewFor nonGeneric)
+        finally
         {
-            nonGeneric.ViewModel = value;
+            this.activeEditorViewGate.Release();
         }
-
-        this.ActiveEditorView = view;
     }
 }

@@ -9,9 +9,12 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Engine;
@@ -41,9 +44,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
 {
     private readonly IContainer container;
     private readonly IProjectContextService projectContextService;
+    private readonly IProjectManagerService projectManager;
+    private readonly IProjectUsageService projectUsage;
     private readonly IEngineService engineService;
+    private readonly IOperationResultPublisher operationResults;
+    private readonly IStatusReducer statusReducer;
     private readonly ILogger logger;
     private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
+    private DocumentManager? documentManager;
     private IMessenger? messenger;
 
     /// <summary>
@@ -59,13 +67,21 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         IContainer container,
         IRouter router,
         IProjectContextService projectContextService,
+        IProjectManagerService projectManager,
+        IProjectUsageService projectUsage,
         IEngineService engineService,
+        IOperationResultPublisher operationResults,
+        IStatusReducer statusReducer,
         ILoggerFactory? loggerFactory = null)
         : base(container, router, loggerFactory)
     {
         this.container = container;
         this.projectContextService = projectContextService;
+        this.projectManager = projectManager;
+        this.projectUsage = projectUsage;
         this.engineService = engineService;
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
         this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
     }
 
@@ -122,9 +138,16 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         this.messenger ??= this.container.Resolve<IMessenger>();
         this.messenger?.RegisterAll(this);
 
+        if (!await this.EnsureEngineRunningAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
         // Mount the project's cooked assets root in the engine's virtual path resolver.
         // This allows the engine to resolve asset:/// URIs to actual files on disk.
         await this.RefreshCookedRootsAsync().ConfigureAwait(true);
+
+        await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -153,7 +176,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         // DocumentManager must be a singleton and resolved immediately to ensure it is always listening for messages
         // even if the router hasn't navigated to any editor yet.
         childContainer.Register<DocumentManager>(Reuse.Singleton);
-        _ = childContainer.Resolve<DocumentManager>();
+        this.documentManager = childContainer.Resolve<DocumentManager>();
 
         // Register shared services at workspace level
         childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
@@ -245,6 +268,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             this.logger.LogWarning(
                 "Cooked root directory does not exist: {CookedBaseRoot}. Assets will not be available in the engine.",
                 cookedBaseRoot);
+            this.PublishCookedRootWarning(
+                DiagnosticCodes.AssetMountPrefix + "ROOT_MISSING",
+                "Cooked root is missing",
+                "The workspace opened, but cooked assets are not available because the project cooked root does not exist.",
+                cookedBaseRoot);
             return;
         }
 
@@ -254,8 +282,29 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         {
             if (this.IsCookedIndexMountable(cookedBaseIndexPath))
             {
-                this.engineService.MountProjectCookedRoot(cookedBaseRoot);
-                mounted.Add(cookedBaseRoot);
+                try
+                {
+                    this.engineService.MountProjectCookedRoot(cookedBaseRoot);
+                    mounted.Add(cookedBaseRoot);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    this.logger.LogWarning(ex, "Failed to mount cooked root {CookedBaseRoot}.", cookedBaseRoot);
+                    this.PublishCookedRootWarning(
+                        DiagnosticCodes.AssetMountPrefix + "MOUNT_FAILED",
+                        "Cooked root mount failed",
+                        "The workspace opened, but cooked assets may not be available because the engine rejected the cooked root.",
+                        cookedBaseRoot,
+                        ex);
+                }
+            }
+            else
+            {
+                this.PublishCookedRootWarning(
+                    DiagnosticCodes.AssetMountPrefix + "INDEX_INCOMPATIBLE",
+                    "Cooked index is incompatible",
+                    "The workspace opened, but cooked assets may not be available because the cooked index could not be read.",
+                    cookedBaseIndexPath);
             }
 
             this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
@@ -288,6 +337,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             or NotSupportedException)
         {
             this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
+            this.PublishCookedRootWarning(
+                DiagnosticCodes.AssetMountPrefix + "ENUMERATE_FAILED",
+                "Cooked roots could not be enumerated",
+                "The workspace opened, but cooked assets may not be available because the cooked root folders could not be enumerated.",
+                cookedBaseRoot,
+                ex);
         }
 
         foreach (var mountPoint in mountPoints.OrderBy(static m => m, StringComparer.Ordinal))
@@ -305,8 +360,21 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 continue;
             }
 
-            this.engineService.MountProjectCookedRoot(cookedMountRoot);
-            mounted.Add(cookedMountRoot);
+            try
+            {
+                this.engineService.MountProjectCookedRoot(cookedMountRoot);
+                mounted.Add(cookedMountRoot);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.logger.LogWarning(ex, "Failed to mount cooked root {CookedMountRoot}.", cookedMountRoot);
+                this.PublishCookedRootWarning(
+                    DiagnosticCodes.AssetMountPrefix + "MOUNT_FAILED",
+                    "Cooked root mount failed",
+                    "The workspace opened, but cooked assets may not be available because the engine rejected a cooked mount point.",
+                    cookedMountRoot,
+                    ex);
+            }
         }
 
         if (mounted.Count == 0)
@@ -315,10 +383,72 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 "No cooked index files found under {CookedBaseRoot} (expected .cooked/<MountPoint>/{IndexFileName}). Assets will not be available in the engine.",
                 cookedBaseRoot,
                 indexFileName);
+            this.PublishCookedRootWarning(
+                DiagnosticCodes.AssetMountPrefix + "INDEX_MISSING",
+                "Cooked index is missing",
+                "The workspace opened, but cooked assets are not available because no cooked index was found.",
+                cookedBaseRoot);
             return;
         }
 
         this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+    }
+
+    private async Task OpenInitialSceneAsync()
+    {
+        if (this.messenger is null
+            || this.projectManager.CurrentProject is not { } project
+            || this.projectContextService.ActiveProject is not { } context
+            || project.Scenes.Count == 0)
+        {
+            return;
+        }
+
+        var scene = await this.ResolveInitialSceneAsync(project, context).ConfigureAwait(true);
+        if (scene is null)
+        {
+            return;
+        }
+
+        if (this.documentManager is null)
+        {
+            this.logger.LogWarning("Cannot open initial scene {SceneName}: document manager is not available.", scene.Name);
+            return;
+        }
+
+        var opened = await this.documentManager.OpenSceneAsync(scene).ConfigureAwait(true);
+        if (!opened)
+        {
+            this.logger.LogWarning("Initial scene {SceneName} was selected for project {ProjectName}, but the document did not open.", scene.Name, context.Name);
+        }
+    }
+
+    private async Task<Oxygen.Editor.World.Scene?> ResolveInitialSceneAsync(IProject project, ProjectContext context)
+    {
+        try
+        {
+            var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(usage?.LastOpenedScene))
+            {
+                var lastOpenedScene = usage.LastOpenedScene;
+                var lastOpenedSceneName = System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
+                var restored = project.Scenes.FirstOrDefault(scene =>
+                    string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(scene.Name, lastOpenedSceneName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
+
+                if (restored is not null)
+                {
+                    return restored;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.logger.LogWarning(ex, "Failed to restore the last opened scene for project {ProjectName}.", context.Name);
+        }
+
+        return project.ActiveScene;
     }
 
     [SuppressMessage(
@@ -362,6 +492,16 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         catch (Exception ex)
         {
             this.logger.LogError(ex, "Failed to start embedded engine for workspace activation.");
+            RuntimeOperationResults.PublishFailure(
+                this.operationResults,
+                this.statusReducer,
+                RuntimeOperationKinds.Start,
+                FailureDomain.RuntimeDiscovery,
+                DiagnosticCodes.RuntimePrefix + "START_FAILED",
+                "Embedded runtime failed to start",
+                "The workspace opened, but the live engine runtime could not start.",
+                this.CreateProjectScope(),
+                exception: ex);
             return false;
         }
         finally
@@ -392,4 +532,32 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             return false;
         }
     }
+
+    private AffectedScope CreateProjectScope()
+        => this.projectContextService.ActiveProject is { } project
+            ? new AffectedScope
+            {
+                ProjectId = project.ProjectId,
+                ProjectName = project.Name,
+                ProjectPath = project.ProjectRoot,
+            }
+            : AffectedScope.Empty;
+
+    private void PublishCookedRootWarning(
+        string code,
+        string title,
+        string message,
+        string affectedPath,
+        Exception? exception = null)
+        => RuntimeOperationResults.PublishWarning(
+            this.operationResults,
+            this.statusReducer,
+            RuntimeOperationKinds.CookedRootRefresh,
+            FailureDomain.AssetMount,
+            code,
+            title,
+            message,
+            this.CreateProjectScope(),
+            affectedPath,
+            exception);
 }

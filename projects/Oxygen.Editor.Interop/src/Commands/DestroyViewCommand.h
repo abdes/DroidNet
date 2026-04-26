@@ -23,6 +23,7 @@ namespace oxygen::interop::module {
       view_id_(id) {
     }
     void Execute(CommandContext& ctx) override;
+    [[nodiscard]] auto GetViewId() const noexcept -> ViewId { return view_id_; }
 
   private:
     ViewManager* view_manager_{ nullptr };
