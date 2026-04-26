@@ -46,7 +46,6 @@
 #include "Common/DemoCli.h"
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "RenderScene/MainModule.h"
 
@@ -109,7 +108,6 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   };
 
   {
-    examples::RenderingSettingsService rendering_settings {};
     auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
       app.platform->Input().ForRead());
     app.input_system = observer_ptr { input_sys.get() };
@@ -117,7 +115,6 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
 
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-      .shadow_quality_tier = rendering_settings.GetShadowQualityTier(),
       .directional_shadow_policy = app.directional_shadow_policy,
       .enable_imgui = !app.headless,
     };

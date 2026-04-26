@@ -40,8 +40,6 @@ constexpr auto kAllShaderDebugModes = std::array {
   ShaderDebugMode::kIblRawSky,
   ShaderDebugMode::kIblIrradiance,
   ShaderDebugMode::kBaseColor,
-  ShaderDebugMode::kUv0,
-  ShaderDebugMode::kOpacity,
   ShaderDebugMode::kWorldNormals,
   ShaderDebugMode::kRoughness,
   ShaderDebugMode::kMetalness,
@@ -199,8 +197,6 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, HelperClassificationMatchesRegistry)
       || info.mode == ShaderDebugMode::kDepthSlice
       || info.mode == ShaderDebugMode::kClusterIndex
       || info.mode == ShaderDebugMode::kBaseColor
-      || info.mode == ShaderDebugMode::kUv0
-      || info.mode == ShaderDebugMode::kOpacity
       || info.mode == ShaderDebugMode::kWorldNormals
       || info.mode == ShaderDebugMode::kRoughness
       || info.mode == ShaderDebugMode::kMetalness

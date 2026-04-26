@@ -95,12 +95,6 @@ public:
   //! Sets whether atmosphere blue-noise jitter is enabled.
   virtual auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
 
-  //! Returns the persisted directional shadow quality tier.
-  [[nodiscard]] virtual auto GetShadowQualityTier() const -> ShadowQualityTier;
-
-  //! Persists the directional shadow quality tier for the next renderer init.
-  virtual auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
-
   [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
   [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
   [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
@@ -128,7 +122,6 @@ private:
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
-  static constexpr auto kShadowQualityTierKey = "rendering.shadow_quality_tier";
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };

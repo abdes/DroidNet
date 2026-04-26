@@ -228,10 +228,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
   const float3 shadow_normal = ComputeShadowSurfaceNormal(
     input.world_pos, input.world_normal, input.is_front_face);
 
-#if defined(DEBUG_UV0)
-  debug_out = float3(frac(input.uv), 0.0f);
-  debug_handled = true;
-#elif defined(DEBUG_SCENE_DEPTH_RAW) || defined(DEBUG_SCENE_DEPTH_LINEAR)      \
+#if defined(DEBUG_SCENE_DEPTH_RAW) || defined(DEBUG_SCENE_DEPTH_LINEAR)        \
   || defined(DEBUG_SCENE_DEPTH_MISMATCH)
   {
     float scene_depth = 0.0f;
@@ -261,16 +258,13 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
       : float3(1.0f, 0.0f, 0.0f);
   }
   debug_handled = true;
-#elif defined(DEBUG_BASE_COLOR) || defined(DEBUG_OPACITY)                      \
-  || defined(DEBUG_WORLD_NORMALS) || defined(DEBUG_ROUGHNESS)                  \
-  || defined(DEBUG_METALNESS)
+#elif defined(DEBUG_BASE_COLOR) || defined(DEBUG_WORLD_NORMALS)                \
+  || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
   MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
     g_DrawIndex, input.is_front_face);
 #  if defined(DEBUG_BASE_COLOR)
   debug_out = s.base_rgb * input.color;
-#  elif defined(DEBUG_OPACITY)
-  debug_out = s.base_a.xxx;
 #  elif defined(DEBUG_WORLD_NORMALS)
   debug_out = s.N * 0.5f + 0.5f;
 #  elif defined(DEBUG_ROUGHNESS)

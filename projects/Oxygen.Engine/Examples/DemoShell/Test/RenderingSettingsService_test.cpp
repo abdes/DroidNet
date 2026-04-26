@@ -74,34 +74,6 @@ namespace {
 } // namespace
 
 NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_DefaultsToUltraForBackwardCompatibility)
-{
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kUltra);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_PersistsReadableStringValues)
-{
-  service_.SetShadowQualityTier(ShadowQualityTier::kMedium);
-
-  const auto settings = SettingsService::ForDemoApp();
-  ASSERT_NE(settings, nullptr);
-  ASSERT_TRUE(settings->GetString("rendering.shadow_quality_tier").has_value());
-  EXPECT_EQ(*settings->GetString("rendering.shadow_quality_tier"), "medium");
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kMedium);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_ReadsLegacyNumericPersistence)
-{
-  const auto settings = SettingsService::ForDemoApp();
-  ASSERT_NE(settings, nullptr);
-  settings->SetFloat("rendering.shadow_quality_tier", 1.0F);
-
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kMedium);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
   VortexBoundDebugModePersistsDirectLightingOnly)
 {
   auto graphics = std::make_shared<FakeGraphics>();

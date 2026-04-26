@@ -451,6 +451,10 @@ Rules:
 
 - Every enum value must have exactly one registry entry.
 - Canonical names must be stable, lowercase, hyphenated, and tool-safe.
+- A mode must not be exposed unless the active runtime path can actually render
+  it or the registry marks it unsupported with a specific reason. Forward-only
+  material probes such as UV0/opacity are not valid deferred fullscreen debug
+  views unless the G-buffer or another published product carries that data.
 - UI code must consume the registry rather than duplicate mode lists.
 - SceneRenderer can keep executing debug views, but mode classification must
   move to the registry or remain tested against it.

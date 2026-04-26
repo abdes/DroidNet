@@ -41,8 +41,6 @@ using enum ShaderType;
 //   DEBUG_DEPTH_SLICE: Depth slice visualization
 //   DEBUG_CLUSTER_INDEX: Cluster index checkerboard
 //   DEBUG_BASE_COLOR: Base color/albedo visualization
-//   DEBUG_UV0: UV0 visualization
-//   DEBUG_OPACITY: Opacity visualization
 //   DEBUG_WORLD_NORMALS: World-space normals visualization
 //   DEBUG_ROUGHNESS: Roughness visualization
 //   DEBUG_METALNESS: Metalness visualization
@@ -195,24 +193,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_BASE_COLOR" },
-    .permutations=std::array<std::string_view, 2>
-      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: required DEBUG_UV0 plus ALPHA_TEST / HDR output
-  // permutations.
-  RequiredDefineShaderFileSpec<1, 1, 2> {
-    .path="Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .required_defines=std::array<std::string_view, 1> { "DEBUG_UV0" },
-    .permutations=std::array<std::string_view, 2>
-      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: required DEBUG_OPACITY plus ALPHA_TEST / HDR
-  // output permutations.
-  RequiredDefineShaderFileSpec<1, 1, 2> {
-    .path="Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .required_defines=std::array<std::string_view, 1> { "DEBUG_OPACITY" },
     .permutations=std::array<std::string_view, 2>
       { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
@@ -491,7 +471,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 4 each (required debug define
 //   x ALPHA_TEST x OXYGEN_HDR_OUTPUT)
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
-// - ForwardDebug_PS debug-required variants: 68
+// - ForwardDebug_PS debug-required variants: 60
 // - ForwardDebug_PS virtual-shadow-mask permutations: 8
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassGBuffer: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
@@ -513,6 +493,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 117
+// Total: 109
 
 } // namespace oxygen::graphics::d3d12
