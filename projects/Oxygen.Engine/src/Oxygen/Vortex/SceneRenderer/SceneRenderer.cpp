@@ -59,6 +59,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
@@ -1314,6 +1315,10 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
+    occlusion_ = std::make_unique<OcclusionModule>(renderer_);
+  }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     base_pass_ = std::make_unique<BasePassModule>(
       renderer_, scene_textures_.GetConfig());
   }
@@ -1524,6 +1529,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   ctx.current_view.screen_hzb_mip_count = 0U;
   ctx.current_view.screen_hzb_available = false;
   ctx.current_view.screen_hzb_has_previous = false;
+  ctx.current_view.occlusion_results.reset(nullptr);
   if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
     screen_hzb_->Execute(ctx, scene_textures_);
     const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
@@ -1579,6 +1585,29 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
     "Vortex.Stage5.ScreenHzbBuild",
     published_view_frame_bindings_.screen_hzb_frame_slot);
+
+  if (occlusion_ != nullptr) {
+    occlusion_->Execute(ctx, scene_textures_);
+    const auto& occlusion_stats = occlusion_->GetStats();
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage5.Occlusion",
+        .kind = DiagnosticsPassKind::kCpuOnly,
+        .executed = occlusion_stats.results_valid,
+        .inputs = { "PreparedSceneFrame", "Vortex.ScreenHzb" },
+        .outputs = { "Vortex.OcclusionFrameResults" },
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.OcclusionFrameResults",
+        .producer_pass = "Vortex.Stage5.Occlusion",
+        .descriptor
+        = std::string { "fallback=" }
+          + std::string { to_string(occlusion_stats.fallback_reason) },
+        .published = ctx.current_view.occlusion_results.get() != nullptr,
+        .valid = occlusion_stats.results_valid,
+      });
+  }
 
   // Stage 6: Forward light data / light grid
 
