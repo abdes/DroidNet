@@ -204,7 +204,7 @@ Validation:
 
 ### Slice D - Frame Ledger And Minimal Runtime Issues
 
-**Status:** `in_progress`
+**Status:** `validated`
 
 Current evidence:
 
@@ -339,7 +339,7 @@ Validation:
 
 ### Slice G - DemoShell Diagnostics Panel Registry
 
-**Status:** `in_progress`
+**Status:** `validated`
 
 Tasks:
 
@@ -380,7 +380,15 @@ Validation:
   with RenderingSettingsService 6/6.
 - Touched example binaries build and link:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-async oxygen-examples-lightbench oxygen-examples-physics oxygen-examples-renderscene oxygen-examples-texturedcube --parallel 4`.
-- Runtime UI smoke is still required before Slice G can move to `validated`.
+- Focused panel draw smoke passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests Oxygen.Examples.DemoShell.RenderingSettingsService.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Examples\.DemoShell\.(DiagnosticsPanel|RenderingSettingsService)" --output-on-failure`
+  with `DiagnosticsPanel` 1/1 and `RenderingSettingsService` 6/6.
+- Runtime DemoShell registration smoke passed:
+  `cmake --build out\build-ninja --config Debug --target oxygen-examples-texturedcube --parallel 4`;
+  `Oxygen.Examples.TexturedCube.exe --frames 4 --fps 30 --vsync false --capture-provider off`
+  exited 0 and `texturedcube-diagnostics-panel.stderr.log` contains
+  `Registered Diagnostics panel for the Vortex runtime`.
 
 ### Slice H - External Tool Handshake And Automation Hardening
 
@@ -480,7 +488,7 @@ ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" -
 If runtime-visible panels, manifests, or debug modes change:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m05a-diagnostics -Frame 5 -RunFrames 9 -Fps 30 -BuildJobs 4
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m05a-diagnostics\vortexbasic-runtime -Frame 5 -RunFrames 9 -Fps 30 -BuildJobs 4
 ```
 
 If new GPU resources or passes are added:
@@ -510,6 +518,16 @@ M05A can move to `validated` only when all implemented scope has evidence:
 - the VTX-M05A row in `IMPLEMENTATION_STATUS.md` records files/areas changed,
   commands/results, UE5.7 references, and remaining gaps without adding
   per-commit rows.
+
+Current closure evidence:
+
+- Full VortexBasic runtime proof passed on 2026-04-26:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m05a-diagnostics\vortexbasic-runtime -Frame 5 -RunFrames 9 -Fps 30 -BuildJobs 4`.
+  The validation report records `analysis_result=success`; the CDB/D3D12
+  debug-layer report records `overall_verdict=pass`; the RenderDoc capture
+  report records `analysis_result=success`.
+- No M05A closeout change altered shader requests or shader bytecode, so no
+  additional ShaderBake proof is required for this closeout.
 
 If any item lacks validation, M05A remains `in_progress`.
 
