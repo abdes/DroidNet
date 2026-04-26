@@ -74,68 +74,55 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M05D - Conventional Shadow Parity And Local-Light Expansion
+### NEXT: VTX-M06A - Multi-View Proof Closeout
 
 **Status:** `planned`
 
-**Purpose:** First complete a UE5.7 parity audit and remediation pass for the
-directional CSM path, then expand the conventional shadow-map path beyond the
-directional-light baseline with spot-light shadows and the explicit point-light
-strategy selected for Oxygen.
+**Purpose:** Prove the Vortex renderer's multi-view substrate with heterogeneous
+per-view rendering, PiP/multi-surface routing, and per-view capability/product
+isolation.
 
 **Why this is next:** `VTX-M05A` diagnostics, `VTX-M05B` occlusion consumers,
-and `VTX-M05C` translucency are validated. The next desktop-deferred baseline
-gap is conventional shadow robustness: city-scale directional CSM projected
-shadows are unstable under camera movement, and local-light shadows are not
-implemented.
+`VTX-M05C` translucency, and `VTX-M05D` conventional shadow parity closeout are
+validated. The next desktop-deferred baseline gap is proving more than one
+view/surface without leaking products, options, or capabilities between views.
 
 **Validated prerequisite work packages:** `VTX-M03`, `VTX-M04D.4`,
-`VTX-M05A`, `VTX-M05B`, and `VTX-M05C`.
+`VTX-M05A`, `VTX-M05B`, `VTX-M05C`, and `VTX-M05D`.
 
-**Active work packages:** `VTX-M05D - Conventional shadow parity and local-light
-expansion`.
+**Active work packages:** `VTX-M06A - Multi-view proof closeout`.
 
-**Detailed plan:** follow
-[`plan/VTX-M05D-conventional-shadow-parity.md`](plan/VTX-M05D-conventional-shadow-parity.md).
+**Detailed plan:** prepare the VTX-M06A proof plan from the row below before
+implementation.
 
 **In scope:**
 
-- UE5.7-informed directional CSM parity audit and Oxygen divergence record.
-- Remediation of directional CSM instability in `CityEnvironmentValidation`
-  under camera movement.
-- UE5.7-informed local-light shadow-map design and Oxygen divergence record.
-- Spot-light conventional shadow implementation and proof.
-- Explicit point-light shadow strategy, implementation, and proof if retained
-  in the production desktop baseline.
-- Diagnostics/proof surfaces for local-light shadow maps and projected-shadow
-  visibility.
+- Heterogeneous multi-view frame setup and publication proof.
+- PiP or multi-surface routing through the existing composition path.
+- Per-view capability/product isolation in diagnostics and frame products.
+- Runtime proof scene/tooling that makes product leakage visible.
 
 **Out of scope:**
 
-- Virtual shadow maps.
-- Ray-traced shadows.
-- Area-light soft-shadow parity beyond the conventional shadow-map baseline.
+- Offscreen-only preview/capture scenarios owned by `VTX-M06B`.
+- Feature-gated runtime variants owned by `VTX-M06C`.
+- Reflection/360-view environment resource parity.
 
 **Dependencies:**
 
-- Existing directional CSM baseline, treated as a starting point rather than a
-  full stability/parity closure.
-- Validated diagnostics and capture tooling.
-- Existing LightingService and ShadowService publication substrate.
+- Existing CompositionView/ViewLifecycle/CompositionPlanner substrate.
+- Validated diagnostics and frame-product publication.
+- Validated composition/presentation closeout.
 
 **Exit gate:**
 
-- Directional CSM parity audit is recorded against local UE5.7 source.
-- City-scale CSM projected-shadow instability is reproduced, explained,
-  remediated, and proven stable under camera movement.
-- Implementation exists and is wired through ShadowService/LightingService.
-- Focused tests and RenderDoc/CDB proof validate local-light shadow products,
-  projected shadows, and no D3D12/DXGI debug-layer errors.
-- User visual confirmation is recorded for any milestone scenario that requires
-  visual validation.
+- A detailed VTX-M06A proof plan is created before implementation.
+- Multi-view runtime implementation exists without cross-view product leakage.
+- Focused tests and RenderDoc/CDB proof validate per-view routing and products.
+- User visual confirmation is requested and recorded for visual scenarios.
 
-**Recommended verification:** see the dedicated M05D plan; CSM and local-light
-visual scenarios require user confirmation before closure.
+**Recommended verification:** define in the VTX-M06A detailed proof plan before
+implementation.
 
 ## 5. Milestone Roadmap
 
@@ -160,7 +147,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M05A | Diagnostics product service | `validated` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
 | VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
 | VTX-M05C | Translucency stage | `validated` | VTX-M03, VTX-M04D.5, VTX-M05A, VTX-M05B | Stage 18 standard forward-lit translucency consuming prepared transparent draws plus lighting/shadow/environment publications. Focused build/tests, senior-review regression remediation, CDB/D3D12 audit, RenderDoc proof, UE5.7 re-check, and user visual confirmation passed. |
-| VTX-M05D | Conventional shadow parity and local-light expansion | `planned` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | UE5.7 directional CSM parity audit/remediation first, including city-scale camera-stability proof; then spot-light conventional shadows and explicit point-light strategy under ShadowService. |
+| VTX-M05D | Conventional shadow parity and local-light expansion | `validated` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | Directional CSM UE5.7 audit/remediation and local-scale `VsmTwoCubes` validation are closed with Release smoke, recook, RenderDoc capture, and sequential shadow/base-pass analysis proof. Spot/point conventional local-light shadows are deferred to future ShadowService/local-light work by closeout approval. |
 | VTX-M06A | Multi-view proof closeout | `planned` | VTX-M05A, VTX-M05B, VTX-M05C | Heterogeneous per-view rendering, PiP/multi-surface routing, per-view capability gating. |
 | VTX-M06B | Offscreen proof closeout | `planned` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios. |
 | VTX-M06C | Feature-gated runtime variants | `planned` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants. |

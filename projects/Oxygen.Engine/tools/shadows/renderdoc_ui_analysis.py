@@ -24,6 +24,9 @@ DEFAULT_PASS_EVENT_LIMIT = 24
 DEFAULT_RESOURCE_EVENT_LIMIT = 24
 
 KNOWN_PASS_NAMES = [
+    "Vortex.Stage8.ShadowDepths",
+    "Vortex.Stage9.BasePass.MainPass",
+    "Vortex.Stage9.BasePass",
     "ConventionalShadowRasterPass.ShadowDepthWork",
     "DepthPrePass.SceneDepthWork",
     "AutoExposurePass",

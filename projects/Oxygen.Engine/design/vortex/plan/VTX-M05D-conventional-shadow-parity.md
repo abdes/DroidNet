@@ -221,4 +221,9 @@ M05D can move to `validated` only when:
 - RenderDoc proof validates shadow products and projected receiver shadows;
 - user visual validation is requested and received for visual proof scenarios.
 
-If any item lacks evidence, M05D remains `in_progress`.
+Closeout approval on 2026-04-27 narrowed the closed M05D baseline to
+directional conventional shadow parity/remediation plus the local-scale
+`VsmTwoCubes` proof. Spot-light and point-light conventional shadows are
+deferred to future ShadowService/local-light work instead of blocking M05D.
+
+If any directional CSM item lacks evidence, M05D remains `in_progress`.
