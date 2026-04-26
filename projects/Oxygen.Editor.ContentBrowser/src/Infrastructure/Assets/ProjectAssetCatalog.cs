@@ -10,12 +10,14 @@ using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Catalog.FileSystem;
 using Oxygen.Assets.Catalog.LooseCooked;
 using Oxygen.Editor.Projects;
+using Oxygen.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
 public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
 {
-    private readonly IProjectManagerService projectManager;
+    private readonly IProjectContextService projectContextService;
+    private readonly IStorageProvider storage;
     private readonly List<IAssetCatalog> catalogs = new();
     private readonly Subject<AssetChange> changes = new();
     private readonly CompositeDisposable catalogSubscriptions = new();
@@ -23,9 +25,10 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
     private bool isDisposed;
     private bool isInitialized;
 
-    public ProjectAssetCatalog(IProjectManagerService projectManager)
+    public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage)
     {
-        this.projectManager = projectManager;
+        this.projectContextService = projectContextService;
+        this.storage = storage;
     }
 
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
@@ -37,9 +40,9 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             return;
         }
 
-        if (this.projectManager.CurrentProject is not { } project)
+        if (this.projectContextService.ActiveProject is not { } project)
         {
-            Debug.WriteLine("[ProjectAssetCatalog] InitializeAsync skipped: no CurrentProject");
+            Debug.WriteLine("[ProjectAssetCatalog] InitializeAsync skipped: no active project context");
             return;
         }
 
@@ -58,50 +61,48 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             this.lockObj.Release();
         }
 
-        Debug.WriteLine($"[ProjectAssetCatalog] Initializing for project at '{project.ProjectInfo.Location}'");
-
-        var storage = this.projectManager.GetCurrentProjectStorageProvider();
+        Debug.WriteLine($"[ProjectAssetCatalog] Initializing for project at '{project.ProjectRoot}'");
 
         // Always provide engine-generated assets (e.g. /Engine/Generated/BasicShapes/*) to pickers.
         await this.AddCatalogAsync(new GeneratedAssetCatalog()).ConfigureAwait(false);
 
         // Index project root
-        if (!string.IsNullOrEmpty(project.ProjectInfo.Location))
+        if (!string.IsNullOrEmpty(project.ProjectRoot))
         {
             var rootOptions = new FileSystemAssetCatalogOptions
             {
-                RootFolderPath = project.ProjectInfo.Location,
+                RootFolderPath = project.ProjectRoot,
                 MountPoint = "project",
             };
-            var rootCatalog = new FileSystemAssetCatalog(storage, rootOptions);
+            var rootCatalog = new FileSystemAssetCatalog(this.storage, rootOptions);
             await this.AddCatalogAsync(rootCatalog).ConfigureAwait(false);
         }
 
         // Index mount points
-        foreach (var mount in project.ProjectInfo.AuthoringMounts)
+        foreach (var mount in project.AuthoringMounts)
         {
             try
             {
-                var mountRootLocation = storage.NormalizeRelativeTo(project.ProjectInfo.Location!, mount.RelativePath);
+                var mountRootLocation = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
 
                 var mountOptions = new FileSystemAssetCatalogOptions
                 {
                     RootFolderPath = mountRootLocation,
                     MountPoint = mount.Name,
                 };
-                var mountCatalog = new FileSystemAssetCatalog(storage, mountOptions);
+                var mountCatalog = new FileSystemAssetCatalog(this.storage, mountOptions);
                 await this.AddCatalogAsync(mountCatalog).ConfigureAwait(false);
 
                 // Index cooked outputs for this mount point via the authoritative loose cooked index:
                 //   .cooked/<MountPoint>/container.index.bin
                 // This is what exposes runtime-consumable assets like .ogeo/.omat/.otex/.oscene as canonical asset:/// URIs.
-                var cookedRootLocation = storage.NormalizeRelativeTo(project.ProjectInfo.Location!, $".cooked/{mount.Name}");
+                var cookedRootLocation = this.storage.NormalizeRelativeTo(project.ProjectRoot, $".cooked/{mount.Name}");
                 var cookedOptions = new LooseCookedIndexAssetCatalogOptions
                 {
                     CookedRootFolderPath = cookedRootLocation,
                 };
 
-                var cookedCatalog = new LooseCookedIndexAssetCatalog(storage, cookedOptions);
+                var cookedCatalog = new LooseCookedIndexAssetCatalog(this.storage, cookedOptions);
                 await this.AddCatalogAsync(cookedCatalog).ConfigureAwait(false);
             }
             catch (Exception)
@@ -139,15 +140,13 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
 
     public async Task AddFolderAsync(Oxygen.Storage.IFolder folder, string mountPoint)
     {
-        var storage = this.projectManager.GetCurrentProjectStorageProvider();
-
         var options = new FileSystemAssetCatalogOptions
         {
             RootFolderPath = folder.Location,
             MountPoint = mountPoint,
         };
 
-        var catalog = new FileSystemAssetCatalog(storage, options);
+        var catalog = new FileSystemAssetCatalog(this.storage, options);
         await this.AddCatalogAsync(catalog).ConfigureAwait(false);
     }
 
