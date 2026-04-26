@@ -1,6 +1,6 @@
 # VTX-M05B Occlusion Consumer Closeout
 
-**Status:** `in_progress`
+**Status:** `validated`
 **Milestone:** `VTX-M05B - Occlusion Consumer Closeout`
 **Scope owner:** Vortex SceneRenderer Stage 5 occlusion consumer
 **Primary LLD:** [../lld/occlusion.md](../lld/occlusion.md)
@@ -296,9 +296,10 @@ Validation:
 - RenderDoc proof passed:
   `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.proof.report.txt`
   records Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, and Stage 9
-  base-pass draws 2 for the VortexBasic `--with-occlusion` proof scene.
-- The milestone remains `in_progress` until required user visual confirmation
-  is recorded.
+  base-pass draws 2 for the VortexBasic `--with-occlusion` proof scene. The
+  refreshed proof also records Stage 20 ground-grid scope count 0 after the
+  proof-scene cleanup.
+- User visual confirmation approved after the proof-scene cleanup.
 
 ## 7. Exit Gate
 

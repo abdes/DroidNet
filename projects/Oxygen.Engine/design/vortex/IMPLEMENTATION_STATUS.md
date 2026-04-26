@@ -31,23 +31,19 @@ gap.
 
 ## 3. Current Next Step
 
-**Next milestone:** `VTX-M05B - Occlusion Consumer Closeout`
+**Next milestone:** `VTX-M05C - Translucency Stage`
 
-**Why:** `VTX-M05A` is validated. The next planned gate is closing the stage-5
-occlusion consumer path over the existing generic Screen HZB implementation.
+**Why:** `VTX-M05A` and `VTX-M05B` are validated. The next planned gate is the
+translucency stage consuming the existing lighting, shadow, environment, and
+diagnostics substrate.
 
-**Active work package:** `VTX-M05B - Occlusion Consumer Closeout`
+**Active work package:** `VTX-M05C - Translucency Stage`
 
-**Plan:** [plan/VTX-M05B-occlusion-consumer-closeout.md](./plan/VTX-M05B-occlusion-consumer-closeout.md)
-defines the detailed work slices. The design authority is
-[lld/occlusion.md](./lld/occlusion.md), with [lld/hzb.md](./lld/hzb.md) as the
-existing Screen HZB producer contract.
+**Plan:** pending detailed milestone plan refresh before implementation.
 
-**Current M05B scope:** full occlusion/query/visibility policy over Screen HZB,
-including visibility classifications, batching, temporal handoff, consumers, and
-proof.
+**Current M05C scope:** Stage 18 translucency implementation and proof.
 
-**Current M05B status:** `in_progress`.
+**Current M05C status:** `planned`.
 
 ## 4. Milestone Ledger
 
@@ -67,7 +63,7 @@ proof.
 | VTX-M04E | Async migration parity gate | `validated` | Async authors a Vortex-ready scene environment, sun directional light, shadow receiver ground, lifted sphere/two-submesh geometry, and Vortex runtime view metadata. DemoShell no longer overrides the scene-authored environment. `Run-AsyncRuntimeValidation.ps1` passed with RenderDoc structural/product proof, final present proof, and overlay composition proof on 2026-04-26. | No open M04E closure gap. |
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | Runtime composition registration, queued single-view composition copy, Stage 22 post-process routing, and overlay blend path exist. `AnalyzeRenderDocAsyncProducts.py` proves exactly one post-Stage-22 composition copy from `Async.SceneColor`, exactly one overlay blend after scene copy, final present output, and focused `RendererCompositionQueue` tests passed. | No open M04F closure gap. |
 | VTX-M05A | Diagnostics product service | `validated` | Diagnostics runtime service, authoritative shader-debug registry, frame ledger, capture manifest, GPU timeline facade, Diagnostics panel, proof script hardening, direct/masked debug corrections, unsupported IBL/light-culling mode handling, and solid/wireframe/wireframe-overlay render controls are implemented and documented in the LLD/plan. Validation evidence: focused Vortex/DemoShell builds and tests, release DiagnosticsService test, VortexBasic runtime RenderDoc/debug-layer proof, TexturedCube panel-registration smoke, RenderScene build/ShaderBake validation, and user visual confirmation for solid plus wireframe overlay. | No open M05A closure gap. Optional GPU debug primitives remain deferred until a concrete proof gap requires them. |
-| VTX-M05B | Occlusion consumer closeout | `in_progress` | LLD/plan updated and committed (`cd57ac692`); result substrate, HZB tester, base-pass consumers, diagnostics facts, `vtx.occlusion.*` controls, and VortexBasic `--with-occlusion` proof scene/tooling exist. Latest validation: ShaderBake rebuilt 186 modules; focused `RendererCapability`, `OcclusionModule`, `SceneRendererPublication`, and `SceneRendererDeferredCore` tests passed 62/62; CDB/D3D12 audit report `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt` passed with 0 D3D12/DXGI errors; RenderDoc proof `vortex-occlusion.proof.report.txt` shows Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, Stage 9 base-pass draws 2. | Obtain required user visual confirmation before closeout. |
+| VTX-M05B | Occlusion consumer closeout | `validated` | LLD/plan updated; result substrate, HZB tester, base-pass consumers, diagnostics facts, `vtx.occlusion.*` controls, and VortexBasic `--with-occlusion` proof scene/tooling exist. Validation: ShaderBake rebuilt 186 modules; focused `RendererCapability`, `OcclusionModule`, `SceneRendererPublication`, and `SceneRendererDeferredCore` tests passed 62/62; CDB/D3D12 audit report `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt` passed with 0 D3D12/DXGI errors; RenderDoc proof `vortex-occlusion.proof.report.txt` shows Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, Stage 9 base-pass scene draws 2, and Stage 20 ground grid absent; user visual confirmation approved. | No open M05B closure gap. |
 | VTX-M05C | Translucency stage | `planned` | Directory placeholders and LLD exist. | Stage 18 implementation consuming lighting/shadow/environment publications and validation proof. |
 | VTX-M05D | Local-light conventional shadow expansion | `planned` | Directional ShadowService baseline exists; local-light LLD exists. | Spot-light shadows, point-light strategy, publication, capture proof, and debug-layer evidence. |
 | VTX-M06A | Multi-view proof closeout | `planned` | CompositionView/ViewLifecycle/CompositionPlanner substrate exists. | Heterogeneous per-view runtime proof, PiP/multi-surface routing, and per-view product isolation. |
