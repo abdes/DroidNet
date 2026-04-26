@@ -27,6 +27,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DiagnosticsPanel
+  SOURCES
+    "DiagnosticsPanel_test.cpp"
+)
+
+m_gtest_program(
   AsyncVortexMigrationSurface
   SOURCES
     "AsyncVortexMigrationSurface_test.cpp"
