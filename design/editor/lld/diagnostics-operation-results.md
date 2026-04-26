@@ -220,20 +220,24 @@ Reserved V0.1 domains for later milestones:
 - `Document`.
 - `SceneAuthoring`.
 - `LiveSync`.
-- `RuntimeDiscovery`.
-- `RuntimeSurface`.
-- `RuntimeView`.
 - `ContentPipeline`.
 - `AssetImport`.
 - `AssetCook`.
-- `AssetMount`.
 - `StandaloneRuntime`.
+
+ED-M02 active runtime domains:
+
+- `RuntimeDiscovery`.
+- `RuntimeSurface`.
+- `RuntimeView`.
+- `AssetMount`.
 - `Settings`.
 
 Domains are stable vocabulary, not class names.
 
-`ProjectSettings` is for project-scoped settings. `Settings` is reserved for
-global editor settings infrastructure.
+`ProjectSettings` is reserved for project-scoped settings. `Settings` is the
+global editor settings domain and is active in ED-M02 for runtime FPS/logging
+setting failures.
 
 ### Affected Scope
 
@@ -513,9 +517,20 @@ Later milestones must add validation for:
 - scene save failure.
 - live sync failure.
 - cook failure.
-- mount failure.
-- runtime surface/view failure.
 - standalone load failure.
+
+ED-M02 diagnostics are complete when:
+
+- runtime startup/discovery failure is visible as `RuntimeDiscovery`.
+- surface attach/resize/release failure is visible as `RuntimeSurface` with the
+  affected document/viewport where known.
+- view create/destroy/preset failure is visible as `RuntimeView` with the
+  affected document/viewport where known.
+- cooked-root mount failure or missing cooked index is visible as `AssetMount`
+  when it affects runtime content availability.
+- FPS/logging setting failure is visible as `Settings`.
+- output/log entries carry enough document/viewport/runtime state to correlate
+  a blank or failed viewport with the failed runtime operation.
 
 Straightforward tests should cover:
 
