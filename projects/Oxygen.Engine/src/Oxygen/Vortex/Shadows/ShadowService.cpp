@@ -6,7 +6,9 @@
 
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 
+#include <algorithm>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -70,7 +72,9 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 {
   last_render_state_.published_view_count = 0U;
   last_render_state_.directional_view_count = 0U;
+  last_render_state_.spot_view_count = 0U;
   last_render_state_.rendered_cascade_count = 0U;
+  last_render_state_.rendered_spot_shadow_count = 0U;
   last_render_state_.rendered_draw_count = 0U;
   last_render_state_.shadow_caster_draw_count = 0U;
   last_render_state_.selection_epoch
@@ -87,7 +91,10 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     : nullptr;
   for (const auto& view_input : inputs.active_views) {
     auto view_data = DirectionalShadowFrameData {};
+    auto shadow_surface = std::shared_ptr<graphics::Texture> {};
+    auto spot_shadow_surface = std::shared_ptr<graphics::Texture> {};
     auto rendered_cascade_count = 0U;
+    auto rendered_spot_shadow_count = 0U;
     auto rendered_draw_count = 0U;
     auto shadow_caster_draw_count = 0U;
 
@@ -95,32 +102,49 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       const auto view_state = cascade_shadow_pass_->RenderDirectionalView(
         view_input, *directional_light);
       view_data = view_state.frame_data;
-      const auto shadow_surface = view_state.shadow_surface;
+      shadow_surface = view_state.shadow_surface;
       rendered_cascade_count = view_state.rendered_cascade_count;
       rendered_draw_count = view_state.rendered_draw_count;
       shadow_caster_draw_count = view_state.shadow_caster_draw_count;
-      const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
-      published_views_.insert_or_assign(view_input.view_id,
-        PublishedView {
-          .slot = slot,
-          .data = view_data,
-          .surface = shadow_surface,
-        });
-    } else {
-      const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
-      published_views_.insert_or_assign(view_input.view_id,
-        PublishedView {
-          .slot = slot,
-          .data = view_data,
-        });
     }
+
+    if (inputs.frame_light_set != nullptr
+      && !inputs.frame_light_set->local_lights.empty()) {
+      const auto spot_state = cascade_shadow_pass_->RenderSpotView(
+        view_input, std::span(inputs.frame_light_set->local_lights));
+      view_data.bindings.spot_shadow_surface_handle
+        = spot_state.bindings.spot_shadow_surface_handle;
+      view_data.bindings.spot_shadow_count = spot_state.bindings.spot_shadow_count;
+      view_data.bindings.technique_flags |= spot_state.bindings.technique_flags;
+      view_data.bindings.sampling_contract_flags
+        |= spot_state.bindings.sampling_contract_flags;
+      view_data.bindings.spot_shadows = spot_state.bindings.spot_shadows;
+      spot_shadow_surface = spot_state.shadow_surface;
+      rendered_spot_shadow_count = spot_state.rendered_shadow_count;
+      rendered_draw_count += spot_state.rendered_draw_count;
+      shadow_caster_draw_count = (std::max)(
+        shadow_caster_draw_count, spot_state.shadow_caster_draw_count);
+    }
+
+    const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
+    published_views_.insert_or_assign(view_input.view_id,
+      PublishedView {
+        .slot = slot,
+        .data = view_data,
+        .surface = shadow_surface,
+        .spot_surface = spot_shadow_surface,
+      });
 
     last_render_state_.published_view_count += 1U;
     last_render_state_.rendered_cascade_count += rendered_cascade_count;
+    last_render_state_.rendered_spot_shadow_count += rendered_spot_shadow_count;
     last_render_state_.rendered_draw_count += rendered_draw_count;
     last_render_state_.shadow_caster_draw_count += shadow_caster_draw_count;
     if (view_data.bindings.cascade_count > 0U) {
       last_render_state_.directional_view_count += 1U;
+    }
+    if (view_data.bindings.spot_shadow_count > 0U) {
+      last_render_state_.spot_view_count += 1U;
     }
   }
 }
@@ -137,6 +161,13 @@ auto ShadowService::InspectShadowSurface(const ViewId view_id) const
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? it->second.surface.get() : nullptr;
+}
+
+auto ShadowService::InspectSpotShadowSurface(const ViewId view_id) const
+  -> const graphics::Texture*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? it->second.spot_surface.get() : nullptr;
 }
 
 auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const

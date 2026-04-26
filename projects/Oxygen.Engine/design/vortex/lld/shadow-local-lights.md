@@ -2,7 +2,7 @@
 
 **Phase:** 5D — Conventional Shadow Parity And Expansion
 **Deliverable:** `VTX-M05D`
-**Status:** `planned`
+**Status:** `m05d_spot_slice_validated`
 
 ## Mandatory Vortex Rule
 
@@ -104,7 +104,7 @@ ShadowService upgrades.
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Spot-light shadow publications | LightingService / translucency | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Spot-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
 | Point-light shadow publications | LightingService / translucency | `ShadowFrameBindings` through `ViewFrameBindings` |
 
 ## 4. Resource Management
@@ -156,6 +156,61 @@ upgrade:
 This order is intentional. Spot lights are cheaper to land and validate first,
 but the document now also gives point lights a concrete target rather than
 leaving them as an abstract future choice.
+
+### 5.2 Slice E Spot-Light Conventional Contract
+
+Slice E adds the first local-light conventional payload to
+`ShadowFrameBindings`. It follows the local UE5.7 spot whole-scene shadow path:
+
+- one projected shadow per shadow-casting spot light;
+- light-space projection derived from light position, light forward direction,
+  outer cone angle, `MinLightW = 0.1`, and authored range;
+- UE-style whole-scene spot depth-bias scaling before the shadow-depth draw;
+- perspective spot depth uses a UE-style separation between raster projection
+  and biased shadow depth: Stage 8 clips/rasterizes with the projected cone but
+  writes biased linear reversed depth along the spot axis, and Stage 12 compares
+  receivers against the same spot-axis depth convention;
+- Stage-8 depth rendering through the existing Vortex shadow-caster draw path;
+- Stage-12 spot deferred lighting multiplies local-light attenuation by the
+  sampled spot shadow visibility.
+- Stage-18 translucent spot-shadow consumption is not part of Slice E. The
+  current forward/translucency path accumulates positional lights without a
+  conventional spot shadow lookup, so this remains deferred until the forward
+  local-light shadow contract is designed and validated.
+
+Intentional Slice E divergences, not closure claims:
+
+- no local-light shadow caching;
+- no per-light CPU interaction list or screen-radius resolution fade yet;
+- no UE shadow border emulation for the dedicated `Texture2DArray` storage;
+- no point-light cubemap payload until Slice F.
+
+Slice E implementation evidence:
+
+- `ShadowFrameBindings` now carries a conventional spot shadow surface handle,
+  spot count, and per-spot bindings.
+- `SpotShadowSetup` builds one projected shadow binding per shadow-casting spot
+  light from authored light position, direction, cone angle, range, and
+  UE-shaped whole-scene spot bias scaling.
+- Stage 8 renders spot depth slices through `ShadowDepthPass::RecordSlices`.
+- Stage 12 spot deferred lighting samples the conventional spot shadow array
+  and multiplies local-light attenuation by shadow visibility.
+- `SpotShadowValidation` is the focused no-sun/no-atmosphere validation scene.
+  On 2026-04-27 the user confirmed visible spot shadows and then confirmed the
+  shadows were perfect after the authored spot shadow bias was set to `0.0` and
+  the scene was recooked.
+- Fresh post-review RenderDoc proof
+  `spot-shadow-validation.bias0.final.spot-shadow-probe.txt` shows Stage 8
+  spot draws `168,171`, non-clear `Vortex.SpotShadowSurface` depth
+  (`max=0.463512063`, center `0.447184265`), Stage 12 spot draw `248`, and
+  Stage 12 spot-light binding of `Vortex.SpotShadowSurface`.
+- Focused tests/shader validation passed: ShadowService `8/8`,
+  SceneRendererDeferredCore `41/41`, LightingService `4/4`, and
+  ShaderBakeCatalog `4/4`.
+- CDB/D3D12 audit
+  `spot-shadow-validation.bias0.final.debug-layer.report.txt` passed with
+  runtime exit `0`, no debugger break, `0` D3D12/DXGI errors, and no blocking
+  warnings.
 
 ## 6. Design Decision
 

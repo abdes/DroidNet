@@ -18,6 +18,8 @@
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/api_export.h>
+#include <glm/mat4x4.hpp>
+#include <glm/vec4.hpp>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -38,6 +40,14 @@ public:
     std::uint32_t rendered_draw_count { 0U };
   };
 
+  struct DepthSlice {
+    glm::mat4 light_view_projection { 1.0F };
+    glm::vec4 shadow_bias_parameters { 0.0F };
+    glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
+    glm::vec4 light_position_and_inv_range { 0.0F };
+    std::uint32_t target_slice { 0U };
+  };
+
   OXGN_VRTX_API explicit ShadowDepthPass(Renderer& renderer);
   OXGN_VRTX_API ~ShadowDepthPass();
 
@@ -52,6 +62,11 @@ public:
     const PreparedViewShadowInput& view_input,
     const std::shared_ptr<graphics::Texture>& shadow_surface,
     const DirectionalShadowFrameData& frame_data,
+    std::span<const DrawCommand> draw_commands) -> RenderState;
+  [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
+    const PreparedViewShadowInput& view_input,
+    const std::shared_ptr<graphics::Texture>& shadow_surface,
+    std::span<const DepthSlice> depth_slices,
     std::span<const DrawCommand> draw_commands) -> RenderState;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
     -> const RenderState&

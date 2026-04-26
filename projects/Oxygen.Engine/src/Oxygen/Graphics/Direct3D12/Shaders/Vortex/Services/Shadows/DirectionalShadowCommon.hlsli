@@ -13,6 +13,7 @@
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 static const uint VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL = 1u << 0u;
+static const uint VORTEX_SHADOW_TECHNIQUE_SPOT_CONVENTIONAL = 1u << 1u;
 
 struct VortexShadowCascadeBinding
 {
@@ -24,6 +25,15 @@ struct VortexShadowCascadeBinding
     float2 _padding0;
 };
 
+struct VortexSpotShadowBinding
+{
+    float4x4 light_view_projection;
+    float4 position_and_inv_range;
+    float4 direction_and_bias;
+    float4 sampling_metadata0;
+    float4 sampling_metadata1;
+};
+
 struct VortexShadowFrameBindings
 {
     uint conventional_shadow_surface_handle;
@@ -31,7 +41,12 @@ struct VortexShadowFrameBindings
     uint technique_flags;
     uint sampling_contract_flags;
     float4 light_direction_to_source;
+    uint spot_shadow_surface_handle;
+    uint spot_shadow_count;
+    uint _padding0;
+    uint _padding1;
     VortexShadowCascadeBinding cascades[4];
+    VortexSpotShadowBinding spot_shadows[8];
 };
 
 static inline VortexShadowFrameBindings MakeInvalidVortexShadowFrameBindings()
@@ -41,6 +56,8 @@ static inline VortexShadowFrameBindings MakeInvalidVortexShadowFrameBindings()
     bindings.cascade_count = 0u;
     bindings.technique_flags = 0u;
     bindings.sampling_contract_flags = 0u;
+    bindings.spot_shadow_surface_handle = K_INVALID_BINDLESS_INDEX;
+    bindings.spot_shadow_count = 0u;
     return bindings;
 }
 
@@ -155,6 +172,103 @@ static inline bool HasDirectionalConventionalShadowBindings(
     return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) != 0u
         && bindings.cascade_count != 0u
         && bindings.conventional_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+}
+
+static inline bool HasSpotConventionalShadowBindings(
+    VortexShadowFrameBindings bindings)
+{
+    return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_SPOT_CONVENTIONAL) != 0u
+        && bindings.spot_shadow_count != 0u
+        && bindings.spot_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+}
+
+static inline float SampleSpotShadowSurface(
+    VortexShadowFrameBindings bindings,
+    uint spot_shadow_index,
+    float2 shadow_uv,
+    float receiver_depth)
+{
+    if (bindings.spot_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+        return 1.0f;
+    }
+
+    Texture2DArray<float> shadow_surface =
+        ResourceDescriptorHeap[bindings.spot_shadow_surface_handle];
+    const uint layer =
+        (uint)(bindings.spot_shadows[spot_shadow_index].sampling_metadata0.x + 0.5f);
+    const float2 inverse_resolution =
+        max(bindings.spot_shadows[spot_shadow_index].sampling_metadata0.yz,
+            float2(0.000001f, 0.000001f));
+    const float2 texture_size = 1.0f / inverse_resolution;
+    const int2 max_coord =
+        max(int2(texture_size) - int2(1, 1), int2(0, 0));
+    const int2 center = int2(shadow_uv * texture_size);
+
+    float visibility = 0.0f;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
+            const float stored_depth = shadow_surface.Load(int4(coord, (int)layer, 0));
+            visibility += receiver_depth >= stored_depth ? 1.0f : 0.0f;
+        }
+    }
+
+    return visibility * (1.0f / 9.0f);
+}
+
+static inline float ComputeSpotShadowVisibility(
+    VortexShadowFrameBindings bindings,
+    uint spot_shadow_index,
+    float3 world_position,
+    float3 world_normal,
+    float3 light_direction_to_source)
+{
+    if (!HasSpotConventionalShadowBindings(bindings)
+        || spot_shadow_index >= min(bindings.spot_shadow_count, 8u)) {
+        return 1.0f;
+    }
+
+    const VortexSpotShadowBinding spot = bindings.spot_shadows[spot_shadow_index];
+    const float3 safe_normal = normalize(
+        dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
+    const float3 safe_light_dir = normalize(
+        dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
+            ? light_direction_to_source
+            : spot.position_and_inv_range.xyz - world_position);
+    const float world_texel_size = max(spot.sampling_metadata0.w, 0.0f);
+    const float normal_bias = max(spot.sampling_metadata1.w, 0.0f)
+        + world_texel_size * 0.75f;
+    const float receiver_bias = world_texel_size * 0.5f;
+    const float3 biased_world_position =
+        world_position + safe_normal * normal_bias + safe_light_dir * receiver_bias;
+
+    const float4 shadow_clip =
+        mul(spot.light_view_projection, float4(biased_world_position, 1.0f));
+    if (abs(shadow_clip.w) <= 1.0e-6f) {
+        return 1.0f;
+    }
+
+    const float3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
+    const float2 shadow_uv = float2(
+        shadow_ndc.x * 0.5f + 0.5f,
+        shadow_ndc.y * -0.5f + 0.5f);
+    if (shadow_uv.x < 0.0f || shadow_uv.x > 1.0f
+        || shadow_uv.y < 0.0f || shadow_uv.y > 1.0f
+        || shadow_ndc.z < 0.0f || shadow_ndc.z > 1.0f) {
+        return 1.0f;
+    }
+
+    const float axial_distance = max(
+        0.0f,
+        dot(biased_world_position - spot.position_and_inv_range.xyz,
+            normalize(spot.direction_and_bias.xyz)));
+    const float receiver_depth =
+        saturate(1.0f - axial_distance * spot.position_and_inv_range.w);
+
+    return SampleSpotShadowSurface(
+        bindings, spot_shadow_index, shadow_uv, receiver_depth);
 }
 
 static inline float ComputeDirectionalShadowVisibility(

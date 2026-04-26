@@ -168,21 +168,55 @@ Validation:
 
 ### Slice E - Spot-Light Conventional Shadows
 
-**Status:** `planned`
+**Status:** `validated`
+
+UE5.7 local-source audit for this slice:
+
+| UE5.7 concern | Oxygen target for Slice E |
+| --- | --- |
+| `SpotLightComponent.cpp::GetWholeSceneProjectedShadowInitializer` creates one whole-scene projected shadow with light-relative pre-translation, `WorldToLight`, `InvTanOuterCone` scale, cone subject bounds, `MinLightW = 0.1`, and `MaxDistanceToCastInLightW = Radius`. | Build one view-independent spot-light projection per shadow-casting spot light using the authored light transform, `outer_cone_cos`, range, and reversed-Z perspective depth. Publish the resulting matrix as a consumer-facing spot binding, not as a directional cascade. |
+| `ShadowSetup.cpp::CreateWholeSceneProjectedShadow` computes local-light shadow resolution from effective screen radius, clamps to renderer/scalability limits, uses a border for non-cubemap shadows, and adds shadow-casting primitives affected by the light. | Slice E uses the existing conventional quality tiers and authored `resolution_hint` for deterministic first activation. It conservatively submits prepared `kShadowCaster` draws, matching the current directional correctness-first culling divergence. Screen-radius resolution fading, borders, caching, and per-light interaction lists remain documented gaps until a later optimization pass. |
+| `FProjectedShadowInfo::SetupWholeSceneProjection` uses non-directional subject depth from the light-space subject bounds, records caster/receiver frusta, and updates shader depth-bias terms. | Use near `0.1`, far `range`, `MakeReversedZPerspectiveProjectionRH_ZO`, and UE-style whole-scene spot depth-bias scaling: `3.0 * 512 / ((far-near) * resolution) * 2 * user_bias`, clamped to `0.1`, with slope multiplier `3.0` and max slope `1.0`. |
+| `ShadowDepthVertexShader.usf` / `ShadowDepthPixelShader.usf` keep perspective spot rasterization projection separate from biased shadow depth. UE's perspective-correct path carries bias to pixel depth output instead of clipping casters by moving `SV_Position` before rasterization. | Spot slices render with the projected cone for clipping/rasterization but write biased linear reversed depth along the spot axis. Stage 12 samples that same spot-axis depth convention before the 3x3 PCF compare. This fixes the `SpotShadowValidation` capture where UE-style slope bias pushed all caster `SV_Position.z` behind the far plane and left `Vortex.SpotShadowSurface` at clear depth. |
+| `DeferredLightPixelShaders.usf` obtains local-light attenuation and multiplies it by `GetLightAttenuationFromShadow`; `ShadowProjectionCommon.ush`/`ShadowFilteringCommon.ush` provide projection and PCF filtering. | Extend Stage 12 spot lighting to sample the published spot shadow array before BRDF evaluation. Use the same compact 3x3 reversed-Z PCF convention already accepted for directional conventional shadows. |
 
 Tasks:
 
-- Design the spot-light shadow payload extension under `ShadowFrameBindings`.
-- Render spot-light shadow depth under Stage 8.
-- Consume the spot-light shadow product in Stage 12 deferred lighting and
-  Stage 18 where applicable.
-- Add a focused validation scene with a clear spot-light projected shadow.
+- [x] Design the spot-light shadow payload extension under `ShadowFrameBindings`.
+- [x] Render spot-light shadow depth under Stage 8.
+- [x] Consume the spot-light shadow product in Stage 12 deferred lighting.
+- [x] Document Stage 18 as a deferred local-light shadow consumer. The current
+  forward/translucency path accumulates positional lights without conventional
+  spot shadow lookup, so Slice E does not claim translucent spot-shadow parity.
+- [x] Add a focused validation scene with a clear spot-light projected shadow.
 
 Validation:
 
 - Focused tests for publication and shader ABI.
-- RenderDoc/CDB proof.
-- User visual confirmation if requested by the validation scenario.
+- RenderDoc/CDB proof. Diagnostic evidence before the final bias/depth
+  remediation:
+  `spot-shadow-validation.bias01.spot-shadow-probe.txt` showed Stage 8 issuing
+  two caster draws while `Vortex.SpotShadowSurface` remained all clear depth
+  (`min=max=0`), and Stage 12 bound the spot shadow SRV correctly. Post-fix
+  proof `spot-shadow-validation.bias0.final.spot-shadow-probe.txt` shows
+  Stage 8 spot draws `168,171`, non-clear `Vortex.SpotShadowSurface` depth
+  (`max=0.463512063`, center `0.447184265`), Stage 12 spot draw `248`, and
+  Stage 12 binding `Vortex.SpotShadowSurface`.
+- User visual confirmation: on 2026-04-27 the validation scene showed visible
+  spot shadows after the spot-axis depth fix, and the user confirmed the shadows
+  were perfect after setting the authored spot shadow bias to `0.0` and
+  recooking `SpotShadowValidation`.
+- Focused validation: `cmake --build out\build-ninja --target
+  Oxygen.Vortex.ShadowService.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests
+  Oxygen.Vortex.LightingService.Tests
+  Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests
+  oxygen-graphics-direct3d12_shaders --parallel 4` succeeded; test executables
+  passed ShadowService `8/8`, SceneRendererDeferredCore `41/41`,
+  LightingService `4/4`, and ShaderBakeCatalog `4/4`.
+- CDB/D3D12 audit:
+  `spot-shadow-validation.bias0.final.debug-layer.report.txt` passed with
+  runtime exit `0`, no debugger break, `0` D3D12 errors, `0` DXGI errors,
+  `0` blocking warnings, and one accepted DXGI live-factory shutdown warning.
 
 ### Slice F - Point-Light Conventional Shadows
 
@@ -222,8 +256,11 @@ M05D can move to `validated` only when:
 - user visual validation is requested and received for visual proof scenarios.
 
 As of 2026-04-27, directional conventional shadow parity/remediation and the
-local-scale `VsmTwoCubes` proof are validated, but this does not close M05D.
-Spot-light conventional shadows and point-light strategy/implementation remain
+local-scale `VsmTwoCubes` proof are validated. Slice E spot-light conventional
+shadows are validated for deferred Stage 12 lighting with focused tests, shader
+validation, CDB/debug-layer audit, RenderDoc spot-shadow probe, and user visual
+confirmation in `SpotShadowValidation`. Stage 18 translucent spot-shadow
+consumption is explicitly deferred. Point-light strategy/implementation remains
 required by this milestone unless explicitly narrowed with approval.
 
 If any item lacks evidence, M05D remains `in_progress`.

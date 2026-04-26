@@ -1082,6 +1082,32 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::kInvalidShaderVisibleIndex);
 }
 
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingConsumesSpotShadowProductForShadowCastingSpotLight)
+{
+  auto spot = AddSpotLight("SpotKey");
+  auto spot_light = spot.GetLightAs<SpotLight>();
+  ASSERT_TRUE(spot_light.has_value());
+  spot_light->get().Common().casts_shadows = true;
+  spot_light->get().Common().shadow.bias = 0.5F;
+  spot_light->get().Common().shadow.normal_bias = 0.03F;
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& selection
+    = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
+  ASSERT_EQ(selection.local_lights.size(), 1U);
+  EXPECT_NE(selection.local_lights.front().flags
+      & oxygen::vortex::kLocalLightFlagCastsShadows,
+    0U);
+
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+  EXPECT_TRUE(lighting_state.consumed_spot_shadow_product);
+  EXPECT_EQ(lighting_state.spot_shadow_count, 1U);
+  EXPECT_NE(
+    lighting_state.spot_shadow_surface_srv, oxygen::kInvalidShaderVisibleIndex);
+}
+
 NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, DeferredLightingUsesOutsideVolumeLocalLights)
 {

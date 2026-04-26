@@ -585,6 +585,12 @@ namespace {
           .inner_cone_cos = 1.0F,
           .outer_cone_cos = 0.0F,
           .source_radius = light.GetSourceRadius(),
+          .flags = light.Common().casts_shadows ? kLocalLightFlagCastsShadows
+                                                : 0U,
+          .shadow_bias = light.Common().shadow.bias,
+          .shadow_normal_bias = light.Common().shadow.normal_bias,
+          .shadow_resolution_hint = static_cast<std::uint32_t>(
+            light.Common().shadow.resolution_hint),
         });
         return scene::VisitResult::kContinue;
       }
@@ -606,6 +612,12 @@ namespace {
           .inner_cone_cos = std::cos(light.GetInnerConeAngleRadians()),
           .outer_cone_cos = std::cos(light.GetOuterConeAngleRadians()),
           .source_radius = light.GetSourceRadius(),
+          .flags = light.Common().casts_shadows ? kLocalLightFlagCastsShadows
+                                                : 0U,
+          .shadow_bias = light.Common().shadow.bias,
+          .shadow_normal_bias = light.Common().shadow.normal_bias,
+          .shadow_resolution_hint = static_cast<std::uint32_t>(
+            light.Common().shadow.resolution_hint),
         });
       }
 
@@ -2708,9 +2720,12 @@ void SceneRenderer::RenderDeferredLighting(
   const auto* shadow_surface = shadows_ != nullptr
     ? shadows_->InspectShadowSurface(ctx.current_view.view_id)
     : nullptr;
+  const auto* spot_shadow_surface = shadows_ != nullptr
+    ? shadows_->InspectSpotShadowSurface(ctx.current_view.view_id)
+    : nullptr;
   lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
     shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
-    shadow_surface);
+    shadow_surface, spot_shadow_surface);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -2744,6 +2759,11 @@ void SceneRenderer::RenderDeferredLighting(
     = lighting_state.directional_shadow_cascade_count;
   deferred_lighting_state_.directional_shadow_surface_srv
     = lighting_state.directional_shadow_surface_srv;
+  deferred_lighting_state_.consumed_spot_shadow_product
+    = lighting_state.consumed_spot_shadow_product;
+  deferred_lighting_state_.spot_shadow_count = lighting_state.spot_shadow_count;
+  deferred_lighting_state_.spot_shadow_surface_srv
+    = lighting_state.spot_shadow_surface_srv;
 }
 
 } // namespace oxygen::vortex
