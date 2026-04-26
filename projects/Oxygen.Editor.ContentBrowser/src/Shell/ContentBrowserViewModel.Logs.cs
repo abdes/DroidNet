@@ -122,4 +122,12 @@ public partial class ContentBrowserViewModel
 
     private void LogProjectNameRetrievalFailed(Exception ex)
         => LogProjectNameRetrievalFailed(this.logger, ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to persist content browser state for project {ProjectName}.")]
+    private static partial void LogContentBrowserStatePersistFailed(ILogger logger, Exception ex, string projectName);
+
+    private void LogContentBrowserStatePersistFailed(Exception ex, string projectName)
+        => LogContentBrowserStatePersistFailed(this.logger, ex, projectName);
 }
