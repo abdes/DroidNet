@@ -88,6 +88,7 @@ public static partial class Program
         // Ensures that the process can run XAML, and provides a deterministic error if a check
         // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
+        NativeRuntimeLoader.RegisterEngineRuntimeDirectory();
 
         var bootstrap = new Bootstrapper(args);
         try
