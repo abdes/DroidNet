@@ -10706,7 +10706,7 @@
           "mobility": 0,
           "casts_shadows": true,
           "shadow": {
-            "bias": 0.0,
+            "bias": 0.125,
             "normal_bias": 0.02,
             "contact_shadows": true,
             "resolution_hint": 1
