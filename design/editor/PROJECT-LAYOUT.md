@@ -156,6 +156,7 @@ feature project.
 | `projects/Oxygen.Editor.Runtime` | Managed engine lifecycle, effective runtime settings application, surface leases, view service, cooked-root mount service, runtime diagnostics. | Authoring defaults, project policy, UI workflow, scene serialization. |
 | `projects/Oxygen.Editor.Interop` | C++/CLI bridge to stable Oxygen Engine APIs. | Authoring policy, UI behavior, project layout policy, cooker policy, fallback behavior. |
 | `projects/Oxygen.Editor.Data` | Durable editor data, settings infrastructure, persistent state DB, settings descriptors/generators. | Feature-specific settings ownership or UI. |
+| `projects/Oxygen.Core` | Shared non-UI editor contracts and utilities needed across multiple editor modules, including operation-result and diagnostic contract types. | Feature UI, workflow orchestration, persistence, runtime services, native interop. |
 | `projects/Oxygen.Assets` | Managed asset identities, references, catalogs, import/cook primitives, loose cooked index utilities. | Editor UI, project workflow policy, live engine mounting. |
 | `projects/Oxygen.Storage` | Storage abstractions and native filesystem implementation. | Asset semantics, editor settings, project policy. |
 
