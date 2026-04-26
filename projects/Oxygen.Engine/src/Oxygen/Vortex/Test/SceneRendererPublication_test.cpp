@@ -370,7 +370,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  FrameStartResizeInvalidatesPublicationUntilTheNextRenderRefresh)
+  FrameStartInvalidatesPublicationUntilRenderTimeResize)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(
@@ -401,7 +401,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   renderer_->OnFrameStart(oxygen::observer_ptr<FrameContext> { &frame_context });
 
-  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(), (glm::uvec2 { 128U, 72U }));
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 64U, 64U }));
   EXPECT_EQ(scene_renderer->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(scene_renderer->GetSceneTextureBindings().scene_color_srv,
@@ -411,6 +412,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto loop = TestEventLoop {};
   oxygen::co::Run(loop, RunRenderAsync(renderer_, &frame_context));
 
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 128U, 72U }));
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindings().scene_texture_frame_slot,
