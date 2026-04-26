@@ -12,6 +12,8 @@ using CommunityToolkit.WinUI.Collections;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Storage;
 using Oxygen.Storage.Native;
@@ -31,7 +33,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     private readonly ILogger logger;
     private readonly object fileListLock = new();
     private readonly IProjectBrowserService projectBrowser;
-    private readonly IRouter router;
+    private readonly IProjectActivationCoordinator activationCoordinator;
 
 #pragma warning disable CA1859 // Use concrete types when possible for improved performance
     private readonly IStorageProvider storageProvider;
@@ -50,7 +52,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// <summary>
     /// Initializes a new instance of the <see cref="OpenProjectViewModel"/> class.
     /// </summary>
-    /// <param name="router">The router for navigating between views.</param>
+    /// <param name="activationCoordinator">The shell coordinator that activates projects into the workspace.</param>
     /// <param name="storageProvider">The storage provider for accessing storage items.</param>
     /// <param name="projectBrowser">The project browser service.</param>
     /// <param name="loggerFactory">
@@ -58,13 +60,13 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
     public OpenProjectViewModel(
-        IRouter router,
+        IProjectActivationCoordinator activationCoordinator,
         NativeStorageProvider storageProvider,
         IProjectBrowserService projectBrowser,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<OpenProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<OpenProjectViewModel>();
-        this.router = router;
+        this.activationCoordinator = activationCoordinator;
 
         this.storageProvider = storageProvider;
         this.projectBrowser = projectBrowser;
@@ -225,19 +227,20 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     {
         this.IsActivating = true;
 
-        var result = await this.projectBrowser.OpenProjectAsync(location).ConfigureAwait(true);
-        if (!result)
+        var result = await this.activationCoordinator.ActivateAsync(
+                new ProjectActivationRequest
+                {
+                    Mode = ProjectActivationMode.OpenExisting,
+                    SourceSurface = ProjectActivationSourceSurface.Open,
+                    ProjectLocation = location,
+                })
+            .ConfigureAwait(true);
+        if (result.Status is OperationStatus.Failed or OperationStatus.Cancelled)
         {
             this.IsActivating = false;
             this.LogFailedToOpenProjectFile(location);
             return false;
         }
-
-        await this.router.NavigateAsync("/we", new FullNavigation()
-        {
-            Target = new Target { Name = "wnd-we" },
-            ReplaceTarget = true,
-        }).ConfigureAwait(true);
 
         return true;
     }

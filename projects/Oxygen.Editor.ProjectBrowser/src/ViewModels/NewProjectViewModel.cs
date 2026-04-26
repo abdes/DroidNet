@@ -8,7 +8,8 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -16,17 +17,15 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// <summary>
 /// The ViewModel for the StartNewPage.
 /// </summary>
-/// <param name="router">The router for navigating between views.</param>
 /// <param name="templateService">The template service to be used to access project templates.</param>
-/// <param name="projectBrowserService">The project service to be used to access and manipulate projects.</param>
+/// <param name="activationCoordinator">The shell coordinator that activates projects into the workspace.</param>
 /// <param name="loggerFactory">
 /// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
 /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
 /// </param>
 public partial class NewProjectViewModel(
-    IRouter router,
     ITemplatesService templateService,
-    IProjectBrowserService projectBrowserService,
+    IProjectActivationCoordinator activationCoordinator,
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware
 {
@@ -62,19 +61,25 @@ public partial class NewProjectViewModel(
 
         this.IsActivating = true;
 
-        var result = await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
-        if (!result)
+        var result = await activationCoordinator.ActivateAsync(
+                new ProjectActivationRequest
+                {
+                    Mode = ProjectActivationMode.CreateFromTemplate,
+                    SourceSurface = ProjectActivationSourceSurface.New,
+                    TemplateLocation = template.Location,
+                    TemplateId = template.Name,
+                    ProjectName = projectName,
+                    ParentLocation = location,
+                    Category = template.Category,
+                    Thumbnail = template.Icon,
+                })
+            .ConfigureAwait(true);
+        if (result.Status is OperationStatus.Failed or OperationStatus.Cancelled)
         {
             this.LogNewProjectFailed();
             this.IsActivating = false;
             return false;
         }
-
-        await router.NavigateAsync("/we", new FullNavigation()
-        {
-            Target = new Target { Name = "wnd-we" },
-            ReplaceTarget = true,
-        }).ConfigureAwait(true);
 
         return true;
     }

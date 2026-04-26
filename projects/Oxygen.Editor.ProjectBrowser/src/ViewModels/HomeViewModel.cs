@@ -11,6 +11,8 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
@@ -33,6 +35,7 @@ public partial class HomeViewModel(
     IRouter router,
     ITemplatesService templateService,
     IProjectBrowserService projectBrowser,
+    IProjectActivationCoordinator activationCoordinator,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IRoutingAware
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<HomeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<HomeViewModel>();
@@ -81,16 +84,22 @@ public partial class HomeViewModel(
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
         this.preloadedTemplates = false; // Refresh recent templates next time we are activated
 
-        var result = await projectBrowser.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
-        if (!result)
-        {
-            return false;
-        }
-
-        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" }, ReplaceTarget = true }).ConfigureAwait(true);
+        var result = await activationCoordinator.ActivateAsync(
+                new ProjectActivationRequest
+                {
+                    Mode = ProjectActivationMode.CreateFromTemplate,
+                    SourceSurface = ProjectActivationSourceSurface.Home,
+                    TemplateLocation = template.Location,
+                    TemplateId = template.Name,
+                    ProjectName = projectName,
+                    ParentLocation = location,
+                    Category = template.Category,
+                    Thumbnail = template.Icon,
+                })
+            .ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
-        return true;
+        return result.Status is not OperationStatus.Failed and not OperationStatus.Cancelled;
     }
 
     /// <summary>
@@ -102,22 +111,23 @@ public partial class HomeViewModel(
     {
         this.LogOpenProject(projectInfo.Name, projectInfo.Location ?? string.Empty);
 
-        var result = await projectBrowser.OpenProjectAsync(projectInfo).ConfigureAwait(true);
-        if (!result)
+        if (string.IsNullOrWhiteSpace(projectInfo.Location))
         {
             return false;
         }
 
-        this.preloadedProjects = false; // Refresh recent projects next time we are activated
-
-        await router.NavigateAsync("/we", new FullNavigation()
-        {
-            Target = new Target { Name = "wnd-we" },
-            ReplaceTarget = true,
-        }).ConfigureAwait(true);
+        var result = await activationCoordinator.ActivateAsync(
+                new ProjectActivationRequest
+                {
+                    Mode = ProjectActivationMode.OpenExisting,
+                    SourceSurface = ProjectActivationSourceSurface.Home,
+                    ProjectLocation = projectInfo.Location,
+                    RecentEntryId = projectInfo.Id.ToString("D"),
+                })
+            .ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
-        return true;
+        return result.Status is not OperationStatus.Failed and not OperationStatus.Cancelled;
     }
 
     /// <summary>
