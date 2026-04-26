@@ -14,6 +14,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Input;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
@@ -209,6 +210,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         this.currentViewModel = current;
+        this.Bindings.Update();
         this.OnViewModelChanged(previous, current);
     }
 
@@ -222,10 +224,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
 
-        // Dispose previous viewmodel subscriptions if present so it can detach
-        // from services (appearance settings, etc.). This prevents duplicate
-        // subscriptions when swapping viewmodels.
-        previous?.Dispose();
         _ = this.HandleViewModelChangeAsync(previous, current);
     }
 
@@ -386,6 +384,13 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         catch (Exception ex)
         {
             this.LogResizeFailed(ex);
+            this.ViewModel?.PublishRuntimeWarning(
+                RuntimeOperationKinds.SurfaceResize,
+                FailureDomain.RuntimeSurface,
+                DiagnosticCodes.SurfacePrefix + "RESIZE_FAILED",
+                "Viewport resize failed",
+                "The viewport surface could not be resized.",
+                ex);
         }
 #pragma warning restore CA1031
     }
@@ -1002,11 +1007,27 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         viewModel.AssignedViewId = created;
                         this.LogViewCreated(viewModel.ViewportId, created);
                     }
+                    else
+                    {
+                        viewModel.PublishRuntimeFailure(
+                            RuntimeOperationKinds.ViewCreate,
+                            FailureDomain.RuntimeView,
+                            DiagnosticCodes.ViewPrefix + "CREATE_REJECTED",
+                            "Viewport view was not created",
+                            "The runtime rejected the engine view creation request for this viewport.");
+                    }
                 }
             }
             catch (Exception ex)
             {
                 this.LogCreateViewFailed(viewModel.ViewportId, ex);
+                viewModel.PublishRuntimeFailure(
+                    RuntimeOperationKinds.ViewCreate,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CREATE_FAILED",
+                    "Viewport view creation failed",
+                    "The runtime could not create an engine view for this viewport.",
+                    ex);
             }
 
             // Perform the initial resize unconditionally (do not cancel via the
@@ -1023,6 +1044,13 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         catch (Exception ex)
         {
             this.LogAttachmentFailed(ex);
+            viewModel.PublishRuntimeFailure(
+                RuntimeOperationKinds.SurfaceAttach,
+                FailureDomain.RuntimeSurface,
+                DiagnosticCodes.SurfacePrefix + "ATTACH_FAILED",
+                "Viewport surface attachment failed",
+                "The runtime could not attach the viewport surface.",
+                ex);
         }
 #pragma warning restore CA1031
     }
@@ -1051,13 +1079,34 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             {
                 try
                 {
-                    await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
+                    var destroyed = await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
+                    if (!destroyed)
+                    {
+                        vm.PublishRuntimeWarning(
+                            RuntimeOperationKinds.ViewDestroy,
+                            FailureDomain.RuntimeView,
+                            DiagnosticCodes.ViewPrefix + "DESTROY_REJECTED",
+                            "Viewport view teardown was rejected",
+                            "The runtime rejected the engine view teardown request for this viewport.");
+                    }
+
                     vm.AssignedViewId = ViewIdManaged.Invalid;
                     this.LogViewDestroyed(vm.ViewportId);
                 }
                 catch (Exception ex)
                 {
                     this.LogDestroyViewFailed(vm.ViewportId, ex);
+                    vm.PublishRuntimeWarning(
+                        RuntimeOperationKinds.ViewDestroy,
+                        FailureDomain.RuntimeView,
+                        DiagnosticCodes.ViewPrefix + "DESTROY_FAILED",
+                        "Viewport view teardown failed",
+                        "The runtime could not destroy the engine view for this viewport.",
+                        ex);
+                }
+                finally
+                {
+                    vm.AssignedViewId = ViewIdManaged.Invalid;
                 }
             }
 

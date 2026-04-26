@@ -120,7 +120,7 @@ public sealed partial class EngineService(
         {
             var runner = this.EnsureIsReadyOrRunning();
             var clamped = Math.Clamp(value, 0, this.MaxTargetFps);
-            runner.SetTargetFps(this.engineContext, value);
+            runner.SetTargetFps(this.engineContext, clamped);
             this.LogTargetFpsSet(value, clamped);
         }
     }

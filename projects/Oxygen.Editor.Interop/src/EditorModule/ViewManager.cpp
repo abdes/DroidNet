@@ -84,6 +84,16 @@ namespace oxygen::interop::module {
     LOG_F(INFO, "ViewManager: destroyed all views");
   }
 
+  void ViewManager::RetargetAllViews(scene::Scene& scene) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [id, entry] : views_) {
+      if (entry.view) {
+        entry.view->RetargetScene(scene);
+      }
+    }
+    LOG_F(INFO, "ViewManager: retargeted all views to replacement scene");
+  }
+
   bool ViewManager::RegisterView(ViewId engine_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 

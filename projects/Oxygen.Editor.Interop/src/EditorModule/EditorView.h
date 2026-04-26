@@ -109,6 +109,7 @@ namespace oxygen::interop::module {
 
     // Phase hooks
     void Initialize(scene::Scene& scene);
+    void RetargetScene(scene::Scene& scene);
     void OnSceneMutation(); // Uses context from SetRenderingContext
     auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
     void EnsureRenderTarget(Graphics& graphics);

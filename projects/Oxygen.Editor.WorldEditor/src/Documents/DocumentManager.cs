@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -19,6 +21,8 @@ public sealed partial class DocumentManager : IDisposable
     private readonly ILogger logger;
     private readonly IDocumentService documentService;
     private readonly IMessenger messenger;
+    private readonly IProjectContextService projectContextService;
+    private readonly IProjectUsageService projectUsage;
     private readonly WindowId windowId;
 
     /// <summary>
@@ -31,6 +35,8 @@ public sealed partial class DocumentManager : IDisposable
     public DocumentManager(
         IDocumentService documentService,
         IMessenger messenger,
+        IProjectContextService projectContextService,
+        IProjectUsageService projectUsage,
         WindowId windowId,
         ILoggerFactory? loggerFactory = null)
     {
@@ -38,6 +44,8 @@ public sealed partial class DocumentManager : IDisposable
 
         this.documentService = documentService;
         this.messenger = messenger;
+        this.projectContextService = projectContextService;
+        this.projectUsage = projectUsage;
         this.windowId = windowId;
 
         this.messenger.Register<OpenSceneRequestMessage>(this, this.OnOpenSceneRequested);
@@ -50,49 +58,76 @@ public sealed partial class DocumentManager : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
+    /// <summary>
+    /// Opens or activates the specified scene document for this workspace.
+    /// </summary>
+    /// <param name="scene">The scene to open.</param>
+    /// <returns><see langword="true"/> when the scene document is open and selected.</returns>
+    public async Task<bool> OpenSceneAsync(World.Scene scene)
     {
-        this.LogOnOpenSceneRequested(message.Scene);
+        this.LogOnOpenSceneRequested(scene);
 
         if (this.windowId.Value == 0)
         {
-            this.LogCannotOpenSceneWindowIdInvalid(message.Scene);
-            message.Reply(response: false);
-            return;
+            this.LogCannotOpenSceneWindowIdInvalid(scene);
+            return false;
         }
 
         // Check if the document is already open
         var openDocs = this.documentService.GetOpenDocuments(this.windowId);
-        if (openDocs.Any(d => d.DocumentId == message.Scene.Id))
+        if (openDocs.Any(d => d.DocumentId == scene.Id))
         {
-            this.LogReactivatingExistingScene(message.Scene);
+            this.LogReactivatingExistingScene(scene);
 
-            var selected = await this.documentService.SelectDocumentAsync(this.windowId, message.Scene.Id).ConfigureAwait(true);
+            var selected = await this.documentService.SelectDocumentAsync(this.windowId, scene.Id).ConfigureAwait(true);
             if (!selected)
             {
-                this.LogSceneReactivationError(message.Scene);
-                message.Reply(response: false);
-                return;
+                this.LogSceneReactivationError(scene);
+                return false;
             }
 
-            this.LogReactivatedExistingScene(message.Scene);
-            message.Reply(response: true);
-            return;
+            this.LogReactivatedExistingScene(scene);
+            await this.MarkSceneActivatedAsync(scene).ConfigureAwait(true);
+            return true;
         }
 
         // Create metadata for the new scene document
-        var metadataNew = new SceneDocumentMetadata(message.Scene.Id) { Title = message.Scene.Name };
+        var metadataNew = new SceneDocumentMetadata(scene.Id) { Title = scene.Name };
 
         var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
         if (openedId == Guid.Empty)
         {
-            this.LogSceneOpeningAborted(message.Scene);
-            message.Reply(response: false);
+            this.LogSceneOpeningAborted(scene);
+            return false;
+        }
+
+        this.LogOpenedNewScene(scene);
+        await this.MarkSceneActivatedAsync(scene).ConfigureAwait(true);
+        return true;
+    }
+
+    private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
+    {
+        var opened = await this.OpenSceneAsync(message.Scene).ConfigureAwait(true);
+        message.Reply(opened);
+    }
+
+    private async Task MarkSceneActivatedAsync(World.Scene scene)
+    {
+        scene.Project.ActiveScene = scene;
+
+        if (this.projectContextService.ActiveProject is not { } project)
+        {
             return;
         }
 
-        this.LogOpenedNewScene(message.Scene);
-
-        message.Reply(response: true);
+        try
+        {
+            await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot, scene.Name).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.logger.LogWarning(ex, "Failed to persist last opened scene {SceneName} for project {ProjectName}.", scene.Name, project.Name);
+        }
     }
 }

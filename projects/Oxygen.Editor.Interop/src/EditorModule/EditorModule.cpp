@@ -250,6 +250,7 @@ namespace oxygen::interop::module {
     // After surface handling, execute frame-start commands related to views
     // with a strict ordering to avoid race conditions: destroy -> create -> rest.
     CommandContext cmd_ctx{
+      .FrameContext = observer_ptr { context.get() },
       .Scene = observer_ptr{scene_.get()},
       .AssetLoader = observer_ptr{asset_loader_.get()},
       .PathResolver = observer_ptr{path_resolver_.get()}
@@ -265,6 +266,12 @@ namespace oxygen::interop::module {
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
           try {
+            if (const auto* destroy_view =
+                  dynamic_cast<const DestroyViewCommand*>(cmd.get());
+                destroy_view != nullptr) {
+              RemovePublishedRuntimeViewForIntent(
+                destroy_view->GetViewId(), context.get());
+            }
             cmd->Execute(cmd_ctx);
           } catch (const std::exception& e) {
             LOG_F(ERROR, "Exception executing DestroyViewCommand: {}", e.what());
@@ -427,11 +434,11 @@ namespace oxygen::interop::module {
         if (!graphics_.expired()) {
           auto gfx = graphics_.lock();
           try {
-            gfx->Flush();
+            gfx->FlushCommandQueues();
           }
           catch (...) {
             DLOG_F(WARNING,
-              "Graphics::Flush threw during pre-resize; continuing.");
+              "Graphics::FlushCommandQueues threw during pre-resize; continuing.");
           }
         }
 
@@ -901,7 +908,7 @@ namespace oxygen::interop::module {
     LOG_F(INFO, "EditorModule::ApplyCreateScene: creating scene '{}'", name);
     if (scene_) {
       try {
-        ApplyDestroyScene();
+        ApplyDestroyScene(false);
       } catch (const std::exception& e) {
         LOG_F(ERROR, "ApplyCreateScene: failed to destroy existing scene: {}",
           e.what());
@@ -920,6 +927,9 @@ namespace oxygen::interop::module {
     (void)environment
       ->AddSystem<oxygen::scene::environment::PostProcessVolume>();
     scene_->SetEnvironment(std::move(environment));
+    if (view_manager_) {
+      view_manager_->RetargetAllViews(*scene_);
+    }
   }
 
   auto EditorModule::EnsureFramebuffers() -> bool {
@@ -961,17 +971,11 @@ namespace oxygen::interop::module {
     if (!view_manager_)
       return;
 
-    if (engine_) {
-      if (auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
-        renderer_opt.has_value()) {
-        renderer_opt->get().RemovePublishedRuntimeView(view_id);
-      }
-    }
-
     // Enqueue a destroy command so the actual destruction runs on the engine
     // thread and cannot race with frame-phase iteration (OnSceneMutation /
-    // OnPreRender). This avoids use-after-free when the UI requests
-    // destruction from a different thread.
+    // OnPreRender). Runtime publication cleanup happens in the same FrameStart
+    // drain while the active FrameContext is available; doing it here would
+    // leave stale FrameContext view entries pointing at released framebuffers.
     auto cmd = std::make_unique<DestroyViewCommand>(view_manager_.get(), view_id);
     Enqueue(std::move(cmd));
     LOG_F(INFO, "DestroyView: queued destroy request for view {}", view_id.get());
@@ -1037,19 +1041,17 @@ namespace oxygen::interop::module {
     }
   }
 
-  void EditorModule::ApplyDestroyScene() {
+  void EditorModule::ApplyDestroyScene(
+    bool destroy_views,
+    engine::FrameContext* frame_context) {
     LOG_F(INFO, "EditorModule::ApplyDestroyScene: destroying current scene");
     // Ensure all views are destroyed/cleaned up before releasing the scene.
-    if (view_manager_) {
+    if (destroy_views && view_manager_) {
       try {
-        if (engine_) {
-          if (auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
-            renderer_opt.has_value()) {
-            for (auto* view : view_manager_->GetAllViews()) {
-              if (view != nullptr && view->GetViewId() != kInvalidViewId) {
-                renderer_opt->get().RemovePublishedRuntimeView(view->GetViewId());
-              }
-            }
+        for (auto* view : view_manager_->GetAllViews()) {
+          if (view != nullptr && view->GetViewId() != kInvalidViewId) {
+            RemovePublishedRuntimeViewForIntent(
+              view->GetViewId(), frame_context);
           }
         }
         view_manager_->DestroyAllViews();
@@ -1074,6 +1076,26 @@ namespace oxygen::interop::module {
     // Reset scene after views have been released to avoid traversals seeing
     // an invalid scene during frame phases.
     scene_.reset();
+  }
+
+  void EditorModule::RemovePublishedRuntimeViewForIntent(
+    ViewId view_id,
+    engine::FrameContext* frame_context) {
+    if (view_id == kInvalidViewId || engine_ == nullptr) {
+      return;
+    }
+
+    auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
+    if (!renderer_opt.has_value()) {
+      return;
+    }
+
+    auto& renderer = renderer_opt->get();
+    if (frame_context != nullptr) {
+      renderer.RemovePublishedRuntimeView(*frame_context, view_id);
+    } else {
+      renderer.RemovePublishedRuntimeView(view_id);
+    }
   }
 
   auto EditorModule::SyncSurfacesWithFrameContext(

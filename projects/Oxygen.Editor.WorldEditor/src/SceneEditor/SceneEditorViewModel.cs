@@ -16,8 +16,10 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
@@ -48,6 +50,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IOperationResultPublisher operationResults;
+    private readonly IStatusReducer statusReducer;
     private readonly IProjectManagerService projectManager;
     private readonly IDocumentService documentService;
     private readonly WindowId windowId;
@@ -73,12 +77,16 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IDocumentService documentService,
         WindowId windowId,
         IEngineService engineService,
+        IOperationResultPublisher operationResults,
+        IStatusReducer statusReducer,
         IProjectManagerService projectManager,
         IContainer container,
         IMessenger messenger,
         ILoggerFactory? loggerFactory = null)
     {
         this.engineService = engineService;
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
         this.projectManager = projectManager;
         this.documentService = documentService;
         this.windowId = windowId;
@@ -208,6 +216,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             catch (InvalidOperationException ex)
             {
                 this.LogFailedToSetEngineTargetFps(ex);
+                this.PublishRuntimeSettingsFailure(
+                    DiagnosticCodes.SettingsPrefix + "TARGET_FPS_REJECTED",
+                    "Target FPS was not applied",
+                    "The runtime rejected the target FPS setting.",
+                    ex);
             }
         }
     }
@@ -231,15 +244,33 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         get
         {
-            var raw = this.engineService.EngineLoggingVerbosity;
-            return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
+            try
+            {
+                var raw = this.engineService.EngineLoggingVerbosity;
+                return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
+            }
+            catch (InvalidOperationException)
+            {
+                return 0;
+            }
         }
 
         set
         {
-            var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
-            this.engineService.EngineLoggingVerbosity = clamped;
-            this.OnPropertyChanged(nameof(this.LoggingVerbosity));
+            try
+            {
+                var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
+                this.engineService.EngineLoggingVerbosity = clamped;
+                this.OnPropertyChanged(nameof(this.LoggingVerbosity));
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
+            {
+                this.PublishRuntimeSettingsFailure(
+                    DiagnosticCodes.SettingsPrefix + "LOGGING_VERBOSITY_REJECTED",
+                    "Logging verbosity was not applied",
+                    "The runtime rejected the logging verbosity setting.",
+                    ex);
+            }
         }
     }
 
@@ -268,7 +299,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         while (this.Viewports.Count < requiredCount)
         {
             var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
-            var viewport = new ViewportViewModel(metadata.DocumentId, this.engineService, settings, this.loggerFactory);
+            var viewport = new ViewportViewModel(
+                metadata.DocumentId,
+                this.engineService,
+                this.operationResults,
+                this.statusReducer,
+                settings,
+                this.loggerFactory);
             var newIndex = this.Viewports.Count;
 
             // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
@@ -573,4 +610,24 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.UpdateLayout(this.CurrentLayout);
         }
     }
+
+    private void PublishRuntimeSettingsFailure(
+        string code,
+        string title,
+        string message,
+        Exception exception)
+        => RuntimeOperationResults.PublishFailure(
+            this.operationResults,
+            this.statusReducer,
+            RuntimeOperationKinds.SettingsApply,
+            FailureDomain.Settings,
+            code,
+            title,
+            message,
+            new AffectedScope
+            {
+                DocumentId = this.Metadata.DocumentId,
+                DocumentName = this.Metadata.Title,
+            },
+            exception: exception);
 }

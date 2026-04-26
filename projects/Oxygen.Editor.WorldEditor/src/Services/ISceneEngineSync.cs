@@ -22,8 +22,9 @@ public interface ISceneEngineSync
     ///     Synchronizes an entire scene with the engine, creating all nodes and establishing the hierarchy.
     /// </summary>
     /// <param name="scene">The scene to synchronize.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public Task SyncSceneAsync(Scene scene);
+    /// <param name="cancellationToken">Cancellation token to abort stale scene synchronization.</param>
+    /// <returns><see langword="true"/> when the scene was synchronized into the engine; otherwise <see langword="false"/>.</returns>
+    public Task<bool> SyncSceneAsync(Scene scene, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Synchronizes an entire scene with the engine once the engine is running.
@@ -32,8 +33,8 @@ public interface ISceneEngineSync
     /// <param name="cancellationToken">
     ///     Cancellation token to abort waiting (e.g., when a newer scene load supersedes this one).
     /// </param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public Task SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default);
+    /// <returns><see langword="true"/> when the scene was synchronized into the engine; otherwise <see langword="false"/>.</returns>
+    public Task<bool> SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Creates a new scene node in the engine.

@@ -20,7 +20,10 @@ namespace Oxygen.Editor.World.SceneEditor;
 public sealed partial class SceneEditorView : UserControl
 {
     private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = [];
+    private readonly SemaphoreSlim viewportControlsGate = new(initialCount: 1, maxCount: 1);
     private SceneEditorViewModel? currentViewModel;
+    private long lifecycleGeneration;
+    private bool isDeactivated = true;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneEditorView"/> class.
@@ -30,37 +33,68 @@ public sealed partial class SceneEditorView : UserControl
         this.InitializeComponent();
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
+        _ = this.RegisterPropertyChangedCallback(ViewModelProperty, this.OnViewModelDependencyPropertyChanged);
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
 
-        this.AttachToViewModel(this.ViewModel as SceneEditorViewModel ?? this.currentViewModel);
-        this.RebuildLayout();
+        var generation = Interlocked.Increment(ref this.lifecycleGeneration);
+        this.isDeactivated = false;
+
+        await this.RunViewportControlsOperationAsync(
+            generation,
+            async () =>
+            {
+                await this.AttachToViewModelCoreAsync(this.ViewModel as SceneEditorViewModel ?? this.currentViewModel).ConfigureAwait(true);
+                this.Bindings.Update();
+                await this.RebuildLayoutCoreAsync().ConfigureAwait(true);
+            }).ConfigureAwait(true);
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
 
-        this.DetachFromCurrentViewModel();
-        this.ClearViewportControls();
+        await this.DeactivateAsync().ConfigureAwait(true);
     }
 
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>
+    /// Detaches and disposes all viewport controls owned by this view.
+    /// </summary>
+    /// <returns>A task that completes when active viewport controls are detached.</returns>
+    public async Task DeactivateAsync()
+    {
+        _ = Interlocked.Increment(ref this.lifecycleGeneration);
+        this.isDeactivated = true;
+
+        await this.viewportControlsGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            this.DetachFromCurrentViewModel();
+            await this.ClearViewportControlsCoreAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            this.viewportControlsGate.Release();
+        }
+    }
+
+    private async void OnSceneEditorViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (!string.Equals(e.PropertyName, nameof(SceneEditorViewModel.CurrentLayout), System.StringComparison.Ordinal))
         {
             return;
         }
 
-        this.RebuildLayout();
+        var generation = Volatile.Read(ref this.lifecycleGeneration);
+        await this.RunViewportControlsOperationAsync(generation, this.RebuildLayoutCoreAsync).ConfigureAwait(true);
     }
 
-    private void AttachToViewModel(SceneEditorViewModel? viewModel)
+    private async Task AttachToViewModelCoreAsync(SceneEditorViewModel? viewModel)
     {
         if (ReferenceEquals(this.currentViewModel, viewModel))
         {
@@ -68,12 +102,12 @@ public sealed partial class SceneEditorView : UserControl
         }
 
         this.DetachFromCurrentViewModel();
-        this.ClearViewportControls();
+        await this.ClearViewportControlsCoreAsync().ConfigureAwait(true);
         this.currentViewModel = viewModel;
 
         if (this.currentViewModel != null)
         {
-            this.currentViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+            this.currentViewModel.PropertyChanged += this.OnSceneEditorViewModelPropertyChanged;
             this.currentViewModel.Viewports.CollectionChanged += this.OnViewportsChanged;
         }
     }
@@ -85,25 +119,48 @@ public sealed partial class SceneEditorView : UserControl
             return;
         }
 
-        this.currentViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;
+        this.currentViewModel.PropertyChanged -= this.OnSceneEditorViewModelPropertyChanged;
         this.currentViewModel.Viewports.CollectionChanged -= this.OnViewportsChanged;
         this.currentViewModel = null;
     }
 
-    private void OnViewportsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => _ = this.DispatcherQueue?.TryEnqueue(this.RebuildLayout);
-
-    private void ClearViewportControls()
+    private async void OnViewModelDependencyPropertyChanged(DependencyObject sender, DependencyProperty dp)
     {
-        foreach (var control in this.viewportControls.Values)
-        {
-            _ = this.ViewportGrid.Children.Remove(control);
-        }
+        _ = sender;
+        _ = dp;
 
-        this.viewportControls.Clear();
+        var generation = Volatile.Read(ref this.lifecycleGeneration);
+        await this.RunViewportControlsOperationAsync(
+            generation,
+            async () =>
+            {
+                await this.AttachToViewModelCoreAsync(this.ViewModel).ConfigureAwait(true);
+                this.Bindings.Update();
+                await this.RebuildLayoutCoreAsync().ConfigureAwait(true);
+            }).ConfigureAwait(true);
     }
 
-    private void RebuildLayout()
+    private void OnViewportsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        var generation = Volatile.Read(ref this.lifecycleGeneration);
+        _ = this.DispatcherQueue?.TryEnqueue(() => _ = this.RunViewportControlsOperationAsync(generation, this.RebuildLayoutCoreAsync));
+    }
+
+    private async Task ClearViewportControlsCoreAsync()
+    {
+        var controls = this.viewportControls.Values.ToList();
+        this.viewportControls.Clear();
+
+        foreach (var control in controls)
+        {
+            control.PointerPressed -= this.OnViewportPointerPressed;
+            control.GotFocus -= this.OnViewportGotFocus;
+            _ = this.ViewportGrid.Children.Remove(control);
+            await control.DisposeAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task RebuildLayoutCoreAsync()
     {
         var viewModel = this.currentViewModel ?? this.ViewModel as SceneEditorViewModel;
         if (viewModel == null)
@@ -113,7 +170,7 @@ public sealed partial class SceneEditorView : UserControl
 
         this.ConfigureGrid(viewModel);
         var placements = SceneLayoutHelpers.GetPlacements(viewModel.CurrentLayout);
-        this.SyncViewportControls(viewModel, placements);
+        await this.SyncViewportControlsCoreAsync(viewModel, placements).ConfigureAwait(true);
     }
 
     private void ConfigureGrid(SceneEditorViewModel viewModel)
@@ -134,7 +191,7 @@ public sealed partial class SceneEditorView : UserControl
         }
     }
 
-    private void SyncViewportControls(SceneEditorViewModel viewModel, IReadOnlyList<(int row, int column, int rowspan, int colspan)> placements)
+    private async Task SyncViewportControlsCoreAsync(SceneEditorViewModel viewModel, IReadOnlyList<(int row, int column, int rowspan, int colspan)> placements)
     {
         var viewports = viewModel.Viewports;
         var used = new HashSet<ViewportViewModel>();
@@ -176,13 +233,39 @@ public sealed partial class SceneEditorView : UserControl
                 continue;
             }
 
-            _ = this.ViewportGrid.Children.Remove(kvp.Value);
+            var control = kvp.Value;
+            control.PointerPressed -= this.OnViewportPointerPressed;
+            control.GotFocus -= this.OnViewportGotFocus;
+            _ = this.ViewportGrid.Children.Remove(control);
+            await control.DisposeAsync().ConfigureAwait(true);
             toRemove.Add(kvp.Key);
         }
 
         foreach (var key in toRemove)
         {
             _ = this.viewportControls.Remove(key);
+        }
+    }
+
+    private async Task RunViewportControlsOperationAsync(long generation, Func<Task> operation)
+    {
+        await this.viewportControlsGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            if (this.isDeactivated || generation != Volatile.Read(ref this.lifecycleGeneration))
+            {
+                return;
+            }
+
+            await operation().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"SceneEditorView viewport operation failed: {ex}");
+        }
+        finally
+        {
+            this.viewportControlsGate.Release();
         }
     }
 
