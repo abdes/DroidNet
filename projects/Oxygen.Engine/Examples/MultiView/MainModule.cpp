@@ -131,7 +131,6 @@ auto MainModule::OnAttachedImpl(
     .camera_controls = true,
     .environment = false,
     .lighting = false,
-    .rendering = false,
     .post_process = true,
   };
   shell_config.enable_camera_rig = true;

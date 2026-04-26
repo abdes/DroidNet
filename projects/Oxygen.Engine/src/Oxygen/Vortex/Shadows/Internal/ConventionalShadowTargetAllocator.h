@@ -44,10 +44,12 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart() -> void;
   [[nodiscard]] OXGN_VRTX_API auto AcquireDirectionalSurface(
-    std::uint32_t cascade_count) -> DirectionalAllocation;
+    std::uint32_t cascade_count, std::uint32_t resolution_hint)
+    -> DirectionalAllocation;
 
 private:
-  auto EnsureDirectionalSurface(std::uint32_t cascade_count) -> void;
+  auto EnsureDirectionalSurface(
+    std::uint32_t cascade_count, std::uint32_t resolution_hint) -> void;
   auto RegisterDirectionalSurfaceSrv() -> ShaderVisibleIndex;
 
   Renderer& renderer_;

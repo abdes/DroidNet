@@ -1,6 +1,6 @@
 # VTX-M05D Conventional Shadow Parity And Local-Light Expansion
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Milestone:** `VTX-M05D - Conventional Shadow Parity And Local-Light Expansion`
 **Scope owner:** Vortex ShadowService / LightingService
 **Primary LLDs:** [../lld/shadow-service.md](../lld/shadow-service.md),
@@ -43,6 +43,7 @@ Parity is against the local UE5.7 codebase only:
 - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Engine\Private\Components\DirectionalLightComponent.cpp`
 - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\ForwardShadowingCommon.ush`
 - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\ShadowFilteringCommon.ush`
+- `F:\Epic Games\UE_5.7\Engine\Shaders\Private\ShadowProjectionPixelShader.usf`
 - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\DeferredLightPixelShaders.usf`
 
 Local-light audit additions:
@@ -70,6 +71,23 @@ Compare UE5.7 and Oxygen for:
 The audit result must be recorded in this plan before remediation is called
 complete.
 
+### 4.1 Directional CSM Audit Record
+
+| UE5.7 concern | Oxygen result | Remediation / accepted divergence |
+| --- | --- | --- |
+| `DirectionalLightComponent.cpp::GetSplitDistance` split distribution | Oxygen already supports manual distances and generated distribution from canonicalized scene CSM settings. | Keep. Oxygen does not mirror UE far-shadow or distance-field cascade extensions in M05D. |
+| `GetShadowSplitBoundsDepthRange` no-AA projection | Oxygen previously extracted cascade corners from the current inverse view-projection, which can include temporal jitter. | Remediate by extracting corners from `StableProjectionMatrix() * ViewMatrix()`. |
+| UE sphere-fitted cascade bounds | Oxygen previously used tight light-space AABB bounds around split corners. | Remediate with a sphere-derived square projection for stable extents. |
+| `SetupWholeSceneProjection` texel snapping with `MaxDownsampleFactor = 4` | Oxygen had no cascade-center snapping. | Remediate with light-space XY snapping at four shadow texels. |
+| `SetupWholeSceneProjection` directional `DepthRangeClamp = 5000` | Oxygen used tight receiver-corner depth range. This can clip valid casters and explained the malformed/truncated right-frustum shadows. | Remediate with a 5000-unit directional depth extent minimum. |
+| `UpdateShaderDepthBias` per-shadow depth-bias publication | Oxygen previously treated the authored scene `shadow.bias` as a raw clip-space bias. UE computes CSM bias as `r.Shadow.CSMDepthBias / depth_span`, scales it by cascade radius over resolution when `ShadowCascadeBiasDistribution == 1`, then multiplies by the user shadow-bias multiplier. | Remediate by computing the UE-style per-cascade clip-depth bias in setup, binding it to the shadow-depth pass, and not subtracting it again during opaque receiver comparison. |
+| Directional shadow resolution quality | Oxygen's conventional allocator ignored the Environment panel's directional shadow resolution hint and always allocated 2048. A first wiring pass also exposed that the shadow-depth pass kept stale DSVs after surface reallocation. | Remediate by carrying the selected `ShadowResolutionHint` through frame-light selection, resolving it through the renderer shadow-quality budget at Low 1024, Medium 2048, High 3072, or Ultra 4096, and invalidating cached cascade DSVs when the surface changes. |
+| `ShadowProjectionPixelShader.usf` / `ShadowFilteringCommon.ush` filtering | Oxygen has a compact reversed-Z 3x3 PCF path rather than UE's full projection shader permutations. | Accepted for M05D if proof shows stable conventional projected shadows; no PCSS/subsurface/transmission parity claimed. |
+| `GetShadowSplitBounds` transition/fade extension | Oxygen keeps authored split distances as the published cascade boundaries and blends in shader over the configured terminal band, instead of extending non-last cascade bounds. | Accepted ABI simplification unless physics-domain proof exposes visible cascade seams. |
+| UE caster/receiver frusta and per-cascade culling | Oxygen submits all prepared shadow casters to each cascade. | Accepted conservative correctness divergence for M05D; performance culling is not required to fix projected-shadow correctness. |
+| UE atlas/tile storage | Oxygen uses a dedicated directional `Texture2DArray`. | Accepted Oxygen resource convention; public ABI stays `ShadowFrameBindings`. |
+| UE CSM caching/scrolling | Oxygen has no CSM cache. | Accepted M05D divergence; stability is provided by no-AA frusta, stable bounds, and snapping. |
+
 ## 5. Implementation Slices
 
 ### Slice A - Design Scope And Truth Surface
@@ -88,7 +106,7 @@ Validation:
 
 ### Slice B - Directional CSM UE5.7 Parity Audit
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 Tasks:
 
@@ -100,29 +118,31 @@ Tasks:
 
 Validation:
 
-- Source-to-target mapping recorded in this plan or a linked appendix.
+- Source-to-target mapping recorded in section 4.1.
 - No implementation status upgrade without this mapping.
 
 ### Slice C - City-Scale Instability Reproduction
 
-**Status:** `planned`
+**Status:** `superseded_by_targeted_audit_and_small_scene_proof`
 
 Tasks:
 
-- Build a repeatable `CityEnvironmentValidation` scenario that moves the camera
-  enough to reveal the unstable CSM projected shadows.
-- Capture the failure with RenderDoc or targeted debug modes.
-- Add or improve debug modes if cascade index, shadow UV/depth, or shadow mask
-  visibility is insufficient.
+- Use the city scene as the motivating runtime smoke scenario, not the deep
+  capture scene.
+- Do detailed post-remediation proof on `physics_domain` after the full CSM
+  parity audit is complete.
+- Add or improve debug modes only if the smaller proof scene cannot expose
+  cascade index, shadow UV/depth, or shadow-mask visibility.
 
 Validation:
 
-- Runtime log and capture artifact that show the unstable baseline.
-- Explicit root-cause hypothesis before code remediation starts.
+- Runtime city observation that the reported malformed right-frustum shadows are
+  explained by the depth-range audit finding.
+- Smaller-scene RenderDoc/debug-layer proof after remediation.
 
 ### Slice D - Directional CSM Remediation
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 Tasks:
 

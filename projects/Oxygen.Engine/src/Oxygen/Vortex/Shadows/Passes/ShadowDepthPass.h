@@ -69,6 +69,7 @@ private:
   std::vector<ShaderVisibleIndex> pass_constants_srvs_ {};
   std::uint32_t pass_constants_slot_count_ { 0U };
   std::vector<graphics::NativeView> cascade_dsvs_ {};
+  const graphics::Texture* cascade_dsv_surface_ { nullptr };
 };
 
 } // namespace shadows

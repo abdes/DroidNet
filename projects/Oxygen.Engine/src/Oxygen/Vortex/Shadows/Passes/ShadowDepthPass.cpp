@@ -38,15 +38,18 @@ namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
 constexpr std::uint32_t kShadowPassConstantsStride
   = packing::kConstantBufferAlignment;
+constexpr float kUeCsmShadowSlopeScaleDepthBias = 3.0F;
+constexpr float kUeDefaultUserShadowSlopeBias = 0.5F;
+constexpr float kUeShadowMaxSlopeScaleDepthBias = 1.0F;
 
 struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
   glm::mat4 light_view_projection { 1.0F };
-  float depth_bias { 0.0006F };
-  float normal_bias { 0.02F };
+  glm::vec4 shadow_bias_parameters { 0.0F };
+  glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
   std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
   std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
   std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
-  float _padding1 { 0.0F };
+  std::uint32_t _padding0 { 0U };
 };
 
 auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
@@ -304,6 +307,11 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     return last_render_state_;
   }
 
+  if (cascade_dsv_surface_ != shadow_surface.get()) {
+    cascade_dsvs_.clear();
+    cascade_dsv_surface_ = shadow_surface.get();
+  }
+
   const auto ensure_pass_constants =
     [&](const std::uint32_t required_slots) -> void {
     if (pass_constants_buffer_ != nullptr
@@ -357,6 +365,12 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     auto constants = ShadowPassConstants {
       .light_view_projection
       = frame_data.bindings.cascades[cascade_index].light_view_projection,
+      .shadow_bias_parameters = glm::vec4(
+        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z,
+        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z
+          * kUeCsmShadowSlopeScaleDepthBias * kUeDefaultUserShadowSlopeBias,
+        kUeShadowMaxSlopeScaleDepthBias, 0.0F),
+      .light_direction_to_source = frame_data.bindings.light_direction_to_source,
       .draw_metadata_slot = view_input.prepared_scene->bindless_draw_metadata_slot.get(),
       .current_worlds_slot = view_input.prepared_scene->bindless_worlds_slot.get(),
       .instance_data_slot = view_input.prepared_scene->bindless_instance_data_slot.get(),

@@ -38,8 +38,8 @@ auto CascadeShadowPass::RenderDirectionalView(
   const FrameDirectionalLightSelection& directional_light) -> ViewShadowPassState
 {
   auto state = ViewShadowPassState {};
-  const auto allocation
-    = allocator_->AcquireDirectionalSurface(directional_light.cascade_count);
+  const auto allocation = allocator_->AcquireDirectionalSurface(
+    directional_light.cascade_count, directional_light.shadow_resolution_hint);
   state.frame_data = cascade_setup_->BuildDirectionalFrameData(
     view_input, directional_light, allocation);
   state.shadow_surface = allocation.surface;
