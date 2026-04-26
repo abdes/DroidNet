@@ -31,29 +31,23 @@ gap.
 
 ## 3. Current Next Step
 
-**Next milestone:** `VTX-M05A - Diagnostics Product Service`
+**Next milestone:** `VTX-M05B - Occlusion Consumer Closeout`
 
-**Why:** The Phase 4D environment/fog parity packages, Async migration proof,
-and single-view composition/presentation closeout now have implementation and
-recorded validation. The next gate is making diagnostics a product-owned
-service instead of relying on proof tooling, scattered debug vocabulary, and ad
-hoc UI controls.
+**Why:** `VTX-M05A` is validated. The next planned gate is closing the stage-5
+occlusion consumer path over the existing generic Screen HZB implementation.
 
-**Active work package:** `VTX-M05A - Diagnostics Product Service`
+**Active work package:** `VTX-M05B - Occlusion Consumer Closeout`
 
-**Plan:** [plan/VTX-M05A-diagnostics-product-service.md](./plan/VTX-M05A-diagnostics-product-service.md)
+**Plan:** no dedicated detailed milestone plan exists yet. The starting design
+documents are [lld/occlusion.md](./lld/occlusion.md) and
+[lld/hzb.md](./lld/hzb.md); the first M05B task is to review/update those docs
+and create `plan/VTX-M05B-...md` before implementation claims.
 
-**Current M05A scope:** runtime `DiagnosticsService`, authoritative
-`ShaderDebugModeRegistry`, frame ledger, GPU timeline facade with Tracy kept
-behind the profiling/backend layer, minimal recoverable runtime issues, capture
-manifest export, DemoShell diagnostics panel registry, automation hardening for
-M05A-owned or touched proof scripts, and optional GPU debug primitives only if a
-required spatial-debug proof gap demands them.
+**Current M05B scope:** full occlusion/query/visibility policy over Screen HZB,
+including visibility classifications, batching, temporal handoff, consumers, and
+proof.
 
-**Current M05A status:** `validated`. Runtime diagnostics, the Diagnostics
-panel, proof-script hardening, and the debug/render-mode corrections are
-implemented, documented in the LLD/plan, and covered by focused build, test,
-ShaderBake, runtime proof, and user visual evidence.
+**Current M05B status:** `planned`.
 
 ## 4. Milestone Ledger
 
