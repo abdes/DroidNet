@@ -5,10 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstring>
-#include <numbers>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,6 +27,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -522,83 +521,6 @@ namespace {
     .Build();
   }
 
-  auto GenerateSphereVertices() -> std::vector<glm::vec4>
-  {
-    constexpr auto kSlices = 16U;
-    constexpr auto kStacks = 8U;
-    constexpr auto kTwoPi = std::numbers::pi_v<float> * 2.0F;
-
-    const auto ring_vertex
-      = [](const std::uint32_t ring, const std::uint32_t slice) -> glm::vec4 {
-      const auto phi = std::numbers::pi_v<float>
-        * static_cast<float>(ring) / static_cast<float>(kStacks);
-      const auto theta
-        = kTwoPi * static_cast<float>(slice) / static_cast<float>(kSlices);
-      const auto sin_phi = std::sin(phi);
-      return glm::vec4(sin_phi * std::cos(theta), std::cos(phi),
-        sin_phi * std::sin(theta), 1.0F);
-    };
-
-    auto vertices = std::vector<glm::vec4> {};
-    vertices.reserve(6U * kSlices * (kStacks - 1U));
-    const auto north = glm::vec4(0.0F, 1.0F, 0.0F, 1.0F);
-    const auto south = glm::vec4(0.0F, -1.0F, 0.0F, 1.0F);
-
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.push_back(north);
-      vertices.push_back(ring_vertex(1U, next_slice));
-      vertices.push_back(ring_vertex(1U, slice));
-    }
-
-    for (std::uint32_t ring = 1U; ring < kStacks - 1U; ++ring) {
-      for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-        const auto next_slice = (slice + 1U) % kSlices;
-        const auto v00 = ring_vertex(ring, slice);
-        const auto v01 = ring_vertex(ring, next_slice);
-        const auto v10 = ring_vertex(ring + 1U, slice);
-        const auto v11 = ring_vertex(ring + 1U, next_slice);
-        vertices.insert(vertices.end(), { v00, v10, v01, v10, v11, v01 });
-      }
-    }
-
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.push_back(south);
-      vertices.push_back(ring_vertex(kStacks - 1U, slice));
-      vertices.push_back(ring_vertex(kStacks - 1U, next_slice));
-    }
-
-    return vertices;
-  }
-
-  auto GenerateConeVertices() -> std::vector<glm::vec4>
-  {
-    constexpr auto kSlices = 24U;
-    constexpr auto kTwoPi = std::numbers::pi_v<float> * 2.0F;
-    const auto ring_vertex = [](const std::uint32_t slice) -> glm::vec4 {
-      const auto theta
-        = kTwoPi * static_cast<float>(slice) / static_cast<float>(kSlices);
-      return glm::vec4(std::cos(theta), -1.0F, std::sin(theta), 1.0F);
-    };
-
-    auto vertices = std::vector<glm::vec4> {};
-    vertices.reserve(6U * kSlices);
-    const auto apex = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
-    const auto base_center = glm::vec4(0.0F, -1.0F, 0.0F, 1.0F);
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.insert(
-        vertices.end(), { apex, ring_vertex(next_slice), ring_vertex(slice) });
-    }
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.insert(vertices.end(),
-        { base_center, ring_vertex(slice), ring_vertex(next_slice) });
-    }
-    return vertices;
-  }
-
 } // namespace
 
 DeferredLightPass::DeferredLightPass(Renderer& renderer)
@@ -632,7 +554,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const internal::DeferredLightPacketSet& packets,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
-  const graphics::Texture* spot_shadow_surface) -> ExecutionState
+  const graphics::Texture* spot_shadow_surface,
+  const graphics::Texture* point_shadow_surface) -> ExecutionState
 {
   auto state = ExecutionState {};
   if (ctx.view_constants == nullptr) {
@@ -655,6 +578,13 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     state.spot_shadow_count = directional_shadow_bindings->spot_shadow_count;
     state.spot_shadow_surface_srv
       = directional_shadow_bindings->spot_shadow_surface_handle;
+  }
+  if (directional_shadow_bindings != nullptr
+    && directional_shadow_bindings->HasPointConventionalShadow()) {
+    state.consumed_point_shadow_product = true;
+    state.point_shadow_count = directional_shadow_bindings->point_shadow_count;
+    state.point_shadow_surface_srv
+      = directional_shadow_bindings->point_shadow_surface_handle;
   }
 
   auto gfx = renderer_.GetGraphics();
@@ -691,13 +621,14 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   };
 
   if (point_geometry_buffer_ == nullptr) {
-    const auto point_vertices = GenerateSphereVertices();
+    const auto point_vertices
+      = internal::GeneratePointLightProxySphereVertices();
     ensure_geometry_buffer(point_geometry_buffer_, point_geometry_srv_,
       point_geometry_vertex_count_, "LightingService.PointProxyGeometry",
       std::span(point_vertices));
   }
   if (spot_geometry_buffer_ == nullptr) {
-    const auto spot_vertices = GenerateConeVertices();
+    const auto spot_vertices = internal::GenerateSpotLightProxyConeVertices();
     ensure_geometry_buffer(spot_geometry_buffer_, spot_geometry_srv_,
       spot_geometry_vertex_count_, "LightingService.SpotProxyGeometry",
       std::span(spot_vertices));
@@ -892,6 +823,16 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       recorder->BeginTrackingResourceState(*spot_shadow_surface, initial);
     }
   }
+  if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
+    if (!recorder->AdoptKnownResourceState(*point_shadow_surface)) {
+      auto initial = point_shadow_surface->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kShaderResource;
+      }
+      recorder->BeginTrackingResourceState(*point_shadow_surface, initial);
+    }
+  }
 
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
@@ -950,6 +891,11 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       recorder->RequireResourceState(
         *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
     }
+    if (draw.kind == DeferredLightKind::kPoint && point_shadow_surface != nullptr
+      && state.consumed_point_shadow_product) {
+      recorder->RequireResourceState(
+        *point_shadow_surface, graphics::ResourceStates::kShaderResource);
+    }
     recorder->FlushBarriers();
     recorder->BindFrameBuffer(*local_framebuffer_);
     SetViewportAndScissor(*recorder, ctx, scene_textures);
@@ -991,6 +937,10 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
     recorder->RequireResourceStateFinal(
       *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
+  }
+  if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
+    recorder->RequireResourceStateFinal(
+      *point_shadow_surface, graphics::ResourceStates::kShaderResource);
   }
 
   return state;

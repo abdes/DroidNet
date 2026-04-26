@@ -37,6 +37,13 @@ public:
     std::uint32_t shadow_count { 0U };
   };
 
+  struct PointAllocation {
+    std::shared_ptr<graphics::Texture> surface {};
+    ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
+    glm::uvec2 resolution { 0U, 0U };
+    std::uint32_t shadow_count { 0U };
+  };
+
   OXGN_VRTX_API explicit ConventionalShadowTargetAllocator(Renderer& renderer);
   OXGN_VRTX_API ~ConventionalShadowTargetAllocator();
 
@@ -55,6 +62,9 @@ public:
     -> DirectionalAllocation;
   [[nodiscard]] OXGN_VRTX_API auto AcquireSpotSurface(
     std::uint32_t shadow_count, std::uint32_t resolution_hint) -> SpotAllocation;
+  [[nodiscard]] OXGN_VRTX_API auto AcquirePointSurface(
+    std::uint32_t shadow_count, std::uint32_t resolution_hint)
+    -> PointAllocation;
 
 private:
   auto EnsureDirectionalSurface(
@@ -63,6 +73,9 @@ private:
   auto EnsureSpotSurface(
     std::uint32_t shadow_count, std::uint32_t resolution_hint) -> void;
   auto RegisterSpotSurfaceSrv() -> ShaderVisibleIndex;
+  auto EnsurePointSurface(
+    std::uint32_t shadow_count, std::uint32_t resolution_hint) -> void;
+  auto RegisterPointSurfaceSrv() -> ShaderVisibleIndex;
 
   Renderer& renderer_;
   std::shared_ptr<graphics::Texture> directional_surface_ {};
@@ -73,6 +86,10 @@ private:
   ShaderVisibleIndex spot_surface_srv_ { kInvalidShaderVisibleIndex };
   glm::uvec2 spot_resolution_ { 0U, 0U };
   std::uint32_t spot_array_size_ { 0U };
+  std::shared_ptr<graphics::Texture> point_surface_ {};
+  ShaderVisibleIndex point_surface_srv_ { kInvalidShaderVisibleIndex };
+  glm::uvec2 point_resolution_ { 0U, 0U };
+  std::uint32_t point_shadow_count_ { 0U };
 };
 
 } // namespace shadows::internal

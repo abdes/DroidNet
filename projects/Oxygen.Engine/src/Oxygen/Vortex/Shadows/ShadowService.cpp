@@ -73,8 +73,10 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
   last_render_state_.published_view_count = 0U;
   last_render_state_.directional_view_count = 0U;
   last_render_state_.spot_view_count = 0U;
+  last_render_state_.point_view_count = 0U;
   last_render_state_.rendered_cascade_count = 0U;
   last_render_state_.rendered_spot_shadow_count = 0U;
+  last_render_state_.rendered_point_shadow_count = 0U;
   last_render_state_.rendered_draw_count = 0U;
   last_render_state_.shadow_caster_draw_count = 0U;
   last_render_state_.selection_epoch
@@ -93,8 +95,10 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     auto view_data = DirectionalShadowFrameData {};
     auto shadow_surface = std::shared_ptr<graphics::Texture> {};
     auto spot_shadow_surface = std::shared_ptr<graphics::Texture> {};
+    auto point_shadow_surface = std::shared_ptr<graphics::Texture> {};
     auto rendered_cascade_count = 0U;
     auto rendered_spot_shadow_count = 0U;
+    auto rendered_point_shadow_count = 0U;
     auto rendered_draw_count = 0U;
     auto shadow_caster_draw_count = 0U;
 
@@ -124,6 +128,22 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       rendered_draw_count += spot_state.rendered_draw_count;
       shadow_caster_draw_count = (std::max)(
         shadow_caster_draw_count, spot_state.shadow_caster_draw_count);
+
+      const auto point_state = cascade_shadow_pass_->RenderPointView(
+        view_input, std::span(inputs.frame_light_set->local_lights));
+      view_data.bindings.point_shadow_surface_handle
+        = point_state.bindings.point_shadow_surface_handle;
+      view_data.bindings.point_shadow_count
+        = point_state.bindings.point_shadow_count;
+      view_data.bindings.technique_flags |= point_state.bindings.technique_flags;
+      view_data.bindings.sampling_contract_flags
+        |= point_state.bindings.sampling_contract_flags;
+      view_data.bindings.point_shadows = point_state.bindings.point_shadows;
+      point_shadow_surface = point_state.shadow_surface;
+      rendered_point_shadow_count += point_state.rendered_shadow_count;
+      rendered_draw_count += point_state.rendered_draw_count;
+      shadow_caster_draw_count = (std::max)(
+        shadow_caster_draw_count, point_state.shadow_caster_draw_count);
     }
 
     const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
@@ -133,11 +153,14 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         .data = view_data,
         .surface = shadow_surface,
         .spot_surface = spot_shadow_surface,
+        .point_surface = point_shadow_surface,
       });
 
     last_render_state_.published_view_count += 1U;
     last_render_state_.rendered_cascade_count += rendered_cascade_count;
     last_render_state_.rendered_spot_shadow_count += rendered_spot_shadow_count;
+    last_render_state_.rendered_point_shadow_count
+      += rendered_point_shadow_count;
     last_render_state_.rendered_draw_count += rendered_draw_count;
     last_render_state_.shadow_caster_draw_count += shadow_caster_draw_count;
     if (view_data.bindings.cascade_count > 0U) {
@@ -145,6 +168,9 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     }
     if (view_data.bindings.spot_shadow_count > 0U) {
       last_render_state_.spot_view_count += 1U;
+    }
+    if (view_data.bindings.point_shadow_count > 0U) {
+      last_render_state_.point_view_count += 1U;
     }
   }
 }
@@ -168,6 +194,13 @@ auto ShadowService::InspectSpotShadowSurface(const ViewId view_id) const
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? it->second.spot_surface.get() : nullptr;
+}
+
+auto ShadowService::InspectPointShadowSurface(const ViewId view_id) const
+  -> const graphics::Texture*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? it->second.point_surface.get() : nullptr;
 }
 
 auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const

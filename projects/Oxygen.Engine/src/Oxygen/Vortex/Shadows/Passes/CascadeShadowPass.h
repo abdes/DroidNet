@@ -28,6 +28,7 @@ class ShadowDepthPass;
 namespace internal {
 class CascadeShadowSetup;
 class ConventionalShadowTargetAllocator;
+class PointShadowSetup;
 class ShadowCasterCulling;
 class SpotShadowSetup;
 } // namespace internal
@@ -43,6 +44,14 @@ public:
   };
 
   struct ViewSpotShadowPassState {
+    ShadowFrameBindings bindings {};
+    std::shared_ptr<graphics::Texture> shadow_surface {};
+    std::uint32_t shadow_caster_draw_count { 0U };
+    std::uint32_t rendered_shadow_count { 0U };
+    std::uint32_t rendered_draw_count { 0U };
+  };
+
+  struct ViewPointShadowPassState {
     ShadowFrameBindings bindings {};
     std::shared_ptr<graphics::Texture> shadow_surface {};
     std::uint32_t shadow_caster_draw_count { 0U };
@@ -67,11 +76,16 @@ public:
     const PreparedViewShadowInput& view_input,
     std::span<const FrameLocalLightSelection> local_lights)
     -> ViewSpotShadowPassState;
+  [[nodiscard]] OXGN_VRTX_API auto RenderPointView(
+    const PreparedViewShadowInput& view_input,
+    std::span<const FrameLocalLightSelection> local_lights)
+    -> ViewPointShadowPassState;
 
 private:
   Renderer& renderer_;
   std::unique_ptr<internal::CascadeShadowSetup> cascade_setup_;
   std::unique_ptr<internal::SpotShadowSetup> spot_setup_;
+  std::unique_ptr<internal::PointShadowSetup> point_setup_;
   std::unique_ptr<internal::ConventionalShadowTargetAllocator> allocator_;
   std::unique_ptr<internal::ShadowCasterCulling> shadow_caster_culling_;
   std::unique_ptr<ShadowDepthPass> depth_pass_;

@@ -12,8 +12,10 @@
 #include <span>
 #include <string>
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -27,6 +29,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -71,6 +74,17 @@ using oxygen::vortex::ShadingMode;
 using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::RendererPublicationProbe;
+
+auto TriangleWindsOutwardFromOrigin(
+  const glm::vec4& a, const glm::vec4& b, const glm::vec4& c) -> bool
+{
+  const auto p0 = glm::vec3 { a };
+  const auto p1 = glm::vec3 { b };
+  const auto p2 = glm::vec3 { c };
+  const auto normal = glm::cross(p1 - p0, p2 - p0);
+  const auto center = (p0 + p1 + p2) / 3.0F;
+  return glm::dot(normal, center) > 0.0F;
+}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -1108,6 +1122,32 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     lighting_state.spot_shadow_surface_srv, oxygen::kInvalidShaderVisibleIndex);
 }
 
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingConsumesPointShadowProductForShadowCastingPointLight)
+{
+  auto point = AddPointLight("PointKey");
+  auto point_light = point.GetLightAs<PointLight>();
+  ASSERT_TRUE(point_light.has_value());
+  point_light->get().Common().casts_shadows = true;
+  point_light->get().Common().shadow.bias = 0.5F;
+  point_light->get().Common().shadow.normal_bias = 0.03F;
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& selection
+    = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
+  ASSERT_EQ(selection.local_lights.size(), 1U);
+  EXPECT_NE(selection.local_lights.front().flags
+      & oxygen::vortex::kLocalLightFlagCastsShadows,
+    0U);
+
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+  EXPECT_TRUE(lighting_state.consumed_point_shadow_product);
+  EXPECT_EQ(lighting_state.point_shadow_count, 1U);
+  EXPECT_NE(lighting_state.point_shadow_surface_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+}
+
 NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, DeferredLightingUsesOutsideVolumeLocalLights)
 {
@@ -1186,6 +1226,22 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
                   == "Vortex.DeferredLight.Spot.InsideVolumeLighting";
               }),
     1);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  PointLightProxySphereUsesConsistentOutwardWinding)
+{
+  const auto vertices
+    = oxygen::vortex::lighting::internal::
+      GeneratePointLightProxySphereVertices();
+
+  ASSERT_FALSE(vertices.empty());
+  ASSERT_EQ(vertices.size() % 3U, 0U);
+  for (std::size_t i = 0; i < vertices.size(); i += 3U) {
+    EXPECT_TRUE(TriangleWindsOutwardFromOrigin(
+      vertices[i], vertices[i + 1U], vertices[i + 2U]))
+      << "triangle " << (i / 3U);
+  }
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

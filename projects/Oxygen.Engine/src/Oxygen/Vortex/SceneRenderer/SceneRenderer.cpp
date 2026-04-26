@@ -2723,9 +2723,12 @@ void SceneRenderer::RenderDeferredLighting(
   const auto* spot_shadow_surface = shadows_ != nullptr
     ? shadows_->InspectSpotShadowSurface(ctx.current_view.view_id)
     : nullptr;
+  const auto* point_shadow_surface = shadows_ != nullptr
+    ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
+    : nullptr;
   lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
     shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
-    shadow_surface, spot_shadow_surface);
+    shadow_surface, spot_shadow_surface, point_shadow_surface);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -2764,6 +2767,12 @@ void SceneRenderer::RenderDeferredLighting(
   deferred_lighting_state_.spot_shadow_count = lighting_state.spot_shadow_count;
   deferred_lighting_state_.spot_shadow_surface_srv
     = lighting_state.spot_shadow_surface_srv;
+  deferred_lighting_state_.consumed_point_shadow_product
+    = lighting_state.consumed_point_shadow_product;
+  deferred_lighting_state_.point_shadow_count
+    = lighting_state.point_shadow_count;
+  deferred_lighting_state_.point_shadow_surface_srv
+    = lighting_state.point_shadow_surface_srv;
 }
 
 } // namespace oxygen::vortex
