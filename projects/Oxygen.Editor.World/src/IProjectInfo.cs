@@ -22,6 +22,11 @@ public interface IProjectInfo
     public Guid Id { get; }
 
     /// <summary>
+    ///     Gets or sets the project manifest schema version.
+    /// </summary>
+    public int SchemaVersion { get; set; }
+
+    /// <summary>
     ///     Gets or sets the name of the project.
     /// </summary>
     /// <value>
