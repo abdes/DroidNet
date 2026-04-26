@@ -40,3 +40,9 @@ current milestone ID after the `ED-M01` insertion.
 | [ED-WP05.1-manifest-driven-cooking.md](./ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | Descriptor/manifest cooking workflow. |
 | [ED-WP06.1-settings-architecture-and-editors.md](./ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | Settings ownership, persistence, validation, and editors. |
 | [ED-WP08.1-validation-model.md](./ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | Structured validation and diagnostics model. |
+
+## Milestone Plans
+
+| Plan | Milestone | Purpose |
+| --- | --- | --- |
+| [ED-M01-project-browser-workspace-activation.md](./ED-M01-project-browser-workspace-activation.md) | `ED-M01` | Project Browser startup, project open/create, invalid project handling, workspace activation, restoration visibility, and operation results. |
