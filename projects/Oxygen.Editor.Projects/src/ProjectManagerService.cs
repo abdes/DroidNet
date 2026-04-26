@@ -218,7 +218,14 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
             await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
 
-            await this.CookSceneAssetAsync(scene).ConfigureAwait(true);
+            try
+            {
+                await this.CookSceneAssetAsync(scene).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                this.CouldNotCookSceneAfterSave(ex, scene.Name);
+            }
 
             return true;
         }
@@ -341,6 +348,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Level = LogLevel.Error,
         Message = "Could not save scene `{sceneName}`; {error}")]
     partial void CouldNotSaveScene(string sceneName, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Scene `{SceneName}` was saved, but the legacy cook side effect failed.")]
+    partial void CouldNotCookSceneAfterSave(Exception ex, string SceneName);
 
     [LoggerMessage(
         Level = LogLevel.Error,

@@ -48,4 +48,19 @@ public static class DiagnosticCodes
     /// Runtime cooked-root mount diagnostic code prefix.
     /// </summary>
     public const string AssetMountPrefix = "OXE.ASSET_MOUNT.";
+
+    /// <summary>
+    /// Scene authoring diagnostic code prefix.
+    /// </summary>
+    public const string ScenePrefix = "OXE.SCENE.";
+
+    /// <summary>
+    /// Scene document diagnostic code prefix.
+    /// </summary>
+    public const string DocumentPrefix = "OXE.DOCUMENT.";
+
+    /// <summary>
+    /// Live scene sync diagnostic code prefix.
+    /// </summary>
+    public const string LiveSyncPrefix = "OXE.LIVESYNC.";
 }

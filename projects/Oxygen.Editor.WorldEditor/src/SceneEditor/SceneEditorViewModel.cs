@@ -17,15 +17,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.World.Diagnostics;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Interop;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -52,7 +51,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IEngineService engineService;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private readonly IProjectManagerService projectManager;
+    private readonly ISceneDocumentCommandService commandService;
     private readonly IDocumentService documentService;
     private readonly WindowId windowId;
     private readonly IContainer container;
@@ -68,7 +67,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="documentService">The document service.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
-    /// <param name="projectManager">The project manager service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="loggerFactory">The logger factory.</param>
@@ -79,7 +77,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
-        IProjectManagerService projectManager,
+        ISceneDocumentCommandService commandService,
         IContainer container,
         IMessenger messenger,
         ILoggerFactory? loggerFactory = null)
@@ -87,7 +85,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.engineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
-        this.projectManager = projectManager;
+        this.commandService = commandService;
         this.documentService = documentService;
         this.windowId = windowId;
         this.loggerFactory = loggerFactory;
@@ -466,12 +464,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         this.LogSaveRequested();
-        var success = await this.projectManager.SaveSceneAsync(this.scene).ConfigureAwait(true);
-        if (success)
+        var result = await this.commandService.SaveSceneAsync(this.CreateCommandContext()).ConfigureAwait(true);
+        if (result.Succeeded)
         {
-            this.Metadata.IsDirty = false;
-            _ = await this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsCookedMessage());
             this.LogSaveSuccessful();
         }
         else
@@ -503,11 +498,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // Shapes submenu
         _ = builder.AddSubmenu("Shapes", shapes =>
         {
-            _ = shapes.AddMenuItem("Sphere", new RelayCommand(() => this.AddPrimitive("Sphere")));
-            _ = shapes.AddMenuItem("Cube", new RelayCommand(() => this.AddPrimitive("Cube")));
-            _ = shapes.AddMenuItem("Cylinder", new RelayCommand(() => this.AddPrimitive("Cylinder")));
-            _ = shapes.AddMenuItem("Cone", new RelayCommand(() => this.AddPrimitive("Cone")));
-            _ = shapes.AddMenuItem("Plane", new RelayCommand(() => this.AddPrimitive("Plane")));
+            _ = shapes.AddMenuItem("Sphere", new AsyncRelayCommand(() => this.AddPrimitive("Sphere")));
+            _ = shapes.AddMenuItem("Cube", new AsyncRelayCommand(() => this.AddPrimitive("Cube")));
+            _ = shapes.AddMenuItem("Cylinder", new AsyncRelayCommand(() => this.AddPrimitive("Cylinder")));
+            _ = shapes.AddMenuItem("Cone", new AsyncRelayCommand(() => this.AddPrimitive("Cone")));
+            _ = shapes.AddMenuItem("Plane", new AsyncRelayCommand(() => this.AddPrimitive("Plane")));
         });
 
         _ = builder.AddSeparator();
@@ -524,11 +519,17 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     }
 
     [RelayCommand]
-    private void AddPrimitive(string kind)
+    private async Task AddPrimitive(string kind)
     {
         this.LogRequestToAddPrimitive(kind);
 
-        // TODO: Implement real add logic via document/engine APIs.
+        if (this.scene is null)
+        {
+            this.LogSaveRequestedButSceneNotReady();
+            return;
+        }
+
+        _ = await this.commandService.CreatePrimitiveAsync(this.CreateCommandContext(), kind).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -542,53 +543,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             return;
         }
 
-        var node = new Oxygen.Editor.World.SceneNode(this.scene) { Name = $"{kind} Light" };
-        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
-        if (transform is not null)
-        {
-            transform.LocalPosition = kind switch
-            {
-                "Point" => new System.Numerics.Vector3(0f, 2f, 0f),
-                "Spot" => new System.Numerics.Vector3(0f, 3f, 3f),
-                _ => System.Numerics.Vector3.Zero,
-            };
-            transform.LocalRotation = kind switch
-            {
-                "Directional" => DirectionalLightComponent.DefaultLocalRotation,
-                "Spot" => System.Numerics.Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
-                _ => System.Numerics.Quaternion.Identity,
-            };
-        }
-
-        _ = kind switch
-        {
-            "Directional" => node.AddComponent(new DirectionalLightComponent
-            {
-                Name = "Directional Light",
-            }),
-            "Point" => node.AddComponent(new PointLightComponent
-            {
-                Name = "Point Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 10f,
-            }),
-            "Spot" => node.AddComponent(new SpotLightComponent
-            {
-                Name = "Spot Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 15f,
-            }),
-            _ => false,
-        };
-
-        this.scene.RootNodes.Add(node);
-        if (this.container.Resolve<ISceneEngineSync>(IfUnresolved.ReturnDefault) is { } sceneEngineSync)
-        {
-            await sceneEngineSync.CreateNodeAsync(node).ConfigureAwait(true);
-        }
-
-        this.Metadata.IsDirty = true;
-        _ = await this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata).ConfigureAwait(true);
+        _ = await this.commandService.CreateLightAsync(this.CreateCommandContext(), kind).ConfigureAwait(true);
     }
 
     private void OnSceneLoadedMessage(object? recipient, SceneLoadedMessage msg)
@@ -610,6 +565,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.UpdateLayout(this.CurrentLayout);
         }
     }
+
+    private SceneDocumentCommandContext CreateCommandContext()
+        => new(
+            this.Metadata.DocumentId,
+            this.Metadata,
+            this.scene ?? throw new InvalidOperationException("Scene is not loaded."),
+            UndoRedo.Default[this.Metadata.DocumentId]);
 
     private void PublishRuntimeSettingsFailure(
         string code,

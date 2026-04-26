@@ -200,6 +200,14 @@ example `OXE.PROJECT.MANIFEST_INVALID`. Diagnostic code prefixes are allocated
 centrally by this LLD; individual feature LLDs own their concrete codes under
 their assigned prefix.
 
+ED-M03 prefix allocations:
+
+| Prefix | Owner |
+| --- | --- |
+| `OXE.SCENE.*` | Scene authoring commands and scene explorer layout operations. |
+| `OXE.DOCUMENT.*` | Scene document open/save lifecycle. |
+| `OXE.LIVESYNC.*` | Command-triggered live scene sync failures. |
+
 ### Failure Domain
 
 Domains are stable vocabulary, not class names.
@@ -444,6 +452,27 @@ ED-M02 producers and operation kinds:
 | scene editor viewport host | `Viewport.Layout.Change` | `WorkspaceRestoration` |
 | workspace cooked-root refresh | `Runtime.CookedRoot.Refresh` | `AssetMount` |
 
+ED-M03 producers and operation kinds:
+
+| Producer | Operation Kind | Domain |
+| --- | --- | --- |
+| scene document command service | `Scene.Node.Create` | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.CreatePrimitive` | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.CreateLight` | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.Rename` | `SceneAuthoring` |
+| scene document command service | `Scene.Node.Delete` | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.Reparent` | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.ExplorerFolder.Create` | `SceneAuthoring` |
+| scene document command service | `Scene.ExplorerFolder.Rename` | `SceneAuthoring` |
+| scene document command service | `Scene.ExplorerFolder.Delete` | `SceneAuthoring` |
+| scene document command service | `Scene.ExplorerLayout.MoveNode` | `SceneAuthoring` |
+| scene document save workflow | `Scene.Save` | `Document` |
+
+Selection changes are not operation kinds in ED-M03. They are document-scoped
+state changes through `ISceneSelectionService`; stale/no-such-node selection
+requests may publish diagnostics under `SceneAuthoring` but do not publish
+success results.
+
 ## 12. Operation Results And Diagnostics
 
 ### Status Reduction Rule
@@ -539,6 +568,18 @@ ED-M02 diagnostics are complete when:
 - FPS/logging setting failure is visible as `Settings`.
 - output/log entries carry enough document/viewport/runtime state to correlate
   a blank or failed viewport with the failed runtime operation.
+
+ED-M03 diagnostics are complete when:
+
+- scene command failures are visible as `SceneAuthoring` with document and
+  node/folder scope where known.
+- scene save failures are visible as `Document`.
+- command-triggered live-sync failures are visible as `LiveSync` without hiding
+  the successful authoring mutation.
+- undo/redo failures are visible as `SceneAuthoring` or `Document` depending
+  on the failed operation.
+- scene explorer invalid operations, such as stale IDs or invalid reparent,
+  fail without partial mutation and publish scoped diagnostics.
 
 Straightforward tests should cover:
 

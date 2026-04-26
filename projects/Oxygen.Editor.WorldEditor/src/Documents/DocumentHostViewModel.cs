@@ -12,9 +12,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -29,7 +29,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     private readonly IEngineService engineService;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private readonly IProjectManagerService projectManager;
     private readonly IContainer container;
     private readonly WindowId windowId;
 
@@ -44,7 +43,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <param name="documentService">The document service used to manage documents.</param>
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
-    /// <param name="projectManager">The project manager service.</param>
     /// <param name="container">The dependency injection container used to resolve services and manage editor lifetimes.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="loggerFactory">
@@ -57,7 +55,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
-        IProjectManagerService projectManager,
         IContainer container,
         WindowId windowId,
         ILoggerFactory? loggerFactory = null)
@@ -71,7 +68,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         this.engineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
-        this.projectManager = projectManager;
         this.windowId = windowId;
 
         this.DocumentService.DocumentOpened += this.OnDocumentOpened;
@@ -138,7 +134,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.engineService,
                 this.operationResults,
                 this.statusReducer,
-                this.projectManager,
+                this.container.Resolve<ISceneDocumentCommandService>(),
                 this.container,
                 messenger,
                 this.loggerFactory);
