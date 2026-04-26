@@ -34,6 +34,7 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -299,6 +300,7 @@ public static partial class Program
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
         container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+        container.Register<IProjectActivationCoordinator, ProjectActivationCoordinator>(Reuse.Singleton);
         container.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
         container.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
         container.Register<IProjectCookScopeProvider, ProjectCookScopeProvider>(Reuse.Singleton);
