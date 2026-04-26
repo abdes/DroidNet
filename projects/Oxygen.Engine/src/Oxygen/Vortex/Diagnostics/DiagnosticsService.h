@@ -7,9 +7,12 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
+#include <span>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -47,6 +50,11 @@ public:
   OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetShaderDebugMode() const noexcept
     -> ShaderDebugMode;
+  [[nodiscard]] OXGN_VRTX_API auto EnumerateShaderDebugModes() const noexcept
+    -> std::span<const ShaderDebugModeInfo>;
+  [[nodiscard]] OXGN_VRTX_API auto FindShaderDebugMode(
+    std::string_view canonical_name) const noexcept
+    -> std::optional<ShaderDebugMode>;
 
   OXGN_VRTX_API auto BeginFrame(frame::SequenceNumber frame) -> void;
   OXGN_VRTX_API auto RecordPass(DiagnosticsPassRecord record) -> void;

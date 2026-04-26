@@ -181,4 +181,19 @@ NOLINT_TEST(DiagnosticsServiceTest, RendererOwnsServiceAndForwardsDebugMode)
     ShaderDebugMode::kSceneDepthLinear);
 }
 
+NOLINT_TEST(DiagnosticsServiceTest, ExposesShaderDebugModeRegistry)
+{
+  auto service = DiagnosticsService {
+    kDiagnosticsCapability,
+    DiagnosticsConfig { .default_features
+      = DiagnosticsFeature::kShaderDebugModes },
+  };
+
+  EXPECT_FALSE(service.EnumerateShaderDebugModes().empty());
+  const auto resolved = service.FindShaderDebugMode("directional-shadow-mask");
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(*resolved, ShaderDebugMode::kDirectionalShadowMask);
+  EXPECT_FALSE(service.FindShaderDebugMode("missing-mode").has_value());
+}
+
 } // namespace
