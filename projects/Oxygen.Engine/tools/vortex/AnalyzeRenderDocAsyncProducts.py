@@ -144,6 +144,30 @@ def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
     return matches
 
 
+def bound_named_resources(
+    controller, rd, resource_names, event_id, shader_stage, read_write, *tokens
+):
+    controller.SetFrameEvent(event_id, True)
+    state = controller.GetPipelineState()
+    descriptors = (
+        state.GetReadWriteResources(shader_stage, True)
+        if read_write
+        else state.GetReadOnlyResources(shader_stage, True)
+    )
+
+    matches = []
+    for used_descriptor in descriptors:
+        descriptor = used_descriptor.descriptor
+        resource_id = safe_getattr(descriptor, "resource")
+        if resource_id is None:
+            continue
+        name = resource_names.get(str(resource_id), str(resource_id))
+        lower_name = str(name).lower()
+        if all(token.lower() in lower_name for token in tokens):
+            matches.append({"resource_id": resource_id, "name": name})
+    return matches
+
+
 def float4_values(pixel_value):
     return [float(v) for v in list(pixel_value.floatValue)[:4]]
 
@@ -915,12 +939,22 @@ def build_report(
     atmosphere_camera_aerial_dispatch_count_match = (
         len(records_with_name(atmosphere_camera_aerial_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
     )
-    atmosphere_camera_aerial_usage = find_named_resource_usage(
+    atmosphere_camera_aerial_usage = bound_named_resources(
         controller,
-        resource_records,
-        stage15_atmosphere_event_ids,
+        rd,
+        resource_names,
+        stage15_atmosphere_last_draw.event_id,
+        rd.ShaderStage.Pixel,
+        False,
         "vortex.environment.atmospherecameraaerialperspective",
     )
+    if not atmosphere_camera_aerial_usage:
+        atmosphere_camera_aerial_usage = find_named_resource_usage(
+            controller,
+            resource_records,
+            stage15_atmosphere_event_ids,
+            "vortex.environment.atmospherecameraaerialperspective",
+        )
     atmosphere_camera_aerial_consumed = len(atmosphere_camera_aerial_usage) > 0
     stage15_async_scene_color_delta = max(
         max_sample_delta(stage12_final_scene_color, stage15_fog_scene_color),
