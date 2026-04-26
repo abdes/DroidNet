@@ -5,6 +5,8 @@
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Services;
 
@@ -18,6 +20,8 @@ public partial class SceneExplorerService : ISceneExplorerService
     private readonly ISceneMutator sceneMutator;
     private readonly ISceneOrganizer sceneOrganizer;
     private readonly ISceneEngineSync sceneEngineSync;
+    private readonly IOperationResultPublisher operationResults;
+    private readonly IStatusReducer statusReducer;
     private readonly ILogger<SceneExplorerService> logger;
 
     /// <summary>
@@ -31,11 +35,15 @@ public partial class SceneExplorerService : ISceneExplorerService
         ISceneMutator sceneMutator,
         ISceneOrganizer sceneOrganizer,
         ISceneEngineSync sceneEngineSync,
+        IOperationResultPublisher operationResults,
+        IStatusReducer statusReducer,
         ILogger<SceneExplorerService>? logger = null)
     {
         this.sceneMutator = sceneMutator;
         this.sceneOrganizer = sceneOrganizer;
         this.sceneEngineSync = sceneEngineSync;
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
         this.logger = logger ?? NullLogger<SceneExplorerService>.Instance;
     }
 
@@ -79,7 +87,20 @@ public partial class SceneExplorerService : ISceneExplorerService
 
         if (change?.RequiresEngineSync == true)
         {
-            await this.sceneEngineSync.CreateNodeAsync(node, change.NewParentId).ConfigureAwait(false);
+            try
+            {
+                await this.sceneEngineSync.CreateNodeAsync(node, change.NewParentId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogWarning(ex, "Scene node {NodeId} was added to the authoring model, but live sync failed.", node.Id);
+                this.PublishLiveSyncWarning(
+                    SceneOperationKinds.NodeCreate,
+                    DiagnosticCodes.LiveSyncPrefix + "CREATE_NODE_FAILED",
+                    "Scene was updated but live preview was not",
+                    node,
+                    ex);
+            }
         }
 
         return change;
@@ -208,7 +229,20 @@ public partial class SceneExplorerService : ISceneExplorerService
 
             if (change?.RequiresEngineSync == true)
             {
-                await this.sceneEngineSync.ReparentNodeAsync(node.Id, change.NewParentId).ConfigureAwait(false);
+                try
+                {
+                    await this.sceneEngineSync.ReparentNodeAsync(node.Id, change.NewParentId).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogWarning(ex, "Scene node {NodeId} was moved in the authoring model, but live sync failed.", node.Id);
+                    this.PublishLiveSyncWarning(
+                        SceneOperationKinds.NodeReparent,
+                        DiagnosticCodes.LiveSyncPrefix + "REPARENT_NODE_FAILED",
+                        "Scene was updated but live preview was not",
+                        node,
+                        ex);
+                }
             }
 
             return change;
@@ -271,7 +305,20 @@ public partial class SceneExplorerService : ISceneExplorerService
                 var change = this.sceneMutator.RemoveNode(nodeAdapter.AttachedObject.Id, scene);
                 if (change.RequiresEngineSync)
                 {
-                    await this.sceneEngineSync.RemoveNodeAsync(nodeAdapter.AttachedObject.Id).ConfigureAwait(false);
+                    try
+                    {
+                        await this.sceneEngineSync.RemoveNodeAsync(nodeAdapter.AttachedObject.Id).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Scene node {NodeId} was removed from the authoring model, but live sync failed.", nodeAdapter.AttachedObject.Id);
+                        this.PublishLiveSyncWarning(
+                            SceneOperationKinds.NodeDelete,
+                            DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED",
+                            "Scene was updated but live preview was not",
+                            nodeAdapter.AttachedObject,
+                            ex);
+                    }
                 }
 
                 // Also remove from layout if present
@@ -399,4 +446,27 @@ public partial class SceneExplorerService : ISceneExplorerService
 
         return scene;
     }
+
+    private void PublishLiveSyncWarning(
+        string operationKind,
+        string code,
+        string title,
+        SceneNode node,
+        Exception exception)
+        => SceneOperationResults.PublishWarning(
+            this.operationResults,
+            this.statusReducer,
+            operationKind,
+            FailureDomain.LiveSync,
+            code,
+            title,
+            $"The scene node '{node.Name}' was changed in the authoring model, but the live preview did not update.",
+            new AffectedScope
+            {
+                SceneId = node.Scene.Id,
+                SceneName = node.Scene.Name,
+                NodeId = node.Id,
+                NodeName = node.Name,
+            },
+            exception);
 }

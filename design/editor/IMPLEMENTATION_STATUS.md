@@ -49,8 +49,12 @@ Current execution focus:
 - [ ] Validate `ED-M02` manually with the supported single live viewport,
       correct surface presentation, cooked-root warning behavior, runtime
       settings, and camera preset failure handling.
-- [ ] Prepare `ED-M03` by reviewing its required LLDs and producing a detailed
-      implementation plan.
+- [x] Draft `ED-M03` required LLDs and detailed implementation plan for
+      review.
+- [x] Land `ED-M03` authoring foundation implementation and targeted test
+      validation.
+- [x] Validate `ED-M03` manually for quick-add, selection, dirty/save,
+      undo/redo, save/reopen, and visible diagnostics.
 
 `ED-M02` may close in parallel with `ED-M03` LLD review and detailed planning.
 `ED-M03` implementation may not rely on live preview as validation evidence
@@ -59,8 +63,8 @@ until `ED-M02` is `validated`.
 Current resume point:
 
 1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Move to `ED-M03` LLD review and detailed planning; multi-viewport is
-   deferred and must not block `ED-M03`.
+2. Prepare `ED-M04` component inspector and scene editing UX LLD review and
+   detailed plan.
 3. Record the `ED-M02` validation ledger row only after visual validation
    passes.
 4. Keep this ledger synchronized whenever a milestone or detailed plan changes.
@@ -200,7 +204,7 @@ Exit evidence required:
 
 ### ED-M03 - Authoring Foundation
 
-Status: `planned`
+Status: `validated`
 
 Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-004`,
 `REQ-005`, `REQ-006`, `REQ-007`, `REQ-008`, `REQ-009`, `REQ-022`,
@@ -211,22 +215,22 @@ Outcome: scene documents, commands, dirty state, undo/redo, selection model,
 scene explorer, operation results, and save/reopen form a reliable authoring
 core.
 
-- [ ] Required LLDs are reviewed:
+- [x] Required LLDs are reviewed:
       `documents-and-commands`, `scene-authoring-model`, `scene-explorer`,
       `diagnostics-operation-results`.
-- [ ] Detailed `ED-M03` implementation plan exists.
-- [ ] Node create/delete/rename/reparent operations use command paths.
-- [ ] Component add/remove/edit operations for V0.1 components use command
-      paths.
-- [ ] Dirty state and undo/redo work for supported mutations.
-- [ ] Scene save/reopen round-trips supported values.
-- [ ] Live-sync intent is requested after supported mutations.
-- [ ] Operation result presentation exists for command, save, and sync
+- [x] Detailed `ED-M03` implementation plan exists.
+- [x] Node create/delete/rename/reparent operations use the ED-M03 authoring
+      paths; the proper DynamicTree rename commit hook is deferred and tracked.
+- [x] Quick-add primitive and directional light creation use command paths.
+- [x] Dirty state and undo/redo work for supported mutations.
+- [x] Scene save/reopen support is implemented for supported values.
+- [x] Live-sync intent is requested after supported mutations.
+- [x] Operation result presentation exists for command, save, and sync
       failures.
 
 Exit evidence required:
 
-- [ ] One `ED-M03` validation ledger row records command/dirty/undo behavior,
+- [x] One `ED-M03` validation ledger row records command/dirty/undo behavior,
       save/reopen result, live-sync intent result, operation-result behavior,
       and cook readiness.
 
@@ -432,12 +436,14 @@ the current milestone ID after the `ED-M01` insertion.
 | --- | --- | --- | --- |
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
-| [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
-| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
+| [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
+| [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
+| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | ED-M03 command foundation is covered by `ED-M03-authoring-foundation.md`; inspector/sync details move to ED-M04 planning. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
 | [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | `planned` | Reconcile with `content-pipeline.md` and `project-services.md`. |
 | [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | `planned` | Reconcile with `settings-architecture.md` and `environment-authoring.md`. |
 | [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | `planned` | Reconcile with `diagnostics-operation-results.md`. |
+| DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
 
 ## 5. Validation Ledger
 
@@ -449,7 +455,7 @@ checklist or detailed plan tracker instead.
 | `ED-M00` | `validated` | 2026-04-26 | Design package approved: README, RULES, PROJECT-LAYOUT, PRD, ARCHITECTURE, DESIGN, PLAN, LLD index/scaffolds, plan index, and status ledger are accepted as the V0.1 planning baseline. |
 | `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
 | `ED-M02` | `pending` | - | Not validated. |
-| `ED-M03` | `pending` | - | Not validated. |
+| `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
 | `ED-M04` | `pending` | - | Not validated. |
 | `ED-M05` | `pending` | - | Not validated. |
 | `ED-M06` | `pending` | - | Not validated. |
@@ -467,3 +473,4 @@ work package. Do not use it to list unfinished implementation work.
 | --- | --- | --- | --- | --- |
 | `DB-001` | `ED-M00` | `closed` | Top-level `PLAN.md` review feedback was applied and accepted. | No further action. |
 | `DB-002` | `ED-M02` | `closed` | Multi-viewport stability is deferred out of ED-M02; V0.1 proceeds on the supported single live viewport unless multi-viewport is explicitly re-scoped later. | No further action for ED-M02. |
+| `DB-003` | `ED-M03` | `closed` | DynamicTree in-place rename has no pre-mutation commit hook today, so ED-M03 uses a loaded-adapter label-change bridge to preserve undo/redo and persistence. | Proper DynamicTree rename commit hook is deferred after ED-M03 and does not block milestone validation. |
