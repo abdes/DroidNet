@@ -53,6 +53,9 @@ public:
     bool consumed_spot_shadow_product { false };
     std::uint32_t spot_shadow_count { 0U };
     ShaderVisibleIndex spot_shadow_surface_srv { kInvalidShaderVisibleIndex };
+    bool consumed_point_shadow_product { false };
+    std::uint32_t point_shadow_count { 0U };
+    ShaderVisibleIndex point_shadow_surface_srv { kInvalidShaderVisibleIndex };
   };
 
   explicit DeferredLightPass(Renderer& renderer);
@@ -63,7 +66,8 @@ public:
     const internal::DeferredLightPacketSet& packets,
     const ShadowFrameBindings* directional_shadow_bindings,
     const graphics::Texture* directional_shadow_surface,
-    const graphics::Texture* spot_shadow_surface) -> ExecutionState;
+    const graphics::Texture* spot_shadow_surface,
+    const graphics::Texture* point_shadow_surface) -> ExecutionState;
 
 private:
   Renderer& renderer_;

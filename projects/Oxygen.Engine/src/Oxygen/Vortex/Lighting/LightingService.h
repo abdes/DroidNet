@@ -67,6 +67,9 @@ public:
     bool consumed_spot_shadow_product { false };
     std::uint32_t spot_shadow_count { 0U };
     ShaderVisibleIndex spot_shadow_surface_srv { kInvalidShaderVisibleIndex };
+    bool consumed_point_shadow_product { false };
+    std::uint32_t point_shadow_count { 0U };
+    ShaderVisibleIndex point_shadow_surface_srv { kInvalidShaderVisibleIndex };
     std::uint64_t selection_epoch { 0U };
   };
 
@@ -86,7 +89,8 @@ public:
     const FrameLightSelection& frame_light_set,
     const ShadowFrameBindings* directional_shadow_bindings,
     const graphics::Texture* directional_shadow_surface,
-    const graphics::Texture* spot_shadow_surface) -> void;
+    const graphics::Texture* spot_shadow_surface,
+    const graphics::Texture* point_shadow_surface) -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(ViewId view_id) const
     -> const LightingFrameBindings*;

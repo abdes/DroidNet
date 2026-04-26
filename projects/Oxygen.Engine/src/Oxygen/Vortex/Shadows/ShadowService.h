@@ -36,8 +36,10 @@ public:
     std::uint32_t published_view_count { 0U };
     std::uint32_t directional_view_count { 0U };
     std::uint32_t spot_view_count { 0U };
+    std::uint32_t point_view_count { 0U };
     std::uint32_t rendered_cascade_count { 0U };
     std::uint32_t rendered_spot_shadow_count { 0U };
+    std::uint32_t rendered_point_shadow_count { 0U };
     std::uint32_t rendered_draw_count { 0U };
     std::uint32_t shadow_caster_draw_count { 0U };
     std::uint64_t selection_epoch { 0U };
@@ -61,6 +63,8 @@ public:
     -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(ViewId view_id) const
     -> const graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurface(ViewId view_id) const
+    -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }
@@ -76,6 +80,7 @@ private:
     DirectionalShadowFrameData data {};
     std::shared_ptr<graphics::Texture> surface {};
     std::shared_ptr<graphics::Texture> spot_surface {};
+    std::shared_ptr<graphics::Texture> point_surface {};
   };
 
   auto EnsurePublishResources() -> bool;

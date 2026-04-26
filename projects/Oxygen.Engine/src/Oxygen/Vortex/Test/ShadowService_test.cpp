@@ -26,6 +26,7 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
@@ -52,6 +53,7 @@ using oxygen::vortex::kDirectionalLightShadowFlagCastsShadows;
 using oxygen::vortex::kLocalLightFlagCastsShadows;
 using oxygen::vortex::shadows::internal::CascadeShadowSetup;
 using oxygen::vortex::shadows::internal::ConventionalShadowTargetAllocator;
+using oxygen::vortex::shadows::internal::PointShadowSetup;
 using oxygen::vortex::shadows::internal::SpotShadowSetup;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -109,9 +111,13 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_EQ(bindings.sampling_contract_flags, 0U);
   EXPECT_EQ(bindings.spot_shadow_surface_handle, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.spot_shadow_count, 0U);
+  EXPECT_EQ(bindings.point_shadow_surface_handle, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.point_shadow_count, 0U);
   EXPECT_EQ(bindings.cascades.size(), ShadowFrameBindings::kMaxCascades);
   EXPECT_EQ(
     bindings.spot_shadows.size(), ShadowFrameBindings::kMaxSpotShadows);
+  EXPECT_EQ(
+    bindings.point_shadows.size(), ShadowFrameBindings::kMaxPointShadows);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -125,6 +131,56 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_EQ(frame_data.storage_flags, 0U);
   EXPECT_EQ(frame_data.bindings.cascade_count, 2U);
   EXPECT_EQ(frame_data.bindings.spot_shadow_count, 0U);
+  EXPECT_EQ(frame_data.bindings.point_shadow_count, 0U);
+}
+
+NOLINT_TEST(ShadowServiceSurfaceTest,
+  PointShadowSetupPublishesOnlyShadowCastingPointLightsInSelectionOrder)
+{
+  auto resolved_view = MakePerspectiveResolvedView();
+  const auto view_input = oxygen::vortex::PreparedViewShadowInput {
+    .view_id = oxygen::ViewId { 6U },
+    .resolved_view = oxygen::observer_ptr<const oxygen::ResolvedView> {
+      &resolved_view },
+  };
+  const auto allocation = ConventionalShadowTargetAllocator::PointAllocation {
+    .surface_srv = oxygen::ShaderVisibleIndex { 13U },
+    .resolution = glm::uvec2 { 1024U, 1024U },
+    .shadow_count = 2U,
+  };
+  const auto local_lights = std::array {
+    FrameLocalLightSelection {
+      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .position = glm::vec3 { 0.0F, 3.0F, 2.0F },
+      .range = 10.0F,
+      .flags = kLocalLightFlagCastsShadows,
+      .shadow_bias = 0.5F,
+      .shadow_normal_bias = 0.04F,
+    },
+    FrameLocalLightSelection {
+      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .position = glm::vec3 { 2.0F, 0.0F, 3.0F },
+      .range = 8.0F,
+      .flags = 0U,
+    },
+  };
+
+  const auto bindings = PointShadowSetup {}.BuildPointFrameBindings(
+    view_input, std::span(local_lights), allocation);
+
+  EXPECT_TRUE(bindings.HasPointConventionalShadow());
+  EXPECT_EQ(
+    bindings.point_shadow_surface_handle, oxygen::ShaderVisibleIndex { 13U });
+  EXPECT_EQ(bindings.point_shadow_count, 1U);
+  EXPECT_FLOAT_EQ(
+    bindings.point_shadows[0].position_and_inv_range.w, 1.0F / 10.0F);
+  EXPECT_FLOAT_EQ(bindings.point_shadows[0].sampling_metadata0.x, 0.0F);
+  EXPECT_GT(bindings.point_shadows[0].sampling_metadata0.w, 0.0F);
+  EXPECT_FLOAT_EQ(bindings.point_shadows[0].sampling_metadata1.x, 0.04F);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,

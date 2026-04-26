@@ -65,11 +65,13 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const FrameLightSelection& frame_light_set,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
-  const graphics::Texture* spot_shadow_surface) -> void
+  const graphics::Texture* spot_shadow_surface,
+  const graphics::Texture* point_shadow_surface) -> void
 {
   const auto packets = deferred_packets_->Build(frame_light_set);
   const auto pass_state = deferred_pass_->Record(ctx, scene_textures, packets,
-    directional_shadow_bindings, directional_shadow_surface, spot_shadow_surface);
+    directional_shadow_bindings, directional_shadow_surface, spot_shadow_surface,
+    point_shadow_surface);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,
@@ -100,6 +102,9 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .consumed_spot_shadow_product = pass_state.consumed_spot_shadow_product,
     .spot_shadow_count = pass_state.spot_shadow_count,
     .spot_shadow_surface_srv = pass_state.spot_shadow_surface_srv,
+    .consumed_point_shadow_product = pass_state.consumed_point_shadow_product,
+    .point_shadow_count = pass_state.point_shadow_count,
+    .point_shadow_surface_srv = pass_state.point_shadow_surface_srv,
     .selection_epoch = packets.selection_epoch,
   };
 }
