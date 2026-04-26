@@ -97,12 +97,18 @@ namespace {
   auto WriteProduct(std::ostream& out, const DiagnosticsProductRecord& product)
     -> void
   {
+    const auto export_descriptor = !product.descriptor.empty()
+      && !std::string_view { product.descriptor }.starts_with("bindless:");
     out << "{\n";
     Indent(out, 4) << "\"name\": " << Quote(product.name) << ",\n";
     Indent(out, 4) << "\"producer_pass\": "
                    << Quote(product.producer_pass) << ",\n";
     Indent(out, 4) << "\"resource_name\": "
                    << Quote(product.resource_name) << ",\n";
+    if (export_descriptor) {
+      Indent(out, 4) << "\"descriptor\": " << Quote(product.descriptor)
+                     << ",\n";
+    }
     Indent(out, 4) << "\"published\": "
                    << (product.published ? "true" : "false") << ",\n";
     Indent(out, 4) << "\"valid\": " << (product.valid ? "true" : "false")

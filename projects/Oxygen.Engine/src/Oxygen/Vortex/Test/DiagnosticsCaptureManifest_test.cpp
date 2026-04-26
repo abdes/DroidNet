@@ -59,6 +59,13 @@ auto MakeSnapshot() -> DiagnosticsFrameSnapshot
     .published = true,
     .valid = true,
   });
+  snapshot.products.push_back(DiagnosticsProductRecord {
+    .name = "Vortex.BasePassDrawCommands",
+    .producer_pass = "Vortex.Stage9.BasePass",
+    .descriptor = "draws=42 occlusion_culled=7",
+    .published = true,
+    .valid = true,
+  });
   snapshot.issues.push_back(DiagnosticsIssue {
     .severity = DiagnosticsSeverity::kWarning,
     .code = "debug-mode.missing-product",
@@ -90,9 +97,11 @@ NOLINT_TEST(DiagnosticsCaptureManifestTest,
     "captures/gpu-timeline.json");
   ASSERT_EQ(manifest["passes"].size(), 1U);
   EXPECT_EQ(manifest["passes"][0]["kind"], "Graphics");
-  ASSERT_EQ(manifest["products"].size(), 1U);
+  ASSERT_EQ(manifest["products"].size(), 2U);
   EXPECT_FALSE(manifest["products"][0].contains("descriptor"));
   EXPECT_EQ(manifest["products"][0]["resource_name"], "SceneColorTexture");
+  EXPECT_EQ(manifest["products"][1]["descriptor"],
+    "draws=42 occlusion_culled=7");
   ASSERT_EQ(manifest["issues"].size(), 1U);
   EXPECT_EQ(manifest["issues"][0]["occurrences"], 2);
 }
