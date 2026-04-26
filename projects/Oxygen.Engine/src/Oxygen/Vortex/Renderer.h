@@ -546,8 +546,13 @@ public:
 
   OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
   OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
-  OXGN_VRTX_NDAPI auto GetDiagnosticsService() noexcept
-    -> DiagnosticsService&;
+  OXGN_VRTX_API auto SetRenderMode(RenderMode mode) noexcept -> void;
+  OXGN_VRTX_NDAPI auto GetRenderMode() const noexcept -> RenderMode;
+  OXGN_VRTX_API auto SetWireframeColor(const graphics::Color& color) noexcept
+    -> void;
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetWireframeColor() const noexcept
+    -> const graphics::Color&;
+  OXGN_VRTX_NDAPI auto GetDiagnosticsService() noexcept -> DiagnosticsService&;
   OXGN_VRTX_NDAPI auto GetDiagnosticsService() const noexcept
     -> const DiagnosticsService&;
   OXGN_VRTX_API auto SetGroundGridConfig(
@@ -581,8 +586,7 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetVolumetricFogJitterEnabled() const noexcept -> bool;
   [[nodiscard]] OXGN_VRTX_API auto
-  GetVolumetricFogHistoryMissSupersampleCount() const noexcept
-    -> std::uint32_t;
+  GetVolumetricFogHistoryMissSupersampleCount() const noexcept -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto
@@ -674,6 +678,8 @@ private:
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
   std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
   GroundGridConfig ground_grid_config_ {};
+  RenderMode render_mode_ { RenderMode::kSolid };
+  graphics::Color wireframe_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;

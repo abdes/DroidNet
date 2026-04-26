@@ -111,8 +111,7 @@ namespace {
     = "vtx.volumetric_fog.directional_shadows";
   constexpr auto kCVarVortexVolumetricFogTemporalReprojection
     = "vtx.volumetric_fog.temporal_reprojection";
-  constexpr auto kCVarVortexVolumetricFogJitter
-    = "vtx.volumetric_fog.jitter";
+  constexpr auto kCVarVortexVolumetricFogJitter = "vtx.volumetric_fog.jitter";
   constexpr auto kCVarVortexVolumetricFogHistoryMissSupersampleCount
     = "vtx.volumetric_fog.history_miss_supersample_count";
   constexpr auto kCVarVortexAerialPerspectiveLutWidth
@@ -157,6 +156,9 @@ namespace {
     if (render_context.current_view.prepared_frame != nullptr) {
       data.exposure = std::max(
         render_context.current_view.prepared_frame->exposure, 1.0e-6F);
+    }
+    if (render_context.render_mode == RenderMode::kWireframe) {
+      data.exposure = 1.0F;
     }
     return data;
   }
@@ -529,7 +531,8 @@ auto Renderer::RegisterConsoleBindings(
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexVolumetricFogJitter),
-    .help = "Enable UE-style volumetric fog Halton jitter when temporal reprojection is enabled",
+    .help = "Enable UE-style volumetric fog Halton jitter when temporal "
+            "reprojection is enabled",
     .default_value = true,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
@@ -802,6 +805,26 @@ auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
 auto Renderer::SetShaderDebugMode(const ShaderDebugMode mode) noexcept -> void
 {
   diagnostics_service_->SetShaderDebugMode(mode);
+}
+
+auto Renderer::SetRenderMode(const RenderMode mode) noexcept -> void
+{
+  render_mode_ = mode;
+}
+
+auto Renderer::GetRenderMode() const noexcept -> RenderMode
+{
+  return render_mode_;
+}
+
+auto Renderer::SetWireframeColor(const graphics::Color& color) noexcept -> void
+{
+  wireframe_color_ = color;
+}
+
+auto Renderer::GetWireframeColor() const noexcept -> const graphics::Color&
+{
+  return wireframe_color_;
 }
 
 auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
@@ -1581,7 +1604,8 @@ auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
   return 0.01F;
 }
 
-auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> bool
+auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept
+  -> bool
 {
   if (console_ != nullptr) {
     auto value = true;
@@ -1625,8 +1649,7 @@ auto Renderer::GetVolumetricFogHistoryMissSupersampleCount() const noexcept
     auto value = std::int64_t { 4 };
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexVolumetricFogHistoryMissSupersampleCount, value)) {
-      return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 1, 16));
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 1, 16));
     }
   }
   return 4U;
@@ -1978,6 +2001,8 @@ auto Renderer::WireContext(RenderContext& context,
   context.delta_time = last_frame_dt_seconds_;
   context.view_constants = view_constants;
   context.shader_debug_mode = GetShaderDebugMode();
+  context.render_mode = GetRenderMode();
+  context.wireframe_color = GetWireframeColor();
 }
 
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)

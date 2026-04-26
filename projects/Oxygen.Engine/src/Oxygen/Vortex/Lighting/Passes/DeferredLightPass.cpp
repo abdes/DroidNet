@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstring>
 #include <numbers>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -31,6 +33,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -314,6 +317,45 @@ namespace {
     };
   }
 
+  auto AddBooleanDefine(const bool enabled, std::string_view name,
+    std::vector<graphics::ShaderDefine>& defines) -> void
+  {
+    if (enabled) {
+      defines.push_back(graphics::ShaderDefine {
+        .name = std::string(name),
+        .value = std::string("1"),
+      });
+    }
+  }
+
+  [[nodiscard]] auto IsDirectionalDebugMode(const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDirectLightingOnly:
+    case kDirectLightingFull:
+    case kDirectLightGates:
+    case kDirectBrdfCore:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  [[nodiscard]] auto ShouldSkipLocalLightsForDirectionalDebug(
+    const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDirectLightingOnly:
+    case kDirectLightGates:
+    case kDirectBrdfCore:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   auto BuildDirectionalFramebuffer(const SceneTextures& scene_textures)
     -> graphics::FramebufferDesc
   {
@@ -369,10 +411,13 @@ namespace {
       || !desc.depth_attachment.is_read_only;
   }
 
-  auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures)
-    -> graphics::GraphicsPipelineDesc
+  auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures,
+    const ShaderDebugMode debug_mode) -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
+    auto pixel_defines = std::vector<graphics::ShaderDefine> {};
+    AddBooleanDefine(IsDirectionalDebugMode(debug_mode),
+      GetShaderDebugDefineName(debug_mode), pixel_defines);
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -383,6 +428,7 @@ namespace {
       .stage = ShaderType::kPixel,
       .source_path = "Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
       .entry_point = "DeferredLightDirectionalPS",
+      .defines = std::move(pixel_defines),
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
@@ -657,23 +703,27 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     });
     ++state.directional_draw_count;
   }
-  for (const auto& packet : packets.local_lights) {
-    const auto kind = packet.kind == LocalLightKind::kPoint
-      ? DeferredLightKind::kPoint
-      : DeferredLightKind::kSpot;
-    draws.push_back(DeferredLightDraw {
-      .packet = packet,
-      .kind = kind,
-      .geometry_srv = kind == DeferredLightKind::kPoint ? point_geometry_srv_
-                                                        : spot_geometry_srv_,
-      .geometry_vertex_count = kind == DeferredLightKind::kPoint
-        ? point_geometry_vertex_count_
-        : spot_geometry_vertex_count_,
-    });
-    if (kind == DeferredLightKind::kPoint) {
-      ++state.point_light_count;
-    } else {
-      ++state.spot_light_count;
+  const auto skip_local_lights
+    = ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
+  if (!skip_local_lights) {
+    for (const auto& packet : packets.local_lights) {
+      const auto kind = packet.kind == LocalLightKind::kPoint
+        ? DeferredLightKind::kPoint
+        : DeferredLightKind::kSpot;
+      draws.push_back(DeferredLightDraw {
+        .packet = packet,
+        .kind = kind,
+        .geometry_srv = kind == DeferredLightKind::kPoint ? point_geometry_srv_
+                                                          : spot_geometry_srv_,
+        .geometry_vertex_count = kind == DeferredLightKind::kPoint
+          ? point_geometry_vertex_count_
+          : spot_geometry_vertex_count_,
+      });
+      if (kind == DeferredLightKind::kPoint) {
+        ++state.point_light_count;
+      } else {
+        ++state.spot_light_count;
+      }
     }
   }
   state.local_light_count = state.point_light_count + state.spot_light_count;
@@ -771,8 +821,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       constants.shadow_info.y = packets.directional->light_flags;
       constants.shadow_info.z = packets.directional->atmosphere_light_slot;
       constants.shadow_info.w = packets.directional->atmosphere_mode_flags;
-      constants.atmosphere_transmittance_and_padding = glm::vec4(
-        packets.directional->transmittance_toward_sun_rgb, 0.0F);
+      constants.atmosphere_transmittance_and_padding
+        = glm::vec4(packets.directional->transmittance_toward_sun_rgb, 0.0F);
       constants.light_type
         = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
     } else {
@@ -855,8 +905,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       recorder->FlushBarriers();
       recorder->BindFrameBuffer(*directional_framebuffer_);
       SetViewportAndScissor(*recorder, ctx, scene_textures);
-      recorder->SetPipelineState(
-        BuildDeferredDirectionalPipelineDesc(scene_textures));
+      recorder->SetPipelineState(BuildDeferredDirectionalPipelineDesc(
+        scene_textures, ctx.shader_debug_mode));
       bind_common_root_parameters(pass_index);
       recorder->Draw(3U, 1U, 0U, 0U);
       state.accumulated_into_scene_color = true;

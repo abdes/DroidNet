@@ -273,6 +273,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
   },
+  ShaderFileSpec {
+    .path="Vortex/Stages/BasePass/BasePassWireframe.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassWireframePS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
   RequiredDefineShaderFileSpec<2, 1, 1> {
     .path="Vortex/Stages/BasePass/BasePassVelocityAux.hlsl",
     .entries=std::array {
@@ -325,6 +330,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_LINEAR" }
   },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_MASKED_ALPHA_COVERAGE" }
+  },
   // VortexShadowDepthVS / VortexShadowDepthMaskedPS
   ShaderFileSpec {
     .path="Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
@@ -337,6 +347,26 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" }, EntryPoint { .type=kVertex, .name="DeferredLightDirectionalVS" } }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHTING_ONLY" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHTING_FULL" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHT_GATES" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_BRDF_CORE" }
   },
   // VortexDeferredLightPointVS / VortexDeferredLightPointPS
   ShaderFileSpec {

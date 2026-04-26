@@ -167,6 +167,11 @@ Current evidence:
   from `ShaderDebugMode`, `ShaderDebugModeRegistry`, `EngineShaderCatalog.h`,
   and `ForwardDebug_PS.hlsl` because the active deferred RenderScene path cannot
   render those values as real fullscreen debug products.
+- Follow-up debug-mode correctness work marks IBL and light-culling modes
+  unsupported with explicit reasons until real deferred products exist, moves
+  direct-lighting debug modes to the deferred directional-light service pass,
+  and makes Masked Alpha Coverage a deferred fullscreen view backed by GBuffer
+  custom-data metadata written by the base pass.
 - Focused build and tests passed on 2026-04-26:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-vortexbasic Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.ShaderDebugModeRegistry --parallel 4`;
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(ShaderDebugModeRegistry|DiagnosticsService)" --output-on-failure`.
@@ -205,6 +210,8 @@ Validation:
   `EngineShaderCatalog.h`, without making the registry generate shader bake
   entries.
 - DemoShell focused tests if UI/service mappings change.
+- ShaderBake and RenderScene target validation when a registry change adds,
+  removes, or retargets shader variants.
 
 ### Slice D - Frame Ledger And Minimal Runtime Issues
 
@@ -374,6 +381,16 @@ Implementation evidence:
 - The Diagnostics panel reports Vortex binding, selected/active debug view, a
   read-only renderer capability checklist, and registry-grouped debug controls
   with disabled reasons.
+- The Diagnostics panel exposes render-mode controls for Vortex runtime:
+  solid, wireframe, wireframe overlay, and wireframe color. The settings
+  service applies requested render mode and color to `vortex::Renderer`.
+- `BasePassModule` implements wireframe-only rendering and exposes a late
+  wireframe-overlay draw path. Wireframe-only clears SceneColor/SceneDepth,
+  skips environment and ground-grid overlays, and uses neutral
+  exposure/tonemapping policy. Overlay wireframe is executed after
+  lighting/environment work so the solid path remains solid. Wire color is
+  passed as an HDR `float4` constant buffer value; overlay mode applies explicit
+  exposure compensation because it is recorded before post-process.
 - The stale Diagnostics-panel directional shadow quality control and its
   `RenderingSettingsService` persistence key were removed; RenderScene no
   longer reads `rendering.shadow_quality_tier` at startup.
@@ -399,6 +416,13 @@ Validation:
   with `ShaderDebugModeRegistry` 9/9, `DiagnosticsPanel` 1/1, and
   `RenderingSettingsService` 3/3. ShaderBake repacked `shaders.bin` and removed
   the eight stale UV0/Opacity debug artifacts.
+- Debug-mode/render-mode correction validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.ShaderDebugModeRegistry.Tests Oxygen.Examples.DemoShell.RenderingSettingsService.Tests Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests --parallel 4`;
+  `ctest --test-dir out\build-ninja -C Debug -R "(Oxygen\.Vortex\.ShaderDebugModeRegistry|Oxygen\.Examples\.DemoShell\.(RenderingSettingsService|DiagnosticsPanel))" --output-on-failure`
+  with `ShaderDebugModeRegistry` 9/9, `RenderingSettingsService` 4/4 in the
+  focused executable, and `DiagnosticsPanel` 1/1; `cmake --build out\build-ninja
+  --config Debug --target oxygen-examples-renderscene --parallel 4` passed and
+  ShaderBake repacked `shaders.bin` with 185 shader modules.
 - Runtime DemoShell registration smoke passed:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-texturedcube --parallel 4`;
   `Oxygen.Examples.TexturedCube.exe --frames 4 --fps 30 --vsync false --capture-provider off`

@@ -35,26 +35,39 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
     const float scene_depth = SampleSceneDepth(input.uv, bindings);
     const float3 world_position =
         ReconstructDeferredWorldPosition(input.uv, scene_depth);
+    const float3 light_dir =
+        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz);
+    const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
+        input.uv, world_position, camera_position, bindings);
     float light_attenuation = 1.0f;
     if (light_constants.shadow_info.x > 0u) {
-        const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
-            input.uv, world_position, camera_position, bindings);
         light_attenuation = ComputeDirectionalShadowVisibility(
             world_position,
             surface.world_normal,
-            VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz));
+            light_dir);
     }
     const float3 deferred_light_radiance = ResolveDirectionalLightAtmosphereRadiance(
         world_position,
-        light_constants.light_direction_and_falloff.xyz,
+        light_dir,
         light_constants.atmosphere_transmittance_and_padding.xyz,
         light_constants.shadow_info.w,
         LoadDeferredLightColor(light_constants.light_color_and_intensity));
+#if defined(DEBUG_DIRECT_LIGHTING_ONLY)
+    const float NoL = saturate(dot(surface.world_normal, light_dir));
+    return float4(surface.base_color * deferred_light_radiance * NoL, 0.0f);
+#elif defined(DEBUG_DIRECT_LIGHT_GATES)
+    const float transmittance_luma = dot(
+        saturate(light_constants.atmosphere_transmittance_and_padding.xyz),
+        float3(0.2126f, 0.7152f, 0.0722f));
+    return float4(saturate(light_attenuation), saturate(transmittance_luma), 0.0f, 0.0f);
+#elif defined(DEBUG_DIRECT_BRDF_CORE)
+    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx), 0.0f);
+#endif
     const float3 lighting = EvaluateDeferredLightAtWorldPosition(
         input.uv,
         scene_depth,
         world_position,
-        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz),
+        light_dir,
         deferred_light_radiance,
         light_attenuation,
         camera_position,

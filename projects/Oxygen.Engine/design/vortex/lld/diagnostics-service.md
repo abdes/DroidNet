@@ -455,6 +455,19 @@ Rules:
   it or the registry marks it unsupported with a specific reason. Forward-only
   material probes such as UV0/opacity are not valid deferred fullscreen debug
   views unless the G-buffer or another published product carries that data.
+- IBL debug modes remain unsupported until Oxygen has a real deferred IBL
+  product with capture/proof. Do not expose placeholder IBL shader variants as
+  working runtime modes.
+- Light-culling debug modes remain unsupported until the deferred light-grid
+  visualization path exists. The presence of light-grid build code or shader
+  assets is not enough to expose a mode.
+- Direct-lighting debug modes for the deferred renderer are service-pass modes
+  owned by `DeferredLightDirectional.hlsl` and the deferred lighting pass, not
+  forward mesh variants.
+- Masked alpha coverage is a deferred fullscreen debug view only when the base
+  pass writes truthful alpha-test metadata into a published GBuffer channel.
+- Wireframe and wireframe-overlay are render modes, not shader debug modes.
+  They belong to renderer settings and the base pass.
 - UI code must consume the registry rather than duplicate mode lists.
 - SceneRenderer can keep executing debug views, but mode classification must
   move to the registry or remain tested against it.
@@ -604,6 +617,15 @@ Panel structure:
 - Status strip: renderer implementation, frame index, active view, enabled
   diagnostics features, capture/export state, and Tracy compiled/available
   state when known.
+- Rendering Mode: solid, wireframe, and wireframe overlay controls plus a
+  wireframe color picker when the active renderer supports them. Wireframe-only
+  mode must bypass exposure and tonemapping, skip environment/ground overlays,
+  and draw scene geometry as wireframe against a cleared scene target.
+  Wireframe-overlay mode must leave the solid render path intact and draw the
+  wire overlay as a late scene-color overlay after lighting/environment work,
+  not as part of the GBuffer/base pass. The wire color is an HDR `float4`
+  render constant, not a packed LDR value; overlays drawn before post-process
+  compensate exposure so the selected color remains inspectable.
 - Debug Modes: modes grouped by `ShaderDebugModeRegistry` family. Unsupported
   modes stay visible but disabled with the missing capability/product reason.
   Selection writes a requested debug mode; the UI displays both requested and
