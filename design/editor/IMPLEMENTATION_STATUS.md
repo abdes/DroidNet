@@ -55,7 +55,8 @@ Current resume point:
 
 1. Implement `ED-M01` from
    [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md),
-   continuing with `ED-M01.6 - Workspace Activation And Restoration`.
+   closing the remaining manual validation items for startup, open/create,
+   invalid project handling, workspace activation, and restoration visibility.
 2. Continue `ED-M02` validation in parallel where it does not block `ED-M01`.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
@@ -124,6 +125,15 @@ product behavior.
       the activation coordinator, open/create failures surface inline operation
       results, and stale recent entries stay visible with an explicit remove
       action.
+- [x] `ED-M01.6` workspace activation and restoration implementation is
+      landed: workspace activation waits for committed project context, engine
+      startup runs before workspace cooked-root refresh, dock/content browser
+      restoration is best-effort, and content browser selection is preserved.
+- [x] `ED-M01.7` dependency cleanup and targeted tests are landed:
+      Project Browser has no direct WorldEditor/runtime/project-manager
+      activation dependency, Content Browser uses project context for project
+      metadata, and targeted `Oxygen.Core` / `Oxygen.Editor.Projects` tests
+      pass.
 - [ ] Editor starts at Project Browser.
 - [ ] Recent project, create project, open project, and invalid project states
       are usable.
@@ -404,7 +414,7 @@ the current milestone ID after the `ED-M01` insertion.
 
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
-| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Continue implementation with `ED-M01.5 - Project Browser Service/UI Migration`. |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `landed` | Complete manual validation and record one ED-M01 validation ledger row. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `planned` | Reconcile with `documents-and-commands.md` and `scene-explorer.md`. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | Split command foundation from inspector/sync work if needed. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
