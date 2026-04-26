@@ -26,8 +26,8 @@ visual evidence.
 | `REQ-023` | Scoped: ED-M02 engine/runtime viewport failures produce useful logs correlated to document/viewport/runtime state where known. |
 | `REQ-024` | Scoped: ED-M02 diagnostics distinguish missing content/cooked-root state, surface/view state, settings rejection, and engine runtime state. |
 | `REQ-025` | A live embedded viewport renders the active scene. |
-| `REQ-027` | One/two/four viewport layouts are stable. |
-| `REQ-028` | Each viewport presents to the correct editor surface. |
+| `REQ-027` | Scoped: the supported single live viewport layout is stable; multi-viewport layouts are deferred. |
+| `REQ-028` | Scoped: the supported single live viewport presents to the correct surface; multi-viewport surface routing is deferred. |
 | `REQ-030` | Partial: ED-M02 establishes the embedded preview path; full preview parity remains ED-M08. |
 | `SUCCESS-003` | Users can see the scene in the editor viewport. |
 | `SUCCESS-005` | Viewport interaction is stable enough for later viewport authoring tools. |
@@ -58,8 +58,10 @@ ED-M02 includes:
 - Existing cooked-root refresh ordering and non-fatal `AssetMount` warnings.
 - Surface lease attach, resize, release, and surface-limit diagnostics.
 - Engine view create, destroy, and camera preset call diagnostics.
-- One-pane, representative two-pane, and four-quadrant viewport validation.
-- Correct surface presentation evidence for every visible viewport.
+- One-pane viewport validation.
+- Deferring multi-viewport layout validation to later engine multi-surface /
+  multi-view work.
+- Correct surface presentation evidence for the supported live viewport.
 - Resize/coalescing behavior where latest measured viewport size eventually
   reaches the runtime.
 - Runtime FPS/logging setting success or visible rejection.
@@ -228,17 +230,16 @@ Validation:
 
 ### ED-M02.5 - Viewport Layout Matrix Stabilization
 
-Validate one/two/four viewport layouts against the real UI.
+Validate the supported one-pane viewport path. Multi-viewport layout validation
+is deferred out of ED-M02.
 
 Tasks:
 
 - Verify `SceneEditorViewModel`, `SceneLayoutHelpers`, and
-  `SceneEditorView.xaml.cs` produce stable placements for:
+  `SceneEditorView.xaml.cs` produce stable single-viewport placement for:
   - `OnePane`
-  - one representative two-pane layout, preferably `TwoMainLeft`
-  - `FourQuad`
-- Ensure `ViewportViewModel` instances have distinct viewport IDs and clear
-  diagnostic visual cues for each visible surface.
+- Record that representative two-pane layout and `FourQuad` validation are
+  deferred to later engine multi-surface/multi-view work.
 - Ensure layout change failure publishes `Viewport.Layout.Change` only when the
   change cannot be applied, restoration fails, or runtime surface/view work
   fails.
@@ -247,19 +248,17 @@ Tasks:
 
 Required behavior:
 
-- One/two/four layouts do not crash, abort, or present stale/blank panels after
+- One-pane layout does not crash, abort, or present stale/blank panels after
   the scene is loaded.
-- Every visible viewport can be correlated to a distinct document/viewport ID in
+- The supported live viewport can be correlated to a document/viewport ID in
   logs.
-- Every visible viewport has visual evidence of correct routing, such as
-  distinct clear color per viewport or distinct camera orientation per
-  viewport. Any other cue must be agreed before validation and recorded in the
-  ledger row.
+- Multi-viewport layout stability does not block ED-M02 because it is deferred.
 
 Validation:
 
-- Manual validation records one/two/four screenshots or notes.
-- Logs record distinct document/viewport IDs for each visible viewport.
+- Manual validation records one-pane notes now.
+- Multi-viewport validation is recorded as deferred, not pending, in the ED-M02
+  ledger evidence.
 
 ### ED-M02.6 - Runtime Settings Surface
 
@@ -311,8 +310,8 @@ Tasks:
 
 Required behavior:
 
-- No implementation is considered complete until manual one/two/four visual
-  validation is possible for the user.
+- ED-M02 can close on supported single-viewport validation; multi-viewport is
+  deferred and does not block M03.
 - Any skipped test or manual validation item is recorded against ED-M02, not
   hidden in a generic gap list.
 
@@ -320,7 +319,7 @@ Validation:
 
 - MSBuild succeeds for the affected solution/projects.
 - Targeted tests pass or skipped tests are explicitly recorded.
-- User validates the visible viewport matrix.
+- User validates the supported single live viewport path.
 
 ## 7. Project/File Touch Points
 
@@ -399,17 +398,12 @@ ED-M02 can close only when:
   activation and before cooked-root refresh.
 - Native runtime DLLs load from the engine install runtime directory.
 - One-pane scene viewport renders the active scene.
-- Representative two-pane layout renders each visible viewport to the correct
-  surface.
-- Four-quadrant layout renders each visible viewport to the correct surface.
-- Switching between one/two/four layouts does not crash, abort, or leave
-  blank/stale panels.
-- Three-pane variants are not ED-M02 validation targets, but each exposed
-  three-pane variant gets a smoke check: open it and confirm it does not crash,
-  abort, or assert. Record pass/skip in the ledger evidence.
-- Resizing the window and panes keeps viewports scaled and non-overlapping.
-- Closing/reopening the scene releases old surfaces/views and creates new
-  surfaces/views.
+- Two/four viewport layout validation is deferred out of ED-M02 because stable
+  support requires deeper engine multi-surface/multi-view work.
+- Three-pane variants are also out of ED-M02 validation scope.
+- Resizing the window keeps the supported viewport scaled and non-overlapping.
+- Closing/reopening the scene releases the old surface/view and creates a new
+  surface/view.
 - Default editor camera observes authored content without clipping the whole
   scene.
 - Camera preset menu calls do not fault the runtime/UI.
@@ -431,13 +425,8 @@ Manual visual validation expectations for the user:
 - After opening Vortex, the central scene viewport shows rendered scene content,
   not a blank panel.
 - In one-pane layout, one live viewport fills the scene editor area.
-- In two-pane layout, two live viewports are visible and independently routed;
-  they must not show stale copies of the same surface.
-- In four-quadrant layout, four live viewports are visible, stable, and
-  correctly scaled.
-- Acceptable distinct-viewport cues for ED-M02 are distinct clear color per
-  viewport or distinct camera orientation per viewport. Any other cue must be
-  agreed before validation and recorded in the ledger row.
+- Two-pane and four-quadrant layout validation is deferred. The menu paths may
+  still exist, but they are not part of ED-M02 manual acceptance.
 - Resizing the editor window or docked panes updates viewport sizes without
   leaving black/stale rectangles.
 - FPS/logging controls either apply or show a visible failure result.
@@ -456,7 +445,7 @@ The ledger evidence should record:
 - engine runtime DLL discovery path.
 - build configuration and MSBuild command used.
 - test command(s) used, if any.
-- one/two/four viewport validation result.
+- one-pane viewport validation result and deferred two/four viewport status.
 - correct surface presentation evidence.
 - runtime settings result.
 - cooked-root warning behavior, if exercised.
