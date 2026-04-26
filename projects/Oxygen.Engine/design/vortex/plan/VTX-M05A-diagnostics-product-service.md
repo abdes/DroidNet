@@ -84,7 +84,7 @@ Tasks:
 - Update this detailed plan to match the hardened LLD.
 - Update roadmap/status references and the single VTX-M05A status row.
 
-Validation:
+Validation requirements:
 
 - `rg` consistency scan for M05A, LLD status, and plan references.
 - `git diff --check`.
@@ -334,7 +334,7 @@ Validation:
 
 ### Slice G - DemoShell Diagnostics Panel Registry
 
-**Status:** `planned`
+**Status:** `validated`
 
 Tasks:
 
@@ -398,12 +398,36 @@ Tasks:
 - Add a small negative/synthetic failing-report check for touched wrappers where
   practical.
 
-Validation:
+Validation requirements:
 
 - Syntax checks for changed Python/PowerShell files only if tool code changes.
 - Wrapper dry-run or focused helper tests for failure propagation when tool code
   changes.
 - Runtime/capture proof only if runtime logging/export behavior changes.
+
+Implementation evidence:
+
+- `tools/vortex/VortexProofCommon.ps1` defines the Vortex proof helper surface:
+  native command failure propagation, sequential PowerShell proof-step
+  invocation, RenderDoc UI analysis invocation through the existing
+  `tools/shadows/Invoke-RenderDocUiAnalysis.ps1` lock/report gate, and compact
+  key/value report helpers.
+- `Verify-VortexBasicRuntimeProof.ps1`,
+  `Verify-VortexBasicDebugViewProof.ps1`, and `Verify-AsyncRuntimeProof.ps1`
+  now use the helper instead of open-coded `powershell` calls and
+  `$LASTEXITCODE` checks.
+- `tools/vortex/README.md` documents the proof automation contract and the
+  diagnostics capture manifest handoff role.
+- `tools/vortex/tests/test_vortex_proof_common.py` covers explicit report
+  success/pass acceptance, failed-verdict rejection, and native command exit
+  propagation.
+
+Validation:
+
+- PowerShell parser checks passed for `VortexProofCommon.ps1` and the three
+  migrated verify wrappers.
+- `pytest tools/vortex/tests/test_vortex_proof_common.py tools/vortex/tests/test_async_renderdoc_analysis.py`
+  passed with 7/7 tests.
 
 ### Slice I - Optional GPU Debug Primitive Runtime
 

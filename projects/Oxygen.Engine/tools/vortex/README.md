@@ -2,6 +2,28 @@
 
 This directory contains Vortex-specific capture analysis and probe scripts.
 
+## Proof Automation Contract
+
+Vortex proof wrappers must fail fast and must not claim proof from a failed
+baseline stage. Use `VortexProofCommon.ps1` for M05A-owned or touched wrappers:
+
+- `Invoke-VortexProofStep` propagates native command exit codes as terminating
+  errors.
+- `Invoke-VortexPowerShellProofScript` runs dependent PowerShell proof stages
+  sequentially and stops on the first failure.
+- `Invoke-VortexRenderDocAnalysis` routes RenderDoc UI replay through
+  `tools/shadows/Invoke-RenderDocUiAnalysis.ps1`, preserving the shared
+  RenderDoc UI automation lock and explicit `analysis_result=success` report
+  check.
+- `Read-VortexProofReportMap`, `Assert-VortexProofReportStatus`, and
+  `Assert-VortexProofReportValues` provide small schema-like checks for
+  key/value proof reports.
+
+The diagnostics capture manifest emitted by the runtime is the stable handoff
+artifact for newer diagnostics-aware tools. Analyzer scripts may consume it as
+context, but wrappers must still verify analyzer report verdicts before
+recording proof.
+
 ## Durable VortexBasic Validation Path
 
 - `Run-VortexBasicRuntimeValidation.ps1`
