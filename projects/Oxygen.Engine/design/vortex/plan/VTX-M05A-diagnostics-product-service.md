@@ -1,6 +1,6 @@
 # VTX-M05A Diagnostics Product Service
 
-**Status:** `in_progress`
+**Status:** `validated`
 **Milestone:** `VTX-M05A - Diagnostics Product Service`
 **Scope owner:** Vortex runtime diagnostics
 **Primary LLD:** [../lld/diagnostics-service.md](../lld/diagnostics-service.md)
@@ -214,16 +214,20 @@ Current evidence:
 - `DiagnosticsService` now delegates frame recording to the ledger while
   keeping feature gating and renderer capability clamping at the service
   boundary.
+- `SceneRenderer::OnRender` records major pass/product facts at existing
+  stage/publication boundaries: init views, lighting bindings, depth prepass,
+  screen HZB, shadow bindings, environment bindings, base pass scene textures,
+  deferred/debug lighting, volumetric/local fog, sky/atmosphere/fog, resolved
+  scene color, post-process bindings, and ground grid.
 - Focused build and tests passed on 2026-04-26:
   `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsFrameLedger Oxygen.Vortex.DiagnosticsService --parallel 4`;
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsFrameLedger|DiagnosticsService)" --output-on-failure`
   with `DiagnosticsFrameLedger` 5/5 and `DiagnosticsService` 7/7.
-
-Remaining gap:
-
-- Lightweight writer hooks in Vortex pass/service owners are not yet added.
-  Those hooks must be landed where stage/product truth already exists, instead
-  of guessing facts from the diagnostics layer.
+- Additional focused build and tests passed after the writer hooks:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.SceneRendererPublication --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(SceneRendererPublication|DiagnosticsService|DiagnosticsFrameLedger)" --output-on-failure`
+  with `SceneRendererPublication` 17/17, `DiagnosticsService` 7/7, and
+  `DiagnosticsFrameLedger` 5/5.
 
 Tasks:
 

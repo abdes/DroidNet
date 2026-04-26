@@ -10,6 +10,8 @@
 #include <cstring>
 #include <optional>
 #include <ranges>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <glm/ext/matrix_transform.hpp>
@@ -318,6 +320,47 @@ namespace {
     }
 
     return ctx.pass_target;
+  }
+
+  auto ShaderVisibleDescriptor(const ShaderVisibleIndex slot) -> std::string
+  {
+    if (slot == kInvalidShaderVisibleIndex) {
+      return "invalid";
+    }
+    return "bindless:" + std::to_string(slot.get());
+  }
+
+  auto SceneTextureDescriptor(const std::uint32_t slot) -> std::string
+  {
+    if (slot == SceneTextureBindings::kInvalidIndex) {
+      return "invalid";
+    }
+    return "bindless:" + std::to_string(slot);
+  }
+
+  auto RecordDiagnosticsPass(Renderer& renderer, DiagnosticsPassRecord record)
+    -> void
+  {
+    renderer.GetDiagnosticsService().RecordPass(std::move(record));
+  }
+
+  auto RecordDiagnosticsProduct(
+    Renderer& renderer, DiagnosticsProductRecord record) -> void
+  {
+    renderer.GetDiagnosticsService().RecordProduct(std::move(record));
+  }
+
+  auto RecordDiagnosticsViewProduct(Renderer& renderer, std::string name,
+    std::string producer_pass, const ShaderVisibleIndex slot) -> void
+  {
+    RecordDiagnosticsProduct(renderer,
+      DiagnosticsProductRecord {
+        .name = std::move(name),
+        .producer_pass = std::move(producer_pass),
+        .descriptor = ShaderVisibleDescriptor(slot),
+        .published = slot != kInvalidShaderVisibleIndex,
+        .valid = slot != kInvalidShaderVisibleIndex,
+      });
   }
 
   auto ResolveWorldRotation(
@@ -1365,6 +1408,16 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   if (ctx.current_view.prepared_frame == nullptr) {
     PrimePreparedView(ctx);
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage2.InitViews",
+      .kind = DiagnosticsPassKind::kCpuOnly,
+      .executed = ctx.current_view.prepared_frame != nullptr,
+      .outputs = { "Vortex.PreparedSceneFrame" },
+      .missing_inputs = ctx.current_view.prepared_frame == nullptr
+        ? std::vector<std::string> { "PreparedSceneFrame" }
+        : std::vector<std::string> {},
+    });
 
   if (lighting_ != nullptr
     && lighting_grid_built_sequence_ != ctx.frame_sequence) {
@@ -1392,6 +1445,18 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_lighting_frame_slot
       = published_view_frame_bindings_.lighting_frame_slot;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage6.ForwardLightData",
+        .kind = DiagnosticsPassKind::kCpuOnly,
+        .executed = published_view_frame_bindings_.lighting_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { "FrameLightSelection" },
+        .outputs = { "Vortex.LightingFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.LightingFrameBindings",
+      "Vortex.Stage6.ForwardLightData",
+      published_view_frame_bindings_.lighting_frame_slot);
   }
 
   // Stage 3: Depth prepass + early velocity
@@ -1410,9 +1475,30 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = DepthPrePassCompleteness::kDisabled;
     ctx.current_view.scene_depth_product_valid = false;
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage3.DepthPrepass",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = depth_prepass_ != nullptr
+        && ctx.current_view.depth_prepass_completeness
+          != DepthPrePassCompleteness::kDisabled,
+      .outputs = { "Vortex.SceneDepth", "Vortex.PartialDepth" },
+    });
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
     PublishDepthPrepassProducts();
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.SceneDepth",
+        .producer_pass = "Vortex.Stage3.DepthPrepass",
+        .resource_name
+        = std::string { scene_textures_.GetSceneDepth().GetName() },
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.scene_depth_srv),
+        .published = scene_texture_bindings_.scene_depth_srv
+          != SceneTextureBindings::kInvalidIndex,
+        .valid = ctx.current_view.scene_depth_product_valid,
+      });
   }
 
   // Stage 4: reserved - GeometryVirtualizationService
@@ -1470,6 +1556,21 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       PublishScreenHzbProducts(ctx);
     }
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage5.ScreenHzbBuild",
+      .kind = DiagnosticsPassKind::kCompute,
+      .executed = ctx.current_view.screen_hzb_available,
+      .inputs = { "Vortex.SceneDepth" },
+      .outputs = { "Vortex.ScreenHzb" },
+      .missing_inputs = ctx.current_view.CanBuildScreenHzb()
+          && !ctx.current_view.scene_depth_product_valid
+        ? std::vector<std::string> { "Vortex.SceneDepth" }
+        : std::vector<std::string> {},
+    });
+  RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
+    "Vortex.Stage5.ScreenHzbBuild",
+    published_view_frame_bindings_.screen_hzb_frame_slot);
 
   // Stage 6: Forward light data / light grid
 
@@ -1490,6 +1591,18 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_shadow_frame_slot
       = published_view_frame_bindings_.shadow_frame_slot;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage8.ShadowDepth",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = published_view_frame_bindings_.shadow_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { "FrameShadowInputs" },
+        .outputs = { "Vortex.ShadowFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.ShadowFrameBindings",
+      "Vortex.Stage8.ShadowDepth",
+      published_view_frame_bindings_.shadow_frame_slot);
   }
   if (environment_ != nullptr) {
     published_view_frame_bindings_.environment_frame_slot
@@ -1511,12 +1624,16 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       environment_lighting_state_.probe_revision
         = environment_bindings->probes.probe_revision;
     }
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.EnvironmentFrameBindings",
+      "Vortex.Environment.PublishBindings",
+      published_view_frame_bindings_.environment_frame_slot);
   }
   if (shadows_ != nullptr || environment_ != nullptr) {
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
   // Stage 9: Base pass
+  auto base_pass_published = false;
   if (base_pass_ != nullptr) {
     base_pass_->SetConfig(BasePassConfig {
       .write_velocity = scene_textures_.GetVelocity() != nullptr,
@@ -1524,6 +1641,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .shading_mode = shading_mode,
     });
     const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
+    base_pass_published = base_pass_result.published_base_pass_products;
     if (base_pass_result.published_base_pass_products
       && base_pass_result.completed_velocity_for_dynamic_geometry) {
       PublishBasePassVelocity();
@@ -1533,13 +1651,58 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
     }
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage9.BasePass",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = base_pass_published,
+      .inputs = { "Vortex.PreparedSceneFrame" },
+      .outputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
+    });
+  if (base_pass_published) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.SceneColor",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .resource_name
+        = std::string { scene_textures_.GetSceneColor().GetName() },
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.scene_color_srv),
+        .published = scene_texture_bindings_.scene_color_srv
+          != SceneTextureBindings::kInvalidIndex,
+        .valid = scene_texture_bindings_.scene_color_srv
+          != SceneTextureBindings::kInvalidIndex,
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.GBuffer",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.gbuffer_srvs[0]),
+        .published = HasPublishedGBufferBindings(scene_texture_bindings_),
+        .valid = HasPublishedGBufferBindings(scene_texture_bindings_),
+      });
+  }
 
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
 
   // Stage 12: Deferred direct lighting
-  if (!RenderDebugVisualization(ctx, scene_textures_)) {
+  const auto rendered_debug_visualization
+    = RenderDebugVisualization(ctx, scene_textures_);
+  if (!rendered_debug_visualization) {
     RenderDeferredLighting(ctx, scene_textures_);
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = rendered_debug_visualization
+        ? "Vortex.Stage12.DebugVisualization"
+        : "Vortex.Stage12.DeferredLighting",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = true,
+      .inputs = { "Vortex.SceneColor", "Vortex.GBuffer",
+        "Vortex.LightingFrameBindings", "Vortex.ShadowFrameBindings" },
+      .outputs = { "Vortex.SceneColor" },
+    });
 
   // Stage 13: reserved - IndirectLightingService
 
@@ -1638,6 +1801,35 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_.fog_draw_count = stage15_state.fog_draw_count;
     environment_lighting_state_.total_draw_count
       = stage15_state.total_draw_count;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage14.VolumetricAndLocalFog",
+        .kind = DiagnosticsPassKind::kCompute,
+        .executed = stage14_state.local_fog_executed
+          || stage14_state.volumetric_fog_executed,
+        .inputs = { "Vortex.ScreenHzb", "Vortex.EnvironmentFrameBindings",
+          "Vortex.ShadowFrameBindings" },
+        .outputs = { "Vortex.Environment.IntegratedLightScattering" },
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.Environment.IntegratedLightScattering",
+        .producer_pass = "Vortex.Stage14.VolumetricAndLocalFog",
+        .descriptor
+        = ShaderVisibleDescriptor(stage14_state.integrated_light_scattering_srv),
+        .published = stage14_state.integrated_light_scattering_srv
+          != kInvalidShaderVisibleIndex,
+        .valid = stage14_state.integrated_light_scattering_valid,
+      });
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage15.SkyAtmosphereFog",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = stage15_state.total_draw_count > 0U,
+        .inputs = { "Vortex.SceneColor",
+          "Vortex.Environment.IntegratedLightScattering" },
+        .outputs = { "Vortex.SceneColor" },
+      });
   }
 
   // Stage 16: reserved - WaterService
@@ -1653,6 +1845,27 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 
   // Stage 21: Resolve scene color
   ResolveSceneColor(ctx);
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage21.ResolveSceneColor",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = scene_texture_extracts_.resolved_scene_color.valid,
+      .inputs = { "Vortex.SceneColor" },
+      .outputs = { "Vortex.ResolvedSceneColor" },
+    });
+  if (scene_texture_extracts_.resolved_scene_color.valid
+    && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.ResolvedSceneColor",
+        .producer_pass = "Vortex.Stage21.ResolveSceneColor",
+        .resource_name = std::string {
+          scene_texture_extracts_.resolved_scene_color.texture->GetName(),
+        },
+        .published = true,
+        .valid = true,
+      });
+  }
 
   // Stage 22: Post processing
   if (post_process_ != nullptr) {
@@ -1714,6 +1927,19 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       ctx.current_view.view_id, ctx, scene_textures_, post_process_inputs);
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage22.PostProcess",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = published_view_frame_bindings_.post_process_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { std::string { "Vortex." } + std::string(scene_signal_kind),
+          "Vortex.SceneDepth" },
+        .outputs = { "Vortex.PostProcessFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
+      "Vortex.Stage22.PostProcess",
+      published_view_frame_bindings_.post_process_frame_slot);
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
@@ -1721,6 +1947,14 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   if (ground_grid_pass_ != nullptr) {
     static_cast<void>(ground_grid_pass_->Record(
       ctx, scene_textures_, ResolveLateOverlayTarget(ctx)));
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage20.GroundGrid",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = true,
+        .inputs = { "Vortex.SceneColor" },
+        .outputs = { "Vortex.SceneColor" },
+      });
   }
 
   // Stage 23: Post-render cleanup / extraction
