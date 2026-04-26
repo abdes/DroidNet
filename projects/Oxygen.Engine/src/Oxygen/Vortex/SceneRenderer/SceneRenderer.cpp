@@ -339,6 +339,29 @@ namespace {
     return "bindless:" + std::to_string(slot);
   }
 
+  auto OcclusionStatsDescriptor(const OcclusionStats& stats) -> std::string
+  {
+    return "draws=" + std::to_string(stats.draw_count)
+      + " candidates=" + std::to_string(stats.candidate_count)
+      + " submitted=" + std::to_string(stats.submitted_count)
+      + " visible=" + std::to_string(stats.visible_count)
+      + " occluded=" + std::to_string(stats.occluded_count)
+      + " overflow_visible="
+      + std::to_string(stats.overflow_visible_count)
+      + " fallback=" + std::string { to_string(stats.fallback_reason) }
+      + " hzb=" + (stats.current_furthest_hzb_available ? "1" : "0")
+      + " prev=" + (stats.previous_results_valid ? "1" : "0")
+      + " valid=" + (stats.results_valid ? "1" : "0");
+  }
+
+  auto BasePassDrawDescriptor(const std::uint32_t draw_count,
+    const std::uint32_t occlusion_culled_draw_count) -> std::string
+  {
+    return "draws=" + std::to_string(draw_count)
+      + " occlusion_culled="
+      + std::to_string(occlusion_culled_draw_count);
+  }
+
   auto RecordDiagnosticsPass(Renderer& renderer, DiagnosticsPassRecord record)
     -> void
   {
@@ -1601,9 +1624,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       DiagnosticsProductRecord {
         .name = "Vortex.OcclusionFrameResults",
         .producer_pass = "Vortex.Stage5.Occlusion",
-        .descriptor
-        = std::string { "fallback=" }
-          + std::string { to_string(occlusion_stats.fallback_reason) },
+        .descriptor = OcclusionStatsDescriptor(occlusion_stats),
         .published = ctx.current_view.occlusion_results.get() != nullptr,
         .valid = occlusion_stats.results_valid,
       });
@@ -1672,6 +1693,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 
   // Stage 9: Base pass
   auto base_pass_published = false;
+  auto base_pass_draw_count = std::uint32_t { 0U };
+  auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
   if (base_pass_ != nullptr) {
     base_pass_->SetConfig(BasePassConfig {
       .write_velocity = scene_textures_.GetVelocity() != nullptr,
@@ -1681,6 +1704,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     });
     const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
     base_pass_published = base_pass_result.published_base_pass_products;
+    base_pass_draw_count = base_pass_result.draw_count;
+    base_pass_occlusion_culled_draw_count
+      = base_pass_result.occlusion_culled_draw_count;
     if (base_pass_result.published_base_pass_products
       && base_pass_result.completed_velocity_for_dynamic_geometry) {
       PublishBasePassVelocity();
@@ -1695,10 +1721,22 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .name = "Vortex.Stage9.BasePass",
       .kind = DiagnosticsPassKind::kGraphics,
       .executed = base_pass_published,
-      .inputs = { "Vortex.PreparedSceneFrame" },
+      .inputs = ctx.current_view.occlusion_results.get() != nullptr
+        ? std::vector<std::string> { "Vortex.PreparedSceneFrame",
+            "Vortex.OcclusionFrameResults" }
+        : std::vector<std::string> { "Vortex.PreparedSceneFrame" },
       .outputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
     });
   if (base_pass_published) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.BasePassDrawCommands",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .descriptor = BasePassDrawDescriptor(
+          base_pass_draw_count, base_pass_occlusion_culled_draw_count),
+        .published = true,
+        .valid = true,
+      });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.SceneColor",

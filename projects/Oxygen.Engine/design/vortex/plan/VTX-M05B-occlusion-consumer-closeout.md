@@ -228,20 +228,35 @@ Remaining gap:
 
 ### Slice E - Diagnostics And Capture Surface
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 Tasks:
 
 - Publish occlusion candidate/tested/visible/occluded/overflow counters.
+  Implemented in the `Vortex.OcclusionFrameResults` product descriptor.
 - Record fallback reason, current furthest HZB availability, previous result
-  validity, and consumer draw-count deltas.
+  validity, and consumer draw-count deltas. Implemented through compact
+  `Vortex.OcclusionFrameResults` and `Vortex.BasePassDrawCommands`
+  descriptors.
 - Surface the facts through the M05A diagnostics ledger/manifest without adding
-  a large new UI.
+  a large new UI. Stable counter descriptors export to the capture manifest;
+  transient `bindless:` descriptor indices remain filtered out.
 
 Validation:
 
-- DiagnosticsService focused tests if new APIs are added.
-- Capture manifest/analyzer proof that occlusion facts are exported.
+- `cmake --build out\build-ninja --config Debug --target
+  Oxygen.Vortex.DiagnosticsCaptureManifest
+  Oxygen.Vortex.SceneRendererPublication
+  Oxygen.Vortex.SceneRendererDeferredCore --parallel 4` passed.
+- `ctest --preset test-debug -R
+  "Oxygen\.Vortex\.(DiagnosticsCaptureManifest|SceneRendererPublication|SceneRendererDeferredCore)"
+  --output-on-failure` passed: 52/52.
+
+Remaining gap:
+
+- Runtime capture proof still has to show real occlusion counters and base-pass
+  cull deltas in an application frame before Slice E can be marked
+  `validated`.
 
 ### Slice F - Runtime Proof And Closeout
 

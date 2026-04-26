@@ -307,9 +307,14 @@ M05B diagnostics must be compact and useful:
 - draw counts before/after occlusion for consumers that actually skip draws
 
 Diagnostics must integrate with the M05A `DiagnosticsService` pass/product
-ledger and capture manifest. A draw-reduction claim is not allowed until a
-capture or focused test proves that a consumer skipped draw commands because of
-occlusion.
+ledger and capture manifest. The runtime records `Vortex.OcclusionFrameResults`
+with compact stable facts (`draws`, `candidates`, `submitted`, `visible`,
+`occluded`, `overflow_visible`, `fallback`, `hzb`, `prev`, `valid`) and
+`Vortex.BasePassDrawCommands` with `draws` plus `occlusion_culled`. Transient
+bindless descriptor indices remain excluded from capture manifests; stable
+counter descriptors are exported for external analysis scripts. A
+draw-reduction claim is not allowed until a capture or focused test proves that
+a consumer skipped draw commands because of occlusion.
 
 ## 7. Validation Gates
 
