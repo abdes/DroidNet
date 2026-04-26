@@ -30,7 +30,7 @@ DiagnosticsService::DiagnosticsService(const CapabilitySet renderer_capabilities
   , requested_features_(config.default_features)
   , enabled_features_(ComputeEffectiveFeatures())
 {
-  RefreshSnapshotState(latest_snapshot_);
+  RefreshLedgerState();
 }
 
 DiagnosticsService::~DiagnosticsService() = default;
@@ -41,10 +41,7 @@ auto DiagnosticsService::SetRendererCapabilities(
   std::scoped_lock lock(mutex_);
   renderer_capabilities_ = capabilities;
   enabled_features_ = ComputeEffectiveFeatures();
-  RefreshSnapshotState(latest_snapshot_);
-  if (frame_open_) {
-    RefreshSnapshotState(frame_snapshot_);
-  }
+  RefreshLedgerState();
 }
 
 auto DiagnosticsService::GetRendererCapabilities() const -> CapabilitySet
@@ -59,10 +56,7 @@ auto DiagnosticsService::SetEnabledFeatures(
   std::scoped_lock lock(mutex_);
   requested_features_ = features;
   enabled_features_ = ComputeEffectiveFeatures();
-  RefreshSnapshotState(latest_snapshot_);
-  if (frame_open_) {
-    RefreshSnapshotState(frame_snapshot_);
-  }
+  RefreshLedgerState();
 }
 
 auto DiagnosticsService::GetRequestedFeatures() const -> DiagnosticsFeatureSet
@@ -82,10 +76,7 @@ auto DiagnosticsService::SetShaderDebugMode(
 {
   std::scoped_lock lock(mutex_);
   shader_debug_mode_ = mode;
-  RefreshSnapshotState(latest_snapshot_);
-  if (frame_open_) {
-    RefreshSnapshotState(frame_snapshot_);
-  }
+  RefreshLedgerState();
 }
 
 auto DiagnosticsService::GetShaderDebugMode() const noexcept -> ShaderDebugMode
@@ -110,54 +101,49 @@ auto DiagnosticsService::FindShaderDebugMode(
 auto DiagnosticsService::BeginFrame(const frame::SequenceNumber frame) -> void
 {
   std::scoped_lock lock(mutex_);
-  frame_open_ = true;
-  frame_snapshot_ = {};
-  frame_snapshot_.frame_index = frame;
-  RefreshSnapshotState(frame_snapshot_);
+  frame_ledger_.BeginFrame(frame);
 }
 
 auto DiagnosticsService::RecordPass(DiagnosticsPassRecord record) -> void
 {
   std::scoped_lock lock(mutex_);
-  if (!frame_open_ || !IsFrameLedgerEnabled()) {
+  if (!frame_ledger_.IsFrameOpen() || !IsFrameLedgerEnabled()) {
     return;
   }
-  frame_snapshot_.passes.push_back(std::move(record));
+  frame_ledger_.RecordPass(std::move(record));
 }
 
 auto DiagnosticsService::RecordProduct(DiagnosticsProductRecord record) -> void
 {
   std::scoped_lock lock(mutex_);
-  if (!frame_open_ || !IsFrameLedgerEnabled()) {
+  if (!frame_ledger_.IsFrameOpen() || !IsFrameLedgerEnabled()) {
     return;
   }
-  frame_snapshot_.products.push_back(std::move(record));
+  frame_ledger_.RecordProduct(std::move(record));
 }
 
 auto DiagnosticsService::ReportIssue(DiagnosticsIssue issue) -> void
 {
   std::scoped_lock lock(mutex_);
-  if (!frame_open_ || !IsFrameLedgerEnabled()) {
+  if (!frame_ledger_.IsFrameOpen() || !IsFrameLedgerEnabled()) {
     return;
   }
-  frame_snapshot_.issues.push_back(std::move(issue));
+  frame_ledger_.ReportIssue(std::move(issue));
 }
 
 auto DiagnosticsService::EndFrame() -> void
 {
   std::scoped_lock lock(mutex_);
-  if (!frame_open_) {
+  if (!frame_ledger_.IsFrameOpen()) {
     return;
   }
-  RefreshSnapshotState(frame_snapshot_);
-  latest_snapshot_ = frame_snapshot_;
-  frame_open_ = false;
+  frame_ledger_.EndFrame();
 }
 
 auto DiagnosticsService::GetLatestSnapshot() const -> DiagnosticsFrameSnapshot
 {
   std::scoped_lock lock(mutex_);
-  return latest_snapshot_;
+  return frame_ledger_.GetLatestSnapshot();
 }
 
 auto DiagnosticsService::ComputeEffectiveFeatures() const noexcept
@@ -175,12 +161,10 @@ auto DiagnosticsService::IsFrameLedgerEnabled() const noexcept -> bool
   return HasAllFeatures(enabled_features_, DiagnosticsFeature::kFrameLedger);
 }
 
-auto DiagnosticsService::RefreshSnapshotState(
-  DiagnosticsFrameSnapshot& snapshot) const -> void
+auto DiagnosticsService::RefreshLedgerState() -> void
 {
-  snapshot.active_shader_debug_mode = shader_debug_mode_;
-  snapshot.requested_features = requested_features_;
-  snapshot.enabled_features = enabled_features_;
+  frame_ledger_.UpdateState(
+    shader_debug_mode_, requested_features_, enabled_features_);
 }
 
 } // namespace oxygen::vortex

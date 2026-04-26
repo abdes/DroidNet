@@ -199,7 +199,31 @@ Validation:
 
 ### Slice D - Frame Ledger And Minimal Runtime Issues
 
-**Status:** `planned`
+**Status:** `in_progress`
+
+Current evidence:
+
+- `DiagnosticsFrameLedger` now owns frame reset/snapshot publication,
+  pass/product append rules, bounded recoverable issue context, per-frame issue
+  deduplication, occurrence counts, and fail-fast validation for invalid
+  pass/product/issue records.
+- `DiagnosticsIssueCode` defines the minimal recoverable runtime issue
+  vocabulary currently required by M05A: feature unavailable, manifest write
+  failed, GPU timeline overflow/incomplete scope, unsupported debug mode,
+  missing debug-mode product, and stale product.
+- `DiagnosticsService` now delegates frame recording to the ledger while
+  keeping feature gating and renderer capability clamping at the service
+  boundary.
+- Focused build and tests passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.DiagnosticsFrameLedger Oxygen.Vortex.DiagnosticsService --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(DiagnosticsFrameLedger|DiagnosticsService)" --output-on-failure`
+  with `DiagnosticsFrameLedger` 5/5 and `DiagnosticsService` 7/7.
+
+Remaining gap:
+
+- Lightweight writer hooks in Vortex pass/service owners are not yet added.
+  Those hooks must be landed where stage/product truth already exists, instead
+  of guessing facts from the diagnostics layer.
 
 Tasks:
 

@@ -6,6 +6,9 @@
 
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 
+#include <string>
+#include <utility>
+
 namespace oxygen::vortex {
 
 auto to_string(const DiagnosticsFeatureSet features) -> std::string
@@ -49,6 +52,16 @@ auto to_string(const DiagnosticsFeatureSet features) -> std::string
     return "None";
   }
   return result;
+}
+
+auto MakeDiagnosticsIssue(const DiagnosticsIssueCode code,
+  const DiagnosticsSeverity severity, std::string message) -> DiagnosticsIssue
+{
+  return DiagnosticsIssue {
+    .severity = severity,
+    .code = std::string { to_string(code) },
+    .message = std::move(message),
+  };
 }
 
 } // namespace oxygen::vortex

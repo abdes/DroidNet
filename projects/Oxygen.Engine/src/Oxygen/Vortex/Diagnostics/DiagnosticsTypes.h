@@ -43,6 +43,16 @@ enum class DiagnosticsSeverity : std::uint8_t {
   kError,
 };
 
+enum class DiagnosticsIssueCode : std::uint8_t {
+  kFeatureUnavailable,
+  kManifestWriteFailed,
+  kTimelineOverflow,
+  kTimelineIncompleteScope,
+  kUnsupportedDebugMode,
+  kMissingDebugModeProduct,
+  kStaleProduct,
+};
+
 enum class DiagnosticsPassKind : std::uint8_t {
   kCpuOnly,
   kGraphics,
@@ -66,6 +76,7 @@ struct DiagnosticsIssue {
   std::string view_name;
   std::string pass_name;
   std::string product_name;
+  std::uint32_t occurrences { 1U };
 };
 
 struct DiagnosticsPassRecord {
@@ -140,6 +151,28 @@ struct DiagnosticsFrameSnapshot {
 }
 
 [[nodiscard]] constexpr auto to_string(
+  const DiagnosticsIssueCode code) noexcept -> std::string_view
+{
+  switch (code) {
+  case DiagnosticsIssueCode::kFeatureUnavailable:
+    return "diag.feature-unavailable";
+  case DiagnosticsIssueCode::kManifestWriteFailed:
+    return "capture-manifest.write-failed";
+  case DiagnosticsIssueCode::kTimelineOverflow:
+    return "gpu-timeline.overflow";
+  case DiagnosticsIssueCode::kTimelineIncompleteScope:
+    return "gpu-timeline.incomplete-scope";
+  case DiagnosticsIssueCode::kUnsupportedDebugMode:
+    return "debug-mode.unsupported";
+  case DiagnosticsIssueCode::kMissingDebugModeProduct:
+    return "debug-mode.missing-product";
+  case DiagnosticsIssueCode::kStaleProduct:
+    return "product.stale";
+  }
+  return "__Unknown__";
+}
+
+[[nodiscard]] constexpr auto to_string(
   const DiagnosticsPassKind kind) noexcept -> std::string_view
 {
   switch (kind) {
@@ -174,5 +207,9 @@ struct DiagnosticsFrameSnapshot {
   }
   return "__Unknown__";
 }
+
+[[nodiscard]] OXGN_VRTX_API auto MakeDiagnosticsIssue(
+  DiagnosticsIssueCode code, DiagnosticsSeverity severity, std::string message)
+  -> DiagnosticsIssue;
 
 } // namespace oxygen::vortex
