@@ -543,8 +543,8 @@ public sealed partial class ContentBrowserViewModel(
             var rootLabel = "Project";
             try
             {
-                var pm = this.childContainer?.Resolve<IProjectManagerService>();
-                var pn = pm?.CurrentProject?.ProjectInfo?.Name;
+                var projectContext = this.childContainer?.Resolve<IProjectContextService>();
+                var pn = projectContext?.ActiveProject?.Name;
                 if (!string.IsNullOrEmpty(pn))
                 {
                     rootLabel = pn!;
