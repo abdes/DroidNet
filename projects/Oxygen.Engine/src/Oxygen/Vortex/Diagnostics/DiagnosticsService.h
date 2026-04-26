@@ -15,6 +15,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
@@ -76,6 +77,9 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetLatestGpuTimelineFrame() const
     -> std::optional<internal::GpuTimelineFrame>;
   OXGN_VRTX_API auto SyncGpuTimelineDiagnostics() -> void;
+  [[nodiscard]] OXGN_VRTX_API auto ExportCaptureManifest(
+    const std::filesystem::path& path,
+    const DiagnosticsCaptureManifestOptions& options = {}) -> bool;
 
   OXGN_VRTX_API auto BeginFrame(frame::SequenceNumber frame) -> void;
   OXGN_VRTX_API auto RecordPass(DiagnosticsPassRecord record) -> void;
