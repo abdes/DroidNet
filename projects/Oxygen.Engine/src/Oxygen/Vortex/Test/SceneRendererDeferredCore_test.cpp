@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -360,6 +361,39 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto rebound_context
     = RenderForView(first_view_id_, first_resolved_view_);
   EXPECT_EQ(rebound_context.current_view.prepared_frame.get(), first_prepared);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  RenderViewFamilySerializesSceneViewsAndRestoresCursor)
+{
+  scene_renderer_->OnFrameStart(frame_context_);
+  UpdateSceneTransforms();
+
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.view_constants = view_constants_buffer_;
+  context.frame_views.push_back({
+    .view_id = first_view_id_,
+    .is_scene_view = true,
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
+  });
+  context.frame_views.push_back({
+    .view_id = second_view_id_,
+    .is_scene_view = true,
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &second_resolved_view_ },
+  });
+
+  scene_renderer_->RenderViewFamily(context);
+
+  EXPECT_EQ(context.current_view.view_id, oxygen::kInvalidViewId);
+  EXPECT_EQ(context.active_view_index, std::numeric_limits<std::size_t>::max());
+  EXPECT_EQ(scene_renderer_->GetPublishedViewId(), second_view_id_);
+  EXPECT_NE(scene_renderer_->GetPublishedViewFrameBindingsSlot(),
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

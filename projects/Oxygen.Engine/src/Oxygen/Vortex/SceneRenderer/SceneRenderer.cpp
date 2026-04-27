@@ -48,6 +48,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
+#include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -1469,20 +1470,61 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
 
-void SceneRenderer::PrimePreparedView(RenderContext& ctx)
+void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
 {
-  ctx.current_view.prepared_frame.reset(nullptr);
   if (init_views_ != nullptr) {
     init_views_->Execute(ctx, scene_textures_);
-    if (ctx.current_view.view_id != kInvalidViewId) {
-      ctx.current_view.prepared_frame = observer_ptr<const PreparedSceneFrame> {
-        init_views_->GetPreparedSceneFrame(ctx.current_view.view_id)
-      };
+  }
+}
+
+void SceneRenderer::BindPreparedView(RenderContext& ctx)
+{
+  ctx.current_view.prepared_frame.reset(nullptr);
+  if (init_views_ != nullptr && ctx.current_view.view_id != kInvalidViewId) {
+    ctx.current_view.prepared_frame = observer_ptr<const PreparedSceneFrame> {
+      init_views_->GetPreparedSceneFrame(ctx.current_view.view_id)
+    };
+  }
+}
+
+void SceneRenderer::PrimePreparedView(RenderContext& ctx)
+{
+  PrimePreparedViews(ctx);
+  BindPreparedView(ctx);
+}
+
+void SceneRenderer::RenderViewFamily(RenderContext& ctx)
+{
+  PrimePreparedViews(ctx);
+  for (std::size_t view_index = 0U; view_index < ctx.frame_views.size();
+       ++view_index) {
+    const auto& entry = ctx.frame_views[view_index];
+    if (!entry.is_scene_view) {
+      continue;
     }
+
+    internal::PerViewScope view_scope { ctx, view_index };
+    BindPreparedView(ctx);
+    ResetPerViewSceneProducts();
+    renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this);
+    RenderCurrentView(ctx);
+    renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
   }
 }
 
 void SceneRenderer::OnRender(RenderContext& ctx)
+{
+  if (!ctx.frame_views.empty()
+    && ctx.current_view.view_id == kInvalidViewId
+    && !ctx.per_view_scope_active_) {
+    RenderViewFamily(ctx);
+    return;
+  }
+
+  RenderCurrentView(ctx);
+}
+
+void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
@@ -2433,6 +2475,15 @@ void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
   scene_textures_.Resize(new_extent);
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
+  ResetExtractArtifacts();
+}
+
+void SceneRenderer::ResetPerViewSceneProducts()
+{
+  setup_mode_.Reset();
+  scene_texture_bindings_.Invalidate();
+  published_screen_hzb_bindings_ = {};
+  InvalidatePublishedViewFrameBindings();
   ResetExtractArtifacts();
 }
 

@@ -662,7 +662,16 @@ private:
   auto EnsurePublicationState(Graphics& gfx) -> RendererPublicationState&;
   auto BeginPublicationFrame(
     Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  [[nodiscard]] auto PublishCurrentViewHistoryFrameBindings(
+    RenderContext& render_context, RendererPublicationState& publication_state)
+    -> ShaderVisibleIndex;
+  auto WriteCurrentViewConstants(RenderContext& render_context, Graphics& gfx,
+    ShaderVisibleIndex view_frame_bindings_slot) -> void;
   auto RefreshCurrentViewFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+  auto PublishCurrentViewPreSceneFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+  auto PublishCurrentViewPostSceneFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;
   auto DetachPublishedRuntimeViewState(ViewId intent_view_id)

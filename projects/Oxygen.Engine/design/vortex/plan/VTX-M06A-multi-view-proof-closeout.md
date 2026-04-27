@@ -67,15 +67,15 @@ Out of scope:
 
 | Area | Current state | M06A action |
 | --- | --- | --- |
-| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` list `VTX-M06A` as the active `in_progress` milestone after B1+B2 landed. | Keep status `in_progress` until the full exit gate is proven; update evidence in place after each verified slice. |
+| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` list `VTX-M06A` as the active `in_progress` milestone after B1-C landed. | Keep status `in_progress` until the full exit gate is proven; update evidence in place after each verified slice. |
 | LLD | `multi-view-composition.md` is review-addressed and implementation is in progress. | Treat as the implementation contract; update it first if implementation discovers scope drift. |
 | Runtime view intent | `CompositionView` has `ViewId`, name, view, z-order, opacity, camera, HDR, environment toggles, exposure source id, force-wireframe, shading override, and overlay callback. | Extend without breaking existing single-view clients; add typed settings instead of more ad hoc booleans. |
 | View lifecycle | `ViewLifecycleService` materializes and sorts active `CompositionViewImpl` instances and currently validates exposure with same-frame ordering. | Move exposure sharing to previous-frame `ViewStateHandle` semantics and retain deterministic active-view ordering. |
 | Frame packets | `FrameViewPacket` carries a `CompositionViewImpl`, published `ViewId`, `ViewRenderPlan`, and composite texture helpers. | Slice B1 makes plan/state authoritative; slice B2 adds kind, feature mask, route placeholders, auxiliary IO placeholders, and scene-texture key. |
 | Frame plan | `FramePlanBuilder` builds packets but still keeps frame-global render/debug state accessors. | Slice B1 removes stage-readable global effective mode and makes packets authoritative. |
-| Render context | `RenderContext` already has `frame_views`, `active_view_index`, and `current_view`, but the cursor is ambient. | Add `PerViewScope`; stage execution must enter scope before using current-view fields. |
-| SceneRenderer | `SceneRenderer::OnRender` executes the scene stage chain for the selected current view. | Introduce `RenderViewFamily` / `RenderView` path and delegate single-view execution through it. |
-| SceneTextures | `SceneRenderer` owns one concrete `SceneTextures` family. | Slice C serializes through it; Slice D adds descriptor-keyed lease/pool. |
+| Render context | `RenderContext` has `frame_views`, `active_view_index`, and `current_view`; production cursor selection is now constrained by `PerViewScope`. | Keep new cursor writes scoped; slice D must preserve this contract while adding leases. |
+| SceneRenderer | `SceneRenderer::RenderViewFamily` serializes eligible scene views through `PerViewScope`; `OnRender` delegates to it for production frame-view batches and retains the single-current-view harness path. | Slice D adds descriptor-keyed lease/pool under the same family loop. |
+| SceneTextures | `SceneRenderer` still owns one concrete `SceneTextures` family and slice C resets per-view scene products while serializing through it. | Slice D adds descriptor-keyed lease/pool. |
 | Composition | `CompositionPlanner` has single-surface/layer behavior and still contains primary/z-order assumptions. | Replace with structural surface plans and deterministic layers. |
 | Product publishers | Several services already use per-view publishers or view-keyed inspection surfaces. | Audit each touched product for last-view-wins behavior and explicit disabled products. |
 | Exposure/history | `PreviousViewHistoryCache` is keyed by `ViewId`; `ExposurePass` uses view id and current selected source. | Route histories through `ViewStateHandle` or make stateless where no handle is provided. |
@@ -360,7 +360,7 @@ Rollback/replan trigger:
 
 ### Slice C - `PerViewScope` And Serialized View-Family Loop
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -387,6 +387,38 @@ Required behavior:
   `active_view_index`.
 - Nested `PerViewScope` on the same context fails in debug.
 - Every scene pass/product diagnostic label includes view identity.
+
+Current evidence:
+
+- Implemented `internal::PerViewScope` as the only production writer for
+  `RenderContext::current_view` selection and `active_view_index`.
+- `Renderer::PopulateRenderContextViewState` now materializes frame entries
+  without selecting a current cursor. `SceneRenderer::RenderViewFamily`
+  iterates scene-view entries, enters `PerViewScope`, binds the prepared frame,
+  resets per-view scene products while reusing the existing single
+  `SceneTextures` family, and publishes pre/post per-view bindings through
+  renderer helpers.
+- `SceneRenderer::OnRender` delegates production frame-view batches through
+  `RenderViewFamily`; existing single-current-view harness calls remain
+  supported for focused tests/tools.
+- Added focused coverage in `RenderContext.Tests`,
+  `SceneRendererDeferredCore.Tests`, and updated
+  `SceneRendererPublication.Tests` for no-eager-cursor materialization.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.RenderContext.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(SceneRendererPublication|SceneRendererDeferredCore|RenderContext)" --output-on-failure`
+  with 4/4 matched targets passing (`RenderContextMaterializer` also matched
+  the regex); cursor-write gate found no production writes outside
+  `PerViewScope`; `cmake --build out\build-ninja --config Debug --target oxygen-examples-renderscene --parallel 4`
+  passed; `.\out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --frames 4 --fps 30 --vsync false --capture-provider off`
+  exited 0 and reached `Engine completed after Frame(seq:4) frames`; the
+  existing shutdown-time `Vortex.PointShadowCubeSurface` resource-registry note
+  remains recorded as outside slice C closure proof; `git diff --check` passed
+  with line-ending warnings only.
+- Remaining VTX-M06A gap: D-I are not implemented; scene-texture lease pool,
+  data-driven surface composition, auxiliary graph, overlays, runtime proof
+  scripts, CDB/debug-layer audit, RenderDoc scripted proof, allocation-churn
+  proof, and final closure remain open.
 
 Validation:
 
