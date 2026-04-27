@@ -19,6 +19,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -1381,6 +1382,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   : renderer_(renderer)
   , gfx_(gfx)
   , scene_textures_(gfx, config)
+  , scene_texture_pool_(gfx, config)
+  , active_scene_textures_(&scene_textures_)
+  , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
 {
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
@@ -1504,6 +1508,14 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     }
 
     internal::PerViewScope view_scope { ctx, view_index };
+    auto scene_texture_lease
+      = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
+    auto& leased_scene_textures = scene_texture_lease.GetSceneTextures();
+    active_scene_textures_ = &leased_scene_textures;
+    inspected_scene_textures_ = &leased_scene_textures;
+    auto restore_scene_texture_family = ScopeGuard([this]() noexcept {
+      active_scene_textures_ = &scene_textures_;
+    });
     BindPreparedView(ctx);
     ResetPerViewSceneProducts();
     renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this);
@@ -1527,9 +1539,10 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
+  auto& scene_textures = ActiveSceneTextures();
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
     target_extent.has_value()
-    && *target_extent != scene_textures_.GetExtent()) {
+    && *target_extent != scene_textures.GetExtent()) {
     ResizeSceneTextureFamily(*target_extent);
   }
 
@@ -1605,9 +1618,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   if (depth_prepass_ != nullptr) {
     depth_prepass_->SetConfig(DepthPrepassConfig {
       .mode = ctx.current_view.depth_prepass_mode,
-      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+      .write_velocity = scene_textures.GetVelocity() != nullptr,
     });
-    depth_prepass_->Execute(ctx, scene_textures_);
+    depth_prepass_->Execute(ctx, scene_textures);
     ctx.current_view.depth_prepass_completeness
       = depth_prepass_->GetCompleteness();
     ctx.current_view.scene_depth_product_valid
@@ -1634,7 +1647,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .name = "Vortex.SceneDepth",
         .producer_pass = "Vortex.Stage3.DepthPrepass",
         .resource_name
-        = std::string { scene_textures_.GetSceneDepth().GetName() },
+        = std::string { scene_textures.GetSceneDepth().GetName() },
         .descriptor
         = SceneTextureDescriptor(scene_texture_bindings_.scene_depth_srv),
         .published = scene_texture_bindings_.scene_depth_srv
@@ -1660,7 +1673,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   ctx.current_view.screen_hzb_has_previous = false;
   ctx.current_view.occlusion_results.reset(nullptr);
   if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
-    screen_hzb_->Execute(ctx, scene_textures_);
+    screen_hzb_->Execute(ctx, scene_textures);
     const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
     published_screen_hzb_bindings_ = screen_hzb_output.bindings;
     if (screen_hzb_output.closest_texture != nullptr) {
@@ -1720,7 +1733,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .enabled = renderer_.GetOcclusionEnabled(),
       .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
     });
-    occlusion_->Execute(ctx, scene_textures_);
+    occlusion_->Execute(ctx, scene_textures);
     const auto& occlusion_stats = occlusion_->GetStats();
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
@@ -1776,7 +1789,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     published_view_frame_bindings_.environment_frame_slot
       = environment_->PublishEnvironmentBindings(ctx,
         kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
-        &scene_textures_);
+        &scene_textures);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1807,12 +1820,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
   if (base_pass_ != nullptr) {
     base_pass_->SetConfig(BasePassConfig {
-      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+      .write_velocity = scene_textures.GetVelocity() != nullptr,
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
       .shading_mode = shading_mode,
       .render_mode = ctx.render_mode,
     });
-    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
+    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures);
     base_pass_published = base_pass_result.published_base_pass_products;
     base_pass_draw_count = base_pass_result.draw_count;
     base_pass_occlusion_culled_draw_count
@@ -1852,7 +1865,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .name = "Vortex.SceneColor",
         .producer_pass = "Vortex.Stage9.BasePass",
         .resource_name
-        = std::string { scene_textures_.GetSceneColor().GetName() },
+        = std::string { scene_textures.GetSceneColor().GetName() },
         .descriptor
         = SceneTextureDescriptor(scene_texture_bindings_.scene_color_srv),
         .published = scene_texture_bindings_.scene_color_srv
@@ -1875,9 +1888,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 12: Deferred direct lighting
   const auto rendered_debug_visualization
-    = RenderDebugVisualization(ctx, scene_textures_);
+    = RenderDebugVisualization(ctx, scene_textures);
   if (!rendered_debug_visualization) {
-    RenderDeferredLighting(ctx, scene_textures_);
+    RenderDeferredLighting(ctx, scene_textures);
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -1897,7 +1910,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 15: Sky / atmosphere / fog
   if (environment_ != nullptr && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
-    environment_->RenderSkyAndFog(ctx, scene_textures_);
+    environment_->RenderSkyAndFog(ctx, scene_textures);
     const auto& stage14_state = environment_->GetLastStage14State();
     environment_lighting_state_.stage14_requested = stage14_state.requested;
     environment_lighting_state_.stage14_local_fog_requested
@@ -2023,7 +2036,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   auto translucency_result = TranslucencyExecutionResult {};
   if (translucency_ != nullptr && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
-    translucency_result = translucency_->Execute(ctx, scene_textures_);
+    translucency_result = translucency_->Execute(ctx, scene_textures);
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -2052,7 +2065,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   if (base_pass_ != nullptr && ctx.render_mode == RenderMode::kOverlayWireframe
     && !wireframe_only) {
     const auto overlay_draws
-      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures_);
+      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures);
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.WireframeOverlay",
@@ -2111,7 +2124,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       post_target = ctx.pass_target;
     }
 
-    const auto* scene_signal = scene_textures_.GetSceneColorResource().get();
+    const auto* scene_signal = scene_textures.GetSceneColorResource().get();
     auto scene_signal_kind = std::string_view { "scene_color" };
     if (scene_texture_extracts_.resolved_scene_color.valid
       && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
@@ -2124,7 +2137,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       *const_cast<graphics::Texture*>(scene_signal),
       MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
 
-    const auto* scene_depth = scene_textures_.GetSceneDepthResource().get();
+    const auto* scene_depth = scene_textures.GetSceneDepthResource().get();
     if (scene_texture_extracts_.resolved_scene_depth.valid
       && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
       scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
@@ -2148,7 +2161,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
     };
     post_process_->Execute(
-      ctx.current_view.view_id, ctx, scene_textures_, post_process_inputs);
+      ctx.current_view.view_id, ctx, scene_textures, post_process_inputs);
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
     RecordDiagnosticsPass(renderer_,
@@ -2170,7 +2183,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 20: Ground grid
   if (ground_grid_pass_ != nullptr && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
-      ctx, scene_textures_, ResolveLateOverlayTarget(ctx)));
+      ctx, scene_textures, ResolveLateOverlayTarget(ctx)));
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.GroundGrid",
@@ -2204,9 +2217,10 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
 
 void SceneRenderer::PublishDepthPrepassProducts()
 {
+  auto& scene_textures = ActiveSceneTextures();
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kPartialDepth;
-  if (scene_textures_.GetVelocity() != nullptr) {
+  if (scene_textures.GetVelocity() != nullptr) {
     flags = flags | SceneTextureSetupMode::Flag::kSceneVelocity;
   }
   setup_mode_.SetFlags(flags);
@@ -2226,10 +2240,11 @@ void SceneRenderer::PublishScreenHzbProducts(RenderContext& ctx)
 
 void SceneRenderer::PublishBasePassVelocity()
 {
+  auto& scene_textures = ActiveSceneTextures();
   // Stage 9 owns the raw attachment writes, but Stage 10 remains the first
   // truthful publication boundary for SceneColor and the active GBuffers in
   // the standard SceneTextureBindings route.
-  if (scene_textures_.GetVelocity() != nullptr) {
+  if (scene_textures.GetVelocity() != nullptr) {
     setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
     RefreshSceneTextureBindings();
   }
@@ -2244,6 +2259,7 @@ void SceneRenderer::PublishBasePassVelocity()
 
 void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
 {
+  auto& scene_textures = ActiveSceneTextures();
   // SceneRenderer is the sole owner of the deferred base-pass scene-texture
   // publication seam. RebuildWithGBuffers() is only the family-local
   // readiness helper; this method performs promotion, binding refresh, and
@@ -2257,7 +2273,7 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
   CHECK_F(ctx.frame_slot != frame::kInvalidSlot,
     "SceneRenderer: PublishDeferredBasePassSceneTextures requires a valid "
     "frame slot for publication");
-  scene_textures_.RebuildWithGBuffers();
+  scene_textures.RebuildWithGBuffers();
   setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
     | SceneTextureSetupMode::Flag::kSceneColor
     | SceneTextureSetupMode::Flag::kStencil);
@@ -2270,7 +2286,8 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
 
 void SceneRenderer::PublishCustomDepthProducts()
 {
-  if (scene_textures_.GetCustomDepth() != nullptr) {
+  auto& scene_textures = ActiveSceneTextures();
+  if (scene_textures.GetCustomDepth() != nullptr) {
     setup_mode_.Set(SceneTextureSetupMode::Flag::kCustomDepth);
   }
   RefreshSceneTextureBindings();
@@ -2284,12 +2301,14 @@ void SceneRenderer::FinalizeSceneTextureExtractions()
 
 auto SceneRenderer::GetSceneTextures() const -> const SceneTextures&
 {
-  return scene_textures_;
+  return inspected_scene_textures_ != nullptr ? *inspected_scene_textures_
+                                              : scene_textures_;
 }
 
 auto SceneRenderer::GetSceneTextures() -> SceneTextures&
 {
-  return scene_textures_;
+  return inspected_scene_textures_ != nullptr ? *inspected_scene_textures_
+                                              : scene_textures_;
 }
 
 auto SceneRenderer::GetSceneTextureBindings() const
@@ -2384,48 +2403,49 @@ void SceneRenderer::RefreshSceneTextureBindings()
     return;
   }
 
+  auto& scene_textures = ActiveSceneTextures();
   scene_texture_bindings_.valid_flags = setup_mode_.GetFlags();
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneDepth)) {
     scene_texture_bindings_.scene_depth_srv
-      = RegisterSceneTextureView(scene_textures_.GetSceneDepth(),
-        MakeSrvDesc(scene_textures_.GetSceneDepth(),
+      = RegisterSceneTextureView(scene_textures.GetSceneDepth(),
+        MakeSrvDesc(scene_textures.GetSceneDepth(),
           ResolveDepthSrvFormat(
-            scene_textures_.GetSceneDepth().GetDescriptor().format)));
+            scene_textures.GetSceneDepth().GetDescriptor().format)));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kPartialDepth)) {
     scene_texture_bindings_.partial_depth_srv
-      = RegisterSceneTextureView(scene_textures_.GetPartialDepth(),
-        MakeSrvDesc(scene_textures_.GetPartialDepth(),
-          scene_textures_.GetPartialDepth().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetPartialDepth(),
+        MakeSrvDesc(scene_textures.GetPartialDepth(),
+          scene_textures.GetPartialDepth().GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity)
-    && scene_textures_.GetVelocity() != nullptr) {
+    && scene_textures.GetVelocity() != nullptr) {
     scene_texture_bindings_.velocity_srv
-      = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
-        MakeSrvDesc(*scene_textures_.GetVelocity(),
-          scene_textures_.GetVelocity()->GetDescriptor().format));
+      = RegisterSceneTextureView(*scene_textures.GetVelocity(),
+        MakeSrvDesc(*scene_textures.GetVelocity(),
+          scene_textures.GetVelocity()->GetDescriptor().format));
     scene_texture_bindings_.velocity_uav
-      = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
-        MakeUavDesc(*scene_textures_.GetVelocity(),
-          scene_textures_.GetVelocity()->GetDescriptor().format));
+      = RegisterSceneTextureView(*scene_textures.GetVelocity(),
+        MakeUavDesc(*scene_textures.GetVelocity(),
+          scene_textures.GetVelocity()->GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneColor)) {
     scene_texture_bindings_.scene_color_srv
-      = RegisterSceneTextureView(scene_textures_.GetSceneColor(),
-        MakeSrvDesc(scene_textures_.GetSceneColor(),
-          scene_textures_.GetSceneColor().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetSceneColor(),
+        MakeSrvDesc(scene_textures.GetSceneColor(),
+          scene_textures.GetSceneColor().GetDescriptor().format));
     scene_texture_bindings_.scene_color_uav
-      = RegisterSceneTextureView(scene_textures_.GetSceneColor(),
-        MakeUavDesc(scene_textures_.GetSceneColor(),
-          scene_textures_.GetSceneColor().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetSceneColor(),
+        MakeUavDesc(scene_textures.GetSceneColor(),
+          scene_textures.GetSceneColor().GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kStencil)) {
-    const auto stencil_view = scene_textures_.GetStencil();
+    const auto stencil_view = scene_textures.GetStencil();
     if (stencil_view.IsValid()) {
       scene_texture_bindings_.stencil_srv
         = RegisterSceneTextureView(*stencil_view.texture,
@@ -2436,14 +2456,14 @@ void SceneRenderer::RefreshSceneTextureBindings()
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kCustomDepth)
-    && scene_textures_.GetCustomDepth() != nullptr) {
+    && scene_textures.GetCustomDepth() != nullptr) {
     scene_texture_bindings_.custom_depth_srv
-      = RegisterSceneTextureView(*scene_textures_.GetCustomDepth(),
-        MakeSrvDesc(*scene_textures_.GetCustomDepth(),
+      = RegisterSceneTextureView(*scene_textures.GetCustomDepth(),
+        MakeSrvDesc(*scene_textures.GetCustomDepth(),
           ResolveDepthSrvFormat(
-            scene_textures_.GetCustomDepth()->GetDescriptor().format)));
+            scene_textures.GetCustomDepth()->GetDescriptor().format)));
 
-    const auto custom_stencil = scene_textures_.GetCustomStencil();
+    const auto custom_stencil = scene_textures.GetCustomStencil();
     if (custom_stencil.IsValid()) {
       scene_texture_bindings_.custom_stencil_srv
         = RegisterSceneTextureView(*custom_stencil.texture,
@@ -2454,9 +2474,9 @@ void SceneRenderer::RefreshSceneTextureBindings()
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kGBuffers)) {
-    for (std::uint32_t i = 0; i < scene_textures_.GetGBufferCount(); ++i) {
+    for (std::uint32_t i = 0; i < scene_textures.GetGBufferCount(); ++i) {
       const auto gbuffer_index = static_cast<GBufferIndex>(i);
-      auto& texture = scene_textures_.GetGBuffer(gbuffer_index);
+      auto& texture = scene_textures.GetGBuffer(gbuffer_index);
       scene_texture_bindings_.gbuffer_srvs[i] = RegisterSceneTextureView(
         texture, MakeSrvDesc(texture, texture.GetDescriptor().format));
     }
@@ -2465,17 +2485,44 @@ void SceneRenderer::RefreshSceneTextureBindings()
 
 void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
 {
-  if (new_extent == scene_textures_.GetExtent()) {
+  auto& scene_textures = ActiveSceneTextures();
+  if (new_extent == scene_textures.GetExtent()) {
     return;
   }
 
   LOG_F(INFO, "SceneRenderer resizing scene textures from {}x{} to {}x{}",
-    scene_textures_.GetExtent().x, scene_textures_.GetExtent().y, new_extent.x,
+    scene_textures.GetExtent().x, scene_textures.GetExtent().y, new_extent.x,
     new_extent.y);
-  scene_textures_.Resize(new_extent);
+  scene_textures.Resize(new_extent);
+  if (&scene_textures == &scene_textures_) {
+    inspected_scene_textures_ = &scene_textures_;
+  }
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
+}
+
+auto SceneRenderer::ActiveSceneTextures() -> SceneTextures&
+{
+  return active_scene_textures_ != nullptr ? *active_scene_textures_
+                                           : scene_textures_;
+}
+
+auto SceneRenderer::ActiveSceneTextures() const -> const SceneTextures&
+{
+  return active_scene_textures_ != nullptr ? *active_scene_textures_
+                                           : scene_textures_;
+}
+
+auto SceneRenderer::BuildSceneTextureLeaseKey(const RenderContext& ctx) const
+  -> SceneTextureLeaseKey
+{
+  auto key = SceneTextureLeaseKey::FromConfig(scene_textures_.GetConfig());
+  if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
+    target_extent.has_value()) {
+    key.extent = *target_extent;
+  }
+  return key;
 }
 
 void SceneRenderer::ResetPerViewSceneProducts()
@@ -2555,7 +2602,7 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
 auto SceneRenderer::ResolveVelocitySourceTexture() const
   -> const graphics::Texture*
 {
-  return scene_textures_.GetVelocity();
+  return ActiveSceneTextures().GetVelocity();
 }
 
 auto SceneRenderer::RegisterSceneTextureView(graphics::Texture& texture,

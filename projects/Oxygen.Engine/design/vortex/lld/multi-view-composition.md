@@ -985,10 +985,12 @@ must not remain the only production multi-view path.
 
 ### 14.5 `SceneTextures`
 
-Introduce a Vortex-native pool/lease owner. The concrete `SceneTextures` class
-can remain the product family, but the `SceneRenderer` member
-`SceneTextures scene_textures_` cannot remain the only production store for all
-views.
+Slice D introduced a Vortex-native pool/lease owner. The concrete
+`SceneTextures` class remains the product family, while
+`SceneRenderer::RenderViewFamily` acquires descriptor-keyed leases for scene
+views and keeps the original `SceneTextures scene_textures_` member as the
+single-current-view fallback/inspection bootstrap rather than the only
+production store.
 
 Required behavior:
 
@@ -1259,10 +1261,13 @@ parallel rendering, or a global show-flag clone unless the LLD is updated first.
    every eligible `Primary`/`Auxiliary` scene view in a batch through
    `PerViewScope`, using the existing single `SceneTextures` family
    serially. This slice proves the loop and product isolation before adding a
-   pool. Slice 2 alone does not satisfy acceptance gate item 4.
+   pool. Slice 2 alone does not satisfy acceptance gate item 4. Implemented by
+   slice C.
 3. **Scene-texture leases:** introduce descriptor-keyed lease/pool and route
    the multi-view loop through it. The lease pool's alias/fence/concurrency
    contract is meaningful only after slice 2 exercises more than one view.
+   Implemented by slice D with a focused warmup allocation metric; the full
+   60-frame runtime churn report remains a slice-H/closure artifact.
 4. **Composition plan generalization:** compose arbitrary view outputs into one
    or more surfaces; represent PiP as data and replace primary/z-order copy
    assumptions with structural layer predicates. The predicate must already
