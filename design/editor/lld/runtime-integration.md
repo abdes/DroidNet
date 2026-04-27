@@ -5,7 +5,9 @@ Status: `review`
 ## 1. Purpose
 
 Define the managed boundary between the WinUI editor and the embedded Oxygen
-Engine runtime for ED-M02. This LLD covers runtime lifecycle, native runtime
+Engine runtime. This LLD was first reviewed for ED-M02 and is re-reviewed in
+ED-M04 only for inspector-driven live-sync completion semantics. It covers
+runtime lifecycle, native runtime
 discovery assumptions, runtime settings, surface leases, engine view lifecycle,
 cooked-root refresh ordering, threading, and the validation evidence needed
 before live viewport behavior can support later authoring milestones.
@@ -24,6 +26,10 @@ the runtime contracts defined here.
 | `REQ-030` | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
 | `SUCCESS-003` | Live editor viewport presents correctly. |
 | `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation. |
+
+ED-M04 consumes this LLD for `REQ-008`, `REQ-022`, `REQ-024`, and `REQ-026`
+only to define runtime readiness, rejected runtime setting writes, and sync
+completion semantics. ED-M04 does not reopen surface/view lifecycle scope.
 
 ## 3. Architecture Links
 
@@ -341,6 +347,62 @@ Later consumers:
   camera validation.
 
 ED-M02 must not add authoring-specific scene mutation semantics here.
+
+### ED-M04 Inspector-Driven Sync Semantics
+
+ED-M04 adds **no new public surface** to `IEngineService`. It pins the exact
+preconditions that the live-sync adapter
+([live-engine-sync.md](./live-engine-sync.md)) consumes before invoking
+`OxygenWorld` operations.
+
+#### 12.1 Runtime readiness contract
+
+Before any `ISceneEngineSync.<Update*|Attach*|Detach*>` call hits the engine,
+the adapter MUST observe **all** of:
+
+| Precondition | Source | Failure classification |
+| --- | --- | --- |
+| `IEngineService.State == Running` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning`. |
+| `IEngineService.World is not null` | `EngineService.World` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning` (race with shutdown). |
+| `IEngineService.State != Faulted` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`. |
+| Scope cancellation token not cancelled | command-supplied `CancellationToken` | `SyncOutcome.Failed`, code `OXE.LIVESYNC.Cancelled`. |
+
+The adapter performs these checks **without** taking any runtime lock other
+than reading the `State` snapshot and the `World` reference. It never blocks
+waiting for `Running`. Calls to `SyncSceneWhenReadyAsync` (full-scene resync)
+remain the only awaiting variant and are reserved for workspace/document
+activation, not inspector edits.
+
+#### 12.2 Inspector-side rules
+
+1. Inspector view-models and command services MUST NOT call
+   `IEngineService.StartAsync` / `StopAsync` / `RestartAsync`. Engine lifecycle
+   stays owned by workspace activation / scene editor controls.
+2. Inspector commands MUST NOT subscribe to `IEngineService` state changes to
+   retry sync. A skipped sync stays skipped; the next user edit produces the
+   next attempt.
+3. Inspector commands MUST treat any thrown exception from
+   `ISceneEngineSync` as `SyncOutcome.Failed` and continue. They MUST NOT
+   re-throw to the UI.
+
+#### 12.3 What "Accepted" means
+
+`SyncOutcome.Accepted` means the engine boundary accepted the call. It does
+NOT imply:
+
+- a frame has been presented,
+- the cooked geometry/material was resolved,
+- the change is visible in the active view.
+
+ED-M04 does not introduce a managed presented-frame completion contract.
+Visual confirmation remains a manual validation step.
+
+#### 12.4 Runtime setting writes
+
+Inspector-adjacent runtime setting controls (target FPS, engine logging
+verbosity) continue to use `Runtime.Settings.Apply` and the `Settings`
+failure domain — unchanged from ED-M02. These do not flow through the
+sync adapter and do not produce `OXE.LIVESYNC.*` codes.
 
 ## 13. Operation Results And Diagnostics
 
