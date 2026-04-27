@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -32,6 +32,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     private readonly DispatcherQueue? dispatcher;
 
     private ILogger logger;
+
+    private INotifyCollectionChanged? componentCollectionNotifier;
 
     private bool doNotPropagateName;
 
@@ -103,11 +105,23 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
                 field.PropertyChanged -= OnNodePropertyChanged;
             }
 
+            if (this.componentCollectionNotifier is not null)
+            {
+                this.componentCollectionNotifier.CollectionChanged -= this.OnNodeComponentsChanged;
+                this.componentCollectionNotifier = null;
+            }
+
             field = value;
+            this.SelectedComponent = null;
 
             if (field is not null)
             {
                 field.PropertyChanged += OnNodePropertyChanged;
+                if (field.Components is INotifyCollectionChanged componentNotifier)
+                {
+                    this.componentCollectionNotifier = componentNotifier;
+                    this.componentCollectionNotifier.CollectionChanged += this.OnNodeComponentsChanged;
+                }
             }
 
             this.SyncFromNode();
@@ -146,6 +160,17 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial string? Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the component currently selected in the component list.
+    /// </summary>
+    [ObservableProperty]
+    public partial GameComponent? SelectedComponent { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the current component selection can be removed.
+    /// </summary>
+    public bool CanDeleteSelectedComponent => this.CanDeleteComponent(this.SelectedComponent);
 
     /// <summary>
     /// Gets a menu source used by the UI to expose available component types that can be added.
@@ -193,6 +218,13 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         this.Node.Name = value;
     }
 
+    partial void OnSelectedComponentChanged(GameComponent? value)
+    {
+        _ = value;
+        this.DeleteComponentCommand.NotifyCanExecuteChanged();
+        this.OnPropertyChanged(nameof(this.CanDeleteSelectedComponent));
+    }
+
     private IMenuSource BuildAddComponentMenu()
         => new MenuBuilder()
             .AddMenuItem("Geometry", this.AddGeometryCommand)
@@ -210,17 +242,17 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
     private void AddGeometry() => this.AddComponent("Geometry");
 
-    private bool CanAddGeometry() => this.CanAddComponent("Geometry");
+    private bool CanAddGeometry() => this.Node is not null && this.Node.Components.OfType<GeometryComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanAddPerspectiveCamera))]
     private void AddPerspectiveCamera() => this.AddComponent("PerspectiveCamera");
 
-    private bool CanAddPerspectiveCamera() => this.CanAddComponent("PerspectiveCamera");
+    private bool CanAddPerspectiveCamera() => this.CanAddCamera();
 
     [RelayCommand(CanExecute = nameof(CanAddOrthographicCamera))]
     private void AddOrthographicCamera() => this.AddComponent("OrthographicCamera");
 
-    private bool CanAddOrthographicCamera() => this.CanAddComponent("OrthographicCamera");
+    private bool CanAddOrthographicCamera() => this.CanAddCamera();
 
     [RelayCommand(CanExecute = nameof(CanAddLight))]
     private void AddDirectionalLight() => this.AddComponent("DirectionalLight");
@@ -233,10 +265,12 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
     private bool CanAddLight() => this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
 
+    private bool CanAddCamera() => this.Node is not null && this.Node.Components.OfType<CameraComponent>().FirstOrDefault() is null;
+
     [RelayCommand(CanExecute = nameof(CanDeleteComponent))]
     private void DeleteComponent(GameComponent? comp)
     {
-        if (this.Node is null || comp?.IsLocked != false)
+        if (this.Node is null || !this.IsCurrentComponent(comp) || comp?.IsLocked != false)
         {
             return;
         }
@@ -244,7 +278,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new Messages.ComponentRemoveRequestedMessage(this.Node, comp));
     }
 
-    private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && comp?.IsLocked == false;
+    private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
 
     private void AddComponent(string typeId)
     {
@@ -267,24 +301,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        if (comp is DirectionalLightComponent)
-        {
-            this.ApplyDefaultDirectionalLightTransform();
-        }
-
         // Request the editor (single mutator) to perform the add; decoupled via messenger.
         WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, comp));
-    }
-
-    private void ApplyDefaultDirectionalLightTransform()
-    {
-        var transform = this.Node?.Components.OfType<TransformComponent>().FirstOrDefault();
-        if (transform is null || transform.LocalRotation != Quaternion.Identity)
-        {
-            return;
-        }
-
-        transform.LocalRotation = DirectionalLightComponent.DefaultLocalRotation;
     }
 
     private void SyncFromNode()
@@ -304,7 +322,33 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         });
 
     private bool CanAddComponent(string typeId)
-        => this.Node is not null && typeId is not null && !string.Equals(typeId, "Transform", StringComparison.OrdinalIgnoreCase);
+        => typeId switch
+        {
+            "Geometry" => this.CanAddGeometry(),
+            "PerspectiveCamera" or "OrthographicCamera" => this.CanAddCamera(),
+            "DirectionalLight" or "PointLight" or "SpotLight" => this.CanAddLight(),
+            _ => false,
+        };
 
-    private sealed record ComponentOperation(SceneNode Node, GameComponent Component);
+    private bool IsCurrentComponent(GameComponent? component)
+        => component is not null && this.Node?.Components.Contains(component) == true;
+
+    private void OnNodeComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (!this.IsCurrentComponent(this.SelectedComponent))
+        {
+            this.SelectedComponent = null;
+        }
+
+        this.DeleteComponentCommand.NotifyCanExecuteChanged();
+        this.OnPropertyChanged(nameof(this.CanDeleteSelectedComponent));
+        this.AddGeometryCommand.NotifyCanExecuteChanged();
+        this.AddPerspectiveCameraCommand.NotifyCanExecuteChanged();
+        this.AddOrthographicCameraCommand.NotifyCanExecuteChanged();
+        this.AddDirectionalLightCommand.NotifyCanExecuteChanged();
+        this.AddPointLightCommand.NotifyCanExecuteChanged();
+        this.AddSpotLightCommand.NotifyCanExecuteChanged();
+    }
 }

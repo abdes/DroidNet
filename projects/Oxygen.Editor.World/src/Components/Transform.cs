@@ -95,6 +95,7 @@ public partial class TransformComponent : GameComponent
     public override ComponentData Dehydrate()
         => new TransformData
         {
+            Id = this.Id,
             Name = this.Name,
             Position = this.LocalPosition,
             Rotation = this.LocalRotation,

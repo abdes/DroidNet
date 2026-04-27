@@ -2,12 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.World.Messages;
+using Microsoft.UI.Dispatching;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -18,11 +21,14 @@ namespace Oxygen.Editor.World.Inspector;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IMessenger? messenger = null) : ComponentPropertyEditor
+public partial class TransformViewModel(
+    ILoggerFactory? loggerFactory = null,
+    ISceneDocumentCommandService? commandService = null,
+    Func<SceneDocumentCommandContext?>? commandContextProvider = null) : ComponentPropertyEditor, IDisposable
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
+    private static readonly TimeSpan MouseWheelCommitDelay = TimeSpan.FromMilliseconds(250);
 
-    private readonly IMessenger? messengerSvc = messenger;
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
 
     // Keep track of the current selection so property-change handlers can apply edits back
     // to the selected SceneNode instances.
@@ -30,6 +36,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
     // Guard against re-entrant updates when applying changes from the view back to the model.
     private bool isApplyingEditorChanges;
+
+    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
+    private readonly Dictionary<string, TransformEditSession> activeSessions = [];
+    private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [];
+    private readonly DispatcherQueue? dispatcher = DispatcherQueue.GetForCurrentThread();
+    private int inFlightEdits;
+    private int editGateDisposed;
+    private bool isDisposed;
 
     /// <summary>
     ///     Gets exposes the configured <see cref="ILoggerFactory"/> for views to bind to (read-only).
@@ -127,396 +141,345 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
         this.LogUpdateValues(items.Count);
 
-        this.UpdatePositionValues(items);
-        this.UpdateRotationValues(items);
-        this.UpdateScaleValues(items);
-    }
-
-    // When the ViewModel property changes as a result of user interaction in the VectorBox,
-    // propagate that change to the selected SceneNode transform components.
-    partial void OnPositionXChanged(float value)
-    {
-        if (this.isApplyingEditorChanges)
-        {
-            return;
-        }
-
-        if (this.selectedItems is null)
-        {
-            return;
-        }
-
-        this.LogApplyingChange("PositionX", value, this.selectedItems.Count);
-
+        this.isApplyingEditorChanges = true;
         try
         {
-            this.isApplyingEditorChanges = true;
+            this.UpdatePositionValues(items);
+            this.UpdateRotationValues(items);
+            this.UpdateScaleValues(items);
+        }
+        finally
+        {
+            this.isApplyingEditorChanges = false;
+        }
+    }
 
-            // capture old snapshots for undo/redo
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
 
-            foreach (var item in nodes)
+        this.isDisposed = true;
+
+        foreach (var pendingCommit in this.wheelIdleCommits.Values)
+        {
+            pendingCommit.Cancel();
+            pendingCommit.Dispose();
+        }
+
+        this.wheelIdleCommits.Clear();
+
+        foreach (var sessionEntry in this.activeSessions.ToList())
+        {
+            sessionEntry.Value.Token.Cancel();
+            _ = this.ApplyTransformEditAsync(
+                sessionEntry.Key,
+                sessionEntry.Value.LastEdit ?? EmptyEdit(),
+                sessionEntry.Value.Token,
+                sessionEntry.Value.Nodes,
+                sessionEntry.Value.Context);
+        }
+
+        this.activeSessions.Clear();
+        this.TryDisposeEditGate();
+        GC.SuppressFinalize(this);
+    }
+
+    partial void OnPositionXChanged(float value) => this.ApplyTransformEdit("PositionX", NewEdit(positionX: value));
+
+    partial void OnPositionYChanged(float value) => this.ApplyTransformEdit("PositionY", NewEdit(positionY: value));
+
+    partial void OnPositionZChanged(float value) => this.ApplyTransformEdit("PositionZ", NewEdit(positionZ: value));
+
+    partial void OnRotationXChanged(float value) => this.ApplyTransformEdit("RotationX", NewEdit(rotationX: value));
+
+    partial void OnRotationYChanged(float value) => this.ApplyTransformEdit("RotationY", NewEdit(rotationY: value));
+
+    partial void OnRotationZChanged(float value) => this.ApplyTransformEdit("RotationZ", NewEdit(rotationZ: value));
+
+    partial void OnScaleXChanged(float value) => this.ApplyTransformEdit("ScaleX", NewEdit(scaleX: value));
+
+    partial void OnScaleYChanged(float value) => this.ApplyTransformEdit("ScaleY", NewEdit(scaleY: value));
+
+    partial void OnScaleZChanged(float value) => this.ApplyTransformEdit("ScaleZ", NewEdit(scaleZ: value));
+
+    /// <summary>
+    /// Starts an interactive transform edit session for one vector component.
+    /// </summary>
+    /// <param name="group">The transform vector being edited.</param>
+    /// <param name="args">The vector-box edit session event arguments.</param>
+    public void BeginEditSession(TransformEditFieldGroup group, VectorBoxEditSessionEventArgs args)
+    {
+        if (this.isDisposed || this.selectedItems is null || this.selectedItems.Count == 0)
+        {
+            return;
+        }
+
+        var property = ToPropertyName(group, args.Component);
+        if (this.activeSessions.ContainsKey(property))
+        {
+            return;
+        }
+
+        var nodes = this.selectedItems.ToList();
+        var context = commandContextProvider?.Invoke();
+        if (context is null || commandService is null)
+        {
+            return;
+        }
+
+        this.activeSessions[property] = new TransformEditSession(
+            EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.Select(static node => node.Id).ToList(), property),
+            nodes,
+            context,
+            LastEdit: null);
+    }
+
+    /// <summary>
+    /// Completes an interactive transform edit session for one vector component.
+    /// </summary>
+    /// <param name="group">The transform vector being edited.</param>
+    /// <param name="args">The vector-box edit session event arguments.</param>
+    public void CompleteEditSession(TransformEditFieldGroup group, VectorBoxEditSessionEventArgs args)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        var property = ToPropertyName(group, args.Component);
+
+        if (args.InteractionKind == NumberBoxEditInteractionKind.MouseWheel &&
+            args.CompletionKind == NumberBoxEditCompletionKind.Commit)
+        {
+            this.ScheduleMouseWheelCommit(property);
+            return;
+        }
+
+        _ = this.CompleteActiveSessionAsync(property, args.CompletionKind ?? NumberBoxEditCompletionKind.Commit);
+    }
+
+    private async Task CompleteActiveSessionAsync(string property, NumberBoxEditCompletionKind completionKind)
+    {
+        this.CancelPendingMouseWheelCommit(property);
+        if (!this.activeSessions.Remove(property, out var session))
+        {
+            return;
+        }
+
+        if (completionKind == NumberBoxEditCompletionKind.Cancel)
+        {
+            session.Token.Cancel();
+            await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+            return;
+        }
+
+        session.Token.Commit();
+        await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+    }
+
+    private void ScheduleMouseWheelCommit(string property)
+    {
+        this.CancelPendingMouseWheelCommit(property);
+
+        var cts = new CancellationTokenSource();
+        this.wheelIdleCommits[property] = cts;
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null)
+                await Task.Delay(MouseWheelCommitDelay, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            void Complete()
+                => _ = this.CompleteActiveSessionAsync(property, NumberBoxEditCompletionKind.Commit);
+
+            if (this.dispatcher is not null)
+            {
+                _ = this.dispatcher.TryEnqueue(Complete);
+                return;
+            }
+
+            Complete();
+        });
+    }
+
+    private void CancelPendingMouseWheelCommit(string property)
+    {
+        if (!this.wheelIdleCommits.Remove(property, out var cts))
+        {
+            return;
+        }
+
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private void ApplyTransformEdit(string property, TransformEdit edit)
+    {
+        if (this.isDisposed || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
+        {
+            return;
+        }
+
+        this.LogApplyingChange(property, ExtractValue(edit), this.selectedItems.Count);
+        if (this.activeSessions.TryGetValue(property, out var existing))
+        {
+            this.activeSessions[property] = existing with { LastEdit = edit };
+            _ = this.ApplyTransformEditAsync(property, edit, existing.Token, existing.Nodes, existing.Context);
+            return;
+        }
+
+        var nodes = this.selectedItems.ToList();
+        var context = commandContextProvider.Invoke();
+        _ = this.ApplyTransformEditAsync(property, edit, EditSessionToken.OneShot, nodes, context);
+    }
+
+    private async Task ApplyTransformEditAsync(
+        string property,
+        TransformEdit edit,
+        EditSessionToken session,
+        IReadOnlyList<SceneNode> nodes,
+        SceneDocumentCommandContext? context)
+    {
+        _ = Interlocked.Increment(ref this.inFlightEdits);
+        var entered = false;
+        try
+        {
+            await this.editGate.WaitAsync().ConfigureAwait(true);
+            entered = true;
+
+            if (nodes.Count == 0 || context is null || commandService is null)
+            {
+                return;
+            }
+
+            var result = await commandService.EditTransformAsync(
+                context,
+                nodes.Select(static node => node.Id).ToList(),
+                edit,
+                session).ConfigureAwait(true);
+            if (result.Succeeded && !this.isDisposed && this.SelectionMatches(nodes))
+            {
+                this.isApplyingEditorChanges = true;
+                try
                 {
-                    continue;
+                    this.UpdateValues(nodes.ToList());
                 }
-
-                var p = transform.LocalPosition;
-                p.X = value;
-                transform.LocalPosition = p;
+                finally
+                {
+                    this.isApplyingEditorChanges = false;
+                }
             }
-
-            // notify message with new snapshots
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionX")));
         }
         catch (Exception ex)
         {
-            this.LogApplyFailed("PositionX", ex);
-            throw;
+            this.LogApplyFailed(property, ex);
         }
         finally
         {
-            this.isApplyingEditorChanges = false;
+            if (entered)
+            {
+                _ = this.editGate.Release();
+            }
+
+            _ = Interlocked.Decrement(ref this.inFlightEdits);
+            this.TryDisposeEditGate();
         }
     }
 
-    partial void OnPositionYChanged(float value)
+    private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
     {
-        if (this.isApplyingEditorChanges || this.selectedItems is null)
+        if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
+        {
+            return false;
+        }
+
+        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
+        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
+    }
+
+    private void TryDisposeEditGate()
+    {
+        if (!this.isDisposed || Volatile.Read(ref this.inFlightEdits) != 0)
         {
             return;
         }
 
-        this.LogApplyingChange("PositionY", value, this.selectedItems.Count);
-
-        try
+        if (Interlocked.Exchange(ref this.editGateDisposed, 1) == 0)
         {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-
-            foreach (var item in nodes)
-            {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var p = transform.LocalPosition;
-                p.Y = value;
-                transform.LocalPosition = p;
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionY")));
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("PositionY", ex);
-            throw;
-        }
-        finally
-        {
-            this.isApplyingEditorChanges = false;
+            this.editGate.Dispose();
         }
     }
 
-    partial void OnPositionZChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null)
+    private static TransformEdit EmptyEdit()
+        => new(Optional<Vector3>.Unspecified, Optional<Vector3>.Unspecified, Optional<Vector3>.Unspecified);
+
+    private static TransformEdit NewEdit(
+        float? positionX = null,
+        float? positionY = null,
+        float? positionZ = null,
+        float? rotationX = null,
+        float? rotationY = null,
+        float? rotationZ = null,
+        float? scaleX = null,
+        float? scaleY = null,
+        float? scaleZ = null)
+        => new(
+            Optional<Vector3>.Unspecified,
+            Optional<Vector3>.Unspecified,
+            Optional<Vector3>.Unspecified,
+            PositionX: positionX.HasValue ? Optional<float>.Supplied(positionX.Value) : Optional<float>.Unspecified,
+            PositionY: positionY.HasValue ? Optional<float>.Supplied(positionY.Value) : Optional<float>.Unspecified,
+            PositionZ: positionZ.HasValue ? Optional<float>.Supplied(positionZ.Value) : Optional<float>.Unspecified,
+            RotationXDegrees: rotationX.HasValue ? Optional<float>.Supplied(rotationX.Value) : Optional<float>.Unspecified,
+            RotationYDegrees: rotationY.HasValue ? Optional<float>.Supplied(rotationY.Value) : Optional<float>.Unspecified,
+            RotationZDegrees: rotationZ.HasValue ? Optional<float>.Supplied(rotationZ.Value) : Optional<float>.Unspecified,
+            ScaleX: scaleX.HasValue ? Optional<float>.Supplied(scaleX.Value) : Optional<float>.Unspecified,
+            ScaleY: scaleY.HasValue ? Optional<float>.Supplied(scaleY.Value) : Optional<float>.Unspecified,
+            ScaleZ: scaleZ.HasValue ? Optional<float>.Supplied(scaleZ.Value) : Optional<float>.Unspecified);
+
+    private static float ExtractValue(TransformEdit edit)
+        => edit.PositionX.HasValue ? edit.PositionX.Value! :
+           edit.PositionY.HasValue ? edit.PositionY.Value! :
+           edit.PositionZ.HasValue ? edit.PositionZ.Value! :
+           edit.RotationXDegrees.HasValue ? edit.RotationXDegrees.Value! :
+           edit.RotationYDegrees.HasValue ? edit.RotationYDegrees.Value! :
+           edit.RotationZDegrees.HasValue ? edit.RotationZDegrees.Value! :
+           edit.ScaleX.HasValue ? edit.ScaleX.Value! :
+           edit.ScaleY.HasValue ? edit.ScaleY.Value! :
+           edit.ScaleZ.HasValue ? edit.ScaleZ.Value! :
+           0f;
+
+    private static string ToPropertyName(TransformEditFieldGroup group, Component component)
+        => group switch
         {
-            return;
-        }
-
-        this.LogApplyingChange("PositionZ", value, this.selectedItems.Count);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-
-            foreach (var item in nodes)
+            TransformEditFieldGroup.Position => component switch
             {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var p = transform.LocalPosition;
-                p.Z = value;
-                transform.LocalPosition = p;
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionZ")));
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("PositionZ", ex);
-            throw;
-        }
-        finally
-        {
-            this.isApplyingEditorChanges = false;
-        }
-    }
-
-    partial void OnRotationXChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("RotationX", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-
-            foreach (var item in nodes)
+                Component.X => nameof(PositionX),
+                Component.Y => nameof(PositionY),
+                _ => nameof(PositionZ),
+            },
+            TransformEditFieldGroup.Rotation => component switch
             {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var q = transform.LocalRotation;
-                var euler = TransformConverter.QuaternionToEulerDegrees(q);
-                euler.X = value;
-                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationX")));
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("RotationX", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
-
-    partial void OnRotationYChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("RotationY", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-
-            foreach (var item in nodes)
+                Component.X => nameof(RotationX),
+                Component.Y => nameof(RotationY),
+                _ => nameof(RotationZ),
+            },
+            _ => component switch
             {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var q = transform.LocalRotation;
-                var euler = TransformConverter.QuaternionToEulerDegrees(q);
-                euler.Y = value;
-                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationY")));
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("RotationY", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
-
-    partial void OnRotationZChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("RotationZ", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-
-            foreach (var item in nodes)
-            {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var q = transform.LocalRotation;
-                var euler = TransformConverter.QuaternionToEulerDegrees(q);
-                euler.Z = value;
-                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationZ")));
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("RotationZ", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
-
-    partial void OnScaleXChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("ScaleX", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-            foreach (var item in nodes)
-            {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var s = transform.LocalScale;
-
-                // Apply the user-entered value directly — the control validates inputs.
-                s.X = value;
-                transform.LocalScale = s;
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleX")));
-
-            // Reflect the raw user value back to the ViewModel — do not normalize here.
-            this.ScaleX = value;
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("ScaleX", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
-
-    partial void OnScaleYChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("ScaleY", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-            foreach (var item in nodes)
-            {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var s = transform.LocalScale;
-
-                // Apply the user-entered value directly — the control validates inputs.
-                s.Y = value;
-                transform.LocalScale = s;
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleY")));
-
-            // Reflect the raw user value back to the ViewModel — do not normalize here.
-            this.ScaleY = value;
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("ScaleY", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
-
-    partial void OnScaleZChanged(float value)
-    {
-        if (this.isApplyingEditorChanges || this.selectedItems is null) return;
-
-        var targetCount = this.selectedItems.Count;
-        this.LogApplyingChange("ScaleZ", value, targetCount);
-
-        try
-        {
-            this.isApplyingEditorChanges = true;
-            var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
-                .ToList();
-            foreach (var item in nodes)
-            {
-                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-                if (transform is null) continue;
-                var s = transform.LocalScale;
-
-                // Apply the user-entered value directly — the control validates inputs.
-                s.Z = value;
-                transform.LocalScale = s;
-            }
-
-            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
-                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
-                .ToList();
-
-            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleZ")));
-
-            // Reflect the raw user value back to the ViewModel — do not normalize here.
-            this.ScaleZ = value;
-        }
-        catch (Exception ex)
-        {
-            this.LogApplyFailed("ScaleZ", ex);
-            throw;
-        }
-        finally { this.isApplyingEditorChanges = false; }
-    }
+                Component.X => nameof(ScaleX),
+                Component.Y => nameof(ScaleY),
+                _ => nameof(ScaleZ),
+            },
+        };
 
     private void UpdatePositionValues(ICollection<SceneNode> items)
     {
@@ -647,7 +610,6 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         static void ProcessAxis(
             ICollection<SceneNode> nodes,
             Func<System.Numerics.Vector3, float> extract,
-            Func<System.Numerics.Vector3, float, System.Numerics.Vector3> setComponent,
             Action<float> setViewModelScale,
             Action<bool> setIsIndeterminate)
         {
@@ -670,25 +632,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
             var s = firstTransform.LocalScale;
             var comp = extract(s);
-            var norm = TransformConverter.NormalizeScaleValue(comp);
-            if (norm != comp)
-            {
-                s = setComponent(s, norm);
-                firstTransform.LocalScale = s; // update model to canonical non-zero value
-            }
-
-            setViewModelScale(extract(s));
+            setViewModelScale(TransformConverter.NormalizeScaleValue(comp));
         }
 
         // Process X axis
         ProcessAxis(
             items,
             v => v.X,
-            (v, val) =>
-            {
-                v.X = val;
-                return v;
-            },
             value => this.ScaleX = value,
             indet => this.ScaleXIsIndeterminate = indet);
 
@@ -696,11 +646,6 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         ProcessAxis(
             items,
             v => v.Y,
-            (v, val) =>
-            {
-                v.Y = val;
-                return v;
-            },
             value => this.ScaleY = value,
             indet => this.ScaleYIsIndeterminate = indet);
 
@@ -708,12 +653,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         ProcessAxis(
             items,
             v => v.Z,
-            (v, val) =>
-            {
-                v.Z = val;
-                return v;
-            },
             value => this.ScaleZ = value,
             indet => this.ScaleZIsIndeterminate = indet);
     }
+
+    private sealed record TransformEditSession(
+        EditSessionToken Token,
+        IReadOnlyList<SceneNode> Nodes,
+        SceneDocumentCommandContext Context,
+        TransformEdit? LastEdit);
 }

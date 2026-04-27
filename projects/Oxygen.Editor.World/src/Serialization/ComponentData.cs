@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// Base data transfer object for game components (no ID, only name).
+/// Base data transfer object for game components.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(TransformData), "Transform")]
@@ -17,4 +17,10 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonDerivedType(typeof(DirectionalLightData), "DirectionalLight")]
 [JsonDerivedType(typeof(PointLightData), "PointLight")]
 [JsonDerivedType(typeof(SpotLightData), "SpotLight")]
-public abstract record ComponentData : NamedData;
+public abstract record ComponentData : NamedData
+{
+    /// <summary>
+    /// Gets the stable component identity.
+    /// </summary>
+    public Guid Id { get; init; } = Guid.NewGuid();
+}

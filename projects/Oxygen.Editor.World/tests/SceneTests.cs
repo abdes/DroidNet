@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Text;
 using AwesomeAssertions;
 using Moq;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -36,6 +39,68 @@ public class SceneTests
         _ = dto.RootNodes.Should().HaveCount(2);
         _ = dto.RootNodes[0].Name.Should().Be("Node 1");
         _ = dto.RootNodes[1].Name.Should().Be("Node 2");
+        _ = dto.Environment.Should().Be(new SceneEnvironmentData());
+    }
+
+    [TestMethod]
+    public async Task Deserialize_MissingEnvironmentField_LoadsDefaults()
+    {
+        const string json = """
+            {
+              "Id": "11111111-1111-1111-1111-111111111111",
+              "Name": "Legacy Scene",
+              "RootNodes": []
+            }
+            """;
+
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var serializer = new SceneSerializer(this.ExampleProject);
+
+        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = scene.Environment.Should().Be(new SceneEnvironmentData());
+    }
+
+    [TestMethod]
+    public async Task Environment_AllFields_RoundTripThroughJson()
+    {
+        var scene = new Scene(this.ExampleProject) { Name = "Environment Scene" };
+        var expected = new SceneEnvironmentData
+        {
+            AtmosphereEnabled = false,
+            SunNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            ExposureMode = ExposureMode.Manual,
+            ExposureCompensation = 1.5f,
+            ToneMapping = ToneMappingMode.Filmic,
+            BackgroundColor = new Vector3(0.2f, 0.3f, 0.4f),
+        };
+        scene.SetEnvironment(expected);
+
+        var serializer = new SceneSerializer(this.ExampleProject);
+        await using var stream = new MemoryStream();
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Position = 0;
+
+        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = restored.Environment.Should().Be(expected);
+    }
+
+    [TestMethod]
+    public async Task Environment_StaleSunNodeId_SurvivesJsonRoundTrip()
+    {
+        var staleSunNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var scene = new Scene(this.ExampleProject) { Name = "Stale Sun Scene" };
+        scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = staleSunNodeId });
+
+        var serializer = new SceneSerializer(this.ExampleProject);
+        await using var stream = new MemoryStream();
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Position = 0;
+
+        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = restored.Environment.SunNodeId.Should().Be(staleSunNodeId);
     }
 
     [TestMethod]

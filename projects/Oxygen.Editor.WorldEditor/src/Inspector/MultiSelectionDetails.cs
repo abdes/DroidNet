@@ -147,6 +147,15 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         this.LogRefreshedProperties(this.Name);
     }
 
+    /// <summary>
+    /// Refreshes the visible property-editor values from the current selected item collection.
+    /// </summary>
+    public void RefreshPropertyEditorValues()
+    {
+        this.RefreshOwnProperties();
+        this.UpdatePropertyEditorsValues();
+    }
+
     private void UpdatePropertyEditors()
     {
         var filteredEditors = this.FilterPropertyEditors();

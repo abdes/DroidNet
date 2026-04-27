@@ -196,6 +196,8 @@ public partial class VectorBox : Control
             if (this.numberBoxZ != null)
             {
                 this.numberBoxZ.Validate -= this.OnNumberBoxValidate;
+                this.numberBoxZ.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
+                this.numberBoxZ.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
             }
 
             this.numberBoxZ = this.GetTemplateChild(NumberBoxZPartName) as NumberBox;
@@ -206,6 +208,8 @@ public partial class VectorBox : Control
                 if (this.Dimension == 3)
                 {
                     this.numberBoxZ.Validate += this.OnNumberBoxValidate;
+                    this.numberBoxZ.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
+                    this.numberBoxZ.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
 
                     // Propagate logger factory to child NumberBox
                     this.numberBoxZ.LoggerFactory = this.LoggerFactory;
@@ -231,6 +235,8 @@ public partial class VectorBox : Control
             if (this.numberBoxX != null)
             {
                 this.numberBoxX.Validate -= this.OnNumberBoxValidate;
+                this.numberBoxX.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
+                this.numberBoxX.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
             }
 
             // Retrieve new NumberBox instances
@@ -240,6 +246,8 @@ public partial class VectorBox : Control
             if (this.numberBoxX != null)
             {
                 this.numberBoxX.Validate += this.OnNumberBoxValidate;
+                this.numberBoxX.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
+                this.numberBoxX.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
 
                 // Propagate logger factory to child NumberBox
                 this.numberBoxX.LoggerFactory = this.LoggerFactory;
@@ -256,6 +264,8 @@ public partial class VectorBox : Control
             if (this.numberBoxY != null)
             {
                 this.numberBoxY.Validate -= this.OnNumberBoxValidate;
+                this.numberBoxY.EditSessionStarted -= this.OnNumberBoxEditSessionStarted;
+                this.numberBoxY.EditSessionCompleted -= this.OnNumberBoxEditSessionCompleted;
             }
 
             // Retrieve new NumberBox instances
@@ -265,6 +275,8 @@ public partial class VectorBox : Control
             if (this.numberBoxY != null)
             {
                 this.numberBoxY.Validate += this.OnNumberBoxValidate;
+                this.numberBoxY.EditSessionStarted += this.OnNumberBoxEditSessionStarted;
+                this.numberBoxY.EditSessionCompleted += this.OnNumberBoxEditSessionCompleted;
 
                 // Propagate logger factory to child NumberBox
                 this.numberBoxY.LoggerFactory = this.LoggerFactory;

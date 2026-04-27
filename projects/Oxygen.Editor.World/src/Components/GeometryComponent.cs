@@ -134,6 +134,7 @@ public partial class GeometryComponent : GameComponent
 
         return new GeometryComponentData
         {
+            Id = this.Id,
             Name = this.Name,
             GeometryUri = this.Geometry.Uri.ToString(),
             OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),

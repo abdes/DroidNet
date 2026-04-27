@@ -45,6 +45,32 @@ public sealed record AssetPickerItem(
 public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerItem> Items);
 
 /// <summary>
+/// Represents a single entry shown in the material assignment picker.
+/// </summary>
+/// <param name="Name">The display name of the material assignment.</param>
+/// <param name="Uri">The material URI, or <see langword="null"/> for the explicit none assignment.</param>
+/// <param name="DisplayType">A short description of the material entry.</param>
+/// <param name="DisplayPath">The path shown in the UI for the material location.</param>
+/// <param name="Group">The group the material belongs to.</param>
+/// <param name="IsEnabled">Whether the material may be selected/used.</param>
+/// <param name="ThumbnailModel">An optional model used to render the material's thumbnail.</param>
+public sealed record MaterialPickerItem(
+    string Name,
+    Uri? Uri,
+    string DisplayType,
+    string DisplayPath,
+    AssetPickerGroup Group,
+    bool IsEnabled,
+    object? ThumbnailModel);
+
+/// <summary>
+/// Represents a named group of <see cref="MaterialPickerItem"/> instances shown in the picker.
+/// </summary>
+/// <param name="Key">The group key used for identification.</param>
+/// <param name="Items">The items that belong to the group.</param>
+public sealed record MaterialGroup(string Key, IReadOnlyList<MaterialPickerItem> Items);
+
+/// <summary>
 /// Lightweight header record used to represent a group header in UI lists.
 /// </summary>
 /// <param name="Title">The title to display for the header.</param>

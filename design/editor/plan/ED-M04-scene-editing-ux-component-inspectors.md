@@ -261,7 +261,7 @@ Implementation note:
 
 - ED-M04.2 code currently defines the command contracts, edit records,
   `EditSessionToken`, operation vocabulary, and persisted component identity.
-  Review acceptance is still required before starting ED-M04.3.
+  Review is complete; ED-M04.3 may start.
 
 ### ED-M04.3 - Scene Environment Domain And Serialization
 
@@ -290,6 +290,14 @@ Tasks:
 Exit:
 
 - Scene files can persist environment data before any UI is wired.
+
+Implementation note:
+
+- ED-M04.3 code adds `SceneEnvironmentData`, environment modes,
+  `SceneData.Environment`, command-owned `Scene.SetEnvironment`, source
+  generator registration, and serializer tests for missing-field defaults,
+  all-field round trip, and stale sun references. Review is complete; ED-M04.4
+  may start.
 
 ### ED-M04.4 - Live Sync Result Adapter
 
@@ -357,6 +365,17 @@ Exit:
 - Coalescer is implemented and tested at the `SceneEngineSync` layer; ED-M04.6
   inspector work consumes it without re-implementing it.
 
+Implementation note:
+
+- ED-M04.4 code adds typed `SyncOutcome` contracts, live-sync diagnostic
+  codes, runtime-readiness classification, non-throwing unsupported material
+  paths, environment sync aggregation with sun binding falling through light
+  sync where possible, and executable preview/terminal/cancel coalescer
+  methods on `ISceneEngineSync`. Tests cover not-running, faulted,
+  cancellation, world-null race, legacy unsupported material paths, and
+  preview throttling plus exactly one terminal sync delegate call. Review is
+  complete; ED-M04.5 may start.
+
 ### ED-M04.5 - Command Implementation For Component Edits
 
 Goal: make component edits dirty, undoable, validated, and diagnosable.
@@ -417,6 +436,28 @@ Exit:
 
 - Component mutation no longer depends on direct inspector VM mutation for the
   ED-M04-supported fields.
+
+Implementation note:
+
+- `SceneDocumentCommandService` implements the ED-M04 component/environment
+  command set for one-shot and committed sessions: Transform, Geometry,
+  Material slot, PerspectiveCamera, DirectionalLight, Environment,
+  AddComponent, and RemoveComponent.
+- Geometry asset clear is rejected because `GeometryComponent` cannot dehydrate
+  without a geometry reference; users detach geometry by removing the component.
+- Material slot clear persists the `MaterialsSlot` sentinel URI so the authored
+  slot shape remains stable for ED-M05.
+- Live-sync outcomes are reduced per `live-engine-sync.md`: accepted publishes
+  no result; skipped/unsupported publish warnings; rejected/failed publish
+  partial-success results; cancelled publishes cancelled/info.
+- Interactive edit-session coalescing remains the ED-M04.6 host migration
+  responsibility. ED-M04.5 no-ops uncommitted sessions so preview samples do
+  not create false history, dirty state, or terminal sync.
+- Targeted tests cover locked transform removal denial, geometry clear
+  rejection, material-slot sentinel persistence, directional sun exclusivity,
+  and directional-light component add behavior.
+- Subagent review completed; the only remaining re-review item was a stale
+  `GeometryEdit` XML comment, now fixed. ED-M04.6 may start.
 
 ### ED-M04.6 - Inspector Host Migration And Edit Sessions
 

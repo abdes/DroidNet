@@ -136,6 +136,7 @@ public partial class NumberBox : Control
 
         this.Unloaded += (_, _) =>
         {
+            this.CompleteActiveEditSessionOnUnload();
             this.defaultCursor.Dispose();
             this.dragCursor.Dispose();
         };
@@ -169,6 +170,7 @@ public partial class NumberBox : Control
             oldValueTextBlock.PointerPressed -= this.OnValueTextBlockPointerPressed;
             oldValueTextBlock.PointerMoved -= this.OnValueTextBlockPointerMoved;
             oldValueTextBlock.PointerReleased -= this.OnValueTextBlockPointerReleased;
+            oldValueTextBlock.PointerCaptureLost -= this.OnValueTextBlockPointerCaptureLost;
             oldValueTextBlock.PointerWheelChanged -= this.OnValueTextBlockPointerWheelChanged;
             oldValueTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldValueTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
@@ -185,10 +187,27 @@ public partial class NumberBox : Control
         this.valueTextBlock.PointerPressed += this.OnValueTextBlockPointerPressed;
         this.valueTextBlock.PointerMoved += this.OnValueTextBlockPointerMoved;
         this.valueTextBlock.PointerReleased += this.OnValueTextBlockPointerReleased;
+        this.valueTextBlock.PointerCaptureLost += this.OnValueTextBlockPointerCaptureLost;
         this.valueTextBlock.PointerWheelChanged += this.OnValueTextBlockPointerWheelChanged;
         this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
         this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
         this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
+    }
+
+    private void CompleteActiveEditSessionOnUnload()
+    {
+        if (this.IsMouseCaptured)
+        {
+            this.capturePoint = null;
+            this.valueTextBlock?.ReleasePointerCaptures();
+            this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
+        }
+
+        if (this.isEditing)
+        {
+            this.isEditing = false;
+            this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Cancel);
+        }
     }
 
     private void SetupEditTextBoxPart()
@@ -268,6 +287,7 @@ public partial class NumberBox : Control
         }
 
         this.capturePoint = e.GetCurrentPoint(this.valueTextBlock).Position;
+        this.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
         this.UpdateInputCursor();
         this.UpdateVisualState();
         e.Handled = true;
@@ -321,7 +341,9 @@ public partial class NumberBox : Control
         var increment = this.CalculateIncrement(Math.Sign(delta) * 10, e.KeyModifiers);
         var newValue = this.NumberValue + increment;
 
+        this.OnEditSessionStarted(NumberBoxEditInteractionKind.MouseWheel);
         this.ApplyNewValueIfValid(newValue);
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit);
         e.Handled = true;
     }
 
@@ -361,11 +383,26 @@ public partial class NumberBox : Control
             return;
         }
 
-        this.valueTextBlock.ReleasePointerCapture(e.Pointer);
         this.capturePoint = null;
+        this.valueTextBlock.ReleasePointerCapture(e.Pointer);
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         this.UpdateInputCursor();
         this.UpdateVisualState();
         e.Handled = true;
+    }
+
+    private void OnValueTextBlockPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        this.LogPointerEvent("CaptureLost");
+        if (!this.IsMouseCaptured)
+        {
+            return;
+        }
+
+        this.capturePoint = null;
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
+        this.UpdateInputCursor();
+        this.UpdateVisualState();
     }
 
     private void UpdateInputCursor()
@@ -407,6 +444,7 @@ public partial class NumberBox : Control
 
         this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
         this.isEditing = true;
+        this.OnEditSessionStarted(NumberBoxEditInteractionKind.Text);
 
         this.UpdateVisualState();
 
@@ -443,6 +481,7 @@ public partial class NumberBox : Control
             }
         }
 
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Commit);
         this.EndEdit();
     }
 
@@ -459,6 +498,7 @@ public partial class NumberBox : Control
         }
 
         this.EndEdit();
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Cancel);
 
         this.LogEditCanceled(wasIndeterminate);
     }

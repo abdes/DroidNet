@@ -28,6 +28,19 @@
 
 namespace {
 
+struct GeneratedGeometryCache {
+  std::mutex mutex;
+  std::unordered_map<oxygen::data::AssetKey,
+    std::shared_ptr<const oxygen::data::GeometryAsset>>
+    entries;
+};
+
+auto GetGeneratedGeometryCache() -> GeneratedGeometryCache&
+{
+  static GeneratedGeometryCache cache;
+  return cache;
+}
+
 auto MakeDeterministicAssetKey(std::string_view seed) -> oxygen::data::AssetKey
 {
   return oxygen::data::AssetKey::FromVirtualPath(seed);
@@ -36,14 +49,10 @@ auto MakeDeterministicAssetKey(std::string_view seed) -> oxygen::data::AssetKey
 auto TryGetCachedGeneratedGeometry(const oxygen::data::AssetKey& key)
   -> std::shared_ptr<const oxygen::data::GeometryAsset>
 {
-  static std::mutex cache_mutex;
-  static std::unordered_map<oxygen::data::AssetKey,
-    std::weak_ptr<const oxygen::data::GeometryAsset>>
-    cache;
-
-  std::scoped_lock lock(cache_mutex);
-  if (const auto it = cache.find(key); it != cache.end()) {
-    return it->second.lock();
+  auto& cache = GetGeneratedGeometryCache();
+  std::scoped_lock lock(cache.mutex);
+  if (const auto it = cache.entries.find(key); it != cache.entries.end()) {
+    return it->second;
   }
   return nullptr;
 }
@@ -51,13 +60,9 @@ auto TryGetCachedGeneratedGeometry(const oxygen::data::AssetKey& key)
 auto CacheGeneratedGeometry(const oxygen::data::AssetKey& key,
   const std::shared_ptr<const oxygen::data::GeometryAsset>& geometry) -> void
 {
-  static std::mutex cache_mutex;
-  static std::unordered_map<oxygen::data::AssetKey,
-    std::weak_ptr<const oxygen::data::GeometryAsset>>
-    cache;
-
-  std::scoped_lock lock(cache_mutex);
-  cache[key] = geometry;
+  auto& cache = GetGeneratedGeometryCache();
+  std::scoped_lock lock(cache.mutex);
+  cache.entries[key] = geometry;
 }
 
 } // namespace
