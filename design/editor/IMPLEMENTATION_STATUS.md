@@ -62,9 +62,9 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Prepare `ED-M04` component inspector and scene editing UX LLD review and
-   detailed plan.
+1. Complete review and acceptance for `ED-M04.2 - Command Contracts, Edit
+   Records, And Operation Vocabulary`; do not start `ED-M04.3` until accepted.
+2. Validate or record the supported single live viewport behavior for `ED-M02`.
 3. Record the `ED-M02` validation ledger row only after visual validation
    passes.
 4. Keep this ledger synchronized whenever a milestone or detailed plan changes.
@@ -236,7 +236,7 @@ Exit evidence required:
 
 ### ED-M04 - Scene Editing UX And Component Inspectors
 
-Status: `planned`
+Status: `active`
 
 Trace: `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-005`, `REQ-007`,
 `REQ-008`, `REQ-009`, `REQ-022`, `REQ-024`, `REQ-026`, `REQ-037`;
@@ -245,10 +245,15 @@ Trace: `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-005`, `REQ-007`,
 Outcome: V0.1 scene components except real material asset authoring have
 production-ready inspectors, defaults, validation, and live-sync requests.
 
-- [ ] Required LLDs are reviewed:
+- [x] Required LLDs are reviewed:
       `property-inspector`, `environment-authoring`, `settings-architecture`,
       `live-engine-sync`, `runtime-integration`.
-- [ ] Detailed `ED-M04` implementation plan exists.
+- [x] Detailed `ED-M04` implementation plan exists.
+- [x] `ED-M04.1` baseline audit and LLD lock is complete; direct inspector
+      mutation paths, sync throw/log-only paths, and test hosts are recorded in
+      the detailed plan.
+- [ ] `ED-M04.2` command contracts, edit records, operation vocabulary, and
+      persisted component identity are under review.
 - [ ] Transform, Geometry, PerspectiveCamera, DirectionalLight, and
       Environment have scoped editing behavior.
 - [ ] Geometry components expose a material assignment/override slot that
@@ -437,11 +442,12 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `active` | ED-M04.2 contracts, vocabulary, and component identity are under review; do not start ED-M04.3 until accepted. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
-| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `planned` | ED-M03 command foundation is covered by `ED-M03-authoring-foundation.md`; inspector/sync details move to ED-M04 planning. |
+| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
 | [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | `planned` | Reconcile with `content-pipeline.md` and `project-services.md`. |
-| [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | `planned` | Reconcile with `settings-architecture.md` and `environment-authoring.md`. |
+| [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | `planned` | ED-M04 settings/environment scope is covered by the ED-M04 plan; re-review for ED-M07 project cook/content-root settings. |
 | [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | `planned` | Reconcile with `diagnostics-operation-results.md`. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
 

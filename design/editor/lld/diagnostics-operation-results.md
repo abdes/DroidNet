@@ -208,6 +208,14 @@ ED-M03 prefix allocations:
 | `OXE.DOCUMENT.*` | Scene document open/save lifecycle. |
 | `OXE.LIVESYNC.*` | Command-triggered live scene sync failures. |
 
+ED-M05 prefix allocations:
+
+| Prefix | Owner |
+| --- | --- |
+| `OXE.MATERIAL.*` | Material editor scalar authoring and material-document validation. |
+| `OXE.ASSETID.*` | Content browser / asset picker identity and resolve diagnostics. |
+| `OXE.CONTENTPIPELINE.*` | Content-pipeline orchestration diagnostics surfaced by material workflows. |
+
 ### Failure Domain
 
 Domains are stable vocabulary, not class names.
@@ -232,7 +240,9 @@ Domains are stable vocabulary, not class names.
 | `Document` | ED-M03 | Document save/open workflow. |
 | `SceneAuthoring` | ED-M03 | Scene commands/property editing. |
 | `LiveSync` | ED-M03 | Live scene sync. |
-| `ContentPipeline` | ED-M07 | Content pipeline orchestration. |
+| `MaterialAuthoring` | ED-M05 | Material editor scalar authoring and descriptor validation. |
+| `AssetIdentity` | ED-M05 | Content browser/picker asset identity and resolve state. |
+| `ContentPipeline` | ED-M05 material cook slice; expanded ED-M07 | Content pipeline orchestration. |
 | `AssetImport` | ED-M05 | Asset import. |
 | `AssetCook` | ED-M07 | Cook execution. |
 | `StandaloneRuntime` | ED-M08 | Standalone load validation. |
