@@ -19,6 +19,7 @@ implementation-ready workstream.
 | [VTX-M04D.6-aerial-perspective-parity.md](VTX-M04D.6-aerial-perspective-parity.md) | Detailed remediation plan for UE5.7 aerial perspective parity proof. |
 | [VTX-M05A-diagnostics-product-service.md](VTX-M05A-diagnostics-product-service.md) | Detailed implementation plan for the diagnostics product-service milestone and its runtime/tooling boundary. |
 | [VTX-M05D-conventional-shadow-parity.md](VTX-M05D-conventional-shadow-parity.md) | Detailed implementation plan for CSM parity/stability remediation followed by local-light conventional shadow expansion. |
+| [VTX-M06A-multi-view-proof-closeout.md](VTX-M06A-multi-view-proof-closeout.md) | Detailed implementation plan for multi-view proof closeout: per-view plans, state handles, serialized view-family execution, scene-texture leases, data-driven surface composition, auxiliary views, overlays, and runtime/capture proof. |
 
 ## Planning Rule
 

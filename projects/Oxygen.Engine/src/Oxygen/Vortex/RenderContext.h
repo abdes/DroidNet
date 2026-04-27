@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -86,6 +87,9 @@ struct RenderContext {
 
   struct ViewExecutionEntry {
     oxygen::ViewId view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     bool is_scene_view { false };
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
@@ -106,6 +110,12 @@ struct RenderContext {
   struct ViewSpecific {
     oxygen::ViewId view_id { kInvalidViewId };
     oxygen::ViewId exposure_view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    CompositionView::ViewStateHandle exposure_view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;

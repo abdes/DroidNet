@@ -296,6 +296,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  PreviousViewHistoryCache
+  SOURCES
+    "Internal/PreviousViewHistoryCache_test.cpp"
+)
+
+m_gtest_program(
   RendererFacadePresets
   SOURCES
     "Fakes/Graphics.h"

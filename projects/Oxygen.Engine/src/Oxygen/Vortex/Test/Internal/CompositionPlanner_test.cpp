@@ -89,6 +89,21 @@ auto MakeInputs(const ViewId published_view_id) -> FramePlanBuilder::Inputs
   };
 }
 
+auto MakeMappedInputs() -> FramePlanBuilder::Inputs
+{
+  static const oxygen::vortex::ToneMapPassConfig tone_map_config {};
+  static const oxygen::vortex::ShaderPassConfig shader_pass_config {};
+  return FramePlanBuilder::Inputs {
+    .frame_settings = {},
+    .pending_auto_exposure_reset = std::nullopt,
+    .tone_map_pass_config = observer_ptr { &tone_map_config },
+    .shader_pass_config = observer_ptr { &shader_pass_config },
+    .resolve_published_view_id = [](const ViewId id) {
+      return ViewId { id.get() + 1000U };
+    },
+  };
+}
+
 void PrepareView(CompositionViewImpl& view_impl, const CompositionView& desc,
   FakeGraphics& graphics)
 {
@@ -326,6 +341,124 @@ TEST(CompositionPlannerTest, DepthPrepassDebugModesForceNeutralToneMapping)
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
   const auto& plan = builder.GetFrameViewPackets().front().Plan();
   EXPECT_EQ(plan.GetToneMapPolicy(), ToneMapPolicy::kNeutral);
+}
+
+TEST(CompositionPlannerTest, PerViewRenderSettingsDoNotLeakBetweenPackets)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView first = CompositionView::ForScene(
+    ViewId { 120U }, MakeView(), oxygen::scene::SceneNode {});
+  first.render_settings.render_mode = RenderMode::kWireframe;
+  first.render_settings.shader_debug_mode = ShaderDebugMode::kSceneDepthRaw;
+
+  CompositionView second = CompositionView::ForScene(
+    ViewId { 121U }, MakeView(), oxygen::scene::SceneNode {});
+  second.render_settings.render_mode = RenderMode::kSolid;
+  second.render_settings.shader_debug_mode = ShaderDebugMode::kDisabled;
+
+  CompositionViewImpl first_impl;
+  CompositionViewImpl second_impl;
+  PrepareView(first_impl, first, *graphics);
+  PrepareView(second_impl, second, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &first_impl, &second_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeMappedInputs());
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 2U);
+  const auto& first_plan = builder.GetFrameViewPackets()[0].Plan();
+  const auto& second_plan = builder.GetFrameViewPackets()[1].Plan();
+  EXPECT_EQ(first_plan.EffectiveRenderMode(), RenderMode::kWireframe);
+  EXPECT_EQ(
+    first_plan.EffectiveShaderDebugMode(), ShaderDebugMode::kSceneDepthRaw);
+  EXPECT_EQ(first_plan.GetDepthPrePassMode(), DepthPrePassMode::kDisabled);
+  EXPECT_EQ(second_plan.EffectiveRenderMode(), RenderMode::kSolid);
+  EXPECT_EQ(
+    second_plan.EffectiveShaderDebugMode(), ShaderDebugMode::kDisabled);
+  EXPECT_EQ(
+    second_plan.GetDepthPrePassMode(), DepthPrePassMode::kOpaqueAndMasked);
+}
+
+TEST(CompositionPlannerTest, PerViewStateHandleIsCopiedIntoFramePacket)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView view = CompositionView::ForScene(
+    ViewId { 122U }, MakeView(), oxygen::scene::SceneNode {});
+  view.view_state_handle = CompositionView::ViewStateHandle { 77U };
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 222U }));
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  EXPECT_EQ(builder.GetFrameViewPackets().front().ViewStateHandle(),
+    CompositionView::ViewStateHandle { 77U });
+}
+
+TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView view = CompositionView::ForScene(
+    ViewId { 123U }, MakeView(), oxygen::scene::SceneNode {});
+  view.view_kind = CompositionView::ViewKind::kAuxiliary;
+  view.feature_mask.bits = CompositionView::ViewFeatureBits {
+    CompositionView::ViewFeatureMask::kSceneLighting
+    | CompositionView::ViewFeatureMask::kDiagnostics
+  };
+  view.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
+    .surface_id = CompositionView::SurfaceRouteId { 9U },
+    .destination = MakeView().viewport,
+    .blend_mode = CompositionView::SurfaceRouteBlendMode::kCopy,
+  });
+  view.overlay_policy.lanes = { CompositionView::OverlayLane::kWorldDepthAware,
+    CompositionView::OverlayLane::kSurfaceScreen };
+  view.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
+    .id = CompositionView::AuxOutputId { 5U },
+    .kind = CompositionView::AuxOutputKind::kColorTexture,
+    .debug_name = "Aux.Color",
+  });
+  view.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
+    .id = CompositionView::AuxOutputId { 6U },
+    .required = false,
+  });
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 223U }));
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& packet = builder.GetFrameViewPackets().front();
+  EXPECT_EQ(packet.Kind(), CompositionView::ViewKind::kAuxiliary);
+  EXPECT_TRUE(packet.FeatureMask().Has(
+    CompositionView::ViewFeatureMask::kSceneLighting));
+  EXPECT_FALSE(
+    packet.FeatureMask().Has(CompositionView::ViewFeatureMask::kShadows));
+  ASSERT_EQ(packet.SurfaceRoutes().size(), 1U);
+  EXPECT_EQ(packet.SurfaceRoutes()[0].surface_id,
+    CompositionView::SurfaceRouteId { 9U });
+  ASSERT_EQ(packet.GetOverlayPolicy().lanes.size(), 2U);
+  EXPECT_EQ(packet.GetOverlayPolicy().lanes[0],
+    CompositionView::OverlayLane::kWorldDepthAware);
+  ASSERT_EQ(packet.ProducedAuxOutputs().size(), 1U);
+  EXPECT_EQ(packet.ProducedAuxOutputs()[0].id,
+    CompositionView::AuxOutputId { 5U });
+  ASSERT_EQ(packet.ConsumedAuxOutputs().size(), 1U);
+  EXPECT_FALSE(packet.ConsumedAuxOutputs()[0].required);
 }
 
 } // namespace

@@ -2151,11 +2151,12 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
 
 void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
-void SceneRenderer::RemoveViewState(const ViewId view_id)
+void SceneRenderer::RemoveViewState(const ViewId view_id,
+  const CompositionView::ViewStateHandle view_state_handle)
 {
   InvalidatePublishedViewFrameBindings();
   if (post_process_ != nullptr) {
-    post_process_->RemoveViewState(view_id);
+    post_process_->RemoveViewState(view_id, view_state_handle);
   }
 }
 
