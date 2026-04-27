@@ -7,10 +7,13 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -30,12 +33,30 @@ public:
 
   OXGN_VRTX_API void PlanCompositingTasks();
   OXGN_VRTX_API auto BuildCompositionSubmission(
-    std::shared_ptr<graphics::Framebuffer> final_output)
+    std::shared_ptr<graphics::Framebuffer> final_output,
+    CompositionView::SurfaceRouteId surface_id
+    = CompositionView::kDefaultSurfaceRoute)
     -> oxygen::vortex::CompositionSubmission;
 
 private:
+  struct CompositionLayerPlan {
+    CompositionView::SurfaceRouteId surface_id {
+      CompositionView::kDefaultSurfaceRoute
+    };
+    ViewId source_view_id { kInvalidViewId };
+    std::shared_ptr<graphics::Texture> source_texture {};
+    ViewPort destination {};
+    CompositionView::SurfaceRouteBlendMode blend_mode {
+      CompositionView::SurfaceRouteBlendMode::kAlphaBlend
+    };
+    CompositionView::ZOrder z_order {};
+    std::uint32_t submission_order { 0U };
+    float opacity { 1.0F };
+    std::string debug_name {};
+  };
+
   observer_ptr<FramePlanBuilder> frame_plan_builder_;
-  CompositingTaskList planned_composition_tasks;
+  std::vector<CompositionLayerPlan> planned_layers_;
 };
 
 } // namespace oxygen::vortex::internal

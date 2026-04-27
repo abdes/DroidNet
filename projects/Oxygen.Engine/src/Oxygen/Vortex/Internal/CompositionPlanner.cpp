@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cmath>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Vortex/Internal/CompositionPlanner.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
@@ -13,14 +18,28 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
-  auto ShouldCopyPrimarySceneView(const FrameViewPacket& packet) -> bool
+  constexpr auto kViewportEpsilon = 0.5F;
+
+  auto ResolveRouteDestination(
+    const CompositionView::ViewSurfaceRoute& route, const FrameViewPacket& packet)
+    -> ViewPort
   {
-    const auto& view = packet.View();
-    const auto& desc = view.GetDescriptor();
-    return packet.Plan().Intent() == ViewRenderIntent::kSceneAndComposite
-      && desc.camera.has_value()
-      && desc.z_order == CompositionView::kZOrderScene
-      && packet.GetCompositeOpacity() >= 1.0F;
+    if (route.destination.IsValid()) {
+      return route.destination;
+    }
+    return packet.GetCompositeViewport();
+  }
+
+  auto ViewportCoversTarget(
+    const ViewPort& viewport, const graphics::Texture& target) -> bool
+  {
+    const auto& desc = target.GetDescriptor();
+    return std::abs(viewport.top_left_x) <= kViewportEpsilon
+      && std::abs(viewport.top_left_y) <= kViewportEpsilon
+      && std::abs(viewport.width - static_cast<float>(desc.width))
+        <= kViewportEpsilon
+      && std::abs(viewport.height - static_cast<float>(desc.height))
+        <= kViewportEpsilon;
   }
 
 } // namespace
@@ -30,34 +49,61 @@ CompositionPlanner::~CompositionPlanner() = default;
 void CompositionPlanner::PlanCompositingTasks()
 {
   DCHECK_NOTNULL_F(frame_plan_builder_.get());
-  planned_composition_tasks.clear();
+  planned_layers_.clear();
   const auto& frame_view_packets = frame_plan_builder_->GetFrameViewPackets();
-  planned_composition_tasks.reserve(frame_view_packets.size());
+  planned_layers_.reserve(frame_view_packets.size());
   for (const auto& packet : frame_view_packets) {
     if (!packet.HasCompositeTexture()) {
       continue;
     }
-    if (ShouldCopyPrimarySceneView(packet)) {
-      const auto published_view_id = packet.PublishedViewId();
-      DLOG_F(2,
-        "scene view '{}' planned as copy (published_view_id={} opacity={})",
-        packet.View().GetDescriptor().name, published_view_id.get(),
-        packet.GetCompositeOpacity());
-      planned_composition_tasks.push_back(CompositingTask::MakeCopy(
-        published_view_id, packet.GetCompositeViewport()));
-      continue;
-    }
+    const auto& desc = packet.View().GetDescriptor();
+    const auto append_layer
+      = [this, &packet, &desc](const CompositionView::ViewSurfaceRoute& route) {
+          const auto surface_id = route.surface_id;
+          const auto layer_index = planned_layers_.size();
+          planned_layers_.push_back(CompositionLayerPlan {
+            .surface_id = surface_id,
+            .source_view_id = packet.PublishedViewId(),
+            .source_texture = packet.GetCompositeTexture(),
+            .destination = ResolveRouteDestination(route, packet),
+            .blend_mode = route.blend_mode,
+            .z_order = desc.z_order,
+            .submission_order = packet.View().GetSubmissionOrder(),
+            .opacity = packet.GetCompositeOpacity(),
+            .debug_name = fmt::format("Vortex.Surface[{}].Layer[{}:{}:{}]",
+              surface_id.get(), desc.name, packet.PublishedViewId().get(),
+              layer_index),
+          });
+        };
 
-    DLOG_F(2, "view '{}' planned as texture blend (opacity={})",
-      packet.View().GetDescriptor().name, packet.GetCompositeOpacity());
-    planned_composition_tasks.push_back(
-      CompositingTask::MakeTextureBlend(packet.GetCompositeTexture(),
-        packet.GetCompositeViewport(), packet.GetCompositeOpacity()));
+    if (packet.SurfaceRoutes().empty()) {
+      append_layer(CompositionView::ViewSurfaceRoute {
+        .surface_id = CompositionView::kDefaultSurfaceRoute,
+        .destination = packet.GetCompositeViewport(),
+        .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+      });
+    } else {
+      for (const auto& route : packet.SurfaceRoutes()) {
+        append_layer(route);
+      }
+    }
   }
+
+  std::ranges::stable_sort(planned_layers_,
+    [](const CompositionLayerPlan& lhs, const CompositionLayerPlan& rhs) {
+      if (lhs.surface_id != rhs.surface_id) {
+        return lhs.surface_id.get() < rhs.surface_id.get();
+      }
+      if (lhs.z_order.get() != rhs.z_order.get()) {
+        return lhs.z_order.get() < rhs.z_order.get();
+      }
+      return lhs.submission_order < rhs.submission_order;
+    });
 }
 
 auto CompositionPlanner::BuildCompositionSubmission(
-  std::shared_ptr<graphics::Framebuffer> final_output)
+  std::shared_ptr<graphics::Framebuffer> final_output,
+  const CompositionView::SurfaceRouteId surface_id)
   -> oxygen::vortex::CompositionSubmission
 {
   if (!final_output) {
@@ -75,8 +121,35 @@ auto CompositionPlanner::BuildCompositionSubmission(
   }
 
   oxygen::vortex::CompositionSubmission submission;
+  submission.surface_id = surface_id;
+  submission.debug_name = fmt::format("Vortex.Surface[{}].Composite",
+    surface_id.get());
   submission.composite_target = std::move(final_output);
-  submission.tasks = planned_composition_tasks;
+  submission.tasks.reserve(planned_layers_.size());
+
+  auto& target = *target_desc.color_attachments[0].texture;
+  const auto can_fast_copy_layer = [&target](const auto& layer) {
+    return layer.opacity >= 1.0F && layer.source_texture
+      && layer.source_texture->GetDescriptor().format
+        == target.GetDescriptor().format
+      && ViewportCoversTarget(layer.destination, target);
+  };
+  for (const auto& layer : planned_layers_) {
+    if (layer.surface_id != surface_id || layer.opacity <= 0.0F) {
+      continue;
+    }
+
+    if (layer.blend_mode == CompositionView::SurfaceRouteBlendMode::kCopy
+      || can_fast_copy_layer(layer)) {
+      submission.tasks.push_back(CompositingTask::MakeCopy(
+        layer.source_view_id, layer.destination, layer.debug_name));
+      continue;
+    }
+
+    submission.tasks.push_back(CompositingTask::MakeTextureBlend(
+      layer.source_texture, layer.destination, layer.opacity,
+      layer.debug_name));
+  }
   return submission;
 }
 
