@@ -55,6 +55,8 @@ Current execution focus:
       validation.
 - [x] Validate `ED-M03` manually for quick-add, selection, dirty/save,
       undo/redo, save/reopen, and visible diagnostics.
+- [x] Land and manually validate `ED-M04` scene editing UX and component
+      inspectors for supported V0.1 component fields.
 
 `ED-M02` may close in parallel with `ED-M03` LLD review and detailed planning.
 `ED-M03` implementation may not rely on live preview as validation evidence
@@ -62,7 +64,8 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Continue `ED-M04.6 - Inspector Host Migration And Edit Sessions`.
+1. Prepare `ED-M05 - Scalar Material Authoring`: review/update the required
+   LLDs and produce the detailed implementation plan before coding starts.
 2. Validate or record the supported single live viewport behavior for `ED-M02`.
 3. Record the `ED-M02` validation ledger row only after visual validation
    passes.
@@ -235,7 +238,7 @@ Exit evidence required:
 
 ### ED-M04 - Scene Editing UX And Component Inspectors
 
-Status: `active`
+Status: `validated`
 
 Trace: `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-005`, `REQ-007`,
 `REQ-008`, `REQ-009`, `REQ-022`, `REQ-024`, `REQ-026`, `REQ-037`;
@@ -269,16 +272,16 @@ production-ready inspectors, defaults, validation, and live-sync requests.
       and picking still close in `ED-M05`.
 - [x] Component edit command layer uses services and `ISceneEngineSync`, not
       direct interop.
-- [ ] Inspector host view models route ED-M04-supported fields through the
+- [x] Inspector host view models route ED-M04-supported fields through the
       command service instead of direct mutation.
-- [ ] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
+- [x] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
       DirectionalLight, Environment, and material slot editing end to end.
-- [ ] Component edits persist through save/reopen from the migrated inspector
+- [x] Component edits persist through save/reopen from the migrated inspector
       UI.
 
 Exit evidence required:
 
-- [ ] One `ED-M04` validation ledger row records component editor coverage,
+- [x] One `ED-M04` validation ledger row records component editor coverage,
       settings/environment behavior, persistence, and live preview readiness.
 
 ### ED-M05 - Scalar Material Authoring
@@ -456,7 +459,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
-| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `active` | ED-M04.5 reviewed; continue ED-M04.6 inspector host migration and edit sessions. |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `validated` | No further action for ED-M04. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
@@ -476,7 +479,7 @@ checklist or detailed plan tracker instead.
 | `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
 | `ED-M02` | `pending` | - | Not validated. |
 | `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
-| `ED-M04` | `pending` | - | Not validated. |
+| `ED-M04` | `validated` | 2026-04-27 | User manually validated ED-M04 component inspector scenarios after fixes: transform undo/redo field refresh, geometry asset switching, material slot UI, camera/light/default inspector behavior, environment/runtime setting behavior, and Geometry component deletion. Final fix repaired empty/duplicate component IDs during scene hydration so legacy Vortex scene Geometry deletion no longer resolves to locked Transform. MSBuild passed for Oxygen.Editor.World.Tests, Oxygen.Editor.WorldEditor.SceneExplorer.Tests, and Oxygen.Editor.App. |
 | `ED-M05` | `pending` | - | Not validated. |
 | `ED-M06` | `pending` | - | Not validated. |
 | `ED-M07` | `pending` | - | Not validated. |
