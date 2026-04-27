@@ -444,7 +444,7 @@ Rollback/replan trigger:
 
 ### Slice D - Scene Texture Lease Pool
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -486,6 +486,34 @@ The slice-D lease-pool tests must include a small N=10 frame harness with a
 warmup window and assert that allocation count after warmup equals the expected
 pool size for the observed descriptor keys. This local metric catches churn
 before the full slice-H runtime proof exists.
+
+Current evidence:
+
+- Implemented `SceneTextureLeaseKey`, `SceneTextureLease`, and
+  `SceneTextureLeasePool` as a Vortex-native descriptor-keyed owner for concrete
+  `SceneTextures` families. The key covers the current concrete allocation
+  contract plus M06A placeholders for render scale, HDR/debug/editor primitive
+  requirements, depth convention, and queue affinity.
+- `SceneRenderer::RenderViewFamily` now acquires an exclusive lease per
+  serialized scene view, routes stage execution through the leased
+  `SceneTextures` family, extracts/publishes products before the lease leaves
+  scope, and preserves the public `GetSceneTextures()` inspection contract by
+  exposing the most recent rendered family.
+- Added focused `SceneTextureLeasePool.Tests` coverage for same-key reuse,
+  simultaneous same-key separation, explicit exhaustion, queue-affinity keying,
+  and a 10-frame two-key warmup harness proving zero allocations after the
+  warmup window.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneTextureLeasePool.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(SceneTextures|SceneTextureLeasePool|SceneRendererPublication|SceneRendererDeferredCore)" --output-on-failure`
+  with 4/4 matched targets passing; cursor-write gate found no production
+  writes outside `PerViewScope`; RenderScene Debug build passed; RenderScene
+  4-frame smoke exited 0; and `git diff --check` passed with line-ending
+  warnings only.
+- Remaining VTX-M06A gap: E-I are not implemented; data-driven surface
+  composition, auxiliary graph, overlays, runtime proof scripts,
+  CDB/debug-layer audit, RenderDoc scripted proof, 60-frame allocation-churn
+  proof, and final closure remain open.
 
 Rollback/replan trigger:
 

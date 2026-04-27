@@ -20,6 +20,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -243,6 +244,10 @@ private:
   OXGN_VRTX_API void ResetExtractArtifacts();
   OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
   OXGN_VRTX_API void ResetPerViewSceneProducts();
+  OXGN_VRTX_API auto ActiveSceneTextures() -> SceneTextures&;
+  OXGN_VRTX_NDAPI auto ActiveSceneTextures() const -> const SceneTextures&;
+  OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(
+    const RenderContext& ctx) const -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
@@ -264,6 +269,9 @@ private:
   Renderer& renderer_;
   Graphics& gfx_;
   SceneTextures scene_textures_;
+  SceneTextureLeasePool scene_texture_pool_;
+  SceneTextures* active_scene_textures_ { nullptr };
+  SceneTextures* inspected_scene_textures_ { nullptr };
   SceneTextureSetupMode setup_mode_ {};
   SceneTextureBindings scene_texture_bindings_ {};
   SceneTextureExtracts scene_texture_extracts_ {};
