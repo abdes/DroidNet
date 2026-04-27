@@ -492,7 +492,9 @@ public:
   OXGN_VRTX_API auto UpsertPublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id,
     engine::ViewContext view,
-    std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
+    std::optional<ShadingMode> shading_mode_override = std::nullopt,
+    CompositionView::ViewStateHandle view_state_handle
+    = CompositionView::kInvalidViewStateHandle) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   auto GetRigidTransformHistoryCache() noexcept
@@ -624,6 +626,16 @@ private:
     ViewId published_view_id { kInvalidViewId };
     frame::SequenceNumber last_seen_frame { 0U };
     std::optional<ShadingMode> shading_mode_override;
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+  };
+
+  struct DetachedPublishedRuntimeViewState {
+    ViewId published_view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
   };
 
   static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {
@@ -637,8 +649,11 @@ private:
     bool prefer_composite_source) const -> void;
   [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
+  [[nodiscard]] auto ResolvePublishedRuntimeViewStateHandle(
+    ViewId published_view_id) const noexcept -> CompositionView::ViewStateHandle;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
-  [[nodiscard]] auto BuildViewHistoryFrameBindings(ViewId view_id,
+  [[nodiscard]] auto BuildViewHistoryFrameBindings(
+    CompositionView::ViewStateHandle view_state_handle,
     const ResolvedView& view, observer_ptr<const scene::Scene> scene)
     -> ViewHistoryFrameBindings;
   auto EnsureSceneRenderer(const CompositionView* composition_view = nullptr)
@@ -650,7 +665,8 @@ private:
   auto RefreshCurrentViewFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;
-  auto DetachPublishedRuntimeViewState(ViewId intent_view_id) -> ViewId;
+  auto DetachPublishedRuntimeViewState(ViewId intent_view_id)
+    -> DetachedPublishedRuntimeViewState;
   auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;

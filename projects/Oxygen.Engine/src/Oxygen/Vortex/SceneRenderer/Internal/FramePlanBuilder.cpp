@@ -45,11 +45,7 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
   frame_want_auto_exposure_ = inputs.tone_map_pass_config
     && inputs.tone_map_pass_config->exposure_mode
       == engine::ExposureMode::kAuto;
-  frame_render_mode_ = inputs.frame_settings.render_mode;
   frame_wire_color_ = inputs.frame_settings.wire_color;
-  frame_shader_debug_mode_ = inputs.shader_pass_config
-    ? inputs.shader_pass_config->debug_mode
-    : ShaderDebugMode::kDisabled;
   frame_gpu_debug_mouse_down_position_
     = inputs.frame_settings.gpu_debug_mouse_down_position;
 
@@ -65,6 +61,7 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
     frame_view_packet_index_.emplace(
       published_view_id, frame_view_packets_.size());
     frame_view_packets_.emplace_back(observer_ptr { view }, published_view_id,
+      view->GetDescriptor().view_state_handle,
       EvaluateViewRenderPlan(*view, sky_state, inputs));
   }
 }
@@ -97,8 +94,27 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   const SkyState& sky_state, const Inputs& inputs) const -> ViewRenderPlan
 {
   ViewRenderPlan::Spec plan_spec {};
-  plan_spec.effective_render_mode = frame_render_mode_;
-  const bool is_scene_view = view.GetDescriptor().camera.has_value();
+  const auto& descriptor = view.GetDescriptor();
+  const auto frame_shader_debug_mode = inputs.shader_pass_config
+    ? inputs.shader_pass_config->debug_mode
+    : ShaderDebugMode::kDisabled;
+  plan_spec.effective_render_mode
+    = descriptor.render_settings.render_mode.value_or(
+      inputs.frame_settings.render_mode);
+  plan_spec.effective_shader_debug_mode
+    = descriptor.render_settings.shader_debug_mode.value_or(
+      frame_shader_debug_mode);
+  CHECK_F(descriptor.view_kind != CompositionView::ViewKind::kCompositionOnly
+      || !descriptor.camera.has_value(),
+    "Composition-only view '{}' cannot carry a scene camera",
+    descriptor.name);
+  CHECK_F(descriptor.view_kind == CompositionView::ViewKind::kCompositionOnly
+      || descriptor.camera.has_value(),
+    "Scene view '{}' requires a camera unless it is composition-only",
+    descriptor.name);
+
+  const bool is_scene_view
+    = descriptor.view_kind != CompositionView::ViewKind::kCompositionOnly;
   plan_spec.intent = is_scene_view ? ViewRenderIntent::kSceneAndComposite
                                    : ViewRenderIntent::kCompositeOnly;
 
@@ -118,7 +134,7 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   }
 
   const auto debug_intent
-    = EvaluateFramePlanDebugModeIntent(frame_shader_debug_mode_);
+    = EvaluateFramePlanDebugModeIntent(plan_spec.effective_shader_debug_mode);
   plan_spec.tone_map_policy
     = (is_scene_view
         && (plan_spec.effective_render_mode == RenderMode::kWireframe
@@ -127,14 +143,15 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
     : ToneMapPolicy::kConfigured;
 
   plan_spec.run_overlay_wireframe = is_scene_view
-    && (inputs.frame_settings.render_mode == RenderMode::kOverlayWireframe)
+    && (plan_spec.effective_render_mode == RenderMode::kOverlayWireframe)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
 
   const bool run_scene_passes
     = (plan_spec.intent == ViewRenderIntent::kSceneAndComposite)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
   plan_spec.depth_prepass_mode = run_scene_passes
-    ? inputs.frame_settings.depth_prepass_mode
+    ? descriptor.render_settings.depth_prepass_mode.value_or(
+        inputs.frame_settings.depth_prepass_mode)
     : DepthPrePassMode::kDisabled;
   plan_spec.run_sky_pass = run_scene_passes
     && (sky_state.sky_atmo_enabled || sky_state.sky_sphere_enabled)
@@ -143,10 +160,11 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
 
   const ViewRenderPlan plan(plan_spec);
   DLOG_F(2,
-    "ViewRenderPlan view='{}' mode={} intent={} tone_map={} depth_prepass={} "
-    "overlay={} sky={} lut={}",
-    view.GetDescriptor().name, plan.EffectiveRenderMode(), plan.Intent(),
-    plan.GetToneMapPolicy(), plan.GetDepthPrePassMode(),
+    "ViewRenderPlan view='{}' mode={} debug={} intent={} tone_map={} "
+    "depth_prepass={} overlay={} sky={} lut={}",
+    view.GetDescriptor().name, plan.EffectiveRenderMode(),
+    plan.EffectiveShaderDebugMode(), plan.Intent(), plan.GetToneMapPolicy(),
+    plan.GetDepthPrePassMode(),
     plan.RunOverlayWireframe(), plan.RunSkyPass(), plan.RunSkyLutUpdate());
 
   return plan;

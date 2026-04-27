@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex::internal {
 
@@ -56,6 +57,7 @@ public:
   struct Spec {
     ViewRenderIntent intent { ViewRenderIntent::kCompositeOnly };
     RenderMode effective_render_mode { RenderMode::kSolid };
+    ShaderDebugMode effective_shader_debug_mode { ShaderDebugMode::kDisabled };
     ToneMapPolicy tone_map_policy { ToneMapPolicy::kConfigured };
     DepthPrePassMode depth_prepass_mode { DepthPrePassMode::kOpaqueAndMasked };
     bool run_overlay_wireframe { false };
@@ -66,6 +68,7 @@ public:
   explicit ViewRenderPlan(const Spec& spec)
     : intent_(spec.intent)
     , effective_render_mode_(spec.effective_render_mode)
+    , effective_shader_debug_mode_(spec.effective_shader_debug_mode)
     , tone_map_policy_(spec.tone_map_policy)
     , depth_prepass_mode_(spec.depth_prepass_mode)
     , run_overlay_wireframe_(spec.run_overlay_wireframe)
@@ -107,6 +110,11 @@ public:
   {
     return effective_render_mode_;
   }
+  [[nodiscard]] auto EffectiveShaderDebugMode() const noexcept
+    -> ShaderDebugMode
+  {
+    return effective_shader_debug_mode_;
+  }
   [[nodiscard]] auto GetToneMapPolicy() const noexcept -> ToneMapPolicy
   {
     return tone_map_policy_;
@@ -139,6 +147,7 @@ public:
 private:
   ViewRenderIntent intent_ { ViewRenderIntent::kCompositeOnly };
   RenderMode effective_render_mode_ { RenderMode::kSolid };
+  ShaderDebugMode effective_shader_debug_mode_ { ShaderDebugMode::kDisabled };
   ToneMapPolicy tone_map_policy_ { ToneMapPolicy::kConfigured };
   DepthPrePassMode depth_prepass_mode_ { DepthPrePassMode::kDisabled };
   bool run_overlay_wireframe_ { false };

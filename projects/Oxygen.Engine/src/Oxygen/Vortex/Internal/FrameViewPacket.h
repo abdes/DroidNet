@@ -7,12 +7,13 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h>
 
 namespace oxygen::graphics {
@@ -26,15 +27,8 @@ class CompositionViewImpl;
 class FrameViewPacket {
 public:
   FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
-    ViewId published_view_id, ViewRenderPlan plan)
-    : view_(view)
-    , published_view_id_(published_view_id)
-    , plan_(plan)
-  {
-    CHECK_NOTNULL_F(view_.get(), "FrameViewPacket requires non-null view");
-    CHECK_F(published_view_id_ != kInvalidViewId,
-      "FrameViewPacket requires a published runtime view id");
-  }
+    ViewId published_view_id, CompositionView::ViewStateHandle view_state_handle,
+    ViewRenderPlan plan);
   ~FrameViewPacket() = default;
   OXYGEN_DEFAULT_COPYABLE(FrameViewPacket)
   OXYGEN_DEFAULT_MOVABLE(FrameViewPacket)
@@ -52,6 +46,40 @@ public:
   {
     return published_view_id_;
   }
+  [[nodiscard]] auto ViewStateHandle() const noexcept
+    -> CompositionView::ViewStateHandle
+  {
+    return view_state_handle_;
+  }
+  [[nodiscard]] auto Kind() const noexcept -> CompositionView::ViewKind
+  {
+    return view_kind_;
+  }
+  [[nodiscard]] auto FeatureMask() const noexcept
+    -> const CompositionView::ViewFeatureMask&
+  {
+    return feature_mask_;
+  }
+  [[nodiscard]] auto SurfaceRoutes() const noexcept
+    -> const std::vector<CompositionView::ViewSurfaceRoute>&
+  {
+    return surface_routes_;
+  }
+  [[nodiscard]] auto GetOverlayPolicy() const noexcept
+    -> const CompositionView::OverlayPolicy&
+  {
+    return overlay_policy_;
+  }
+  [[nodiscard]] auto ProducedAuxOutputs() const noexcept
+    -> const std::vector<CompositionView::AuxOutputDesc>&
+  {
+    return produced_aux_outputs_;
+  }
+  [[nodiscard]] auto ConsumedAuxOutputs() const noexcept
+    -> const std::vector<CompositionView::AuxInputDesc>&
+  {
+    return consumed_aux_outputs_;
+  }
 
   [[nodiscard]] auto HasCompositeTexture() const noexcept -> bool;
   [[nodiscard]] auto GetCompositeTexture() const
@@ -62,6 +90,15 @@ public:
 private:
   observer_ptr<const CompositionViewImpl> view_;
   ViewId published_view_id_ { kInvalidViewId };
+  CompositionView::ViewStateHandle view_state_handle_ {
+    CompositionView::kInvalidViewStateHandle
+  };
+  CompositionView::ViewKind view_kind_ { CompositionView::ViewKind::kPrimary };
+  CompositionView::ViewFeatureMask feature_mask_ {};
+  std::vector<CompositionView::ViewSurfaceRoute> surface_routes_ {};
+  CompositionView::OverlayPolicy overlay_policy_ {};
+  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_ {};
+  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_ {};
   ViewRenderPlan plan_;
 };
 

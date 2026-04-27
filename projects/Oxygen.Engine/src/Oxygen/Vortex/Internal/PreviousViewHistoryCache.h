@@ -16,6 +16,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex::internal {
@@ -39,8 +40,11 @@ public:
 
   OXGN_VRTX_API void BeginFrame(
     std::uint64_t frame_sequence, observer_ptr<const scene::Scene> scene);
-  OXGN_VRTX_API auto TouchCurrent(ViewId view_id, const CurrentState& current)
-    -> Snapshot;
+  OXGN_VRTX_API auto TouchCurrent(
+    CompositionView::ViewStateHandle view_state_handle,
+    const CurrentState& current) -> Snapshot;
+  [[nodiscard]] OXGN_VRTX_API auto TouchStateless(
+    const CurrentState& current) const -> Snapshot;
   OXGN_VRTX_API void EndFrame();
 
 private:
@@ -53,7 +57,7 @@ private:
 
   std::uint64_t current_frame_ { 0U };
   const scene::Scene* current_scene_ { nullptr };
-  std::unordered_map<ViewId, Entry> entries_ {};
+  std::unordered_map<CompositionView::ViewStateHandle, Entry> entries_ {};
 };
 
 } // namespace oxygen::vortex::internal

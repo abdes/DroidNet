@@ -234,7 +234,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
         const ViewId exposure_view_id) -> engine::ViewContext {
     engine::ViewContext view_ctx;
     view_ctx.view = view.GetDescriptor().view;
-    const bool has_scene = view.GetDescriptor().camera.has_value();
+    const bool has_scene = view.GetDescriptor().view_kind
+      != CompositionView::ViewKind::kCompositionOnly;
     view_ctx.metadata = { .name = std::string(view.GetDescriptor().name),
       .purpose = has_scene ? "scene" : "overlay",
       .is_scene_view = has_scene,
@@ -271,7 +272,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
       = resolve_published_view_(view->GetDescriptor().id);
     const auto published_view_id = upsert_published_view_(
       context, view->GetDescriptor().id, std::move(view_ctx),
-      view->GetDescriptor().shading_mode);
+      view->GetDescriptor().shading_mode,
+      view->GetDescriptor().view_state_handle);
     if (previous_published_view_id == kInvalidViewId) {
       LOG_F(INFO,
         "Registered View '{}' (IntentID: {}) with Engine "
@@ -282,12 +284,6 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
       DLOG_F(1, "Updated View '{}' (PublishedViewId: {})",
         view->GetDescriptor().name, published_view_id.get());
     }
-  }
-
-  std::unordered_map<ViewId, std::size_t> sorted_indices;
-  sorted_indices.reserve(state_->sorted_views.size());
-  for (std::size_t i = 0; i < state_->sorted_views.size(); ++i) {
-    sorted_indices.emplace(state_->sorted_views[i]->GetDescriptor().id, i);
   }
 
   for (auto* view : state_->sorted_views) {
@@ -307,28 +303,23 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
         "View '{}' references missing exposure source intent id {}",
         view->GetDescriptor().name, requested_source_id.get());
 
-      const auto source_index_it = sorted_indices.find(requested_source_id);
-      CHECK_F(source_index_it != sorted_indices.end(),
-        "View '{}' references inactive exposure source intent id {}",
-        view->GetDescriptor().name, requested_source_id.get());
-
-      const auto consumer_index = sorted_indices.at(view->GetDescriptor().id);
-      CHECK_F(source_index_it->second <= consumer_index,
-        "View '{}' references exposure source '{}' that renders later in the "
-        "frame",
-        view->GetDescriptor().name, source_it->second.GetDescriptor().name);
-
       resolved_exposure_view_id = resolve_published_view_(requested_source_id);
-      CHECK_F(resolved_exposure_view_id != kInvalidViewId,
-        "View '{}' references exposure source '{}' before publication",
-        view->GetDescriptor().name, source_it->second.GetDescriptor().name);
+      if (resolved_exposure_view_id == kInvalidViewId) {
+        LOG_F(WARNING,
+          "View '{}' references inactive exposure source '{}' (intent id {}); "
+          "falling back to own previous exposure state",
+          view->GetDescriptor().name, source_it->second.GetDescriptor().name,
+          requested_source_id.get());
+        resolved_exposure_view_id = self_published_view_id;
+      }
     }
 
     auto resolved_view_ctx
       = build_view_context(*view, resolved_exposure_view_id);
     upsert_published_view_(
       context, view->GetDescriptor().id, std::move(resolved_view_ctx),
-      view->GetDescriptor().shading_mode);
+      view->GetDescriptor().shading_mode,
+      view->GetDescriptor().view_state_handle);
   }
 }
 

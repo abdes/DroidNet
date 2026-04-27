@@ -212,6 +212,15 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     return result;
   }
 
+  const auto exposure_view_state_handle
+    = ctx.current_view.exposure_view_state_handle
+      != CompositionView::kInvalidViewStateHandle
+    ? ctx.current_view.exposure_view_state_handle
+    : ctx.current_view.view_state_handle;
+  if (exposure_view_state_handle == CompositionView::kInvalidViewStateHandle) {
+    return result;
+  }
+
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr || inputs.scene_signal == nullptr) {
     return result;
@@ -230,12 +239,8 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
 
-  const auto exposure_view_id = ctx.current_view.exposure_view_id
-    != kInvalidViewId
-    ? ctx.current_view.exposure_view_id
-    : ctx.current_view.view_id;
-  auto& state
-    = EnsureExposureStateForView(ctx, *recorder, exposure_view_id, config);
+  auto& state = EnsureExposureStateForView(
+    ctx, *recorder, exposure_view_state_handle, config);
   DCHECK_NOTNULL_F(state.buffer.get());
   const auto histogram_created = state.histogram_buffer == nullptr;
   EnsureHistogramBuffer(state);
@@ -294,13 +299,14 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   return result;
 }
 
-auto ExposurePass::RemoveViewState(const ViewId view_id) -> void
+auto ExposurePass::RemoveViewState(
+  const CompositionView::ViewStateHandle view_state_handle) -> void
 {
-  if (view_id == kInvalidViewId) {
+  if (view_state_handle == CompositionView::kInvalidViewStateHandle) {
     return;
   }
 
-  const auto it = exposure_states_.find(view_id);
+  const auto it = exposure_states_.find(view_state_handle);
   if (it == exposure_states_.end()) {
     return;
   }
@@ -450,14 +456,15 @@ auto ExposurePass::EnsureExposureInitUploadBuffer(
 }
 
 auto ExposurePass::EnsureExposureStateForView(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, ViewId view_id,
+  graphics::CommandRecorder& recorder,
+  const CompositionView::ViewStateHandle view_state_handle,
   const PostProcessConfig& config) -> PerViewExposureState&
 {
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
-  auto& state = exposure_states_[view_id];
+  auto& state = exposure_states_[view_state_handle];
   state.last_seen_sequence = ctx.frame_sequence;
 
   if (state.buffer == nullptr) {

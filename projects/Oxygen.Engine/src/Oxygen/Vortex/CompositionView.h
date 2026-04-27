@@ -6,11 +6,13 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NamedType.h>
@@ -18,7 +20,10 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/RenderMode.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -33,6 +38,94 @@ namespace oxygen::vortex {
   resource management (pooling, HDR intermediate buffers, etc.).
 */
 struct CompositionView {
+
+  using ViewStateHandle = NamedType<uint64_t, struct ViewStateHandleTag,
+    Comparable, Hashable, Printable>;
+  static constexpr ViewStateHandle kInvalidViewStateHandle {
+    (std::numeric_limits<ViewStateHandle::UnderlyingType>::max)()
+  };
+
+  struct ViewRenderSettings {
+    std::optional<RenderMode> render_mode;
+    std::optional<ShaderDebugMode> shader_debug_mode;
+    std::optional<DepthPrePassMode> depth_prepass_mode;
+  };
+
+  enum class ViewKind : std::uint8_t {
+    kPrimary,
+    kAuxiliary,
+    kCompositionOnly,
+  };
+
+  using ViewFeatureBits = NamedType<uint64_t, struct ViewFeatureBitsTag,
+    Comparable, Hashable, Printable>;
+
+  struct ViewFeatureMask {
+    enum Bit : uint64_t {
+      kNone = 0U,
+      kSceneLighting = 1ULL << 0U,
+      kShadows = 1ULL << 1U,
+      kEnvironment = 1ULL << 2U,
+      kTranslucency = 1ULL << 3U,
+      kDiagnostics = 1ULL << 4U,
+      kAll = kSceneLighting | kShadows | kEnvironment | kTranslucency
+        | kDiagnostics,
+    };
+
+    ViewFeatureBits bits { kAll };
+
+    [[nodiscard]] auto Has(Bit bit) const noexcept -> bool
+    {
+      return (bits.get() & static_cast<uint64_t>(bit)) != 0U;
+    }
+  };
+
+  using SurfaceRouteId = NamedType<uint64_t, struct SurfaceRouteIdTag,
+    Comparable, Hashable, Printable>;
+  static constexpr SurfaceRouteId kDefaultSurfaceRoute { 0U };
+
+  enum class SurfaceRouteBlendMode : std::uint8_t {
+    kCopy,
+    kAlphaBlend,
+  };
+
+  struct ViewSurfaceRoute {
+    SurfaceRouteId surface_id { kDefaultSurfaceRoute };
+    ViewPort destination {};
+    SurfaceRouteBlendMode blend_mode { SurfaceRouteBlendMode::kAlphaBlend };
+  };
+
+  enum class OverlayLane : std::uint8_t {
+    kWorldDepthAware,
+    kViewScreen,
+    kSurfaceScreen,
+  };
+
+  struct OverlayPolicy {
+    std::vector<OverlayLane> lanes { OverlayLane::kViewScreen };
+  };
+
+  using AuxOutputId = NamedType<uint64_t, struct AuxOutputIdTag,
+    Comparable, Hashable, Printable>;
+
+  enum class AuxOutputKind : std::uint8_t {
+    kColorTexture,
+    kDepthTexture,
+    kSceneTextureBinding,
+    kCustomPassProduct,
+  };
+
+  struct AuxOutputDesc {
+    AuxOutputId id { 0U };
+    AuxOutputKind kind { AuxOutputKind::kColorTexture };
+    std::string_view debug_name;
+    bool same_frame_required { true };
+  };
+
+  struct AuxInputDesc {
+    AuxOutputId id { 0U };
+    bool required { true };
+  };
 
   //! Strongly typed Z-order value for view composition.
   using ZOrder = NamedType<int32_t, struct ZOrderTag,
@@ -60,12 +153,20 @@ struct CompositionView {
   std::string_view name;
 
   //! Unique identifier for the view session. Used by the renderer to
-  //! track and reuse persistent GPU resources (textures, framebuffers)
-  //! across multiple frames.
+  //! publish this frame's view products and composition output. Persistent
+  //! temporal histories use view_state_handle instead.
   ViewId id { kInvalidViewId };
+
+  //! Producer-owned temporal state identity for exposure, previous-view
+  //! matrices, and future temporal products. Invalid means the view is
+  //! stateless and cannot consume or update persistent history.
+  ViewStateHandle view_state_handle { kInvalidViewStateHandle };
 
   //! Core view configuration (Viewport, Scissors, Jitter, etc.).
   View view;
+
+  //! Runtime view classification. Composition-only views bypass scene stages.
+  ViewKind view_kind { ViewKind::kPrimary };
 
   //! Composition stacking order.
   //! - Lower values are rendered further back (closer to the background).
@@ -112,10 +213,31 @@ struct CompositionView {
   //! Optional intent id of another CompositionView whose exposure state should
   //! be consumed by this view.
   //!
-  //! When left invalid, the view owns and consumes its own exposure history.
-  //! When set, the referenced view must also be active in the same frame and
-  //! be rendered no later than this view.
+  //! When left invalid, the view consumes its own previous-frame exposure
+  //! history when view_state_handle is valid. When set, the referenced view's
+  //! producer-owned state handle is used; current-frame render order is not a
+  //! temporal ownership key.
   ViewId exposure_source_view_id { kInvalidViewId };
+
+  //! Optional per-view render/debug/depth settings. Frame-level renderer
+  //! settings are defaults only; FrameViewPacket/ViewRenderPlan carries the
+  //! effective values consumed by scene stages.
+  ViewRenderSettings render_settings {};
+
+  //! Typed per-view feature/show mask placeholder for editor/runtime views.
+  ViewFeatureMask feature_mask {};
+
+  //! Surface routing placeholders. Empty means route to the default surface
+  //! using the view viewport.
+  std::vector<ViewSurfaceRoute> surface_routes {};
+
+  //! Overlay lane policy placeholder. Existing on_overlay is treated as a
+  //! compatibility producer for the view-screen lane.
+  OverlayPolicy overlay_policy {};
+
+  //! Auxiliary IO placeholders; dependency resolution lands in slice F.
+  std::vector<AuxOutputDesc> produced_aux_outputs {};
+  std::vector<AuxInputDesc> consumed_aux_outputs {};
 
   //! Override to force wireframe rendering for this specific view.
   bool force_wireframe { false };
@@ -155,6 +277,7 @@ struct CompositionView {
       .name = "Scene",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kPrimary,
       .z_order = kZOrderScene,
       .camera = std::move(camera),
       .enable_hdr = true,
@@ -174,6 +297,7 @@ struct CompositionView {
       .name = "PiP",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kPrimary,
       .z_order = z_order,
       .camera = std::move(camera),
       .enable_hdr = true,
@@ -190,6 +314,7 @@ struct CompositionView {
       .name = "GameUI",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kCompositionOnly,
       .z_order = kZOrderGameUI,
       .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
@@ -211,6 +336,7 @@ struct CompositionView {
       .name = "HUD",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kCompositionOnly,
       .z_order = z_order,
       .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
@@ -228,6 +354,7 @@ struct CompositionView {
       .name = "ImGui",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kCompositionOnly,
       .z_order = kZOrderTools,
       .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
@@ -245,6 +372,7 @@ struct CompositionView {
       .name = "Overlay",
       .id = id,
       .view = view,
+      .view_kind = ViewKind::kCompositionOnly,
       .z_order = kZOrderDebugOverlay,
       .should_clear = false,
       .camera = {},

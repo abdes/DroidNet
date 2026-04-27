@@ -781,7 +781,8 @@ auto Renderer::RefreshCurrentViewFrameBindings(
       = EnsurePublicationState(*gfx)
           .view_history_frame_bindings_publisher->Publish(
             render_context.current_view.view_id,
-            BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+            BuildViewHistoryFrameBindings(
+              render_context.current_view.view_state_handle,
               *render_context.current_view.resolved_view,
               observer_ptr<const scene::Scene> { render_context.scene.get() }));
   }
@@ -1310,8 +1311,12 @@ auto Renderer::PublishRuntimeCompositionView(
   view_context.view = composition_view.view;
   view_context.metadata = {
     .name = std::string(composition_view.name),
-    .purpose = composition_view.camera.has_value() ? "scene" : "overlay",
-    .is_scene_view = composition_view.camera.has_value(),
+    .purpose = composition_view.view_kind
+        == CompositionView::ViewKind::kCompositionOnly
+      ? "overlay"
+      : "scene",
+    .is_scene_view = composition_view.view_kind
+      != CompositionView::ViewKind::kCompositionOnly,
     .with_atmosphere = composition_view.with_atmosphere,
     .with_height_fog = composition_view.with_height_fog,
     .with_local_fog = composition_view.with_local_fog,
@@ -1323,7 +1328,8 @@ auto Renderer::PublishRuntimeCompositionView(
   const auto published_view_id = UpsertPublishedRuntimeView(frame_context,
     composition_view.id, std::move(view_context),
     shading_mode_override.has_value() ? shading_mode_override
-                                      : composition_view.shading_mode);
+                                      : composition_view.shading_mode,
+    composition_view.view_state_handle);
 
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
@@ -1339,7 +1345,8 @@ auto Renderer::PublishRuntimeCompositionView(
 
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
-  const std::optional<ShadingMode> shading_mode_override) -> ViewId
+  const std::optional<ShadingMode> shading_mode_override,
+  const CompositionView::ViewStateHandle view_state_handle) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
@@ -1350,6 +1357,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     frame_context.UpdateView(it->second.published_view_id, std::move(view));
     it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
     it->second.shading_mode_override = shading_mode_override;
+    it->second.view_state_handle = view_state_handle;
     return it->second.published_view_id;
   }
 
@@ -1359,6 +1367,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .published_view_id = published_view_id,
         .last_seen_frame = frame_context.GetFrameSequenceNumber(),
         .shading_mode_override = shading_mode_override,
+        .view_state_handle = view_state_handle,
       };
   return published_view_id;
 }
@@ -1379,57 +1388,62 @@ auto Renderer::ResolvePublishedRuntimeViewId(
 }
 
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
-  -> ViewId
+  -> DetachedPublishedRuntimeViewState
 {
   if (intent_view_id == kInvalidViewId) {
-    return kInvalidViewId;
+    return {};
   }
 
   std::unique_lock state_lock(view_state_mutex_);
   if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
     it != published_runtime_views_by_intent_.end()) {
-    const auto published_view_id = it->second.published_view_id;
+    const auto detached = DetachedPublishedRuntimeViewState {
+      .published_view_id = it->second.published_view_id,
+      .view_state_handle = it->second.view_state_handle,
+    };
     published_runtime_views_by_intent_.erase(it);
-    return published_view_id;
+    return detached;
   }
 
-  return kInvalidViewId;
+  return {};
 }
 
 auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 {
-  const auto published_view_id
+  const auto detached
     = DetachPublishedRuntimeViewState(intent_view_id);
-  if (published_view_id == kInvalidViewId) {
+  if (detached.published_view_id == kInvalidViewId) {
     return;
   }
 
   if (scene_renderer_) {
-    scene_renderer_->RemoveViewState(published_view_id);
+    scene_renderer_->RemoveViewState(
+      detached.published_view_id, detached.view_state_handle);
   }
-  UnregisterViewRenderGraph(published_view_id);
+  UnregisterViewRenderGraph(detached.published_view_id);
   if (view_const_manager_) {
-    view_const_manager_->RemoveView(published_view_id);
+    view_const_manager_->RemoveView(detached.published_view_id);
   }
 }
 
 auto Renderer::RemovePublishedRuntimeView(
   engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
 {
-  const auto published_view_id
+  const auto detached
     = DetachPublishedRuntimeViewState(intent_view_id);
 
-  if (published_view_id == kInvalidViewId) {
+  if (detached.published_view_id == kInvalidViewId) {
     return;
   }
 
-  frame_context.RemoveView(published_view_id);
+  frame_context.RemoveView(detached.published_view_id);
   if (scene_renderer_) {
-    scene_renderer_->RemoveViewState(published_view_id);
+    scene_renderer_->RemoveViewState(
+      detached.published_view_id, detached.view_state_handle);
   }
-  UnregisterViewRenderGraph(published_view_id);
+  UnregisterViewRenderGraph(detached.published_view_id);
   if (view_const_manager_) {
-    view_const_manager_->RemoveView(published_view_id);
+    view_const_manager_->RemoveView(detached.published_view_id);
   }
 }
 
@@ -1438,7 +1452,7 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 {
   const auto current_frame = frame_context.GetFrameSequenceNumber();
   auto stale_intent_ids = std::vector<ViewId> {};
-  auto stale_published_ids = std::vector<ViewId> {};
+  auto stale_published_states = std::vector<DetachedPublishedRuntimeViewState> {};
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -1447,7 +1461,10 @@ auto Renderer::PruneStalePublishedRuntimeViews(
       if (current_frame - it->second.last_seen_frame
         > kPublishedRuntimeViewMaxIdleFrames) {
         stale_intent_ids.push_back(it->first);
-        stale_published_ids.push_back(it->second.published_view_id);
+        stale_published_states.push_back(DetachedPublishedRuntimeViewState {
+          .published_view_id = it->second.published_view_id,
+          .view_state_handle = it->second.view_state_handle,
+        });
         it = published_runtime_views_by_intent_.erase(it);
       } else {
         ++it;
@@ -1455,14 +1472,15 @@ auto Renderer::PruneStalePublishedRuntimeViews(
     }
   }
 
-  for (const auto published_view_id : stale_published_ids) {
-    frame_context.RemoveView(published_view_id);
+  for (const auto& stale : stale_published_states) {
+    frame_context.RemoveView(stale.published_view_id);
     if (scene_renderer_) {
-      scene_renderer_->RemoveViewState(published_view_id);
+      scene_renderer_->RemoveViewState(
+        stale.published_view_id, stale.view_state_handle);
     }
-    UnregisterViewRenderGraph(published_view_id);
+    UnregisterViewRenderGraph(stale.published_view_id);
     if (view_const_manager_) {
-      view_const_manager_->RemoveView(published_view_id);
+      view_const_manager_->RemoveView(stale.published_view_id);
     }
   }
 
@@ -1865,6 +1883,7 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
 
     auto entry = RenderContext::ViewExecutionEntry {
       .view_id = view.id,
+      .view_state_handle = ResolvePublishedRuntimeViewStateHandle(view.id),
       .is_scene_view = view.metadata.is_scene_view,
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
@@ -1898,10 +1917,19 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
   const auto& selection = render_context.frame_views[*active_index];
   const auto& selected_view = context.GetViewContext(selection.view_id);
   render_context.current_view.view_id = selection.view_id;
+  render_context.current_view.view_state_handle = selection.view_state_handle;
   render_context.current_view.exposure_view_id
     = selected_view.metadata.exposure_view_id != kInvalidViewId
     ? selected_view.metadata.exposure_view_id
     : selection.view_id;
+  render_context.current_view.exposure_view_state_handle
+    = ResolvePublishedRuntimeViewStateHandle(
+      render_context.current_view.exposure_view_id);
+  if (render_context.current_view.exposure_view_state_handle
+    == CompositionView::kInvalidViewStateHandle) {
+    render_context.current_view.exposure_view_state_handle
+      = selection.view_state_handle;
+  }
   const auto is_reflection_capture_view
     = selected_view.metadata.purpose.find("reflection") != std::string::npos
     || selected_view.metadata.purpose.find("capture") != std::string::npos;
@@ -1934,6 +1962,23 @@ auto Renderer::ResolvePublishedRuntimeShadingMode(
     }
   }
   return std::nullopt;
+}
+
+auto Renderer::ResolvePublishedRuntimeViewStateHandle(
+  const ViewId published_view_id) const noexcept
+  -> CompositionView::ViewStateHandle
+{
+  if (published_view_id == kInvalidViewId) {
+    return CompositionView::kInvalidViewStateHandle;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.view_state_handle;
+    }
+  }
+  return CompositionView::kInvalidViewStateHandle;
 }
 
 auto Renderer::EnsureSceneRenderer(const CompositionView* composition_view)
@@ -1985,20 +2030,24 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
     .SetOrthographic(!IsPerspectiveProjection(view), ViewConstants::kRenderer);
 }
 
-auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,
+auto Renderer::BuildViewHistoryFrameBindings(
+  const CompositionView::ViewStateHandle view_state_handle,
   const ResolvedView& view, const observer_ptr<const scene::Scene> scene)
   -> ViewHistoryFrameBindings
 {
   static_cast<void>(scene);
-  const auto snapshot = previous_view_history_cache_.TouchCurrent(view_id,
-    internal::PreviousViewHistoryCache::CurrentState {
+  const auto current = internal::PreviousViewHistoryCache::CurrentState {
       .view_matrix = view.ViewMatrix(),
       .projection_matrix = view.ProjectionMatrix(),
       .stable_projection_matrix = view.StableProjectionMatrix(),
       .inverse_view_projection_matrix = view.InverseViewProjection(),
       .pixel_jitter = view.PixelJitter(),
       .viewport = view.Viewport(),
-    });
+    };
+  const auto snapshot
+    = view_state_handle == CompositionView::kInvalidViewStateHandle
+    ? previous_view_history_cache_.TouchStateless(current)
+    : previous_view_history_cache_.TouchCurrent(view_state_handle, current);
 
   auto history = ViewHistoryFrameBindings {
     .current_view_matrix = snapshot.current.view_matrix,
@@ -2215,7 +2264,8 @@ auto Renderer::DispatchSceneRendererRender(
       view_bindings.history_frame_slot
         = publication_state.view_history_frame_bindings_publisher->Publish(
           render_context.current_view.view_id,
-          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+          BuildViewHistoryFrameBindings(
+            render_context.current_view.view_state_handle,
             *render_context.current_view.resolved_view,
             observer_ptr<const scene::Scene> { render_context.scene.get() }));
     }
@@ -2292,7 +2342,8 @@ auto Renderer::DispatchSceneRendererRender(
       view_bindings.history_frame_slot
         = publication_state.view_history_frame_bindings_publisher->Publish(
           render_context.current_view.view_id,
-          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+          BuildViewHistoryFrameBindings(
+            render_context.current_view.view_state_handle,
             *render_context.current_view.resolved_view,
             observer_ptr<const scene::Scene> { render_context.scene.get() }));
     }

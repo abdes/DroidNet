@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -191,7 +192,9 @@ public:
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
-  OXGN_VRTX_API void RemoveViewState(ViewId view_id);
+  OXGN_VRTX_API void RemoveViewState(ViewId view_id,
+    CompositionView::ViewStateHandle view_state_handle
+    = CompositionView::kInvalidViewStateHandle);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
   OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
