@@ -53,4 +53,22 @@ public partial class TransformView
         const float minMagnitude = 1e-3f; // tweakable threshold
         e.IsValid = MathF.Abs(v) >= minMagnitude;
     }
+
+    private void PositionBox_EditSessionStarted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.BeginEditSession(TransformEditFieldGroup.Position, e);
+
+    private void PositionBox_EditSessionCompleted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.CompleteEditSession(TransformEditFieldGroup.Position, e);
+
+    private void RotationBox_EditSessionStarted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.BeginEditSession(TransformEditFieldGroup.Rotation, e);
+
+    private void RotationBox_EditSessionCompleted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.CompleteEditSession(TransformEditFieldGroup.Rotation, e);
+
+    private void ScaleBox_EditSessionStarted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.BeginEditSession(TransformEditFieldGroup.Scale, e);
+
+    private void ScaleBox_EditSessionCompleted(object? sender, VectorBoxEditSessionEventArgs e)
+        => this.ViewModel?.CompleteEditSession(TransformEditFieldGroup.Scale, e);
 }

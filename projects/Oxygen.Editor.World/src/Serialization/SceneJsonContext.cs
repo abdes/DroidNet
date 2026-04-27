@@ -11,6 +11,7 @@ namespace Oxygen.Editor.World.Serialization;
 /// JSON serialization context for scene data using source generators.
 /// </summary>
 [JsonSerializable(typeof(SceneData))]
+[JsonSerializable(typeof(SceneEnvironmentData))]
 [JsonSerializable(typeof(SceneNodeData))]
 [JsonSerializable(typeof(ComponentData))]
 [JsonSerializable(typeof(ExplorerEntryData))]

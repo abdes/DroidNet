@@ -22,6 +22,11 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
         = new();
 
     /// <summary>
+    /// Gets or sets the stable component identity.
+    /// </summary>
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>
     /// Gets or sets the name of the component.
     /// </summary>
     public required string Name { get; set; }
@@ -67,6 +72,7 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     {
         using (this.SuppressNotifications())
         {
+            this.Id = data.Id;
             this.Name = data.Name;
         }
     }

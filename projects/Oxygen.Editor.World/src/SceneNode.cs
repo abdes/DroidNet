@@ -378,13 +378,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             // Clear existing components and recreate all components so component
             // creation/hydration follows the same path for every component type.
             this.Components.Clear();
-
-            foreach (var compData in data.Components)
-            {
-                var component = GameComponent.CreateAndHydrate(compData);
-                component.Node = this;
-                this.Components.Add(component);
-            }
+            this.HydrateComponents(data.Components);
 
             // 2. Ensure exactly one TransformComponent component exists after hydration.
             var transforms = this.Components.OfType<TransformComponent>().ToList();
@@ -456,5 +450,29 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             IsStatic = this.IsStatic,
             IsExpanded = this.IsExpanded,
         };
+    }
+
+    private static void EnsureComponentIdentity(GameComponent component, HashSet<Guid> usedIds)
+    {
+        if (component.Id == Guid.Empty || !usedIds.Add(component.Id))
+        {
+            do
+            {
+                component.Id = Guid.NewGuid();
+            }
+            while (!usedIds.Add(component.Id));
+        }
+    }
+
+    private void HydrateComponents(IEnumerable<Serialization.ComponentData> components)
+    {
+        var componentIds = new HashSet<Guid>();
+        foreach (var compData in components)
+        {
+            var component = GameComponent.CreateAndHydrate(compData);
+            EnsureComponentIdentity(component, componentIds);
+            component.Node = this;
+            this.Components.Add(component);
+        }
     }
 }

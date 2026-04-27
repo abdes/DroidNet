@@ -84,6 +84,7 @@ public sealed partial class DirectionalLightComponent : LightComponent
     public override ComponentData Dehydrate()
         => new DirectionalLightData
         {
+            Id = this.Id,
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,
@@ -136,6 +137,7 @@ public sealed partial class PointLightComponent : LightComponent
     public override ComponentData Dehydrate()
         => new PointLightData
         {
+            Id = this.Id,
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,
@@ -194,6 +196,7 @@ public sealed partial class SpotLightComponent : LightComponent
     public override ComponentData Dehydrate()
         => new SpotLightData
         {
+            Id = this.Id,
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,

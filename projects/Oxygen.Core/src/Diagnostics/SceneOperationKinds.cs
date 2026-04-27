@@ -40,6 +40,46 @@ public static class SceneOperationKinds
     public const string NodeReparent = "Scene.Node.Reparent";
 
     /// <summary>
+    /// Transform component edit.
+    /// </summary>
+    public const string EditTransform = "Scene.Component.EditTransform";
+
+    /// <summary>
+    /// Geometry component edit.
+    /// </summary>
+    public const string EditGeometry = "Scene.Component.EditGeometry";
+
+    /// <summary>
+    /// Geometry material slot edit.
+    /// </summary>
+    public const string EditMaterialSlot = "Scene.Component.EditMaterialSlot";
+
+    /// <summary>
+    /// Perspective camera component edit.
+    /// </summary>
+    public const string EditPerspectiveCamera = "Scene.Component.EditCamera";
+
+    /// <summary>
+    /// Directional light component edit.
+    /// </summary>
+    public const string EditDirectionalLight = "Scene.Component.EditLight";
+
+    /// <summary>
+    /// Component add.
+    /// </summary>
+    public const string AddComponent = "Scene.Component.Add";
+
+    /// <summary>
+    /// Component removal.
+    /// </summary>
+    public const string RemoveComponent = "Scene.Component.Remove";
+
+    /// <summary>
+    /// Scene environment edit.
+    /// </summary>
+    public const string EditEnvironment = "Scene.Environment.Edit";
+
+    /// <summary>
     /// Scene explorer layout folder creation.
     /// </summary>
     public const string ExplorerFolderCreate = "Scene.ExplorerFolder.Create";
