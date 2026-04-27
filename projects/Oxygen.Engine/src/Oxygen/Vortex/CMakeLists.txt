@@ -222,6 +222,7 @@ set(
   "Internal/FrameViewPacket.h"
   "Internal/ImGuiRuntime.cpp"
   "Internal/ImGuiRuntime.h"
+  "Internal/PerViewScope.h"
   "Internal/PerViewStructuredPublisher.h"
   "Internal/PreviousViewHistoryCache.cpp"
   "Internal/PreviousViewHistoryCache.h"

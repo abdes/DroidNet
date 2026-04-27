@@ -120,11 +120,12 @@ The current Vortex code already has useful anchors:
 - `design/vortex/ARCHITECTURE.md` sections 5 and 6.2 remain the higher-level
   authority for frame dispatch and per-view versus per-frame stage separation.
 
-The blocking limitation is that `Renderer::PopulateRenderContextViewState`
-selects one active scene-view cursor, and `SceneRenderer::OnRender` executes the
-scene stage chain for that selected view only. M06A must replace that
-single-cursor runtime path with a renderer-owned view-family loop while keeping
-the single-view harness path available for tests and tools.
+Slice C replaced the initial blocking limitation where
+`Renderer::PopulateRenderContextViewState` selected one active scene-view cursor
+and `SceneRenderer::OnRender` executed only that selected view. The current M06A
+runtime path materializes frame entries without selecting a cursor, enters
+`PerViewScope` inside `SceneRenderer::RenderViewFamily`, and keeps the
+single-current-view harness path available for tests and tools.
 
 ## 5. Core Concepts
 

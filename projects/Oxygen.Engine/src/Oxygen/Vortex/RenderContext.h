@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -45,6 +46,11 @@ struct CompositionView;
 struct OcclusionFrameResults;
 class Renderer;
 class RenderPass;
+class SceneRenderer;
+
+namespace internal {
+class PerViewScope;
+} // namespace internal
 
 template <typename... Ts> struct PassTypeList {
   static constexpr std::size_t size = sizeof...(Ts);
@@ -87,10 +93,18 @@ struct RenderContext {
 
   struct ViewExecutionEntry {
     oxygen::ViewId view_id { kInvalidViewId };
+    oxygen::ViewId exposure_view_id { kInvalidViewId };
     CompositionView::ViewStateHandle view_state_handle {
       CompositionView::kInvalidViewStateHandle
     };
+    CompositionView::ViewStateHandle exposure_view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     bool is_scene_view { false };
+    bool is_reflection_capture { false };
+    bool with_atmosphere { false };
+    bool with_height_fog { false };
+    bool with_local_fog { false };
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
@@ -145,6 +159,8 @@ struct RenderContext {
     bool with_atmosphere { false };
     bool with_height_fog { false };
     bool with_local_fog { false };
+
+    auto Reset() noexcept -> void { *this = ViewSpecific {}; }
 
     [[nodiscard]] auto HasPlannedDepthPrePass() const noexcept -> bool
     {
@@ -249,9 +265,10 @@ struct RenderContext {
     render_mode = RenderMode::kSolid;
     wireframe_color = graphics::Color { 1.0F, 1.0F, 1.0F, 1.0F };
     pass_target.reset(nullptr);
-    current_view = ViewSpecific {};
+    current_view.Reset();
     frame_views.clear();
-    active_view_index = std::numeric_limits<std::size_t>::max();
+    std::exchange(active_view_index, std::numeric_limits<std::size_t>::max());
+    per_view_scope_active_ = false;
     view_outputs.clear();
     scene.reset(nullptr);
     frame_slot = frame::kInvalidSlot;
@@ -262,6 +279,8 @@ struct RenderContext {
 
 private:
   friend class Renderer;
+  friend class SceneRenderer;
+  friend class internal::PerViewScope;
 
   auto SetRenderer(Renderer* renderer, oxygen::Graphics* graphics) const -> void
   {
@@ -272,6 +291,7 @@ private:
   mutable observer_ptr<Renderer> renderer_;
   mutable observer_ptr<oxygen::Graphics> graphics_;
   mutable std::array<observer_ptr<RenderPass>, kNumPassTypes> known_passes_ {};
+  bool per_view_scope_active_ { false };
 };
 
 } // namespace oxygen::vortex

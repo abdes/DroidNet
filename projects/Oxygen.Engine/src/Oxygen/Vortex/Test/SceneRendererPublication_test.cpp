@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <memory>
+#include <limits>
 #include <ranges>
 
 #include <Oxygen/Config/RendererConfig.h>
@@ -829,7 +830,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  RenderContextViewStateMaterializesAllEligibleViewsBeforeSelectingTheCursor)
+  RenderContextViewStateMaterializesAllEligibleViewsWithoutSelectingTheCursor)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(
@@ -852,13 +853,15 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     *renderer_, render_context, frame_context, false);
 
   ASSERT_EQ(render_context.frame_views.size(), 3U);
-  ASSERT_NE(render_context.GetActiveViewEntry(), nullptr);
-  EXPECT_EQ(render_context.current_view.view_id, first_scene_id);
+  EXPECT_EQ(render_context.GetActiveViewEntry(), nullptr);
+  EXPECT_EQ(render_context.current_view.view_id, oxygen::kInvalidViewId);
   EXPECT_EQ(render_context.current_view.prepared_frame.get(), nullptr);
-  EXPECT_EQ(render_context.GetActiveViewEntry()->view_id, first_scene_id);
-  EXPECT_TRUE(render_context.GetActiveViewEntry()->is_scene_view);
+  EXPECT_EQ(render_context.active_view_index,
+    std::numeric_limits<std::size_t>::max());
+  EXPECT_EQ(render_context.frame_views[1].view_id, first_scene_id);
+  EXPECT_TRUE(render_context.frame_views[1].is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
-    render_context.GetActiveViewEntry()->primary_target.get());
+    render_context.frame_views.front().primary_target.get());
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

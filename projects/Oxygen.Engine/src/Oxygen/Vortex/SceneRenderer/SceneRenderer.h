@@ -188,7 +188,9 @@ public:
 
   OXGN_VRTX_API void OnFrameStart(const engine::FrameContext& frame);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
+  OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
+  OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
@@ -240,6 +242,9 @@ private:
   OXGN_VRTX_API void RefreshSceneTextureBindings();
   OXGN_VRTX_API void ResetExtractArtifacts();
   OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
+  OXGN_VRTX_API void ResetPerViewSceneProducts();
+  OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
+  OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
     std::string_view debug_name, const graphics::Texture& source)
     -> graphics::Texture*;
