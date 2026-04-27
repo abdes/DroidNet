@@ -7,10 +7,13 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::graphics {
 class Framebuffer;
@@ -55,25 +58,29 @@ struct TaaTask {
 //! A compositing task with a stable enum tag and payload slots.
 struct CompositingTask {
   CompositingTaskType type { CompositingTaskType::kCopy };
+  std::string debug_name {};
   CopyTask copy {};
   BlendTask blend {};
   TextureBlendTask texture_blend {};
   TaaTask taa {};
 
-  [[nodiscard]] static auto MakeCopy(ViewId view_id, ViewPort viewport)
-    -> CompositingTask
+  [[nodiscard]] static auto MakeCopy(ViewId view_id, ViewPort viewport,
+    std::string debug_name = {}) -> CompositingTask
   {
     return CompositingTask {
       .type = CompositingTaskType::kCopy,
+      .debug_name = std::move(debug_name),
       .copy = { .source_view_id = view_id, .viewport = viewport },
     };
   }
 
   [[nodiscard]] static auto MakeBlend(
-    ViewId view_id, ViewPort viewport, float alpha) -> CompositingTask
+    ViewId view_id, ViewPort viewport, float alpha, std::string debug_name = {})
+    -> CompositingTask
   {
     return CompositingTask {
       .type = CompositingTaskType::kBlend,
+      .debug_name = std::move(debug_name),
       .blend = {
         .source_view_id = view_id,
         .viewport = viewport,
@@ -83,11 +90,12 @@ struct CompositingTask {
   }
 
   [[nodiscard]] static auto MakeTextureBlend(
-    std::shared_ptr<graphics::Texture> texture, ViewPort viewport, float alpha)
-    -> CompositingTask
+    std::shared_ptr<graphics::Texture> texture, ViewPort viewport, float alpha,
+    std::string debug_name = {}) -> CompositingTask
   {
     return CompositingTask {
       .type = CompositingTaskType::kBlendTexture,
+      .debug_name = std::move(debug_name),
       .texture_blend = {
         .source_texture = std::move(texture),
         .viewport = viewport,
@@ -101,6 +109,10 @@ using CompositingTaskList = std::vector<CompositingTask>;
 
 //! Composition submission for the kCompositing phase.
 struct CompositionSubmission {
+  CompositionView::SurfaceRouteId surface_id {
+    CompositionView::kDefaultSurfaceRoute
+  };
+  std::string debug_name {};
   std::shared_ptr<graphics::Framebuffer> composite_target {};
   CompositingTaskList tasks {};
 };

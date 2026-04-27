@@ -1271,7 +1271,10 @@ parallel rendering, or a global show-flag clone unless the LLD is updated first.
 4. **Composition plan generalization:** compose arbitrary view outputs into one
    or more surfaces; represent PiP as data and replace primary/z-order copy
    assumptions with structural layer predicates. The predicate must already
-   accept auxiliary sources and offscreen-surface destinations.
+   accept auxiliary sources and offscreen-surface destinations. Implemented by
+   slice E with route-aware layer plans, structural full-surface copy
+   selection, deterministic surface/layer debug names, and filtered surface
+   submissions. Full auxiliary producer/consumer plumbing remains slice F.
 5. **Auxiliary view dependencies:** add extracted auxiliary outputs and at
    least one scene-capture-style validation producer/consumer. This slice owns
    auxiliary product extraction and material/stage consumption, not the basic

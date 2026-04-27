@@ -268,6 +268,8 @@ private:
 
   Renderer& renderer_;
   Graphics& gfx_;
+  ViewFrameBindings published_view_frame_bindings_ {};
+  ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   SceneTextures scene_textures_;
   SceneTextureLeasePool scene_texture_pool_;
   SceneTextures* active_scene_textures_ { nullptr };
@@ -281,8 +283,6 @@ private:
   ExtractArtifact prev_velocity_artifact_ {};
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
   ViewId published_view_id_ { kInvalidViewId };
-  ViewFrameBindings published_view_frame_bindings_ {};
-  ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
     kInvalidShaderVisibleIndex
   };

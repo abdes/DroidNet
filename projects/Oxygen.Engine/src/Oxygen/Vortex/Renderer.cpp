@@ -319,6 +319,9 @@ namespace {
   auto FormatCompositingTaskScopeLabel(const CompositingTask& task)
     -> std::string
   {
+    if (!task.debug_name.empty()) {
+      return task.debug_name;
+    }
     switch (task.type) {
     case CompositingTaskType::kCopy:
       return fmt::format(

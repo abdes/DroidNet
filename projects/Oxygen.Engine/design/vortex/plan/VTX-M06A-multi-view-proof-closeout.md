@@ -522,7 +522,7 @@ Rollback/replan trigger:
 
 ### Slice E - Data-Driven Surface Composition
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -565,6 +565,32 @@ git diff --check
 Composition tests must prove the structural fast-copy predicate is reachable
 from a non-`kZOrderScene` layer configuration; otherwise the old primary-view
 path is still the only tested path.
+
+Current evidence:
+
+- `CompositionPlanner` now builds route-aware layer plans first, then lowers
+  the selected surface route into composition tasks. Empty routes still target
+  the default surface using the view viewport.
+- The full-surface fast-copy predicate is structural: an opaque layer whose
+  source format matches the destination target and whose destination covers the
+  target becomes a copy without checking for `kZOrderScene` or a primary view
+  id. Other layers remain texture blends unless the route explicitly requests
+  copy.
+- `CompositionSubmission` and `CompositingTask` now carry deterministic surface
+  and layer debug names, and renderer composition task labels consume the task
+  debug name when present.
+- Focused tests prove non-scene full-surface copy, partial-opacity overlay
+  blending, surface-route filtering, deterministic z/submission ordering, and
+  that the slice-D lease-pool warmup metric remains green.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.SceneTextureLeasePool.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(CompositionPlanner|RendererCompositionQueue|SceneTextureLeasePool)" --output-on-failure`
+  with 3/3 matched targets passing; and `git diff --check` passed with
+  line-ending warnings only.
+- Remaining VTX-M06A gap: F-I are not implemented; auxiliary dependency graph,
+  overlay lanes/extensions, runtime proof scripts, CDB/debug-layer audit,
+  RenderDoc scripted proof, 60-frame allocation-churn proof, and final closure
+  remain open.
 
 Rollback/replan trigger:
 

@@ -167,14 +167,14 @@ TEST(CompositionPlannerTest, PartialOpacitySceneViewUsesTextureBlendTask)
   EXPECT_FLOAT_EQ(submission.tasks[0].texture_blend.alpha, 0.5F);
 }
 
-TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
+TEST(CompositionPlannerTest, PartialOpacityOverlayViewUsesTextureBlendTask)
 {
   auto graphics = std::make_shared<FakeGraphics>();
 
   const auto overlay = [](oxygen::graphics::CommandRecorder&) { };
   CompositionView overlay_view = CompositionView::ForHud(
     ViewId { 103U }, CompositionView::kZOrderGameUI, MakeView(), overlay);
-  overlay_view.opacity = 1.0F;
+  overlay_view.opacity = 0.5F;
 
   CompositionViewImpl view_impl;
   PrepareView(view_impl, overlay_view, *graphics);
@@ -193,7 +193,38 @@ TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
   ASSERT_EQ(submission.tasks.size(), 1U);
   EXPECT_EQ(submission.tasks[0].type,
     oxygen::vortex::CompositingTaskType::kBlendTexture);
-  EXPECT_FLOAT_EQ(submission.tasks[0].texture_blend.alpha, 1.0F);
+  EXPECT_FLOAT_EQ(submission.tasks[0].texture_blend.alpha, 0.5F);
+}
+
+TEST(CompositionPlannerTest, NonSceneFullSurfaceOpaqueLayerUsesCopy)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  const auto overlay = [](oxygen::graphics::CommandRecorder&) { };
+  CompositionView hud_view = CompositionView::ForHud(
+    ViewId { 124U }, CompositionView::kZOrderGameUI, MakeView(), overlay);
+  hud_view.opacity = 1.0F;
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, hud_view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 224U }));
+
+  CompositionPlanner planner(observer_ptr { &builder });
+  planner.PlanCompositingTasks();
+  const auto submission
+    = planner.BuildCompositionSubmission(MakeCompositeTarget(graphics));
+
+  ASSERT_EQ(submission.tasks.size(), 1U);
+  EXPECT_EQ(
+    submission.tasks[0].type, oxygen::vortex::CompositingTaskType::kCopy);
+  EXPECT_EQ(submission.tasks[0].copy.source_view_id, ViewId { 224U });
+  EXPECT_THAT(submission.tasks[0].debug_name,
+    testing::HasSubstr("Vortex.Surface[0].Layer["));
 }
 
 TEST(CompositionPlannerTest, SceneHudAndImGuiLayersStayOrderedOnSingleViewPath)
@@ -241,8 +272,62 @@ TEST(CompositionPlannerTest, SceneHudAndImGuiLayersStayOrderedOnSingleViewPath)
   EXPECT_FLOAT_EQ(submission.tasks[1].texture_blend.alpha, 0.75F);
 
   EXPECT_EQ(submission.tasks[2].type,
-    oxygen::vortex::CompositingTaskType::kBlendTexture);
-  EXPECT_FLOAT_EQ(submission.tasks[2].texture_blend.alpha, 1.0F);
+    oxygen::vortex::CompositingTaskType::kCopy);
+  EXPECT_EQ(submission.tasks[2].copy.source_view_id, ViewId { 208U });
+}
+
+TEST(CompositionPlannerTest, SurfaceRoutesFilterAndOrderLayerSubmissions)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView first = CompositionView::ForScene(
+    ViewId { 125U }, MakeView(), oxygen::scene::SceneNode {});
+  first.z_order = CompositionView::ZOrder { 20 };
+  first.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
+    .surface_id = CompositionView::SurfaceRouteId { 7U },
+    .destination = MakeView().viewport,
+    .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+  });
+
+  CompositionView second = CompositionView::ForScene(
+    ViewId { 126U }, MakeView(), oxygen::scene::SceneNode {});
+  second.z_order = CompositionView::ZOrder { 10 };
+  second.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
+    .surface_id = CompositionView::SurfaceRouteId { 7U },
+    .destination = MakeView().viewport,
+    .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+  });
+  second.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
+    .surface_id = CompositionView::SurfaceRouteId { 9U },
+    .destination = MakeView().viewport,
+    .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+  });
+
+  CompositionViewImpl first_impl;
+  CompositionViewImpl second_impl;
+  PrepareView(first_impl, first, *graphics);
+  PrepareView(second_impl, second, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &first_impl, &second_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeMappedInputs());
+
+  CompositionPlanner planner(observer_ptr { &builder });
+  planner.PlanCompositingTasks();
+
+  const auto surface_7 = planner.BuildCompositionSubmission(
+    MakeCompositeTarget(graphics), CompositionView::SurfaceRouteId { 7U });
+  ASSERT_EQ(surface_7.tasks.size(), 2U);
+  EXPECT_EQ(surface_7.surface_id, CompositionView::SurfaceRouteId { 7U });
+  EXPECT_EQ(surface_7.tasks[0].copy.source_view_id, ViewId { 1126U });
+  EXPECT_EQ(surface_7.tasks[1].copy.source_view_id, ViewId { 1125U });
+
+  const auto surface_9 = planner.BuildCompositionSubmission(
+    MakeCompositeTarget(graphics), CompositionView::SurfaceRouteId { 9U });
+  ASSERT_EQ(surface_9.tasks.size(), 1U);
+  EXPECT_EQ(surface_9.tasks[0].copy.source_view_id, ViewId { 1126U });
 }
 
 TEST(CompositionPlannerTest, SceneViewPlansDepthPrePassByDefault)
