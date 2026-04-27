@@ -15,6 +15,11 @@ public record SceneData : GameObjectData
     public IList<SceneNodeData> RootNodes { get; init; } = [];
 
     /// <summary>
+    /// Gets scene-level environment authoring data.
+    /// </summary>
+    public SceneEnvironmentData Environment { get; init; } = new();
+
+    /// <summary>
     /// Gets optional editor-only data representing the scene explorer layout (folders and node references).
     /// This field is ignored by runtime code but saved/loaded to preserve editor state.
     /// </summary>

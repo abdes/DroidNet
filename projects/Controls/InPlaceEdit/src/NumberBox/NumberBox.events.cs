@@ -10,6 +10,16 @@ namespace DroidNet.Controls;
 public partial class NumberBox
 {
     /// <summary>
+    ///     Occurs when the user starts an interactive numeric edit.
+    /// </summary>
+    public event EventHandler<NumberBoxEditSessionEventArgs>? EditSessionStarted;
+
+    /// <summary>
+    ///     Occurs when the user commits or cancels an interactive numeric edit.
+    /// </summary>
+    public event EventHandler<NumberBoxEditSessionEventArgs>? EditSessionCompleted;
+
+    /// <summary>
     ///     Occurs when the value is being validated.
     /// </summary>
     public event EventHandler<ValidationEventArgs<float>>? Validate;
@@ -23,4 +33,10 @@ public partial class NumberBox
         this.Validate?.Invoke(this, e);
         this.valueIsValid = e.IsValid;
     }
+
+    private void OnEditSessionStarted(NumberBoxEditInteractionKind interactionKind)
+        => this.EditSessionStarted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind));
+
+    private void OnEditSessionCompleted(NumberBoxEditInteractionKind interactionKind, NumberBoxEditCompletionKind completionKind)
+        => this.EditSessionCompleted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind, completionKind));
 }

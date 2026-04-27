@@ -13,3 +13,4 @@ using System.Runtime.CompilerServices;
 */
 
 [assembly: InternalsVisibleTo("Oxygen.Editor.World.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor")]

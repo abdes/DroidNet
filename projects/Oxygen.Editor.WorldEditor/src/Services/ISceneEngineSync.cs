@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World.Services;
@@ -86,6 +87,11 @@ public interface ISceneEngineSync
     // ============================================================================
 
     /// <summary>
+    ///     Updates the transform of an existing scene node in the engine and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> UpdateNodeTransformAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Updates the transform of an existing scene node in the engine.
     /// </summary>
     /// <param name="node">The scene node with updated transform data.</param>
@@ -95,6 +101,16 @@ public interface ISceneEngineSync
     // ============================================================================
     // Geometry Operations - Coarse-Grained
     // ============================================================================
+
+    /// <summary>
+    ///     Attaches or replaces the geometry component on a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> AttachGeometryAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Detaches all geometry from a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> DetachGeometryAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Attaches or replaces the entire geometry component on a scene node.
@@ -120,6 +136,16 @@ public interface ISceneEngineSync
     // ============================================================================
 
     /// <summary>
+    ///     Attaches or replaces the light component on a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> AttachLightAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Detaches the light component from a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> DetachLightAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Attaches or replaces the light component on a scene node.
     /// </summary>
     /// <param name="node">The scene node that will receive the light.</param>
@@ -139,6 +165,16 @@ public interface ISceneEngineSync
     // ============================================================================
 
     /// <summary>
+    ///     Attaches or replaces the camera component on a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> AttachCameraAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Detaches the camera component from a scene node and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> DetachCameraAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Attaches or replaces the camera component on a scene node.
     /// </summary>
     /// <param name="node">The scene node that will receive the camera.</param>
@@ -156,6 +192,16 @@ public interface ISceneEngineSync
     // ============================================================================
     // Geometry Operations - Fine-Grained Material Updates
     // ============================================================================
+
+    /// <summary>
+    ///     Updates a material slot for a geometry component and returns a classified sync outcome.
+    /// </summary>
+    public Task<SyncOutcome> UpdateMaterialSlotAsync(
+        Scene scene,
+        SceneNode node,
+        int slotIndex,
+        Uri? materialUri,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Updates a component-level material override slot for a geometry component.
@@ -243,4 +289,55 @@ public interface ISceneEngineSync
     ///     Controls whether the geometry casts shadows and receives shadows from other objects.
     /// </remarks>
     public Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot);
+
+    /// <summary>
+    ///     Updates live environment settings and returns per-field sync support.
+    /// </summary>
+    public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+        Scene scene,
+        SceneEnvironmentData environment,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Returns true when an open edit session should issue a throttled preview sync for a node.
+    /// </summary>
+    public bool ShouldIssuePreviewSync(Guid sceneId, Guid nodeId, DateTimeOffset observedAt);
+
+    /// <summary>
+    ///     Runs a preview sync for the latest in-flight edit value only when the preview throttle allows it.
+    /// </summary>
+    public Task<SyncOutcome?> TryPreviewSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        DateTimeOffset observedAt,
+        Func<CancellationToken, Task<SyncOutcome>> sync,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Completes an edit session's terminal sync and clears preview throttle state for a node.
+    /// </summary>
+    public bool CompleteTerminalSync(Guid sceneId, Guid nodeId);
+
+    /// <summary>
+    ///     Clears preview throttle state and runs the edit session's one terminal sync.
+    /// </summary>
+    public Task<SyncOutcome> CompleteTerminalSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        Func<CancellationToken, Task<SyncOutcome>> sync,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Cancels an edit session's preview sync state for a node.
+    /// </summary>
+    public void CancelPreviewSync(Guid sceneId, Guid nodeId);
+
+    /// <summary>
+    ///     Clears preview throttle state and runs the edit session's revert sync.
+    /// </summary>
+    public Task<SyncOutcome> CancelPreviewSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        Func<CancellationToken, Task<SyncOutcome>> revertSync,
+        CancellationToken cancellationToken = default);
 }

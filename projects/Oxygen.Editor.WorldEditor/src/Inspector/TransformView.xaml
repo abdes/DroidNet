@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.TransformView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -52,6 +52,8 @@
                 <controls:VectorBox
                     ComponentLabelPosition="Left"
                     Dimension="3"
+                    EditSessionCompleted="PositionBox_EditSessionCompleted"
+                    EditSessionStarted="PositionBox_EditSessionStarted"
                     LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
                     XIsIndeterminate="{x:Bind ViewModel.PositionXIsIndeterminate, Mode=TwoWay}"
                     XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
@@ -68,6 +70,8 @@
                 <controls:VectorBox
                     ComponentLabelPosition="Left"
                     Dimension="3"
+                    EditSessionCompleted="RotationBox_EditSessionCompleted"
+                    EditSessionStarted="RotationBox_EditSessionStarted"
                     LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
                     Validate="RotationBox_Validate"
                     XIsIndeterminate="{x:Bind ViewModel.RotationXIsIndeterminate, Mode=TwoWay}"
@@ -85,6 +89,8 @@
                 <controls:VectorBox
                     ComponentLabelPosition="Left"
                     Dimension="3"
+                    EditSessionCompleted="ScaleBox_EditSessionCompleted"
+                    EditSessionStarted="ScaleBox_EditSessionStarted"
                     LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
                     Validate="ScaleBox_Validate"
                     XIsIndeterminate="{x:Bind ViewModel.ScaleXIsIndeterminate, Mode=TwoWay}"

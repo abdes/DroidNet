@@ -62,8 +62,7 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Complete review and acceptance for `ED-M04.2 - Command Contracts, Edit
-   Records, And Operation Vocabulary`; do not start `ED-M04.3` until accepted.
+1. Continue `ED-M04.6 - Inspector Host Migration And Edit Sessions`.
 2. Validate or record the supported single live viewport behavior for `ED-M02`.
 3. Record the `ED-M02` validation ledger row only after visual validation
    passes.
@@ -252,15 +251,30 @@ production-ready inspectors, defaults, validation, and live-sync requests.
 - [x] `ED-M04.1` baseline audit and LLD lock is complete; direct inspector
       mutation paths, sync throw/log-only paths, and test hosts are recorded in
       the detailed plan.
-- [ ] `ED-M04.2` command contracts, edit records, operation vocabulary, and
-      persisted component identity are under review.
-- [ ] Transform, Geometry, PerspectiveCamera, DirectionalLight, and
-      Environment have scoped editing behavior.
-- [ ] Geometry components expose a material assignment/override slot that
-      persists and can hold an unresolved or placeholder material identity,
-      with real material asset creation/picking/assignment closing in `ED-M05`.
-- [ ] Component edits use commands/services, not direct interop.
-- [ ] Component edits persist, request sync, and report failures visibly.
+- [x] `ED-M04.2` command contracts, edit records, operation vocabulary, and
+      persisted component identity are implemented and reviewed.
+- [x] `ED-M04.3` scene environment domain and serialization are implemented
+      and reviewed.
+- [x] `ED-M04.4` live-sync result adapter contracts, runtime readiness
+      classification, unsupported material/environment outcomes, coalescer
+      service contract, and targeted tests are implemented and reviewed.
+- [x] `ED-M04.5` component/environment command implementation is landed and
+      reviewed: Transform, Geometry, Material slot, PerspectiveCamera,
+      DirectionalLight, Environment, AddComponent, and RemoveComponent commands
+      validate, mutate authoring state, write undo entries, mark dirty only
+      after mutation, request live sync, and publish operation results for
+      validation/sync failures.
+- [x] Geometry components expose a material assignment/override slot command
+      that persists placeholder/sentinel identity; real material asset creation
+      and picking still close in `ED-M05`.
+- [x] Component edit command layer uses services and `ISceneEngineSync`, not
+      direct interop.
+- [ ] Inspector host view models route ED-M04-supported fields through the
+      command service instead of direct mutation.
+- [ ] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
+      DirectionalLight, Environment, and material slot editing end to end.
+- [ ] Component edits persist through save/reopen from the migrated inspector
+      UI.
 
 Exit evidence required:
 
@@ -442,7 +456,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
-| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `active` | ED-M04.2 contracts, vocabulary, and component identity are under review; do not start ED-M04.3 until accepted. |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `active` | ED-M04.5 reviewed; continue ED-M04.6 inspector host migration and edit sessions. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |

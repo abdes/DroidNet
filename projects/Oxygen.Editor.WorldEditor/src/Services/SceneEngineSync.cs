@@ -5,8 +5,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Assets.Catalog;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 
@@ -22,6 +24,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
 
     private readonly IEngineService engineService;
     private readonly ILogger<SceneEngineSync> logger;
+    private readonly LiveSyncCoalescer coalescer = new();
     private readonly SemaphoreSlim sceneSyncGate = new(initialCount: 1, maxCount: 1);
 
     /// <summary>
@@ -153,6 +156,287 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         {
             this.sceneSyncGate.Release();
         }
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> UpdateNodeTransformAsync(
+        Scene scene,
+        SceneNode node,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            SceneOperationKinds.EditTransform,
+            LiveSyncDiagnosticCodes.TransformRejected,
+            LiveSyncDiagnosticCodes.TransformFailed,
+            cancellationToken,
+            world => this.ApplyTransform(world, node));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> AttachGeometryAsync(
+        Scene scene,
+        SceneNode node,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault();
+        if (geometry is null)
+        {
+            return Task.FromResult(
+                Rejected(
+                    SceneOperationKinds.EditGeometry,
+                    Scope(scene, node, componentType: nameof(GeometryComponent)),
+                    LiveSyncDiagnosticCodes.GeometryRejected,
+                    "Node has no geometry component to attach."));
+        }
+
+        var scope = Scope(scene, node, componentType: nameof(GeometryComponent));
+        if (TryClassifyReadiness(
+                this.engineService,
+                SceneOperationKinds.EditGeometry,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        if (TryClassifyUnresolvedImportedGeometry(scene, node, geometry, out var geometryOutcome))
+        {
+            return Task.FromResult(geometryOutcome);
+        }
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditGeometry,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.GeometryRejected,
+            LiveSyncDiagnosticCodes.GeometryFailed,
+            cancellationToken,
+            world => this.ApplyGeometry(world, node, geometry));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> DetachGeometryAsync(
+        Scene scene,
+        Guid nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node: null,
+            nodeId,
+            SceneOperationKinds.EditGeometry,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.GeometryRejected,
+            LiveSyncDiagnosticCodes.GeometryFailed,
+            cancellationToken,
+            world => world.DetachGeometry(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> AttachLightAsync(
+        Scene scene,
+        SceneNode node,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var light = node.Components.OfType<LightComponent>().FirstOrDefault();
+        if (light is null)
+        {
+            return Task.FromResult(
+                Rejected(
+                    SceneOperationKinds.EditDirectionalLight,
+                    Scope(scene, node, componentType: nameof(LightComponent)),
+                    LiveSyncDiagnosticCodes.LightRejected,
+                    "Node has no light component to attach."));
+        }
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditDirectionalLight,
+            light.GetType().Name,
+            LiveSyncDiagnosticCodes.LightRejected,
+            LiveSyncDiagnosticCodes.LightFailed,
+            cancellationToken,
+            world => this.ApplyLight(world, node, light));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> DetachLightAsync(
+        Scene scene,
+        Guid nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node: null,
+            nodeId,
+            SceneOperationKinds.EditDirectionalLight,
+            nameof(LightComponent),
+            LiveSyncDiagnosticCodes.LightRejected,
+            LiveSyncDiagnosticCodes.LightFailed,
+            cancellationToken,
+            world => world.DetachLight(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> AttachCameraAsync(
+        Scene scene,
+        SceneNode node,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var camera = node.Components.OfType<CameraComponent>().FirstOrDefault();
+        if (camera is null)
+        {
+            return Task.FromResult(
+                Rejected(
+                    SceneOperationKinds.EditPerspectiveCamera,
+                    Scope(scene, node, componentType: nameof(CameraComponent)),
+                    LiveSyncDiagnosticCodes.CameraRejected,
+                    "Node has no camera component to attach."));
+        }
+
+        var scope = Scope(scene, node, componentType: camera.GetType().Name, componentName: camera.Name);
+        if (TryClassifyReadiness(
+                this.engineService,
+                SceneOperationKinds.EditPerspectiveCamera,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        if (camera is not PerspectiveCamera)
+        {
+            return Task.FromResult(
+                Unsupported(
+                    SceneOperationKinds.EditPerspectiveCamera,
+                    scope,
+                    LiveSyncDiagnosticCodes.CameraUnsupported,
+                    $"Camera component '{camera.GetType().Name}' has no live sync adapter in ED-M04."));
+        }
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditPerspectiveCamera,
+            camera.GetType().Name,
+            LiveSyncDiagnosticCodes.CameraRejected,
+            LiveSyncDiagnosticCodes.CameraFailed,
+            cancellationToken,
+            world => this.ApplyCamera(world, node, camera));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> DetachCameraAsync(
+        Scene scene,
+        Guid nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node: null,
+            nodeId,
+            SceneOperationKinds.EditPerspectiveCamera,
+            nameof(CameraComponent),
+            LiveSyncDiagnosticCodes.CameraRejected,
+            LiveSyncDiagnosticCodes.CameraFailed,
+            cancellationToken,
+            world => world.DetachCamera(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> UpdateMaterialSlotAsync(
+        Scene scene,
+        SceneNode node,
+        int slotIndex,
+        Uri? materialUri,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var scope = Scope(
+            scene,
+            node,
+            componentType: nameof(GeometryComponent),
+            assetVirtualPath: materialUri?.ToString());
+
+        if (TryClassifyReadiness(
+                this.engineService,
+                SceneOperationKinds.EditMaterialSlot,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        return Task.FromResult(
+            Unsupported(
+                SceneOperationKinds.EditMaterialSlot,
+                scope,
+                LiveSyncDiagnosticCodes.MaterialUnsupported,
+                $"Live material slot sync is not supported in ED-M04. Slot {slotIndex} remains authored only."));
+    }
+
+    /// <inheritdoc/>
+    public async Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+        Scene scene,
+        SceneEnvironmentData environment,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(environment);
+
+        var scope = Scope(scene);
+        if (TryClassifyReadiness(
+                this.engineService,
+                SceneOperationKinds.EditEnvironment,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return new EnvironmentSyncResult(readinessOutcome.Status, new Dictionary<string, SyncStatus>());
+        }
+
+        var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken).ConfigureAwait(false);
+        var perField = new Dictionary<string, SyncStatus>
+        {
+            [nameof(SceneEnvironmentData.AtmosphereEnabled)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.SunNodeId)] = sunOutcome.Status,
+            [nameof(SceneEnvironmentData.ExposureMode)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.ExposureCompensation)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.ToneMapping)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.BackgroundColor)] = SyncStatus.Unsupported,
+        };
+
+        return new EnvironmentSyncResult(Worst(perField.Values), perField);
     }
 
     /// <inheritdoc/>
@@ -291,25 +575,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     public Task UpdateNodeTransformAsync(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            this.LogCannotUpdateTransform(node);
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ApplyTransform(world, node);
-            this.LogUpdatedTransform(node);
-        }
-        catch (Exception ex)
-        {
-            this.LogFailedToUpdateTransform(ex, node);
-        }
-
-        return Task.CompletedTask;
+        return this.UpdateNodeTransformAsync(node.Scene, node);
     }
 
     /// <inheritdoc/>
@@ -318,28 +584,25 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(geometry);
 
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            this.LogCannotAttachGeometry(node);
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ApplyGeometry(world, node, geometry);
-            this.LogAttachedGeometry(node);
-        }
-        catch (Exception ex)
-        {
-            this.LogFailedToAttachGeometry(ex, node);
-        }
-
-        return Task.CompletedTask;
+        return this.ExecuteNodeSyncAsync(
+            node.Scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditGeometry,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.GeometryRejected,
+            LiveSyncDiagnosticCodes.GeometryFailed,
+            CancellationToken.None,
+            world => this.ApplyGeometry(world, node, geometry));
     }
 
     private Oxygen.Interop.World.OxygenWorld? TryGetWorld()
     {
+        if (this.engineService.State != EngineServiceState.Running)
+        {
+            return null;
+        }
+
         try
         {
             return this.engineService.World;
@@ -353,6 +616,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task DetachGeometryAsync(Guid nodeId)
     {
+        // Legacy callers do not provide a scene, so retain log-only behavior.
         var world = this.TryGetWorld();
         if (world is null)
         {
@@ -362,7 +626,6 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
 
         try
         {
-            // Request engine to detach geometry from the node
             world.DetachGeometry(nodeId);
             this.LogDetachedGeometry(nodeId);
         }
@@ -380,22 +643,16 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(light);
 
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ApplyLight(world, node, light);
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogError(ex, "Failed to attach light component to node {NodeId}", node.Id);
-        }
-
-        return Task.CompletedTask;
+        return this.ExecuteNodeSyncAsync(
+            node.Scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditDirectionalLight,
+            light.GetType().Name,
+            LiveSyncDiagnosticCodes.LightRejected,
+            LiveSyncDiagnosticCodes.LightFailed,
+            CancellationToken.None,
+            world => this.ApplyLight(world, node, light));
     }
 
     /// <inheritdoc/>
@@ -425,22 +682,16 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(camera);
 
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        try
-        {
-            this.ApplyCamera(world, node, camera);
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogError(ex, "Failed to attach camera component to node {NodeId}", node.Id);
-        }
-
-        return Task.CompletedTask;
+        return this.ExecuteNodeSyncAsync(
+            node.Scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditPerspectiveCamera,
+            camera.GetType().Name,
+            LiveSyncDiagnosticCodes.CameraRejected,
+            LiveSyncDiagnosticCodes.CameraFailed,
+            CancellationToken.None,
+            world => this.ApplyCamera(world, node, camera));
     }
 
     /// <inheritdoc/>
@@ -467,51 +718,428 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("UpdateMaterialOverrideAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning("Live material override sync is unsupported for node {NodeId}", nodeId);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task UpdateTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, OverrideSlot slot)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("UpdateTargetedMaterialOverrideAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning(
+            "Live targeted material override sync is unsupported for node {NodeId}, LOD {LodIndex}, submesh {SubmeshIndex}",
+            nodeId,
+            lodIndex,
+            submeshIndex);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("RemoveMaterialOverrideAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning("Live material override removal is unsupported for node {NodeId}, slot {SlotType}", nodeId, slotType.Name);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task RemoveTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, Type slotType)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("RemoveTargetedMaterialOverrideAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning(
+            "Live targeted material override removal is unsupported for node {NodeId}, LOD {LodIndex}, submesh {SubmeshIndex}, slot {SlotType}",
+            nodeId,
+            lodIndex,
+            submeshIndex,
+            slotType.Name);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("UpdateLodPolicyAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning("Live LOD policy sync is unsupported for node {NodeId}", nodeId);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task UpdateRenderingSettingsAsync(Guid nodeId, RenderingSlot renderingSlot)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("UpdateRenderingSettingsAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning("Live rendering-settings sync is unsupported for node {NodeId}", nodeId);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     public Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("UpdateLightingSettingsAsync will be implemented when engine API supports it.");
+        this.logger.LogWarning("Live lighting-settings sync is unsupported for node {NodeId}", nodeId);
+        return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public bool ShouldIssuePreviewSync(Guid sceneId, Guid nodeId, DateTimeOffset observedAt)
+        => this.coalescer.ShouldIssuePreview(new SyncCoalescingKey(sceneId, nodeId), observedAt);
+
+    /// <inheritdoc/>
+    public async Task<SyncOutcome?> TryPreviewSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        DateTimeOffset observedAt,
+        Func<CancellationToken, Task<SyncOutcome>> sync,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sync);
+
+        return this.ShouldIssuePreviewSync(sceneId, nodeId, observedAt)
+            ? await sync(cancellationToken).ConfigureAwait(false)
+            : null;
+    }
+
+    /// <inheritdoc/>
+    public bool CompleteTerminalSync(Guid sceneId, Guid nodeId)
+        => this.coalescer.CompleteTerminalSync(new SyncCoalescingKey(sceneId, nodeId));
+
+    /// <inheritdoc/>
+    public async Task<SyncOutcome> CompleteTerminalSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        Func<CancellationToken, Task<SyncOutcome>> sync,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sync);
+
+        _ = this.CompleteTerminalSync(sceneId, nodeId);
+        return await sync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public void CancelPreviewSync(Guid sceneId, Guid nodeId)
+        => this.coalescer.Cancel(new SyncCoalescingKey(sceneId, nodeId));
+
+    /// <inheritdoc/>
+    public async Task<SyncOutcome> CancelPreviewSyncAsync(
+        Guid sceneId,
+        Guid nodeId,
+        Func<CancellationToken, Task<SyncOutcome>> revertSync,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(revertSync);
+
+        this.CancelPreviewSync(sceneId, nodeId);
+        return await revertSync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<SyncOutcome> SyncSunBindingAsync(
+        Scene scene,
+        SceneEnvironmentData environment,
+        CancellationToken cancellationToken)
+    {
+        if (environment.SunNodeId is not { } sunNodeId)
+        {
+            return Accepted(SceneOperationKinds.EditEnvironment, Scope(scene));
+        }
+
+        var sunNode = FindNode(scene, sunNodeId);
+        if (sunNode is null)
+        {
+            return Rejected(
+                SceneOperationKinds.EditEnvironment,
+                Scope(scene, nodeId: sunNodeId, componentType: nameof(DirectionalLightComponent)),
+                LiveSyncDiagnosticCodes.EnvironmentRejected,
+                $"Environment sun node '{sunNodeId}' does not exist in the scene.");
+        }
+
+        if (sunNode.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is null)
+        {
+            return Rejected(
+                SceneOperationKinds.EditEnvironment,
+                Scope(scene, sunNode, componentType: nameof(DirectionalLightComponent)),
+                LiveSyncDiagnosticCodes.EnvironmentRejected,
+                $"Environment sun node '{sunNode.Name}' does not have a directional light component.");
+        }
+
+        return await this.AttachLightAsync(scene, sunNode, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool TryClassifyUnresolvedImportedGeometry(
+        Scene scene,
+        SceneNode node,
+        GeometryComponent geometry,
+        out SyncOutcome outcome)
+    {
+        if (geometry.Geometry?.Uri is { } uri &&
+            string.Equals(AssetUriHelper.GetMountPoint(uri), "Imported", StringComparison.OrdinalIgnoreCase) &&
+            geometry.Geometry.Asset is null)
+        {
+            outcome = Rejected(
+                SceneOperationKinds.EditGeometry,
+                Scope(
+                    scene,
+                    node,
+                    componentType: nameof(GeometryComponent),
+                    componentName: geometry.Name,
+                    assetVirtualPath: uri.ToString()),
+                LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime,
+                $"Imported geometry '{uri}' is not resolved in the authoring catalog; live sync was skipped.");
+            return true;
+        }
+
+        outcome = null!;
+        return false;
+    }
+
+    private static SceneNode? FindNode(Scene scene, Guid nodeId)
+    {
+        foreach (var root in scene.RootNodes)
+        {
+            var found = SceneTraversal.FindNodeById(root, nodeId);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private Task<SyncOutcome> ExecuteNodeSyncAsync(
+        Scene scene,
+        SceneNode node,
+        string operationKind,
+        string rejectedCode,
+        string failedCode,
+        CancellationToken cancellationToken,
+        Action<Oxygen.Interop.World.OxygenWorld> apply)
+        => this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            operationKind,
+            node.Components.FirstOrDefault()?.GetType().Name,
+            rejectedCode,
+            failedCode,
+            cancellationToken,
+            apply);
+
+    private Task<SyncOutcome> ExecuteNodeSyncAsync(
+        Scene scene,
+        SceneNode? node,
+        Guid nodeId,
+        string operationKind,
+        string? componentType,
+        string rejectedCode,
+        string failedCode,
+        CancellationToken cancellationToken,
+        Action<Oxygen.Interop.World.OxygenWorld> apply)
+    {
+        var scope = Scope(scene, node, nodeId, componentType);
+        if (TryGetReadyWorld(
+                this.engineService,
+                operationKind,
+                scope,
+                cancellationToken,
+                out var world,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            apply(world!);
+            return Task.FromResult(Accepted(operationKind, scope));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Cancelled(operationKind, scope));
+        }
+        catch (NotImplementedException ex)
+        {
+            return Task.FromResult(Unsupported(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (NotSupportedException ex)
+        {
+            return Task.FromResult(Unsupported(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (ArgumentException ex)
+        {
+            return Task.FromResult(Rejected(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(Rejected(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(Failed(operationKind, scope, failedCode, ex.Message, ex));
+        }
+    }
+
+    private static bool TryClassifyReadiness(
+        IEngineService engineService,
+        string operationKind,
+        AffectedScope scope,
+        CancellationToken cancellationToken,
+        out SyncOutcome outcome)
+    {
+        var classified = TryGetReadyWorld(
+            engineService,
+            operationKind,
+            scope,
+            cancellationToken,
+            out _,
+            out outcome);
+        return classified;
+    }
+
+    private static bool TryGetReadyWorld(
+        IEngineService engineService,
+        string operationKind,
+        AffectedScope scope,
+        CancellationToken cancellationToken,
+        out Oxygen.Interop.World.OxygenWorld? world,
+        out SyncOutcome outcome)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            world = null;
+            outcome = Cancelled(operationKind, scope);
+            return true;
+        }
+
+        var state = engineService.State;
+        if (state == EngineServiceState.Faulted)
+        {
+            world = null;
+            outcome = new SyncOutcome(
+                SyncStatus.SkippedNotRunning,
+                operationKind,
+                scope,
+                LiveSyncDiagnosticCodes.RuntimeFaulted,
+                "The runtime engine is faulted; live sync was skipped.");
+            return true;
+        }
+
+        if (state != EngineServiceState.Running)
+        {
+            world = null;
+            outcome = new SyncOutcome(
+                SyncStatus.SkippedNotRunning,
+                operationKind,
+                scope,
+                LiveSyncDiagnosticCodes.NotRunning,
+                $"The runtime engine is {state}; live sync was skipped.");
+            return true;
+        }
+
+        try
+        {
+            world = engineService.World;
+        }
+        catch (InvalidOperationException ex)
+        {
+            world = null;
+            outcome = new SyncOutcome(
+                SyncStatus.SkippedNotRunning,
+                operationKind,
+                scope,
+                LiveSyncDiagnosticCodes.NotRunning,
+                "The runtime world is not available; live sync was skipped.",
+                ex);
+            return true;
+        }
+
+        if (world is null)
+        {
+            outcome = new SyncOutcome(
+                SyncStatus.SkippedNotRunning,
+                operationKind,
+                scope,
+                LiveSyncDiagnosticCodes.NotRunning,
+                "The runtime world is not available; live sync was skipped.");
+            return true;
+        }
+
+        outcome = null!;
+        return false;
+    }
+
+    private static SyncOutcome Accepted(string operationKind, AffectedScope scope)
+        => new(SyncStatus.Accepted, operationKind, scope);
+
+    private static SyncOutcome Unsupported(
+        string operationKind,
+        AffectedScope scope,
+        string code,
+        string message,
+        Exception? exception = null)
+        => new(SyncStatus.Unsupported, operationKind, scope, code, message, exception);
+
+    private static SyncOutcome Rejected(
+        string operationKind,
+        AffectedScope scope,
+        string code,
+        string message,
+        Exception? exception = null)
+        => new(SyncStatus.Rejected, operationKind, scope, code, message, exception);
+
+    private static SyncOutcome Failed(
+        string operationKind,
+        AffectedScope scope,
+        string code,
+        string message,
+        Exception? exception = null)
+        => new(SyncStatus.Failed, operationKind, scope, code, message, exception);
+
+    private static SyncOutcome Cancelled(string operationKind, AffectedScope scope)
+        => new(
+            SyncStatus.Cancelled,
+            operationKind,
+            scope,
+            LiveSyncDiagnosticCodes.Cancelled,
+            "Live sync was cancelled.");
+
+    private static SyncStatus Worst(IEnumerable<SyncStatus> statuses)
+    {
+        var worst = SyncStatus.Accepted;
+        foreach (var status in statuses)
+        {
+            if (Rank(status) > Rank(worst))
+            {
+                worst = status;
+            }
+        }
+
+        return worst;
+    }
+
+    private static int Rank(SyncStatus status)
+        => status switch
+        {
+            SyncStatus.Accepted => 0,
+            SyncStatus.SkippedNotRunning => 1,
+            SyncStatus.Unsupported => 2,
+            SyncStatus.Rejected => 3,
+            SyncStatus.Cancelled => 4,
+            SyncStatus.Failed => 5,
+            _ => 0,
+        };
+
+    private static AffectedScope Scope(
+        Scene scene,
+        SceneNode? node = null,
+        Guid? nodeId = null,
+        string? componentType = null,
+        string? componentName = null,
+        string? assetVirtualPath = null)
+        => new()
+        {
+            SceneId = scene.Id,
+            SceneName = scene.Name,
+            NodeId = node?.Id ?? nodeId,
+            NodeName = node?.Name,
+            ComponentType = componentType,
+            ComponentName = componentName,
+            AssetVirtualPath = assetVirtualPath,
+        };
 
     /// <summary>
     ///     Creates a scene node with a thread-safe callback that marshals property changes to the UI thread.

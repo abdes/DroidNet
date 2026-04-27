@@ -34,4 +34,17 @@ public partial class GeometryView
         await this.ViewModel.ApplyAssetAsync(item).ConfigureAwait(true);
         this.AssetPickerFlyout.Hide();
     }
+
+    private async void OnMaterialPickerItemClicked(object? sender, RoutedEventArgs e)
+    {
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling material picker item click.");
+
+        if (sender is not FrameworkElement fe || fe.DataContext is not MaterialPickerItem item)
+        {
+            return;
+        }
+
+        await this.ViewModel.ApplyMaterialAsync(item).ConfigureAwait(true);
+        this.MaterialPickerFlyout.Hide();
+    }
 }

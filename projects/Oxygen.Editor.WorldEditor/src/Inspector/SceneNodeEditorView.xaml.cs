@@ -49,7 +49,8 @@ public sealed partial class SceneNodeEditorView : UserControl
         }
 
         args.Handled = true;
-        await historyKeeper.UndoAsync().ConfigureAwait(false);
+        await historyKeeper.UndoAsync().ConfigureAwait(true);
+        vm.RefreshPropertyEditorValues();
     }
 
     private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -69,6 +70,7 @@ public sealed partial class SceneNodeEditorView : UserControl
         }
 
         args.Handled = true;
-        await historyKeeper.RedoAsync().ConfigureAwait(false);
+        await historyKeeper.RedoAsync().ConfigureAwait(true);
+        vm.RefreshPropertyEditorValues();
     }
 }

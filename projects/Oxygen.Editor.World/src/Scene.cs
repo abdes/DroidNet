@@ -39,6 +39,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public ObservableCollection<SceneNode> RootNodes { get; init; } = [];
 
     /// <summary>
+    /// Gets scene-level environment authoring data.
+    /// </summary>
+    public Serialization.SceneEnvironmentData Environment { get; private set; } = new();
+
+    /// <summary>
     ///     Gets all nodes in the scene (flattened).
     /// </summary>
     [JsonIgnore]
@@ -80,7 +85,19 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
                 var node = SceneNode.CreateAndHydrate(this, nodeData);
                 this.RootNodes.Add(node);
             }
+
+            this.Environment = data.Environment ?? new();
         }
+    }
+
+    /// <summary>
+    /// Replaces scene-level environment authoring data.
+    /// </summary>
+    /// <param name="environment">The new environment data.</param>
+    internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        this.Environment = environment;
     }
 
     /// <summary>
@@ -93,6 +110,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Name = this.Name,
             Id = this.Id,
             RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
+            Environment = this.Environment,
             ExplorerLayout = this.ExplorerLayout,
         };
 }

@@ -146,6 +146,34 @@ public sealed partial class SceneNodeDetailsView : UserControl
 
         _ = sender;
         _ = args;
-        this.ViewModel.DeleteComponentCommand.NotifyCanExecuteChanged();
+        this.ViewModel.SelectedComponent = sender.SelectedItem as GameComponent;
+    }
+
+    private void OnDeleteComponentClicked(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+
+        if (this.ViewModel is null)
+        {
+            return;
+        }
+
+        var component = this.ResolveComponentForDeletion();
+        if (component is null)
+        {
+            return;
+        }
+
+        this.ComponentsItemsView.DeselectAll();
+        this.ViewModel.DeleteComponentCommand.Execute(component);
+    }
+
+    private GameComponent? ResolveComponentForDeletion()
+    {
+        var selectedByItemsView = this.ComponentsItemsView.SelectedItem as GameComponent;
+        return selectedByItemsView is not null && this.ViewModel!.DeleteComponentCommand.CanExecute(selectedByItemsView)
+            ? selectedByItemsView
+            : null;
     }
 }

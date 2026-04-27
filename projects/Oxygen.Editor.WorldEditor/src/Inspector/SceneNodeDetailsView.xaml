@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.SceneNodeDetailsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -81,8 +81,8 @@
             <menus:MenuButton Content="Add" MenuSource="{x:Bind ViewModel.AddComponentMenu, Mode=OneWay}" />
             <Button
                 Padding="6,2"
-                Command="{x:Bind ViewModel.DeleteComponentCommand}"
-                CommandParameter="{x:Bind ComponentsItemsView.SelectedItem, Mode=OneWay}">
+                Click="OnDeleteComponentClicked"
+                IsEnabled="{x:Bind ViewModel.CanDeleteSelectedComponent, Mode=OneWay}">
                 <FontIcon FontSize="12" Glyph="&#xE74D;" />
             </Button>
         </StackPanel>
