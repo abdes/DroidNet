@@ -290,7 +290,7 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     }
   }
 
-  if (!config_.proof_layout) {
+  if (!config_.proof_layout && !config_.aux_proof_layout) {
     return;
   }
 
@@ -416,7 +416,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
     main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
     pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
-    if (config_.proof_layout) {
+    if (config_.proof_layout || config_.aux_proof_layout) {
       top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
       debug_camera_node_
         = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
@@ -474,6 +474,91 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   }
   const float sw = static_cast<float>(extent.width);
   const float sh = static_cast<float>(extent.height);
+
+  if (config_.aux_proof_layout) {
+    const float half_w = std::floor(sw * 0.5F);
+    const float half_h = std::floor(sh * 0.5F);
+    const auto make_view = [](const float x, const float y, const float width,
+                             const float height) -> View {
+      View view {};
+      view.viewport = ViewPort {
+        .top_left_x = x,
+        .top_left_y = y,
+        .width = width,
+        .height = height,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      };
+      view.scissor = Scissors {
+        .left = static_cast<int32_t>(x),
+        .top = static_cast<int32_t>(y),
+        .right = static_cast<int32_t>(x + width),
+        .bottom = static_cast<int32_t>(y + height),
+      };
+      return view;
+    };
+
+    auto consumer_comp = vortex::CompositionView::ForScene(main_view_id_,
+      make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
+    consumer_comp.name = "M06A.AuxConsumer.Main";
+    consumer_comp.with_atmosphere = true;
+    consumer_comp.with_height_fog = true;
+    consumer_comp.clear_color = graphics::Color { 0.05F, 0.09F, 0.16F, 1.0F };
+    consumer_comp.consumed_aux_outputs.push_back(
+      vortex::CompositionView::AuxInputDesc {
+        .id = vortex::CompositionView::AuxOutputId { 7001U },
+        .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+        .required = true,
+      });
+    shell.OnMainViewReady(context, consumer_comp);
+    views.push_back(std::move(consumer_comp));
+
+    auto producer_comp = vortex::CompositionView::ForScene(debug_view_id_,
+      make_view(half_w, 0.0F, sw - half_w, half_h), debug_camera_node_);
+    producer_comp.name = "M06A.AuxProducer.Color";
+    producer_comp.view_kind = vortex::CompositionView::ViewKind::kAuxiliary;
+    producer_comp.render_settings.shader_debug_mode
+      = vortex::ShaderDebugMode::kWorldNormals;
+    producer_comp.clear_color = graphics::Color { 0.09F, 0.04F, 0.12F, 1.0F };
+    producer_comp.produced_aux_outputs.push_back(
+      vortex::CompositionView::AuxOutputDesc {
+        .id = vortex::CompositionView::AuxOutputId { 7001U },
+        .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+        .debug_name = "M06A.AuxProducer.ColorTexture",
+      });
+    views.push_back(std::move(producer_comp));
+
+    auto top_comp = vortex::CompositionView::ForScene(top_view_id_,
+      make_view(0.0F, half_h, half_w, sh - half_h), top_camera_node_);
+    top_comp.name = "M06A.AuxProof.WireframeTop";
+    top_comp.force_wireframe = true;
+    top_comp.feature_mask.bits = vortex::CompositionView::ViewFeatureBits {
+      vortex::CompositionView::ViewFeatureMask::kSceneLighting
+      | vortex::CompositionView::ViewFeatureMask::kDiagnostics
+    };
+    top_comp.clear_color = graphics::Color { 0.02F, 0.08F, 0.06F, 1.0F };
+    views.push_back(std::move(top_comp));
+
+    auto shadow_comp = vortex::CompositionView::ForScene(shadow_view_id_,
+      make_view(half_w, half_h, sw - half_w, sh - half_h),
+      shadow_camera_node_);
+    shadow_comp.name = "M06A.AuxProof.DirectionalShadowMask";
+    shadow_comp.render_settings.shader_debug_mode
+      = vortex::ShaderDebugMode::kDirectionalShadowMask;
+    shadow_comp.feature_mask.bits = vortex::CompositionView::ViewFeatureBits {
+      vortex::CompositionView::ViewFeatureMask::kSceneLighting
+      | vortex::CompositionView::ViewFeatureMask::kShadows
+      | vortex::CompositionView::ViewFeatureMask::kDiagnostics
+    };
+    shadow_comp.clear_color = graphics::Color { 0.08F, 0.07F, 0.02F, 1.0F };
+    views.push_back(std::move(shadow_comp));
+
+    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
+    views.push_back(vortex::CompositionView::ForImGui(
+      imgui_view_id, make_view(0.0F, 0.0F, sw, sh),
+      [](graphics::CommandRecorder&) { }));
+    return;
+  }
 
   if (config_.proof_layout) {
     const float half_w = std::floor(sw * 0.5F);

@@ -866,6 +866,83 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
+  RuntimeAuxiliaryDependencyOrdersProducerBeforeConsumer)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+
+  auto consumer_fb
+    = MakeFramebuffer("SceneRendererPublicationTest.AuxConsumer");
+  auto producer_fb
+    = MakeFramebuffer("SceneRendererPublicationTest.AuxProducer");
+
+  auto make_composition_view = [](const ViewId id, std::string_view name) {
+    auto view = CompositionView {};
+    view.name = name;
+    view.id = id;
+    view.view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 64.0F,
+      .height = 64.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    return view;
+  };
+
+  auto consumer
+    = make_composition_view(ViewId { 501U }, "AuxConsumer");
+  consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
+    .id = CompositionView::AuxOutputId { 7001U },
+    .kind = CompositionView::AuxOutputKind::kColorTexture,
+    .required = true,
+  });
+  auto producer
+    = make_composition_view(ViewId { 502U }, "AuxProducer");
+  producer.view_kind = CompositionView::ViewKind::kAuxiliary;
+  producer.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
+    .id = CompositionView::AuxOutputId { 7001U },
+    .kind = CompositionView::AuxOutputKind::kColorTexture,
+    .debug_name = "AuxProducer.Color",
+  });
+
+  const auto published_consumer_id = renderer_->PublishRuntimeCompositionView(
+    frame_context,
+    Renderer::RuntimeViewPublishInput {
+      .composition_view = consumer,
+      .render_target = oxygen::observer_ptr { consumer_fb.get() },
+      .composite_source = oxygen::observer_ptr { consumer_fb.get() },
+    });
+  const auto published_producer_id = renderer_->PublishRuntimeCompositionView(
+    frame_context,
+    Renderer::RuntimeViewPublishInput {
+      .composition_view = producer,
+      .render_target = oxygen::observer_ptr { producer_fb.get() },
+      .composite_source = oxygen::observer_ptr { producer_fb.get() },
+    });
+
+  auto render_context = RenderContext {};
+  RendererPublicationProbe::PopulateRenderContextViewState(
+    *renderer_, render_context, frame_context, false);
+
+  ASSERT_EQ(render_context.frame_views.size(), 2U);
+  EXPECT_EQ(render_context.frame_views[0].view_id, published_producer_id);
+  EXPECT_EQ(render_context.frame_views[0].view_kind,
+    CompositionView::ViewKind::kAuxiliary);
+  EXPECT_EQ(render_context.frame_views[1].view_id, published_consumer_id);
+  ASSERT_EQ(render_context.frame_views[1].resolved_aux_inputs.size(), 1U);
+  const auto& resolved = render_context.frame_views[1].resolved_aux_inputs[0];
+  EXPECT_TRUE(resolved.valid);
+  EXPECT_EQ(resolved.input.id, CompositionView::AuxOutputId { 7001U });
+  EXPECT_EQ(resolved.kind, CompositionView::AuxOutputKind::kColorTexture);
+  EXPECT_EQ(resolved.producer_view_id, published_producer_id);
+  EXPECT_EQ(resolved.debug_name, "AuxProducer.Color");
+  EXPECT_EQ(render_context.pass_target.get(), producer_fb.get());
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
   Stage5PublishesRealScreenHzbProductsForDeferredViews)
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,

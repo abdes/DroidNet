@@ -10,6 +10,9 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <string>
+#include <unordered_map>
 #include <utility>
 
 #include <fmt/format.h>
@@ -346,6 +349,157 @@ namespace {
     default:
       return "Composite Task";
     }
+  }
+
+  auto AuxiliaryOutputKindName(
+    const CompositionView::AuxOutputKind kind) noexcept -> std::string_view
+  {
+    switch (kind) {
+    case CompositionView::AuxOutputKind::kColorTexture:
+      return "ColorTexture";
+    case CompositionView::AuxOutputKind::kDepthTexture:
+      return "DepthTexture";
+    case CompositionView::AuxOutputKind::kSceneTextureBinding:
+      return "SceneTextureBinding";
+    case CompositionView::AuxOutputKind::kCustomPassProduct:
+      return "CustomPassProduct";
+    }
+    return "Unknown";
+  }
+
+  auto ResolveRuntimeAuxiliaryDependencies(
+    std::vector<RenderContext::ViewExecutionEntry>& entries,
+    const frame::SequenceNumber frame_sequence) -> void
+  {
+    using AuxOutputId = CompositionView::AuxOutputId;
+
+    auto has_aux_descriptors = false;
+    std::unordered_map<AuxOutputId, std::size_t> producers;
+    for (std::size_t index = 0U; index < entries.size(); ++index) {
+      auto& entry = entries[index];
+      entry.resolved_aux_inputs.clear();
+      has_aux_descriptors = has_aux_descriptors
+        || !entry.produced_aux_outputs.empty()
+        || !entry.consumed_aux_outputs.empty();
+      for (const auto& output : entry.produced_aux_outputs) {
+        CHECK_F(output.id.get() != 0U,
+          "Runtime auxiliary output from view '{}' uses invalid AuxOutputId 0",
+          entry.debug_name);
+        const auto [_, inserted] = producers.emplace(output.id, index);
+        CHECK_F(inserted,
+          "Runtime auxiliary output {} has more than one producer",
+          output.id.get());
+      }
+    }
+
+    if (!has_aux_descriptors) {
+      return;
+    }
+
+    auto edges = std::vector<std::vector<std::size_t>>(entries.size());
+    auto indegree = std::vector<std::size_t>(entries.size(), 0U);
+    for (std::size_t consumer_index = 0U; consumer_index < entries.size();
+         ++consumer_index) {
+      auto& consumer = entries[consumer_index];
+      for (const auto& input : consumer.consumed_aux_outputs) {
+        CHECK_F(input.id.get() != 0U,
+          "Runtime auxiliary input from view '{}' uses invalid AuxOutputId 0",
+          consumer.debug_name);
+
+        const auto producer_it = producers.find(input.id);
+        if (producer_it == producers.end()) {
+          if (input.required) {
+            CHECK_F(false,
+              "Runtime auxiliary input {} for view '{}' is required but has "
+              "no producer",
+              input.id.get(), consumer.debug_name);
+          }
+          consumer.resolved_aux_inputs.push_back(
+            RenderContext::AuxiliaryResolvedInput {
+              .input = input,
+              .kind = input.kind,
+              .producer_view_id = kInvalidViewId,
+              .valid = false,
+              .debug_name = {},
+            });
+          continue;
+        }
+
+        const auto producer_index = producer_it->second;
+        CHECK_F(producer_index != consumer_index,
+          "Runtime auxiliary view '{}' cannot consume its own same-frame "
+          "output {}",
+          consumer.debug_name, input.id.get());
+
+        const auto& producer = entries[producer_index];
+        const auto output_it = std::ranges::find_if(
+          producer.produced_aux_outputs,
+          [&input](const CompositionView::AuxOutputDesc& output) {
+            return output.id == input.id;
+          });
+        CHECK_F(output_it != producer.produced_aux_outputs.end());
+        CHECK_F(output_it->kind == input.kind,
+          "Runtime auxiliary input {} for view '{}' expects kind {} but "
+          "producer '{}' publishes kind {}",
+          input.id.get(), consumer.debug_name,
+          AuxiliaryOutputKindName(input.kind), producer.debug_name,
+          AuxiliaryOutputKindName(output_it->kind));
+
+        consumer.resolved_aux_inputs.push_back(
+          RenderContext::AuxiliaryResolvedInput {
+            .input = input,
+            .kind = output_it->kind,
+            .producer_view_id = producer.view_id,
+            .valid = true,
+            .debug_name = std::string(output_it->debug_name),
+          });
+
+        edges[producer_index].push_back(consumer_index);
+        ++indegree[consumer_index];
+        LOG_F(INFO,
+          "Vortex.AuxView.Dependency frame={} aux_id={} producer_view={} "
+          "consumer_view={} kind={} valid=true",
+          frame_sequence.get(), input.id.get(), producer.view_id.get(),
+          consumer.view_id.get(), AuxiliaryOutputKindName(output_it->kind));
+      }
+    }
+
+    auto ordered_indices = std::vector<std::size_t> {};
+    ordered_indices.reserve(entries.size());
+    auto emitted = std::vector<bool>(entries.size(), false);
+    while (ordered_indices.size() < entries.size()) {
+      auto made_progress = false;
+      for (std::size_t index = 0U; index < entries.size(); ++index) {
+        if (emitted[index] || indegree[index] != 0U) {
+          continue;
+        }
+        emitted[index] = true;
+        ordered_indices.push_back(index);
+        for (const auto consumer_index : edges[index]) {
+          CHECK_GT_F(indegree[consumer_index], 0U);
+          --indegree[consumer_index];
+        }
+        made_progress = true;
+      }
+      CHECK_F(made_progress,
+        "Runtime auxiliary dependencies contain a cycle");
+    }
+
+    auto ordered_entries = std::vector<RenderContext::ViewExecutionEntry> {};
+    ordered_entries.reserve(entries.size());
+    auto order_stream = std::ostringstream {};
+    auto first = true;
+    for (const auto index : ordered_indices) {
+      if (!first) {
+        order_stream << ",";
+      }
+      first = false;
+      order_stream << entries[index].view_id.get();
+      ordered_entries.push_back(std::move(entries[index]));
+    }
+    entries = std::move(ordered_entries);
+    LOG_F(INFO, "Vortex.AuxView.Order frame={} view_ids={}",
+      frame_sequence.get(), order_stream.str());
   }
 
 } // namespace
@@ -1508,7 +1662,9 @@ auto Renderer::PublishRuntimeCompositionView(
     composition_view.force_wireframe
       ? std::optional<RenderMode> { RenderMode::kWireframe }
       : composition_view.render_settings.render_mode,
-    composition_view.view_state_handle);
+    composition_view.view_state_handle, composition_view.view_kind,
+    composition_view.produced_aux_outputs, composition_view.consumed_aux_outputs,
+    std::string(composition_view.name));
 
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
@@ -1526,7 +1682,11 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
   const std::optional<ShadingMode> shading_mode_override,
   const std::optional<RenderMode> render_mode_override,
-  const CompositionView::ViewStateHandle view_state_handle) -> ViewId
+  const CompositionView::ViewStateHandle view_state_handle,
+  const CompositionView::ViewKind view_kind,
+  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs,
+  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs,
+  std::string debug_name) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
@@ -1539,6 +1699,10 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.shading_mode_override = shading_mode_override;
     it->second.render_mode_override = render_mode_override;
     it->second.view_state_handle = view_state_handle;
+    it->second.view_kind = view_kind;
+    it->second.produced_aux_outputs = std::move(produced_aux_outputs);
+    it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
+    it->second.debug_name = std::move(debug_name);
     return it->second.published_view_id;
   }
 
@@ -1550,6 +1714,10 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .shading_mode_override = shading_mode_override,
         .render_mode_override = render_mode_override,
         .view_state_handle = view_state_handle,
+        .view_kind = view_kind,
+        .produced_aux_outputs = std::move(produced_aux_outputs),
+        .consumed_aux_outputs = std::move(consumed_aux_outputs),
+        .debug_name = std::move(debug_name),
       };
   return published_view_id;
 }
@@ -2078,6 +2246,13 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .with_atmosphere = view.metadata.with_atmosphere,
       .with_height_fog = view.metadata.with_height_fog,
       .with_local_fog = view.metadata.with_local_fog,
+      .debug_name = view.metadata.name,
+      .view_kind = view.metadata.is_scene_view
+        ? CompositionView::ViewKind::kPrimary
+        : CompositionView::ViewKind::kCompositionOnly,
+      .produced_aux_outputs = {},
+      .consumed_aux_outputs = {},
+      .resolved_aux_inputs = {},
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
       .render_mode_override = ResolvePublishedRuntimeRenderMode(view.id),
@@ -2090,6 +2265,20 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       it != resolved_views_.end()) {
       entry.resolved_view = observer_ptr<const ResolvedView> { &it->second };
     }
+    {
+      std::shared_lock state_lock(view_state_mutex_);
+      for (const auto& [_, state] : published_runtime_views_by_intent_) {
+        if (state.published_view_id != view.id) {
+          continue;
+        }
+        entry.debug_name = state.debug_name.empty() ? entry.debug_name
+                                                    : state.debug_name;
+        entry.view_kind = state.view_kind;
+        entry.produced_aux_outputs = state.produced_aux_outputs;
+        entry.consumed_aux_outputs = state.consumed_aux_outputs;
+        break;
+      }
+    }
     entry.exposure_view_state_handle
       = ResolvePublishedRuntimeViewStateHandle(entry.exposure_view_id);
     if (entry.exposure_view_state_handle
@@ -2101,6 +2290,13 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
     if (render_context.pass_target == nullptr) {
       render_context.pass_target = primary_target;
     }
+  }
+
+  ResolveRuntimeAuxiliaryDependencies(
+    render_context.frame_views, context.GetFrameSequenceNumber());
+  if (!render_context.frame_views.empty()) {
+    render_context.pass_target
+      = render_context.frame_views.front().primary_target;
   }
 }
 

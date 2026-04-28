@@ -191,6 +191,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool pip_wireframe = true;
   uint32_t pip_scissor_inset_px = 0U;
   bool proof_layout = false;
+  bool aux_proof_layout = false;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -243,6 +244,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .DefaultValue(false)
               .UserFriendlyName("enabled")
               .StoreTo(&proof_layout)
+              .Build())
+          .WithOption(Option::WithKey("aux-proof-layout")
+              .About("Use the M06A auxiliary producer/consumer validation layout")
+              .Long("aux-proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&aux_proof_layout)
               .Build());
 
     auto cli = oxygen::examples::cli::BuildCli(
@@ -266,12 +275,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed pip wireframe option = {}", pip_wireframe);
     LOG_F(INFO, "Parsed pip scissor inset option = {}", pip_scissor_inset_px);
     LOG_F(INFO, "Parsed proof layout option = {}", proof_layout);
+    LOG_F(INFO, "Parsed aux proof layout option = {}", aux_proof_layout);
 
     auto main_module_config = oxygen::examples::multiview::MainModuleConfig {
       .compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend,
       .pip_force_wireframe = pip_wireframe,
       .pip_scissor_inset_px = pip_scissor_inset_px,
       .proof_layout = proof_layout,
+      .aux_proof_layout = aux_proof_layout,
     };
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),

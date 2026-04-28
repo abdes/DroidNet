@@ -12,6 +12,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -224,6 +225,133 @@ namespace {
     CHECK_F(recorder.AdoptKnownResourceState(texture),
       "SceneRenderer: missing authoritative incoming state for '{}'",
       texture.GetName());
+  }
+
+  auto ResolveFramebufferColorTexture(
+    const observer_ptr<graphics::Framebuffer> framebuffer)
+    -> std::shared_ptr<graphics::Texture>
+  {
+    if (framebuffer == nullptr) {
+      return {};
+    }
+    const auto& desc = framebuffer->GetDescriptor();
+    if (desc.color_attachments.empty()) {
+      return {};
+    }
+    return desc.color_attachments.front().texture;
+  }
+
+  auto TrackAuxiliaryColorTexture(Graphics& gfx,
+    graphics::CommandRecorder& recorder, const graphics::Texture& texture)
+    -> void
+  {
+    auto& registry = gfx.GetResourceRegistry();
+    CHECK_F(registry.Contains(texture),
+      "SceneRenderer: auxiliary texture '{}' must be registered before "
+      "same-frame consumption",
+      texture.GetDescriptor().debug_name);
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
+
+    auto initial = texture.GetDescriptor().initial_state;
+    if ((initial == graphics::ResourceStates::kUnknown
+          || initial == graphics::ResourceStates::kUndefined)
+      && texture.GetDescriptor().is_render_target) {
+      initial = graphics::ResourceStates::kRenderTarget;
+    }
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "SceneRenderer: auxiliary texture '{}' must have a known state",
+      texture.GetDescriptor().debug_name);
+    recorder.BeginTrackingResourceState(texture, initial);
+  }
+
+  auto BuildAuxiliaryConsumerViewport(
+    const graphics::Texture& target) -> ViewPort
+  {
+    const auto& desc = target.GetDescriptor();
+    const auto width = static_cast<float>(
+      std::clamp(desc.width / 3U, 1U, std::min(desc.width, 256U)));
+    const auto height = static_cast<float>(
+      std::clamp(desc.height / 3U, 1U, std::min(desc.height, 256U)));
+    return ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = width,
+      .height = height,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+  }
+
+  auto CopyAuxiliaryTextureToRegion(graphics::CommandRecorder& recorder,
+    graphics::Texture& source, graphics::Texture& target,
+    const ViewPort& viewport) -> void
+  {
+    CHECK_F(recorder.IsResourceTracked(source),
+      "SceneRenderer: auxiliary copy source '{}' must be tracked",
+      source.GetDescriptor().debug_name);
+    CHECK_F(recorder.IsResourceTracked(target),
+      "SceneRenderer: auxiliary copy target '{}' must be tracked",
+      target.GetDescriptor().debug_name);
+
+    const auto& src_desc = source.GetDescriptor();
+    const auto& dst_desc = target.GetDescriptor();
+    CHECK_F(src_desc.format == dst_desc.format,
+      "SceneRenderer: auxiliary copy requires matching formats (source '{}' "
+      "target '{}')",
+      source.GetDescriptor().debug_name, target.GetDescriptor().debug_name);
+
+    const auto dst_x = static_cast<std::uint32_t>(std::clamp(
+      viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
+    const auto dst_y = static_cast<std::uint32_t>(std::clamp(
+      viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
+    const auto max_dst_w
+      = dst_desc.width > dst_x ? dst_desc.width - dst_x : 0U;
+    const auto max_dst_h
+      = dst_desc.height > dst_y ? dst_desc.height - dst_y : 0U;
+    const auto requested_w = static_cast<std::uint32_t>(std::max(
+      0.0F, std::min(viewport.width, static_cast<float>(max_dst_w))));
+    const auto requested_h = static_cast<std::uint32_t>(std::max(
+      0.0F, std::min(viewport.height, static_cast<float>(max_dst_h))));
+    const auto copy_width = std::min(src_desc.width, requested_w);
+    const auto copy_height = std::min(src_desc.height, requested_h);
+    if (copy_width == 0U || copy_height == 0U) {
+      return;
+    }
+
+    recorder.RequireResourceState(source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(target, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+
+    const graphics::TextureSlice src_slice {
+      .x = 0,
+      .y = 0,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+    const graphics::TextureSlice dst_slice {
+      .x = dst_x,
+      .y = dst_y,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+    constexpr graphics::TextureSubResourceSet subresources {
+      .base_mip_level = 0,
+      .num_mip_levels = 1,
+      .base_array_slice = 0,
+      .num_array_slices = 1,
+    };
+    recorder.CopyTexture(
+      source, src_slice, subresources, target, dst_slice, subresources);
   }
 
   auto RegisterBufferViewIndex(Graphics& gfx, graphics::Buffer& buffer,
@@ -1502,9 +1630,15 @@ void SceneRenderer::PrimePreparedView(RenderContext& ctx)
 
 void SceneRenderer::RenderViewFamily(RenderContext& ctx)
 {
+  struct AuxiliaryProduct {
+    std::shared_ptr<graphics::Texture> texture {};
+  };
+
   PrimePreparedViews(ctx);
   const auto allocations_before_frame = scene_texture_pool_.GetAllocationCount();
   auto rendered_scene_view_count = std::size_t { 0U };
+  auto auxiliary_products
+    = std::unordered_map<CompositionView::AuxOutputId, AuxiliaryProduct> {};
   for (std::size_t view_index = 0U; view_index < ctx.frame_views.size();
        ++view_index) {
     const auto& entry = ctx.frame_views[view_index];
@@ -1530,6 +1664,75 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     RenderCurrentView(ctx);
     renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
     renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
+
+    for (const auto& output : entry.produced_aux_outputs) {
+      if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
+        continue;
+      }
+      auto texture = ResolveFramebufferColorTexture(entry.primary_target);
+      CHECK_F(static_cast<bool>(texture),
+        "SceneRenderer: auxiliary output {} from view {} has no color texture",
+        output.id.get(), entry.view_id.get());
+      auxiliary_products.insert_or_assign(output.id,
+        AuxiliaryProduct {
+          .texture = texture,
+        });
+      LOG_F(INFO,
+        "Vortex.AuxView.Extract frame={} aux_id={} producer_view={} "
+        "texture='{}' debug_name='{}'",
+        ctx.frame_sequence.get(), output.id.get(), entry.view_id.get(),
+        texture->GetDescriptor().debug_name, output.debug_name);
+    }
+
+    for (const auto& input : entry.resolved_aux_inputs) {
+      if (!input.valid
+        || input.kind != CompositionView::AuxOutputKind::kColorTexture) {
+        continue;
+      }
+      const auto product_it = auxiliary_products.find(input.input.id);
+      CHECK_F(product_it != auxiliary_products.end(),
+        "SceneRenderer: resolved auxiliary input {} for view {} was not "
+        "extracted before consumption",
+        input.input.id.get(), entry.view_id.get());
+      auto target = ResolveFramebufferColorTexture(entry.primary_target);
+      CHECK_F(static_cast<bool>(target),
+        "SceneRenderer: auxiliary consumer view {} has no color target",
+        entry.view_id.get());
+      CHECK_F(product_it->second.texture.get() != target.get(),
+        "SceneRenderer: auxiliary consumer view {} cannot copy from its own "
+        "target texture",
+        entry.view_id.get());
+
+      const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
+      auto recorder = gfx_.AcquireCommandRecorder(
+        queue_key, "Vortex Auxiliary View Consumption");
+      CHECK_F(static_cast<bool>(recorder),
+        "SceneRenderer: failed to acquire auxiliary consumption recorder");
+      graphics::GpuEventScope consume_scope(*recorder, "Vortex.AuxView.Consume",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(
+          profiling::Var("aux_id", input.input.id.get()),
+          profiling::Var("producer_view", input.producer_view_id.get()),
+          profiling::Var("consumer_view", entry.view_id.get()),
+          profiling::Var("debug_name", input.debug_name)));
+      auto& source = *product_it->second.texture;
+      TrackAuxiliaryColorTexture(gfx_, *recorder, source);
+      TrackAuxiliaryColorTexture(gfx_, *recorder, *target);
+      CopyAuxiliaryTextureToRegion(
+        *recorder, source, *target, BuildAuxiliaryConsumerViewport(*target));
+      recorder->RequireResourceStateFinal(
+        source, graphics::ResourceStates::kRenderTarget);
+      recorder->RequireResourceStateFinal(
+        *target, graphics::ResourceStates::kRenderTarget);
+      recorder->FlushBarriers();
+      LOG_F(INFO,
+        "Vortex.AuxView.Consume frame={} aux_id={} producer_view={} "
+        "consumer_view={} texture='{}' target='{}'",
+        ctx.frame_sequence.get(), input.input.id.get(),
+        input.producer_view_id.get(), entry.view_id.get(),
+        source.GetDescriptor().debug_name, target->GetDescriptor().debug_name);
+    }
   }
 
   const auto allocations_after_frame = scene_texture_pool_.GetAllocationCount();

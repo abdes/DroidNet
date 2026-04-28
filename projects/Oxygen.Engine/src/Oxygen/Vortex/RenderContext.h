@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -91,6 +93,16 @@ struct RenderContext {
     }
   };
 
+  struct AuxiliaryResolvedInput {
+    CompositionView::AuxInputDesc input {};
+    CompositionView::AuxOutputKind kind {
+      CompositionView::AuxOutputKind::kColorTexture
+    };
+    oxygen::ViewId producer_view_id { kInvalidViewId };
+    bool valid { false };
+    std::string debug_name {};
+  };
+
   struct ViewExecutionEntry {
     oxygen::ViewId view_id { kInvalidViewId };
     oxygen::ViewId exposure_view_id { kInvalidViewId };
@@ -105,6 +117,11 @@ struct RenderContext {
     bool with_atmosphere { false };
     bool with_height_fog { false };
     bool with_local_fog { false };
+    std::string debug_name {};
+    CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
+    std::vector<AuxiliaryResolvedInput> resolved_aux_inputs {};
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     std::optional<RenderMode> render_mode_override;

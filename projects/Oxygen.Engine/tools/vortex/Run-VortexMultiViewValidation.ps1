@@ -27,7 +27,10 @@ param(
   [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll',
 
   [Parameter()]
-  [string]$DebuggerPath = ''
+  [string]$DebuggerPath = '',
+
+  [Parameter()]
+  [switch]$AuxProofLayout
 )
 
 Set-StrictMode -Version Latest
@@ -113,7 +116,8 @@ if (-not (Test-Path -LiteralPath $renderDocLibraryPath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($Output)) {
-  $Output = Join-Path $buildRoot 'analysis\vortex\m06a-multiview\multiview-proof'
+  $leaf = if ($AuxProofLayout) { 'multiview-aux-proof' } else { 'multiview-proof' }
+  $Output = Join-Path $buildRoot "analysis\vortex\m06a-multiview\$leaf"
 }
 
 $outputStem = Resolve-RepoPath -RepoRoot $repoRoot -Path $Output
@@ -171,6 +175,9 @@ $debugArgs = @(
   '--capture-provider', 'off',
   '--debug-layer', 'true'
 )
+if ($AuxProofLayout) {
+  $debugArgs += @('--aux-proof-layout', 'true')
+}
 
 $previousPath = $env:PATH
 try {
@@ -218,6 +225,9 @@ $appArgs = @(
   '--capture-from-frame', "$Frame",
   '--capture-frame-count', '1'
 )
+if ($AuxProofLayout) {
+  $appArgs += @('--aux-proof-layout', 'true')
+}
 try {
   $env:PATH = "$binaryDirectory;$previousPath"
   $runtimeExitCode = Invoke-LoggedProcess `
