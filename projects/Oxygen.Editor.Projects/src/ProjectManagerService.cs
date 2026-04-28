@@ -6,8 +6,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Storage;
 using Oxygen.Editor.World;
+using Oxygen.Storage;
 
 namespace Oxygen.Editor.Projects;
 
@@ -218,15 +218,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
             await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
 
-            try
-            {
-                await this.CookSceneAssetAsync(scene).ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                this.CouldNotCookSceneAfterSave(ex, scene.Name);
-            }
-
             return true;
         }
         catch (Exception ex)
@@ -268,11 +259,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
                 this.CouldNotLoadSceneMetadata(ex, item.Location);
             }
         }
-    }
-
-    private async Task CookSceneAssetAsync(Scene scene)
-    {
-        await EngineImportDescriptorCooker.CookSceneAsync(scene, this.logger).ConfigureAwait(false);
     }
 
     [SuppressMessage(
@@ -348,11 +334,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Level = LogLevel.Error,
         Message = "Could not save scene `{sceneName}`; {error}")]
     partial void CouldNotSaveScene(string sceneName, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "Scene `{SceneName}` was saved, but the legacy cook side effect failed.")]
-    partial void CouldNotCookSceneAfterSave(Exception ex, string SceneName);
 
     [LoggerMessage(
         Level = LogLevel.Error,
