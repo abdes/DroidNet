@@ -395,6 +395,9 @@ public:
       return pipeline_.shading_mode;
     }
 
+    OXGN_VRTX_API auto ExecuteNow() -> void;
+    OXGN_VRTX_API auto ExecuteInsideFrame(engine::FrameContext& frame_context)
+      -> void;
     OXGN_VRTX_API auto Execute() -> co::Co<void>;
 
   private:
