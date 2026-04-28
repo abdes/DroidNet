@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DryIoc;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -145,7 +147,17 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             editor = new MaterialEditorViewModel(
                 materialMeta,
                 this.container.Resolve<IMaterialDocumentService>(),
-                this.loggerFactory);
+                this.loggerFactory,
+                assetChanged: uri =>
+                {
+                    var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
+                    _ = messenger.Send(new AssetsChangedMessage(uri));
+                },
+                assetsCooked: () =>
+                {
+                    var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
+                    _ = messenger.Send(new AssetsCookedMessage());
+                });
         }
         else
         {

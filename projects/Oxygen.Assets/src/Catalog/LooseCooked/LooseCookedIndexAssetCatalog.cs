@@ -21,7 +21,7 @@ namespace Oxygen.Assets.Catalog.LooseCooked;
 /// It maps v1 <c>VirtualPath</c> values (e.g. <c>/Content/Textures/Wood.png</c>) to canonical
 /// asset URIs (e.g. <c>asset:///Content/Textures/Wood.png</c>).
 /// </remarks>
-public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
+public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {
     private readonly IStorageProvider storage;
     private readonly LooseCookedIndexAssetCatalogOptions options;
@@ -129,6 +129,13 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
             .OrderBy(u => u.ToString(), StringComparer.Ordinal)
             .Select(u => new AssetRecord(u))
             .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await this.ReloadSnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

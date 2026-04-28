@@ -10,6 +10,11 @@ namespace Oxygen.Core.Diagnostics;
 public static class AssetOperationKinds
 {
     /// <summary>
+    /// Asset browser snapshot publication.
+    /// </summary>
+    public const string Browse = "Asset.Browse";
+
+    /// <summary>
     /// Asset catalog query.
     /// </summary>
     public const string Query = "Asset.Query";
@@ -18,4 +23,9 @@ public static class AssetOperationKinds
     /// Asset reference resolution.
     /// </summary>
     public const string Resolve = "Asset.Resolve";
+
+    /// <summary>
+    /// Asset identity copy action.
+    /// </summary>
+    public const string CopyIdentity = "Asset.CopyIdentity";
 }

@@ -27,7 +27,7 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <summary>
     /// Gets the project root path.
     /// </summary>
-    public string ProjectRootPath { get; } = projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
+    public string ProjectRootPath => projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
 
     /// <summary>
     /// Adds a folder to the set of selected folders.

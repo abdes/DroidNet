@@ -24,6 +24,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly MaterialDocumentMetadata metadata;
     private readonly IMaterialDocumentService documentService;
     private readonly ILogger logger;
+    private readonly Action<Uri>? assetChanged;
+    private readonly Action? assetsCooked;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private MaterialDocument? document;
     private bool isLoading;
@@ -36,14 +38,20 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="metadata">The material document metadata.</param>
     /// <param name="documentService">The material document service.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
+    /// <param name="assetChanged">Optional callback used by the host to refresh content-browser projections.</param>
+    /// <param name="assetsCooked">Optional callback used by the host to refresh cooked asset projections.</param>
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        Action<Uri>? assetChanged = null,
+        Action? assetsCooked = null)
     {
         this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
+        this.assetChanged = assetChanged;
+        this.assetsCooked = assetsCooked;
         this.MaterialUriText = metadata.MaterialUri.ToString();
 
         _ = this.LoadAsync();
@@ -203,6 +211,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             this.metadata.IsDirty = false;
             this.IsDirty = false;
             this.StatusText = "Saved";
+            this.assetChanged?.Invoke(this.metadata.MaterialUri);
         }
     }
 
@@ -219,6 +228,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.StatusText = result.State == MaterialCookState.Rejected
             ? "Save the material before cooking."
             : $"Cook: {result.State}";
+        if (result.State is MaterialCookState.Cooked or MaterialCookState.Stale)
+        {
+            this.assetsCooked?.Invoke();
+        }
     }
 
     [RelayCommand]

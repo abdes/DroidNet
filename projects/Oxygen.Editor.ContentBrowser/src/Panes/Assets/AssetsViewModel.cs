@@ -14,8 +14,8 @@ using DroidNet.Routing.WinUI;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import;
 using Oxygen.Core;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
@@ -161,9 +161,9 @@ public partial class AssetsViewModel(
         _ = sender; // Unused
 
         Debug.WriteLine(
-            $"[AssetsViewModel] Item invoked: {args.InvokedItem.Name}, Type: {args.InvokedItem.AssetType}, Location: {args.InvokedItem.Location}");
+            $"[AssetsViewModel] Item invoked: {args.InvokedItem.DisplayName}, Kind: {args.InvokedItem.Kind}, URI: {args.InvokedItem.IdentityUri}");
 
-        if (args.InvokedItem.AssetType == AssetType.Scene)
+        if (args.InvokedItem.Kind == AssetKind.Scene)
         {
             var currentProject = projectManagerService.CurrentProject;
             if (currentProject is null)
@@ -173,7 +173,7 @@ public partial class AssetsViewModel(
 
             // Update the scene explorer
             var scene = currentProject.Scenes.FirstOrDefault(scene =>
-                string.Equals(scene.Name, args.InvokedItem.Name, StringComparison.OrdinalIgnoreCase));
+                string.Equals(scene.Name, args.InvokedItem.DisplayName, StringComparison.OrdinalIgnoreCase));
             if (scene is not null)
             {
                 currentProject.ActiveScene = scene;
@@ -182,18 +182,16 @@ public partial class AssetsViewModel(
                 _ = messenger.Send(new OpenSceneRequestMessage(scene));
             }
         }
-        else if (args.InvokedItem.AssetType == AssetType.Folder)
+        else if (args.InvokedItem.Kind == AssetKind.Folder)
         {
             // Navigate into the folder
-            Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.Location}");
-            await this.NavigateToFolder(args.InvokedItem.Location).ConfigureAwait(false);
+            Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.DisplayPath}");
+            await this.NavigateToFolder(args.InvokedItem.DisplayPath).ConfigureAwait(false);
         }
-        else if (args.InvokedItem.AssetType == AssetType.Material
-                 && args.InvokedItem.VirtualPath is { } virtualPath
-                 && virtualPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+        else if (args.InvokedItem.Kind == AssetKind.Material
+                 && args.InvokedItem.IdentityUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
         {
-            var materialUri = new Uri($"{AssetUris.Scheme}://{virtualPath}");
-            _ = messenger.Send(new OpenMaterialRequestMessage(materialUri, args.InvokedItem.Name));
+            _ = messenger.Send(new OpenMaterialRequestMessage(args.InvokedItem.IdentityUri, args.InvokedItem.DisplayName));
         }
     }
 
@@ -237,9 +235,8 @@ public partial class AssetsViewModel(
             if (newScene is not null)
             {
                 projectContextService.Activate(ProjectContext.FromProject(newScene.Project));
-
-                // File watcher will automatically detect and index the new scene
-                // TODO: Could add success notification here
+                _ = messenger.Send(new AssetsChangedMessage());
+                _ = messenger.Send(new OpenSceneRequestMessage(newScene));
             }
 
             // TODO: Show error message to user about scene creation failure
@@ -258,8 +255,6 @@ public partial class AssetsViewModel(
     [RelayCommand]
     private async Task CreateNewSceneWithPromptAsync()
     {
-        // For now, create a default name. In a full implementation,
-        // this would show a dialog to get the scene name from the user.
         var sceneCount = projectContextService.ActiveProject?.Scenes.Count ?? 0;
         var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
 
@@ -285,7 +280,7 @@ public partial class AssetsViewModel(
     {
         var folder = NormalizeMaterialFolder(virtualFolder);
         var count = this.LayoutViewModel is AssetsLayoutViewModel layout
-            ? layout.Assets.Count(asset => asset.AssetType == AssetType.Material)
+            ? layout.Assets.Count(asset => asset.Kind == AssetKind.Material)
             : 0;
         var start = Math.Max(1, count + 1);
         for (var i = start; i < start + 1000; i++)

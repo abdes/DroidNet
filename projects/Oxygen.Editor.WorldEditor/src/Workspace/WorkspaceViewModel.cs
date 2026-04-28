@@ -11,6 +11,7 @@ using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
@@ -186,6 +187,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
         childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
+        childContainer.Register<IAssetIdentityReducer, AssetIdentityReducer>(Reuse.Singleton);
+        childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
         childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
 
         // Register scene-engine synchronization service

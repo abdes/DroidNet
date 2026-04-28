@@ -37,4 +37,27 @@ public class DiagnosticVocabularyTests
         _ = DiagnosticCodes.SettingsPrefix.Should().Be("OXE.SETTINGS.");
         _ = DiagnosticCodes.AssetMountPrefix.Should().Be("OXE.ASSET_MOUNT.");
     }
+
+    [TestMethod]
+    public void OperationKinds_ShouldMatchEdM06AssetIdentityVocabulary()
+    {
+        _ = AssetOperationKinds.Query.Should().Be("Asset.Query");
+        _ = AssetOperationKinds.Resolve.Should().Be("Asset.Resolve");
+        _ = AssetOperationKinds.Browse.Should().Be("Asset.Browse");
+        _ = AssetOperationKinds.CopyIdentity.Should().Be("Asset.CopyIdentity");
+        _ = ContentBrowserOperationKinds.Navigate.Should().Be("ContentBrowser.Navigate");
+        _ = ContentBrowserOperationKinds.Refresh.Should().Be("ContentBrowser.Refresh");
+    }
+
+    [TestMethod]
+    public void AssetIdentityDiagnosticCodes_ShouldMatchEdM06Vocabulary()
+    {
+        _ = AssetIdentityDiagnosticCodes.QueryFailed.Should().Be("OXE.ASSETID.QueryFailed");
+        _ = AssetIdentityDiagnosticCodes.ReduceFailed.Should().Be("OXE.ASSETID.ReduceFailed");
+        _ = AssetIdentityDiagnosticCodes.ResolveMissing.Should().Be("OXE.ASSETID.Resolve.Missing");
+        _ = AssetIdentityDiagnosticCodes.DescriptorBroken.Should().Be("OXE.ASSETID.Descriptor.Broken");
+        _ = AssetIdentityDiagnosticCodes.CookedMissing.Should().Be("OXE.ASSETID.Cooked.Missing");
+        _ = AssetIdentityDiagnosticCodes.ContentRootInvalidSelection.Should().Be("OXE.PROJECT.CONTENT_ROOT.InvalidSelection");
+        _ = AssetIdentityDiagnosticCodes.AssetStale.Should().Be("OXE.CONTENTPIPELINE.Asset.Stale");
+    }
 }
