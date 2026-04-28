@@ -27,6 +27,11 @@ public static class Constants
     /// <remarks>
     /// This constant represents the name of the folder where scene files are stored within a project directory.
     /// </remarks>
+    public const string ContentFolderName = "Content";
+
+    /// <summary>
+    /// The name of the authored scenes folder under the default content mount.
+    /// </summary>
     public const string ScenesFolderName = "Scenes";
 
     /// <summary>
@@ -40,5 +45,5 @@ public static class Constants
     /// <remarks>
     /// This constant represents the file extension used for scene files within the Oxygen Editor.
     /// </remarks>
-    public const string SceneFileExtension = ".scene";
+    public const string SceneFileExtension = ".oscene.json";
 }

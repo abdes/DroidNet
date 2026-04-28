@@ -29,8 +29,8 @@ public sealed class AssetsLayoutViewModelTests
             folders,
             hasActiveProject: true));
         Assert.IsFalse(AssetsLayoutViewModel.IsInSelectedFolders(
-            "/Scenes/Default.oscene.json",
-            "/Scenes/Default.oscene.json",
+            "/Content/Scenes/Default.oscene.json",
+            "/Content/Scenes/Default.oscene.json",
             folders,
             hasActiveProject: true));
     }

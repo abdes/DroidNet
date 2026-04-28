@@ -80,7 +80,7 @@ public partial class NewProjectViewModel(
                     Mode = ProjectActivationMode.CreateFromTemplate,
                     SourceSurface = ProjectActivationSourceSurface.New,
                     TemplateLocation = template.Location,
-                    TemplateId = template.Name,
+                    TemplateId = template.TemplateId ?? template.Name,
                     ProjectName = projectName,
                     ParentLocation = location,
                     Category = template.Category,

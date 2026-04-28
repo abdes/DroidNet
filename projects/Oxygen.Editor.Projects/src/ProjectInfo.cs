@@ -99,6 +99,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public required Category Category { get; set; }
 
     /// <inheritdoc />
+    [JsonIgnore]
     public string? Location { get; set; }
 
     /// <inheritdoc />
@@ -111,6 +112,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public IList<LocalFolderMount> LocalFolderMounts { get; set; } = new List<LocalFolderMount>();
 
     /// <inheritdoc />
+    [JsonIgnore]
     public DateTime LastUsedOn { get; set; }
 
     /// <inheritdoc />
@@ -170,5 +172,35 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// </summary>
     /// <param name="projectInfo">The <see cref="IProjectInfo" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="IProjectInfo" /> object.</returns>
-    internal static string ToJson(IProjectInfo projectInfo) => JsonSerializer.Serialize(projectInfo, JsonOptions);
+    internal static string ToJson(IProjectInfo projectInfo)
+    {
+        var descriptor = new ProjectManifestDescriptor
+        {
+            SchemaVersion = projectInfo.SchemaVersion,
+            Id = projectInfo.Id,
+            Name = projectInfo.Name,
+            Category = projectInfo.Category,
+            Thumbnail = projectInfo.Thumbnail,
+            AuthoringMounts = [.. projectInfo.AuthoringMounts],
+            LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
+        };
+        return JsonSerializer.Serialize(descriptor, JsonOptions);
+    }
+
+    private sealed class ProjectManifestDescriptor
+    {
+        public int SchemaVersion { get; init; }
+
+        public Guid Id { get; init; }
+
+        public required string Name { get; init; }
+
+        public required Category Category { get; init; }
+
+        public string? Thumbnail { get; init; }
+
+        public IList<ProjectMountPoint> AuthoringMounts { get; init; } = [];
+
+        public IList<LocalFolderMount> LocalFolderMounts { get; init; } = [];
+    }
 }

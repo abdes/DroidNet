@@ -50,6 +50,26 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 /// </example>
 public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
 {
+    private static readonly string[] RequiredTemplateFolders =
+    [
+        "Content",
+        "Content/Scenes",
+        "Content/Materials",
+        "Content/Geometry",
+        "Content/Textures",
+        "Content/Audio",
+        "Content/Video",
+        "Content/Scripts",
+        "Content/Prefabs",
+        "Content/Animations",
+        "Content/SourceMedia",
+        "Content/SourceMedia/Images",
+        "Content/SourceMedia/Audio",
+        "Content/SourceMedia/Video",
+        "Content/SourceMedia/DCC",
+        "Config",
+    ];
+
     private readonly JsonSerializerOptions jsonSerializerOptions = new()
     {
         AllowTrailingCommas = true,
@@ -104,9 +124,14 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
 
             var templateInfo = JsonSerializer.Deserialize<TemplateInfo>(json, this.jsonSerializerOptions);
             Debug.Assert(templateInfo != null, $"Json content of template at `{templatePath}` is not valid");
+            if (templateInfo is null)
+            {
+                throw new TemplateLoadingException($"Template descriptor `{templatePath}` is invalid.");
+            }
 
             // Update the paths for the icon and preview images to become absolute
             templateInfo.Location = filesystem.Path.GetFullPath(filesystem.Path.GetDirectoryName(templatePath)!);
+            this.ValidateDescriptor(templateInfo, templateInfo.Location);
             if (templateInfo.Icon != null)
             {
                 var iconPath = filesystem.Path.Combine(templateInfo.Location, templateInfo.Icon);
@@ -131,11 +156,180 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
                 templateInfo.PreviewImages[index] = previewImagePath;
             }
 
+            this.ValidatePayload(templateInfo);
             return templateInfo;
         }
         catch (Exception ex)
         {
             throw new TemplateLoadingException($"Could not load template from location `{fromUri}`", ex);
         }
+    }
+
+    private void ValidateDescriptor(TemplateInfo templateInfo, string templateLocation)
+    {
+        if (templateInfo.SchemaVersion != 1)
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required SchemaVersion = 1.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.TemplateId))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required TemplateId.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.DisplayName) && string.IsNullOrWhiteSpace(templateInfo.Name))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required DisplayName.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.Description))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required Description.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.Icon))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required Icon.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.Preview))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required Preview.");
+        }
+
+        if (string.IsNullOrWhiteSpace(templateInfo.SourceFolder))
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required SourceFolder.");
+        }
+
+        if (filesystem.Path.IsPathRooted(templateInfo.SourceFolder))
+        {
+            throw new TemplateLoadingException("Template SourceFolder must be relative to the template folder.");
+        }
+
+        var sourceFolder = filesystem.Path.GetFullPath(filesystem.Path.Combine(templateLocation, templateInfo.SourceFolder));
+        if (!filesystem.Directory.Exists(sourceFolder))
+        {
+            throw new TemplateLoadingException($"Template SourceFolder `{templateInfo.SourceFolder}` does not exist.");
+        }
+
+        ValidateTemplateRelativePath(templateInfo.Icon, "Icon");
+        ValidateTemplateRelativePath(templateInfo.Preview, "Preview");
+        if (!templateInfo.PreviewImages.Contains(templateInfo.Preview, StringComparer.Ordinal))
+        {
+            templateInfo.PreviewImages.Insert(0, templateInfo.Preview);
+        }
+
+        if (templateInfo.StarterScene is null)
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required StarterScene.");
+        }
+
+        if (templateInfo.AuthoringMounts.Count == 0)
+        {
+            throw new TemplateLoadingException("Template descriptor is missing required AuthoringMounts.");
+        }
+
+        if (!templateInfo.AuthoringMounts.Any(static mount =>
+                string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new TemplateLoadingException("Template descriptor AuthoringMounts must include Content -> Content.");
+        }
+    }
+
+    private void ValidatePayload(TemplateInfo templateInfo)
+    {
+        var sourceFolder = filesystem.Path.GetFullPath(filesystem.Path.Combine(templateInfo.Location, templateInfo.SourceFolder ?? "."));
+        if (filesystem.Directory
+            .EnumerateFiles(sourceFolder, Constants.ProjectFileName, SearchOption.AllDirectories)
+            .Any())
+        {
+            throw new TemplateLoadingException($"Template payload must not contain `{Constants.ProjectFileName}`.");
+        }
+
+        foreach (var requiredFolder in RequiredTemplateFolders)
+        {
+            var path = filesystem.Path.Combine(sourceFolder, requiredFolder);
+            if (!filesystem.Directory.Exists(path))
+            {
+                throw new TemplateLoadingException($"Template payload is missing required folder `{requiredFolder}`.");
+            }
+        }
+
+        var starterScenePath = ResolveAssetRelativePath(templateInfo, templateInfo.StarterScene!.AssetUri, templateInfo.StarterScene.RelativePath, "StarterScene");
+        if (!filesystem.File.Exists(filesystem.Path.Combine(sourceFolder, starterScenePath)))
+        {
+            throw new TemplateLoadingException($"Template payload is missing starter scene `{starterScenePath}`.");
+        }
+
+        foreach (var content in templateInfo.StarterContent)
+        {
+            if (string.IsNullOrWhiteSpace(content.Kind))
+            {
+                throw new TemplateLoadingException("Template StarterContent entry is missing required Kind.");
+            }
+
+            var starterContentPath = ResolveAssetRelativePath(templateInfo, content.AssetUri, content.RelativePath, "StarterContent");
+            if (!filesystem.File.Exists(filesystem.Path.Combine(sourceFolder, starterContentPath)))
+            {
+                throw new TemplateLoadingException($"Template payload is missing starter content `{starterContentPath}`.");
+            }
+        }
+    }
+
+    private static void ValidateTemplateRelativePath(string relativePath, string fieldName)
+    {
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new TemplateLoadingException($"Template {fieldName} must be relative.");
+        }
+
+        var normalized = relativePath.Replace('\\', '/').Trim('/');
+        if (normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(static segment => segment is "." or ".."))
+        {
+            throw new TemplateLoadingException($"Template {fieldName} must not contain '.' or '..' segments.");
+        }
+    }
+
+    private static string ResolveAssetRelativePath(
+        TemplateInfo templateInfo,
+        Uri assetUri,
+        string? declaredRelativePath,
+        string fieldName)
+    {
+        if (!string.Equals(assetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new TemplateLoadingException($"Template {fieldName} URI must use the asset scheme.");
+        }
+
+        var assetPath = Uri.UnescapeDataString(assetUri.AbsolutePath).TrimStart('/');
+        var slash = assetPath.IndexOf('/', StringComparison.Ordinal);
+        if (slash <= 0)
+        {
+            throw new TemplateLoadingException($"Template {fieldName} URI must include an authoring mount.");
+        }
+
+        var mountName = assetPath[..slash];
+        var mountRelativePath = assetPath[(slash + 1)..].Replace('\\', '/').Trim('/');
+        var mount = templateInfo.AuthoringMounts.FirstOrDefault(mount =>
+            string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase));
+        if (mount is null)
+        {
+            throw new TemplateLoadingException($"Template {fieldName} URI targets unknown authoring mount `{mountName}`.");
+        }
+
+        var expectedPath = Path.Combine(mount.RelativePath, mountRelativePath).Replace('\\', '/').Trim('/');
+        if (!string.IsNullOrWhiteSpace(declaredRelativePath))
+        {
+            ValidateTemplateRelativePath(declaredRelativePath, $"{fieldName}.RelativePath");
+            var normalizedDeclaredPath = declaredRelativePath.Replace('\\', '/').Trim('/');
+            if (!string.Equals(normalizedDeclaredPath, expectedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new TemplateLoadingException($"Template {fieldName}.RelativePath does not match AssetUri.");
+            }
+        }
+
+        return expectedPath;
     }
 }

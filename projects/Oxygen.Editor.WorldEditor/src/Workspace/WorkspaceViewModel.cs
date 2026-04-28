@@ -410,7 +410,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         if (this.messenger is null
             || this.projectManager.CurrentProject is not { } project
             || this.projectContextService.ActiveProject is not { } context
-            || project.Scenes.Count == 0)
+            || project.Scenes.Count == 0
+            || !context.OpenInitialScene)
         {
             return;
         }
@@ -436,6 +437,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
 
     private async Task<Oxygen.Editor.World.Scene?> ResolveInitialSceneAsync(IProject project, ProjectContext context)
     {
+        if (context.InitialSceneAssetUri is { } initialSceneAssetUri
+            && TryResolveSceneFromAssetUri(project, initialSceneAssetUri) is { } starterScene)
+        {
+            return starterScene;
+        }
+
         try
         {
             var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(true);
@@ -460,6 +467,28 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         }
 
         return project.ActiveScene;
+    }
+
+    private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)
+    {
+        if (!string.Equals(sceneAssetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var fileName = System.IO.Path.GetFileName(Uri.UnescapeDataString(sceneAssetUri.AbsolutePath));
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var sceneName = fileName.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
+            : System.IO.Path.GetFileNameWithoutExtension(fileName);
+
+        return project.Scenes.FirstOrDefault(scene =>
+            string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Id.ToString("D"), sceneName, StringComparison.OrdinalIgnoreCase));
     }
 
     [SuppressMessage(

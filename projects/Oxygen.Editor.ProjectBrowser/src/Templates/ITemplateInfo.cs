@@ -24,6 +24,21 @@ public interface ITemplateInfo
     public string Name { get; set; }
 
     /// <summary>
+    /// Gets the stable template identifier from the descriptor.
+    /// </summary>
+    public string? TemplateId { get; }
+
+    /// <summary>
+    /// Gets the descriptor schema version.
+    /// </summary>
+    public int SchemaVersion { get; }
+
+    /// <summary>
+    /// Gets the project-relative template payload folder.
+    /// </summary>
+    public string? SourceFolder { get; }
+
+    /// <summary>
     /// Gets or sets the localized description explaining the purpose and contents of this template.
     /// </summary>
     public string Description { get; set; }

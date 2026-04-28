@@ -125,15 +125,117 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void AuthoringTargetResolver_ShouldDefaultMaterialCreationToContentMaterials()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project");
+
+        var target = resolver.ResolveCreateTarget(context, AuthoringAssetKind.Material, null);
+
+        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials"));
+        _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.NoSelection);
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldIgnoreMismatchedSceneFolderForMaterialCreation()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project");
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentBrowserSelection("Content/Scenes"));
+
+        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials"));
+        _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldHonorMatchingMaterialSubfolder()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project");
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentBrowserSelection("Content/Materials/Subfolder"));
+
+        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials/Subfolder");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials/Subfolder"));
+        _ = target.FallbackReason.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldSupportNonDefaultContentMountPath()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project") with
+        {
+            AuthoringMounts = [new ProjectMountPoint("Content", "Authoring")],
+        };
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentBrowserSelection("Authoring/Materials/Subfolder"));
+
+        _ = target.ProjectRelativeFolder.Should().Be("Authoring/Materials/Subfolder");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials/Subfolder"));
+        _ = target.FallbackReason.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldHonorExplicitLocalMountMaterialSubfolder()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project") with
+        {
+            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
+        };
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentBrowserSelection("StudioLibrary/Materials/Shared", "StudioLibrary"));
+
+        _ = target.IsExplicitLocalMount.Should().BeTrue();
+        _ = target.ProjectRelativeFolder.Should().Be("Materials/Shared");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///StudioLibrary/Materials/Shared"));
+        _ = target.FallbackReason.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldFallbackWhenExplicitLocalMountSelectionIsWrongKind()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateContext("Project") with
+        {
+            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
+        };
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentBrowserSelection("StudioLibrary/Scenes", "StudioLibrary"));
+
+        _ = target.IsExplicitLocalMount.Should().BeTrue();
+        _ = target.ProjectRelativeFolder.Should().Be("Materials");
+        _ = target.FolderAssetUri.Should().Be(new Uri("asset:///StudioLibrary/Materials"));
+        _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
+    }
+
+    [TestMethod]
     public async Task ProjectCreationService_ShouldCreateV01ManifestAndValidateResult()
     {
         var fs = new MockFileSystem();
-        fs.Directory.CreateDirectory(@"C:\Templates\Blank\Content");
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
         fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", "{}").ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
         await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Content\asset.txt", "payload").ConfigureAwait(false);
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateManifestJson(schemaVersion: 1))
-            .ConfigureAwait(false);
 
         var storage = new NativeStorageProvider(fs);
         var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
@@ -159,15 +261,21 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         _ = info.Name.Should().Be("Created");
         _ = info.Id.Should().NotBeEmpty();
         _ = info.AuthoringMounts.Should().ContainSingle();
+        _ = manifest.Should().NotContain(nameof(ProjectInfo.Location));
+        _ = manifest.Should().NotContain(nameof(ProjectInfo.LastUsedOn));
+        _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Scenes").Should().BeTrue();
+        _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Materials").Should().BeTrue();
+        _ = result.OpenStarterScene.Should().BeTrue();
+        _ = result.StarterSceneAssetUri.Should().Be(new Uri("asset:///Content/Scenes/Main.oscene.json"));
     }
 
     [TestMethod]
-    public async Task ProjectCreationService_ShouldIgnoreTemplatePlaceholderIdAndCreateUniqueProjectIds()
+    public async Task ProjectCreationService_ShouldCreateUniqueProjectIdsFromDescriptorTemplate()
     {
         var fs = new MockFileSystem();
-        fs.Directory.CreateDirectory(@"C:\Templates\Blank\Content");
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
         fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateTemplateManifestJson()).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
 
         var storage = new NativeStorageProvider(fs);
         var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
@@ -196,6 +304,61 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         _ = first.ProjectInfo!.Id.Should().NotBe(second.ProjectInfo!.Id);
         _ = first.ProjectInfo.Id.Should().NotBeEmpty();
         _ = second.ProjectInfo.Id.Should().NotBeEmpty();
+    }
+
+    [TestMethod]
+    public async Task ProjectCreationService_ShouldRejectTemplatePayloadProjectManifest()
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateManifestJson(schemaVersion: 1))
+            .ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var result = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Created",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Message.Should().Contain("Project.oxy");
+    }
+
+    [TestMethod]
+    public async Task ProjectCreationService_ShouldRejectInvalidTemplateDescriptor()
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(
+                @"C:\Templates\Blank\Template.json",
+                CreateTemplateDescriptorJson().Replace("\"SchemaVersion\": 1", "\"SchemaVersion\": 2", StringComparison.Ordinal))
+            .ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var result = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Created",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Message.Should().Contain("SchemaVersion");
     }
 
     [TestMethod]
@@ -291,13 +454,18 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                  """;
     }
 
-    private static string CreateTemplateManifestJson()
+    private static string CreateTemplateDescriptorJson()
         => """
            {
              "SchemaVersion": 1,
-             "Id": "__FIXME__",
-             "Name": "__FIXME__",
+             "TemplateId": "Games/Blank",
+             "Name": "Blank",
+             "DisplayName": "Blank",
+             "Description": "Blank template",
              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+             "Icon": "Media/Icon.png",
+             "Preview": "Media/Preview.png",
+             "SourceFolder": ".",
              "Thumbnail": "Media/Preview.png",
              "AuthoringMounts": [
                {
@@ -305,9 +473,76 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                  "RelativePath": "Content"
                }
              ],
-             "LocalFolderMounts": []
+             "LocalFolderMounts": [],
+             "StarterScene": {
+               "AssetUri": "asset:///Content/Scenes/Main.oscene.json",
+               "RelativePath": "Content/Scenes/Main.oscene.json",
+               "OpenOnCreate": true
+             },
+             "StarterContent": [
+               {
+                 "AssetUri": "asset:///Content/Materials/Default.omat.json",
+                 "RelativePath": "Content/Materials/Default.omat.json",
+                 "Kind": "Material"
+               }
+             ]
            }
            """;
+
+    private static void CreateTemplateSkeleton(MockFileSystem fs, string root)
+    {
+        foreach (var folder in new[]
+                 {
+                     "Content",
+                     "Content/Scenes",
+                     "Content/Materials",
+                     "Content/Geometry",
+                     "Content/Textures",
+                     "Content/Audio",
+                     "Content/Video",
+                     "Content/Scripts",
+                     "Content/Prefabs",
+                     "Content/Animations",
+                     "Content/SourceMedia",
+                     "Content/SourceMedia/Images",
+                     "Content/SourceMedia/Audio",
+                     "Content/SourceMedia/Video",
+                     "Content/SourceMedia/DCC",
+                     "Config",
+                     "Media",
+                 })
+        {
+            fs.Directory.CreateDirectory(Path.Combine(root, folder));
+        }
+
+        fs.File.WriteAllText(Path.Combine(root, "Media", "Icon.png"), "icon");
+        fs.File.WriteAllText(Path.Combine(root, "Media", "Preview.png"), "preview");
+        fs.File.WriteAllText(
+            Path.Combine(root, "Content", "Scenes", "Main.oscene.json"),
+            """
+            {
+              "Id": "09b406b8-410c-4cc3-8c0a-5f6af9afcc0c",
+              "Name": "Main",
+              "RootNodes": []
+            }
+            """);
+        fs.File.WriteAllText(
+            Path.Combine(root, "Content", "Materials", "Default.omat.json"),
+            """
+            {
+              "Schema": "oxygen.material.v1",
+              "Type": "PBR",
+              "Name": "Default",
+              "PbrMetallicRoughness": {
+                "BaseColorFactor": [1, 1, 1, 1],
+                "MetallicFactor": 0,
+                "RoughnessFactor": 0.5
+              },
+              "AlphaMode": "OPAQUE",
+              "DoubleSided": false
+            }
+            """);
+    }
 
     private static ProjectContext CreateContext(string name)
         => new()
