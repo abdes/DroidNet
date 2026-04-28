@@ -9,12 +9,15 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <unordered_map>
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -53,6 +56,11 @@ public:
 
 private:
   struct PassConstants;
+  struct SmoothState {
+    glm::dvec2 grid_offset { 0.0, 0.0 };
+    glm::dvec2 velocity { 0.0, 0.0 };
+    bool first_frame { true };
+  };
 
   auto EnsurePassConstantsBuffer() -> void;
   auto ReleasePassConstantsBuffer() -> void;
@@ -68,9 +76,7 @@ private:
   std::byte* pass_constants_mapped_ptr_ { nullptr };
   std::array<ShaderVisibleIndex, 8U> pass_constants_indices_ {};
   std::size_t pass_constants_slot_ { 0U };
-  glm::dvec2 smooth_grid_offset_ { 0.0, 0.0 };
-  glm::dvec2 smooth_grid_velocity_ { 0.0, 0.0 };
-  bool first_frame_ { true };
+  std::unordered_map<ViewId, SmoothState> smooth_states_by_view_;
 };
 
 } // namespace oxygen::vortex
