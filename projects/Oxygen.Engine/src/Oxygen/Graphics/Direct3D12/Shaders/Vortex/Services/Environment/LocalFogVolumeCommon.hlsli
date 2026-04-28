@@ -521,16 +521,14 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
     if (LoadEnvironmentStaticData(env_data)
         && env_data.sky_light.enabled != 0u
-        && env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX)
+        && env_data.sky_light.diffuse_sh_slot != K_INVALID_BINDLESS_INDEX)
     {
-        TextureCube<float4> irradiance_map
-            = ResourceDescriptorHeap[env_data.sky_light.irradiance_map_slot];
         const float3 sky_direction = normalize(lerp(
             float3(0.0f, 0.0f, 1.0f),
             -ray_dir_world,
             saturate(abs(instance.phase_g))));
-        const float3 sky_lighting = irradiance_map.SampleLevel(
-            linear_sampler, CubemapSamplingDirFromOxygenWS(sky_direction), 0.0f).rgb;
+        const float3 sky_lighting = EvaluateStaticSkyLightDiffuseSh(
+            env_data, sky_direction);
         in_scattering += sky_lighting
             * env_data.sky_light.tint_rgb
             * env_data.sky_light.radiance_scale

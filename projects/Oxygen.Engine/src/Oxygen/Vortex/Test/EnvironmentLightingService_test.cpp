@@ -10,9 +10,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include <glm/gtc/constants.hpp>
@@ -65,6 +69,10 @@
 
 #include "Fakes/Graphics.h"
 #include "Fixtures/TextureBinderPayloads.h"
+
+#ifndef OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR
+#  define OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR ""
+#endif
 
 namespace oxygen::vortex::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
@@ -141,6 +149,26 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   return { new Renderer(std::weak_ptr<Graphics>(graphics), std::move(config),
              kCapabilities),
     DestroyRenderer };
+}
+
+auto ReadShaderSource(const std::filesystem::path& relative_path) -> std::string
+{
+  const auto shader_path
+    = std::filesystem::path { OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR }
+    / relative_path;
+  auto input = std::ifstream(shader_path, std::ios::binary);
+  EXPECT_TRUE(input.is_open()) << shader_path.string();
+  if (!input.is_open()) {
+    return {};
+  }
+
+  return { std::istreambuf_iterator<char>(input),
+    std::istreambuf_iterator<char>() };
+}
+
+auto Contains(const std::string& text, const std::string_view needle) -> bool
+{
+  return text.find(needle) != std::string::npos;
 }
 
 auto MakeResolvedView(const float width, const float height,
@@ -391,7 +419,35 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     static_data.sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data.sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data.sky_light.diffuse_sh_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data.sky_light.ibl_generation, 0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightShaderConsumersUseDiffuseShBindingWithoutVisualFallback)
+{
+  const auto forward_mesh
+    = ReadShaderSource("Stages/Translucency/ForwardMesh_PS.hlsl");
+  const auto forward_debug
+    = ReadShaderSource("Stages/Translucency/ForwardDebug_PS.hlsl");
+  const auto local_fog
+    = ReadShaderSource("Services/Environment/LocalFogVolumeCommon.hlsli");
+
+  ASSERT_FALSE(forward_mesh.empty());
+  ASSERT_FALSE(forward_debug.empty());
+  ASSERT_FALSE(local_fog.empty());
+
+  EXPECT_TRUE(Contains(forward_mesh, "EvaluateStaticSkyLightDiffuseSh"));
+  EXPECT_TRUE(Contains(local_fog, "EvaluateStaticSkyLightDiffuseSh"));
+  EXPECT_TRUE(Contains(forward_debug, "sky_light.cubemap_slot"));
+
+  EXPECT_FALSE(Contains(forward_mesh, "sky_sphere.cubemap_slot"));
+  EXPECT_FALSE(Contains(forward_debug, "sky_sphere.cubemap_slot"));
+  EXPECT_FALSE(Contains(forward_mesh, "irradiance_map_slot"));
+  EXPECT_FALSE(Contains(local_fog, "irradiance_map_slot"));
+  EXPECT_FALSE(
+    Contains(forward_debug, "slot = env_data.sky_sphere.cubemap_slot"));
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -668,7 +724,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  StaticSkyLightSpecifiedCubemapRemainsUnavailableUntilShaderConsumersMigrate)
+  StaticSkyLightSpecifiedCubemapClassifiesPendingGpuProducts)
 {
   const auto pass = IblProbePass {};
   auto sky_light = SkyLightEnvironmentModel {};
@@ -702,7 +758,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(refreshed.probe_state.static_sky_light.status,
     StaticSkyLightProductStatus::kUnavailable);
   EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
-    StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete);
+    StaticSkyLightUnavailableReason::kGpuProductsPending);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -863,7 +919,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  StaticSkyLightGpuProductsUploadProcessedCubemapAndDiffuseShButRemainGated)
+  StaticSkyLightGpuProductsUploadProcessedCubemapAndDiffuseShBindings)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
@@ -909,11 +965,11 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   const auto second = processor.RefreshStaticSkyLightProducts(
     first.probe_state, sky_light, source_cubemap.get());
 
-  EXPECT_FALSE(second.probe_state.valid);
+  EXPECT_TRUE(second.probe_state.valid);
   EXPECT_EQ(second.probe_state.static_sky_light.status,
-    StaticSkyLightProductStatus::kUnavailable);
+    StaticSkyLightProductStatus::kValidCurrentKey);
   EXPECT_EQ(second.probe_state.static_sky_light.unavailable_reason,
-    StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete);
+    StaticSkyLightUnavailableReason::kNone);
   EXPECT_TRUE(
     second.probe_state.static_sky_light.processed_cubemap_srv.IsValid());
   EXPECT_TRUE(
@@ -923,10 +979,26 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     second.probe_state.static_sky_light.source_radiance_scale, 1.0F);
   EXPECT_NEAR(
     second.probe_state.static_sky_light.average_brightness, 4.0F, 1.0e-4F);
+  EXPECT_EQ(second.probe_state.probes.environment_map_srv,
+    second.probe_state.static_sky_light.processed_cubemap_srv);
+  EXPECT_EQ(second.probe_state.probes.diffuse_sh_srv,
+    second.probe_state.static_sky_light.diffuse_irradiance_sh_srv);
   EXPECT_EQ(
-    second.probe_state.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+    second.probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(
-    second.probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
+    second.probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(second.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
+
+  const auto third = processor.RefreshStaticSkyLightProducts(
+    second.probe_state, sky_light, source_cubemap.get());
+
+  EXPECT_FALSE(third.requested);
+  EXPECT_FALSE(third.refreshed);
+  EXPECT_TRUE(third.probe_state.valid);
+  EXPECT_EQ(third.probe_state.probes.probe_revision,
+    second.probe_state.probes.probe_revision);
+  EXPECT_EQ(third.probe_state.static_sky_light.product_revision,
+    second.probe_state.static_sky_light.product_revision);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2200,6 +2272,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     static_data->sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data->sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data->sky_light.diffuse_sh_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data->sky_light.ibl_generation, 0U);
   EXPECT_NE(products->flags
       & oxygen::vortex::environment::

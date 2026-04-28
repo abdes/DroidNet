@@ -45,7 +45,7 @@ enum class StaticSkyLightUnavailableReason : std::uint8_t {
   kNotTextureCube,
   kUnsupportedFormat,
   kProcessingFailed,
-  kShaderConsumerMigrationIncomplete,
+  kGpuProductsPending,
 };
 
 struct StaticSkyLightProducts {

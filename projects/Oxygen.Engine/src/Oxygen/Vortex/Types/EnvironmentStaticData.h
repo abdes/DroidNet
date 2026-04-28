@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Core/Constants.h>
@@ -75,9 +76,10 @@ inline constexpr std::uint32_t kGpuFogFlagEnabled = 1U << 0U;
 inline constexpr std::uint32_t kGpuFogFlagHeightFogEnabled = 1U << 1U;
 inline constexpr std::uint32_t kGpuFogFlagVolumetricFogAuthored = 1U << 2U;
 inline constexpr std::uint32_t kGpuFogFlagRenderInMainPass = 1U << 3U;
-inline constexpr std::uint32_t kGpuFogFlagVisibleInReflectionCaptures = 1U << 4U;
-inline constexpr std::uint32_t kGpuFogFlagVisibleInRealTimeSkyCaptures
-  = 1U << 5U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInReflectionCaptures = 1U
+  << 4U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInRealTimeSkyCaptures = 1U
+  << 5U;
 inline constexpr std::uint32_t kGpuFogFlagHoldout = 1U << 6U;
 inline constexpr std::uint32_t kGpuFogFlagDirectionalInscattering = 1U << 7U;
 inline constexpr std::uint32_t kGpuFogFlagCubemapAuthored = 1U << 8U;
@@ -126,7 +128,9 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   float pad_sun_disk_luminance { 0.0F };
 
   std::array<float, 3> rayleigh_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
-  float rayleigh_scale_height_km { engine::atmos::kDefaultRayleighScaleHeightKm };
+  float rayleigh_scale_height_km {
+    engine::atmos::kDefaultRayleighScaleHeightKm
+  };
 
   std::array<float, 3> mie_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
   float mie_scale_height_km { engine::atmos::kDefaultMieScaleHeightKm };
@@ -177,7 +181,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t cubemap_max_mip { 0U };
   std::uint32_t prefilter_max_mip { 0U };
   std::uint32_t ibl_generation { 0U };
-  std::uint32_t pad1 { 0U };
+  std::uint32_t diffuse_sh_slot { kInvalidBindlessIndex };
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
@@ -249,6 +253,8 @@ static_assert(sizeof(GpuFogParams) == 128);
 static_assert(sizeof(GpuVolumetricFogParams) == 96);
 static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
 static_assert(sizeof(GpuSkyLightParams) == 64);
+static_assert(offsetof(GpuSkyLightParams, cubemap_slot) == 32);
+static_assert(offsetof(GpuSkyLightParams, diffuse_sh_slot) == 60);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);

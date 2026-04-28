@@ -197,7 +197,7 @@ enum class StaticSkyLightUnavailableReason {
   kNotTextureCube,
   kUnsupportedFormat,
   kProcessingFailed,
-  kShaderConsumerMigrationIncomplete,
+  kGpuProductsPending,
 };
 
 struct StaticSkyLightProducts {

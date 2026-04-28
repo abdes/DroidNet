@@ -174,7 +174,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
   auto& cache = *static_sky_light_cache_;
 
   if (state.static_sky_light.unavailable_reason
-      != StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete
+      != StaticSkyLightUnavailableReason::kGpuProductsPending
     || source_cubemap == nullptr) {
     if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
       ResetResource(*gfx, cache.processed_cubemap);
@@ -395,7 +395,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       .average_brightness = cpu_products->average_brightness,
       .status = StaticSkyLightProductStatus::kUnavailable,
       .unavailable_reason
-      = StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete,
+      = StaticSkyLightUnavailableReason::kGpuProductsPending,
     };
     cache.processed_cubemap = std::move(processed_cubemap);
     cache.diffuse_sh_buffer = std::move(diffuse_sh_buffer);
@@ -417,29 +417,58 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       && *cubemap_complete && *sh_complete;
   }
 
-  state.static_sky_light = cache.products;
-  state.static_sky_light.status = uploads_complete
-    ? StaticSkyLightProductStatus::kUnavailable
-    : StaticSkyLightProductStatus::kRegeneratingCurrentKey;
-  state.static_sky_light.unavailable_reason = uploads_complete
-    ? StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete
-    : StaticSkyLightUnavailableReason::kNone;
   if (!uploads_complete) {
+    state.static_sky_light = cache.products;
+    state.static_sky_light.status
+      = StaticSkyLightProductStatus::kRegeneratingCurrentKey;
+    state.static_sky_light.unavailable_reason
+      = StaticSkyLightUnavailableReason::kNone;
     state.static_sky_light.processed_cubemap_srv = kInvalidShaderVisibleIndex;
     state.static_sky_light.diffuse_irradiance_sh_srv
       = kInvalidShaderVisibleIndex;
     state.static_sky_light.processed_cubemap_max_mip = 0U;
+    state.valid = false;
+    state.flags = kEnvironmentProbeStateFlagUnavailable;
+    return {
+      .requested = refreshed.requested,
+      .refreshed = refreshed.refreshed,
+      .probe_state = state,
+    };
   }
-  state.valid = false;
-  state.flags = kEnvironmentProbeStateFlagUnavailable;
 
-  if (uploads_complete
-    && current_state.static_sky_light.diffuse_irradiance_sh_srv
-      != state.static_sky_light.diffuse_irradiance_sh_srv) {
+  state.static_sky_light = cache.products;
+  state.static_sky_light.status = StaticSkyLightProductStatus::kValidCurrentKey;
+  state.static_sky_light.unavailable_reason
+    = StaticSkyLightUnavailableReason::kNone;
+  state.probes.environment_map_srv
+    = state.static_sky_light.processed_cubemap_srv;
+  state.probes.diffuse_sh_srv
+    = state.static_sky_light.diffuse_irradiance_sh_srv;
+  state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
+  state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
+  state.probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
+  state.valid = true;
+  state.flags = kEnvironmentProbeStateFlagResourcesValid;
+
+  const auto products_changed = !current_state.valid
+    || current_state.static_sky_light.key != state.static_sky_light.key
+    || current_state.static_sky_light.processed_cubemap_srv
+      != state.static_sky_light.processed_cubemap_srv
+    || current_state.static_sky_light.diffuse_irradiance_sh_srv
+      != state.static_sky_light.diffuse_irradiance_sh_srv
+    || current_state.static_sky_light.processed_cubemap_max_mip
+      != state.static_sky_light.processed_cubemap_max_mip;
+  if (products_changed) {
     state.probes.probe_revision += 1U;
     state.static_sky_light.product_revision = state.probes.probe_revision;
     refreshed.requested = true;
     refreshed.refreshed = true;
+  } else {
+    state.probes.probe_revision = current_state.probes.probe_revision;
+    state.static_sky_light.product_revision
+      = current_state.static_sky_light.product_revision;
+    refreshed.requested = false;
+    refreshed.refreshed = false;
   }
 
   return {

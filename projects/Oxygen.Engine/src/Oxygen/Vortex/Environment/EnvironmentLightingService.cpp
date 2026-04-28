@@ -808,13 +808,15 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     view_products.sky_light.tint_rgb.y,
     view_products.sky_light.tint_rgb.z,
   };
-  data.sky_light.radiance_scale = view_products.sky_light.intensity_mul;
   data.sky_light.diffuse_intensity = view_products.sky_light.diffuse_intensity;
   data.sky_light.specular_intensity
     = view_products.sky_light.specular_intensity;
   data.sky_light.source = view_products.sky_light.source;
   const auto usable_probe_bindings = SanitizedProbeBindings(probe_state_);
   const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
+  data.sky_light.radiance_scale = view_products.sky_light.intensity_mul
+    * (sky_light_ibl_valid ? probe_state_.static_sky_light.source_radiance_scale
+                           : 1.0F);
   data.sky_light.enabled
     = view_products.sky_light.enabled && sky_light_ibl_valid ? 1U : 0U;
   data.sky_light.cubemap_slot = usable_probe_bindings.environment_map_srv.get();
@@ -823,6 +825,13 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     = usable_probe_bindings.irradiance_map_srv.get();
   data.sky_light.prefilter_map_slot
     = usable_probe_bindings.prefiltered_map_srv.get();
+  data.sky_light.diffuse_sh_slot = usable_probe_bindings.diffuse_sh_srv.get();
+  data.sky_light.cubemap_max_mip = sky_light_ibl_valid
+    ? probe_state_.static_sky_light.processed_cubemap_max_mip
+    : 0U;
+  data.sky_light.prefilter_max_mip = sky_light_ibl_valid
+    ? probe_state_.static_sky_light.prefiltered_cubemap_max_mip
+    : 0U;
   data.sky_light.ibl_generation
     = sky_light_ibl_valid ? usable_probe_bindings.probe_revision : 0U;
 

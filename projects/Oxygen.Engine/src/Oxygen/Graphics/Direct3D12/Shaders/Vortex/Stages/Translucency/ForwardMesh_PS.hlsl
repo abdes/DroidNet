@@ -88,34 +88,20 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
     return 0.0.xxx;
   }
 
-  uint sky_slot = env_state.data.sky_light.cubemap_slot;
-  if (sky_slot == K_INVALID_BINDLESS_INDEX) {
-    sky_slot = env_state.data.sky_sphere.cubemap_slot;
-  }
-  if (sky_slot == K_INVALID_BINDLESS_INDEX) {
-    return 0.0.xxx;
-  }
-
   const float3 V = surf.V;
   const float3 N = surf.N;
   const float3 cube_R = CubemapSamplingDirFromOxygenWS(reflect(-V, N));
-  const float3 cube_N = CubemapSamplingDirFromOxygenWS(N);
 
-  float3 ibl_diffuse = 0.0.xxx;
+  float3 ibl_diffuse = EvaluateStaticSkyLightDiffuseSh(env_state.data, N)
+    * env_state.data.sky_light.tint_rgb
+    * env_state.data.sky_light.radiance_scale
+    * env_state.data.sky_light.diffuse_intensity;
   float3 ibl_specular = 0.0.xxx;
-  TextureCube<float4> sky_cube = ResourceDescriptorHeap[sky_slot];
 
-  if (env_state.data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX
-    && env_state.data.sky_light.prefilter_map_slot
-      != K_INVALID_BINDLESS_INDEX) {
-    TextureCube<float4> irr_map
-      = ResourceDescriptorHeap[env_state.data.sky_light.irradiance_map_slot];
+  if (env_state.data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX
+    && BX_IN_GLOBAL_SRV(env_state.data.sky_light.prefilter_map_slot)) {
     TextureCube<float4> pref_map
       = ResourceDescriptorHeap[env_state.data.sky_light.prefilter_map_slot];
-    ibl_diffuse = irr_map.SampleLevel(linear_sampler, cube_N, 0.0).rgb
-      * env_state.data.sky_light.tint_rgb
-      * env_state.data.sky_light.radiance_scale
-      * env_state.data.sky_light.diffuse_intensity;
     ibl_specular
       = pref_map
           .SampleLevel(linear_sampler, cube_R,
@@ -124,22 +110,6 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
       * env_state.data.sky_light.tint_rgb
       * env_state.data.sky_light.radiance_scale
       * env_state.data.sky_light.specular_intensity;
-  } else {
-    const float sky_max_mip
-      = (sky_slot == env_state.data.sky_sphere.cubemap_slot)
-      ? (float)env_state.data.sky_sphere.cubemap_max_mip
-      : (float)env_state.data.sky_light.cubemap_max_mip;
-    ibl_specular
-      = sky_cube
-          .SampleLevel(linear_sampler, cube_R, sky_max_mip * surf.roughness)
-          .rgb
-      * env_state.data.sky_light.tint_rgb
-      * env_state.data.sky_light.radiance_scale
-      * env_state.data.sky_light.specular_intensity;
-    ibl_diffuse = sky_cube.SampleLevel(linear_sampler, cube_N, sky_max_mip).rgb
-      * env_state.data.sky_light.tint_rgb
-      * env_state.data.sky_light.radiance_scale
-      * env_state.data.sky_light.diffuse_intensity;
   }
 
   float3 ibl_spec_term = 0.0.xxx;
