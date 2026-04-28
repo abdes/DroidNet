@@ -73,6 +73,7 @@ Current execution focus:
       creation, scene/material target, Content Browser root, and picker
       filtering corrections.
 - [x] Validate `ED-M06A` manually before resuming `ED-M07`.
+- [x] Implement and manually validate `ED-M07` content pipeline and cooking.
 
 `ED-M02` may close in parallel with `ED-M03` LLD review and detailed planning.
 `ED-M03` implementation may not rely on live preview as validation evidence
@@ -81,8 +82,8 @@ until `ED-M02` is `validated`.
 Current resume point:
 
 1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Start `ED-M07.1` native API/content-pipeline audit and record the selected
-   execution path before ED-M07.2+ coding.
+2. Prepare `ED-M08` runtime parity and standalone validation LLD review and
+   detailed planning.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
@@ -418,7 +419,7 @@ Exit evidence required:
 
 ### ED-M07 - Content Pipeline And Cooking
 
-Status: `active`
+Status: `validated`
 
 Trace: `GOAL-001`, `GOAL-002`, `GOAL-005`, `GOAL-006`; `REQ-015`,
 `REQ-016`, `REQ-017`, `REQ-018`, `REQ-019`, `REQ-022`, `REQ-023`,
@@ -460,12 +461,12 @@ catalog refresh, and mount refresh work as explicit workflows.
       it through the same explicit content-pipeline service.
 - [x] Runtime cooked-root refresh is requested only from validated cooked-output
       messages after cook/validate success.
-- [ ] Cook, inspect, and mount failures produce visible operation results across
+- [x] Cook, inspect, and mount failures produce visible operation results across
       all command entry points and manual failure scenarios.
 
 Exit evidence required:
 
-- [ ] One `ED-M07` validation ledger row records descriptor/manifest inputs,
+- [x] One `ED-M07` validation ledger row records descriptor/manifest inputs,
       cook output, inspect result, mount result, and failure-result behavior.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
@@ -566,7 +567,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
-| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `accepted` | Begin implementation with ED-M07.1 native API/content-pipeline audit; ED-M07.2+ coding waits for recorded decisions. |
+| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | No further action for ED-M07. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `deferred` | Covered by `ED-M05-scalar-material-authoring.md` and `ED-M06-asset-identity-content-browser.md`; keep only as historical context. |
@@ -590,7 +591,7 @@ checklist or detailed plan tracker instead.
 | `ED-M05` | `validated` | 2026-04-28 | User manually validated scalar material authoring against the corrected ED-M06A project layout: material creation under `Content/Materials`, editor scalar/color editing with shared controls, save/reopen behavior, material picker refresh/filtering, geometry assignment by asset identity, asset URI/GUID identity display and copy affordances, and minimum cook/catalog behavior. |
 | `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
-| `ED-M07` | `pending` | - | Not validated. |
+| `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
