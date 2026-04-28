@@ -84,6 +84,16 @@ namespace {
     };
   }
 
+  auto CreatePerspectiveCameraNode(scene::Scene& scene, std::string_view name)
+    -> scene::SceneNode
+  {
+    auto node = scene.CreateNode(std::string(name));
+    const bool attached
+      = node.AttachCamera(std::make_unique<scene::PerspectiveCamera>());
+    CHECK_F(attached, "Failed to attach {}", name);
+    return node;
+  }
+
 } // namespace
 
 MainModule::MainModule(
@@ -95,6 +105,9 @@ MainModule::MainModule(
 
   main_view_id_ = this->GetOrCreateViewId("MainView");
   pip_view_id_ = this->GetOrCreateViewId("PipView");
+  top_view_id_ = this->GetOrCreateViewId("TopView");
+  debug_view_id_ = this->GetOrCreateViewId("DebugView");
+  shadow_view_id_ = this->GetOrCreateViewId("ShadowView");
 }
 
 auto MainModule::BuildDefaultWindowProperties() const
@@ -145,18 +158,14 @@ auto MainModule::OnAttachedImpl(
   const auto staged_scene = shell->GetStagedScene();
   CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
 
-  main_camera_node_ = staged_scene->CreateNode("MainCamera");
-  {
-    const bool attached = main_camera_node_.AttachCamera(
-      std::make_unique<scene::PerspectiveCamera>());
-    CHECK_F(attached, "Failed to attach MainCamera");
-  }
-
-  pip_camera_node_ = staged_scene->CreateNode("PipCamera");
-  {
-    const bool attached = pip_camera_node_.AttachCamera(
-      std::make_unique<scene::PerspectiveCamera>());
-    CHECK_F(attached, "Failed to attach PipCamera");
+  main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
+  pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
+  if (config_.proof_layout) {
+    top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
+    debug_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
+    shadow_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
   }
 
   shell->SetStagedMainCamera(main_camera_node_);
@@ -280,6 +289,42 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       });
     }
   }
+
+  if (!config_.proof_layout) {
+    return;
+  }
+
+  const float quadrant_aspect = extent.height > 0
+    ? static_cast<float>(extent.width) / static_cast<float>(extent.height)
+    : 1.0F;
+  const auto configure_camera = [quadrant_aspect](scene::SceneNode& node,
+                                  const glm::vec3& position,
+                                  const glm::vec3& target,
+                                  const float fov_degrees) {
+    if (!node.IsAlive()) {
+      return;
+    }
+    const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
+    if (!cam_opt) {
+      return;
+    }
+
+    auto& cam = cam_opt->get();
+    const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
+    node.GetTransform().SetLocalPosition(position);
+    node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view_mat)));
+    cam.SetFieldOfView(glm::radians(fov_degrees));
+    cam.SetAspectRatio(quadrant_aspect);
+    cam.SetNearPlane(0.05F);
+    cam.SetFarPlane(160.0F);
+  };
+
+  configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.1F),
+    glm::vec3(0.0F, 0.0F, -2.0F), 45.0F);
+  configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
+    glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
+  configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
+    glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
 }
 
 auto MainModule::OnFrameStart(
@@ -369,18 +414,14 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     const auto staged_scene = shell.GetStagedScene();
     CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
 
-    main_camera_node_ = staged_scene->CreateNode("MainCamera");
-    {
-      const bool attached = main_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-      CHECK_F(attached, "Failed to attach MainCamera");
-    }
-
-    pip_camera_node_ = staged_scene->CreateNode("PipCamera");
-    {
-      const bool attached = pip_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-      CHECK_F(attached, "Failed to attach PipCamera");
+    main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
+    pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
+    if (config_.proof_layout) {
+      top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
+      debug_camera_node_
+        = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
+      shadow_camera_node_
+        = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
     }
 
     shell.SetStagedMainCamera(main_camera_node_);
@@ -433,6 +474,88 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   }
   const float sw = static_cast<float>(extent.width);
   const float sh = static_cast<float>(extent.height);
+
+  if (config_.proof_layout) {
+    const float half_w = std::floor(sw * 0.5F);
+    const float half_h = std::floor(sh * 0.5F);
+    const auto make_view = [](const float x, const float y, const float width,
+                             const float height) -> View {
+      View view {};
+      view.viewport = ViewPort {
+        .top_left_x = x,
+        .top_left_y = y,
+        .width = width,
+        .height = height,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      };
+      view.scissor = Scissors {
+        .left = static_cast<int32_t>(x),
+        .top = static_cast<int32_t>(y),
+        .right = static_cast<int32_t>(x + width),
+        .bottom = static_cast<int32_t>(y + height),
+      };
+      return view;
+    };
+
+    auto lit_comp = vortex::CompositionView::ForScene(main_view_id_,
+      make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
+    lit_comp.name = "M06A.LitPerspective";
+    lit_comp.with_atmosphere = true;
+    lit_comp.with_height_fog = true;
+    lit_comp.clear_color = graphics::Color { 0.05F, 0.11F, 0.20F, 1.0F };
+    lit_comp.produced_aux_outputs.push_back(vortex::CompositionView::AuxOutputDesc {
+      .id = vortex::CompositionView::AuxOutputId { 6001U },
+      .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+      .debug_name = "M06A.LitPerspective.Color",
+    });
+    shell.OnMainViewReady(context, lit_comp);
+    views.push_back(std::move(lit_comp));
+
+    auto top_comp = vortex::CompositionView::ForScene(top_view_id_,
+      make_view(half_w, 0.0F, sw - half_w, half_h), top_camera_node_);
+    top_comp.name = "M06A.WireframeTop";
+    top_comp.force_wireframe = true;
+    top_comp.feature_mask.bits = vortex::CompositionView::ViewFeatureBits {
+      vortex::CompositionView::ViewFeatureMask::kSceneLighting
+      | vortex::CompositionView::ViewFeatureMask::kDiagnostics
+    };
+    top_comp.clear_color = graphics::Color { 0.02F, 0.08F, 0.06F, 1.0F };
+    views.push_back(std::move(top_comp));
+
+    auto debug_comp = vortex::CompositionView::ForScene(debug_view_id_,
+      make_view(0.0F, half_h, half_w, sh - half_h), debug_camera_node_);
+    debug_comp.name = "M06A.WorldNormals";
+    debug_comp.render_settings.shader_debug_mode
+      = vortex::ShaderDebugMode::kWorldNormals;
+    debug_comp.consumed_aux_outputs.push_back(vortex::CompositionView::AuxInputDesc {
+      .id = vortex::CompositionView::AuxOutputId { 6001U },
+      .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+      .required = true,
+    });
+    debug_comp.clear_color = graphics::Color { 0.10F, 0.04F, 0.10F, 1.0F };
+    views.push_back(std::move(debug_comp));
+
+    auto shadow_comp = vortex::CompositionView::ForScene(shadow_view_id_,
+      make_view(half_w, half_h, sw - half_w, sh - half_h),
+      shadow_camera_node_);
+    shadow_comp.name = "M06A.DirectionalShadowMask";
+    shadow_comp.render_settings.shader_debug_mode
+      = vortex::ShaderDebugMode::kDirectionalShadowMask;
+    shadow_comp.feature_mask.bits = vortex::CompositionView::ViewFeatureBits {
+      vortex::CompositionView::ViewFeatureMask::kSceneLighting
+      | vortex::CompositionView::ViewFeatureMask::kShadows
+      | vortex::CompositionView::ViewFeatureMask::kDiagnostics
+    };
+    shadow_comp.clear_color = graphics::Color { 0.08F, 0.07F, 0.02F, 1.0F };
+    views.push_back(std::move(shadow_comp));
+
+    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
+    views.push_back(vortex::CompositionView::ForImGui(
+      imgui_view_id, make_view(0.0F, 0.0F, sw, sh),
+      [](graphics::CommandRecorder&) { }));
+    return;
+  }
 
   // 1. Main Scene (Full screen)
   View main_view {};
