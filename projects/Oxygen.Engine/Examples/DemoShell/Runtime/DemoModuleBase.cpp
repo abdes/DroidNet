@@ -403,9 +403,10 @@ auto DemoModuleBase::OnPreRender(observer_ptr<engine::FrameContext> /*context*/)
   co_return;
 }
 
-auto DemoModuleBase::OnCompositing(
-  observer_ptr<engine::FrameContext> /*context*/) -> co::Co<>
+auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
+  DCHECK_NOTNULL_F(context);
   DCHECK_NOTNULL_F(app_window_);
 
   if (app_.headless || !app_window_->GetWindow()
@@ -447,6 +448,8 @@ auto DemoModuleBase::OnCompositing(
       .opacity = view_intent.opacity,
     });
   }
+
+  AppendRuntimeCompositionLayers(*context, input);
 
   renderer->RegisterRuntimeComposition(input);
   co_return;
