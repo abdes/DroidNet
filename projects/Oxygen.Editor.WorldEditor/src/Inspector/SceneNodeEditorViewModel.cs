@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Assets.Catalog;
+using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -63,6 +64,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IDocumentService documentService,
         WindowId windowId,
         IAssetCatalog assetCatalog,
+        IMaterialPickerService materialPickerService,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -84,6 +86,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             [typeof(GeometryComponent)] = _ => new GeometryViewModel(
                 hosting,
                 assetCatalog,
+                materialPickerService,
                 commandService,
                 this.CreateCommandContext),
         };

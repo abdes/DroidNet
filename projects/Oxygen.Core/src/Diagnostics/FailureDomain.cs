@@ -95,6 +95,16 @@ public enum FailureDomain
     ContentPipeline,
 
     /// <summary>
+    /// Material authoring workflow.
+    /// </summary>
+    MaterialAuthoring,
+
+    /// <summary>
+    /// Asset identity and catalog resolution workflow.
+    /// </summary>
+    AssetIdentity,
+
+    /// <summary>
     /// Asset import workflow.
     /// </summary>
     AssetImport,

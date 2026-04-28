@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -137,6 +138,13 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.container.Resolve<ISceneDocumentCommandService>(),
                 this.container,
                 messenger,
+                this.loggerFactory);
+        }
+        else if (e.Metadata is MaterialDocumentMetadata materialMeta)
+        {
+            editor = new MaterialEditorViewModel(
+                materialMeta,
+                this.container.Resolve<IMaterialDocumentService>(),
                 this.loggerFactory);
         }
         else

@@ -6,7 +6,7 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
@@ -31,7 +31,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <local:PropertiesExpander
+    <editorcontrols:PropertiesExpander
         Padding="2"
         HorizontalAlignment="Stretch"
         VerticalAlignment="Top"
@@ -40,11 +40,11 @@
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE7AD;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
-        <local:PropertiesExpander.Content>
+        <editorcontrols:PropertiesExpander.Content>
             <Button>Hello</Button>
-        </local:PropertiesExpander.Content>
-        <local:PropertiesExpander.Items>
-            <local:PropertyCard
+        </editorcontrols:PropertiesExpander.Content>
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Position"
@@ -61,8 +61,8 @@
                     YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
                     ZIsIndeterminate="{x:Bind ViewModel.PositionZIsIndeterminate, Mode=TwoWay}"
                     ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
-            </local:PropertyCard>
-            <local:PropertyCard
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Rotation"
@@ -80,8 +80,8 @@
                     YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
                     ZIsIndeterminate="{x:Bind ViewModel.RotationZIsIndeterminate, Mode=TwoWay}"
                     ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
-            </local:PropertyCard>
-            <local:PropertyCard
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Scale"
@@ -99,7 +99,7 @@
                     YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
                     ZIsIndeterminate="{x:Bind ViewModel.ScaleZIsIndeterminate, Mode=TwoWay}"
                     ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
-            </local:PropertyCard>
-        </local:PropertiesExpander.Items>
-    </local:PropertiesExpander>
+            </editorcontrols:PropertyCard>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
 </UserControl>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <UseWinUI>true</UseWinUI>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Editor.Controls</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen editor shared controls.</Title>
+        <Description>Shared Oxygen editor controls used by inspector and document editors.</Description>
+        <PackageTags>oxygen;editor;controls;ui</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.WinUI.Triggers" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+</Project>

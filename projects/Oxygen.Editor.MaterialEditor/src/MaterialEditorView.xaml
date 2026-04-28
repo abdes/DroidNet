@@ -1,0 +1,263 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.MaterialEditor.MaterialEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.MaterialEditor"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+            <x:Double x:Key="MaterialEditorScalarMinWidth">104</x:Double>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="VectorBoxPointerOverBackground" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="VectorBoxPointerOverBackground" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            MaxWidth="920"
+            Padding="20"
+            Spacing="12">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Width="56"
+                    Height="56"
+                    VerticalAlignment="Top"
+                    Background="{x:Bind ViewModel.BaseColorBrush, Mode=OneWay}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4" />
+
+                <StackPanel
+                    Grid.Column="1"
+                    MinWidth="0"
+                    Spacing="4">
+                    <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.DisplayName, Mode=OneWay}" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind ViewModel.MaterialUriText, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Modified"
+                            Visibility="{x:Bind ViewModel.IsDirtyVisibility, Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="2"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button Command="{x:Bind ViewModel.SaveMaterialCommand}" Content="Save" />
+                    <Button Command="{x:Bind ViewModel.CookCommand}" Content="Cook" />
+                </StackPanel>
+            </Grid>
+
+            <editorcontrols:PropertiesExpander
+                Padding="2"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Description="Names and identifies the material descriptor."
+                Header="Identity"
+                HeaderIcon="{ui:FontIcon Glyph='&#xE8A5;'}"
+                IsExpanded="True">
+                <editorcontrols:PropertiesExpander.Items>
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset URI">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.MaterialUriText, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <Button
+                                Grid.Column="1"
+                                Command="{x:Bind ViewModel.CopyMaterialUriCommand}"
+                                ToolTipService.ToolTip="Copy asset URI">
+                                <FontIcon Glyph="&#xE8C8;" />
+                            </Button>
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset GUID">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.MaterialGuidText, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <Button
+                                Grid.Column="1"
+                                Command="{x:Bind ViewModel.CopyMaterialGuidCommand}"
+                                ToolTipService.ToolTip="Copy asset GUID">
+                                <FontIcon Glyph="&#xE8C8;" />
+                            </Button>
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+                </editorcontrols:PropertiesExpander.Items>
+            </editorcontrols:PropertiesExpander>
+
+            <editorcontrols:PropertiesExpander
+                Padding="2"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Description="Scalar PBR values stored in oxygen.material.v1."
+                Header="PBR Metallic Roughness"
+                HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+                IsExpanded="True">
+                <editorcontrols:PropertiesExpander.Items>
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Base Color">
+                        <Grid ColumnSpacing="8" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Button
+                                MinWidth="44"
+                                Padding="4"
+                                ToolTipService.ToolTip="Pick base color">
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <ColorPicker
+                                            ColorChanged="BaseColorPicker_ColorChanged"
+                                            IsAlphaEnabled="True"
+                                            IsAlphaSliderVisible="True"
+                                            IsColorChannelTextInputVisible="True"
+                                            IsHexInputVisible="True"
+                                            Color="{x:Bind ViewModel.BaseColorColor, Mode=OneWay}" />
+                                    </Flyout>
+                                </Button.Flyout>
+                                <Border
+                                    Width="32"
+                                    Height="24"
+                                    Background="{x:Bind ViewModel.BaseColorBrush, Mode=OneWay}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="2" />
+                            </Button>
+
+                            <controls:NumberBox
+                                Grid.Column="1"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="R"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}" />
+                            <controls:NumberBox
+                                Grid.Column="2"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="G"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.BaseColorG, Mode=TwoWay}" />
+                            <controls:NumberBox
+                                Grid.Column="3"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="B"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}" />
+                            <controls:NumberBox
+                                Grid.Column="4"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="A"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}" />
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Surface">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:NumberBox
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="Metallic"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.MetallicFactor, Mode=TwoWay}" />
+                            <controls:NumberBox
+                                Grid.Column="1"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="Roughness"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.RoughnessFactor, Mode=TwoWay}" />
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+                </editorcontrols:PropertiesExpander.Items>
+            </editorcontrols:PropertiesExpander>
+
+            <editorcontrols:PropertiesExpander
+                Padding="2"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Description="Alpha and render-state descriptor fields."
+                Header="Advanced"
+                HeaderIcon="{ui:FontIcon Glyph='&#xE9D2;'}"
+                IsExpanded="False">
+                <editorcontrols:PropertiesExpander.Items>
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Alpha">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <ComboBox ItemsSource="{x:Bind ViewModel.AlphaModes}" SelectedItem="{x:Bind ViewModel.AlphaMode, Mode=TwoWay}" />
+                            <controls:NumberBox
+                                Grid.Column="1"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                Label="Cutoff"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.AlphaCutoff, Mode=TwoWay}" />
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Rendering">
+                        <ToggleSwitch Header="Double Sided" IsOn="{x:Bind ViewModel.DoubleSided, Mode=TwoWay}" />
+                    </editorcontrols:PropertyCard>
+                </editorcontrols:PropertiesExpander.Items>
+            </editorcontrols:PropertiesExpander>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

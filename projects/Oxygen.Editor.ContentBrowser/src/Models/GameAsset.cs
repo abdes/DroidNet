@@ -77,7 +77,7 @@ public class GameAsset
     /// <param name="location">The path, relative to the project root, where the asset is located.</param>
     public GameAsset(string name, string location)
     {
-        this.Name = name;
+        this.Name = NormalizeDisplayName(name);
         this.Location = location;
         this.AssetType = GetAssetType(name);
     }
@@ -90,7 +90,7 @@ public class GameAsset
     /// <param name="assetType">The type of the asset.</param>
     public GameAsset(string name, string location, AssetType assetType)
     {
-        this.Name = name;
+        this.Name = NormalizeDisplayName(name);
         this.Location = location;
         this.AssetType = assetType;
     }
@@ -212,5 +212,18 @@ public class GameAsset
 
         ext = ext.TrimStart('.').ToLowerInvariant();
         return $"{baseName} ({ext})";
+    }
+
+    private static string NormalizeDisplayName(string name)
+    {
+        foreach (var suffix in new[] { ".omat", ".ogeo", ".oscene", ".otex" })
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return name[..^suffix.Length];
+            }
+        }
+
+        return name;
     }
 }

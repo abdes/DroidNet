@@ -46,6 +46,14 @@
                                     <FontIcon Glyph="&#xE7C3;" />
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                AccessKey="M"
+                                Click="OnCreateMaterialClicked"
+                                Text="Material">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8B9;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
                             <MenuFlyoutSeparator x:Name="NewMenuFileFolderSeparator" />
                         </MenuFlyout>
                     </dnc:ToolBarButton.Flyout>

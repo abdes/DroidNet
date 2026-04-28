@@ -12,8 +12,10 @@ using Oxygen.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
@@ -184,6 +186,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
         childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
+        childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
@@ -203,6 +206,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<SceneEditorView>(Reuse.Transient);
+        childContainer.Register<MaterialEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
 
