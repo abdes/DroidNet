@@ -41,6 +41,7 @@ using oxygen::scene::Scene;
 using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto DestroyRenderer(Renderer* renderer) -> void
@@ -184,6 +185,41 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PresetsFinalizeWithRenderableViewIds)
   EXPECT_NE(preview_session->GetViewId(), capture_session->GetViewId());
 }
 
+NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineDefaultsToDeferred)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "DefaultPipeline", ViewId { 43U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+
+  auto session = facade.Finalize();
+
+  ASSERT_TRUE(session.has_value());
+  EXPECT_EQ(session->GetPipelineShadingMode(), ShadingMode::kDeferred);
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCanSelectForward)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "ForwardPipeline", ViewId { 44U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
+
+  auto session = facade.Finalize();
+
+  ASSERT_TRUE(session.has_value());
+  EXPECT_EQ(session->GetPipelineShadingMode(), ShadingMode::kForward);
+}
+
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
 {
   auto facade = renderer_->ForOffscreenScene();
@@ -194,6 +230,28 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
     "OffscreenExecute", ViewId { 42U }, MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
+
+  auto session = facade.Finalize();
+  ASSERT_TRUE(session.has_value());
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(
+    loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
+
+  EXPECT_FALSE(graphics_->draw_log_.draws.empty());
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "ForwardExecute", ViewId { 45U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
 
   auto session = facade.Finalize();
   ASSERT_TRUE(session.has_value());

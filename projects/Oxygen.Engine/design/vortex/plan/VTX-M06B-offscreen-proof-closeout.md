@@ -139,7 +139,20 @@ Validation:
 
 Evidence:
 
-- Record which modes are source-implemented and which runtime proofs remain.
+- `OffscreenPipelineInput` now carries a typed `ShadingMode`, defaults to
+  deferred, and exposes `Deferred()` / `Forward()` factories. `Execute()`
+  materializes that mode into the effective offscreen `CompositionView` so the
+  normal SceneRenderer shading resolver consumes the setting.
+- Focused validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OffscreenSceneFacade.Tests --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.OffscreenSceneFacade" --output-on-failure`
+  with 6/6 tests passing, covering default deferred selection, explicit
+  forward selection, deferred execution, and forward execution.
+- ShaderBake/catalog validation was not run because no shader source, shader
+  ABI, root-binding, or catalog files changed.
+- Residual gap: CPU/API routing is validated; runtime RenderDoc proof must
+  still distinguish deferred/forward products in the visual proof scenario.
 
 ### D. Product Handoff and Final State
 
