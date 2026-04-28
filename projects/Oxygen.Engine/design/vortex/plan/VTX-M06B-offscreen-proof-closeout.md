@@ -1,6 +1,6 @@
 # VTX-M06B - Offscreen Proof Closeout
 
-Status: `in_progress`
+Status: `validated`
 
 ## 1. Goal
 
@@ -52,9 +52,9 @@ Out of scope:
 | Presets | `offscreen::scene::presets::ForPreview()` and `ForCapture()` configure the facade. | Make presets produce renderable offscreen sessions, including a valid view identity. |
 | Execution | `ValidatedOffscreenSceneSession::Execute()` currently validates non-null renderer/scene/output and ensures a `SceneRenderer`, but it does not render to the output target. | First implementation slice must replace this no-op with a Vortex-native offscreen frame execution path. |
 | Pipeline settings | `OffscreenPipelineInput` is currently empty. | Add the minimum typed settings needed for deferred/solid-forward proof without leaking cross-domain options. |
-| Forward solid scene path | Vortex routes `ShadingMode::kForward` through the base pass using the shared Forward+ mesh shader path and writes SceneColor directly without publishing GBuffer products. Forward wireframe remains debug/regression coverage only. | Complete RenderDoc/readback/churn proof before claiming the forward offscreen gate closed. |
+| Forward solid scene path | Vortex routes `ShadingMode::kForward` through the base pass using the shared Forward+ mesh shader path and writes SceneColor directly without publishing GBuffer products. Forward wireframe remains debug/regression coverage only. | Validated by focused tests, CDB/debug-layer proof, RenderDoc structural proof, and non-empty offscreen product proof. |
 | Product handoff | The output framebuffer is accepted but not populated by the facade. | Route scene/post/composition output into the caller target and leave the product in the documented final state. |
-| Runtime proof | No dedicated offscreen runtime proof script or analyzer exists. | Add proof tooling after the render path exists; keep status `in_progress` until the proof passes. |
+| Runtime proof | Dedicated offscreen runtime proof script, RenderDoc analyzer, assertion wrapper, and allocation-churn report are implemented. | Validated by `Run-VortexOffscreenValidation.ps1`; keep these artifacts current if the proof layout changes. |
 
 ## 4. UE5.7 References
 
@@ -238,7 +238,7 @@ Evidence:
   and
   `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
   with 45/45 tests passing.
-- Solid forward source implementation is now present: the base pass accepts
+- Solid forward source implementation landed in commit `97ca7fb65`: the base pass accepts
   `ShadingMode::kForward` solid draws, binds a SceneColor-only framebuffer,
   runs the shared Forward+ mesh shader path, avoids deferred GBuffer
   publication, and the MultiView offscreen proof capture tile now requests
@@ -256,9 +256,29 @@ Evidence:
   violation, 5 deferred preview renders, and 5 forward capture renders. The log
   is recorded at
   `out\build-ninja\analysis\vortex\m06b-offscreen\cdb-solid-forward-smoke.log`.
-- Residual gap: add scripted RenderDoc analysis, readback/product proof,
-  assertion wrapper, 60-frame churn report, and user visual confirmation before
-  slice E can close.
+- Runtime closure tooling landed in the current proof-tooling slice:
+  `tools\vortex\Run-VortexOffscreenValidation.ps1`,
+  `tools\vortex\AnalyzeRenderDocVortexOffscreen.py`, and
+  `tools\vortex\Assert-VortexOffscreenProof.ps1`.
+- Full slice-E validation passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexOffscreenValidation.ps1 -Output out\build-ninja\analysis\vortex\m06b-offscreen\offscreen-proof -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4`.
+  Evidence:
+  `offscreen-proof.debug-layer.report.txt` has `overall_verdict=pass`,
+  `runtime_exit_code=0`, `d3d12_error_count=0`, `dxgi_error_count=0`, and
+  `blocking_warning_count=0`;
+  `offscreen-proof.renderdoc.txt` has `overall_verdict=true`,
+  `deferred_scope_count=2`, `deferred_draw_count=10`,
+  `forward_scope_count=1`, `forward_draw_count=5`,
+  `preview_composite_work_count=1`, `capture_composite_work_count=1`,
+  `preview_texture_rgb_nonzero=true`, and
+  `capture_texture_rgb_nonzero=true`;
+  `offscreen-proof.allocation-churn.txt` has `run_frames_at_least_60=true`,
+  `steady_state_frame_count=190`,
+  `steady_state_allocations_after_warmup=0`, and `overall_verdict=pass`;
+  `offscreen-proof.validation.txt` has `overall_verdict=pass`.
+- User visual confirmation on 2026-04-28 approved the solid-forward offscreen
+  proof visual.
+- Residual gap: none for slice E.
 
 ### F. Closure and Ledger Update
 
@@ -272,6 +292,23 @@ Required work:
   CDB/debug-layer proof, RenderDoc analysis, allocation-churn proof, and
   truthful final-state/product evidence.
 
+Evidence:
+
+- Full focused closure validation passed through
+  `Run-VortexOffscreenValidation.ps1`, which builds `oxygen-vortex`,
+  `oxygen-graphics-direct3d12`, and `oxygen-examples-multiview`, runs the
+  CDB/debug-layer audit, captures/analyzes RenderDoc, produces the 60-frame
+  allocation-churn report, and runs the assertion wrapper.
+- Focused unit/integration validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OffscreenSceneFacade.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests oxygen-examples-multiview --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(OffscreenSceneFacade|RendererCompositionQueue|SceneRendererDeferredCore)" --output-on-failure`
+  with 3/3 test executables passing.
+- ShaderBake/catalog validation was not run because no shader source, shader
+  ABI, root-binding, or catalog files changed in the closure slices.
+- `git diff --check` passed before the solid-forward source commit; rerun it
+  after this status/doc update before committing closure docs/tooling.
+
 Exit gate:
 
 - Implementation exists.
@@ -284,7 +321,7 @@ Exit gate:
 - Both deferred and solid forward offscreen scene products are proven. Forward
   wireframe/debug proof may remain as regression coverage but cannot satisfy
   the solid forward gate.
-- Remaining gaps are recorded as none, accepted, or deferred with owner.
+- Remaining gaps are recorded as none for VTX-M06B.
 
 ## 6. Validation Command Set
 

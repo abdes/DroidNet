@@ -2,12 +2,12 @@
 
 **Phase:** 5E — Remaining Services
 **Deliverable:** D.18
-**Status:** `implementation in progress`
+**Status:** `validated by VTX-M06B`
 
 > VTX-M06B implementation note: the public `ForOffscreenScene()` facade now
 > executes a Vortex-native one-view scene-renderer path into the
 > caller-provided framebuffer, with deferred and forward shading selection.
-> Runtime closeout is still in progress under
+> Runtime closeout is validated under
 > [../plan/VTX-M06B-offscreen-proof-closeout.md](../plan/VTX-M06B-offscreen-proof-closeout.md).
 >
 > Scope correction: `ShadingMode::kForward` means a real solid forward scene
