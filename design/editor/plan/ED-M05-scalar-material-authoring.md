@@ -1,6 +1,6 @@
 # ED-M05 Scalar Material Authoring Detailed Plan
 
-Status: `landed - validation held by ED-M06A layout correction`
+Status: `validated`
 
 Planning note:
 
@@ -10,8 +10,8 @@ Planning note:
   resolution, Content Browser folder refresh, and picker row filtering are now
   finalized by
   [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md).
-- ED-M05 validation remains pending until ED-M06A confirms material create,
-  save, browser refresh, and picker behavior against the accepted game project
+- ED-M05 validation closed after ED-M06A confirmed material create, save,
+  browser refresh, and picker behavior against the accepted game project
   layout.
 
 ## 1. Purpose
