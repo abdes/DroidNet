@@ -3035,7 +3035,9 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
   CHECK_NOTNULL_F(output_target_.framebuffer.get(),
     "ValidatedOffscreenSceneSession requires an output target");
 
-  const auto& view_intent = view_intent_.ViewIntent();
+  auto effective_view_intent = view_intent_.ViewIntent();
+  effective_view_intent.shading_mode = pipeline_.shading_mode;
+  const auto& view_intent = effective_view_intent;
   CHECK_F(view_intent.id != kInvalidViewId,
     "ValidatedOffscreenSceneSession requires a valid offscreen view id");
   CHECK_F(view_intent.camera.has_value(),

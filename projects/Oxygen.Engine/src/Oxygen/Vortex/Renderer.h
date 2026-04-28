@@ -350,7 +350,21 @@ public:
     CompositionView composition_view_ {};
   };
 
-  struct OffscreenPipelineInput { };
+  struct OffscreenPipelineInput {
+    ShadingMode shading_mode { ShadingMode::kDeferred };
+
+    [[nodiscard]] static constexpr auto Deferred() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .shading_mode = ShadingMode::kDeferred };
+    }
+
+    [[nodiscard]] static constexpr auto Forward() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .shading_mode = ShadingMode::kForward };
+    }
+  };
 
   class ValidatedOffscreenSceneSession {
   public:
@@ -366,6 +380,11 @@ public:
     [[nodiscard]] auto GetViewId() const noexcept -> ViewId
     {
       return view_intent_.ViewIntent().id;
+    }
+
+    [[nodiscard]] auto GetPipelineShadingMode() const noexcept -> ShadingMode
+    {
+      return pipeline_.shading_mode;
     }
 
     OXGN_VRTX_API auto Execute() -> co::Co<void>;
