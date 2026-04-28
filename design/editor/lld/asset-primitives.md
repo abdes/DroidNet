@@ -1,6 +1,6 @@
 # Asset Primitives LLD
 
-Status: `ED-M06 review-ready`
+Status: `ED-M07 review-ready`
 
 ## 1. Purpose
 
@@ -62,6 +62,16 @@ The repo already contains the ED-M05 material slice primitives:
 - `MaterialSourceImporter` for `*.omat.json`.
 - `CookedMaterialWriter` and `LooseCookedBuildService` for cooked `.omat`
   descriptors and loose cooked indexes.
+- `ImportService.ImportAsync` executes importer dispatch and build; callers
+  must not call `LooseCookedBuildService` a second time for the same import
+  result.
+- managed `CookedSceneWriter` exists but is a limited brownfield scene writer.
+  Full ED-M07 scene cook targets the native `oxygen.scene` descriptor importer
+  unless equivalent managed coverage is deliberately added.
+- engine-side `Oxygen.Cooker` provides native schemas, manifest batch import,
+  scene descriptor import, loose cooked inspection, and loose cooked validation
+  APIs. Editor workflow code may reach these only through ContentPipeline or a
+  narrow Interop adapter.
 - tests covering `AssetReference<TAsset>`, generated catalog queries, material
   source read/write, cooked material writer, loose cooked index behavior, and
   import/cook helpers.
@@ -401,9 +411,15 @@ ED-M06/ED-M07 gates:
   browser states are derived outside `Oxygen.Assets`.
 - ED-M06: runtime mounted availability is represented as an editor overlay, not
   as a primitive catalog fact.
-- broader pak state coverage.
-- scoped cook/index validation for complete scenes and dependencies.
-- inspect and mount refresh workflows.
+- ED-M07: full scene cook uses engine-compatible descriptor schemas and does
+  not persist generated descriptor/cooked paths as authored asset identity.
+- ED-M07: scene cook dependencies resolve material and geometry virtual paths
+  before cook; unresolved references fail visibly.
+- ED-M07: inspect/validation can read `container.index.bin` asset/file entries
+  through managed or native APIs without Content Browser parsing binary index
+  details itself.
+- ED-M07: runtime mount refresh consumes validated cooked roots; mount state is
+  still an editor/runtime overlay, not an `Oxygen.Assets` primitive fact.
 
 ## 15. Open Issues
 

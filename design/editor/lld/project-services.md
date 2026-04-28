@@ -1,6 +1,6 @@
 # Project Services LLD
 
-Status: `ED-M06 review-ready`
+Status: `ED-M07 review-ready`
 
 ## 1. Purpose
 
@@ -134,11 +134,11 @@ Target invariants:
 | `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation |
 | `Oxygen.Editor.Runtime` | engine lifecycle and cooked-root mounts based on project policy |
 
-Required cleanup: `ProjectManagerService` currently performs scene cooking.
-That is not part of the target project-service responsibility. ED-M01 does not
-need to implement the content pipeline, but any project-service work must avoid
-adding new cook behavior here. ED-M07 removes or replaces the existing
-scene-save cook side effect through `Oxygen.Editor.ContentPipeline`.
+Required cleanup: `ProjectManagerService` no longer performs scene cooking, but
+the brownfield `IProjectManagerService.SaveSceneAsync` scene-persistence method
+still exists. It is tolerated as project persistence plumbing only; new public
+workflows must not extend it, and ED-M07 must keep cook/mount refresh behind
+explicit ContentPipeline commands.
 
 Required service split:
 
@@ -153,8 +153,9 @@ Required service split:
 - `EnsureDefaultAuthoringMounts` auto-healing is removed from validation paths.
   Missing or invalid manifest mounts must surface as `InvalidContentRoots`
   instead of being silently repaired.
-- `SaveSceneAsync` is not part of the project-service contract. New ED-M01 APIs
-  must not call that method.
+- `SaveSceneAsync` is not part of the target cross-project service contract.
+  Existing scene persistence may remain until a document-service replacement is
+  introduced, but no cook or runtime mount behavior may be attached to it.
 
 ## 7. Data Contracts
 
@@ -551,6 +552,19 @@ ED-M06 project-service gates:
 - missing/inaccessible content roots surface as `ProjectContentRoots`
   diagnostics; browser code does not silently reinterpret them as empty
   folders.
+
+ED-M07 project-service gates:
+
+- content pipeline resolves cook inputs from `ProjectContext` authoring/local
+  mount facts and `ProjectCookScope.CookedOutputRoot`; it does not hardcode
+  project folders outside the accepted layout policy.
+- `ProjectCookScopeProvider` remains a policy provider only. It never invokes
+  import, cook, inspect, validation, or runtime mount operations.
+- project services do not persist cooked paths, generated descriptor paths, or
+  import manifest paths into `Project.oxy`.
+- content pipeline can construct `ContentCookScope` for current-scene,
+  asset/folder, and project cook from project-service facts without depending
+  on Project Browser or WinUI.
 
 Straightforward unit tests should cover:
 

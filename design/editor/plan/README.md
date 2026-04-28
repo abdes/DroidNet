@@ -37,7 +37,7 @@ current milestone ID after the `ED-M01` insertion.
 | [ED-WP02.1-normalize-scene-mutation-commands.md](./ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | Command model, dirty state, undo/redo. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](./ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | V0.1 component editors and sync completion. |
 | [ED-WP04.1-asset-reference-model.md](./ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | Asset reference identity and picker model. |
-| [ED-WP05.1-manifest-driven-cooking.md](./ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | Descriptor/manifest cooking workflow. |
+| [ED-WP05.1-manifest-driven-cooking.md](./ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | Historical/superseded context; `ED-M07-content-pipeline-and-cooking.md` is the active plan. |
 | [ED-WP06.1-settings-architecture-and-editors.md](./ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | Settings ownership, persistence, validation, and editors. |
 | [ED-WP08.1-validation-model.md](./ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | Structured validation and diagnostics model. |
 
@@ -52,3 +52,4 @@ current milestone ID after the `ED-M01` insertion.
 | [ED-M05-scalar-material-authoring.md](./ED-M05-scalar-material-authoring.md) | `ED-M05` | Scalar material documents, material picker identity, geometry assignment, descriptor save/reopen, and minimum material cook/catalog slice. |
 | [ED-M06-asset-identity-content-browser.md](./ED-M06-asset-identity-content-browser.md) | `ED-M06` | Content Browser asset identity rows, shared state reducer, typed picker projection, missing/broken references, and browser persistence boundaries. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | Game project layout, predefined templates, project creation, scene/material authoring targets, Content Browser roots, and material picker filtering before content pipeline work. |
+| [ED-M07-content-pipeline-and-cooking.md](./ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | Descriptor generation, manifest/import orchestration, cook, inspect, validation, catalog refresh, and validated runtime mount refresh. |
