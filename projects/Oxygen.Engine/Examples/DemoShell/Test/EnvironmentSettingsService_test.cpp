@@ -25,8 +25,10 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::testing {
 
@@ -965,6 +967,87 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(service_.GetHeightFogPassRequested());
   EXPECT_TRUE(service_.GetLocalFogPassRequested());
   EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredModePreservesDefaultSceneLightingEnvironment)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.DefaultSceneLightingEnvironment");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_TRUE(service_.GetSkyAtmosphereEnabled());
+  EXPECT_TRUE(service_.GetSkyLightEnabled());
+  EXPECT_TRUE(service_.GetSunPresent());
+  EXPECT_TRUE(service_.GetSunEnabled());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredModeIgnoresPersistedCustomSunOnStartup)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.sun.atmosphere_light_slot",
+    static_cast<float>(scene::AtmosphereLightSlot::kSecondary));
+  settings->SetFloat("env.sun.illuminance_lx", 120000.0F);
+  settings->Save();
+  settings->Load();
+
+  auto scene = MakeScene("DemoShell.SceneAuthoredIgnoresCustomStartup");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
+    static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
+  EXPECT_FLOAT_EQ(service_.GetSunIlluminanceLx(), 100000.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredSunEditSwitchesToCustomBeforeApplying)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SceneAuthoredSunManualOverride");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+  service_.SetPresetIndex(-2);
+  service_.ActivateUseSceneMode();
+  ASSERT_EQ(service_.GetPresetIndex(), -2);
+  ASSERT_FALSE(service_.HasPendingChanges());
+
+  auto vm = ui::EnvironmentVm(
+    observer_ptr<EnvironmentSettingsService> { &service_ }, nullptr, nullptr);
+  vm.SetSunAzimuthDeg(123.0F);
+
+  EXPECT_EQ(service_.GetPresetIndex(), -1);
+  EXPECT_TRUE(service_.HasPendingChanges());
+  EXPECT_FLOAT_EQ(service_.GetSunAzimuthDeg(), 123.0F);
+
+  service_.ApplyPendingChanges();
+
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_FLOAT_EQ(service_.GetSunAzimuthDeg(), 123.0F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
