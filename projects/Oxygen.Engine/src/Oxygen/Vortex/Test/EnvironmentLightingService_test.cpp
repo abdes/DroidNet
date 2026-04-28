@@ -6,12 +6,16 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <memory>
+#include <span>
 #include <string>
 #include <type_traits>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -35,6 +39,7 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
@@ -102,6 +107,9 @@ using oxygen::vortex::environment::SkyLightEnvironmentModel;
 using oxygen::vortex::environment::StaticSkyLightProductStatus;
 using oxygen::vortex::environment::StaticSkyLightUnavailableReason;
 using oxygen::vortex::environment::VolumetricFogModel;
+using oxygen::vortex::environment::internal::
+  EvaluatePackedStaticSkyLightDiffuseSh;
+using oxygen::vortex::environment::internal::ProcessStaticSkyLightCubemapCpu;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto DestroyRenderer(Renderer* renderer) -> void
@@ -148,7 +156,8 @@ auto MakeResolvedView(const float width, const float height,
 }
 
 auto MakeTestTextureResource(const TextureType texture_type,
-  const Format format, const std::uint16_t array_layers)
+  const Format format, const std::uint16_t array_layers,
+  const std::span<const glm::vec4> layer_colors = {})
   -> std::shared_ptr<oxygen::data::TextureResource>
 {
   using oxygen::data::pak::core::TextureResourceDesc;
@@ -173,6 +182,16 @@ auto MakeTestTextureResource(const TextureType texture_type,
   desc.content_hash = 0x12345678U;
 
   std::vector<std::uint8_t> data_region(bytes_per_pixel * array_layers, 0U);
+  if (format == Format::kRGBA32Float) {
+    for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
+      const auto color = layer < layer_colors.size()
+        ? layer_colors[layer]
+        : glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+      std::memcpy(
+        data_region.data() + (layer * bytes_per_pixel), &color, sizeof(color));
+    }
+  }
+
   std::vector<SubresourceLayout> layouts;
   layouts.reserve(array_layers);
   for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
@@ -703,6 +722,105 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     EnvironmentProbeState {}, sky_light, ldr_cube.get());
   EXPECT_EQ(unsupported_format.probe_state.static_sky_light.unavailable_reason,
     StaticSkyLightUnavailableReason::kUnsupportedFormat);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorPacksUeStyleDiffuseShForSolidCubemap)
+{
+  const std::array face_colors {
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = false;
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  EXPECT_FLOAT_EQ(processed->source_radiance_scale, 1.0F);
+  EXPECT_NEAR(processed->average_brightness, 4.0F, 1.0e-4F);
+
+  const auto upward = EvaluatePackedStaticSkyLightDiffuseSh(
+    processed->diffuse_irradiance_sh, glm::vec3(0.0F, 0.0F, 1.0F));
+  const auto side = EvaluatePackedStaticSkyLightDiffuseSh(
+    processed->diffuse_irradiance_sh, glm::vec3(1.0F, 0.0F, 0.0F));
+  EXPECT_NEAR(upward.r, 2.0F, 2.0e-3F);
+  EXPECT_NEAR(upward.g, 4.0F, 2.0e-3F);
+  EXPECT_NEAR(upward.b, 6.0F, 2.0e-3F);
+  EXPECT_NEAR(side.r, 2.0F, 2.0e-3F);
+  EXPECT_NEAR(side.g, 4.0F, 2.0e-3F);
+  EXPECT_NEAR(side.b, 6.0F, 2.0e-3F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorAppliesLowerHemisphereAndHdrScale)
+{
+  constexpr auto kHdrValue = 131008.0F;
+  const std::array face_colors {
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = true;
+  sky_light.lower_hemisphere_color = glm::vec3(0.25F, 0.5F, 0.75F);
+  sky_light.lower_hemisphere_blend_alpha = 1.0F;
+
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  EXPECT_FLOAT_EQ(processed->source_radiance_scale, 2.0F);
+  ASSERT_EQ(processed->processed_rgba.size(), 6U);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].r, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].g, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].b, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].a, 1.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].r, 0.25F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].g, 0.5F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].b, 0.75F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].a, 1.0F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorAppliesCubemapYawRotation)
+{
+  const std::array face_colors {
+    glm::vec4(1.0F, 0.0F, 0.0F, 1.0F), // +X
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -X
+    glm::vec4(0.0F, 1.0F, 0.0F, 1.0F), // +Y
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Y
+    glm::vec4(0.0F, 0.0F, 1.0F, 1.0F), // +Z
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Z
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = false;
+  sky_light.source_cubemap_angle_radians = glm::half_pi<float>();
+
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  ASSERT_GE(processed->processed_rgba.size(), 1U);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].r, 0.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].g, 1.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].b, 0.0F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
