@@ -10,9 +10,14 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/CompositionPlanner.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
@@ -21,6 +26,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Internal/ShaderPassConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/ToneMapPassConfig.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace {
 
@@ -37,6 +43,7 @@ using oxygen::vortex::internal::CompositionPlanner;
 using oxygen::vortex::internal::CompositionViewImpl;
 using oxygen::vortex::internal::FramePlanBuilder;
 using oxygen::vortex::internal::ToneMapPolicy;
+using oxygen::vortex::internal::VisibleSkyBackground;
 using oxygen::vortex::internal::access::ViewLifecycleTagFactory;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -98,10 +105,31 @@ auto MakeMappedInputs() -> FramePlanBuilder::Inputs
     .pending_auto_exposure_reset = std::nullopt,
     .tone_map_pass_config = observer_ptr { &tone_map_config },
     .shader_pass_config = observer_ptr { &shader_pass_config },
-    .resolve_published_view_id = [](const ViewId id) {
-      return ViewId { id.get() + 1000U };
-    },
+    .resolve_published_view_id
+    = [](const ViewId id) { return ViewId { id.get() + 1000U }; },
   };
+}
+
+auto MakeSceneWithAtmosphereAndSkySphere(
+  oxygen::scene::environment::SkySphereSource sky_sphere_source)
+  -> std::unique_ptr<oxygen::scene::Scene>
+{
+  auto scene
+    = std::make_unique<oxygen::scene::Scene>("CompositionPlannerSkyState", 8U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+  auto& atmosphere
+    = environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  auto& sky_sphere
+    = environment->AddSystem<oxygen::scene::environment::SkySphere>();
+  sky_sphere.SetEnabled(true);
+  sky_sphere.SetSource(sky_sphere_source);
+  if (sky_sphere_source
+    == oxygen::scene::environment::SkySphereSource::kCubemap) {
+    sky_sphere.SetCubemapResource(oxygen::content::ResourceKey { 42U });
+  }
+  scene->SetEnvironment(std::move(environment));
+  return scene;
 }
 
 void PrepareView(CompositionViewImpl& view_impl, const CompositionView& desc,
@@ -263,16 +291,16 @@ TEST(CompositionPlannerTest, SceneHudAndImGuiLayersStayOrderedOnSingleViewPath)
     = planner.BuildCompositionSubmission(MakeCompositeTarget(graphics));
 
   ASSERT_EQ(submission.tasks.size(), 3U);
-  EXPECT_EQ(submission.tasks[0].type,
-    oxygen::vortex::CompositingTaskType::kCopy);
+  EXPECT_EQ(
+    submission.tasks[0].type, oxygen::vortex::CompositingTaskType::kCopy);
   EXPECT_EQ(submission.tasks[0].copy.source_view_id, ViewId { 208U });
 
   EXPECT_EQ(submission.tasks[1].type,
     oxygen::vortex::CompositingTaskType::kBlendTexture);
   EXPECT_FLOAT_EQ(submission.tasks[1].texture_blend.alpha, 0.75F);
 
-  EXPECT_EQ(submission.tasks[2].type,
-    oxygen::vortex::CompositingTaskType::kCopy);
+  EXPECT_EQ(
+    submission.tasks[2].type, oxygen::vortex::CompositingTaskType::kCopy);
   EXPECT_EQ(submission.tasks[2].copy.source_view_id, ViewId { 208U });
 }
 
@@ -428,6 +456,70 @@ TEST(CompositionPlannerTest, DepthPrepassDebugModesForceNeutralToneMapping)
   EXPECT_EQ(plan.GetToneMapPolicy(), ToneMapPolicy::kNeutral);
 }
 
+TEST(CompositionPlannerTest, SkySphereBackgroundWinsOverAtmospherePerPlan)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  auto scene = MakeSceneWithAtmosphereAndSkySphere(
+    oxygen::scene::environment::SkySphereSource::kCubemap);
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 130U }, MakeView(), oxygen::scene::SceneNode {});
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr { scene.get() },
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 230U }));
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_TRUE(plan.SkyAtmosphereEnabled());
+  EXPECT_TRUE(plan.SkySphereEnabled());
+  EXPECT_EQ(plan.SkySphereSource(),
+    static_cast<std::uint32_t>(
+      oxygen::scene::environment::SkySphereSource::kCubemap));
+  EXPECT_TRUE(plan.SkySphereCubemapAuthored());
+  EXPECT_EQ(plan.GetVisibleSkyBackground(), VisibleSkyBackground::kSkySphere);
+  EXPECT_TRUE(plan.RunSkyPass());
+  EXPECT_TRUE(plan.RunSkyLutUpdate());
+}
+
+TEST(CompositionPlannerTest, NoEnvironmentFeatureMaskDisablesSkyWork)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  auto scene = MakeSceneWithAtmosphereAndSkySphere(
+    oxygen::scene::environment::SkySphereSource::kSolidColor);
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 131U }, MakeView(), oxygen::scene::SceneNode {});
+  scene_view.feature_profile
+    = CompositionView::ViewFeatureProfile::kNoEnvironment;
+  scene_view.feature_mask
+    = oxygen::vortex::ResolveViewFeatureProfileSpec(scene_view.feature_profile)
+        .feature_mask;
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr { scene.get() },
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 231U }));
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_TRUE(plan.SkyAtmosphereEnabled());
+  EXPECT_TRUE(plan.SkySphereEnabled());
+  EXPECT_FALSE(plan.SkySphereCubemapAuthored());
+  EXPECT_EQ(plan.GetVisibleSkyBackground(), VisibleSkyBackground::kNone);
+  EXPECT_FALSE(plan.RunSkyPass());
+  EXPECT_FALSE(plan.RunSkyLutUpdate());
+}
+
 TEST(CompositionPlannerTest, PerViewRenderSettingsDoNotLeakBetweenPackets)
 {
   auto graphics = std::make_shared<FakeGraphics>();
@@ -461,8 +553,7 @@ TEST(CompositionPlannerTest, PerViewRenderSettingsDoNotLeakBetweenPackets)
     first_plan.EffectiveShaderDebugMode(), ShaderDebugMode::kSceneDepthRaw);
   EXPECT_EQ(first_plan.GetDepthPrePassMode(), DepthPrePassMode::kDisabled);
   EXPECT_EQ(second_plan.EffectiveRenderMode(), RenderMode::kSolid);
-  EXPECT_EQ(
-    second_plan.EffectiveShaderDebugMode(), ShaderDebugMode::kDisabled);
+  EXPECT_EQ(second_plan.EffectiveShaderDebugMode(), ShaderDebugMode::kDisabled);
   EXPECT_EQ(
     second_plan.GetDepthPrePassMode(), DepthPrePassMode::kOpaqueAndMasked);
 }
@@ -532,8 +623,8 @@ TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
   EXPECT_EQ(packet.Kind(), CompositionView::ViewKind::kAuxiliary);
   EXPECT_EQ(
     packet.FeatureProfile(), CompositionView::ViewFeatureProfile::kNoShadowing);
-  EXPECT_TRUE(packet.FeatureMask().Has(
-    CompositionView::ViewFeatureMask::kSceneLighting));
+  EXPECT_TRUE(
+    packet.FeatureMask().Has(CompositionView::ViewFeatureMask::kSceneLighting));
   EXPECT_FALSE(
     packet.FeatureMask().Has(CompositionView::ViewFeatureMask::kShadows));
   ASSERT_EQ(packet.SurfaceRoutes().size(), 1U);
@@ -545,12 +636,12 @@ TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
   ASSERT_EQ(packet.OverlayBatches().size(), 1U);
   EXPECT_EQ(packet.OverlayBatches()[0].lane,
     CompositionView::OverlayLane::kWorldDepthAware);
-  EXPECT_EQ(packet.OverlayBatches()[0].target,
-    CompositionView::OverlayTarget::kView);
+  EXPECT_EQ(
+    packet.OverlayBatches()[0].target, CompositionView::OverlayTarget::kView);
   EXPECT_FALSE(packet.OverlayBatches()[0].record);
   ASSERT_EQ(packet.ProducedAuxOutputs().size(), 1U);
-  EXPECT_EQ(packet.ProducedAuxOutputs()[0].id,
-    CompositionView::AuxOutputId { 5U });
+  EXPECT_EQ(
+    packet.ProducedAuxOutputs()[0].id, CompositionView::AuxOutputId { 5U });
   ASSERT_EQ(packet.ConsumedAuxOutputs().size(), 1U);
   EXPECT_FALSE(packet.ConsumedAuxOutputs()[0].required);
 }
@@ -561,11 +652,11 @@ TEST(CompositionPlannerTest, OnOverlayCallbackProducesTypedScreenOverlay)
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
   auto overlay_called = false;
 
-  CompositionView view = CompositionView::ForHud(
-    ViewId { 124U }, CompositionView::ZOrder { 5 }, MakeView(),
-    [&overlay_called](oxygen::graphics::CommandRecorder&) {
-      overlay_called = true;
-    });
+  CompositionView view
+    = CompositionView::ForHud(ViewId { 124U }, CompositionView::ZOrder { 5 },
+      MakeView(), [&overlay_called](oxygen::graphics::CommandRecorder&) {
+        overlay_called = true;
+      });
   view.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
     .surface_id = CompositionView::SurfaceRouteId { 8U },
     .destination = MakeView().viewport,
@@ -584,10 +675,10 @@ TEST(CompositionPlannerTest, OnOverlayCallbackProducesTypedScreenOverlay)
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
   const auto& packet = builder.GetFrameViewPackets().front();
   ASSERT_EQ(packet.OverlayBatches().size(), 1U);
-  EXPECT_EQ(packet.OverlayBatches()[0].lane,
-    CompositionView::OverlayLane::kViewScreen);
-  EXPECT_EQ(packet.OverlayBatches()[0].target,
-    CompositionView::OverlayTarget::kView);
+  EXPECT_EQ(
+    packet.OverlayBatches()[0].lane, CompositionView::OverlayLane::kViewScreen);
+  EXPECT_EQ(
+    packet.OverlayBatches()[0].target, CompositionView::OverlayTarget::kView);
   EXPECT_EQ(packet.OverlayBatches()[0].view_id, ViewId { 224U });
   ASSERT_TRUE(packet.OverlayBatches()[0].record);
 

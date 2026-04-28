@@ -1,12 +1,13 @@
 # Skybox And Static Specified-Cubemap SkyLight LLD
 
 **Milestone:** VTX-M08
-**Status:** `draft_for_review`
+**Status:** `active_design`
 
 This LLD defines how Vortex renders a visual cubemap skybox and consumes the
 static specified-cubemap SkyLight products defined in
 [`cubemap-processing.md`](cubemap-processing.md). It is not completion
-evidence. VTX-M08 remains `planned` until implementation and proof are present.
+evidence. VTX-M08 remains `in_progress` until full implementation and closure
+proof are present.
 
 ## 1. Design Goals
 

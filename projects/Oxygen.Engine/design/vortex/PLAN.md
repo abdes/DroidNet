@@ -76,7 +76,7 @@ Important baseline facts:
 
 ### NEXT: VTX-M08 - Skybox And Static Specified-Cubemap SkyLight
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 **Purpose:** Implement and validate the first cubemap-backed environment
 baseline after production readiness: visual skybox background rendering and
@@ -92,7 +92,8 @@ open resource gap.
 surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
 `VTX-M06A`, `VTX-M06B`, `VTX-M06C`, and `VTX-M07` are validated.
 
-**Active work packages:** `VTX-M08` planning package only.
+**Active work packages:** VTX-M08 Slice A is implemented and focused-test
+validated. Slices B-E remain open.
 
 **Detailed plan:** [plan/VTX-M08-skybox-static-skylight.md](plan/VTX-M08-skybox-static-skylight.md).
 
@@ -166,7 +167,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M06B | Offscreen proof closeout | `validated` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios are implemented and validated. Closure proof covers focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, non-empty offscreen product proof, downstream texture composition, 60-frame allocation-churn proof, and user visual confirmation. |
 | VTX-M06C | Feature-gated runtime variants | `validated` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants with focused tests, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, and user visual confirmation. |
 | VTX-M07 | Production readiness and legacy retirement | `validated` | VTX-M06C | Static legacy seam guard, stale demo/doc cleanup, required demo refresh/testing, production proof-suite consolidation, binary dependency audit, current-path doc routing, CDB/RenderDoc closure proof, and safe legacy retirement are validated. |
-| VTX-M08 | Skybox and static specified-cubemap SkyLight | `planned` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Visual cubemap skybox background plus static specified-cubemap SkyLight diffuse lighting through a reviewed environment-product boundary. Required LLDs must be reviewed before implementation. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
+| VTX-M08 | Skybox and static specified-cubemap SkyLight | `in_progress` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Slice A data and plan state is implemented and focused-test validated: SkyLight authored fields, 96-byte SkyLight environment record with legacy 84-byte load support, scene descriptor/PakGen/PakDump/DemoShell propagation, and per-view visible-sky plan state with no-environment gating. Slices B-E remain open: cubemap product processing, skybox rendering, diffuse SkyLight consumption, shader ABI migration, proof tooling, runtime proof, and closure evidence. |
 | VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M08 or explicit reprioritization | Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
 
 ## 6. Environment Milestone Decomposition
@@ -547,7 +548,7 @@ Parallelism rules:
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `validated` for main-view AP | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; main-view aerial perspective has focused VortexBasic enabled/disabled proof and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP remains explicitly deferred. |
 | SkyLight publication truth | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. |
-| Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `planned` | Visual cubemap skybox background, deterministic procedural-sky versus skybox selection, directional sun interaction rules, and static SkyLight diffuse lighting. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
+| Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `in_progress` | Slice A data/plan state is validated. Remaining work: visual cubemap skybox background, cubemap product processing, deterministic procedural-sky versus skybox selection in runtime, directional sun interaction proof, static SkyLight diffuse lighting, shader ABI migration, proof tooling, and closure evidence. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
 | Exponential height fog | VTX-M04D.2 | `validated` | UE5.7-informed authored parameters, algorithms, shaders, disabled fast path, focused runtime/capture proof, and city-scale capture proof. Cubemap inscattering resource binding/sampling remains explicitly deferred. |
 | City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `validated` for M04D fog/AP packages | `CityEnvironmentValidation` banding/quality fixes now have implementation/test/runtime-smoke/focused RenderDoc evidence: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, city-scale directional CSM hydration, city-scale height-fog runtime/capture behavior, city-scale volumetric integrated-scattering runtime behavior, and city-scale main-view AP compose proof. Consolidated runtime closure is validated by VTX-M04D.5. Cubemap fog and reflection/360 AP are deferred. |
 | Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |

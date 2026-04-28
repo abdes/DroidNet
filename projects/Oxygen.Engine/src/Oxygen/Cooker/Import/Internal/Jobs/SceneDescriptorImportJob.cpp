@@ -382,36 +382,37 @@ namespace {
       = source.value("mie_scale_height_m", record.mie_scale_height_m);
     record.mie_g = source.value("mie_anisotropy", record.mie_g);
     CopyFloatArray(source.at("ozone_absorption_rgb"), record.absorption_rgb);
-    CopyFloatArray(source.at("ozone_density_profile"), record.ozone_density_profile);
+    CopyFloatArray(
+      source.at("ozone_density_profile"), record.ozone_density_profile);
     record.multi_scattering_factor
       = source.value("multi_scattering_factor", record.multi_scattering_factor);
     CopyFloatArray(
       source.at("sky_luminance_factor_rgb"), record.sky_luminance_factor_rgb);
     CopyFloatArray(source.at("sky_and_aerial_perspective_luminance_factor_rgb"),
       record.sky_and_aerial_perspective_luminance_factor_rgb);
-    record.aerial_perspective_distance_scale = source.value(
-      "aerial_perspective_distance_scale",
-      record.aerial_perspective_distance_scale);
-    record.aerial_scattering_strength
-      = source.value("aerial_scattering_strength", record.aerial_scattering_strength);
-    record.aerial_perspective_start_depth_m = source.value(
-      "aerial_perspective_start_depth_m",
-      record.aerial_perspective_start_depth_m);
+    record.aerial_perspective_distance_scale
+      = source.value("aerial_perspective_distance_scale",
+        record.aerial_perspective_distance_scale);
+    record.aerial_scattering_strength = source.value(
+      "aerial_scattering_strength", record.aerial_scattering_strength);
+    record.aerial_perspective_start_depth_m
+      = source.value("aerial_perspective_start_depth_m",
+        record.aerial_perspective_start_depth_m);
     record.height_fog_contribution
       = source.value("height_fog_contribution", record.height_fog_contribution);
-    record.trace_sample_count_scale
-      = source.value("trace_sample_count_scale", record.trace_sample_count_scale);
-    record.transmittance_min_light_elevation_deg = source.value(
-      "transmittance_min_light_elevation_deg",
-      record.transmittance_min_light_elevation_deg);
+    record.trace_sample_count_scale = source.value(
+      "trace_sample_count_scale", record.trace_sample_count_scale);
+    record.transmittance_min_light_elevation_deg
+      = source.value("transmittance_min_light_elevation_deg",
+        record.transmittance_min_light_elevation_deg);
     record.sun_disk_enabled = source.value("sun_disk_enabled", true) ? 1U : 0U;
     record.holdout = source.value("holdout", false) ? 1U : 0U;
     record.render_in_main_pass
       = source.value("render_in_main_pass", true) ? 1U : 0U;
 
     return SceneEnvironmentSystem {
-      .system_type
-      = static_cast<uint32_t>(data::pak::world::EnvironmentComponentType::kSkyAtmosphere),
+      .system_type = static_cast<uint32_t>(
+        data::pak::world::EnvironmentComponentType::kSkyAtmosphere),
       .record_bytes = PackRecordBytes(record),
     };
   }
@@ -432,8 +433,8 @@ namespace {
     record.start_distance_m
       = source.value("start_distance_m", record.start_distance_m);
     record.max_opacity = source.value("max_opacity", record.max_opacity);
-    CopyFloatArray(
-      source.at("single_scattering_albedo_rgb"), record.single_scattering_albedo_rgb);
+    CopyFloatArray(source.at("single_scattering_albedo_rgb"),
+      record.single_scattering_albedo_rgb);
     record.anisotropy_g = source.value("anisotropy_g", record.anisotropy_g);
     record.enable_height_fog
       = source.value("enable_height_fog", true) ? 1U : 0U;
@@ -445,8 +446,8 @@ namespace {
       "second_fog_height_falloff", record.second_fog_height_falloff);
     record.second_fog_height_offset = source.value(
       "second_fog_height_offset", record.second_fog_height_offset);
-    CopyFloatArray(
-      source.at("fog_inscattering_luminance"), record.fog_inscattering_luminance);
+    CopyFloatArray(source.at("fog_inscattering_luminance"),
+      record.fog_inscattering_luminance);
     CopyFloatArray(source.at("sky_atmosphere_ambient_contribution_color_scale"),
       record.sky_atmosphere_ambient_contribution_color_scale);
     if (source.contains("inscattering_color_cubemap_ref")) {
@@ -458,63 +459,61 @@ namespace {
       }
       record.inscattering_color_cubemap_asset = *cubemap_key;
     }
-    record.inscattering_color_cubemap_angle = source.value(
-      "inscattering_color_cubemap_angle", record.inscattering_color_cubemap_angle);
+    record.inscattering_color_cubemap_angle
+      = source.value("inscattering_color_cubemap_angle",
+        record.inscattering_color_cubemap_angle);
     CopyFloatArray(
       source.at("inscattering_texture_tint"), record.inscattering_texture_tint);
-    record.fully_directional_inscattering_color_distance = source.value(
-      "fully_directional_inscattering_color_distance",
-      record.fully_directional_inscattering_color_distance);
-    record.non_directional_inscattering_color_distance = source.value(
-      "non_directional_inscattering_color_distance",
-      record.non_directional_inscattering_color_distance);
+    record.fully_directional_inscattering_color_distance
+      = source.value("fully_directional_inscattering_color_distance",
+        record.fully_directional_inscattering_color_distance);
+    record.non_directional_inscattering_color_distance
+      = source.value("non_directional_inscattering_color_distance",
+        record.non_directional_inscattering_color_distance);
     CopyFloatArray(source.at("directional_inscattering_luminance"),
       record.directional_inscattering_luminance);
-    record.directional_inscattering_exponent = source.value(
-      "directional_inscattering_exponent",
-      record.directional_inscattering_exponent);
-    record.directional_inscattering_start_distance = source.value(
-      "directional_inscattering_start_distance",
-      record.directional_inscattering_start_distance);
+    record.directional_inscattering_exponent
+      = source.value("directional_inscattering_exponent",
+        record.directional_inscattering_exponent);
+    record.directional_inscattering_start_distance
+      = source.value("directional_inscattering_start_distance",
+        record.directional_inscattering_start_distance);
     record.end_distance_m
       = source.value("end_distance_m", record.end_distance_m);
     record.fog_cutoff_distance_m
       = source.value("fog_cutoff_distance_m", record.fog_cutoff_distance_m);
-    record.volumetric_fog_scattering_distribution = source.value(
-      "volumetric_fog_scattering_distribution",
-      record.volumetric_fog_scattering_distribution);
+    record.volumetric_fog_scattering_distribution
+      = source.value("volumetric_fog_scattering_distribution",
+        record.volumetric_fog_scattering_distribution);
     CopyFloatArray(
       source.at("volumetric_fog_albedo"), record.volumetric_fog_albedo);
     CopyFloatArray(
       source.at("volumetric_fog_emissive"), record.volumetric_fog_emissive);
-    record.volumetric_fog_extinction_scale = source.value(
-      "volumetric_fog_extinction_scale",
-      record.volumetric_fog_extinction_scale);
+    record.volumetric_fog_extinction_scale
+      = source.value("volumetric_fog_extinction_scale",
+        record.volumetric_fog_extinction_scale);
     record.volumetric_fog_distance
       = source.value("volumetric_fog_distance", record.volumetric_fog_distance);
     record.volumetric_fog_start_distance = source.value(
       "volumetric_fog_start_distance", record.volumetric_fog_start_distance);
-    record.volumetric_fog_near_fade_in_distance = source.value(
-      "volumetric_fog_near_fade_in_distance",
-      record.volumetric_fog_near_fade_in_distance);
-    record.volumetric_fog_static_lighting_scattering_intensity = source.value(
-      "volumetric_fog_static_lighting_scattering_intensity",
-      record.volumetric_fog_static_lighting_scattering_intensity);
-    record.override_light_colors_with_fog_inscattering_colors = source.value(
-      "override_light_colors_with_fog_inscattering_colors", false)
+    record.volumetric_fog_near_fade_in_distance
+      = source.value("volumetric_fog_near_fade_in_distance",
+        record.volumetric_fog_near_fade_in_distance);
+    record.volumetric_fog_static_lighting_scattering_intensity
+      = source.value("volumetric_fog_static_lighting_scattering_intensity",
+        record.volumetric_fog_static_lighting_scattering_intensity);
+    record.override_light_colors_with_fog_inscattering_colors
+      = source.value(
+          "override_light_colors_with_fog_inscattering_colors", false)
       ? 1U
       : 0U;
     record.holdout = source.value("holdout", false) ? 1U : 0U;
     record.render_in_main_pass
       = source.value("render_in_main_pass", true) ? 1U : 0U;
-    record.visible_in_reflection_captures = source.value(
-      "visible_in_reflection_captures", true)
-      ? 1U
-      : 0U;
-    record.visible_in_real_time_sky_captures = source.value(
-      "visible_in_real_time_sky_captures", true)
-      ? 1U
-      : 0U;
+    record.visible_in_reflection_captures
+      = source.value("visible_in_reflection_captures", true) ? 1U : 0U;
+    record.visible_in_real_time_sky_captures
+      = source.value("visible_in_real_time_sky_captures", true) ? 1U : 0U;
 
     return SceneEnvironmentSystem {
       .system_type
@@ -547,19 +546,25 @@ namespace {
       = source.value("specular_intensity", record.specular_intensity);
     record.real_time_capture_enabled
       = source.value("real_time_capture_enabled", false) ? 1U : 0U;
+    record.source_cubemap_angle_radians = source.value(
+      "source_cubemap_angle_radians", record.source_cubemap_angle_radians);
     CopyFloatArray(
       source.at("lower_hemisphere_color"), record.lower_hemisphere_color);
-    record.volumetric_scattering_intensity = source.value(
-      "volumetric_scattering_intensity",
-      record.volumetric_scattering_intensity);
+    record.lower_hemisphere_is_solid_color
+      = source.value("lower_hemisphere_is_solid_color", true) ? 1U : 0U;
+    record.lower_hemisphere_blend_alpha = source.value(
+      "lower_hemisphere_blend_alpha", record.lower_hemisphere_blend_alpha);
+    record.volumetric_scattering_intensity
+      = source.value("volumetric_scattering_intensity",
+        record.volumetric_scattering_intensity);
     record.affect_reflections
       = source.value("affect_reflections", true) ? 1U : 0U;
     record.affect_global_illumination
       = source.value("affect_global_illumination", true) ? 1U : 0U;
 
     return SceneEnvironmentSystem {
-      .system_type
-      = static_cast<uint32_t>(data::pak::world::EnvironmentComponentType::kSkyLight),
+      .system_type = static_cast<uint32_t>(
+        data::pak::world::EnvironmentComponentType::kSkyLight),
       .record_bytes = PackRecordBytes(record),
     };
   }
@@ -889,9 +894,9 @@ namespace {
         if (renderable_doc.contains("material_ref")) {
           const auto material_ref
             = renderable_doc.at("material_ref").get<std::string>();
-          const auto resolved_material = ResolveAssetReference(context,
-            material_ref, data::AssetType::kMaterial, false,
-            object_path + ".material_ref");
+          const auto resolved_material
+            = ResolveAssetReference(context, material_ref,
+              data::AssetType::kMaterial, false, object_path + ".material_ref");
           if (!resolved_material.has_value()) {
             return std::nullopt;
           }
@@ -1154,8 +1159,7 @@ namespace {
       const auto& environment_doc = descriptor_doc.at("environment");
       if (environment_doc.contains("sky_atmosphere")) {
         auto sky_record = BuildSkyAtmosphereSystemRecord(context,
-          environment_doc.at("sky_atmosphere"),
-          "environment.sky_atmosphere");
+          environment_doc.at("sky_atmosphere"), "environment.sky_atmosphere");
         if (!sky_record.has_value()) {
           return std::nullopt;
         }
@@ -1170,9 +1174,8 @@ namespace {
         prepared.environment_systems.push_back(std::move(*fog_record));
       }
       if (environment_doc.contains("sky_light")) {
-        auto sky_light_record = BuildSkyLightSystemRecord(context,
-          environment_doc.at("sky_light"),
-          "environment.sky_light");
+        auto sky_light_record = BuildSkyLightSystemRecord(
+          context, environment_doc.at("sky_light"), "environment.sky_light");
         if (!sky_light_record.has_value()) {
           return std::nullopt;
         }
@@ -1202,8 +1205,8 @@ namespace {
           "radial_fog_extinction", record.radial_fog_extinction);
         record.height_fog_extinction = volume_doc.value(
           "height_fog_extinction", record.height_fog_extinction);
-        record.height_fog_falloff = volume_doc.value(
-          "height_fog_falloff", record.height_fog_falloff);
+        record.height_fog_falloff
+          = volume_doc.value("height_fog_falloff", record.height_fog_falloff);
         record.height_fog_offset
           = volume_doc.value("height_fog_offset", record.height_fog_offset);
         record.fog_phase_g

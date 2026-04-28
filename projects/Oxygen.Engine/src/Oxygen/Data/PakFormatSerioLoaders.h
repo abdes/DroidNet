@@ -510,7 +510,8 @@ inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
   for (auto& v : r.inscattering_texture_tint) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.fully_directional_inscattering_color_distance));
+  CHECK_RESULT(
+    reader.ReadInto(r.fully_directional_inscattering_color_distance));
   CHECK_RESULT(reader.ReadInto(r.non_directional_inscattering_color_distance));
   for (auto& v : r.directional_inscattering_luminance) {
     CHECK_RESULT(reader.ReadInto(v));
@@ -566,6 +567,9 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.volumetric_scattering_intensity));
   CHECK_RESULT(reader.ReadInto(r.affect_reflections));
   CHECK_RESULT(reader.ReadInto(r.affect_global_illumination));
+  CHECK_RESULT(reader.ReadInto(r.source_cubemap_angle_radians));
+  CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_is_solid_color));
+  CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_blend_alpha));
 
   return {};
 }

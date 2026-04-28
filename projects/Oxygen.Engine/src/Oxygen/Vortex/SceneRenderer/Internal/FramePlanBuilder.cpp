@@ -9,6 +9,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/AuxiliaryDependencyGraph.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h>
@@ -101,6 +102,10 @@ auto FramePlanBuilder::EvaluateSkyState(observer_ptr<scene::Scene> scene) const
   if (const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
     sphere && sphere->IsEnabled()) {
     state.sky_sphere_enabled = true;
+    state.sky_sphere_source = static_cast<std::uint32_t>(sphere->GetSource());
+    state.sky_sphere_cubemap_authored
+      = sphere->GetSource() == scene::environment::SkySphereSource::kCubemap
+      && sphere->GetCubemapResource().get() != 0U;
   }
   return state;
 }
@@ -119,10 +124,13 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   plan_spec.effective_shader_debug_mode
     = descriptor.render_settings.shader_debug_mode.value_or(
       frame_shader_debug_mode);
+  plan_spec.sky_atmo_enabled = sky_state.sky_atmo_enabled;
+  plan_spec.sky_sphere_enabled = sky_state.sky_sphere_enabled;
+  plan_spec.sky_sphere_source = sky_state.sky_sphere_source;
+  plan_spec.sky_sphere_cubemap_authored = sky_state.sky_sphere_cubemap_authored;
   CHECK_F(descriptor.view_kind != CompositionView::ViewKind::kCompositionOnly
       || !descriptor.camera.has_value(),
-    "Composition-only view '{}' cannot carry a scene camera",
-    descriptor.name);
+    "Composition-only view '{}' cannot carry a scene camera", descriptor.name);
   CHECK_F(descriptor.view_kind == CompositionView::ViewKind::kCompositionOnly
       || descriptor.camera.has_value(),
     "Scene view '{}' requires a camera unless it is composition-only",
@@ -164,23 +172,33 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   const bool run_scene_passes
     = (plan_spec.intent == ViewRenderIntent::kSceneAndComposite)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
+  const bool environment_enabled = descriptor.feature_mask.Has(
+    CompositionView::ViewFeatureMask::kEnvironment);
+  if (run_scene_passes && environment_enabled) {
+    if (sky_state.sky_sphere_enabled) {
+      plan_spec.visible_sky_background = VisibleSkyBackground::kSkySphere;
+    } else if (sky_state.sky_atmo_enabled) {
+      plan_spec.visible_sky_background = VisibleSkyBackground::kSkyAtmosphere;
+    }
+  }
   plan_spec.depth_prepass_mode = run_scene_passes
     ? descriptor.render_settings.depth_prepass_mode.value_or(
         inputs.frame_settings.depth_prepass_mode)
     : DepthPrePassMode::kDisabled;
   plan_spec.run_sky_pass = run_scene_passes
-    && (sky_state.sky_atmo_enabled || sky_state.sky_sphere_enabled)
+    && (plan_spec.visible_sky_background != VisibleSkyBackground::kNone)
     && !debug_intent.is_non_ibl;
-  plan_spec.run_sky_lut_update = run_scene_passes && sky_state.sky_atmo_enabled;
+  plan_spec.run_sky_lut_update
+    = run_scene_passes && environment_enabled && sky_state.sky_atmo_enabled;
 
   const ViewRenderPlan plan(plan_spec);
   DLOG_F(2,
     "ViewRenderPlan view='{}' mode={} debug={} intent={} tone_map={} "
-    "depth_prepass={} overlay={} sky={} lut={}",
+    "depth_prepass={} overlay={} sky={} lut={} visible_sky={}",
     view.GetDescriptor().name, plan.EffectiveRenderMode(),
     plan.EffectiveShaderDebugMode(), plan.Intent(), plan.GetToneMapPolicy(),
-    plan.GetDepthPrePassMode(),
-    plan.RunOverlayWireframe(), plan.RunSkyPass(), plan.RunSkyLutUpdate());
+    plan.GetDepthPrePassMode(), plan.RunOverlayWireframe(), plan.RunSkyPass(),
+    plan.RunSkyLutUpdate(), to_string(plan.GetVisibleSkyBackground()));
 
   return plan;
 }

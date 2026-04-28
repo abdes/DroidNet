@@ -23,7 +23,7 @@ implementation-preparation workstream.
 | [VTX-M06B-offscreen-proof-closeout.md](VTX-M06B-offscreen-proof-closeout.md) | Detailed implementation plan for offscreen proof closeout: `ForOffscreenScene` execution, deferred/forward coverage, offscreen product handoff, runtime/capture proof, and allocation-churn validation. |
 | [VTX-M06C-feature-gated-runtime-variants.md](VTX-M06C-feature-gated-runtime-variants.md) | Detailed implementation plan for feature-gated runtime variants: depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only, and runtime/capture proof. |
 | [VTX-M07-production-readiness-legacy-retirement.md](VTX-M07-production-readiness-legacy-retirement.md) | Detailed implementation plan for production readiness and legacy retirement: seam inventory, stale demo/doc cleanup, demo refresh/testing, proof-suite consolidation, build-graph dependency audit, and closure evidence. |
-| [VTX-M08-skybox-static-skylight.md](VTX-M08-skybox-static-skylight.md) | Planning stub for skybox and static specified-cubemap SkyLight. Implementation remains blocked until the required LLD drafts are reviewed. |
+| [VTX-M08-skybox-static-skylight.md](VTX-M08-skybox-static-skylight.md) | Active plan/evidence file for skybox and static specified-cubemap SkyLight. |
 
 ## Planning Rule
 

@@ -1,10 +1,10 @@
 # VTX-M08 Skybox And Static Specified-Cubemap SkyLight
 
-Status: `planned`
+Status: `in_progress`
 
-This is the milestone planning stub for the first post-M07 environment feature
-family. It exists so PRD, architecture, plan, status, and the required LLD
-drafts can be reviewed before implementation starts.
+This is the milestone planning and evidence file for the first post-M07
+environment feature family. It exists so PRD, architecture, plan, status, and
+the required LLDs stay aligned as implementation proceeds.
 
 ## Purpose
 
@@ -45,7 +45,7 @@ Implementation must not start until these LLD drafts are reviewed:
 
 The LLDs define data products, product validity states, shader contracts, pass
 ordering, feature gates, proof scenes, proof scripts, and accepted/deferred
-parity gaps. They remain draft design until reviewed.
+parity gaps.
 
 Implementation slices, focused tests, and proof tooling currently live in
 [`../lld/skybox-static-skylight.md`](../lld/skybox-static-skylight.md) §9-§10
@@ -89,6 +89,42 @@ review asks for M05D/M06A-style slice evidence tracking in the plan file.
 
 ## Planning Gate
 
-VTX-M08 remains `planned` until the PRD, milestone scope, and required LLD
-drafts are reviewed. No implementation or validation evidence exists for this
-milestone yet.
+VTX-M08 remains `in_progress` until every implementation slice and closure proof
+gate passes. Do not mark it validated until skybox rendering, static
+specified-cubemap SkyLight diffuse lighting, shader ABI migration, focused
+tests, ShaderBake/catalog validation where required, CDB/debug-layer proof,
+RenderDoc scripted analysis, allocation-churn proof, and residual-gap recording
+are complete.
+
+## Slice Evidence
+
+### Slice A: Data And Plan State
+
+Status: `validated`
+
+Implementation evidence:
+
+- Added SkyLight authored state for source cubemap angle, lower-hemisphere solid
+  color toggle, and lower-hemisphere blend alpha.
+- Grew `SkyLightEnvironmentRecord` to 96 bytes with legacy 84-byte read support.
+- Updated scene descriptor import/schema, PakGen, PakDump, DemoShell scene
+  record application, Vortex `SkyLightEnvironmentModel`, and model hashing.
+- Added per-view plan state for `VisibleSkyBackground`, sky atmosphere/sphere
+  availability, SkySphere source, and cubemap-authored status.
+- Added feature-mask gating so `kNoEnvironment` views suppress sky pass and sky
+  LUT work while preserving immutable scene sky state on the plan.
+
+Validation evidence:
+
+- `cmake --build out\build-ninja --config Debug --target Oxygen.Scene.EnvironmentComponents.Tests Oxygen.Cooker.AsyncImportSceneDescriptor.Tests Oxygen.Vortex.CompositionPlanner.Tests --parallel 4`
+- `ctest --preset test-debug -R "Oxygen\.(Scene\.EnvironmentComponents|Vortex\.CompositionPlanner|Cooker\.AsyncImportSceneDescriptor)" --output-on-failure` passed 3/3 test executables.
+- `python -m pytest src/Oxygen/Cooker/Tools/PakGen/tests/test_writer_scene_basic.py -q` passed 3 tests.
+- `cmake --build out\build-ninja --config Debug --target oxygen-cooker-pakdump oxygen-examples-demoshell --parallel 4` passed.
+
+Remaining gaps:
+
+- Slices B-E are not implemented.
+- No shader ABI/catalog validation has run yet because Slice A did not change
+  shader files or shader binding structs.
+- No runtime CDB/debug-layer, RenderDoc, allocation-churn, or visual proof exists
+  for M08 yet.

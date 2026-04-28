@@ -76,8 +76,8 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 | PostProcessService | [`post-process-service.md`](lld/post-process-service.md) |
 | ShadowService | [`shadow-service.md`](lld/shadow-service.md) |
 | EnvironmentLightingService | [`environment-service.md`](lld/environment-service.md) |
-| Cubemap processing for static SkyLight | [`cubemap-processing.md`](lld/cubemap-processing.md) — VTX-M08 draft LLD |
-| Skybox and static specified-cubemap SkyLight | [`skybox-static-skylight.md`](lld/skybox-static-skylight.md) — VTX-M08 draft LLD |
+| Cubemap processing for static SkyLight | [`cubemap-processing.md`](lld/cubemap-processing.md) — VTX-M08 active LLD |
+| Skybox and static specified-cubemap SkyLight | [`skybox-static-skylight.md`](lld/skybox-static-skylight.md) — VTX-M08 active LLD |
 | DiagnosticsService | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 | Translucency (stage 18) | [`translucency.md`](lld/translucency.md) |
 | Occlusion / HZB (stage 5) | [`occlusion.md`](lld/occlusion.md) |
@@ -212,7 +212,7 @@ Per-subsystem detailed designs:
 | LightingService | 6, 12 | [`lighting-service.md`](lld/lighting-service.md) |
 | ShadowService | 8 | [`shadow-service.md`](lld/shadow-service.md) |
 | EnvironmentLightingService | 14, 15 | [`environment-service.md`](lld/environment-service.md) |
-| Static cubemap SkyLight / Skybox | pre-stage, 12/13 boundary, 15 | VTX-M08 draft LLDs: [`skybox-static-skylight.md`](lld/skybox-static-skylight.md), [`cubemap-processing.md`](lld/cubemap-processing.md) |
+| Static cubemap SkyLight / Skybox | pre-stage, 12/13 boundary, 15 | VTX-M08 active LLDs: [`skybox-static-skylight.md`](lld/skybox-static-skylight.md), [`cubemap-processing.md`](lld/cubemap-processing.md) |
 | PostProcessService | 22 | [`post-process-service.md`](lld/post-process-service.md) |
 | DiagnosticsService | overlay | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 

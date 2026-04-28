@@ -30,8 +30,8 @@ namespace {
     return std::bit_cast<std::uint32_t>(value);
   }
 
-  auto BuildAtmosphereModel(
-    const scene::SceneEnvironment* environment_systems) -> environment::AtmosphereModel
+  auto BuildAtmosphereModel(const scene::SceneEnvironment* environment_systems)
+    -> environment::AtmosphereModel
   {
     auto model = environment::AtmosphereModel {};
     if (environment_systems == nullptr) {
@@ -49,7 +49,8 @@ namespace {
     model.planet_radius_m = atmosphere->GetPlanetRadiusMeters();
     model.atmosphere_height_m = atmosphere->GetAtmosphereHeightMeters();
     model.ground_albedo_rgb = atmosphere->GetGroundAlbedoRgb();
-    model.planet_anchor_position_ws = atmosphere->GetPlanetAnchorWorldPosition();
+    model.planet_anchor_position_ws
+      = atmosphere->GetPlanetAnchorWorldPosition();
     model.rayleigh_scattering_rgb = atmosphere->GetRayleighScatteringRgb();
     model.rayleigh_scale_height_m = atmosphere->GetRayleighScaleHeightMeters();
     model.mie_scattering_rgb = atmosphere->GetMieScatteringRgb();
@@ -78,14 +79,15 @@ namespace {
     return model;
   }
 
-  auto BuildHeightFogModel(
-    const scene::SceneEnvironment* environment_systems) -> environment::HeightFogModel
+  auto BuildHeightFogModel(const scene::SceneEnvironment* environment_systems)
+    -> environment::HeightFogModel
   {
     auto model = environment::HeightFogModel {};
     if (environment_systems == nullptr) {
       return model;
     }
-    const auto fog = environment_systems->TryGetSystem<scene::environment::Fog>();
+    const auto fog
+      = environment_systems->TryGetSystem<scene::environment::Fog>();
     if (fog == nullptr) {
       return model;
     }
@@ -132,13 +134,15 @@ namespace {
   }
 
   auto BuildVolumetricFogModel(
-    const scene::SceneEnvironment* environment_systems) -> environment::VolumetricFogModel
+    const scene::SceneEnvironment* environment_systems)
+    -> environment::VolumetricFogModel
   {
     auto model = environment::VolumetricFogModel {};
     if (environment_systems == nullptr) {
       return model;
     }
-    const auto fog = environment_systems->TryGetSystem<scene::environment::Fog>();
+    const auto fog
+      = environment_systems->TryGetSystem<scene::environment::Fog>();
     if (fog == nullptr) {
       return model;
     }
@@ -159,8 +163,8 @@ namespace {
     return model;
   }
 
-  auto BuildSkyLightModel(
-    const scene::SceneEnvironment* environment_systems) -> environment::SkyLightEnvironmentModel
+  auto BuildSkyLightModel(const scene::SceneEnvironment* environment_systems)
+    -> environment::SkyLightEnvironmentModel
   {
     auto model = environment::SkyLightEnvironmentModel {};
     if (environment_systems == nullptr) {
@@ -180,12 +184,17 @@ namespace {
     model.diffuse_intensity = sky_light->GetDiffuseIntensity();
     model.specular_intensity = sky_light->GetSpecularIntensity();
     model.real_time_capture_enabled = sky_light->GetRealTimeCaptureEnabled();
+    model.source_cubemap_angle_radians
+      = sky_light->GetSourceCubemapAngleRadians();
     model.lower_hemisphere_color = sky_light->GetLowerHemisphereColor();
+    model.lower_hemisphere_is_solid_color
+      = sky_light->GetLowerHemisphereIsSolidColor();
+    model.lower_hemisphere_blend_alpha
+      = sky_light->GetLowerHemisphereBlendAlpha();
     model.volumetric_scattering_intensity
       = sky_light->GetVolumetricScatteringIntensity();
     model.affect_reflections = sky_light->GetAffectReflections();
-    model.affect_global_illumination
-      = sky_light->GetAffectGlobalIllumination();
+    model.affect_global_illumination = sky_light->GetAffectGlobalIllumination();
     return model;
   }
 
@@ -194,8 +203,8 @@ namespace {
   {
     auto seed = std::uint64_t { 0U };
     seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.enabled));
-    seed = HashCombineU64(
-      seed, static_cast<std::uint64_t>(model.transform_mode));
+    seed
+      = HashCombineU64(seed, static_cast<std::uint64_t>(model.transform_mode));
     seed = HashCombineU64(seed, FloatBits(model.planet_radius_m));
     seed = HashCombineU64(seed, FloatBits(model.atmosphere_height_m));
     seed = HashCombineU64(seed, FloatBits(model.ground_albedo_rgb.x));
@@ -229,24 +238,23 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.sky_luminance_factor_rgb.x));
     seed = HashCombineU64(seed, FloatBits(model.sky_luminance_factor_rgb.y));
     seed = HashCombineU64(seed, FloatBits(model.sky_luminance_factor_rgb.z));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.x));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.y));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.z));
+    seed = HashCombineU64(
+      seed, FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.x));
+    seed = HashCombineU64(
+      seed, FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.y));
+    seed = HashCombineU64(
+      seed, FloatBits(model.sky_and_aerial_perspective_luminance_factor_rgb.z));
     seed = HashCombineU64(
       seed, FloatBits(model.aerial_perspective_distance_scale));
-    seed = HashCombineU64(
-      seed, FloatBits(model.aerial_scattering_strength));
-    seed = HashCombineU64(
-      seed, FloatBits(model.aerial_perspective_start_depth_m));
+    seed = HashCombineU64(seed, FloatBits(model.aerial_scattering_strength));
+    seed
+      = HashCombineU64(seed, FloatBits(model.aerial_perspective_start_depth_m));
     seed = HashCombineU64(seed, FloatBits(model.height_fog_contribution));
     seed = HashCombineU64(seed, FloatBits(model.trace_sample_count_scale));
-    seed = HashCombineU64(seed,
-      FloatBits(model.transmittance_min_light_elevation_deg));
-    seed = HashCombineU64(seed,
-      static_cast<std::uint64_t>(model.sun_disk_enabled));
+    seed = HashCombineU64(
+      seed, FloatBits(model.transmittance_min_light_elevation_deg));
+    seed = HashCombineU64(
+      seed, static_cast<std::uint64_t>(model.sun_disk_enabled));
     seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.holdout));
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(model.render_in_main_pass));
@@ -272,33 +280,33 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.fog_inscattering_luminance.x));
     seed = HashCombineU64(seed, FloatBits(model.fog_inscattering_luminance.y));
     seed = HashCombineU64(seed, FloatBits(model.fog_inscattering_luminance.z));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.x));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.y));
-    seed = HashCombineU64(seed,
-      FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.z));
     seed = HashCombineU64(
-      seed, model.inscattering_color_cubemap_resource.get());
+      seed, FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.x));
     seed = HashCombineU64(
-      seed, FloatBits(model.inscattering_color_cubemap_angle));
+      seed, FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.y));
+    seed = HashCombineU64(
+      seed, FloatBits(model.sky_atmosphere_ambient_contribution_color_scale.z));
+    seed
+      = HashCombineU64(seed, model.inscattering_color_cubemap_resource.get());
+    seed
+      = HashCombineU64(seed, FloatBits(model.inscattering_color_cubemap_angle));
     seed = HashCombineU64(seed, FloatBits(model.inscattering_texture_tint.x));
     seed = HashCombineU64(seed, FloatBits(model.inscattering_texture_tint.y));
     seed = HashCombineU64(seed, FloatBits(model.inscattering_texture_tint.z));
-    seed = HashCombineU64(seed,
-      FloatBits(model.fully_directional_inscattering_color_distance));
-    seed = HashCombineU64(seed,
-      FloatBits(model.non_directional_inscattering_color_distance));
-    seed = HashCombineU64(seed,
-      FloatBits(model.directional_inscattering_luminance.x));
-    seed = HashCombineU64(seed,
-      FloatBits(model.directional_inscattering_luminance.y));
-    seed = HashCombineU64(seed,
-      FloatBits(model.directional_inscattering_luminance.z));
+    seed = HashCombineU64(
+      seed, FloatBits(model.fully_directional_inscattering_color_distance));
+    seed = HashCombineU64(
+      seed, FloatBits(model.non_directional_inscattering_color_distance));
+    seed = HashCombineU64(
+      seed, FloatBits(model.directional_inscattering_luminance.x));
+    seed = HashCombineU64(
+      seed, FloatBits(model.directional_inscattering_luminance.y));
+    seed = HashCombineU64(
+      seed, FloatBits(model.directional_inscattering_luminance.z));
     seed = HashCombineU64(
       seed, FloatBits(model.directional_inscattering_exponent));
-    seed = HashCombineU64(seed,
-      FloatBits(model.directional_inscattering_start_distance));
+    seed = HashCombineU64(
+      seed, FloatBits(model.directional_inscattering_start_distance));
     seed = HashCombineU64(seed, FloatBits(model.fog_max_opacity));
     seed = HashCombineU64(seed, FloatBits(model.start_distance));
     seed = HashCombineU64(seed, FloatBits(model.end_distance));
@@ -306,8 +314,8 @@ namespace {
     seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.holdout));
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(model.render_in_main_pass));
-    seed = HashCombineU64(seed,
-      static_cast<std::uint64_t>(model.visible_in_reflection_captures));
+    seed = HashCombineU64(
+      seed, static_cast<std::uint64_t>(model.visible_in_reflection_captures));
     seed = HashCombineU64(seed,
       static_cast<std::uint64_t>(model.visible_in_real_time_sky_captures));
     return seed;
@@ -326,13 +334,17 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.tint_rgb.z));
     seed = HashCombineU64(seed, FloatBits(model.diffuse_intensity));
     seed = HashCombineU64(seed, FloatBits(model.specular_intensity));
-    seed = HashCombineU64(seed,
-      static_cast<std::uint64_t>(model.real_time_capture_enabled));
+    seed = HashCombineU64(
+      seed, static_cast<std::uint64_t>(model.real_time_capture_enabled));
+    seed = HashCombineU64(seed, FloatBits(model.source_cubemap_angle_radians));
     seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_color.x));
     seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_color.y));
     seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_color.z));
-    seed = HashCombineU64(seed,
-      FloatBits(model.volumetric_scattering_intensity));
+    seed = HashCombineU64(
+      seed, static_cast<std::uint64_t>(model.lower_hemisphere_is_solid_color));
+    seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_blend_alpha));
+    seed
+      = HashCombineU64(seed, FloatBits(model.volumetric_scattering_intensity));
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(model.affect_reflections));
     seed = HashCombineU64(
@@ -356,10 +368,11 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.distance));
     seed = HashCombineU64(seed, FloatBits(model.start_distance));
     seed = HashCombineU64(seed, FloatBits(model.near_fade_in_distance));
+    seed = HashCombineU64(
+      seed, FloatBits(model.static_lighting_scattering_intensity));
     seed = HashCombineU64(seed,
-      FloatBits(model.static_lighting_scattering_intensity));
-    seed = HashCombineU64(seed, static_cast<std::uint64_t>(
-      model.override_light_colors_with_fog_inscattering_colors));
+      static_cast<std::uint64_t>(
+        model.override_light_colors_with_fog_inscattering_colors));
     return seed;
   }
 
@@ -383,16 +396,15 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
   next.conventional_shadow_authority_slot = light_state.shadow_authority_slot;
   next.conventional_shadow_cascade_count
     = light_state.shadow_authority_slot == 0U
-      ? light_state.source_cascade_counts[0]
-      : 0U;
+    ? light_state.source_cascade_counts[0]
+    : 0U;
   next.conventional_shadow_authority_slot0_only
     = light_state.shadow_authority_slot0_only;
   next.light_revision = light_state.revision;
 
   next.authored_hash = HashAtmosphereModel(next.view_products.atmosphere);
-  next.authored_hash
-    = HashCombineU64(
-      next.authored_hash, HashHeightFogModel(next.view_products.height_fog));
+  next.authored_hash = HashCombineU64(
+    next.authored_hash, HashHeightFogModel(next.view_products.height_fog));
   next.authored_hash = HashCombineU64(
     next.authored_hash, HashSkyLightModel(next.view_products.sky_light));
   next.authored_hash = HashCombineU64(next.authored_hash,
@@ -403,9 +415,9 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
 
   const auto stable_hash
     = HashCombineU64(next.authored_hash, light_state.authored_hash);
-  next.stable_revision
-    = stable_hash == stable_hash_ ? state_.stable_revision
-                                  : state_.stable_revision + 1U;
+  next.stable_revision = stable_hash == stable_hash_
+    ? state_.stable_revision
+    : state_.stable_revision + 1U;
   if (stable_hash == stable_hash_) {
     return false;
   }

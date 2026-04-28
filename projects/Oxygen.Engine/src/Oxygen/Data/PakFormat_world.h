@@ -310,7 +310,8 @@ static_assert(sizeof(SceneEnvironmentSystemRecordHeader) == 8);
 #pragma pack(push, 1)
 struct SkyAtmosphereEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
-    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkyAtmosphere),
+    .system_type
+    = nostd::to_underlying(EnvironmentComponentType::kSkyAtmosphere),
     .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
   };
 
@@ -438,6 +439,8 @@ struct FogEnvironmentRecord {
 static_assert(sizeof(FogEnvironmentRecord) == 232);
 
 //! Packed SkyLight (IBL) environment record.
+inline constexpr size_t kSkyLightEnvironmentRecordLegacySize = 84;
+
 #pragma pack(push, 1)
 struct SkyLightEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
@@ -461,9 +464,13 @@ struct SkyLightEnvironmentRecord {
   float volumetric_scattering_intensity = 1.0F;
   uint32_t affect_reflections = 1;
   uint32_t affect_global_illumination = 1;
+
+  float source_cubemap_angle_radians = 0.0F;
+  uint32_t lower_hemisphere_is_solid_color = 1;
+  float lower_hemisphere_blend_alpha = 1.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 84);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 96);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -525,13 +532,13 @@ struct EnvironmentRecordSizeEntry {
 
 inline constexpr std::array kKnownEnvironmentRecordSizes {
   EnvironmentRecordSizeEntry {
-    .system_type = nostd::to_underlying(
-      EnvironmentComponentType::kSkyAtmosphere),
+    .system_type
+    = nostd::to_underlying(EnvironmentComponentType::kSkyAtmosphere),
     .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
   },
   EnvironmentRecordSizeEntry {
-    .system_type = nostd::to_underlying(
-      EnvironmentComponentType::kVolumetricClouds),
+    .system_type
+    = nostd::to_underlying(EnvironmentComponentType::kVolumetricClouds),
     .record_size = sizeof(VolumetricCloudsEnvironmentRecord),
   },
   EnvironmentRecordSizeEntry {
@@ -547,8 +554,8 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
     .record_size = sizeof(SkySphereEnvironmentRecord),
   },
   EnvironmentRecordSizeEntry {
-    .system_type = nostd::to_underlying(
-      EnvironmentComponentType::kPostProcessVolume),
+    .system_type
+    = nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume),
     .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
   },
 };
