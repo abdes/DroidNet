@@ -12,6 +12,9 @@
 
 namespace oxygen::vortex::environment {
 
+inline constexpr std::uint32_t kSkyLightSourceCapturedScene = 0U;
+inline constexpr std::uint32_t kSkyLightSourceSpecifiedCubemap = 1U;
+
 struct SkyLightEnvironmentModel {
   bool enabled { false };
   std::uint32_t source { 0U };

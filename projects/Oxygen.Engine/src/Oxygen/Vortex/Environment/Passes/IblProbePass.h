@@ -8,6 +8,7 @@
 
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex::environment {
@@ -24,8 +25,11 @@ public:
   OXGN_VRTX_API ~IblProbePass() = default;
 
   [[nodiscard]] OXGN_VRTX_API auto Refresh(
-    const EnvironmentProbeState& current_state, bool environment_source_changed) const
-    -> RefreshState;
+    const EnvironmentProbeState& current_state,
+    bool environment_source_changed) const -> RefreshState;
+  [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLight(
+    const EnvironmentProbeState& current_state,
+    const SkyLightEnvironmentModel& sky_light) const -> RefreshState;
 };
 
 } // namespace oxygen::vortex::environment

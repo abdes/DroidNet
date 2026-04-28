@@ -123,8 +123,41 @@ Validation evidence:
 
 Remaining gaps:
 
-- Slices B-E are not implemented.
-- No shader ABI/catalog validation has run yet because Slice A did not change
-  shader files or shader binding structs.
+- Slices B-E are not complete.
 - No runtime CDB/debug-layer, RenderDoc, allocation-churn, or visual proof exists
   for M08 yet.
+
+### Slice B: Cubemap Product Processing
+
+Status: `in_progress`
+
+Implementation evidence:
+
+- Added explicit static SkyLight product key/status/unavailable-reason/product
+  state under Vortex environment types.
+- Extended environment probe bindings with a dedicated `diffuse_sh_srv` slot
+  while preserving the 112-byte `EnvironmentFrameBindings` payload size.
+- Updated the CPU/HLSL `EnvironmentFrameBindings` mirror and invalid binding
+  initialization.
+- Updated `IblProbePass` / `IblProcessor` to classify disabled, captured-scene,
+  real-time-capture, missing-specified-cubemap, and specified-cubemap states.
+- Kept specified-cubemap SkyLight unavailable with
+  `kShaderConsumerMigrationIncomplete` until resource generation and shader
+  consumer migration land, so shaders cannot sample mismatched descriptors.
+
+Validation evidence:
+
+- `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4` passed.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 43/43 tests.
+- `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
+- `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
+
+Remaining gaps:
+
+- No cubemap asset resolution, source TextureCube validation, processed cubemap,
+  mip generation, SH generation/upload, or source-radiance-scale handling exists
+  yet.
+- `diffuse_sh_slot` in `GpuSkyLightParams` and shader consumer migration remain
+  open for Slice D.
+- Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain
+  open for later slices/closeout.

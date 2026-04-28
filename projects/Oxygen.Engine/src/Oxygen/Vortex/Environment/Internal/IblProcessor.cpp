@@ -19,11 +19,26 @@ IblProcessor::IblProcessor(Renderer& renderer)
 IblProcessor::~IblProcessor() = default;
 
 auto IblProcessor::RefreshPersistentProbes(
-  const EnvironmentProbeState& current_state, const bool environment_source_changed) const
-  -> RefreshState
+  const EnvironmentProbeState& current_state,
+  const bool environment_source_changed) const -> RefreshState
 {
   static_cast<void>(renderer_);
-  const auto refreshed = probe_pass_->Refresh(current_state, environment_source_changed);
+  const auto refreshed
+    = probe_pass_->Refresh(current_state, environment_source_changed);
+  return {
+    .requested = refreshed.requested,
+    .refreshed = refreshed.refreshed,
+    .probe_state = refreshed.probe_state,
+  };
+}
+
+auto IblProcessor::RefreshStaticSkyLightProducts(
+  const EnvironmentProbeState& current_state,
+  const SkyLightEnvironmentModel& sky_light) const -> RefreshState
+{
+  static_cast<void>(renderer_);
+  const auto refreshed
+    = probe_pass_->RefreshStaticSkyLight(current_state, sky_light);
   return {
     .requested = refreshed.requested,
     .refreshed = refreshed.refreshed,
