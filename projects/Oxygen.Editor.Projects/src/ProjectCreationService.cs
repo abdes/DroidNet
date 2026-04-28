@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Utils;
 using Oxygen.Storage;
 
 namespace Oxygen.Editor.Projects;
@@ -210,7 +212,7 @@ public sealed class ProjectCreationService(
         "Performance",
         "CA1822:Mark members as static",
         Justification = "Instance helper keeps template-manifest loading grouped with this service.")]
-    private async Task<IProjectInfo?> LoadTemplateProjectInfoAsync(
+    private async Task<TemplateProjectInfo?> LoadTemplateProjectInfoAsync(
         IFolder projectFolder,
         CancellationToken cancellationToken)
     {
@@ -222,6 +224,43 @@ public sealed class ProjectCreationService(
         }
 
         var json = await manifest.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
-        return ProjectInfo.FromJson(json);
+        return TemplateProjectInfo.FromJson(json);
+    }
+
+    private sealed record TemplateProjectInfo(
+        Category? Category,
+        string? Thumbnail,
+        IReadOnlyList<ProjectMountPoint> AuthoringMounts,
+        IReadOnlyList<LocalFolderMount> LocalFolderMounts)
+    {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            AllowTrailingCommas = true,
+            PropertyNameCaseInsensitive = false,
+            Converters = { new CategoryJsonConverter() },
+        };
+
+        public static TemplateProjectInfo FromJson(string json)
+        {
+            var descriptor = JsonSerializer.Deserialize<TemplateProjectInfoDescriptor>(json, JsonOptions)
+                ?? new TemplateProjectInfoDescriptor();
+
+            return new TemplateProjectInfo(
+                descriptor.Category,
+                descriptor.Thumbnail,
+                descriptor.AuthoringMounts ?? [],
+                descriptor.LocalFolderMounts ?? []);
+        }
+    }
+
+    private sealed class TemplateProjectInfoDescriptor
+    {
+        public Category? Category { get; set; }
+
+        public string? Thumbnail { get; set; }
+
+        public List<ProjectMountPoint>? AuthoringMounts { get; set; }
+
+        public List<LocalFolderMount>? LocalFolderMounts { get; set; }
     }
 }
