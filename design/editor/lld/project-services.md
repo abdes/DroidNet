@@ -1,6 +1,6 @@
 # Project Services LLD
 
-Status: `review`
+Status: `ED-M06 review-ready`
 
 ## 1. Purpose
 
@@ -20,8 +20,11 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 | `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets. |
 | `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones. |
 | `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI. |
+| `REQ-020` | Content Browser can derive browsable roots from project content-root policy. |
+| `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths. |
 | `REQ-022` | Project workflows return typed results to the caller. |
 | `REQ-024` | Project load/save failures expose useful diagnostics. |
+| `REQ-036` | Project content-root policy supports predictable browser navigation and creation targets. |
 
 ## 3. Architecture Links
 
@@ -67,9 +70,10 @@ Baseline gaps:
   classification.
 - `ProjectBrowserService` mixes UI-facing workflow orchestration with project
   service calls and recent/template usage updates.
-- `ProjectManagerService.SaveSceneAsync` cooks scenes as a side effect through
-  `EngineImportDescriptorCooker`; this belongs to `Oxygen.Editor.ContentPipeline`
-  in the target architecture.
+- `ProjectManagerService.SaveSceneAsync` now persists authoring scene data only.
+  Save-time scene cook orchestration has been removed from project services and
+  belongs to `Oxygen.Editor.ContentPipeline` when reintroduced through explicit
+  cook commands.
 - Project settings are not clearly separated from global editor settings and
   Project Browser settings.
 - Content root validation does not yet produce a first-class project validation
@@ -115,6 +119,9 @@ Target invariants:
    cooked root policy.
 8. Active project state is exposed through `IProjectContextService`, not through
    mutable `IProjectManagerService.CurrentProject`.
+9. Content Browser source roots, local roots, and derived cooked roots are
+   exposed from `ProjectContext`/cook-scope policy, not guessed from current
+   UI selection.
 
 ## 6. Ownership
 
@@ -143,11 +150,11 @@ Required service split:
   design. During ED-M01 it is removed as a cross-project service contract and
   any remaining implementation is internal to `Oxygen.Editor.Projects`
   persistence code.
-- Legacy `EnsureDefaultAuthoringMounts` auto-healing is removed from validation
-  paths. Missing or invalid manifest mounts must surface as
-  `InvalidContentRoots` instead of being silently repaired.
-- `SaveSceneAsync` remains migration debt until ED-M03/ED-M07 replaces scene
-  save and cook flow. New ED-M01 APIs must not call that method.
+- `EnsureDefaultAuthoringMounts` auto-healing is removed from validation paths.
+  Missing or invalid manifest mounts must surface as `InvalidContentRoots`
+  instead of being silently repaired.
+- `SaveSceneAsync` is not part of the project-service contract. New ED-M01 APIs
+  must not call that method.
 
 ## 7. Data Contracts
 
@@ -258,6 +265,11 @@ Path rules:
 - authoring mounts are immutable through ED-M01 UI. Editable project content
   roots require a later project-settings command and validation workflow.
 
+Project layout, default creation targets, derived roots, and template output
+rules are owned by `project-layout-and-templates.md`. Project services expose
+the manifest facts and validation results that let Content Browser and Content
+Pipeline apply those rules.
+
 ### Project Cook Scope
 
 Policy object consumed by content pipeline.
@@ -272,6 +284,13 @@ Cook scope is scaffolded in ED-M01 so workspace/runtime activation can agree on
 project cooked-root policy. Full selected roots, descriptor roots, scene/asset
 selection, and pipeline execution are owned by `content-pipeline.md` in ED-M07.
 Cook scope is a declarative input. It must not perform cooking.
+
+For ED-M06, the browser reads cooked-root policy through
+`IProjectCookScopeProvider` / `ProjectCookScope.CookedOutputRoot` when
+resolving diagnostic paths and displaying derived cooked entries. It should not
+continue hardcoding `.cooked/<MountName>` outside the project catalog
+composition layer. It must not use cook scope to redirect authored identities
+or to execute cook.
 
 ## 8. Commands, Services, Or Adapters
 
@@ -341,6 +360,35 @@ ED-M07 scope:
 
 - full cook scope details and content pipeline handoff.
 
+### Content Browser Root Adapter
+
+ED-M06 may introduce a small adapter in `Oxygen.Editor.ContentBrowser`, not in
+`Oxygen.Editor.Projects`, that projects `ProjectContext` into browser roots:
+
+```csharp
+public sealed record ContentBrowserRoot(
+    string MountName,
+    string VirtualRoot,
+    string DisplayName,
+    string BackingPath,
+    ContentBrowserRootKind Kind,
+    bool Exists,
+    bool IsAuthoringTarget);
+
+public enum ContentBrowserRootKind
+{
+    ProjectRoot,
+    Authoring,
+    Local,
+    DerivedCooked,
+    DerivedImported,
+    DerivedBuild,
+}
+```
+
+The adapter is a view/workflow projection. Project services remain the source
+of project facts and do not depend on this type.
+
 ## 9. UI Surfaces
 
 Project services own no UI.
@@ -402,6 +450,8 @@ Project services provide facts to runtime and pipeline services:
   local folder roots, and cooked-root policy to workspace/runtime consumers.
 - `ProjectCookScope` provides the minimal ED-M01 cook-scope record: project
   identity, project root, and cooked output root.
+- Content Browser consumes the same facts to label authoring roots and derived
+  roots consistently.
 
 Project services do not:
 
@@ -411,8 +461,9 @@ Project services do not:
 - write cooked indexes.
 - call native interop.
 
-The current scene-save cook side effect is migration debt. New project-service
-work must not expand it. Content pipeline work owns the replacement.
+The scene-save cook side effect is outside the project-service contract. New
+project-service work must not expand it. Content pipeline work owns the
+replacement.
 
 ## 12. Operation Results And Diagnostics
 
@@ -490,6 +541,16 @@ ED-M01 project services are complete when:
 - `CurrentProject` consumers are migrated to `IProjectContextService`.
 - Content Browser and project asset catalog resolve project state from
   `IProjectContextService`, not `IProjectManagerService`.
+
+ED-M06 project-service gates:
+
+- Content Browser root adapter derives authoring, local, and derived cooked
+  roots from `ProjectContext` and `ProjectCookScopeProvider`.
+- browser and template workflows consume layout rules from
+  `project-layout-and-templates.md` instead of defining local folder policy.
+- missing/inaccessible content roots surface as `ProjectContentRoots`
+  diagnostics; browser code does not silently reinterpret them as empty
+  folders.
 
 Straightforward unit tests should cover:
 

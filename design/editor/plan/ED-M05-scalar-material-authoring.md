@@ -1,6 +1,18 @@
 # ED-M05 Scalar Material Authoring Detailed Plan
 
-Status: `active - corrective revision after initial implementation rejection`
+Status: `landed - validation held by ED-M06A layout correction`
+
+Planning note:
+
+- ED-M05 remains the scalar material document/editor/picker/assignment
+  milestone.
+- Default project layout, predefined templates, material creation target
+  resolution, Content Browser folder refresh, and picker row filtering are now
+  finalized by
+  [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md).
+- ED-M05 validation remains pending until ED-M06A confirms material create,
+  save, browser refresh, and picker behavior against the accepted game project
+  layout.
 
 ## 1. Purpose
 
@@ -153,10 +165,15 @@ Assign
   newly-created material without requiring editor restart.
 ```
 
-For V0.1, material creation is content-mount oriented. Arbitrary project-root
-folders such as `Scenes`, `.cooked`, or the synthetic `project` catalog mount
-are never inferred as material targets. If the Content Browser selection is not
-inside `/Content`, the New Material dialog falls back to `/Content/Materials`.
+For V0.1, material creation is content-mount oriented. Authoring target
+selection is governed by `IAuthoringTargetResolver` from ED-M06A. The
+`/Content/Materials` default shown here is the fallback returned for
+project-root, non-authoring, non-matching, or derived-root selections.
+
+Material picker state vocabulary is superseded by ED-M06/ED-M06A: material
+descriptors use `PrimaryState = Descriptor`; cooked companions use
+`DerivedState = Cooked` or `Stale`; compact badges follow the ED-M06 asset
+identity precedence rule.
 
 ## 6. Implementation Sequence
 
@@ -328,8 +345,9 @@ Tasks:
 - Force a picker refresh when the Geometry material flyout opens so newly
   created descriptors are visible even if filesystem watcher delivery is
   delayed.
-- Compute `AssetState ∈ {Generated, Source, Cooked, Stale, Missing, Broken}`
-  per material from catalog records and content-pipeline timestamps.
+- Compute material row state through the ED-M06/ED-M06A shared browser
+  provider: `PrimaryState = Descriptor` for material descriptors and
+  `DerivedState = Cooked` or `Stale` for cooked companions.
 - Populate `DescriptorPath` / `CookedPath` as diagnostic affordances only,
   never persisted.
 - Implement `BaseColorPreview` as `MaterialPreviewColor` from descriptor base
@@ -339,10 +357,10 @@ Tasks:
 ```text
 +--------------------------------------------------+
 | Pick Material                       [search...]  |
-| [x] Generated  [x] Source  [x] Cooked  [ ] Miss. |
+| [x] Generated  [x] Descriptor  [x] Cooked  [ ] Miss. |
 +--------------------------------------------------+
 | [swatch] Default          Engine/Generated   GEN |
-| [swatch] Gold             Content/Materials  SRC |
+| [swatch] Gold             Content/Materials  DESC |
 | [warn ]  MissingMat       unresolved         MIS |
 +--------------------------------------------------+
 | [Open in Material Editor] [Create New] [Clear]   |
@@ -351,8 +369,9 @@ Tasks:
 
 - Implement `Create New` from picker:
   - prompt name + target folder;
-  - default `/Content/Materials`;
-  - use the selected folder only when it is already under `/Content`;
+  - target folder is resolved by `IAuthoringTargetResolver` per ED-M06A;
+  - `/Content/Materials` is the fallback for project-root and invalid
+    authoring-target selections;
   - create/open material document;
   - assign only if launched from a material slot and the user confirms.
 - Ensure missing/broken current assignment row is shown when picker opens from
@@ -530,6 +549,10 @@ The user should validate these visually after implementation and build:
     scene edit.
 
 ## 10. Code/Test Validation Gates
+
+State assertions in this section are interpreted through the ED-M06/ED-M06A
+browser model: material descriptors are `PrimaryState = Descriptor`; cooked or
+stale companions are represented as `DerivedState`.
 
 ED-M05 cannot be called landed until these are true:
 

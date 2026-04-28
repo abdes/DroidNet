@@ -35,9 +35,9 @@ these rules:
 5. New V0.1 editor features must close end-to-end: UI, view model, authoring
    model, command path, persistence, live sync where supported, cook/runtime
    behavior where applicable, and operation result handling.
-6. No temporary compatibility bridge, manual file repair workflow, or
-   editor-only copy of an engine runtime system may be treated as the target
-   architecture.
+6. Runtime integration must use the managed runtime boundary. Manual file
+   repair workflows and editor-owned copies of engine runtime systems are
+   outside the target architecture.
 
 ## Table of Contents
 
@@ -47,7 +47,7 @@ these rules:
 - [4. Architectural Principles](#4-architectural-principles)
 - [5. Architectural Model](#5-architectural-model)
 - [6. Module Ownership](#6-module-ownership)
-- [7. Brownfield Delta Register](#7-brownfield-delta-register)
+- [7. Ownership Boundary Constraints](#7-ownership-boundary-constraints)
 - [8. Workflow Architecture](#8-workflow-architecture)
 - [9. Data and Persistence Architecture](#9-data-and-persistence-architecture)
 - [10. Subsystem Contracts](#10-subsystem-contracts)
@@ -66,10 +66,13 @@ translates [PRD.md](./PRD.md) into stable ownership boundaries, dependency
 direction, runtime integration contracts, data ownership, and workflow
 architecture.
 
-[PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) is the placement authority for
-projects, folders, and MSBuild shape. This document is the architecture
-authority for ownership, boundaries, runtime contracts, and architectural
-decisions. When this document names modules, it must remain consistent with
+[PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) is the repository placement authority
+for editor source projects, folders, and MSBuild shape. It does not define the
+filesystem layout of user-created Oxygen game projects.
+
+This document is the architecture authority for ownership, boundaries, runtime
+contracts, game-project management contracts, and architectural decisions. When
+this document names repository modules, it must remain consistent with
 `PROJECT-LAYOUT.md`.
 
 This document defines:
@@ -79,11 +82,13 @@ This document defines:
   physics, runtime, viewport, interop, and diagnostics concerns
 - how authoring data, generated descriptors, cooked output, and live engine
   state relate
+- how created Oxygen game projects are managed, classified, and consumed by
+  editor services
 - which workflows must remain explicit: project open, scene mutation,
   save/reopen, live sync, descriptor generation, cook, mount, preview, and
   standalone load
-- which brownfield dependencies are accepted for migration and which are not
-  target architecture
+- which ownership boundaries are mandatory for editor services and game
+  project workflows
 
 This document does not define:
 
@@ -303,7 +308,8 @@ evidence, not the primary product surface for user-triggered failures.
 8. Surface identity and view identity are separate and must remain separate.
 9. Editor camera/navigation tools are editor concerns even when native engine
    capabilities implement the final movement.
-10. Brownfield namespace names and existing references are not ownership proof.
+10. Namespace names and existing references do not define ownership; ownership
+    follows the module responsibilities in this architecture.
 
 ### 4.2 Axioms
 
@@ -326,13 +332,19 @@ evidence, not the primary product surface for user-triggered failures.
 9. Diagnostics must identify the failure domain: authoring data, missing
    content, descriptor generation, import tool, cook output, mount state, live
    sync, or engine runtime.
-10. Brownfield shortcuts may be documented as migration constraints; they must
-    not be promoted into target architecture.
+10. Concrete implementations must preserve the ownership boundaries in this
+    architecture rather than moving policy into whichever module currently has
+    convenient access.
 
 ## 5. Architectural Model
 
-[PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) owns the canonical project and folder
-layout. The architectural layers are:
+[PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) owns repository source placement and
+MSBuild folder rules. Oxygen game projects are user-created authoring
+workspaces with their own manifest, authored content roots, project-local
+configuration, and derived output roots. They are not editor repository
+projects and must not be described by repository placement rules.
+
+The architectural layers are:
 
 ```mermaid
 flowchart TB
@@ -363,8 +375,10 @@ content-browser, or shell implementation details.
 ## 6. Module Ownership
 
 This table is the canonical ownership map for this architecture document.
-Placement details, folder shape, and MSBuild rules remain owned by
-`PROJECT-LAYOUT.md`.
+Repository placement details and MSBuild rules remain owned by
+`PROJECT-LAYOUT.md`. Game-project management contracts remain owned by this
+architecture document; low-level schema fields, concrete folder names, and
+template payload mechanics belong in LLDs that implement this contract.
 
 | Module | Architectural Role | Owns | Must Not Own |
 | --- | --- | --- | --- |
@@ -387,18 +401,21 @@ Placement details, folder shape, and MSBuild rules remain owned by
 | `Oxygen.Assets` | shared asset/cook data library | asset identities, references, catalogs, import/cook primitives, loose cooked index utilities | editor UI, project workflow policy, live engine mounting |
 | `Oxygen.Storage` | storage abstraction | storage providers and filesystem access | asset semantics, editor settings, project policy |
 
-## 7. Brownfield Delta Register
+## 7. Ownership Boundary Constraints
 
-This section records current deviations from the target module ownership. It
-does not redefine ownership.
+These constraints are target architecture. They define where policy is allowed
+to live and how editor services interact with game project files.
 
-| Brownfield Delta | Current Risk | Target Direction |
-| --- | --- | --- |
-| `WorldEditor` currently has direct native interop references. | View models and workspace services can bypass runtime ownership. | New managed engine work goes through `Oxygen.Editor.Runtime`; direct interop use shrinks to compatibility seams or documented LLD exceptions. |
-| `Projects` currently performs some scene save/cook work. | Project metadata/policy can become cook execution owner. | `Projects` defines project policy and cook scope; `ContentPipeline` owns execution orchestration and diagnostics. |
-| `WorldEditor` hosts broad workspace, content, sync, inspector, and viewport code. | Reusable widgets and cross-cutting tooling can become trapped in one feature. | Reusable editor UI moves to `Oxygen.Editor.UI`; content tooling moves to `ContentPipeline`; shared domains move to domain projects. |
-| `WorldEditor` namespace overlaps with `World`. | Namespace can be mistaken for ownership. | Ownership follows project responsibility, not root namespace. |
-| Native editor runtime behavior is currently concentrated behind interop. | Authoring defaults or editor policy can drift into native code. | Native code exposes capabilities; managed editor modules own authoring and workflow policy. |
+| Boundary | Rule |
+| --- | --- |
+| UI to domain | UI view models issue commands or service requests. They do not mutate domain models directly when a command path exists. |
+| Feature UI to reusable UI | Reusable controls and editor field components belong in `Oxygen.Editor.UI`; feature modules own only feature-specific composition and policy. |
+| Feature UI to native runtime | Feature view models do not call native interop directly. Runtime work crosses `Oxygen.Editor.Runtime` or a documented managed runtime service. |
+| `Projects` to content pipeline | `Projects` owns project identity, manifest validation, content-root policy, and cook-scope facts. It does not execute import, cook, pak, mount, or content-pipeline jobs. |
+| `ContentPipeline` to projects | `ContentPipeline` reads project facts through project-service contracts when it needs cook scope, authored roots, or project identity. It does not own project creation or manifest policy. |
+| `WorldEditor` to project layout | `WorldEditor` creates, opens, and saves scene documents through project/document services. It does not decide global project layout or write cooked output directly. |
+| `ContentBrowser` to scene editing | Content Browser can return asset identity and diagnostics. It does not mutate scene components or material slots directly. |
+| Native interop to authoring policy | Native code exposes capabilities. Managed editor modules own authoring defaults, game project policy, UI behavior, and workflow decisions. |
 
 ## 8. Workflow Architecture
 
@@ -525,7 +542,85 @@ not merely a live editor preview.
 
 ## 9. Data and Persistence Architecture
 
-### 9.1 Authoring Scene Data
+### 9.1 Game Project Filesystem Contract
+
+An Oxygen game project is a user-authored workspace, not an editor source
+project. Its filesystem layout is part of the editor architecture because every
+major service reads or writes project files through this contract.
+
+Architectural project classes:
+
+- project manifest: stable project identity, display metadata, project
+  category, declared authoring mounts, and local folder mounts
+- authored content roots: project-owned or explicitly mounted folders where
+  user-authored assets and editor-authored descriptors live
+- project configuration: project-scoped settings that are not authored runtime
+  assets
+- source media: raw files imported into authored assets, kept distinct from
+  cooked runtime output
+- derived output: imported intermediates, build intermediates, cooked runtime
+  products, cooked indexes, editor caches, and other reproducible artifacts
+
+Architectural layout rules:
+
+1. User-authored game assets live under authored content roots. The default
+   authored content root is the project-local Content root.
+2. Scenes are authored content. They must be addressed through asset identity
+   under an authored content root, not through a separate top-level scene
+   location.
+3. Materials, geometry descriptors, texture descriptors, scripts, prefabs,
+   animation descriptors, and other user-authored runtime assets follow the
+   same authored-content-root rule.
+4. Raw source media can be stored inside the authored content root when it is
+   part of the project, but it remains source media until an import or
+   descriptor workflow promotes it into an authored asset.
+5. Project configuration is not authored content. It is project-local editor or
+   game configuration and must not be returned by asset pickers as runtime
+   assets.
+6. Derived output is never an authoring source. Editor services may browse,
+   validate, mount, copy paths from, or diagnose derived output, but user
+   authoring commands must not write source changes into derived roots.
+7. Extra project-relative authoring mounts extend the authored content space.
+   They are first-class asset roots and use the same identity rules as the
+   default Content root.
+8. Absolute local folder mounts are explicit user-selected authoring roots.
+   They are useful for shared studio libraries and external working folders,
+   but they are not silently chosen as default creation targets.
+9. Mount names are part of asset identity. They must be stable, unique within
+   the active project, and independent of local absolute paths.
+10. Asset identity is rooted in the declared authoring mount, not in cooked
+    filesystem paths.
+
+Project creation contract:
+
+- creating a project from a predefined template creates a complete, valid
+  project workspace
+- every created project receives a new project identity
+- created projects include a valid manifest, the required authored content
+  root, project configuration location, starter content declared by the
+  template, and enough metadata for the Project Browser to show the project
+- templates define startup intent, such as the starter scene or empty workspace
+  state, without requiring the shell to inspect arbitrary files
+- project creation validates the created project before workspace activation
+
+Editor-service contract:
+
+| Service | May Read | May Write | Must Not Do |
+| --- | --- | --- | --- |
+| `Oxygen.Editor.Projects` | manifest, declared mounts, project metadata, project configuration, project cook scope | manifest and project-level configuration through project services | import, cook, mount runtime roots, mutate scene/material assets directly |
+| `Oxygen.Editor.ProjectBrowser` | template metadata, project manifest summary, recent project state, validation result | new project payload through project creation services, recent project state | define asset layout policy, edit authored assets |
+| `Oxygen.Editor.ContentBrowser` | authored roots, local mounts, source media, descriptors, cooked indexes, derived-state diagnostics | user-requested asset files through feature commands or delegated creation services | treat cooked paths as authored identity, invoke cook/mount as browse side effects |
+| `Oxygen.Editor.WorldEditor` | scene documents and asset references through document/project services | scene documents through command/document save paths | choose project layout policy, write cooked output directly |
+| `Oxygen.Editor.MaterialEditor` | material descriptors and material asset identity through document/content services | material descriptors through material document save paths | write scene assignments directly, write cooked output directly |
+| `Oxygen.Editor.ContentPipeline` | authored content roots, source media, descriptors, project cook scope | generated descriptors, import intermediates, cooked output, cooked indexes | own UI browsing policy or project-template policy |
+| `Oxygen.Editor.Runtime` | cooked-root mount requests and runtime settings | runtime state only | read authored files as runtime assets, mutate project files |
+
+The low-level design for project layout and templates must choose concrete
+folder names, manifest field shapes, template descriptor fields, and validation
+rules that satisfy this architectural contract. It must not redefine ownership
+or allow a second asset-identity model.
+
+### 9.2 Authoring Scene Data
 
 The authoring scene owns:
 
@@ -542,7 +637,7 @@ The authoring scene owns:
 
 The authoring scene must save and reopen without manual repair.
 
-### 9.2 Component Data
+### 9.3 Component Data
 
 A component is architecturally complete only when the full chain closes:
 
@@ -561,7 +656,7 @@ The owning LLD enumerates the precise phases and verification method.
 Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, and
 Material assignment/override are the V0.1 component set.
 
-### 9.3 Material Data
+### 9.4 Material Data
 
 V0.1 material authoring is scalar-material authoring. The architecture must
 support:
@@ -578,7 +673,7 @@ support:
 Texture authoring, material graphs, and complex texture workflows are outside
 V0.1.
 
-### 9.4 Descriptor and Manifest Data
+### 9.5 Descriptor and Manifest Data
 
 Descriptors and manifests are cooker inputs. They may be:
 
@@ -591,7 +686,7 @@ Descriptors and manifests are cooker inputs. They may be:
 The PRD does not require one universal persistence schema. It requires that
 supported V0.1 data round-trips and cooks without manual repair.
 
-### 9.5 Cooked Data
+### 9.6 Cooked Data
 
 Cooked output includes runtime-loadable assets, descriptors, binary data, and
 loose cooked indexes. The editor may:
@@ -879,8 +974,8 @@ Diagnostics must classify failures into at least:
 ### 14.1 Target Dependency Graph
 
 This graph is the target architectural dependency/control direction. Concrete
-compile-time references must be checked against `PROJECT-LAYOUT.md` and LLDs to
-avoid cycles.
+compile-time references must preserve this dependency architecture and the
+repository placement rules in `PROJECT-LAYOUT.md`.
 
 ```mermaid
 flowchart TB
@@ -932,7 +1027,6 @@ flowchart TB
     ContentBrowser --> Assets
     ContentBrowser --> Projects
     ContentBrowser --> Pipeline
-    Projects --> Pipeline
     Pipeline --> Assets
     Pipeline --> Projects
     Pipeline --> Interop
@@ -945,11 +1039,12 @@ flowchart TB
     Projects --> Data
 ```
 
-The `Projects` and `ContentPipeline` relationship is intentionally split:
-project services own policy and cook scope, while the content pipeline owns
-execution orchestration. If a concrete implementation would create a cycle, the
-LLD must introduce a contract package or inversion point rather than hiding the
-operation in the wrong owner.
+Cook, import, and package workflows are requested by feature commands or
+application orchestration services. `ContentPipeline` reads project facts from
+`Projects` through project-service contracts; `Projects` must not depend on
+`ContentPipeline` or call pipeline execution internals. If a concrete
+implementation needs contracts in both directions, it must introduce a shared
+contract package or inversion point rather than creating a compile-time cycle.
 
 ### 14.2 Required Edges
 
@@ -961,7 +1056,7 @@ operation in the wrong owner.
 | `WorldEditor` | `ContentPipeline` | scene save/cook/mount workflows |
 | `ContentBrowser` | `Assets` | asset identity and catalog data |
 | `ContentBrowser` | `ContentPipeline` | source/generated/cooked state and pipeline actions |
-| `Projects` | `ContentPipeline` | project-level cook scope requests |
+| `ContentPipeline` | `Projects` | project identity, authored roots, and cook-scope facts |
 | `ContentPipeline` | `Assets` | reusable asset/cook primitives |
 | `ContentPipeline` | `Interop` | native cooker/content tool adapters |
 | `Runtime` | `Interop` | embedded engine lifecycle, surfaces, views, mounts |

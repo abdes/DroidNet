@@ -30,7 +30,7 @@ scene components, the content browser, cooking, validation, and live sync.
 - `Oxygen.Editor.World` asset reference fields
 - `Oxygen.Editor.ContentBrowser`
 - `GeometryViewModel`
-- `EngineImportDescriptorCooker`
+- explicit content-pipeline cook orchestration
 - `Oxygen.Assets`
 
 ## 5. Acceptance Criteria

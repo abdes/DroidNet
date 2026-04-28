@@ -11,6 +11,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | LLD | Purpose |
 | --- | --- |
 | [project-workspace-shell.md](./project-workspace-shell.md) | Project Browser startup, project open/create, workspace activation, restoration, shell/project boundaries. |
+| [project-layout-and-templates.md](./project-layout-and-templates.md) | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules. |
 | [project-services.md](./project-services.md) | Project metadata, project settings, content roots, project cook scope and policy. |
 | [documents-and-commands.md](./documents-and-commands.md) | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
 | [scene-authoring-model.md](./scene-authoring-model.md) | Authoring scene, component completion, commands, dirty state, persistence. |
