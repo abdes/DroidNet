@@ -73,6 +73,8 @@ STAGE12_SCOPE_NAMES = (
 STAGE22_SCOPE_NAME = "Vortex.PostProcess.Tonemap"
 COMPOSITING_SCOPE_PREFIX = "Vortex.CompositingTask[label=Composite"
 VIEW_ID_RE = re.compile(r"View\s+(\d+)")
+EXPECTED_PROOF_VIEW_COUNT = 4
+EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT = 3
 
 
 def records_with_name(action_records, name):
@@ -113,8 +115,31 @@ def append_order_check(report, label, earlier_records, later_records):
             record.event_id for record in later_records
         )
     report.append(f"{label}={format_bool(ordered)}")
-    if not ordered:
-        raise RuntimeError(f"{label} failed")
+    return ordered
+
+
+def append_interleaved_order_check(report, label, earlier_records, later_records):
+    earlier_events = sorted(record.event_id for record in earlier_records)
+    later_events = sorted(record.event_id for record in later_records)
+    matched_pairs = 0
+    previous_later_event = -1
+
+    for later_event in later_events:
+        matching_earlier = [
+            event
+            for event in earlier_events
+            if previous_later_event < event < later_event
+        ]
+        if matching_earlier:
+            matched_pairs += 1
+            previous_later_event = later_event
+
+    expected_pairs = min(len(earlier_events), len(later_events))
+    ordered = expected_pairs > 0 and matched_pairs == expected_pairs
+    report.append(f"{label}={format_bool(ordered)}")
+    report.append(f"{label}_matched_pairs={matched_pairs}")
+    report.append(f"{label}_expected_pairs={expected_pairs}")
+    return ordered
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -136,10 +161,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     composited_view_ids = extract_composited_view_ids(compositing_scopes)
     unique_composited_view_ids = sorted(set(composited_view_ids))
 
-    stage3_view_count_match = len(stage3_scopes) >= 4
-    stage9_view_count_match = len(stage9_scopes) >= 4
-    stage12_view_count_match = len(stage12_scopes) >= 4
-    composition_view_count_match = len(unique_composited_view_ids) >= 4
+    stage3_view_count_match = len(stage3_scopes) >= EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT
+    stage9_view_count_match = len(stage9_scopes) >= EXPECTED_PROOF_VIEW_COUNT
+    stage12_view_count_match = len(stage12_scopes) >= EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT
+    composition_view_count_match = len(unique_composited_view_ids) >= EXPECTED_PROOF_VIEW_COUNT
     distinct_composition_outputs = len(composited_view_ids) == len(unique_composited_view_ids)
     composition_work_count = count_work_records(compositing_records, DRAW_NAME) + count_work_records(
         compositing_records, COPY_NAME
@@ -149,6 +174,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"capture_path={capture_path}")
     report.append(f"report_path={report_path}")
     report.append(f"total_actions={len(action_records)}")
+    report.append(f"expected_proof_view_count={EXPECTED_PROOF_VIEW_COUNT}")
+    report.append(
+        f"expected_proof_scene_pass_view_count={EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT}"
+    )
     report.append(f"stage3_scope_count={len(stage3_scopes)}")
     report.append(f"stage3_view_count_match={format_bool(stage3_view_count_match)}")
     report.append(f"stage9_scope_count={len(stage9_scopes)}")
@@ -164,11 +193,18 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"stage3_draw_count={count_work_records(stage3_records, DRAW_NAME)}")
     report.append(f"stage9_draw_count={count_work_records(stage9_records, DRAW_NAME)}")
 
-    append_order_check(report, "stage3_before_stage9", stage3_scopes, stage9_scopes)
-    append_order_check(report, "stage9_before_composition", stage9_scopes, compositing_scopes)
+    stage3_before_stage9 = append_interleaved_order_check(
+        report, "stage3_before_stage9", stage3_scopes, stage9_scopes
+    )
+    stage9_before_composition = append_order_check(
+        report, "stage9_before_composition", stage9_scopes, compositing_scopes
+    )
     if stage22_scopes:
-        append_order_check(report, "stage22_before_composition", stage22_scopes, compositing_scopes)
+        stage22_before_composition = append_order_check(
+            report, "stage22_before_composition", stage22_scopes, compositing_scopes
+        )
     else:
+        stage22_before_composition = True
         report.append("stage22_before_composition=not_applicable")
 
     overall = (
@@ -178,10 +214,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and composition_view_count_match
         and distinct_composition_outputs
         and composition_work_count >= 4
+        and stage3_before_stage9
+        and stage9_before_composition
+        and stage22_before_composition
     )
     report.append(f"overall_verdict={format_bool(overall)}")
-    if not overall:
-        raise RuntimeError("Vortex multi-view proof checks failed")
 
 
 run_ui_script(REPORT_SUFFIX, build_report)

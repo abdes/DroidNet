@@ -1503,6 +1503,8 @@ void SceneRenderer::PrimePreparedView(RenderContext& ctx)
 void SceneRenderer::RenderViewFamily(RenderContext& ctx)
 {
   PrimePreparedViews(ctx);
+  const auto allocations_before_frame = scene_texture_pool_.GetAllocationCount();
+  auto rendered_scene_view_count = std::size_t { 0U };
   for (std::size_t view_index = 0U; view_index < ctx.frame_views.size();
        ++view_index) {
     const auto& entry = ctx.frame_views[view_index];
@@ -1510,6 +1512,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       continue;
     }
 
+    ++rendered_scene_view_count;
     internal::PerViewScope view_scope { ctx, view_index };
     auto scene_texture_lease
       = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
@@ -1528,6 +1531,16 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
     renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
   }
+
+  const auto allocations_after_frame = scene_texture_pool_.GetAllocationCount();
+  LOG_F(INFO,
+    "Vortex.SceneTextureLeasePool.Churn frame={} scene_views={} "
+    "allocations_before={} allocations_after={} allocations_delta={} "
+    "live_leases={}",
+    ctx.frame_sequence.get(), rendered_scene_view_count,
+    allocations_before_frame, allocations_after_frame,
+    allocations_after_frame - allocations_before_frame,
+    scene_texture_pool_.GetLiveLeaseCount());
 }
 
 void SceneRenderer::OnRender(RenderContext& ctx)

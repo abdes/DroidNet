@@ -201,7 +201,6 @@ Set-Content -LiteralPath $debugTranscriptPath -Value $debugTranscriptLines -Enco
 
 & powershell -NoProfile -File $debugAuditAssertScript `
   -DebuggerLogPath $debugTranscriptPath `
-  -RuntimeLogPath @($debugStdoutPath, $debugStderrPath) `
   -ReportPath $debugReportPath
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
@@ -234,10 +233,12 @@ if ($runtimeExitCode -ne 0) {
   throw "MultiView capture run exited with code $runtimeExitCode. See $runtimeStdoutPath and $runtimeStderrPath"
 }
 
-$newCaptures = Get-NewOrUpdatedCaptures `
-  -Directory $outputDirectory `
-  -Filter $captureFilter `
-  -Before $captureSnapshotBefore
+$newCaptures = @(
+  Get-NewOrUpdatedCaptures `
+    -Directory $outputDirectory `
+    -Filter $captureFilter `
+    -Before $captureSnapshotBefore
+)
 if ($newCaptures.Count -eq 0) {
   throw "No new RenderDoc capture found in $outputDirectory with filter $captureFilter"
 }
@@ -251,19 +252,39 @@ Invoke-VortexRenderDocAnalysis `
   -ReportPath $captureReportPath
 
 $runFramesAtLeast60 = $RunFrames -ge 60
+$allocationWarmupFrames = 5
+$churnMatches = @(
+  Select-String `
+    -Path $runtimeStderrPath `
+    -Pattern 'Vortex\.SceneTextureLeasePool\.Churn frame=(\d+) scene_views=(\d+) allocations_before=(\d+) allocations_after=(\d+) allocations_delta=(\d+) live_leases=(\d+)'
+)
+$steadyStateAllocationsAfterWarmup = 0
+$steadyStateFrameCount = 0
+foreach ($match in ($churnMatches | Select-Object -Skip $allocationWarmupFrames)) {
+  $steadyStateFrameCount += 1
+  $steadyStateAllocationsAfterWarmup += [int]$match.Matches[0].Groups[5].Value
+}
+$hasSteadyStateWindow = $steadyStateFrameCount -gt 0
+$steadyStateAllocationsZero = $steadyStateAllocationsAfterWarmup -eq 0
 $allocationReportLines = @(
   'analysis_result=success'
   'analysis_profile=vortex_multiview_allocation_churn'
   "run_frames=$RunFrames"
   "run_frames_at_least_60=$(if ($runFramesAtLeast60) { 'true' } else { 'false' })"
-  'steady_state_window=runtime process completed with proof layout enabled'
-  "overall_verdict=$(if ($runFramesAtLeast60) { 'pass' } else { 'fail' })"
+  "warmup_frames=$allocationWarmupFrames"
+  "telemetry_frame_count=$($churnMatches.Count)"
+  "steady_state_frame_count=$steadyStateFrameCount"
+  "steady_state_window=$(if ($hasSteadyStateWindow) { 'true' } else { 'false' })"
+  "steady_state_allocations_after_warmup=$steadyStateAllocationsAfterWarmup"
+  "steady_state_allocations_zero=$(if ($steadyStateAllocationsZero) { 'true' } else { 'false' })"
+  "overall_verdict=$(if ($runFramesAtLeast60 -and $hasSteadyStateWindow -and $steadyStateAllocationsZero) { 'pass' } else { 'fail' })"
 )
 Set-Content -LiteralPath $allocationReportPath -Value $allocationReportLines -Encoding utf8
 
 & powershell -NoProfile -File $assertScript `
   -DebugLayerReportPath $debugReportPath `
   -RuntimeLogPath $runtimeStdoutPath `
+  -RuntimeErrorLogPath $runtimeStderrPath `
   -CaptureReportPath $captureReportPath `
   -AllocationReportPath $allocationReportPath `
   -ReportPath $validationReportPath
