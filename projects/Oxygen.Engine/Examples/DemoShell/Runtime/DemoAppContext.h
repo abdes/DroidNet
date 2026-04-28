@@ -56,6 +56,13 @@ public:
   float vortex_aerial_scattering_strength { 1.0F };
   float vortex_aerial_start_depth_m { 100.0F };
   std::string startup_scene_name;
+  std::string startup_skybox_path;
+  int startup_skybox_layout { 0 };
+  int startup_skybox_output_format { 0 };
+  int startup_skybox_face_size { 512 };
+  bool startup_skybox_flip_y { false };
+  bool startup_skybox_tonemap_hdr_to_ldr { false };
+  float startup_skybox_hdr_exposure_ev { 0.0F };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };

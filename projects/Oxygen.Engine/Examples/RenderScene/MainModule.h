@@ -42,6 +42,7 @@ namespace vortex {
 
 namespace oxygen::examples {
 class SceneLoaderService;
+class SkyboxService;
 } // namespace oxygen::examples
 
 namespace oxygen::examples::render_scene {
@@ -108,6 +109,9 @@ private:
 
   auto ClearSceneRuntime(const char* reason) -> void;
   auto StageFallbackScene() -> void;
+  auto ApplyStartupSkyboxToScene(
+    oxygen::observer_ptr<oxygen::scene::Scene> scene,
+    std::string_view scene_label) -> void;
 
   struct SceneLoadRequest {
     data::AssetKey key {};
@@ -152,6 +156,14 @@ private:
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
   std::optional<std::string> startup_scene_name_;
+  std::optional<std::filesystem::path> startup_skybox_path_;
+  int startup_skybox_layout_ { 0 };
+  int startup_skybox_output_format_ { 0 };
+  int startup_skybox_face_size_ { 512 };
+  bool startup_skybox_flip_y_ { false };
+  bool startup_skybox_tonemap_hdr_to_ldr_ { false };
+  float startup_skybox_hdr_exposure_ev_ { 0.0F };
+  std::unique_ptr<SkyboxService> startup_skybox_service_;
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>

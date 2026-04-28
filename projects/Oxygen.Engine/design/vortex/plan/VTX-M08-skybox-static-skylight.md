@@ -222,10 +222,14 @@ Validation evidence:
 - `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 54/54 tests.
 - `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
 - `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
+- `cmake --build out\build-ninja --config Debug --target oxygen-examples-renderscene --parallel 4` passed after adding the RenderScene startup-skybox proof route.
+- `python -m py_compile tools\vortex\AnalyzeRenderDocVortexSkybox.py` passed.
+- CDB/debug-layer runtime audit passed for `Oxygen.Examples.RenderScene.exe --frames 80 --fps 60 --vsync false --debug-layer true --aftermath false --scene VsmTwoCubes` with startup skybox loaded from `Examples\Content\images\4x3_skybox.png`; log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-cdb-stdout.log` records exit code 0, no D3D12/DXGI errors, no device removal/hang, no access violation, and a non-blocking live `IDXGIFactory` shutdown warning.
+- RenderDoc capture passed for `RenderScene --frames 100 --scene VsmTwoCubes --capture-provider renderdoc --capture-load search --capture-from-frame 75 --capture-frame-count 1`; capture `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox_capture.rdc` was produced.
+- `powershell -NoProfile -File tools\vortex\Verify-VortexSkyboxProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox_capture.rdc -CaptureReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox.vortex-skybox.txt` passed. The report proves one `Vortex.Stage15.Sky` scope, one sky draw, zero `Vortex.Stage15.Atmosphere` scopes, `atmosphere_enabled=0`, cubemap `SkySphere` source/enabled/descriptor state, one `SceneColor` output, and non-black SceneColor max luminance.
 
 Remaining gaps:
 
-- Runtime cubemap SkySphere proof through `RenderScene` is still open.
-- CDB/debug-layer, RenderDoc scripted analysis, allocation-churn proof, and
-  user visual confirmation are still required before Slice C can be closed.
+- Allocation-churn proof and user visual confirmation are still required before
+  Slice C can be closed.
 - Deferred static SkyLight diffuse consumption remains open.
