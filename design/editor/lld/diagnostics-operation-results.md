@@ -216,6 +216,12 @@ ED-M05 prefix allocations:
 | `OXE.ASSETID.*` | Content browser / asset picker identity and resolve diagnostics. |
 | `OXE.CONTENTPIPELINE.*` | Content-pipeline orchestration diagnostics surfaced by material workflows. |
 
+ED-M05 may also add material-specific codes under existing ED-M03 prefixes
+when the owning domain remains unchanged:
+
+- `OXE.DOCUMENT.MATERIAL.*` for material document save/open failures.
+- `OXE.LIVESYNC.MATERIAL.*` for material assignment sync warnings.
+
 ### Failure Domain
 
 Domains are stable vocabulary, not class names.
@@ -482,6 +488,24 @@ Selection changes are not operation kinds in ED-M03. They are document-scoped
 state changes through `ISceneSelectionService`; stale/no-such-node selection
 requests may publish diagnostics under `SceneAuthoring` but do not publish
 success results.
+
+ED-M05 producers and operation kinds:
+
+| Producer | Operation Kind | Domain |
+| --- | --- | --- |
+| material document service | `Material.Create` | `MaterialAuthoring` / `Document` |
+| material document service | `Material.Open` | `MaterialAuthoring` / `Document` |
+| material document service | `Material.EditScalar` | `MaterialAuthoring` |
+| material document service | `Material.Save` | `Document` |
+| material document service / content pipeline | `Material.Cook` | `ContentPipeline` |
+| geometry material slot command | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
+| material picker/content browser | `Asset.Query` | `AssetIdentity` |
+| material picker/content browser | `Asset.Resolve` | `AssetIdentity` |
+| material picker/content browser | `Material.Pick` | `AssetIdentity` |
+
+ED-M05 implementation adds the corresponding `FailureDomain` values and
+diagnostic-code constants to `Oxygen.Core` before material workflows publish
+results.
 
 ## 12. Operation Results And Diagnostics
 
