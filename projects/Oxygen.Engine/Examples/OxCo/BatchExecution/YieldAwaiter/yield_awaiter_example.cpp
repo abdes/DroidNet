@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <coroutine>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <optional>
@@ -251,7 +252,7 @@ private:
 // Example Usage
 //===----------------------------------------------------------------------===//
 
-extern "C" void MainImpl(std::span<const char*> /*args*/)
+extern "C" auto MainImpl(std::span<const char*> /*args*/) -> int
 {
   std::cout << "=== YieldAwaiter Batch Processing with Result Population ===\n";
   std::cout << "This example demonstrates the YieldAwaiter approach where:\n";
@@ -274,4 +275,5 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     << "- Each operation processes the entire collection independently\n";
   std::cout << "- Simple and predictable execution pattern\n";
   std::cout << "- Lower overhead compared to channel-based approaches\n";
+  return EXIT_SUCCESS;
 }
