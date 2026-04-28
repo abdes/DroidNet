@@ -124,6 +124,7 @@ struct CompositionView {
 
   struct AuxInputDesc {
     AuxOutputId id { 0U };
+    AuxOutputKind kind { AuxOutputKind::kColorTexture };
     bool required { true };
   };
 

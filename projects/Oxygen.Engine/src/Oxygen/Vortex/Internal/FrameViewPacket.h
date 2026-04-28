@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -23,6 +24,17 @@ class Texture;
 namespace oxygen::vortex::internal {
 
 class CompositionViewImpl;
+
+struct AuxiliaryResolvedInput {
+  CompositionView::AuxInputDesc input {};
+  CompositionView::AuxOutputKind kind {
+    CompositionView::AuxOutputKind::kColorTexture
+  };
+  ViewId producer_view_id { kInvalidViewId };
+  std::uint32_t producer_packet_index { 0U };
+  bool valid { false };
+  std::string debug_name {};
+};
 
 class FrameViewPacket {
 public:
@@ -80,6 +92,16 @@ public:
   {
     return consumed_aux_outputs_;
   }
+  [[nodiscard]] auto ResolvedAuxInputs() const noexcept
+    -> const std::vector<AuxiliaryResolvedInput>&
+  {
+    return resolved_aux_inputs_;
+  }
+  auto SetResolvedAuxInputs(
+    std::vector<AuxiliaryResolvedInput> resolved_inputs) noexcept -> void
+  {
+    resolved_aux_inputs_ = std::move(resolved_inputs);
+  }
 
   [[nodiscard]] auto HasCompositeTexture() const noexcept -> bool;
   [[nodiscard]] auto GetCompositeTexture() const
@@ -99,6 +121,7 @@ private:
   CompositionView::OverlayPolicy overlay_policy_ {};
   std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_ {};
   std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_ {};
+  std::vector<AuxiliaryResolvedInput> resolved_aux_inputs_ {};
   ViewRenderPlan plan_;
 };
 

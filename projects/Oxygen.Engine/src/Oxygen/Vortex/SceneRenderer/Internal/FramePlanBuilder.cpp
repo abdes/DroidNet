@@ -9,6 +9,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Internal/AuxiliaryDependencyGraph.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h>
 
@@ -64,6 +65,20 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
       view->GetDescriptor().view_state_handle,
       EvaluateViewRenderPlan(*view, sky_state, inputs));
   }
+
+  const auto aux_plan = AuxiliaryDependencyGraph::Build(frame_view_packets_);
+  auto ordered_packets = std::vector<FrameViewPacket> {};
+  ordered_packets.reserve(frame_view_packets_.size());
+  frame_view_packet_index_.clear();
+  for (const auto old_index : aux_plan.ordered_packet_indices) {
+    auto packet = std::move(frame_view_packets_.at(old_index));
+    packet.SetResolvedAuxInputs(
+      aux_plan.resolved_inputs_by_packet.at(old_index));
+    frame_view_packet_index_.emplace(
+      packet.PublishedViewId(), ordered_packets.size());
+    ordered_packets.push_back(std::move(packet));
+  }
+  frame_view_packets_ = std::move(ordered_packets);
 }
 
 auto FramePlanBuilder::EvaluateSkyState(observer_ptr<scene::Scene> scene) const

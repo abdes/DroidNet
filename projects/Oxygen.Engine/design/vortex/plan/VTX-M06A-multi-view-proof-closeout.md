@@ -599,7 +599,7 @@ Rollback/replan trigger:
 
 ### Slice F - Auxiliary Views And Dependency Graph
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -648,6 +648,40 @@ dedicated target may wrap that code directly. The tests must cover missing
 required producer, duplicate producer, optional missing producer, in-batch
 ordering, cross-batch ordering, cycle rejection, and typed invalid consumer
 binding.
+
+Current evidence:
+
+- Added a Vortex-native `AuxiliaryDependencyGraph` used by
+  `FramePlanBuilder` after frame-packet materialization and before GPU work.
+  The resolver validates unique typed producers, required inputs, expected
+  input kind, and dependency cycles, then topologically reorders packets so
+  auxiliary producers render before consumers.
+- `AuxInputDesc` now carries an expected `AuxOutputKind`, allowing optional
+  missing inputs to publish a typed invalid `AuxiliaryResolvedInput` instead
+  of requiring consumers to branch on raw pointer sentinels.
+- `FrameViewPacket` now carries resolved auxiliary inputs with explicit
+  `valid`, `kind`, `producer_view_id`, producer packet index, and deterministic
+  debug name fields. Full material/stage consumption of those bindings remains
+  runtime proof/future consumer work, but the graph-facing consumer contract is
+  typed and validated.
+- UE5.7 parity reference was rechecked locally: custom-render-pass views are
+  appended to the view family and then to `AllViews` in
+  `SceneRendering.cpp:3005-3040`; late single-view creation appends to
+  `ViewFamily->Views` at `SceneRendering.cpp:5022-5030`; `SceneView.h:2308-2311`
+  documents the `Views` / `AllViews` split that keeps auxiliary/scene-capture
+  style views in the frame family without treating them as the primary view.
+- Focused tests prove missing required producer failure, duplicate producer
+  failure, optional missing typed-invalid binding, producer-before-consumer
+  ordering, kind mismatch failure, and cycle rejection. Existing composition
+  and deferred-core tests stayed green.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.AuxiliaryDependencyGraph.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(AuxiliaryDependencyGraph|CompositionPlanner|SceneRendererDeferredCore)" --output-on-failure`
+  with 3/3 matched targets passing; and `git diff --check` passed with
+  line-ending warnings only.
+- Remaining VTX-M06A gap: G-I are not implemented; overlay lanes/extensions,
+  runtime proof scripts, CDB/debug-layer audit, RenderDoc scripted proof,
+  60-frame allocation-churn proof, and final closure remain open.
 
 Rollback/replan trigger:
 

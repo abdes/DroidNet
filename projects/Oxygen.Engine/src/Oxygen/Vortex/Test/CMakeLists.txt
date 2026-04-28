@@ -255,6 +255,13 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  AuxiliaryDependencyGraph
+  SOURCES
+    "Fakes/Graphics.h"
+    "Internal/AuxiliaryDependencyGraph_test.cpp"
+)
+
+m_gtest_program(
   CompositionPlanner
   SOURCES
     "Fakes/Graphics.h"
