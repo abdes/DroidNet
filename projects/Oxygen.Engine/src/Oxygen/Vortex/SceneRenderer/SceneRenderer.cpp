@@ -2080,7 +2080,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         ? std::vector<std::string> { "Vortex.PreparedSceneFrame",
             "Vortex.OcclusionFrameResults" }
         : std::vector<std::string> { "Vortex.PreparedSceneFrame" },
-      .outputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
+      .outputs = base_pass_published
+        ? std::vector<std::string> { "Vortex.SceneColor", "Vortex.GBuffer" }
+        : std::vector<std::string> { "Vortex.SceneColor" },
     });
   if (base_pass_wrote_scene_color) {
     RecordDiagnosticsProduct(renderer_,
@@ -2126,12 +2128,15 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   if (!rendered_debug_visualization) {
     RenderDeferredLighting(ctx, scene_textures);
   }
+  const auto deferred_lighting_executed
+    = rendered_debug_visualization
+    || deferred_lighting_state_.consumed_published_scene_textures;
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
       .name = rendered_debug_visualization ? "Vortex.Stage12.DebugVisualization"
                                            : "Vortex.Stage12.DeferredLighting",
       .kind = DiagnosticsPassKind::kGraphics,
-      .executed = true,
+      .executed = deferred_lighting_executed,
       .inputs = { "Vortex.SceneColor", "Vortex.GBuffer",
         "Vortex.LightingFrameBindings", "Vortex.ShadowFrameBindings" },
       .outputs = { "Vortex.SceneColor" },
