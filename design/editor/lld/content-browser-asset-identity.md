@@ -133,14 +133,18 @@ public sealed record MaterialPickerResult(
     string DisplayPath,
     AssetState State,
     string? ThumbnailKey,
-    string? DescriptorPath,    // local FS path to *.omat.json when known
-    string? CookedPath,        // local FS path to cooked .omat when known
-    Color? BaseColorPreview)   // for swatch rendering when descriptor is loaded
+    string? DescriptorPath,          // local FS path to *.omat.json when known
+    string? CookedPath,              // local FS path to cooked .omat when known
+    MaterialPreviewColor? BaseColorPreview)
     : AssetPickerResult<MaterialAsset>(Uri, Name, DisplayPath, State, ThumbnailKey);
+
+public readonly record struct MaterialPreviewColor(float R, float G, float B, float A);
 ```
 
 `DescriptorPath` and `CookedPath` are diagnostic / open-action affordances
-only. They are **never** persisted into scene data; only `Uri` is.
+only. `BaseColorPreview` is a presentation-neutral RGBA value in linear
+material scalar space; UI layers convert it to the platform color type they
+need. These fields are **never** persisted into scene data; only `Uri` is.
 
 ### 7.4 Geometry slot persistence
 
@@ -172,8 +176,9 @@ public sealed record MaterialPickerFilter(
 
 `RefreshAsync` issues `IAssetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All))`,
 filters to `MaterialAsset` records, then enriches with content-pipeline
-state. Subscribes to `IAssetCatalog.Changes` and re-publishes `Results` on
-`Added` / `Removed` / `Modified`.
+state. Subscribes to `IAssetCatalog.Changes` and re-publishes `Results` when
+`AssetChange.Kind` is `Added`, `Removed`, `Updated`, or `Relocated`
+(`PreviousUri` is used only for relocated records).
 
 `ResolveAsync(uri)` is used by the Geometry slot to render the **current**
 assignment (including `Missing` rows) without opening the picker.
@@ -185,6 +190,7 @@ From the Geometry inspector slot:
 ```text
 user clicks slot
  -> open MaterialPickerView (modal flyout, V0.1)
+ -> refresh IMaterialPickerService from the live catalog before showing rows
  -> bind to IMaterialPickerService.Results
  -> user selects row -> MaterialPickerResult
  -> EditMaterialSlotAsync(ctx, [nodeId], slotIndex, result.Uri, OneShot)
@@ -236,11 +242,30 @@ The slot in [property-inspector.md](./property-inspector.md) renders
 - `Missing|Broken` → warning icon + URI text + "Re-pick" affordance.
 - `null` → `<None>` + "Pick Material…" affordance.
 
+When the picker opens from a missing/broken slot, it includes the existing
+assignment row even though the default filter has `IncludeMissing = false`.
+The unresolved row is shown as current context and can be cleared or replaced;
+normal browse/search results remain filtered unless the user explicitly enables
+missing rows.
+
 ### 9.4 Broader content browser (ED-M06 only)
 
 Source tree, descriptor/generated view, cooked output view, asset-type views,
 missing/broken diagnostic presentation — deferred. ED-M05 ships the picker
 alone.
+
+### 9.5 Material create target folder
+
+The ED-M05 material create prompt is content-mount oriented:
+
+- default target is `/Content/Materials`.
+- a selected Content Browser folder is reused only when it is already under
+  `/Content`.
+- selections outside `/Content` (`Scenes`, `.cooked`, `project`, or local
+  utility mounts) fall back to `/Content/Materials`.
+- created source URI shape is
+  `asset:///Content/Materials/{Name}.omat.json` unless the user explicitly
+  picks another `/Content/...` target.
 
 ## 10. Persistence And Round Trip
 
