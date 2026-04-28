@@ -24,13 +24,17 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -227,12 +231,54 @@ protected:
     static_cast<void>(scene_->Traverse().UpdateTransforms());
   }
 
+  void RecreateRendererWithCapabilities(const CapabilitySet capabilities)
+  {
+    scene_renderer_.reset();
+    renderer_ = MakeRenderer(graphics_, capabilities);
+    auto scene_config = SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = true,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    };
+    scene_renderer_ = std::make_unique<SceneRenderer>(
+      *renderer_, *graphics_, scene_config, ShadingMode::kDeferred);
+  }
+
+  void InstallAtmosphereEnvironment(const bool enable_volumetric_fog)
+  {
+    auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+    auto& atmosphere
+      = environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+    atmosphere.SetEnabled(true);
+    atmosphere.SetPlanetRadiusMeters(7000000.0F);
+    atmosphere.SetAtmosphereHeightMeters(120000.0F);
+
+    auto& fog = environment->AddSystem<oxygen::scene::environment::Fog>();
+    fog.SetEnabled(true);
+    fog.SetEnableHeightFog(true);
+    fog.SetEnableVolumetricFog(enable_volumetric_fog);
+    fog.SetExtinctionSigmaTPerMeter(0.05F);
+    fog.SetVolumetricFogDistance(96000.0F);
+    fog.SetVolumetricFogStartDistance(50.0F);
+
+    auto& sky_light
+      = environment->AddSystem<oxygen::scene::environment::SkyLight>();
+    sky_light.SetEnabled(true);
+    sky_light.SetIntensityMul(1.25F);
+
+    scene_->SetEnvironment(std::move(environment));
+    scene_->Update();
+  }
+
   auto RenderForView(const ViewId active_view_id,
     const ResolvedView& active_view,
     const ShaderDebugMode debug_mode = ShaderDebugMode::kDisabled,
     const oxygen::vortex::CompositionView::ViewFeatureProfile feature_profile
-    = oxygen::vortex::CompositionView::ViewFeatureProfile::kDefault)
-    -> RenderContext
+    = oxygen::vortex::CompositionView::ViewFeatureProfile::kDefault,
+    const bool with_atmosphere = false, const bool with_height_fog = false,
+    const bool with_local_fog = false) -> RenderContext
   {
     scene_renderer_->OnFrameStart(frame_context_);
     UpdateSceneTransforms();
@@ -276,6 +322,9 @@ protected:
     context.current_view.feature_mask
       = oxygen::vortex::ResolveViewFeatureProfileSpec(feature_profile)
           .feature_mask;
+    context.current_view.with_atmosphere = with_atmosphere;
+    context.current_view.with_height_fog = with_height_fog;
+    context.current_view.with_local_fog = with_local_fog;
     context.view_constants = view_constants_buffer_;
     renderer_->SetShaderDebugMode(debug_mode);
     context.shader_debug_mode = renderer_->GetShaderDebugMode();
@@ -690,7 +739,8 @@ NOLINT_TEST_F(
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 }
 
-NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassSolidForwardWritesSceneColor)
+NOLINT_TEST_F(
+  SceneRendererDeferredCoreTest, BasePassSolidForwardWritesSceneColor)
 {
   auto scene_config = SceneTexturesConfig {
     .extent = { 64U, 64U },
@@ -755,8 +805,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassSolidForwardWritesSceneColo
     1U);
 }
 
-NOLINT_TEST_F(
-  SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
+NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
 {
   auto scene_config = SceneTexturesConfig {
     .extent = { 64U, 64U },
@@ -1298,6 +1347,106 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  NoEnvironmentFeatureProfileSkipsEnvironmentWhileRenderingSceneLighting)
+{
+  RecreateRendererWithCapabilities(RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData
+    | RendererCapabilityFamily::kEnvironmentLighting);
+  InstallAtmosphereEnvironment(false);
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kNoEnvironment, true,
+    true);
+  const auto& published_bindings
+    = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  const auto& environment_state
+    = scene_renderer_->GetLastEnvironmentLightingState();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_TRUE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kSceneLighting));
+  EXPECT_FALSE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kEnvironment));
+  EXPECT_EQ(published_bindings.environment_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_FALSE(environment_state.published_bindings);
+  EXPECT_FALSE(environment_state.stage14_requested);
+  EXPECT_FALSE(environment_state.stage15_requested);
+  EXPECT_NE(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  NoShadowingFeatureProfileSkipsShadowProductsWhileRenderingSceneLighting)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing);
+  const auto& published_bindings
+    = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_TRUE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kSceneLighting));
+  EXPECT_FALSE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kShadows));
+  EXPECT_EQ(
+    published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(lighting_state.published_shadow_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_FALSE(lighting_state.consumed_directional_shadow_product);
+  EXPECT_EQ(lighting_state.directional_shadow_surface_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  NoVolumetricsFeatureProfileKeepsEnvironmentWithoutIntegratedScattering)
+{
+  RecreateRendererWithCapabilities(RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData
+    | RendererCapabilityFamily::kEnvironmentLighting);
+  InstallAtmosphereEnvironment(true);
+  static_cast<void>(AddDirectionalLight("Sun"));
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kNoVolumetrics, true,
+    true);
+  const auto& published_bindings
+    = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& environment_state
+    = scene_renderer_->GetLastEnvironmentLightingState();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_TRUE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kEnvironment));
+  EXPECT_FALSE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kVolumetrics));
+  EXPECT_NE(published_bindings.environment_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(environment_state.published_bindings);
+  EXPECT_FALSE(environment_state.stage14_requested);
+  EXPECT_FALSE(environment_state.stage14_volumetric_fog_requested);
+  EXPECT_FALSE(environment_state.stage14_volumetric_fog_executed);
+  EXPECT_FALSE(environment_state.stage14_integrated_light_scattering_valid);
+  EXPECT_EQ(environment_state.stage14_integrated_light_scattering_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(environment_state.stage15_requested);
+  EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingConsumesDirectionalShadowProductWithoutVsmOrLocalShadowExpansion)
 {
   static_cast<void>(AddDirectionalLight("Sun"));
@@ -1449,9 +1598,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   PointLightProxySphereUsesConsistentOutwardWinding)
 {
-  const auto vertices
-    = oxygen::vortex::lighting::internal::
-      GeneratePointLightProxySphereVertices();
+  const auto vertices = oxygen::vortex::lighting::internal::
+    GeneratePointLightProxySphereVertices();
 
   ASSERT_FALSE(vertices.empty());
   ASSERT_EQ(vertices.size() % 3U, 0U);
