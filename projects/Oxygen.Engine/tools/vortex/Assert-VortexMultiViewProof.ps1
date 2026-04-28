@@ -10,6 +10,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$RuntimeLogPath,
 
+  [Parameter()]
+  [string]$RuntimeErrorLogPath = '',
+
   [Parameter(Mandatory = $true)]
   [string]$CaptureReportPath,
 
@@ -39,7 +42,10 @@ function Assert-ReportValue {
 }
 
 $debugLayerReportFullPath = (Resolve-Path $DebugLayerReportPath).Path
-$runtimeLogFullPath = (Resolve-Path $RuntimeLogPath).Path
+$runtimeLogFullPaths = @((Resolve-Path $RuntimeLogPath).Path)
+if (-not [string]::IsNullOrWhiteSpace($RuntimeErrorLogPath)) {
+  $runtimeLogFullPaths += (Resolve-Path $RuntimeErrorLogPath).Path
+}
 $captureReportFullPath = (Resolve-Path $CaptureReportPath).Path
 $allocationReportFullPath = (Resolve-Path $AllocationReportPath).Path
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
@@ -50,7 +56,11 @@ $reportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathF
 $debugReport = Read-VortexProofReportMap -Path $debugLayerReportFullPath
 $captureReport = Read-VortexProofReportMap -Path $captureReportFullPath
 $allocationReport = Read-VortexProofReportMap -Path $allocationReportFullPath
-$runtimeLogLines = Get-Content -LiteralPath $runtimeLogFullPath
+$runtimeLogLines = @(
+  foreach ($path in $runtimeLogFullPaths) {
+    Get-Content -LiteralPath $path
+  }
+)
 
 Assert-ReportValue -Report $debugReport -Key 'overall_verdict' -Expected 'pass' -Label 'debug-layer'
 Assert-ReportValue -Report $debugReport -Key 'runtime_exit_code' -Expected '0' -Label 'debug-layer'
@@ -67,16 +77,21 @@ Assert-ReportValue -Report $captureReport -Key 'distinct_composition_outputs' -E
 
 Assert-ReportValue -Report $allocationReport -Key 'overall_verdict' -Expected 'pass' -Label 'allocation-churn'
 Assert-ReportValue -Report $allocationReport -Key 'run_frames_at_least_60' -Expected 'true' -Label 'allocation-churn'
+Assert-ReportValue -Report $allocationReport -Key 'steady_state_window' -Expected 'true' -Label 'allocation-churn'
+Assert-ReportValue -Report $allocationReport -Key 'steady_state_allocations_zero' -Expected 'true' -Label 'allocation-churn'
 
-if (($runtimeLogLines | Select-String -Pattern 'Parsed proof layout option = true').Count -eq 0) {
-  throw "Runtime log does not prove that MultiView ran with --proof-layout true: $runtimeLogFullPath"
+$proofLayoutMatches = @(
+  $runtimeLogLines | Select-String -Pattern 'Parsed proof layout option = true'
+)
+if ($proofLayoutMatches.Count -eq 0) {
+  throw "Runtime logs do not prove that MultiView ran with --proof-layout true: $($runtimeLogFullPaths -join ', ')"
 }
 
 $reportLines = @(
   'analysis_result=success'
   'analysis_profile=vortex_multiview_assert'
   "debug_layer_report=$debugLayerReportFullPath"
-  "runtime_log=$runtimeLogFullPath"
+  "runtime_logs=$($runtimeLogFullPaths -join ';')"
   "capture_report=$captureReportFullPath"
   "allocation_report=$allocationReportFullPath"
   'overall_verdict=pass'
