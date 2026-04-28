@@ -530,7 +530,9 @@ Allowed:
 - query loose cooked indexes.
 - display stale/cooked/missing/broken state.
 - show actions that navigate to Material Editor or diagnostics.
-- refresh browser rows after `AssetsChangedMessage` / `AssetsCookedMessage`.
+- refresh browser rows after `AssetsChangedMessage` or validated content
+  pipeline completion events. ED-M06 must not depend on save-time cooked-root
+  refresh messages.
 
 Forbidden in ED-M06:
 
