@@ -191,6 +191,31 @@ Validation:
 - Focused `SceneRendererDeferredCore`/publication tests.
 - CDB/debug-layer smoke before deeper capture analysis.
 
+Evidence:
+
+- Source implementation gates the SceneRenderer stage chain with the carried
+  feature profile/mask. Depth-only forces Stage 3 depth prepass, publishes
+  SceneDepth, resolves depth for later handoff, and skips SceneColor/GBuffer,
+  lighting, shadow, environment, translucency, post-process, and ground-grid
+  color work. Shadow-only builds light selection, runs Stage 8 shadow products,
+  and skips main-view depth, SceneColor/GBuffer, lighting, environment,
+  translucency, post-process, and ground-grid color work.
+- Focused validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
+  with 1/1 test executable and 48/48 tests passing, including
+  `DepthOnlyFeatureProfilePublishesDepthWithoutSceneColorProducts` and
+  `ShadowOnlyFeatureProfilePublishesShadowBindingsWithoutSceneColorProducts`.
+- Adjacent slice-B regression validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.OffscreenSceneFacade.Tests Oxygen.Vortex.CompositionPlanner.Tests --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|CompositionPlanner)" --output-on-failure`
+  with 4/4 test executables passing.
+- Residual gap: D3D12 CDB/debug-layer and RenderDoc proof for these variant
+  gates are not yet available because the runtime proof layout is slice F.
+  VTX-M06C remains `in_progress`.
+
 ### D. Environment, Shadowing, and Volumetric Disable Gates
 
 Required work:

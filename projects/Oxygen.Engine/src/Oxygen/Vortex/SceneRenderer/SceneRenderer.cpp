@@ -67,6 +67,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace oxygen::vortex {
 
@@ -1778,10 +1779,37 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
   const auto wireframe_only = ctx.render_mode == RenderMode::kWireframe;
-  ctx.current_view.screen_hzb_request = wireframe_only
+  const auto feature_spec
+    = ResolveViewFeatureProfileSpec(ctx.current_view.feature_profile);
+  const auto feature_mask = ctx.current_view.feature_mask;
+  const auto depth_only_variant = feature_spec.depth_only;
+  const auto shadow_only_variant = feature_spec.shadow_only;
+  const auto diagnostics_only_variant = feature_spec.diagnostics_only;
+  const auto wants_scene_lighting
+    = feature_mask.Has(CompositionView::ViewFeatureMask::kSceneLighting)
+    && !depth_only_variant && !shadow_only_variant
+    && !diagnostics_only_variant;
+  const auto wants_shadow_products
+    = feature_mask.Has(CompositionView::ViewFeatureMask::kShadows)
+    || shadow_only_variant;
+  const auto wants_environment
+    = wants_scene_lighting
+    && feature_mask.Has(CompositionView::ViewFeatureMask::kEnvironment);
+  const auto wants_translucency
+    = wants_scene_lighting
+    && feature_mask.Has(CompositionView::ViewFeatureMask::kTranslucency);
+  const auto wants_lighting_selection
+    = wants_scene_lighting || wants_shadow_products;
+  const auto wants_depth_prepass = wants_scene_lighting || depth_only_variant;
+  const auto wants_resolve = wants_scene_lighting || depth_only_variant;
+  ctx.current_view.screen_hzb_request
+    = wireframe_only || !wants_scene_lighting
     ? RenderContext::ScreenHzbRequest {}
     : ResolveScreenHzbRequest(ctx, shading_mode);
-  if (wireframe_only) {
+  if (depth_only_variant) {
+    ctx.current_view.depth_prepass_mode = DepthPrePassMode::kOpaqueAndMasked;
+  }
+  if (wireframe_only || !wants_depth_prepass) {
     ctx.current_view.depth_prepass_mode = DepthPrePassMode::kDisabled;
   }
   ctx.current_view.scene_depth_product_valid = false;
@@ -1804,7 +1832,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         : std::vector<std::string> {},
     });
 
-  if (lighting_ != nullptr
+  if ((lighting_ != nullptr || shadows_ != nullptr) && wants_lighting_selection
     && lighting_grid_built_sequence_ != ctx.frame_sequence) {
     if (auto* scene_mutable = ctx.GetSceneMutable().get();
       scene_mutable != nullptr) {
@@ -1818,14 +1846,17 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .selection_epoch = ctx.frame_sequence.get(),
       };
     }
-    CollectLightingViewInputs(ctx, init_views_.get(), frame_lighting_views_);
-    lighting_->BuildLightGrid(FrameLightingInputs {
-      .frame_light_set = &frame_light_selection_,
-      .active_views = std::span(frame_lighting_views_),
-    });
+    frame_lighting_views_.clear();
+    if (lighting_ != nullptr && wants_scene_lighting) {
+      CollectLightingViewInputs(ctx, init_views_.get(), frame_lighting_views_);
+      lighting_->BuildLightGrid(FrameLightingInputs {
+        .frame_light_set = &frame_light_selection_,
+        .active_views = std::span(frame_lighting_views_),
+      });
+    }
     lighting_grid_built_sequence_ = ctx.frame_sequence;
   }
-  if (lighting_ != nullptr) {
+  if (lighting_ != nullptr && wants_scene_lighting) {
     published_view_frame_bindings_.lighting_frame_slot
       = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_lighting_frame_slot
@@ -1845,7 +1876,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
 
   // Stage 3: Depth prepass + early velocity
-  if (depth_prepass_ != nullptr) {
+  if (depth_prepass_ != nullptr && wants_depth_prepass) {
     depth_prepass_->SetConfig(DepthPrepassConfig {
       .mode = ctx.current_view.depth_prepass_mode,
       .write_velocity = scene_textures.GetVelocity() != nullptr,
@@ -1958,7 +1989,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     "Vortex.Stage5.ScreenHzbBuild",
     published_view_frame_bindings_.screen_hzb_frame_slot);
 
-  if (occlusion_ != nullptr) {
+  if (occlusion_ != nullptr && wants_scene_lighting) {
     occlusion_->SetConfig(OcclusionConfig {
       .enabled = renderer_.GetOcclusionEnabled(),
       .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
@@ -1988,7 +2019,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 7: reserved - MaterialCompositionService::PreBasePass
 
   // Stage 8: Shadow depth
-  if (shadows_ != nullptr
+  if (shadows_ != nullptr && wants_shadow_products
     && shadow_depths_built_sequence_ != ctx.frame_sequence) {
     CollectShadowViewInputs(ctx, init_views_.get(), frame_shadow_views_);
     shadows_->RenderShadowDepths(FrameShadowInputs {
@@ -1997,7 +2028,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     });
     shadow_depths_built_sequence_ = ctx.frame_sequence;
   }
-  if (shadows_ != nullptr) {
+  if (shadows_ != nullptr && wants_shadow_products) {
     published_view_frame_bindings_.shadow_frame_slot
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_shadow_frame_slot
@@ -2015,7 +2046,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       "Vortex.Stage8.ShadowDepth",
       published_view_frame_bindings_.shadow_frame_slot);
   }
-  if (environment_ != nullptr) {
+  if (environment_ != nullptr && wants_environment) {
     published_view_frame_bindings_.environment_frame_slot
       = environment_->PublishEnvironmentBindings(ctx,
         kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
@@ -2040,7 +2071,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       "Vortex.Environment.PublishBindings",
       published_view_frame_bindings_.environment_frame_slot);
   }
-  if (shadows_ != nullptr || environment_ != nullptr) {
+  if ((shadows_ != nullptr && wants_shadow_products)
+    || (environment_ != nullptr && wants_environment)) {
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
@@ -2049,7 +2081,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   auto base_pass_wrote_scene_color = false;
   auto base_pass_draw_count = std::uint32_t { 0U };
   auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
-  if (base_pass_ != nullptr) {
+  if (base_pass_ != nullptr && wants_scene_lighting) {
     base_pass_->SetConfig(BasePassConfig {
       .write_velocity = scene_textures.GetVelocity() != nullptr,
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
@@ -2123,10 +2155,13 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
 
   // Stage 12: Deferred direct lighting
-  const auto rendered_debug_visualization
-    = RenderDebugVisualization(ctx, scene_textures);
+  const auto rendered_debug_visualization = wants_scene_lighting
+    ? RenderDebugVisualization(ctx, scene_textures)
+    : false;
   if (!rendered_debug_visualization) {
-    RenderDeferredLighting(ctx, scene_textures);
+    if (wants_scene_lighting) {
+      RenderDeferredLighting(ctx, scene_textures);
+    }
   }
   const auto deferred_lighting_executed
     = rendered_debug_visualization
@@ -2147,7 +2182,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
-  if (environment_ != nullptr && !wireframe_only
+  if (environment_ != nullptr && wants_environment && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures);
     const auto& stage14_state = environment_->GetLastStage14State();
@@ -2273,7 +2308,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 18: Translucency
   auto translucency_result = TranslucencyExecutionResult {};
-  if (translucency_ != nullptr && !wireframe_only
+  if (translucency_ != nullptr && wants_translucency && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     translucency_result = translucency_->Execute(ctx, scene_textures);
   }
@@ -2301,8 +2336,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 19: reserved - DistortionModule
 
-  if (base_pass_ != nullptr && ctx.render_mode == RenderMode::kOverlayWireframe
-    && !wireframe_only) {
+  if (base_pass_ != nullptr && wants_scene_lighting
+    && ctx.render_mode == RenderMode::kOverlayWireframe && !wireframe_only) {
     const auto overlay_draws
       = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures);
     RecordDiagnosticsPass(renderer_,
@@ -2320,7 +2355,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   PublishCustomDepthProducts();
 
   // Stage 21: Resolve scene color
-  ResolveSceneColor(ctx);
+  if (wants_resolve) {
+    ResolveSceneColor(ctx);
+  }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
       .name = "Vortex.Stage21.ResolveSceneColor",
@@ -2344,7 +2381,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
 
   // Stage 22: Post processing
-  if (post_process_ != nullptr) {
+  if (post_process_ != nullptr && wants_scene_lighting) {
     post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));
     auto post_target = observer_ptr<const graphics::Framebuffer> {};
     if (const auto* active_view = ctx.GetActiveViewEntry();
@@ -2420,7 +2457,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
 
   // Stage 20: Ground grid
-  if (ground_grid_pass_ != nullptr && !wireframe_only) {
+  if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
       ctx, scene_textures, ResolveLateOverlayTarget(ctx)));
     RecordDiagnosticsPass(renderer_,
