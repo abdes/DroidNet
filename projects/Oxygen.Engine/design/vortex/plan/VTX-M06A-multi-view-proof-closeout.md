@@ -679,9 +679,9 @@ Current evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(AuxiliaryDependencyGraph|CompositionPlanner|SceneRendererDeferredCore)" --output-on-failure`
   with 3/3 matched targets passing; and `git diff --check` passed with
   line-ending warnings only.
-- Remaining VTX-M06A gap: G-I are not implemented; overlay lanes/extensions,
-  runtime proof scripts, CDB/debug-layer audit, RenderDoc scripted proof,
-  60-frame allocation-churn proof, and final closure remain open.
+- Remaining VTX-M06A gap: H-I are not implemented; runtime proof scripts,
+  CDB/debug-layer audit, RenderDoc scripted proof, 60-frame allocation-churn
+  proof, and final closure remain open.
 
 Rollback/replan trigger:
 
@@ -690,7 +690,7 @@ Rollback/replan trigger:
 
 ### Slice G - Overlay Lanes And View Extensions
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -727,6 +727,36 @@ cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.CompositionP
 ctest --preset test-debug -R "Oxygen\.Vortex\.(CompositionPlanner|RendererCompositionQueue)" --output-on-failure
 git diff --check
 ```
+
+Current evidence:
+
+- Added typed overlay lane payloads on `CompositionView`, including reserved
+  world-depth-aware/world-foreground view-target batches and surface-target
+  screen overlay batches. Existing `CompositionView::on_overlay` is now
+  converted into a typed `kViewScreen` overlay batch during
+  `FrameViewPacket` materialization.
+- Added `IViewExtension` with typed `OnFamilyAssembled`, `OnViewSetup`,
+  `OnPreRenderViewGpu`, `OnPostRenderViewGpu`, and `OnPostComposition`
+  hooks. Renderer Core snapshots registered extensions and dispatches the
+  hooks at the family, per-view, and post-surface-composition points without
+  re-entrant scene rendering or direct stage mutation.
+- `CompositionPlanner` now routes view/surface screen overlay batches into
+  `CompositionSubmission::surface_overlays` per surface route while preserving
+  world-depth-aware/world-foreground overlays as view-target placeholders.
+  Renderer Core executes surface overlays after all surface composition layers
+  and before presentable handoff, then runs `OnPostComposition` on the same
+  graphics-queue recorder before the present barrier.
+- Focused tests cover typed `on_overlay` conversion, reserved world-depth-aware
+  placeholder batches, surface-overlay execution order before presentable
+  handoff, and `OnPostComposition` hook ordering before presentable handoff.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.RendererCompositionQueue.Tests --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(CompositionPlanner|RendererCompositionQueue)" --output-on-failure`
+  with 2/2 matched targets passing; and `git diff --check` passed with
+  line-ending warnings only.
+- Remaining VTX-M06A gap: H-I are not implemented; runtime validation scripts,
+  CDB/debug-layer audit, RenderDoc scripted analysis, 60-frame allocation-churn
+  proof, and final ledger closure remain open.
 
 Rollback/replan trigger:
 

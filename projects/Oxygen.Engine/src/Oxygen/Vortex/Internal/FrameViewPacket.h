@@ -82,6 +82,11 @@ public:
   {
     return overlay_policy_;
   }
+  [[nodiscard]] auto OverlayBatches() const noexcept
+    -> const std::vector<CompositionView::OverlayBatch>&
+  {
+    return overlay_batches_;
+  }
   [[nodiscard]] auto ProducedAuxOutputs() const noexcept
     -> const std::vector<CompositionView::AuxOutputDesc>&
   {
@@ -119,6 +124,7 @@ private:
   CompositionView::ViewFeatureMask feature_mask_ {};
   std::vector<CompositionView::ViewSurfaceRoute> surface_routes_ {};
   CompositionView::OverlayPolicy overlay_policy_ {};
+  std::vector<CompositionView::OverlayBatch> overlay_batches_ {};
   std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_ {};
   std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_ {};
   std::vector<AuxiliaryResolvedInput> resolved_aux_inputs_ {};

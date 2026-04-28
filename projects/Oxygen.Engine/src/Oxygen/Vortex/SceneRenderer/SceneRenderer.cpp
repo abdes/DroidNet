@@ -1518,9 +1518,12 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     });
     BindPreparedView(ctx);
     ResetPerViewSceneProducts();
+    renderer_.DispatchViewExtensionsOnViewSetup(ctx);
     renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this);
+    renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx);
     RenderCurrentView(ctx);
     renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
+    renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
   }
 }
 

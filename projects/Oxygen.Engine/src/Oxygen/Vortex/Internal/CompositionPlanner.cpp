@@ -50,13 +50,59 @@ void CompositionPlanner::PlanCompositingTasks()
 {
   DCHECK_NOTNULL_F(frame_plan_builder_.get());
   planned_layers_.clear();
+  planned_surface_overlays_.clear();
   const auto& frame_view_packets = frame_plan_builder_->GetFrameViewPackets();
   planned_layers_.reserve(frame_view_packets.size());
   for (const auto& packet : frame_view_packets) {
+    const auto& desc = packet.View().GetDescriptor();
+    const auto append_surface_overlay
+      = [this, &packet,
+          &desc](const CompositionView::ViewSurfaceRoute& route,
+          const CompositionView::OverlayBatch& overlay) {
+          if (overlay.lane != CompositionView::OverlayLane::kViewScreen
+            && overlay.lane != CompositionView::OverlayLane::kSurfaceScreen) {
+            return;
+          }
+          auto batch = overlay;
+          batch.target = CompositionView::OverlayTarget::kSurface;
+          batch.surface_id = route.surface_id;
+          if (batch.view_id == kInvalidViewId) {
+            batch.view_id = packet.PublishedViewId();
+          }
+          if (batch.debug_name.empty()) {
+            batch.debug_name = fmt::format("Vortex.Surface[{}].Overlay[{}:{}]",
+              route.surface_id.get(), desc.name, packet.PublishedViewId().get());
+          }
+          planned_surface_overlays_.push_back(SurfaceOverlayPlan {
+            .surface_id = route.surface_id,
+            .batch = std::move(batch),
+            .z_order = desc.z_order,
+            .submission_order = packet.View().GetSubmissionOrder(),
+          });
+        };
+    const auto append_surface_overlays
+      = [&packet, &append_surface_overlay](
+          const CompositionView::ViewSurfaceRoute& route) {
+          for (const auto& overlay : packet.OverlayBatches()) {
+            append_surface_overlay(route, overlay);
+          }
+        };
+
+    if (packet.SurfaceRoutes().empty()) {
+      append_surface_overlays(CompositionView::ViewSurfaceRoute {
+        .surface_id = CompositionView::kDefaultSurfaceRoute,
+        .destination = packet.GetCompositeViewport(),
+        .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+      });
+    } else {
+      for (const auto& route : packet.SurfaceRoutes()) {
+        append_surface_overlays(route);
+      }
+    }
+
     if (!packet.HasCompositeTexture()) {
       continue;
     }
-    const auto& desc = packet.View().GetDescriptor();
     const auto append_layer
       = [this, &packet, &desc](const CompositionView::ViewSurfaceRoute& route) {
           const auto surface_id = route.surface_id;
@@ -96,6 +142,19 @@ void CompositionPlanner::PlanCompositingTasks()
       }
       if (lhs.z_order.get() != rhs.z_order.get()) {
         return lhs.z_order.get() < rhs.z_order.get();
+      }
+      return lhs.submission_order < rhs.submission_order;
+    });
+  std::ranges::stable_sort(planned_surface_overlays_,
+    [](const SurfaceOverlayPlan& lhs, const SurfaceOverlayPlan& rhs) {
+      if (lhs.surface_id != rhs.surface_id) {
+        return lhs.surface_id.get() < rhs.surface_id.get();
+      }
+      if (lhs.z_order.get() != rhs.z_order.get()) {
+        return lhs.z_order.get() < rhs.z_order.get();
+      }
+      if (lhs.batch.priority != rhs.batch.priority) {
+        return lhs.batch.priority < rhs.batch.priority;
       }
       return lhs.submission_order < rhs.submission_order;
     });
@@ -149,6 +208,11 @@ auto CompositionPlanner::BuildCompositionSubmission(
     submission.tasks.push_back(CompositingTask::MakeTextureBlend(
       layer.source_texture, layer.destination, layer.opacity,
       layer.debug_name));
+  }
+  for (const auto& overlay : planned_surface_overlays_) {
+    if (overlay.surface_id == surface_id) {
+      submission.surface_overlays.push_back(overlay.batch);
+    }
   }
   return submission;
 }

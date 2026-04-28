@@ -10,6 +10,7 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -97,12 +98,29 @@ struct CompositionView {
 
   enum class OverlayLane : std::uint8_t {
     kWorldDepthAware,
+    kWorldForeground,
     kViewScreen,
     kSurfaceScreen,
   };
 
   struct OverlayPolicy {
     std::vector<OverlayLane> lanes { OverlayLane::kViewScreen };
+    std::uint32_t editor_primitive_sample_count { 1U };
+  };
+
+  enum class OverlayTarget : std::uint8_t {
+    kView,
+    kSurface,
+  };
+
+  struct OverlayBatch {
+    OverlayLane lane { OverlayLane::kViewScreen };
+    OverlayTarget target { OverlayTarget::kView };
+    ViewId view_id { kInvalidViewId };
+    SurfaceRouteId surface_id { kDefaultSurfaceRoute };
+    std::int32_t priority { 0 };
+    std::string debug_name {};
+    std::function<void(graphics::CommandRecorder&)> record {};
   };
 
   using AuxOutputId = NamedType<uint64_t, struct AuxOutputIdTag,
@@ -235,6 +253,7 @@ struct CompositionView {
   //! Overlay lane policy placeholder. Existing on_overlay is treated as a
   //! compatibility producer for the view-screen lane.
   OverlayPolicy overlay_policy {};
+  std::vector<OverlayBatch> overlay_batches {};
 
   //! Auxiliary IO placeholders; dependency resolution lands in slice F.
   std::vector<AuxOutputDesc> produced_aux_outputs {};

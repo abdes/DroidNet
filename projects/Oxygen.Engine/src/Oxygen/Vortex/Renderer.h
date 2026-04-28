@@ -43,6 +43,7 @@
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/api_export.h>
 
 struct ImGuiContext;
@@ -519,6 +520,7 @@ public:
     const RuntimeCompositionInput& input) -> void;
   OXGN_VRTX_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
+  OXGN_VRTX_API auto RegisterViewExtension(ViewExtensionPtr extension) -> void;
 
   OXGN_VRTX_API auto ForSinglePassHarness() -> SinglePassHarnessFacade;
   OXGN_VRTX_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
@@ -692,6 +694,20 @@ private:
     -> co::Co<>;
   auto DispatchSceneRendererCompositing(
     observer_ptr<engine::FrameContext> context) -> co::Co<>;
+  [[nodiscard]] auto SnapshotViewExtensions() const
+    -> std::vector<ViewExtensionPtr>;
+  auto DispatchViewExtensionsOnFamilyAssembled(
+    engine::FrameContext& frame_context, RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnViewSetup(RenderContext& render_context) -> void;
+  auto DispatchViewExtensionsOnPreRenderViewGpu(RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnPostRenderViewGpu(RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnPostComposition(
+    engine::FrameContext& frame_context,
+    CompositionView::SurfaceRouteId surface_id, graphics::Framebuffer& target,
+    graphics::CommandRecorder& recorder) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_;
   observer_ptr<IAsyncEngine> engine_ { nullptr };
@@ -741,6 +757,10 @@ private:
   std::mutex composition_mutex_;
   std::vector<PendingComposition> pending_compositions_;
   std::uint64_t next_composition_sequence_in_frame_ { 0 };
+
+  mutable std::mutex view_extension_mutex_;
+  std::vector<ViewExtensionPtr> view_extensions_;
+
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
   float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };

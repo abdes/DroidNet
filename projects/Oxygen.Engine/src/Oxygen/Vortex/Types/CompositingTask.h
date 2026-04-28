@@ -106,6 +106,7 @@ struct CompositingTask {
 };
 
 using CompositingTaskList = std::vector<CompositingTask>;
+using SurfaceOverlayBatchList = std::vector<CompositionView::OverlayBatch>;
 
 //! Composition submission for the kCompositing phase.
 struct CompositionSubmission {
@@ -115,6 +116,7 @@ struct CompositionSubmission {
   std::string debug_name {};
   std::shared_ptr<graphics::Framebuffer> composite_target {};
   CompositingTaskList tasks {};
+  SurfaceOverlayBatchList surface_overlays {};
 };
 
 } // namespace oxygen::vortex
