@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <string_view>
 #include <utility>
@@ -14,6 +15,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -23,6 +25,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
@@ -31,6 +34,10 @@ namespace oxygen::examples::multiview {
 
 namespace {
   constexpr size_t kDefaultSceneCapacity = 128;
+  constexpr uint32_t kOffscreenPreviewWidth = 512U;
+  constexpr uint32_t kOffscreenPreviewHeight = 288U;
+  constexpr uint32_t kOffscreenCaptureWidth = 256U;
+  constexpr uint32_t kOffscreenCaptureHeight = 256U;
 
   auto HasPositiveExtent(const platform::window::ExtentT& extent) -> bool
   {
@@ -53,6 +60,36 @@ namespace {
       return { depth_desc.width, depth_desc.height };
     }
     return {};
+  }
+
+  auto ResolveFramebufferColorTexture(const graphics::Framebuffer& framebuffer)
+    -> std::shared_ptr<graphics::Texture>
+  {
+    const auto& desc = framebuffer.GetDescriptor();
+    if (desc.color_attachments.empty()) {
+      return {};
+    }
+    return desc.color_attachments.front().texture;
+  }
+
+  auto MakeLocalView(const uint32_t width, const uint32_t height) -> View
+  {
+    View view {};
+    view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(width),
+      .height = static_cast<float>(height),
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    view.scissor = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<int32_t>(width),
+      .bottom = static_cast<int32_t>(height),
+    };
+    return view;
   }
 
   struct PipLayout {
@@ -167,6 +204,12 @@ auto MainModule::OnAttachedImpl(
     shadow_camera_node_
       = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
   }
+  if (config_.offscreen_proof_layout) {
+    offscreen_preview_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "M06BOffscreenPreviewCamera");
+    offscreen_capture_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "M06BOffscreenCaptureCamera");
+  }
 
   shell->SetStagedMainCamera(main_camera_node_);
   scene_bootstrapper_.BindToScene(staged_scene);
@@ -182,6 +225,10 @@ auto MainModule::OnAttachedImpl(
 
 auto MainModule::OnShutdown() noexcept -> void
 {
+  for (auto* product : { &offscreen_preview_, &offscreen_capture_ }) {
+    product->framebuffer.reset();
+  }
+
   auto& shell = GetShell();
   shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
@@ -290,7 +337,8 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     }
   }
 
-  if (!config_.proof_layout && !config_.aux_proof_layout) {
+  if (!config_.proof_layout && !config_.aux_proof_layout
+    && !config_.offscreen_proof_layout) {
     return;
   }
 
@@ -325,6 +373,38 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
   configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
     glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
+
+  const auto configure_offscreen_camera = [](scene::SceneNode& node,
+                                           const glm::vec3& position,
+                                           const glm::vec3& target,
+                                           const float fov_degrees,
+                                           const uint32_t width,
+                                           const uint32_t height) {
+    if (!node.IsAlive()) {
+      return;
+    }
+    const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
+    if (!cam_opt) {
+      return;
+    }
+
+    auto& cam = cam_opt->get();
+    const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
+    node.GetTransform().SetLocalPosition(position);
+    node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view_mat)));
+    cam.SetFieldOfView(glm::radians(fov_degrees));
+    cam.SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+    cam.SetNearPlane(0.05F);
+    cam.SetFarPlane(160.0F);
+    cam.SetViewport(MakeLocalView(width, height).viewport);
+  };
+
+  configure_offscreen_camera(offscreen_preview_camera_node_,
+    glm::vec3(-3.2F, 2.2F, 4.8F), glm::vec3(0.0F, 0.0F, -1.6F), 38.0F,
+    kOffscreenPreviewWidth, kOffscreenPreviewHeight);
+  configure_offscreen_camera(offscreen_capture_camera_node_,
+    glm::vec3(3.8F, 3.0F, 3.4F), glm::vec3(0.0F, 0.1F, -1.8F), 32.0F,
+    kOffscreenCaptureWidth, kOffscreenCaptureHeight);
 }
 
 auto MainModule::OnFrameStart(
@@ -367,6 +447,7 @@ auto MainModule::OnFrameStart(
   if (rig != last_camera_rig_) {
     last_camera_rig_ = rig;
   }
+
 }
 
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
@@ -399,6 +480,134 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
+auto MainModule::EnsureOffscreenProofProduct(OffscreenProofProduct& product,
+  const uint32_t width, const uint32_t height, std::string_view debug_name)
+  -> bool
+{
+  auto gfx = app_.gfx_weak.lock();
+  if (!gfx) {
+    return false;
+  }
+
+  if (product.framebuffer && product.width == width && product.height == height) {
+    return true;
+  }
+
+  product.framebuffer.reset();
+  product.width = width;
+  product.height = height;
+
+  auto color_desc = graphics::TextureDesc {};
+  color_desc.width = width;
+  color_desc.height = height;
+  color_desc.format = Format::kRGBA8UNorm;
+  color_desc.texture_type = TextureType::kTexture2D;
+  color_desc.is_render_target = true;
+  color_desc.is_shader_resource = true;
+  color_desc.initial_state = graphics::ResourceStates::kCommon;
+  color_desc.use_clear_value = true;
+  color_desc.clear_value = graphics::Color { 0.02F, 0.02F, 0.025F, 1.0F };
+  color_desc.debug_name = std::string(debug_name);
+
+  auto color = gfx->CreateTexture(color_desc);
+  if (!color) {
+    return false;
+  }
+
+  auto fb_desc = graphics::FramebufferDesc {};
+  fb_desc.AddColorAttachment({ .texture = std::move(color) });
+  product.framebuffer = gfx->CreateFramebuffer(fb_desc);
+  return static_cast<bool>(product.framebuffer);
+}
+
+auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
+  -> void
+{
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer) {
+    return;
+  }
+  if (!active_scene_.IsValid() || !offscreen_preview_camera_node_.IsAlive()
+    || !offscreen_capture_camera_node_.IsAlive()) {
+    return;
+  }
+
+  const bool preview_ready = EnsureOffscreenProofProduct(offscreen_preview_,
+    kOffscreenPreviewWidth, kOffscreenPreviewHeight,
+    "M06B.OffscreenPreview.Deferred.Color");
+  const bool capture_ready = EnsureOffscreenProofProduct(offscreen_capture_,
+    kOffscreenCaptureWidth, kOffscreenCaptureHeight,
+    "M06B.OffscreenCapture.Forward.Color");
+  if (!preview_ready || !capture_ready) {
+    LOG_F(WARNING, "[MultiView] M06B offscreen proof targets are not ready");
+    return;
+  }
+
+  const auto delta_seconds
+    = std::chrono::duration<float>(context.GetGameDeltaTime().get()).count();
+  const auto frame_session = vortex::Renderer::FrameSessionInput {
+    .frame_slot = context.GetFrameSlot(),
+    .frame_sequence = context.GetFrameSequenceNumber(),
+    .delta_time_seconds = std::max(
+      delta_seconds, time::SimulationClock::kMinDeltaTimeSeconds),
+    .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
+  };
+
+  auto render_product =
+    [&](OffscreenProofProduct& product, const char* name, const ViewId view_id,
+      const scene::SceneNode& camera,
+      const vortex::Renderer::OffscreenPipelineInput pipeline,
+      const bool force_wireframe) -> void {
+    auto facade = renderer->ForOffscreenScene();
+    facade.SetFrameSession(frame_session);
+    facade.SetSceneSource(vortex::Renderer::SceneSourceInput {
+      .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
+    });
+    facade.SetViewIntent(vortex::Renderer::OffscreenSceneViewInput::FromCamera(
+                           name, view_id, MakeLocalView(product.width, product.height),
+                           camera)
+                           .SetWithAtmosphere(true)
+                           .SetForceWireframe(force_wireframe)
+                           .SetClearColor(
+                             graphics::Color { 0.025F, 0.035F, 0.05F, 1.0F }));
+    facade.SetOutputTarget(vortex::Renderer::OutputTargetInput {
+      .framebuffer = observer_ptr<graphics::Framebuffer> {
+        product.framebuffer.get() },
+    });
+    facade.SetPipeline(pipeline);
+
+    const auto report = facade.Validate();
+    if (!report.Ok()) {
+      for (const auto& issue : report.issues) {
+        LOG_F(WARNING, "[MultiView] M06B offscreen proof {} validation {}: {}",
+          name, issue.code, issue.message);
+      }
+      return;
+    }
+
+    auto session = facade.Finalize();
+    if (!session.has_value()) {
+      LOG_F(WARNING, "[MultiView] M06B offscreen proof {} finalize failed",
+        name);
+      return;
+    }
+
+    session->ExecuteInsideFrame(context);
+    LOG_F(INFO, "Vortex.OffscreenProof.Render name={} view_id={} texture={}",
+      name, view_id.get(),
+      ResolveFramebufferColorTexture(*product.framebuffer)
+        ->GetDescriptor()
+        .debug_name);
+  };
+
+  render_product(offscreen_preview_, "M06B.OffscreenPreview.Deferred",
+    ViewId { 0x060B0101ULL }, offscreen_preview_camera_node_,
+    vortex::Renderer::OffscreenPipelineInput::Deferred(), false);
+  render_product(offscreen_capture_, "M06B.OffscreenCapture.Forward",
+    ViewId { 0x060B0102ULL }, offscreen_capture_camera_node_,
+    vortex::Renderer::OffscreenPipelineInput::Forward(), true);
+}
+
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
@@ -422,6 +631,12 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
       shadow_camera_node_
         = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
+    }
+    if (config_.offscreen_proof_layout) {
+      offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
+        *staged_scene, "M06BOffscreenPreviewCamera");
+      offscreen_capture_camera_node_ = CreatePerspectiveCameraNode(
+        *staged_scene, "M06BOffscreenCaptureCamera");
     }
 
     shell.SetStagedMainCamera(main_camera_node_);
@@ -454,8 +669,71 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
+  if (config_.offscreen_proof_layout) {
+    RenderOffscreenProofProducts(*context);
+  }
+
   co_await Base::OnPreRender(context);
   co_return;
+}
+
+auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*/,
+  vortex::Renderer::RuntimeCompositionInput& input) -> void
+{
+  if (!config_.offscreen_proof_layout || !offscreen_preview_.framebuffer
+    || !offscreen_capture_.framebuffer) {
+    return;
+  }
+
+  const auto preview_texture
+    = ResolveFramebufferColorTexture(*offscreen_preview_.framebuffer);
+  const auto capture_texture
+    = ResolveFramebufferColorTexture(*offscreen_capture_.framebuffer);
+  if (!preview_texture || !capture_texture) {
+    return;
+  }
+
+  const auto extent = ResolveRenderExtent();
+  if (!HasPositiveExtent(extent)) {
+    return;
+  }
+
+  constexpr float kMargin = 28.0F;
+  constexpr float kGap = 18.0F;
+  const float sw = static_cast<float>(extent.width);
+  const float sh = static_cast<float>(extent.height);
+  const float preview_w = std::min(512.0F, std::floor(sw * 0.30F));
+  const float preview_h = std::floor(preview_w * 9.0F / 16.0F);
+  const float capture_size = std::min(256.0F, std::floor(sh * 0.22F));
+  const float panel_y = std::max(kMargin, sh - kMargin - preview_h);
+
+  input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
+    .source_texture = preview_texture,
+    .viewport = ViewPort {
+      .top_left_x = kMargin,
+      .top_left_y = panel_y,
+      .width = preview_w,
+      .height = preview_h,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    },
+    .opacity = 1.0F,
+    .debug_name = "M06B.OffscreenPreview.Deferred.Composite",
+  });
+
+  input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
+    .source_texture = capture_texture,
+    .viewport = ViewPort {
+      .top_left_x = kMargin + preview_w + kGap,
+      .top_left_y = std::max(kMargin, sh - kMargin - capture_size),
+      .width = capture_size,
+      .height = capture_size,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    },
+    .opacity = 1.0F,
+    .debug_name = "M06B.OffscreenCapture.Forward.Composite",
+  });
 }
 
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,

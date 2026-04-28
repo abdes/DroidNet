@@ -18,6 +18,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/AppWindow.h"
@@ -89,6 +90,14 @@ protected:
   //! frame.
   virtual auto UpdateComposition(engine::FrameContext& /*context*/,
     std::vector<vortex::CompositionView>& /*views*/) -> void
+  {
+  }
+
+  //! Hook: derived demos may add texture-backed composition layers after their
+  //! scene layers have been collected.
+  virtual auto AppendRuntimeCompositionLayers(
+    engine::FrameContext& /*context*/,
+    vortex::Renderer::RuntimeCompositionInput& /*input*/) -> void
   {
   }
 
