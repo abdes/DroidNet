@@ -170,7 +170,18 @@ Validation:
 
 Evidence:
 
-- Record the exact audit report and residual gap.
+- Source implementation leaves the caller-owned offscreen color attachment in
+  `ResourceStates::kShaderResource` after `ValidatedOffscreenSceneSession`
+  rendering and rejects output framebuffers that do not expose a color product.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OffscreenSceneFacade.Tests --parallel 4`.
+- Validation passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.OffscreenSceneFacade" --output-on-failure`
+  with 7/7 tests passing.
+- Residual gap: this is focused source/test final-state proof only. Runtime
+  D3D12 CDB/debug-layer audit, RenderDoc scripted analysis, visually
+  inspectable runtime preview/capture proof, and allocation-churn proof remain
+  required before `VTX-M06B` can be validated.
 
 ### E. Runtime Preview and Capture Proof
 

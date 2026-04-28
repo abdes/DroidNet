@@ -269,6 +269,47 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial);
   }
 
+  auto ResolveFramebufferColorTexture(graphics::Framebuffer& framebuffer)
+    -> std::shared_ptr<graphics::Texture>
+  {
+    const auto& desc = framebuffer.GetDescriptor();
+    if (desc.color_attachments.empty()) {
+      return {};
+    }
+    return desc.color_attachments.front().texture;
+  }
+
+  auto FinalizeOffscreenOutputProduct(
+    Renderer& renderer, graphics::Framebuffer& framebuffer) -> void
+  {
+    auto gfx = renderer.GetGraphics();
+    CHECK_NOTNULL_F(gfx.get(),
+      "Vortex offscreen output finalization requires a live Graphics backend");
+
+    auto output_texture = ResolveFramebufferColorTexture(framebuffer);
+    CHECK_F(static_cast<bool>(output_texture),
+      "Vortex offscreen output finalization requires a color attachment");
+
+    auto& registry = gfx->GetResourceRegistry();
+    CHECK_F(registry.Contains(*output_texture),
+      "Vortex offscreen output texture '{}' must be registered before "
+      "product finalization",
+      output_texture->GetDescriptor().debug_name);
+
+    const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+    auto recorder
+      = gfx->AcquireCommandRecorder(queue_key, "Vortex Offscreen Finalize");
+    CHECK_F(static_cast<bool>(recorder),
+      "Vortex offscreen output finalization failed to acquire a recorder");
+
+    TrackCompositionSourceTexture(registry, *recorder, *output_texture);
+    recorder->RequireResourceState(
+      *output_texture, graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceStateFinal(
+      *output_texture, graphics::ResourceStates::kShaderResource);
+    recorder->FlushBarriers();
+  }
+
   auto CopyTextureToRegion(graphics::CommandRecorder& recorder,
     graphics::Texture& source, graphics::Texture& backbuffer,
     const ViewPort& viewport) -> void
@@ -3099,6 +3140,7 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
   });
 
   scene_renderer.OnRender(render_context);
+  FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
   co_return;
 }
 
@@ -3204,6 +3246,13 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
     report.issues.push_back(ValidationIssue {
       .code = "output_target.missing",
       .message = "Offscreen scene requires an output target framebuffer",
+    });
+  } else if (ResolveFramebufferColorTexture(*output_target_->framebuffer)
+    == nullptr) {
+    report.issues.push_back(ValidationIssue {
+      .code = "output_target.invalid_framebuffer",
+      .message
+      = "Offscreen scene requires an output framebuffer with a color target",
     });
   }
 

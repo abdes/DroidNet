@@ -166,6 +166,43 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsInvalidViewId)
   }));
 }
 
+NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsFramebufferWithoutColor)
+{
+  auto depth_desc = TextureDesc {};
+  depth_desc.width = 64U;
+  depth_desc.height = 64U;
+  depth_desc.format = Format::kDepth32;
+  depth_desc.texture_type = TextureType::kTexture2D;
+  depth_desc.is_render_target = true;
+  depth_desc.is_shader_resource = true;
+  depth_desc.is_typeless = true;
+  depth_desc.initial_state = ResourceStates::kCommon;
+  depth_desc.debug_name = "OffscreenSceneFacadeTest.DepthOnly";
+
+  auto fb_desc = FramebufferDesc {};
+  fb_desc.SetDepthAttachment(graphics_->CreateTexture(depth_desc));
+  auto framebuffer_without_color = graphics_->CreateFramebuffer(fb_desc);
+
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "NoColorTarget", ViewId { 46U }, MakeView(), camera_));
+  facade.SetOutputTarget(Renderer::OutputTargetInput {
+    .framebuffer
+    = oxygen::observer_ptr<Framebuffer> { framebuffer_without_color.get() },
+  });
+
+  const auto report = facade.Validate();
+
+  ASSERT_FALSE(report.Ok());
+  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) {
+    return issue.code == "output_target.invalid_framebuffer";
+  }));
+}
+
 NOLINT_TEST_F(OffscreenSceneFacadeTest, PresetsFinalizeWithRenderableViewIds)
 {
   auto preview = oxygen::vortex::offscreen::scene::presets::ForPreview(
@@ -239,6 +276,14 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
     loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
+  const auto& color_texture
+    = *framebuffer_->GetDescriptor().color_attachments.front().texture;
+  auto queue = graphics_->GetCommandQueue(QueueRole::kGraphics);
+  ASSERT_NE(queue.get(), nullptr);
+  const auto final_state
+    = queue->TryGetKnownResourceState(color_texture.GetNativeResource());
+  ASSERT_TRUE(final_state.has_value());
+  EXPECT_EQ(*final_state, ResourceStates::kShaderResource);
 }
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
