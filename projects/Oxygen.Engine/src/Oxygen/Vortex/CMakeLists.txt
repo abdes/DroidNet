@@ -208,6 +208,8 @@ set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
   "Internal/BlueNoiseData.h"
+  "Internal/AuxiliaryDependencyGraph.cpp"
+  "Internal/AuxiliaryDependencyGraph.h"
   "Internal/CompositingAlphaSanitizer.h"
   "Internal/GpuTimelineProfiler.cpp"
   "Internal/GpuTimelineProfiler.h"

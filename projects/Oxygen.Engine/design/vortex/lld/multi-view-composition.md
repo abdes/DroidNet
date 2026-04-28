@@ -236,6 +236,7 @@ struct AuxOutputDesc {
 
 struct AuxInputDesc {
   AuxOutputId id;
+  AuxOutputKind kind;
   bool required { true };
 };
 ```
@@ -1278,7 +1279,10 @@ parallel rendering, or a global show-flag clone unless the LLD is updated first.
 5. **Auxiliary view dependencies:** add extracted auxiliary outputs and at
    least one scene-capture-style validation producer/consumer. This slice owns
    auxiliary product extraction and material/stage consumption, not the basic
-   ability for a surface plan to route an auxiliary source.
+   ability for a surface plan to route an auxiliary source. Slice F implements
+   the typed dependency graph, producer validation, optional typed-invalid
+   bindings, and topological packet ordering; runtime consumer sampling and
+   capture proof remain closure/runtime validation work.
 6. **Overlay lanes and view extensions:** add typed extension hooks, minimal
    view screen overlays, and surface overlays. Reserve editor primitive
    attachments/lane policy even if full MSAA primitive rasterization is
