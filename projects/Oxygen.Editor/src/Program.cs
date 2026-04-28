@@ -30,10 +30,12 @@ using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Import.Textures;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Core.Services;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -390,6 +392,9 @@ public static partial class Program
 
         // Register ImportService
         container.Register<IImportService, ImportService>(Reuse.Singleton);
+        container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
+        container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
+        container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);
 
         // Auto-register importers with the registry
         container.RegisterDelegate<object>(

@@ -13,6 +13,7 @@ using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import;
+using Oxygen.Core;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
@@ -76,6 +77,7 @@ public partial class AssetsViewModel(
             // If an import/cook completes, the cooked index may update without reliable file watcher events
             // (e.g. cooked folder created after watchers were set up). Force a refresh in that case.
             messenger.Register<AssetsCookedMessage>(this, (_, _) => this.OnAssetsCooked());
+            messenger.Register<AssetsChangedMessage>(this, (_, _) => this.OnAssetsChanged());
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
@@ -133,6 +135,14 @@ public partial class AssetsViewModel(
         }
     }
 
+    private void OnAssetsChanged()
+    {
+        if (this.LayoutViewModel is AssetsLayoutViewModel layout)
+        {
+            _ = layout.RefreshAsync();
+        }
+    }
+
     private async void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
@@ -177,6 +187,13 @@ public partial class AssetsViewModel(
             // Navigate into the folder
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.Location}");
             await this.NavigateToFolder(args.InvokedItem.Location).ConfigureAwait(false);
+        }
+        else if (args.InvokedItem.AssetType == AssetType.Material
+                 && args.InvokedItem.VirtualPath is { } virtualPath
+                 && virtualPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var materialUri = new Uri($"{AssetUris.Scheme}://{virtualPath}");
+            _ = messenger.Send(new OpenMaterialRequestMessage(materialUri, args.InvokedItem.Name));
         }
     }
 
@@ -249,6 +266,43 @@ public partial class AssetsViewModel(
         await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
     }
 
+    public Task CreateNewMaterialAsync(string materialName, string virtualFolder)
+    {
+        if (!TryNormalizeMaterialName(materialName, out var normalizedName))
+        {
+            Debug.WriteLine($"[AssetsViewModel] Rejected invalid material name '{materialName}'.");
+            return Task.CompletedTask;
+        }
+
+        var folder = NormalizeMaterialFolder(virtualFolder);
+        var materialUri = new Uri($"{AssetUris.Scheme}://{folder.TrimEnd('/')}/{normalizedName}.omat.json");
+        _ = messenger.Send(new CreateMaterialRequestMessage(materialUri, normalizedName));
+        Debug.WriteLine($"[AssetsViewModel] Requested material creation {materialUri}");
+        return Task.CompletedTask;
+    }
+
+    public string CreateDefaultMaterialName(string virtualFolder)
+    {
+        var folder = NormalizeMaterialFolder(virtualFolder);
+        var count = this.LayoutViewModel is AssetsLayoutViewModel layout
+            ? layout.Assets.Count(asset => asset.AssetType == AssetType.Material)
+            : 0;
+        var start = Math.Max(1, count + 1);
+        for (var i = start; i < start + 1000; i++)
+        {
+            var candidate = string.Create(CultureInfo.InvariantCulture, $"NewMaterial{i}");
+            if (!MaterialSourceExists(folder, candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"NewMaterial{Guid.NewGuid():N}");
+    }
+
+    public string GetSelectedMaterialFolder()
+        => NormalizeMaterialFolder(contentBrowserState.SelectedFolders.FirstOrDefault(), projectContextService.ActiveProject);
+
     private void OnLayoutViewModelChanging(object? sender, PropertyChangingEventArgs args)
     {
         if (args.PropertyName?.Equals(nameof(this.LayoutViewModel), StringComparison.Ordinal) == true
@@ -256,6 +310,123 @@ public partial class AssetsViewModel(
         {
             layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
         }
+    }
+
+    public static string NormalizeMaterialFolder(string? selected, ProjectContext? project = null)
+    {
+        if (string.IsNullOrWhiteSpace(selected))
+        {
+            return "/Content/Materials";
+        }
+
+        var normalized = selected.Replace('\\', '/').Trim();
+        normalized = normalized.TrimEnd('/');
+        var normalizedNoRoot = normalized.TrimStart('/');
+
+        if (TryMapSelectedAuthoringFolder(project, normalizedNoRoot, out var mapped))
+        {
+            return mapped;
+        }
+
+        if (normalized.StartsWith('/'))
+        {
+            return normalized.Equals("/Content", StringComparison.OrdinalIgnoreCase)
+                ? "/Content/Materials"
+                : normalized.StartsWith("/Content/", StringComparison.OrdinalIgnoreCase)
+                ? normalized
+                : "/Content/Materials";
+        }
+
+        normalized = normalized.TrimStart('/');
+        return normalized.Equals("Content", StringComparison.OrdinalIgnoreCase)
+            ? "/Content/Materials"
+            : normalized.StartsWith("Content/", StringComparison.OrdinalIgnoreCase)
+                ? "/" + normalized
+                : "/Content/Materials";
+    }
+
+    private static bool TryMapSelectedAuthoringFolder(ProjectContext? project, string normalizedNoRoot, out string virtualFolder)
+    {
+        virtualFolder = string.Empty;
+        if (project is null || string.IsNullOrWhiteSpace(normalizedNoRoot))
+        {
+            return false;
+        }
+
+        foreach (var mount in project.AuthoringMounts.OrderByDescending(static mount => mount.RelativePath.Length))
+        {
+            var mountFolder = mount.RelativePath.Replace('\\', '/').Trim('/');
+            if (string.IsNullOrWhiteSpace(mountFolder))
+            {
+                continue;
+            }
+
+            if (normalizedNoRoot.Equals(mountFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                virtualFolder = "/" + mount.Name + "/Materials";
+                return true;
+            }
+
+            if (normalizedNoRoot.StartsWith(mountFolder + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                virtualFolder = "/" + mount.Name + "/" + normalizedNoRoot[(mountFolder.Length + 1)..];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool MaterialSourceExists(string virtualFolder, string materialName)
+    {
+        if (projectContextService.ActiveProject is not { } project || string.IsNullOrWhiteSpace(project.ProjectRoot))
+        {
+            return false;
+        }
+
+        var normalized = virtualFolder.Trim('/').Replace('\\', '/');
+        var slash = normalized.IndexOf('/', StringComparison.Ordinal);
+        if (slash <= 0)
+        {
+            return false;
+        }
+
+        var mountName = normalized[..slash];
+        var relativeFolder = normalized[(slash + 1)..];
+        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
+        if (mount is null)
+        {
+            return false;
+        }
+
+        var path = Path.Combine(project.ProjectRoot, mount.RelativePath, relativeFolder, materialName + ".omat.json");
+        return File.Exists(path);
+    }
+
+    private static bool TryNormalizeMaterialName(string materialName, out string normalized)
+    {
+        normalized = materialName.Trim();
+        if (normalized.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[..^".omat.json".Length];
+        }
+        else if (normalized.EndsWith(".omat", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[..^".omat".Length];
+        }
+
+        if (string.IsNullOrWhiteSpace(normalized)
+            || normalized.Contains('/', StringComparison.Ordinal)
+            || normalized.Contains('\\', StringComparison.Ordinal)
+            || normalized == "."
+            || normalized == ".."
+            || normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            normalized = string.Empty;
+            return false;
+        }
+
+        return true;
     }
 
     private void OnLayoutViewModelChanged(object? sender, PropertyChangedEventArgs args)

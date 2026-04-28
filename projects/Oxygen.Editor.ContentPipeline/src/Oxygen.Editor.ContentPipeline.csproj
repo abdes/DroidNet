@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Editor.ContentPipeline</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen editor content pipeline orchestration.</Title>
+        <Description>Oxygen.Editor.ContentPipeline coordinates editor import, cook, index, and inspection workflows using Oxygen.Assets primitives.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;editor;content-pipeline;assets</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Assets\src\Oxygen.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Core\src\Oxygen.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+    </ItemGroup>
+</Project>

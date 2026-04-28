@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.World.Documents;
@@ -23,6 +24,7 @@ public sealed partial class DocumentManager : IDisposable
     private readonly IMessenger messenger;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectUsageService projectUsage;
+    private readonly IMaterialDocumentService materialDocumentService;
     private readonly WindowId windowId;
 
     /// <summary>
@@ -37,6 +39,7 @@ public sealed partial class DocumentManager : IDisposable
         IMessenger messenger,
         IProjectContextService projectContextService,
         IProjectUsageService projectUsage,
+        IMaterialDocumentService materialDocumentService,
         WindowId windowId,
         ILoggerFactory? loggerFactory = null)
     {
@@ -46,9 +49,12 @@ public sealed partial class DocumentManager : IDisposable
         this.messenger = messenger;
         this.projectContextService = projectContextService;
         this.projectUsage = projectUsage;
+        this.materialDocumentService = materialDocumentService;
         this.windowId = windowId;
 
         this.messenger.Register<OpenSceneRequestMessage>(this, this.OnOpenSceneRequested);
+        this.messenger.Register<OpenMaterialRequestMessage>(this, this.OnOpenMaterialRequested);
+        this.messenger.Register<CreateMaterialRequestMessage>(this, this.OnCreateMaterialRequested);
     }
 
     /// <inheritdoc/>
@@ -106,11 +112,70 @@ public sealed partial class DocumentManager : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Opens or activates the specified material document for this workspace.
+    /// </summary>
+    /// <param name="materialUri">The material source asset URI.</param>
+    /// <param name="title">The document title.</param>
+    /// <returns><see langword="true"/> when the material document is open and selected.</returns>
+    public async Task<bool> OpenMaterialAsync(Uri materialUri, string title)
+    {
+        ArgumentNullException.ThrowIfNull(materialUri);
+
+        if (this.windowId.Value == 0)
+        {
+            return false;
+        }
+
+        var openDocs = this.documentService.GetOpenDocuments(this.windowId);
+        var existing = openDocs
+            .OfType<MaterialDocumentMetadata>()
+            .FirstOrDefault(d => UriValuesEqual(d.MaterialUri, materialUri));
+        if (existing is not null)
+        {
+            return await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
+        }
+
+        var metadata = new MaterialDocumentMetadata(materialUri)
+        {
+            Title = string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(materialUri.AbsolutePath) : title,
+        };
+
+        var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true);
+        return openedId != Guid.Empty;
+    }
+
     private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
     {
         var opened = await this.OpenSceneAsync(message.Scene).ConfigureAwait(true);
         message.Reply(opened);
     }
+
+    private async void OnOpenMaterialRequested(object recipient, OpenMaterialRequestMessage message)
+    {
+        var opened = await this.OpenMaterialAsync(message.MaterialUri, message.Title).ConfigureAwait(true);
+        message.Reply(opened);
+    }
+
+    private async void OnCreateMaterialRequested(object recipient, CreateMaterialRequestMessage message)
+    {
+        try
+        {
+            var created = await this.materialDocumentService.CreateAsync(message.MaterialUri).ConfigureAwait(true);
+            await this.materialDocumentService.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(true);
+            _ = this.messenger.Send(new AssetsChangedMessage(message.MaterialUri));
+            var opened = await this.OpenMaterialAsync(message.MaterialUri, message.Title).ConfigureAwait(true);
+            message.Reply(opened);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.logger.LogWarning(ex, "Failed to create material {MaterialUri}.", message.MaterialUri);
+            message.Reply(false);
+        }
+    }
+
+    private static bool UriValuesEqual(Uri left, Uri right)
+        => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
     private async Task MarkSceneActivatedAsync(World.Scene scene)
     {
