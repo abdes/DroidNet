@@ -180,6 +180,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
   shell_config.enable_renderer_bound_panels = false;
+  shell_config.force_environment_override = false;
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(ERROR, "TexturedCube: DemoShell initialization failed");

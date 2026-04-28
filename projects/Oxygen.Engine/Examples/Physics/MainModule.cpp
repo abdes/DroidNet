@@ -55,8 +55,23 @@ namespace {
 constexpr std::uint32_t kWindowWidth = 2400;
 constexpr std::uint32_t kWindowHeight = 1400;
 constexpr float kRampPitchRad = -0.44F;
-constexpr oxygen::Vec3 kFloorPosition { 0.0F, 0.0F, -1.2F };
-constexpr oxygen::Vec3 kFloorScale { 32.0F, 32.0F, 1.0F };
+constexpr oxygen::Vec3 kFloorCollisionSize { 32.0F, 32.0F, 1.0F };
+constexpr oxygen::Vec3 kFloorCollisionCenterWs { 0.0F, 0.0F, -0.5F };
+constexpr float kFloorCollisionTopZ
+  = kFloorCollisionCenterWs.z + 0.5F * kFloorCollisionSize.z;
+// Oxygen is +Z up. Keep the visible floor just above the UE-style atmosphere
+// planet-top boundary at Z=0 so per-pixel sun transmittance is not occluded.
+constexpr float kFloorVisualClearanceAboveAtmosphereM = 0.02F;
+constexpr oxygen::Vec3 kFloorVisualCenterWs {
+  kFloorCollisionCenterWs.x,
+  kFloorCollisionCenterWs.y,
+  kFloorCollisionTopZ + kFloorVisualClearanceAboveAtmosphereM
+};
+constexpr oxygen::Vec3 kFloorVisualScale {
+  kFloorCollisionSize.x,
+  kFloorCollisionSize.y,
+  1.0F
+};
 constexpr oxygen::Vec3 kRampPosition { 0.0F, -6.5F, 4.6F };
 constexpr oxygen::Vec3 kRampScale { 3.6F, 15.0F, 0.05F };
 constexpr oxygen::Vec3 kRampRailScale { 0.35F, 15.0F, 0.8F };
@@ -83,7 +98,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = 0;
+  desc.flags = pak::render::kMaterialFlag_NoTextureSampling;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -208,6 +223,7 @@ auto MainModule::OnAttachedImpl(
   DemoShellConfig shell_config {
     .engine = observer_ptr { app_.engine.get() },
     .enable_camera_rig = true,
+    .force_environment_override = false,
     .content_roots = {
       .content_root = demo_root.parent_path() / "Content",
       .cooked_root = demo_root / ".cooked",
@@ -602,21 +618,27 @@ auto MainModule::BuildProceduralScene() -> bool
     return false;
   }
 
-  if (!cube_geometry_) {
+  if (!cube_geometry_ || !floor_geometry_ || !sphere_geometry_
+    || !player_sphere_geometry_) {
     const auto cube_mesh = data::MakeCubeMeshAsset();
+    const auto floor_mesh = data::MakePlaneMeshAsset(8, 8, 1.0F);
     const auto sphere_mesh = data::MakeSphereMeshAsset(24, 48);
-    if (!cube_mesh || !sphere_mesh) {
+    if (!cube_mesh || !floor_mesh || !sphere_mesh) {
       return false;
     }
 
     const auto cube_mat
       = MakeSolidColorMaterial("PhysicsCubeMat", { 0.78F, 0.80F, 0.88F, 1.0F });
+    const auto floor_mat = MakeSolidColorMaterial(
+      "PhysicsFloorMat", { 0.44F, 0.47F, 0.50F, 1.0F });
     const auto sphere_mat = MakeSolidColorMaterial(
       "PhysicsSphereMat", { 0.94F, 0.27F, 0.22F, 1.0F });
     const auto player_sphere_mat = MakeSolidColorMaterial(
       "PhysicsPlayerSphereMat", { 0.19F, 0.81F, 0.31F, 1.0F });
 
     cube_geometry_ = BuildGeometryAsset("CubeLOD0", *cube_mesh, cube_mat);
+    floor_geometry_
+      = BuildGeometryAsset("FloorPlaneLOD0", *floor_mesh, floor_mat);
     sphere_geometry_
       = BuildGeometryAsset("SphereLOD0", *sphere_mesh, sphere_mat);
     player_sphere_geometry_
@@ -628,8 +650,9 @@ auto MainModule::BuildProceduralScene() -> bool
   flippers_.clear();
   player_body_.reset();
 
-  const auto floor_node = SpawnRenderableNode("Floor", cube_geometry_,
-    kFloorPosition, glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }, kFloorScale);
+  const auto floor_node = SpawnRenderableNode("Floor", floor_geometry_,
+    kFloorVisualCenterWs, glm::quat { 1.0F, 0.0F, 0.0F, 0.0F },
+    kFloorVisualScale);
   static_nodes_.push_back(floor_node);
 
   const auto ramp_rotation = MakeXRotationQuat(kRampPitchRad);
@@ -721,8 +744,8 @@ auto MainModule::BuildProceduralScene() -> bool
     .direction_sign = -1.0F,
   });
 
-  const float floor_top_z = kFloorPosition.z + 0.5F * kFloorScale.z;
-  const float bowl_ring_center_z = floor_top_z + kBowlRingSphereRadius;
+  constexpr float bowl_ring_center_z
+    = kFloorCollisionTopZ + kBowlRingSphereRadius;
   constexpr int ring_count = 14;
   for (int i = 0; i < ring_count; ++i) {
     // Leave an entry gap on the incoming (south) side so the player can enter.
@@ -779,6 +802,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
 
     const auto scale
       = node.GetTransform().GetLocalScale().value_or(Vec3 { 1.0F, 1.0F, 1.0F });
+    const bool is_floor = node.GetName() == "Floor";
     const bool is_sphere
       = node.GetName().find("Bowl") != std::string_view::npos;
     const bool is_ramp_surface = node.GetName() == "Ramp";
@@ -786,15 +810,21 @@ auto MainModule::InitializePhysicsScenario() -> bool
     physics::body::BodyDesc desc {};
     desc.type = physics::body::BodyType::kStatic;
     desc.flags = physics::body::BodyFlags::kNone;
-    if (is_sphere) {
+    if (is_floor) {
+      desc.shape
+        = physics::BoxShape { .extents = 0.5F * kFloorCollisionSize };
+    } else if (is_sphere) {
       desc.shape = physics::SphereShape { .radius = 0.5F * scale.x };
     } else {
       desc.shape = physics::BoxShape { .extents = 0.5F * scale };
     }
-    desc.initial_position = node.GetTransform().GetLocalPosition().value_or(
-      Vec3 { 0.0F, 0.0F, 0.0F });
-    desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
-      Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+    desc.initial_position = is_floor ? kFloorCollisionCenterWs
+                                     : node.GetTransform().GetLocalPosition()
+                                         .value_or(Vec3 { 0.0F, 0.0F, 0.0F });
+    desc.initial_rotation = is_floor ? Quat { 1.0F, 0.0F, 0.0F, 0.0F }
+                                     : node.GetTransform().GetLocalRotation()
+                                         .value_or(Quat {
+                                           1.0F, 0.0F, 0.0F, 0.0F });
     desc.friction = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
     desc.restitution = is_sphere ? 0.03F : 0.02F;
 

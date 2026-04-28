@@ -39,6 +39,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "InputSystem/MainModule.h"
 
 namespace {
@@ -46,6 +47,8 @@ namespace {
 constexpr std::uint32_t kWindowWidth = 2400;
 constexpr std::uint32_t kWindowHeight = 1400;
 constexpr size_t kDefaultSceneCapacity = 128;
+constexpr oxygen::Vec3 kSceneLightingFocusPoint { 0.0F, -4.0F, 1.5F };
+constexpr oxygen::Vec3 kSunPosition { -8.0F, -12.0F, 14.0F };
 
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
@@ -64,7 +67,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = 0;
+  desc.flags = pak::render::kMaterialFlag_NoTextureSampling;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -123,6 +126,12 @@ auto MainModule::StageInitialScene(DemoShell& shell) -> void
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(main_camera_);
+  sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
+    DefaultSceneLightingDesc {
+      .sun_node_name = "SunLight",
+      .sun_position = kSunPosition,
+      .focus_point = kSceneLightingFocusPoint,
+    });
 }
 
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
@@ -142,6 +151,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     .engine = observer_ptr { app_.engine.get() },
     .enable_camera_rig = true,
     .enable_renderer_bound_panels = false,
+    .force_environment_override = false,
     .content_roots = {
       .content_root = demo_root.parent_path() / "Content",
       .cooked_root = demo_root / ".cooked",
