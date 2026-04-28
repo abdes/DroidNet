@@ -158,6 +158,7 @@ private:
 
   observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
   std::shared_ptr<data::GeometryAsset> cube_geometry_;
+  std::shared_ptr<data::GeometryAsset> floor_geometry_;
   std::shared_ptr<data::GeometryAsset> sphere_geometry_;
   std::shared_ptr<data::GeometryAsset> player_sphere_geometry_;
 

@@ -118,6 +118,7 @@ private:
   ActiveScene active_scene_;
   scene::SceneNode sphere_node_;
   scene::SceneNode main_camera_ {};
+  scene::SceneNode sun_light_node_ {};
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
