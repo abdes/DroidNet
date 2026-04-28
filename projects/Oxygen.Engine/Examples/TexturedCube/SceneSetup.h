@@ -52,10 +52,8 @@ struct SurfaceParams {
 /*!
  This class encapsulates the creation and configuration of the demo scene:
  - Cube and Sphere geometry and materials
+ - Authored sun/environment defaults for direct lighting and sky contribution
  - Demo-specific fill light
-
- All global environment settings (Sun, Sky, etc.) are managed by the DemoShell
- standard panels and services.
 */
 class SceneSetup final {
 public:
@@ -95,6 +93,7 @@ private:
   observer_ptr<scene::Scene> scene_ { nullptr };
   scene::SceneNode sphere_node_;
   scene::SceneNode cube_node_;
+  scene::SceneNode sun_light_node_;
   scene::SceneNode fill_light_node_;
 
   std::shared_ptr<const data::MaterialAsset> sphere_material_;

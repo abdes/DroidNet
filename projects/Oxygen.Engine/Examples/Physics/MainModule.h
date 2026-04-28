@@ -144,6 +144,7 @@ private:
 
   ActiveScene active_scene_;
   scene::SceneNode main_camera_ {};
+  scene::SceneNode sun_light_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
 
