@@ -47,6 +47,7 @@ struct MainModuleConfig {
   CompositingMode compositing_mode { CompositingMode::kBlend };
   bool pip_force_wireframe { true };
   uint32_t pip_scissor_inset_px { 0U };
+  bool proof_layout { false };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.
@@ -142,10 +143,16 @@ private:
   // View identifiers
   ViewId main_view_id_ { kInvalidViewId };
   ViewId pip_view_id_ { kInvalidViewId };
+  ViewId top_view_id_ { kInvalidViewId };
+  ViewId debug_view_id_ { kInvalidViewId };
+  ViewId shadow_view_id_ { kInvalidViewId };
 
   // Cameras
   scene::SceneNode main_camera_node_;
   scene::SceneNode pip_camera_node_;
+  scene::SceneNode top_camera_node_;
+  scene::SceneNode debug_camera_node_;
+  scene::SceneNode shadow_camera_node_;
 
   observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
   MainModuleConfig config_ {};
