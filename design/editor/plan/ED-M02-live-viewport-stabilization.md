@@ -80,7 +80,7 @@ ED-M02 does not include:
 - Standalone runtime validation or full preview parity.
 - Material, physics, environment, or component inspector authoring.
 - Replacing the WinUI `SwapChainPanel` surface seam with an abstract handle.
-- Reworking three-pane layout variants unless touched incidentally.
+- Reworking three-pane layout variants.
 
 ## 6. Implementation Sequence
 
@@ -243,8 +243,7 @@ Tasks:
 - Ensure layout change failure publishes `Viewport.Layout.Change` only when the
   change cannot be applied, restoration fails, or runtime surface/view work
   fails.
-- Avoid expanding the validation matrix to three-pane layouts unless the
-  implementation touches them.
+- Do not expand the validation matrix to three-pane layouts in ED-M02.
 
 Required behavior:
 
@@ -380,7 +379,7 @@ Expected project/reference constraints:
 | --- | --- |
 | ED-M02 already has partially landed behavior, so a plan could accidentally rewrite stable code. | Treat current implementation as baseline and harden only the seams required by the LLDs. |
 | Runtime invalid-state calls can assert before producing user-visible diagnostics. | Add service-level guards and operation-result/output-log diagnostics before UI paths call runtime operations. |
-| Multi-viewport validation can pass visually while surfaces are misrouted. | Require distinct document/viewport IDs in logs and visually distinguishable evidence per viewport. |
+| Multi-viewport work could be accidentally reopened while closing ED-M02. | Do not validate, harden, or gate ED-M02 on multi-viewport behavior. Record two/four/three-pane live viewport stability as deferred. |
 | Resize behavior is timing-sensitive and can become flaky. | Coalesce resize requests but guarantee latest measured size is eventually submitted while the lease is active. |
 | Missing cooked roots can be mistaken for a content-pipeline failure. | ED-M02 only reports non-fatal `AssetMount` warnings; ED-M07 owns cooked-index policy and cook/mount refresh after cooking. |
 | Runtime settings UI can silently log failures. | Convert settings write failures into `Runtime.Settings.Apply` results and output/log diagnostics. |
@@ -398,9 +397,11 @@ ED-M02 can close only when:
   activation and before cooked-root refresh.
 - Native runtime DLLs load from the engine install runtime directory.
 - One-pane scene viewport renders the active scene.
-- Two/four viewport layout validation is deferred out of ED-M02 because stable
-  support requires deeper engine multi-surface/multi-view work.
-- Three-pane variants are also out of ED-M02 validation scope.
+- Two/four viewport layout validation is deferred out of ED-M02 and must stay
+  deferred because stable support requires deeper engine multi-surface /
+  multi-view work.
+- Three-pane variants are also out of ED-M02 validation scope and must stay
+  deferred.
 - Resizing the window keeps the supported viewport scaled and non-overlapping.
 - Closing/reopening the scene releases the old surface/view and creates a new
   surface/view.
@@ -425,8 +426,9 @@ Manual visual validation expectations for the user:
 - After opening Vortex, the central scene viewport shows rendered scene content,
   not a blank panel.
 - In one-pane layout, one live viewport fills the scene editor area.
-- Two-pane and four-quadrant layout validation is deferred. The menu paths may
-  still exist, but they are not part of ED-M02 manual acceptance.
+- Two-pane, three-pane, and four-quadrant layout validation is deferred. The
+  menu paths may still exist, but they are not part of ED-M02 manual
+  acceptance.
 - Resizing the editor window or docked panes updates viewport sizes without
   leaving black/stale rectangles.
 - FPS/logging controls either apply or show a visible failure result.
@@ -445,7 +447,8 @@ The ledger evidence should record:
 - engine runtime DLL discovery path.
 - build configuration and MSBuild command used.
 - test command(s) used, if any.
-- one-pane viewport validation result and deferred two/four viewport status.
+- one-pane viewport validation result and deferred two/three/four viewport
+  status.
 - correct surface presentation evidence.
 - runtime settings result.
 - cooked-root warning behavior, if exercised.
