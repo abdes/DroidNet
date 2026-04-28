@@ -3076,7 +3076,7 @@ Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
 {
 }
 
-auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
 {
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
@@ -3150,6 +3150,87 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
 
   scene_renderer.OnRender(render_context);
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
+  engine::FrameContext& frame_context) -> void
+{
+  CHECK_NOTNULL_F(
+    renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
+  CHECK_NOTNULL_F(scene_source_.scene.get(),
+    "ValidatedOffscreenSceneSession requires a live scene");
+  CHECK_NOTNULL_F(output_target_.framebuffer.get(),
+    "ValidatedOffscreenSceneSession requires an output target");
+
+  auto effective_view_intent = view_intent_.ViewIntent();
+  effective_view_intent.shading_mode = pipeline_.shading_mode;
+  const auto& view_intent = effective_view_intent;
+  CHECK_F(view_intent.id != kInvalidViewId,
+    "ValidatedOffscreenSceneSession requires a valid offscreen view id");
+  CHECK_F(view_intent.camera.has_value(),
+    "ValidatedOffscreenSceneSession requires a camera-backed view intent");
+
+  auto& scene = *scene_source_.scene;
+  scene.Update();
+
+  auto camera_node = view_intent.camera.value();
+  auto resolver = SceneCameraViewResolver {
+    [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+    view_intent.view.viewport,
+  };
+  auto resolved_view = resolver(view_intent.id);
+
+  auto& scene_renderer = renderer_->EnsureSceneRenderer(&view_intent);
+  scene_renderer.OnStandaloneFrameStart(frame_context.GetFrameSequenceNumber(),
+    frame_context.GetFrameSlot(), std::nullopt);
+
+  auto render_context = RenderContext {};
+  renderer_->WireContext(render_context, {});
+  render_context.frame_slot = frame_context.GetFrameSlot();
+  render_context.frame_sequence = frame_context.GetFrameSequenceNumber();
+  render_context.scene = scene_source_.scene;
+  render_context.pass_target = output_target_.framebuffer;
+  render_context.view_outputs.insert_or_assign(
+    view_intent.id, output_target_.framebuffer);
+
+  const auto exposure_view_id
+    = view_intent.exposure_source_view_id != kInvalidViewId
+    ? view_intent.exposure_source_view_id
+    : view_intent.id;
+  render_context.frame_views.push_back(RenderContext::ViewExecutionEntry {
+    .view_id = view_intent.id,
+    .exposure_view_id = exposure_view_id,
+    .view_state_handle = view_intent.view_state_handle,
+    .exposure_view_state_handle = view_intent.view_state_handle,
+    .is_scene_view = true,
+    .is_reflection_capture = false,
+    .with_atmosphere = view_intent.with_atmosphere,
+    .with_height_fog = view_intent.with_height_fog,
+    .with_local_fog = view_intent.with_local_fog,
+    .debug_name = std::string(view_intent.name),
+    .view_kind = view_intent.view_kind,
+    .composition_view = observer_ptr<const CompositionView> { &view_intent },
+    .shading_mode_override = view_intent.shading_mode,
+    .render_mode_override = view_intent.force_wireframe
+      ? std::optional<RenderMode> { RenderMode::kWireframe }
+      : view_intent.render_settings.render_mode,
+    .resolved_view = observer_ptr<const ResolvedView> { &resolved_view },
+    .render_target = output_target_.framebuffer,
+    .composite_source = output_target_.framebuffer,
+    .primary_target = output_target_.framebuffer,
+  });
+
+  scene_renderer.OnRender(render_context);
+  FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+
+  scene_renderer.OnFrameStart(frame_context);
+  renderer_->scene_renderer_started_frame_
+    = frame_context.GetFrameSequenceNumber();
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+{
+  ExecuteNow();
   co_return;
 }
 
