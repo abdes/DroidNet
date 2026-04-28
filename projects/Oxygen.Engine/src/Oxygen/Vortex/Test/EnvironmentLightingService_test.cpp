@@ -45,6 +45,7 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Environment/Types/VolumetricFogModel.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -95,6 +96,8 @@ using oxygen::vortex::environment::IblProbePass;
 using oxygen::vortex::environment::kAtmosphereLightSlotCount;
 using oxygen::vortex::environment::kInvalidAtmosphereLightSlot;
 using oxygen::vortex::environment::SkyLightEnvironmentModel;
+using oxygen::vortex::environment::StaticSkyLightProductStatus;
+using oxygen::vortex::environment::StaticSkyLightUnavailableReason;
 using oxygen::vortex::environment::VolumetricFogModel;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -194,6 +197,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(bindings.sky_view_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.camera_aerial_perspective_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -219,6 +223,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_FALSE(state.valid);
   EXPECT_EQ(state.flags, 0U);
   EXPECT_EQ(state.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -504,6 +509,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FALSE(probe_state.valid);
   EXPECT_EQ(probe_state.probes.probe_revision, 1U);
   EXPECT_EQ(probe_state.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -522,6 +528,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   current.valid = true;
   current.flags = oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid;
   current.probes.environment_map_srv = oxygen::ShaderVisibleIndex { 11U };
+  current.probes.diffuse_sh_srv = oxygen::ShaderVisibleIndex { 15U };
   current.probes.irradiance_map_srv = oxygen::ShaderVisibleIndex { 12U };
   current.probes.prefiltered_map_srv = oxygen::ShaderVisibleIndex { 13U };
   current.probes.brdf_lut_srv = oxygen::ShaderVisibleIndex { 14U };
@@ -535,6 +542,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(refreshed.probe_state.probes.probe_revision, 8U);
   EXPECT_EQ(refreshed.probe_state.probes.environment_map_srv,
     kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    refreshed.probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(refreshed.probe_state.probes.irradiance_map_srv,
     kInvalidShaderVisibleIndex);
   EXPECT_EQ(refreshed.probe_state.probes.prefiltered_map_srv,
@@ -550,6 +559,67 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(refreshed.probe_state.flags
       & oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid,
     0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightProductRefreshClassifiesMissingSpecifiedCubemap)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey {};
+
+  const auto refreshed
+    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light);
+
+  EXPECT_TRUE(refreshed.requested);
+  EXPECT_TRUE(refreshed.refreshed);
+  EXPECT_FALSE(refreshed.probe_state.valid);
+  EXPECT_EQ(refreshed.probe_state.probes.probe_revision, 1U);
+  EXPECT_EQ(refreshed.probe_state.probes.environment_map_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    refreshed.probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kMissingCubemap);
+  EXPECT_NE(refreshed.probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
+    0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightSpecifiedCubemapRemainsUnavailableUntilShaderConsumersMigrate)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey { 42U };
+  sky_light.source_cubemap_angle_radians = 0.75F;
+  sky_light.lower_hemisphere_is_solid_color = true;
+  sky_light.lower_hemisphere_color = { 0.1F, 0.2F, 0.3F };
+  sky_light.lower_hemisphere_blend_alpha = 0.4F;
+
+  const auto refreshed
+    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light);
+
+  EXPECT_TRUE(refreshed.requested);
+  EXPECT_FALSE(refreshed.probe_state.valid);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.source_cubemap,
+    oxygen::content::ResourceKey { 42U });
+  EXPECT_FLOAT_EQ(
+    refreshed.probe_state.static_sky_light.key.source_rotation_radians, 0.75F);
+  EXPECT_TRUE(
+    refreshed.probe_state.static_sky_light.key.lower_hemisphere_solid_color);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -1809,8 +1879,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagSkyLightIblValid,
     0U);
-  EXPECT_EQ(bindings->probes.probe_revision, 1U);
+  EXPECT_EQ(bindings->probes.probe_revision, 2U);
   EXPECT_EQ(bindings->probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.brdf_lut_srv, kInvalidShaderVisibleIndex);

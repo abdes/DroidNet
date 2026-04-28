@@ -114,6 +114,7 @@ set(
   "Environment/Types/EnvironmentProbeBindings.h"
   "Environment/Types/EnvironmentEvaluationParameters.h"
   "Environment/Types/EnvironmentAmbientBridgeBindings.h"
+  "Environment/Types/StaticSkyLightProducts.h"
   "Environment/Types/AtmosphereModel.h"
   "Environment/Types/AtmosphereLightModel.h"
   "Environment/Types/HeightFogModel.h"

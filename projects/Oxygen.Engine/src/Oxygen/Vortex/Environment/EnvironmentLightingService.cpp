@@ -152,8 +152,7 @@ namespace {
     -> bool
   {
     return probes.environment_map_srv.IsValid()
-      && probes.irradiance_map_srv.IsValid()
-      && probes.prefiltered_map_srv.IsValid() && probes.brdf_lut_srv.IsValid();
+      && probes.diffuse_sh_srv.IsValid() && probes.probe_revision != 0U;
   }
 
   auto ProbeStateHasUsableResources(const EnvironmentProbeState& state) -> bool
@@ -846,6 +845,18 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   }
 
   const auto& stable_state = atmosphere_state_->GetState();
+  const auto refreshed_probe_state = ibl_->RefreshStaticSkyLightProducts(
+    probe_state_, stable_state.view_products.sky_light);
+  probe_state_ = refreshed_probe_state.probe_state;
+  last_probe_refresh_state_ = {
+    .frame_sequence = current_sequence_,
+    .frame_slot = current_slot_,
+    .requested = refreshed_probe_state.requested,
+    .refreshed = refreshed_probe_state.refreshed,
+    .valid = refreshed_probe_state.probe_state.valid,
+    .probe_revision = refreshed_probe_state.probe_state.probes.probe_revision,
+  };
+  last_publication_state_.probe_revision = probe_state_.probes.probe_revision;
   atmosphere_lut_cache_->RefreshForState(stable_state);
   const auto view_data = BuildEnvironmentViewData(ctx);
   const auto resolved_environment_view_slot = environment_view_slot.IsValid()
