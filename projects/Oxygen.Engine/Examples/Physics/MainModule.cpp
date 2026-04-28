@@ -47,6 +47,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "Physics/MainModule.h"
 
 namespace {
@@ -59,6 +60,8 @@ constexpr oxygen::Vec3 kFloorScale { 32.0F, 32.0F, 1.0F };
 constexpr oxygen::Vec3 kRampPosition { 0.0F, -6.5F, 4.6F };
 constexpr oxygen::Vec3 kRampScale { 3.6F, 15.0F, 0.05F };
 constexpr oxygen::Vec3 kRampRailScale { 0.35F, 15.0F, 0.8F };
+constexpr oxygen::Vec3 kSceneLightingFocusPoint { 0.0F, -3.5F, 2.8F };
+constexpr oxygen::Vec3 kSunPosition { -14.0F, -18.0F, 22.0F };
 constexpr float kPlayerSphereRadius = 0.5F;
 constexpr float kSpawnSurfaceClearance = 0.05F;
 constexpr float kBowlRingSphereRadius = 0.5F;
@@ -243,6 +246,12 @@ auto MainModule::OnAttachedImpl(
   tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
   shell->SetStagedMainCamera(camera_node);
+  sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
+    DefaultSceneLightingDesc {
+      .sun_node_name = "SunLight",
+      .sun_position = kSunPosition,
+      .focus_point = kSceneLightingFocusPoint,
+    });
 
   main_view_id_ = GetOrCreateViewId("MainView");
   LOG_F(INFO, "Physics: Module initialized");
@@ -254,6 +263,7 @@ void MainModule::OnShutdown() noexcept
   auto& shell = GetShell();
   shell.SetScene(nullptr);
 
+  sun_light_node_ = {};
   physics_panel_.reset();
   gameplay_input_ctx_.reset();
   launch_action_.reset();
@@ -880,6 +890,12 @@ auto MainModule::StageScenarioScene() -> bool
   tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
+  sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
+    DefaultSceneLightingDesc {
+      .sun_node_name = "SunLight",
+      .sun_position = kSunPosition,
+      .focus_point = kSceneLightingFocusPoint,
+    });
 
   active_scene_ = {};
   main_camera_ = {};
