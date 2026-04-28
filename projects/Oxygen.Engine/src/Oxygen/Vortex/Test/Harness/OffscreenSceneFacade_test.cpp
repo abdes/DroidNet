@@ -21,6 +21,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace {
 
@@ -39,6 +40,7 @@ using oxygen::graphics::TextureDesc;
 using oxygen::scene::PerspectiveCamera;
 using oxygen::scene::Scene;
 using oxygen::vortex::CapabilitySet;
+using oxygen::vortex::CompositionView;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ShadingMode;
@@ -255,6 +257,59 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCanSelectForward)
 
   ASSERT_TRUE(session.has_value());
   EXPECT_EQ(session->GetPipelineShadingMode(), ShadingMode::kForward);
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCarriesFeatureProfile)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "NoEnvironmentPipeline", ViewId { 47U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetPipeline(Renderer::OffscreenPipelineInput {
+    .feature_profile = CompositionView::ViewFeatureProfile::kNoEnvironment,
+  });
+
+  auto session = facade.Finalize();
+
+  ASSERT_TRUE(session.has_value());
+  EXPECT_EQ(session->GetPipelineFeatureProfile(),
+    CompositionView::ViewFeatureProfile::kNoEnvironment);
+}
+
+NOLINT_TEST_F(
+  OffscreenSceneFacadeTest, ValidateRejectsMissingProfileCapabilities)
+{
+  auto limited_config = RendererConfig {};
+  limited_config.upload_queue_key
+    = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+  auto limited_renderer = std::shared_ptr<Renderer>(
+    new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(limited_config),
+      RendererCapabilityFamily::kScenePreparation
+        | RendererCapabilityFamily::kDeferredShading
+        | RendererCapabilityFamily::kLightingData
+        | RendererCapabilityFamily::kFinalOutputComposition),
+    DestroyRenderer);
+
+  auto facade = limited_renderer->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "ShadowOnlyPipeline", ViewId { 48U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetPipeline(Renderer::OffscreenPipelineInput::ShadowOnly());
+
+  const auto report = facade.Validate();
+
+  ASSERT_FALSE(report.Ok());
+  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) {
+    return issue.code == "pipeline.missing_required_capabilities";
+  }));
 }
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)

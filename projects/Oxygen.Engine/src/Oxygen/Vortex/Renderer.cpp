@@ -1721,6 +1721,7 @@ auto Renderer::PublishRuntimeCompositionView(
       ? std::optional<RenderMode> { RenderMode::kWireframe }
       : composition_view.render_settings.render_mode,
     composition_view.view_state_handle, composition_view.view_kind,
+    composition_view.feature_profile, composition_view.feature_mask,
     composition_view.produced_aux_outputs, composition_view.consumed_aux_outputs,
     std::string(composition_view.name));
 
@@ -1742,6 +1743,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const std::optional<RenderMode> render_mode_override,
   const CompositionView::ViewStateHandle view_state_handle,
   const CompositionView::ViewKind view_kind,
+  const CompositionView::ViewFeatureProfile feature_profile,
+  const CompositionView::ViewFeatureMask feature_mask,
   std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs,
   std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs,
   std::string debug_name) -> ViewId
@@ -1758,6 +1761,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.render_mode_override = render_mode_override;
     it->second.view_state_handle = view_state_handle;
     it->second.view_kind = view_kind;
+    it->second.feature_profile = feature_profile;
+    it->second.feature_mask = feature_mask;
     it->second.produced_aux_outputs = std::move(produced_aux_outputs);
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
@@ -1773,6 +1778,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .render_mode_override = render_mode_override,
         .view_state_handle = view_state_handle,
         .view_kind = view_kind,
+        .feature_profile = feature_profile,
+        .feature_mask = feature_mask,
         .produced_aux_outputs = std::move(produced_aux_outputs),
         .consumed_aux_outputs = std::move(consumed_aux_outputs),
         .debug_name = std::move(debug_name),
@@ -2317,6 +2324,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .view_kind = view.metadata.is_scene_view
         ? CompositionView::ViewKind::kPrimary
         : CompositionView::ViewKind::kCompositionOnly,
+      .feature_profile = CompositionView::ViewFeatureProfile::kDefault,
+      .feature_mask = {},
       .produced_aux_outputs = {},
       .consumed_aux_outputs = {},
       .resolved_aux_inputs = {},
@@ -2341,6 +2350,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
         entry.debug_name = state.debug_name.empty() ? entry.debug_name
                                                     : state.debug_name;
         entry.view_kind = state.view_kind;
+        entry.feature_profile = state.feature_profile;
+        entry.feature_mask = state.feature_mask;
         entry.produced_aux_outputs = state.produced_aux_outputs;
         entry.consumed_aux_outputs = state.consumed_aux_outputs;
         break;
@@ -3087,6 +3098,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
 
   auto effective_view_intent = view_intent_.ViewIntent();
   effective_view_intent.shading_mode = pipeline_.shading_mode;
+  effective_view_intent.feature_profile = pipeline_.feature_profile;
+  effective_view_intent.feature_mask
+    = ResolveViewFeatureProfileSpec(pipeline_.feature_profile).feature_mask;
   const auto& view_intent = effective_view_intent;
   CHECK_F(view_intent.id != kInvalidViewId,
     "ValidatedOffscreenSceneSession requires a valid offscreen view id");
@@ -3137,6 +3151,8 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
     .with_local_fog = view_intent.with_local_fog,
     .debug_name = std::string(view_intent.name),
     .view_kind = view_intent.view_kind,
+    .feature_profile = view_intent.feature_profile,
+    .feature_mask = view_intent.feature_mask,
     .composition_view = observer_ptr<const CompositionView> { &view_intent },
     .shading_mode_override = view_intent.shading_mode,
     .render_mode_override = view_intent.force_wireframe
@@ -3164,6 +3180,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
 
   auto effective_view_intent = view_intent_.ViewIntent();
   effective_view_intent.shading_mode = pipeline_.shading_mode;
+  effective_view_intent.feature_profile = pipeline_.feature_profile;
+  effective_view_intent.feature_mask
+    = ResolveViewFeatureProfileSpec(pipeline_.feature_profile).feature_mask;
   const auto& view_intent = effective_view_intent;
   CHECK_F(view_intent.id != kInvalidViewId,
     "ValidatedOffscreenSceneSession requires a valid offscreen view id");
@@ -3209,6 +3228,8 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .with_local_fog = view_intent.with_local_fog,
     .debug_name = std::string(view_intent.name),
     .view_kind = view_intent.view_kind,
+    .feature_profile = view_intent.feature_profile,
+    .feature_mask = view_intent.feature_mask,
     .composition_view = observer_ptr<const CompositionView> { &view_intent },
     .shading_mode_override = view_intent.shading_mode,
     .render_mode_override = view_intent.force_wireframe
@@ -3343,6 +3364,23 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
       .code = "output_target.invalid_framebuffer",
       .message
       = "Offscreen scene requires an output framebuffer with a color target",
+    });
+  }
+
+  const auto pipeline_input
+    = pipeline_.has_value() ? *pipeline_ : OffscreenPipelineInput {};
+  const auto profile_spec
+    = ResolveViewFeatureProfileSpec(pipeline_input.feature_profile);
+  const auto capability_validation
+    = renderer_->ValidateCapabilityRequirements(
+      profile_spec.capability_requirements);
+  if (!capability_validation.Ok()) {
+    report.issues.push_back(ValidationIssue {
+      .code = "pipeline.missing_required_capabilities",
+      .message = fmt::format(
+        "Offscreen scene profile '{}' is missing required capabilities: {}",
+        ToString(pipeline_input.feature_profile),
+        to_string(capability_validation.missing_required)),
     });
   }
 

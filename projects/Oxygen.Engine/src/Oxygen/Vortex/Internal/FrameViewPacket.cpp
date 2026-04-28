@@ -28,6 +28,7 @@ FrameViewPacket::FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
 
   const auto& descriptor = view_->GetDescriptor();
   view_kind_ = descriptor.view_kind;
+  feature_profile_ = descriptor.feature_profile;
   feature_mask_ = descriptor.feature_mask;
   surface_routes_ = descriptor.surface_routes;
   overlay_policy_ = descriptor.overlay_policy;
