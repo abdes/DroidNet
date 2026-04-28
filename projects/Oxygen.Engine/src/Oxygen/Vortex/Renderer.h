@@ -496,7 +496,11 @@ public:
     std::optional<ShadingMode> shading_mode_override = std::nullopt,
     std::optional<RenderMode> render_mode_override = std::nullopt,
     CompositionView::ViewStateHandle view_state_handle
-    = CompositionView::kInvalidViewStateHandle) -> ViewId;
+    = CompositionView::kInvalidViewStateHandle,
+    CompositionView::ViewKind view_kind = CompositionView::ViewKind::kPrimary,
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs = {},
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs = {},
+    std::string debug_name = {}) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   auto GetRigidTransformHistoryCache() noexcept
@@ -633,6 +637,10 @@ private:
     CompositionView::ViewStateHandle view_state_handle {
       CompositionView::kInvalidViewStateHandle
     };
+    CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
+    std::string debug_name {};
   };
 
   struct DetachedPublishedRuntimeViewState {

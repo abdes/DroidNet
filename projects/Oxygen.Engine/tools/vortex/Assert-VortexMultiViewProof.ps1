@@ -74,6 +74,10 @@ Assert-ReportValue -Report $captureReport -Key 'stage9_view_count_match' -Expect
 Assert-ReportValue -Report $captureReport -Key 'stage12_view_count_match' -Expected 'true' -Label 'renderdoc'
 Assert-ReportValue -Report $captureReport -Key 'composition_view_count_match' -Expected 'true' -Label 'renderdoc'
 Assert-ReportValue -Report $captureReport -Key 'distinct_composition_outputs' -Expected 'true' -Label 'renderdoc'
+Assert-ReportValue -Report $captureReport -Key 'aux_consume_scope_match' -Expected 'true' -Label 'renderdoc'
+Assert-ReportValue -Report $captureReport -Key 'aux_consume_work_match' -Expected 'true' -Label 'renderdoc'
+Assert-ReportValue -Report $captureReport -Key 'stage9_before_aux_consume' -Expected 'true' -Label 'renderdoc'
+Assert-ReportValue -Report $captureReport -Key 'aux_consume_before_composition' -Expected 'true' -Label 'renderdoc'
 
 Assert-ReportValue -Report $allocationReport -Key 'overall_verdict' -Expected 'pass' -Label 'allocation-churn'
 Assert-ReportValue -Report $allocationReport -Key 'run_frames_at_least_60' -Expected 'true' -Label 'allocation-churn'
@@ -85,6 +89,27 @@ $proofLayoutMatches = @(
 )
 if ($proofLayoutMatches.Count -eq 0) {
   throw "Runtime logs do not prove that MultiView ran with --proof-layout true: $($runtimeLogFullPaths -join ', ')"
+}
+
+$auxDependencyMatches = @(
+  $runtimeLogLines | Select-String -Pattern 'Vortex\.AuxView\.Dependency .* valid=true'
+)
+if ($auxDependencyMatches.Count -eq 0) {
+  throw "Runtime logs do not prove that a required auxiliary dependency resolved: $($runtimeLogFullPaths -join ', ')"
+}
+
+$auxExtractMatches = @(
+  $runtimeLogLines | Select-String -Pattern 'Vortex\.AuxView\.Extract '
+)
+if ($auxExtractMatches.Count -eq 0) {
+  throw "Runtime logs do not prove that an auxiliary product was extracted: $($runtimeLogFullPaths -join ', ')"
+}
+
+$auxConsumeMatches = @(
+  $runtimeLogLines | Select-String -Pattern 'Vortex\.AuxView\.Consume '
+)
+if ($auxConsumeMatches.Count -eq 0) {
+  throw "Runtime logs do not prove that an auxiliary product was consumed: $($runtimeLogFullPaths -join ', ')"
 }
 
 $reportLines = @(

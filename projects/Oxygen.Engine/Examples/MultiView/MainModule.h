@@ -48,6 +48,7 @@ struct MainModuleConfig {
   bool pip_force_wireframe { true };
   uint32_t pip_scissor_inset_px { 0U };
   bool proof_layout { false };
+  bool aux_proof_layout { false };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.
