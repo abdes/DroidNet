@@ -344,6 +344,52 @@ Validation:
   smoke hook that must be added.
 - CDB/debug-layer audits for graphics examples that run frame loops.
 
+Evidence:
+
+- Full registered example build matrix passed:
+  `cmake --build out\build-ninja --config Debug --target
+  oxygen-platform-example oxygen-graphics-devicemanager-example
+  oxygen-examples-async oxygen-examples-inputsystem
+  oxygen-examples-lightbench oxygen-examples-texturedcube
+  oxygen-examples-demoshell oxygen-examples-renderscene
+  oxygen-examples-multiview oxygen-examples-physics
+  oxygen-examples-vortexbasic
+  oxygen-oxco-examples-batchexecution-yieldawaiter
+  oxygen-oxco-examples-batchexecution-broadcastchannel
+  oxygen-oxco-examples-batchexecution-repeatableshared --parallel 4`.
+- Short D3D12/debug-layer smoke passed for Async, InputSystem, LightBench,
+  TexturedCube, Physics, RenderScene, VortexBasic, and MultiView. Each run
+  used `--frames 8 --fps 30 --vsync false --debug-layer --capture-provider
+  off`, exited `0`, and logged `d3d12_errors=0`, `dxgi_errors=0`, and
+  `blocking=0` in
+  `out\build-ninja\analysis\vortex\m07-demo-smoke\summary.txt`.
+- OxCo batch examples initially exposed an invalid `void MainImpl` entry-point
+  signature against the shared `int MainImpl(...)` launcher contract. The
+  three examples now return `EXIT_SUCCESS`, rebuilt, and smoke-ran with
+  `exit=0` and `blocking=0`.
+- Devices example built and smoke-ran with `exit=0` and `blocking=0`; it is a
+  non-Vortex D3D12 device-removal example, so D3D12 removal diagnostics are
+  not interpreted as Vortex renderer proof.
+- Platform example built and `--help` exited `0`. It remains an interactive
+  platform/window sample with no finite-frame runtime CLI, so the M07 matrix
+  records help/build proof only and a residual deterministic-smoke-hook gap if
+  future baseline policy requires automated platform runtime closure.
+
+| Example target | Scope | M07 proof status |
+| --- | --- | --- |
+| `oxygen-examples-async` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; current RenderDoc Async proof wrapper retained for closure. |
+| `oxygen-examples-inputsystem` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
+| `oxygen-examples-lightbench` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
+| `oxygen-examples-texturedcube` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
+| `oxygen-examples-demoshell` | Shared example UI/library | Built as dependency and target; runtime covered by dependent demos and focused DemoShell tests. |
+| `oxygen-examples-renderscene` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
+| `oxygen-examples-multiview` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M06A/M06B/M06C proof remains the closure reference. |
+| `oxygen-examples-physics` | Vortex graphics runtime plus physics | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
+| `oxygen-examples-vortexbasic` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M04-M06 proof remains the closure reference. |
+| `oxygen-platform-example` | Non-Vortex interactive platform/window sample | Built; `--help` exited `0`; no finite-frame runtime CLI exists. |
+| `oxygen-graphics-devicemanager-example` | Non-Vortex D3D12 device-management sample | Built; smoke exited `0`; classified outside Vortex renderer proof because it intentionally exercises device removal. |
+| `oxygen-oxco-examples-batchexecution-*` | Non-Vortex coroutine samples | Built; entry-point return contract fixed; all three smoke runs exited `0`. |
+
 ### E. Production Proof Suite Consolidation
 
 Required work:
