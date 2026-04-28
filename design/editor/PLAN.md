@@ -164,9 +164,9 @@ Exit gate:
 Deferred work:
 
 - Multi-viewport layout validation is deferred out of ED-M02. The existing UI
-  path may remain visible, but one/two/four stability is no longer an ED-M02
-  closure gate. Stable multi-viewport requires later engine multi-surface /
-  multi-view renderer work.
+  path may remain visible, but multi-pane stability is not an ED-M02 closure
+  gate and must stay deferred. Stable multi-viewport requires later
+  engine multi-surface / multi-view renderer work.
 
 ### ED-M03 - Authoring Foundation
 
