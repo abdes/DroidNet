@@ -539,11 +539,74 @@ TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
   ASSERT_EQ(packet.GetOverlayPolicy().lanes.size(), 2U);
   EXPECT_EQ(packet.GetOverlayPolicy().lanes[0],
     CompositionView::OverlayLane::kWorldDepthAware);
+  ASSERT_EQ(packet.OverlayBatches().size(), 1U);
+  EXPECT_EQ(packet.OverlayBatches()[0].lane,
+    CompositionView::OverlayLane::kWorldDepthAware);
+  EXPECT_EQ(packet.OverlayBatches()[0].target,
+    CompositionView::OverlayTarget::kView);
+  EXPECT_FALSE(packet.OverlayBatches()[0].record);
   ASSERT_EQ(packet.ProducedAuxOutputs().size(), 1U);
   EXPECT_EQ(packet.ProducedAuxOutputs()[0].id,
     CompositionView::AuxOutputId { 5U });
   ASSERT_EQ(packet.ConsumedAuxOutputs().size(), 1U);
   EXPECT_FALSE(packet.ConsumedAuxOutputs()[0].required);
+}
+
+TEST(CompositionPlannerTest, OnOverlayCallbackProducesTypedScreenOverlay)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto overlay_called = false;
+
+  CompositionView view = CompositionView::ForHud(
+    ViewId { 124U }, CompositionView::ZOrder { 5 }, MakeView(),
+    [&overlay_called](oxygen::graphics::CommandRecorder&) {
+      overlay_called = true;
+    });
+  view.surface_routes.push_back(CompositionView::ViewSurfaceRoute {
+    .surface_id = CompositionView::SurfaceRouteId { 8U },
+    .destination = MakeView().viewport,
+    .blend_mode = CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
+  });
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 224U }));
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& packet = builder.GetFrameViewPackets().front();
+  ASSERT_EQ(packet.OverlayBatches().size(), 1U);
+  EXPECT_EQ(packet.OverlayBatches()[0].lane,
+    CompositionView::OverlayLane::kViewScreen);
+  EXPECT_EQ(packet.OverlayBatches()[0].target,
+    CompositionView::OverlayTarget::kView);
+  EXPECT_EQ(packet.OverlayBatches()[0].view_id, ViewId { 224U });
+  ASSERT_TRUE(packet.OverlayBatches()[0].record);
+
+  CompositionPlanner planner(observer_ptr { &builder });
+  planner.PlanCompositingTasks();
+  const auto submission = planner.BuildCompositionSubmission(
+    MakeCompositeTarget(graphics), CompositionView::SurfaceRouteId { 8U });
+
+  ASSERT_EQ(submission.surface_overlays.size(), 1U);
+  EXPECT_EQ(submission.surface_overlays[0].lane,
+    CompositionView::OverlayLane::kViewScreen);
+  EXPECT_EQ(submission.surface_overlays[0].target,
+    CompositionView::OverlayTarget::kSurface);
+  EXPECT_EQ(submission.surface_overlays[0].surface_id,
+    CompositionView::SurfaceRouteId { 8U });
+
+  auto recorder = graphics->AcquireCommandRecorder(
+    graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+    "CompositionPlannerOverlayTest", false);
+  ASSERT_TRUE(static_cast<bool>(recorder));
+  submission.surface_overlays[0].record(*recorder);
+  EXPECT_TRUE(overlay_called);
 }
 
 } // namespace

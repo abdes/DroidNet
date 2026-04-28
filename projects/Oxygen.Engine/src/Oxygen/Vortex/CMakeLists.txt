@@ -60,6 +60,7 @@ set(
   "RendererTag.h"
   "RenderMode.h"
   "ShaderDebugMode.h"
+  "ViewExtension.h"
   "Diagnostics/DiagnosticsCaptureManifest.h"
   "Diagnostics/DiagnosticsFrameLedger.h"
   "Diagnostics/DiagnosticsService.h"
@@ -207,6 +208,7 @@ set(
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
+  "ViewExtension.cpp"
   "Internal/BlueNoiseData.h"
   "Internal/AuxiliaryDependencyGraph.cpp"
   "Internal/AuxiliaryDependencyGraph.h"

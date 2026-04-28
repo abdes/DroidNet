@@ -55,8 +55,18 @@ private:
     std::string debug_name {};
   };
 
+  struct SurfaceOverlayPlan {
+    CompositionView::SurfaceRouteId surface_id {
+      CompositionView::kDefaultSurfaceRoute
+    };
+    CompositionView::OverlayBatch batch {};
+    CompositionView::ZOrder z_order {};
+    std::uint32_t submission_order { 0U };
+  };
+
   observer_ptr<FramePlanBuilder> frame_plan_builder_;
   std::vector<CompositionLayerPlan> planned_layers_;
+  std::vector<SurfaceOverlayPlan> planned_surface_overlays_;
 };
 
 } // namespace oxygen::vortex::internal

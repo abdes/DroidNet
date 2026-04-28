@@ -1207,7 +1207,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   for (const auto& pending : submissions) {
     const auto& payload = pending.submission;
-    if (payload.tasks.empty()) {
+    if (payload.tasks.empty() && payload.surface_overlays.empty()) {
       continue;
     }
 
@@ -1362,6 +1362,20 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         break;
       }
     }
+
+    for (const auto& overlay : payload.surface_overlays) {
+      if (!overlay.record) {
+        continue;
+      }
+      graphics::GpuEventScope overlay_scope(recorder, "Vortex.SurfaceOverlay",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("label", overlay.debug_name)));
+      overlay.record(recorder);
+    }
+
+    DispatchViewExtensionsOnPostComposition(
+      *context, payload.surface_id, target_fb, recorder);
 
     recorder.RequireResourceStateFinal(
       backbuffer, graphics::ResourceStates::kPresent);
@@ -1705,6 +1719,13 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
     .target_surface = std::move(target_surface),
     .sequence_in_frame = next_composition_sequence_in_frame_++,
   });
+}
+
+auto Renderer::RegisterViewExtension(ViewExtensionPtr extension) -> void
+{
+  CHECK_NOTNULL_F(extension.get(), "RegisterViewExtension requires extension");
+  std::scoped_lock lock(view_extension_mutex_);
+  view_extensions_.push_back(std::move(extension));
 }
 
 auto Renderer::ForSinglePassHarness() -> SinglePassHarnessFacade
@@ -2292,6 +2313,74 @@ auto Renderer::EndOffscreenFrame() noexcept -> void
   previous_view_history_cache_.EndFrame();
 }
 
+auto Renderer::SnapshotViewExtensions() const -> std::vector<ViewExtensionPtr>
+{
+  std::scoped_lock lock(view_extension_mutex_);
+  return view_extensions_;
+}
+
+auto Renderer::DispatchViewExtensionsOnFamilyAssembled(
+  engine::FrameContext& frame_context, RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = ViewFamilyAssembledContext {
+    .frame_context = frame_context,
+    .render_context = render_context,
+  };
+  for (const auto& extension : extensions) {
+    extension->OnFamilyAssembled(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnViewSetup(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = ViewSetupContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnViewSetup(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPreRenderViewGpu(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context
+    = ViewRenderGpuContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnPreRenderViewGpu(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPostRenderViewGpu(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context
+    = ViewRenderGpuContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnPostRenderViewGpu(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPostComposition(
+  engine::FrameContext& frame_context,
+  const CompositionView::SurfaceRouteId surface_id,
+  graphics::Framebuffer& target, graphics::CommandRecorder& recorder) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = PostCompositionContext {
+    .frame_context = frame_context,
+    .surface_id = surface_id,
+    .target = target,
+    .recorder = recorder,
+  };
+  for (const auto& extension : extensions) {
+    extension->OnPostComposition(hook_context);
+  }
+}
+
 auto Renderer::DispatchSceneRendererPreRender(
   const observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
@@ -2322,6 +2411,7 @@ auto Renderer::DispatchSceneRendererRender(
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, false);
+  DispatchViewExtensionsOnFamilyAssembled(*context, render_context);
 
   const auto has_scene_view = std::ranges::any_of(render_context.frame_views,
     [](const RenderContext::ViewExecutionEntry& entry) {
