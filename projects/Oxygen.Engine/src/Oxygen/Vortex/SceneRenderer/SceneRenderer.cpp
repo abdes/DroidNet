@@ -1470,6 +1470,9 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
     post_process_->OnFrameStart(
       frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
   }
+  if (screen_hzb_ != nullptr) {
+    screen_hzb_->OnFrameStart();
+  }
 }
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
