@@ -148,6 +148,12 @@ Implementation evidence:
 - Extended the static SkyLight product key with source content revision,
   selected output face size, and source format class when a valid HDR cube is
   resolved.
+- Added a Vortex-native CPU static SkyLight cubemap processor that reads
+  imported HDR cubemaps, applies source yaw selection, lower-hemisphere solid
+  color replacement, FP16-domain source-radiance scaling metadata, average
+  brightness, and UE5.7-shaped eight-`float4` diffuse irradiance SH packing.
+- Added a CPU evaluator for the packed diffuse SH product so focused tests can
+  prove the packing/evaluation contract before GPU shader migration.
 - Kept specified-cubemap SkyLight unavailable with
   `kShaderConsumerMigrationIncomplete` until resource generation and shader
   consumer migration land, so shaders cannot sample mismatched descriptors.
@@ -155,14 +161,14 @@ Implementation evidence:
 Validation evidence:
 
 - `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4` passed.
-- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 44/44 tests.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 47/47 tests.
 - `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
 - `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
 
 Remaining gaps:
 
-- No processed cubemap, mip generation, SH generation/upload, or
-  source-radiance-scale handling exists yet.
+- No GPU processed cubemap resource, mip generation, SH structured-buffer upload,
+  or runtime product publication exists yet.
 - `diffuse_sh_slot` in `GpuSkyLightParams` and shader consumer migration remain
   open for Slice D.
 - Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain
