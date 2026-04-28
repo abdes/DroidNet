@@ -300,7 +300,6 @@ private:
   std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
   std::vector<PreparedViewShadowInput> frame_shadow_views_ {};
   frame::SequenceNumber lighting_grid_built_sequence_ { 0U };
-  frame::SequenceNumber shadow_depths_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<ScreenHzbModule> screen_hzb_;

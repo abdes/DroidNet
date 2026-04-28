@@ -48,9 +48,9 @@ static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
         return constants;
     }
 
-    ConstantBuffer<ShadowPassConstants> constants_buffer =
+    StructuredBuffer<ShadowPassConstants> constants_buffer =
         ResourceDescriptorHeap[slot];
-    return constants_buffer;
+    return constants_buffer[0];
 }
 
 [shader("vertex")]
