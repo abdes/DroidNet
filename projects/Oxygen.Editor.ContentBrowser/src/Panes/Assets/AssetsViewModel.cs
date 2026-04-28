@@ -42,6 +42,7 @@ public partial class AssetsViewModel(
     ContentBrowserState contentBrowserState,
     IProjectContextService projectContextService,
     IProjectManagerService projectManagerService,
+    IAuthoringTargetResolver authoringTargetResolver,
     IStorageProvider storage,
     IMessenger messenger,
     IImportService importService,
@@ -88,7 +89,7 @@ public partial class AssetsViewModel(
             if (activeContext?.Scenes.Count > 0 && contentBrowserState.SelectedFolders.Count == 0)
             {
                 // Navigate to the Scenes folder to show scene assets
-                contentBrowserState.SetSelectedFolders(["Scenes"]);
+                contentBrowserState.SetSelectedFolders(["Content/Scenes"]);
             }
         }
 
@@ -269,7 +270,7 @@ public partial class AssetsViewModel(
             return Task.CompletedTask;
         }
 
-        var folder = NormalizeMaterialFolder(virtualFolder);
+        var folder = this.ResolveMaterialFolder(virtualFolder);
         var materialUri = new Uri($"{AssetUris.Scheme}://{folder.TrimEnd('/')}/{normalizedName}.omat.json");
         _ = messenger.Send(new CreateMaterialRequestMessage(materialUri, normalizedName));
         Debug.WriteLine($"[AssetsViewModel] Requested material creation {materialUri}");
@@ -278,7 +279,7 @@ public partial class AssetsViewModel(
 
     public string CreateDefaultMaterialName(string virtualFolder)
     {
-        var folder = NormalizeMaterialFolder(virtualFolder);
+        var folder = this.ResolveMaterialFolder(virtualFolder);
         var count = this.LayoutViewModel is AssetsLayoutViewModel layout
             ? layout.Assets.Count(asset => asset.Kind == AssetKind.Material)
             : 0;
@@ -296,7 +297,38 @@ public partial class AssetsViewModel(
     }
 
     public string GetSelectedMaterialFolder()
-        => NormalizeMaterialFolder(contentBrowserState.SelectedFolders.FirstOrDefault(), projectContextService.ActiveProject);
+        => this.ResolveMaterialFolder(contentBrowserState.SelectedFolders.FirstOrDefault());
+
+    private string ResolveMaterialFolder(string? selected)
+    {
+        var activeProject = projectContextService.ActiveProject;
+        if (activeProject is null)
+        {
+            return NormalizeMaterialFolder(selected);
+        }
+
+        var target = authoringTargetResolver.ResolveCreateTarget(
+            activeProject,
+            AuthoringAssetKind.Material,
+            CreateMaterialTargetSelection(activeProject, selected));
+        return target.FolderAssetUri.AbsolutePath;
+    }
+
+    internal static ContentBrowserSelection CreateMaterialTargetSelection(ProjectContext activeProject, string? selected)
+    {
+        var normalized = selected?.Replace('\\', '/').Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return new ContentBrowserSelection(selected);
+        }
+
+        var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
+        var root = firstSlash < 0 ? normalized : normalized[..firstSlash];
+        var localMount = activeProject.LocalFolderMounts.FirstOrDefault(mount =>
+            string.Equals(mount.Name, root, StringComparison.OrdinalIgnoreCase));
+
+        return new ContentBrowserSelection(selected, localMount?.Name);
+    }
 
     private void OnLayoutViewModelChanging(object? sender, PropertyChangingEventArgs args)
     {
@@ -327,7 +359,8 @@ public partial class AssetsViewModel(
         {
             return normalized.Equals("/Content", StringComparison.OrdinalIgnoreCase)
                 ? "/Content/Materials"
-                : normalized.StartsWith("/Content/", StringComparison.OrdinalIgnoreCase)
+                : normalized.Equals("/Content/Materials", StringComparison.OrdinalIgnoreCase)
+                  || normalized.StartsWith("/Content/Materials/", StringComparison.OrdinalIgnoreCase)
                 ? normalized
                 : "/Content/Materials";
         }
@@ -335,7 +368,8 @@ public partial class AssetsViewModel(
         normalized = normalized.TrimStart('/');
         return normalized.Equals("Content", StringComparison.OrdinalIgnoreCase)
             ? "/Content/Materials"
-            : normalized.StartsWith("Content/", StringComparison.OrdinalIgnoreCase)
+            : normalized.Equals("Content/Materials", StringComparison.OrdinalIgnoreCase)
+              || normalized.StartsWith("Content/Materials/", StringComparison.OrdinalIgnoreCase)
                 ? "/" + normalized
                 : "/Content/Materials";
     }
@@ -364,7 +398,11 @@ public partial class AssetsViewModel(
 
             if (normalizedNoRoot.StartsWith(mountFolder + "/", StringComparison.OrdinalIgnoreCase))
             {
-                virtualFolder = "/" + mount.Name + "/" + normalizedNoRoot[(mountFolder.Length + 1)..];
+                var mountRelative = normalizedNoRoot[(mountFolder.Length + 1)..];
+                virtualFolder = mountRelative.Equals("Materials", StringComparison.OrdinalIgnoreCase)
+                                || mountRelative.StartsWith("Materials/", StringComparison.OrdinalIgnoreCase)
+                    ? "/" + mount.Name + "/" + mountRelative
+                    : "/" + mount.Name + "/Materials";
                 return true;
             }
         }

@@ -1,8 +1,32 @@
 {
+  "SchemaVersion": 1,
+  "TemplateId": "Games/First Person",
   "Name": "PB_Template_Games_FirstPerson_Name",
+  "DisplayName": "PB_Template_Games_FirstPerson_Name",
   "Description": "PB_Template_Games_FirstPerson_Description",
   "Icon": "Media/Icon.png",
+  "Preview": "Media/Preview.png",
+  "SourceFolder": ".",
   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+  "AuthoringMounts": [
+    {
+      "Name": "Content",
+      "RelativePath": "Content"
+    }
+  ],
+  "LocalFolderMounts": [],
+  "StarterScene": {
+    "AssetUri": "asset:///Content/Scenes/FirstPerson.oscene.json",
+    "RelativePath": "Content/Scenes/FirstPerson.oscene.json",
+    "OpenOnCreate": true
+  },
+  "StarterContent": [
+    {
+      "AssetUri": "asset:///Content/Materials/Default.omat.json",
+      "RelativePath": "Content/Materials/Default.omat.json",
+      "Kind": "Material"
+    }
+  ],
   "PreviewImages": [
     "Media/Preview.png"
   ]

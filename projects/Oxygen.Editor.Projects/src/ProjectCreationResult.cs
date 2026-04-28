@@ -32,6 +32,16 @@ public sealed record ProjectCreationResult
     public ProjectValidationResult? Validation { get; init; }
 
     /// <summary>
+    ///     Gets a value indicating whether workspace activation should open the template starter scene.
+    /// </summary>
+    public bool OpenStarterScene { get; init; }
+
+    /// <summary>
+    ///     Gets the starter scene asset URI declared by the template, when available.
+    /// </summary>
+    public Uri? StarterSceneAssetUri { get; init; }
+
+    /// <summary>
     ///     Gets the failure message when creation fails.
     /// </summary>
     public string? Message { get; init; }
@@ -51,13 +61,17 @@ public sealed record ProjectCreationResult
     public static ProjectCreationResult Success(
         string projectRoot,
         IProjectInfo projectInfo,
-        ProjectValidationResult validation)
+        ProjectValidationResult validation,
+        bool openStarterScene = false,
+        Uri? starterSceneAssetUri = null)
         => new()
         {
             Succeeded = true,
             ProjectRoot = projectRoot,
             ProjectInfo = projectInfo,
             Validation = validation,
+            OpenStarterScene = openStarterScene,
+            StarterSceneAssetUri = starterSceneAssetUri,
         };
 
     /// <summary>

@@ -25,15 +25,44 @@ public class TemplateInfo(string description, string name, Category category) : 
 {
     private string description = description.L();
     private string name = name.L();
+    private string? displayName;
 
     /// <summary>
     /// Gets or sets the localized name of the template.
     /// </summary>
     public required string Name
     {
-        get => this.name;
+        get => this.displayName?.L() ?? this.name;
         set => this.name = value.L();
     }
+
+    /// <summary>
+    /// Gets or sets the non-localized display name from a V0.1 template descriptor.
+    /// </summary>
+    public string? DisplayName
+    {
+        get => this.displayName;
+        set => this.displayName = value;
+    }
+
+    /// <inheritdoc />
+    public string? TemplateId { get; set; }
+
+    /// <inheritdoc />
+    public int SchemaVersion { get; set; }
+
+    /// <inheritdoc />
+    public string? SourceFolder { get; set; }
+
+    /// <summary>
+    /// Gets or sets the authoring mounts declared by the template descriptor.
+    /// </summary>
+    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the local folder mounts declared by the template descriptor.
+    /// </summary>
+    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the localized description of the template.
@@ -64,9 +93,24 @@ public class TemplateInfo(string description, string name, Category category) : 
     public string? Icon { get; set; }
 
     /// <summary>
+    /// Gets or sets the primary preview image path from a V0.1 template descriptor.
+    /// </summary>
+    public string? Preview { get; set; }
+
+    /// <summary>
     /// Gets or sets the collection of preview image paths for the template.
     /// </summary>
     public IList<string> PreviewImages { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the starter scene declared by the template.
+    /// </summary>
+    public TemplateStarterSceneInfo? StarterScene { get; set; }
+
+    /// <summary>
+    /// Gets or sets the starter content assets declared by the template.
+    /// </summary>
+    public IList<TemplateStarterContentInfo> StarterContent { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the last time this template was used.
@@ -77,3 +121,13 @@ public class TemplateInfo(string description, string name, Category category) : 
     [JsonIgnore]
     public DateTime LastUsedOn { get; set; } = DateTime.Now;
 }
+
+/// <summary>
+/// Starter scene metadata declared by a project template.
+/// </summary>
+public sealed record TemplateStarterSceneInfo(Uri AssetUri, string? RelativePath, bool OpenOnCreate);
+
+/// <summary>
+/// Starter asset metadata declared by a project template.
+/// </summary>
+public sealed record TemplateStarterContentInfo(Uri AssetUri, string? RelativePath, string? Kind);

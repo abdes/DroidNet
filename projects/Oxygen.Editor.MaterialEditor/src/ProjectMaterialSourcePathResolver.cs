@@ -52,8 +52,11 @@ public sealed class ProjectMaterialSourcePathResolver : IMaterialSourcePathResol
             throw new InvalidOperationException($"Material URI '{materialUri}' contains an invalid material path.");
         }
 
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Material URI '{materialUri}' targets unknown mount '{mountName}'.");
+        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
+        if (mount is null)
+        {
+            return ResolveLocalMount(project, materialUri, mountName, mountRelativePath);
+        }
 
         var sourceRelativePath = NormalizeRelativePath(Path.Combine(mount.RelativePath, mountRelativePath));
         var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
@@ -69,6 +72,30 @@ public sealed class ProjectMaterialSourcePathResolver : IMaterialSourcePathResol
             MountName: mount.Name,
             SourcePath: sourcePath,
             SourceRelativePath: sourceRelativePath);
+    }
+
+    private static MaterialSourceLocation ResolveLocalMount(
+        ProjectContext project,
+        Uri materialUri,
+        string mountName,
+        string mountRelativePath)
+    {
+        var mount = project.LocalFolderMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Material URI '{materialUri}' targets unknown mount '{mountName}'.");
+
+        var mountRoot = Path.GetFullPath(mount.AbsolutePath);
+        var sourcePath = Path.GetFullPath(Path.Combine(mountRoot, mountRelativePath));
+        if (!IsUnderRoot(sourcePath, mountRoot))
+        {
+            throw new InvalidOperationException($"Material URI '{materialUri}' resolves outside local mount '{mountName}'.");
+        }
+
+        return new MaterialSourceLocation(
+            MaterialUri: materialUri,
+            ProjectRoot: project.ProjectRoot,
+            MountName: mount.Name,
+            SourcePath: sourcePath,
+            SourceRelativePath: NormalizeRelativePath(mountRelativePath));
     }
 
     private static string NormalizeRelativePath(string path)

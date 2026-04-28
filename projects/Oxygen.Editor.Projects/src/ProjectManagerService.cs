@@ -199,13 +199,8 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
 
         try
         {
-            // Ensure the Scenes folder exists
             var projectFolder = await storage.GetFolderFromPathAsync(scene.Project.ProjectInfo.Location).ConfigureAwait(true);
-            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
-            if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
-            {
-                await scenesFolder.CreateAsync().ConfigureAwait(true);
-            }
+            var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
 
             // Create or get the scene file
             var sceneFileName = scene.Name + Constants.SceneFileExtension;
@@ -232,7 +227,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
 
         var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location).ConfigureAwait(true);
-        var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+        var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
         if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
         {
             return;
@@ -273,7 +268,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         {
             var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location!)
                 .ConfigureAwait(true);
-            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+            var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
             var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
                 .ConfigureAwait(true);
             if (!await sceneFile.ExistsAsync().ConfigureAwait(true))
@@ -294,10 +289,27 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         {
             var sceneLocation = storage.NormalizeRelativeTo(
                 project.ProjectInfo.Location,
-                $"{Constants.ScenesFolderName}/{sceneName}{Constants.SceneFileExtension}");
+                $"{Constants.ContentFolderName}/{Constants.ScenesFolderName}/{sceneName}{Constants.SceneFileExtension}");
             this.CouldNotLoadScene(sceneLocation, ex.Message);
             return null;
         }
+    }
+
+    private static async Task<Oxygen.Storage.IFolder> GetScenesFolderAsync(Oxygen.Storage.IFolder projectFolder)
+    {
+        var contentFolder = await projectFolder.GetFolderAsync(Constants.ContentFolderName).ConfigureAwait(true);
+        if (!await contentFolder.ExistsAsync().ConfigureAwait(true))
+        {
+            await contentFolder.CreateAsync().ConfigureAwait(true);
+        }
+
+        var scenesFolder = await contentFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+        if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
+        {
+            await scenesFolder.CreateAsync().ConfigureAwait(true);
+        }
+
+        return scenesFolder;
     }
 
     [LoggerMessage(

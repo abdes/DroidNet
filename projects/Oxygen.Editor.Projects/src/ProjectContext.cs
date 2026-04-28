@@ -52,6 +52,16 @@ public sealed record ProjectContext
     public required IReadOnlyList<ProjectSceneInfo> Scenes { get; init; }
 
     /// <summary>
+    ///     Gets a value indicating whether workspace activation should open an initial scene.
+    /// </summary>
+    public bool OpenInitialScene { get; init; } = true;
+
+    /// <summary>
+    ///     Gets the scene asset URI requested by project activation, when a template or workflow selected one.
+    /// </summary>
+    public Uri? InitialSceneAssetUri { get; init; }
+
+    /// <summary>
     ///     Creates a context snapshot from a loaded project.
     /// </summary>
     /// <param name="project">The loaded project.</param>

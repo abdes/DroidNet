@@ -275,6 +275,8 @@ public sealed class ProjectActivationCoordinator(
                 validationResult.ProjectInfo,
                 operationId,
                 diagnostics,
+                openInitialScene: true,
+                initialSceneAssetUri: null,
                 cancellationToken)
             .ConfigureAwait(true);
     }
@@ -352,6 +354,8 @@ public sealed class ProjectActivationCoordinator(
                 creationResult.ProjectInfo,
                 operationId,
                 diagnostics,
+                creationResult.OpenStarterScene,
+                creationResult.StarterSceneAssetUri,
                 cancellationToken)
             .ConfigureAwait(true);
     }
@@ -360,6 +364,8 @@ public sealed class ProjectActivationCoordinator(
         Oxygen.Editor.World.IProjectInfo projectInfo,
         Guid operationId,
         List<DiagnosticRecord> diagnostics,
+        bool openInitialScene,
+        Uri? initialSceneAssetUri,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -377,7 +383,11 @@ public sealed class ProjectActivationCoordinator(
             return null;
         }
 
-        return ProjectContext.FromProject(projectManager.CurrentProject);
+        return ProjectContext.FromProject(projectManager.CurrentProject) with
+        {
+            OpenInitialScene = openInitialScene,
+            InitialSceneAssetUri = initialSceneAssetUri,
+        };
     }
 
     private async Task UpdateRecentProjectsAsync(

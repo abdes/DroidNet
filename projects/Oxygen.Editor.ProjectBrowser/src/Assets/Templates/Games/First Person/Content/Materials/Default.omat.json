@@ -1,0 +1,12 @@
+{
+  "Schema": "oxygen.material.v1",
+  "Type": "PBR",
+  "Name": "Default",
+  "PbrMetallicRoughness": {
+    "BaseColorFactor": [1, 1, 1, 1],
+    "MetallicFactor": 0,
+    "RoughnessFactor": 0.5
+  },
+  "AlphaMode": "OPAQUE",
+  "DoubleSided": false
+}
