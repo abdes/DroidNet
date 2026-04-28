@@ -794,7 +794,7 @@ namespace {
     }
   }
 
-  auto CollectShadowViewInputs(const RenderContext& ctx,
+  auto CollectCurrentShadowViewInput(const RenderContext& ctx,
     const InitViewsModule* init_views,
     std::vector<PreparedViewShadowInput>& out) -> void
   {
@@ -803,27 +803,14 @@ namespace {
       return;
     }
 
-    for (const auto& view : ctx.frame_views) {
-      if (!view.is_scene_view) {
-        continue;
-      }
-      out.push_back(PreparedViewShadowInput {
-        .view_id = view.view_id,
-        .prepared_scene = observer_ptr<const PreparedSceneFrame> {
-          init_views->GetPreparedSceneFrame(view.view_id),
-        },
-        .resolved_view = view.resolved_view,
-        .view_constants = view.view_id == ctx.current_view.view_id
-          ? observer_ptr<const graphics::Buffer> { ctx.view_constants.get() }
-          : observer_ptr<const graphics::Buffer> {},
-        .composition_view = view.composition_view,
-      });
-    }
-
-    if (out.empty() && ctx.current_view.view_id != kInvalidViewId) {
+    if (ctx.current_view.view_id != kInvalidViewId) {
       out.push_back(PreparedViewShadowInput {
         .view_id = ctx.current_view.view_id,
-        .prepared_scene = ctx.current_view.prepared_frame,
+        .prepared_scene = ctx.current_view.prepared_frame != nullptr
+          ? ctx.current_view.prepared_frame
+          : observer_ptr<const PreparedSceneFrame> {
+              init_views->GetPreparedSceneFrame(ctx.current_view.view_id),
+            },
         .resolved_view = ctx.current_view.resolved_view,
         .view_constants = observer_ptr<const graphics::Buffer> {
           ctx.view_constants.get(),
@@ -1583,7 +1570,6 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   frame_lighting_views_.clear();
   frame_shadow_views_.clear();
   lighting_grid_built_sequence_ = frame::SequenceNumber {};
-  shadow_depths_built_sequence_ = frame::SequenceNumber {};
   if (lighting_ != nullptr) {
     lighting_->OnFrameStart(sequence, slot);
   }
@@ -2037,14 +2023,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 7: reserved - MaterialCompositionService::PreBasePass
 
   // Stage 8: Shadow depth
-  if (shadows_ != nullptr && wants_shadow_products
-    && shadow_depths_built_sequence_ != ctx.frame_sequence) {
-    CollectShadowViewInputs(ctx, init_views_.get(), frame_shadow_views_);
+  if (shadows_ != nullptr && wants_shadow_products) {
+    CollectCurrentShadowViewInput(ctx, init_views_.get(), frame_shadow_views_);
     shadows_->RenderShadowDepths(FrameShadowInputs {
       .frame_light_set = &frame_light_selection_,
       .active_views = std::span(frame_shadow_views_),
     });
-    shadow_depths_built_sequence_ = ctx.frame_sequence;
   }
   if (shadows_ != nullptr && wants_shadow_products) {
     published_view_frame_bindings_.shadow_frame_slot

@@ -472,6 +472,46 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  RenderViewFamilyPublishesShadowDepthsOnlyForShadowedViews)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+  scene_renderer_->OnFrameStart(frame_context_);
+  UpdateSceneTransforms();
+
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.view_constants = view_constants_buffer_;
+  context.frame_views.push_back({
+    .view_id = first_view_id_,
+    .is_scene_view = true,
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
+  });
+  context.frame_views.push_back({
+    .view_id = second_view_id_,
+    .is_scene_view = true,
+    .feature_profile = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing,
+    .feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
+      oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing)
+                      .feature_mask,
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &second_resolved_view_ },
+  });
+
+  scene_renderer_->RenderViewFamily(context);
+
+  const auto* shadow_service
+    = RendererPublicationProbe::GetShadowService(*scene_renderer_);
+  ASSERT_NE(shadow_service, nullptr);
+  EXPECT_NE(shadow_service->ResolveShadowFrameSlot(first_view_id_),
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(shadow_service->ResolveShadowFrameSlot(second_view_id_),
+    oxygen::kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DepthPrepassDisabledModeLeavesCompletenessDisabled)
 {
   scene_renderer_->OnFrameStart(frame_context_);
