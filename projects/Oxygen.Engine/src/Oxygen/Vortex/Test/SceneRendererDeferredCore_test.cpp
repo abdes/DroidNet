@@ -684,6 +684,68 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
+  SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
+{
+  auto scene_config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1U> {};
+  draw_metadata.front().is_indexed = 0U;
+  draw_metadata.front().vertex_count = 3U;
+  draw_metadata.front().instance_count = 1U;
+  draw_metadata.front().flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+        &prepared_frame,
+      };
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.ForwardWireframeConstants",
+  });
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = false,
+    .early_z_pass_done = false,
+    .shading_mode = ShadingMode::kForward,
+    .render_mode = oxygen::vortex::RenderMode::kWireframe,
+  });
+
+  const auto result = base_pass.Execute(context, scene_textures);
+
+  EXPECT_FALSE(result.published_base_pass_products);
+  EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
+  EXPECT_FALSE(result.wrote_velocity_target);
+  EXPECT_TRUE(result.wrote_scene_color);
+  EXPECT_EQ(result.draw_count, 1U);
+  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
+  ASSERT_FALSE(graphics_->graphics_pipeline_log_.binds.empty());
+  EXPECT_EQ(graphics_->graphics_pipeline_log_.binds.back().desc.GetName(),
+    "Vortex.BasePass.Wireframe");
+}
+
+NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, BasePassCompletesVelocityForDynamicGeometry)
 {
   auto scene_config = SceneTexturesConfig {
