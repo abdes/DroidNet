@@ -36,16 +36,19 @@ Key artifacts:
 
 ## Rendering Stack
 
-Rendering is split into a renderer module (high-level render graph and passes)
-and a backend-agnostic graphics layer (device, resources, queues).
+Rendering is split into the Vortex renderer module (high-level view planning,
+render stages, services, and composition) and a backend-agnostic graphics layer
+(device, resources, queues).
 
-Renderer:
+Vortex renderer:
 
-- `src/Oxygen/Renderer/README.md` is the design entry point.
-- Render graphs are coroutines composed from pass objects.
-- `RenderContext` is the per-frame shared state and pass registry.
-- Passes live under `src/Oxygen/Renderer/Passes/` and follow
-  Validate → PrepareResources → Execute.
+- `design/vortex/PLAN.md` is the roadmap/status entry point.
+- `design/vortex/lld/README.md` links the current renderer design package.
+- `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h` owns frame rendering,
+  view-family execution, and stage orchestration.
+- Render stages live under `src/Oxygen/Vortex/SceneRenderer/Stages/`; renderer
+  services live under `src/Oxygen/Vortex/*Service*` and environment/shadow
+  service folders.
 
 Graphics:
 
@@ -60,7 +63,8 @@ Graphics:
 Key flow:
 
 - Scene + view data is resolved into renderable snapshots.
-- Render graphs execute via renderer-owned passes and graphics command recorders.
+- Vortex stages execute through renderer-owned orchestration and graphics
+  command recorders.
 - Presentation is coordinated by the graphics backend and engine phase order.
 
 ## Scene
@@ -164,7 +168,7 @@ binary serialization and file I/O (`Stream.h`, `Reader.h`, `Writer.h`).
 | `Core` | Shared engine types, frame context | `src/Oxygen/Core/FrameContext.h` |
 | `Composition` | Object/component system with pooled storage | `src/Oxygen/Composition/README.md` |
 | `Engine` | Frame orchestration and module lifecycle | `src/Oxygen/Engine/AsyncEngine.h` |
-| `Renderer` | Render graph, passes, render context | `src/Oxygen/Renderer/README.md` |
+| `Vortex` | View planning, render stages, services, composition | `design/vortex/PLAN.md`, `src/Oxygen/Vortex/` |
 | `Graphics` | Device abstraction, resources, command recording | `src/Oxygen/Graphics/README.md` |
 | `Loader` | Graphics backend loader | `src/Oxygen/Loader/README.md` |
 | `Scene` | Scene graph, nodes, queries, environment | `src/Oxygen/Scene/Scene.h` |
@@ -191,11 +195,13 @@ New engine module:
   `OnPreRender`, `OnRender`, `OnCompositing`, `OnFrameEnd`.
 - Use `FrameContext` as the authoritative per-frame state.
 
-New render pass:
+New Vortex render stage or service:
 
-- Add a pass class under `src/Oxygen/Renderer/Passes/`.
-- Follow the RenderPass lifecycle and register the pass in a render coroutine.
-- Use bindless descriptors through the `ResourceRegistry` and `DescriptorAllocator`.
+- Add stage-owned code under `src/Oxygen/Vortex/SceneRenderer/Stages/` or a
+  service under the appropriate Vortex service folder.
+- Follow the existing `SceneRenderer`/stage-module publication model.
+- Use bindless descriptors through Graphics `ResourceRegistry`,
+  `DescriptorAllocator`, and Vortex resource helpers.
 
 New scene system:
 
@@ -218,14 +224,15 @@ New input features:
 ## Architectural Boundaries (Keep Clean)
 
 - Engine owns orchestration, not subsystem internals.
-- Renderer owns render graph and pass orchestration; Graphics owns device APIs.
+- Vortex owns render-stage orchestration; Graphics owns device APIs.
 - Scene owns hierarchy data; renderer reads snapshots only.
 - Content owns asset loading; Data owns immutable runtime representations.
 
 ## Where to Go Deeper
 
 - Frame model and phase contracts: `src/Oxygen/Engine/README.md`.
-- Render graph and pass architecture: `src/Oxygen/Renderer/README.md`.
+- Vortex renderer roadmap and design: `design/vortex/PLAN.md` and
+  `design/vortex/lld/README.md`.
 - Graphics backend contracts: `src/Oxygen/Graphics/Common/README.md`.
 - Scene environment and rendering implications: `src/Oxygen/Scene/Environment/README.md`.
 - Content pipeline and asset dependencies: `src/Oxygen/Content/README.md`.

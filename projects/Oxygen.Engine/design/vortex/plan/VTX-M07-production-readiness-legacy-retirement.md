@@ -1,6 +1,6 @@
 # VTX-M07 - Production Readiness And Legacy Retirement
 
-Status: `in_progress`
+Status: `validated`
 
 ## 1. Goal
 
@@ -295,8 +295,8 @@ Evidence so far:
 - `ctest --preset test-debug -R
   "Oxygen\.Examples\.DemoShell\.AsyncVortexMigrationSurface\.Tests"
   --output-on-failure` passed, but the executable currently contains 0 tests;
-  this is recorded as a residual test-coverage gap for later M07 demo/proof
-  consolidation.
+  this is not a closure blocker because the current Async runtime proof wrapper
+  now gates the real capture/product/runtime behavior.
 
 ### D. Required Example Build And Runtime Smoke Matrix
 
@@ -374,6 +374,23 @@ Evidence:
   platform/window sample with no finite-frame runtime CLI, so the M07 matrix
   records help/build proof only and a residual deterministic-smoke-hook gap if
   future baseline policy requires automated platform runtime closure.
+- Demo refresh/fix closeout also covered scene-authored environment behavior
+  and material/runtime correctness in required examples: DemoShell now preserves
+  scene-authored environment controls and switches to custom mode when users
+  edit sun/environment controls; fixed exposure seeds post-process exposure
+  state; TexturedCube, InputSystem, and Physics scenes now author clear
+  sun/environment defaults; generated solid-color demo materials are marked
+  non-texture-sampling; the Physics floor uses correct Oxygen +Z-up placement
+  and a non-zero above-atmosphere visual/collision plane.
+- Physics direct-light proof passed with RenderDoc analysis:
+  `tools/vortex/ProbeRenderDocPhysicsDirectLighting.py
+  out\build-ninja\analysis\physics\physics-after-scene-cleanup_capture.rdc`
+  wrote
+  `out\build-ninja\analysis\physics\physics-after-scene-cleanup-direct-lighting-probe.txt`
+  with `analysis_result=success`, `floor_candidate_count=4`,
+  `nonzero_direct_floor_count=3`, lit floor `NoL=0.690735274`, and direct
+  output values around `8680..9160`. The one zero-direct floor sample was
+  shadowed, not missing lighting.
 
 | Example target | Scope | M07 proof status |
 | --- | --- | --- |
@@ -410,6 +427,38 @@ Validation:
 - Wrapper dry run or full run depending on scope.
 - Parser/static checks for any new tooling.
 
+Evidence:
+
+- Closure reused existing proof wrappers rather than introducing duplicate
+  runtime analyzers.
+- VortexBasic runtime proof passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output
+  out\build-ninja\analysis\vortex\m07-closeout\vortexbasic-runtime -Frame 3
+  -RunFrames 6 -Fps 30 -BuildJobs 4`.
+- Async runtime proof passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\vortex\Run-AsyncRuntimeValidation.ps1 -Output
+  out\build-ninja\analysis\vortex\m07-closeout\async-runtime -Frame 90
+  -RunFrames 94 -Fps 30 -BuildJobs 4`.
+- MultiView standard and auxiliary proof passed:
+  `tools\vortex\Run-VortexMultiViewValidation.ps1 -Output
+  out\build-ninja\analysis\vortex\m07-closeout\multiview-proof -Frame 5
+  -RunFrames 65 -Fps 30 -BuildJobs 4` and the same command with
+  `-AuxProofLayout -Output
+  out\build-ninja\analysis\vortex\m07-closeout\multiview-aux-proof`.
+- Offscreen proof passed:
+  `tools\vortex\Run-VortexOffscreenValidation.ps1 -Output
+  out\build-ninja\analysis\vortex\m07-closeout\offscreen-proof -Frame 5
+  -RunFrames 65 -Fps 30 -BuildJobs 4`.
+- Feature-variant proof passed:
+  `tools\vortex\Run-VortexFeatureVariantValidation.ps1 -Output
+  out\build-ninja\analysis\vortex\m07-closeout\feature-variant-proof -Frame 5
+  -RunFrames 65 -Fps 30 -BuildJobs 4`.
+- The generated reports under `out\build-ninja\analysis\vortex\m07-closeout`
+  include CDB/debug-layer, RenderDoc/scripted analysis, assertion, and
+  allocation-churn evidence for the relevant wrappers.
+
 ### F. Build Graph And Binary Dependency Audit
 
 Required work:
@@ -425,6 +474,19 @@ Validation:
 
 - CMake target graph inspection.
 - Binary dependency inspection for relevant built DLLs/executables.
+
+Evidence:
+
+- Current source/build/tooling seam guard passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
+  out\build-ninja\analysis\vortex\m07-closeout\legacy-seams-tooling.txt`,
+  scanning 581 files with no forbidden current-source legacy renderer seams.
+- Binary dependency audit passed:
+  `out\build-ninja\analysis\vortex\m07-closeout\binary-dependencies.txt`
+  records `result=PASS` and `blocking_legacy_dependency_matches=0` for
+  `Oxygen.Vortex-d.dll`, required Vortex example executables, and matching
+  Vortex/DemoShell test binaries inspected with `dumpbin /dependents`.
 
 ### G. Status Reconciliation And Legacy Archive Routing
 
@@ -446,6 +508,25 @@ Validation:
   `src/Oxygen/Renderer`, and legacy/reference proof claims.
 - `git diff --check`.
 
+Evidence:
+
+- Current-path docs were routed away from removed legacy renderer material:
+  `src/Oxygen/ARCHITECTURE.md`, `src/Oxygen/ImGui/README.md`,
+  `src/Oxygen/Content/Docs/overview.md`,
+  `src/Oxygen/Content/Docs/implementation_plan.md`,
+  `src/Oxygen/Content/Docs/deps_and_cache.md`,
+  `src/Oxygen/Content/Docs/chunking.md`,
+  `src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/README.md`,
+  `src/Oxygen/Scene/Light/light-deisgn.md`, and
+  `src/Oxygen/Nexus/Docs/design.md`.
+- Current-path legacy doc/source audit passed:
+  `out\build-ninja\analysis\vortex\m07-closeout\current-source-legacy-doc-audit.txt`
+  records `rg_exit=1`, `result=PASS`, and `matches=0` for
+  `src/Oxygen`, `Examples`, and `tools/vortex`.
+- Historical and Vortex planning docs may still discuss `Oxygen.Renderer` as
+  legacy migration context or guardrail language; they are not current
+  implementation routing.
+
 ### H. Closure
 
 Required work:
@@ -462,6 +543,29 @@ Validation:
 - Static seam script.
 - Required runtime/CDB/RenderDoc proof wrappers.
 - `git diff --check`.
+
+Evidence:
+
+- Full focused Vortex/example build passed:
+  `cmake --build out\build-ninja --config Debug --target
+  Oxygen.Vortex.LinkTest oxygen-vortex oxygen-examples-async
+  oxygen-examples-inputsystem oxygen-examples-renderscene
+  oxygen-examples-multiview oxygen-examples-vortexbasic
+  oxygen-examples-texturedcube oxygen-examples-physics
+  oxygen-examples-lightbench oxygen-examples-demoshell --parallel 4`.
+- Focused CTest passed after explicitly rebuilding the stale
+  `Oxygen.Vortex.OcclusionModule.Tests` binary:
+  `ctest --preset test-debug -R
+  "Oxygen\.Vortex\.(LinkTest|RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|SceneRendererDeferredCore|SceneRendererPublication|EnvironmentLightingService|ShadowService|DiagnosticsService|OcclusionModule)|Oxygen\.Examples\.DemoShell\.(DemoShellPanelConfig|EnvironmentSettingsService|RenderingSettingsService|DiagnosticsPanel)\.Tests"
+  --output-on-failure` passed 14/14.
+- Static seam guard, current-path doc/source audit, binary dependency audit,
+  VortexBasic, Async, MultiView standard/auxiliary, Offscreen, and
+  Feature-variant runtime proof wrappers passed with reports under
+  `out\build-ninja\analysis\vortex\m07-closeout`.
+- ShaderBake/catalog validation was not run because the M07 closure patch did
+  not change shader source, shader ABI, root-binding, or shader catalog data.
+- No open VTX-M07 closure gap remains. Accepted/deferred post-baseline gaps are
+  listed in `VTX-FUTURE` and in `IMPLEMENTATION_STATUS.md`.
 
 ## 9. Test Plan
 
@@ -534,6 +638,7 @@ Replan before continuing if:
 - Update this plan slice evidence only after its validation command passes.
 - Update `IMPLEMENTATION_STATUS.md` when a slice has implementation plus
   validation evidence.
-- Keep VTX-M07 `in_progress` until the full exit gate is satisfied.
+- Keep VTX-M07 `validated` only while the full exit-gate evidence above
+  remains current and uncontradicted.
 - Do not mark M07 `validated` based on planning docs, inventory, or static
   scans alone.

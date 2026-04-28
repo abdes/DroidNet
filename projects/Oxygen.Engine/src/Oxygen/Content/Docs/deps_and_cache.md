@@ -7,8 +7,9 @@ resources.
 > Canonical status/roadmap: `implementation_plan.md`.
 >
 > GPU upload / residency is out of scope for Content. Content ends at
-> **DecodedCPUReady**. GPU materialization is the Renderer’s job (see
-> `src/Oxygen/Renderer/Upload/README.md`).
+> **DecodedCPUReady**. GPU materialization is the Vortex/Graphics job (see
+> `src/Oxygen/Vortex/Upload/`, `src/Oxygen/Vortex/Resources/`, and
+> `src/Oxygen/Graphics/`).
 
 ---
 

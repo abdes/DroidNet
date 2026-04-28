@@ -19,7 +19,8 @@ Content provides **CPU-side acquisition** of engine assets/resources, including:
 ## Non-goals (by design)
 
 - GPU upload, GPU residency, and GPU memory budgeting.
-  Those are Renderer-owned (`src/Oxygen/Renderer/Upload/README.md`).
+  Those are Vortex/Graphics-owned (`src/Oxygen/Vortex/Upload/`,
+  `src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/`).
 
 ## Implementation tracking (ordered task list)
 
