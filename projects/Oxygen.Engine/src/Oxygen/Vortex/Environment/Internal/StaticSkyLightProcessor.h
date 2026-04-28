@@ -37,6 +37,7 @@ struct StaticSkyLightCpuProducts {
     diffuse_irradiance_sh {};
   std::vector<glm::vec4> processed_rgba {};
   std::uint32_t output_face_size { 0U };
+  std::uint32_t mip_count { 0U };
   float source_radiance_scale { 1.0F };
   float average_brightness { 0.0F };
 };

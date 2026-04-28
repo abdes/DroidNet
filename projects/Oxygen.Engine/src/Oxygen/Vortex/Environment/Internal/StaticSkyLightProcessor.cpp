@@ -69,6 +69,49 @@ namespace {
     return glm::normalize(basis.center + s * basis.right + t * basis.up);
   }
 
+  [[nodiscard]] auto ComputeMipCount(std::uint32_t face_size) noexcept
+    -> std::uint32_t
+  {
+    auto mip_count = 0U;
+    do {
+      ++mip_count;
+      face_size >>= 1U;
+    } while (face_size > 0U);
+    return mip_count;
+  }
+
+  [[nodiscard]] auto MipFaceSize(const std::uint32_t base_face_size,
+    const std::uint32_t mip) noexcept -> std::uint32_t
+  {
+    return (std::max)(1U, base_face_size >> mip);
+  }
+
+  [[nodiscard]] auto FaceMipElementCount(const std::uint32_t base_face_size,
+    const std::uint32_t mip_count) noexcept -> std::size_t
+  {
+    auto total = std::size_t { 0U };
+    for (std::uint32_t mip = 0U; mip < mip_count; ++mip) {
+      const auto mip_size
+        = static_cast<std::size_t>(MipFaceSize(base_face_size, mip));
+      total += mip_size * mip_size;
+    }
+    return total;
+  }
+
+  [[nodiscard]] auto ProcessedMipOffset(const std::uint32_t face,
+    const std::uint32_t mip, const std::uint32_t base_face_size,
+    const std::uint32_t mip_count) noexcept -> std::size_t
+  {
+    auto offset = static_cast<std::size_t>(face)
+      * FaceMipElementCount(base_face_size, mip_count);
+    for (std::uint32_t current_mip = 0U; current_mip < mip; ++current_mip) {
+      const auto mip_size
+        = static_cast<std::size_t>(MipFaceSize(base_face_size, current_mip));
+      offset += mip_size * mip_size;
+    }
+    return offset;
+  }
+
   [[nodiscard]] auto RotateYaw(
     const glm::vec3 direction, const float radians) noexcept -> glm::vec3
   {
@@ -252,6 +295,43 @@ namespace {
     return color;
   }
 
+  auto GenerateProcessedMips(StaticSkyLightCpuProducts& products) -> void
+  {
+    for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
+      for (std::uint32_t mip = 1U; mip < products.mip_count; ++mip) {
+        const auto dst_size = MipFaceSize(products.output_face_size, mip);
+        const auto src_size = MipFaceSize(products.output_face_size, mip - 1U);
+        const auto src_offset = ProcessedMipOffset(
+          face, mip - 1U, products.output_face_size, products.mip_count);
+        const auto dst_offset = ProcessedMipOffset(
+          face, mip, products.output_face_size, products.mip_count);
+
+        for (std::uint32_t y = 0U; y < dst_size; ++y) {
+          for (std::uint32_t x = 0U; x < dst_size; ++x) {
+            const auto src_x0 = (std::min)(x * 2U, src_size - 1U);
+            const auto src_y0 = (std::min)(y * 2U, src_size - 1U);
+            const auto src_x1 = (std::min)(src_x0 + 1U, src_size - 1U);
+            const auto src_y1 = (std::min)(src_y0 + 1U, src_size - 1U);
+            const auto sample00
+              = products
+                  .processed_rgba[src_offset + src_y0 * src_size + src_x0];
+            const auto sample10
+              = products
+                  .processed_rgba[src_offset + src_y0 * src_size + src_x1];
+            const auto sample01
+              = products
+                  .processed_rgba[src_offset + src_y1 * src_size + src_x0];
+            const auto sample11
+              = products
+                  .processed_rgba[src_offset + src_y1 * src_size + src_x1];
+            products.processed_rgba[dst_offset + y * dst_size + x]
+              = (sample00 + sample10 + sample01 + sample11) * 0.25F;
+          }
+        }
+      }
+    }
+  }
+
 } // namespace
 
 auto ProcessStaticSkyLightCubemapCpu(
@@ -294,9 +374,10 @@ auto ProcessStaticSkyLightCubemapCpu(
 
   StaticSkyLightCpuProducts products {};
   products.output_face_size = output_face_size;
+  products.mip_count = ComputeMipCount(output_face_size);
   products.source_radiance_scale = source_radiance_scale;
   products.processed_rgba.resize(static_cast<std::size_t>(kCubeFaceCount)
-    * output_face_size * output_face_size);
+    * FaceMipElementCount(output_face_size, products.mip_count));
 
   ShVector3 sh {};
   auto accumulated_solid_angle = 0.0F;
@@ -319,8 +400,8 @@ auto ProcessStaticSkyLightCubemapCpu(
 
         const auto color = ProcessedColor(
           *source, source_direction_ws, sky_light, source_radiance_scale);
-        const auto index = (static_cast<std::size_t>(face) * output_face_size
-                             * output_face_size)
+        const auto index
+          = ProcessedMipOffset(face, 0U, output_face_size, products.mip_count)
           + (static_cast<std::size_t>(y) * output_face_size) + x;
         products.processed_rgba[index] = glm::vec4(color, source->a);
 
@@ -347,6 +428,7 @@ auto ProcessStaticSkyLightCubemapCpu(
     : 0.0F;
   products.diffuse_irradiance_sh
     = PackDiffuseSh(sh, products.average_brightness);
+  GenerateProcessedMips(products);
   return products;
 }
 

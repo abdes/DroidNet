@@ -154,6 +154,16 @@ Implementation evidence:
   brightness, and UE5.7-shaped eight-`float4` diffuse irradiance SH packing.
 - Added a CPU evaluator for the packed diffuse SH product so focused tests can
   prove the packing/evaluation contract before GPU shader migration.
+- Extended the CPU processed cubemap product to include a complete mip chain.
+- Added renderer-owned static SkyLight product caching in `IblProcessor`:
+  processed RGBA16F TextureCube creation/upload, diffuse SH structured-buffer
+  creation/upload, descriptor registration, upload-ticket gating, key-change
+  resource replacement, and deferred release through existing Vortex
+  Graphics/UploadCoordinator systems.
+- Kept completed GPU products out of `EnvironmentProbeBindings` until the
+  shader ABI migration lands; product SRVs are recorded on
+  `StaticSkyLightProducts`, while shading bindings remain invalid and the state
+  remains unavailable with `kShaderConsumerMigrationIncomplete`.
 - Kept specified-cubemap SkyLight unavailable with
   `kShaderConsumerMigrationIncomplete` until resource generation and shader
   consumer migration land, so shaders cannot sample mismatched descriptors.
@@ -161,14 +171,15 @@ Implementation evidence:
 Validation evidence:
 
 - `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4` passed.
-- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 47/47 tests.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 49/49 tests.
 - `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
 - `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
 
 Remaining gaps:
 
-- No GPU processed cubemap resource, mip generation, SH structured-buffer upload,
-  or runtime product publication exists yet.
+- GPU processed cubemap and SH upload exist, but they are intentionally gated
+  from shader-facing `EnvironmentProbeBindings` until the shader ABI migration
+  and consumers land.
 - `diffuse_sh_slot` in `GpuSkyLightParams` and shader consumer migration remain
   open for Slice D.
 - Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain

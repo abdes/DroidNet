@@ -16,6 +16,10 @@ namespace oxygen::vortex {
 class Renderer;
 }
 
+namespace oxygen::data {
+class TextureResource;
+}
+
 namespace oxygen::vortex::environment {
 
 class IblProbePass;
@@ -40,14 +44,21 @@ namespace internal {
 
     [[nodiscard]] OXGN_VRTX_API auto RefreshPersistentProbes(
       const EnvironmentProbeState& current_state,
-      bool environment_source_changed) const -> RefreshState;
+      bool environment_source_changed) -> RefreshState;
     [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLightProducts(
       const EnvironmentProbeState& current_state,
-      const SkyLightEnvironmentModel& sky_light) const -> RefreshState;
+      const SkyLightEnvironmentModel& sky_light) -> RefreshState;
+    [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLightProducts(
+      const EnvironmentProbeState& current_state,
+      const SkyLightEnvironmentModel& sky_light,
+      const data::TextureResource* source_cubemap) -> RefreshState;
 
   private:
+    struct StaticSkyLightProductCache;
+
     Renderer& renderer_;
     std::unique_ptr<IblProbePass> probe_pass_;
+    std::unique_ptr<StaticSkyLightProductCache> static_sky_light_cache_;
   };
 
 } // namespace internal
