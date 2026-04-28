@@ -726,6 +726,52 @@ public partial class ProjectLayoutViewModel(
             return;
         }
 
+        foreach (var projectRelativeMount in projectInfo.AuthoringMounts.Where(IsPersistedProjectRelativeVirtualMount))
+        {
+            try
+            {
+                var mountRootLocation = storage.NormalizeRelativeTo(
+                    this.projectRoot.ProjectRootFolder.Location,
+                    projectRelativeMount.RelativePath);
+                var mountRootFolder = await storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
+                VirtualFolderMountTreeItemAdapter? mount = null;
+                try
+                {
+                    mount = new VirtualFolderMountTreeItemAdapter(
+                        this.logger,
+                        projectRelativeMount.Name,
+                        mountRootFolder,
+                        projectRelativeMount.RelativePath,
+                        VirtualFolderMountBackingPathKind.ProjectRelative)
+                    {
+                        IsExpanded = projectRelativeMount.IsExpanded,
+                    };
+
+                    mount.PropertyChanged += this.OnMountPointPropertyChanged;
+
+                    if (await this.projectRoot.MountVirtualFolderAsync(mount).ConfigureAwait(true))
+                    {
+                        var mountedItem = mount;
+                        mount = null;
+
+                        if (this.projectRoot.AreChildrenLoaded)
+                        {
+                            await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount)
+                                .ConfigureAwait(true);
+                        }
+                    }
+                }
+                finally
+                {
+                    mount?.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to load project-relative virtual folder mount {Name}", projectRelativeMount.Name);
+            }
+        }
+
         foreach (var localMount in projectInfo.LocalFolderMounts)
         {
             try
@@ -770,6 +816,14 @@ public partial class ProjectLayoutViewModel(
                 this.logger.LogError(ex, "Failed to load local folder mount {Name}", localMount.Name);
             }
         }
+    }
+
+    internal static bool IsPersistedProjectRelativeVirtualMount(ProjectMountPoint mount)
+    {
+        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
+        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]

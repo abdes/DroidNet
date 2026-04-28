@@ -43,6 +43,17 @@ public sealed partial class ListLayoutView
         args.Handled = true;
     }
 
+    private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        _ = args;
+        if (this.ViewModel is null || sender is not ListView listView)
+        {
+            return;
+        }
+
+        this.ViewModel.SelectedAsset = listView.SelectedItem as ContentBrowserAssetItem;
+    }
+
     /// <summary>
     /// Handles the pointer pressed event on the ListView.
     /// </summary>

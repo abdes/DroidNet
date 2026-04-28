@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -138,6 +139,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.operationResults,
                 this.statusReducer,
                 this.container.Resolve<ISceneDocumentCommandService>(),
+                this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+                this.container.Resolve<IContentBrowserAssetProvider>(),
                 this.container,
                 messenger,
                 this.loggerFactory);
@@ -152,11 +155,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 {
                     var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
                     _ = messenger.Send(new AssetsChangedMessage(uri));
-                },
-                assetsCooked: () =>
-                {
-                    var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-                    _ = messenger.Send(new AssetsCookedMessage());
                 });
         }
         else

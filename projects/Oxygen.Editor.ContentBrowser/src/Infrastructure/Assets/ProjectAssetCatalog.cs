@@ -10,6 +10,7 @@ using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Catalog.FileSystem;
 using Oxygen.Assets.Catalog.LooseCooked;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
@@ -81,6 +82,11 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
         // Index mount points
         foreach (var mount in project.AuthoringMounts)
         {
+            if (IsDerivedRootMount(mount))
+            {
+                continue;
+            }
+
             try
             {
                 var mountRootLocation = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
@@ -184,6 +190,14 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
         this.changes.Dispose();
         this.catalogSubscriptions.Dispose();
         this.lockObj.Dispose();
+    }
+
+    private static bool IsDerivedRootMount(ProjectMountPoint mount)
+    {
+        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
+        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task AddCatalogAsync(IAssetCatalog catalog)

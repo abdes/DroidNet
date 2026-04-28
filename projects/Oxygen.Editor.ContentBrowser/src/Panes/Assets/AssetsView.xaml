@@ -8,11 +8,13 @@
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.ContentBrowser"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     mc:Ignorable="d">
 
     <Border Margin="0,0,4,4" Background="{ThemeResource LayerFillColorDefaultBrush}">
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
@@ -65,6 +67,42 @@
                     </dnc:ToolBarButton.Icon>
                 </dnc:ToolBarButton>
 
+                <dnc:ToolBarButton Label="Cook">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Sync" />
+                    </dnc:ToolBarButton.Icon>
+                    <dnc:ToolBarButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.CookSelectedAssetCommand}" Text="Cook Selected Asset">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8A5;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.CookSelectedFolderCommand}" Text="Cook Folder">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8B7;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.CookProjectCommand}" Text="Cook Project">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8F1;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.InspectCookedOutputCommand}" Text="Inspect Cooked Output">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE721;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.ValidateCookedOutputCommand}" Text="Validate Cooked Output">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE73E;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </dnc:ToolBarButton.Flyout>
+                </dnc:ToolBarButton>
+
                 <dnc:ToolBarSeparator />
 
                 <dnc:ToolBarButton Label="Cut" ToolBarLabelPosition="Collapsed">
@@ -98,8 +136,17 @@
                 <dnc:ToolBarSeparator />
             </dnc:ToolBar>
 
-            <controls:RouterOutlet
+            <muxc:InfoBar
+                Title="{x:Bind ViewModel.OperationResultTitle, Mode=OneWay}"
                 Grid.Row="1"
+                Margin="8,0,8,8"
+                IsClosable="True"
+                IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
+                Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
+                Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}" />
+
+            <controls:RouterOutlet
+                Grid.Row="2"
                 Outlet="assets"
                 ViewModel="{x:Bind ViewModel.LayoutViewModel, Mode=OneWay}"
                 VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />

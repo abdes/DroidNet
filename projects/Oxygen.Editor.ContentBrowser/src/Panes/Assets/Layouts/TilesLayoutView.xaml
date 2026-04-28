@@ -82,6 +82,7 @@
             ItemTemplate="{StaticResource GameAssetTemplate}"
             ItemsSource="{x:Bind ViewModel.Assets}"
             PointerPressed="GridView_PointerPressed"
+            SelectionChanged="GridView_SelectionChanged"
             SelectionMode="Single">
             <GridView.ItemContainerStyle>
                 <Style TargetType="GridViewItem">

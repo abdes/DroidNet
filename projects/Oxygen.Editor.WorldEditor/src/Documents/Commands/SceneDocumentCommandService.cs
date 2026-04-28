@@ -617,7 +617,7 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
 
             context.Metadata.IsDirty = false;
             _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsCookedMessage());
+            _ = this.messenger.Send(new AssetsChangedMessage());
             return SceneCommandResult.Success;
         }
         catch (Exception ex)

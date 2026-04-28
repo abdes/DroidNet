@@ -58,6 +58,28 @@ public sealed class ContentBrowserAssetProviderTests
     }
 
     [TestMethod]
+    public async Task RefreshAsync_WhenCatalogContainsCookedIndexRecord_ShouldPublishCookedRow()
+    {
+        using var workspace = new TempWorkspace();
+        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
+        Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
+        await File.WriteAllBytesAsync(cookedPath, [1]).ConfigureAwait(false);
+        var catalog = new TestProjectAssetCatalog(
+            [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat"))]);
+        var projectContext = CreateProjectContextService(workspace);
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+
+        IReadOnlyList<ContentBrowserAssetItem> rows = [];
+        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
+        await provider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(false);
+
+        Assert.AreEqual(1, rows.Count);
+        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat"), rows[0].IdentityUri);
+        Assert.AreEqual(AssetState.Cooked, rows[0].PrimaryState);
+        Assert.AreEqual(cookedPath, rows[0].CookedPath);
+    }
+
+    [TestMethod]
     public async Task ResolveAsync_WhenRecordIsMissing_ShouldReturnUnresolvedRow()
     {
         using var workspace = new TempWorkspace();

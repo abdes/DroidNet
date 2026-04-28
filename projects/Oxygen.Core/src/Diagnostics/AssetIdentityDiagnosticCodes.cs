@@ -35,6 +35,11 @@ public static class AssetIdentityDiagnosticCodes
     public const string CookedMissing = DiagnosticCodes.AssetIdentityPrefix + "Cooked.Missing";
 
     /// <summary>
+    /// Post-cook asset catalog refresh failed.
+    /// </summary>
+    public const string RefreshFailed = DiagnosticCodes.AssetIdentityPrefix + "RefreshFailed";
+
+    /// <summary>
     /// User selected an invalid project content root.
     /// </summary>
     public const string ContentRootInvalidSelection = DiagnosticCodes.ProjectPrefix + "CONTENT_ROOT.InvalidSelection";

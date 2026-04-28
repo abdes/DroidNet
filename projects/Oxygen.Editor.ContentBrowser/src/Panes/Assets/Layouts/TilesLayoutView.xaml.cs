@@ -43,6 +43,17 @@ public sealed partial class TilesLayoutView
         args.Handled = true;
     }
 
+    private void GridView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        _ = args;
+        if (this.ViewModel is null || sender is not GridView gridView)
+        {
+            return;
+        }
+
+        this.ViewModel.SelectedAsset = gridView.SelectedItem as ContentBrowserAssetItem;
+    }
+
     /// <summary>
     /// Handles the pointer pressed event on the GridView.
     /// </summary>

@@ -4,5 +4,6 @@
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/ThemeResources.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/PropertiesExpander.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/PropertyCard.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Resources/ViewportIcons.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

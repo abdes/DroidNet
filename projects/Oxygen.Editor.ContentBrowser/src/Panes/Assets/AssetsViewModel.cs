@@ -5,19 +5,23 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import;
 using Oxygen.Core;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Storage;
 using Windows.Storage.Pickers;
@@ -33,6 +37,10 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
+/// <param name="contentPipelineService">The explicit editor content-pipeline service.</param>
+/// <param name="assetProvider">The shared content-browser asset provider.</param>
+/// <param name="operationResults">The operation-result publisher.</param>
+/// <param name="statusReducer">The operation status reducer.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="importService">The import service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
@@ -43,6 +51,10 @@ public partial class AssetsViewModel(
     IProjectContextService projectContextService,
     IProjectManagerService projectManagerService,
     IAuthoringTargetResolver authoringTargetResolver,
+    IContentPipelineService contentPipelineService,
+    IContentBrowserAssetProvider assetProvider,
+    IOperationResultPublisher operationResults,
+    IStatusReducer statusReducer,
     IStorageProvider storage,
     IMessenger messenger,
     IImportService importService,
@@ -55,6 +67,18 @@ public partial class AssetsViewModel(
     ///     Gets the layout view model.
     /// </summary>
     public object? LayoutViewModel => this.Outlets["right"].viewModel;
+
+    [ObservableProperty]
+    public partial bool IsOperationResultVisible { get; set; }
+
+    [ObservableProperty]
+    public partial string OperationResultTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string OperationResultMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
     /// <summary>
     ///     Gets the converter for converting view models to views.
@@ -75,9 +99,6 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            // If an import/cook completes, the cooked index may update without reliable file watcher events
-            // (e.g. cooked folder created after watchers were set up). Force a refresh in that case.
-            messenger.Register<AssetsCookedMessage>(this, (_, _) => this.OnAssetsCooked());
             messenger.Register<AssetsChangedMessage>(this, (_, _) => this.OnAssetsChanged());
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
@@ -125,14 +146,6 @@ public partial class AssetsViewModel(
             }
 
             this.disposed = true;
-        }
-    }
-
-    private void OnAssetsCooked()
-    {
-        if (this.LayoutViewModel is AssetsLayoutViewModel layout)
-        {
-            _ = layout.RefreshAsync();
         }
     }
 
@@ -472,6 +485,357 @@ public partial class AssetsViewModel(
     }
 
     [RelayCommand]
+    private async Task CookSelectedAssetAsync()
+    {
+        if (this.LayoutViewModel is not AssetsLayoutViewModel { SelectedAsset: { } asset }
+            || asset.Kind == AssetKind.Folder)
+        {
+            this.PublishFailure(
+                ContentPipelineOperationKinds.CookAsset,
+                "No asset selected",
+                "Select one cookable asset before running Cook Asset.",
+                AssetCookDiagnosticCodes.CookFailed,
+                null);
+            return;
+        }
+
+        if (!IsCookableDescriptorSelection(asset))
+        {
+            this.PublishFailure(
+                ContentPipelineOperationKinds.CookAsset,
+                "Cook Asset",
+                "Select an authored descriptor asset, not cooked output.",
+                AssetCookDiagnosticCodes.CookFailed,
+                asset.IdentityUri);
+            return;
+        }
+
+        await this.RunCookAsync(
+                ContentPipelineOperationKinds.CookAsset,
+                "Cook Asset",
+                asset.IdentityUri,
+                () => contentPipelineService.CookAssetAsync(asset.IdentityUri, CancellationToken.None))
+            .ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task CookSelectedFolderAsync()
+        => await this.RunCookAsync(
+                ContentPipelineOperationKinds.CookFolder,
+                "Cook Folder",
+                this.GetSelectedFolderUri(),
+                () => contentPipelineService.CookFolderAsync(this.GetSelectedFolderUri(), CancellationToken.None))
+            .ConfigureAwait(true);
+
+    [RelayCommand]
+    private async Task CookProjectAsync()
+        => await this.RunCookAsync(
+                ContentPipelineOperationKinds.CookProject,
+                "Cook Project",
+                scopeUri: null,
+                () => contentPipelineService.CookProjectAsync(CancellationToken.None))
+            .ConfigureAwait(true);
+
+    [RelayCommand]
+    private async Task InspectCookedOutputAsync()
+    {
+        var scopeUri = this.GetSelectedFolderUri();
+        var operationId = Guid.NewGuid();
+        try
+        {
+            var result = await contentPipelineService.InspectCookedOutputAsync(scopeUri, CancellationToken.None)
+                .ConfigureAwait(true);
+            this.PublishOperation(
+                operationId,
+                ContentPipelineOperationKinds.CookedOutputInspect,
+                result.Succeeded ? OperationStatus.Succeeded : OperationStatus.Failed,
+                "Inspect Cooked Output",
+                result.Succeeded
+                    ? $"Found {result.Assets.Count} cooked assets and {result.Files.Count} cooked files in {result.CookedRoot}."
+                    : $"Cooked output inspection failed: {result.CookedRoot}.",
+                result.Diagnostics,
+                scopeUri);
+        }
+        catch (Exception ex)
+        {
+            this.PublishFailure(
+                ContentPipelineOperationKinds.CookedOutputInspect,
+                "Inspect Cooked Output",
+                ex.Message,
+                ContentPipelineDiagnosticCodes.InspectFailed,
+                scopeUri,
+                ex);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ValidateCookedOutputAsync()
+    {
+        var scopeUri = this.GetSelectedFolderUri();
+        try
+        {
+            var result = await contentPipelineService.ValidateCookedOutputAsync(scopeUri, CancellationToken.None)
+                .ConfigureAwait(true);
+            this.PublishOperation(
+                Guid.NewGuid(),
+                ContentPipelineOperationKinds.CookedOutputValidate,
+                result.Succeeded ? OperationStatus.Succeeded : OperationStatus.Failed,
+                "Validate Cooked Output",
+                result.Succeeded
+                    ? $"Cooked output validated: {result.CookedRoot}."
+                    : $"Cooked output validation failed: {result.CookedRoot}.",
+                result.Diagnostics,
+                scopeUri);
+            if (result.Succeeded)
+            {
+                _ = messenger.Send(new ValidatedCookedOutputMessage([result.CookedRoot]));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.PublishFailure(
+                ContentPipelineOperationKinds.CookedOutputValidate,
+                "Validate Cooked Output",
+                ex.Message,
+                ContentPipelineDiagnosticCodes.ValidateFailed,
+                scopeUri,
+                ex);
+        }
+    }
+
+    private async Task RunCookAsync(
+        string operationKind,
+        string title,
+        Uri? scopeUri,
+        Func<Task<ContentCookResult>> cook)
+    {
+        try
+        {
+            var result = await this.RefreshCatalogAfterCookAsync(await cook().ConfigureAwait(true), scopeUri)
+                .ConfigureAwait(true);
+            this.PublishCookResult(operationKind, title, result, scopeUri);
+            if (result.Validation?.Succeeded == true && result.Status is not OperationStatus.Failed)
+            {
+                _ = messenger.Send(new ValidatedCookedOutputMessage(GetValidatedCookedRoots(result)));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.PublishFailure(
+                operationKind,
+                title,
+                ex.Message,
+                AssetCookDiagnosticCodes.CookFailed,
+                scopeUri,
+                ex);
+        }
+    }
+
+    private void PublishCookResult(
+        string operationKind,
+        string title,
+        ContentCookResult result,
+        Uri? scopeUri)
+    {
+        var cookedRoot = result.Validation?.CookedRoot ?? result.Inspection?.CookedRoot ?? "(no cooked root)";
+        var message = result.Status == OperationStatus.Failed
+            ? BuildOperationMessage($"Cook failed for {DescribeScope(scopeUri)}.", result.Diagnostics)
+            : $"Cooked {result.CookedAssets.Count} assets to {cookedRoot}.";
+        this.PublishOperation(
+            result.OperationId,
+            operationKind,
+            result.Status,
+            title,
+            message,
+            result.Diagnostics,
+            scopeUri);
+    }
+
+    private void PublishFailure(
+        string operationKind,
+        string title,
+        string message,
+        string code,
+        Uri? scopeUri,
+        Exception? exception = null)
+    {
+        var operationId = Guid.NewGuid();
+        var scope = this.CreateAffectedScope(scopeUri);
+        var diagnostic = new DiagnosticRecord
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Error,
+            Code = code,
+            Message = message,
+            TechnicalMessage = exception?.Message,
+            ExceptionType = exception?.GetType().FullName,
+            AffectedEntity = scope,
+        };
+        this.PublishOperation(operationId, operationKind, OperationStatus.Failed, title, message, [diagnostic], scopeUri);
+    }
+
+    private void PublishOperation(
+        Guid operationId,
+        string operationKind,
+        OperationStatus status,
+        string title,
+        string message,
+        IReadOnlyList<DiagnosticRecord> diagnostics,
+        Uri? scopeUri)
+    {
+        var normalizedDiagnostics = NormalizeDiagnostics(operationId, diagnostics);
+        var severity = status == OperationStatus.Failed && normalizedDiagnostics.Count == 0
+            ? DiagnosticSeverity.Error
+            : statusReducer.ComputeSeverity(normalizedDiagnostics);
+        var result = new OperationResult
+        {
+            OperationId = operationId,
+            OperationKind = operationKind,
+            Status = status,
+            Severity = severity,
+            Title = title,
+            Message = message,
+            CompletedAt = DateTimeOffset.UtcNow,
+            AffectedScope = this.CreateAffectedScope(scopeUri),
+            Diagnostics = normalizedDiagnostics,
+        };
+        operationResults.Publish(result);
+        this.ApplyOperationResult(result);
+    }
+
+    private void ApplyOperationResult(OperationResult result)
+    {
+        this.OperationResultTitle = result.Title;
+        this.OperationResultMessage = BuildOperationMessage(result.Message, result.Diagnostics);
+        this.OperationResultSeverity = result.Status switch
+        {
+            OperationStatus.Succeeded => InfoBarSeverity.Success,
+            OperationStatus.SucceededWithWarnings or OperationStatus.PartiallySucceeded => InfoBarSeverity.Warning,
+            OperationStatus.Cancelled => InfoBarSeverity.Informational,
+            _ => InfoBarSeverity.Error,
+        };
+        this.IsOperationResultVisible = result.Status is not OperationStatus.Succeeded
+                                        || ShouldShowSucceededOperationResult(result.OperationKind);
+    }
+
+    internal static string BuildOperationMessage(string message, IReadOnlyList<DiagnosticRecord> diagnostics)
+    {
+        var diagnostic = diagnostics.FirstOrDefault(static item =>
+            item.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal)
+                         ?? diagnostics.FirstOrDefault(static item => item.Severity == DiagnosticSeverity.Warning);
+        if (diagnostic is null)
+        {
+            return message;
+        }
+
+        var details = string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage)
+            ? diagnostic.Message
+            : diagnostic.TechnicalMessage;
+        return string.IsNullOrWhiteSpace(details)
+            || string.Equals(details, message, StringComparison.Ordinal)
+            || message.Contains(details, StringComparison.Ordinal)
+            ? message
+            : $"{message} {details}";
+    }
+
+    internal static bool ShouldShowSucceededOperationResult(string operationKind)
+        => string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputInspect, StringComparison.Ordinal)
+           || string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputValidate, StringComparison.Ordinal);
+
+    private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri? scopeUri)
+    {
+        if (result.Status == OperationStatus.Failed)
+        {
+            return result;
+        }
+
+        try
+        {
+            await assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
+            _ = messenger.Send(new AssetsChangedMessage(scopeUri));
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var diagnostic = new DiagnosticRecord
+            {
+                OperationId = result.OperationId,
+                Domain = FailureDomain.AssetIdentity,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetIdentityDiagnosticCodes.RefreshFailed,
+                Message = "Asset catalog refresh failed after cook.",
+                TechnicalMessage = ex.Message,
+                ExceptionType = ex.GetType().FullName,
+                AffectedEntity = this.CreateAffectedScope(scopeUri),
+            };
+            return result with
+            {
+                Status = result.Status == OperationStatus.Succeeded
+                    ? OperationStatus.PartiallySucceeded
+                    : result.Status,
+                Diagnostics = [.. result.Diagnostics, diagnostic],
+            };
+        }
+    }
+
+    private static IReadOnlyList<string> GetValidatedCookedRoots(ContentCookResult result)
+        => result.Validation?.CookedRoot
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+           ?? [];
+
+    private static IReadOnlyList<DiagnosticRecord> NormalizeDiagnostics(
+        Guid operationId,
+        IEnumerable<DiagnosticRecord> diagnostics)
+        => diagnostics
+            .Select(diagnostic => diagnostic.OperationId == operationId
+                ? diagnostic
+                : diagnostic with { OperationId = operationId })
+            .ToList();
+
+    private AffectedScope CreateAffectedScope(Uri? scopeUri)
+    {
+        var project = projectContextService.ActiveProject;
+        return new AffectedScope
+        {
+            ProjectId = project?.ProjectId,
+            ProjectName = project?.Name,
+            ProjectPath = project?.ProjectRoot,
+            AssetId = scopeUri?.ToString(),
+            AssetVirtualPath = scopeUri?.AbsolutePath,
+        };
+    }
+
+    private Uri GetSelectedFolderUri()
+    {
+        var selected = contentBrowserState.SelectedFolders.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(selected))
+        {
+            return new Uri("asset:///Content");
+        }
+
+        var normalized = selected.Replace('\\', '/').Trim();
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return uri;
+        }
+
+        return new Uri($"{AssetUris.Scheme}:///{normalized.Trim('/')}");
+    }
+
+    private static string DescribeScope(Uri? scopeUri)
+        => scopeUri?.ToString() ?? "the active project";
+
+    private static bool IsCookableDescriptorSelection(ContentBrowserAssetItem asset)
+        => asset.IdentityUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+           || asset.IdentityUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
+           || asset.IdentityUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase);
+
+    [RelayCommand]
     private async Task ImportAsync()
     {
         var window = windowManagerService.ActiveWindow?.Window;
@@ -548,7 +912,8 @@ public partial class AssetsViewModel(
 
         relativePath = relativePath.Replace('\\', '/');
 
-        var input = new ImportInput(relativePath, "Content");
+        var operationId = Guid.NewGuid();
+        var input = new ImportInput(relativePath, this.ResolveImportMountName());
         var request = new ImportRequest(projectRoot, [input], new ImportOptions());
 
         try
@@ -557,7 +922,27 @@ public partial class AssetsViewModel(
             if (result.Succeeded)
             {
                 Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
-                _ = messenger.Send(new AssetsCookedMessage());
+                var diagnostics = ToDiagnosticRecords(operationId, result.Diagnostics).ToList();
+                var status = OperationStatus.Succeeded;
+                try
+                {
+                    await assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
+                    _ = messenger.Send(new AssetsChangedMessage());
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    status = OperationStatus.PartiallySucceeded;
+                    diagnostics.Add(CreateCatalogRefreshDiagnostic(operationId, ex, this.GetSelectedFolderUri()));
+                }
+
+                this.PublishOperation(
+                    operationId,
+                    ContentPipelineOperationKinds.Import,
+                    status,
+                    "Import Asset",
+                    $"Imported {relativePath}.",
+                    diagnostics,
+                    this.GetSelectedFolderUri());
             }
             else
             {
@@ -566,11 +951,80 @@ public partial class AssetsViewModel(
                 {
                     Debug.WriteLine($"[Import] {diag.Severity}: {diag.Message}");
                 }
+
+                this.PublishOperation(
+                    operationId,
+                    ContentPipelineOperationKinds.Import,
+                    OperationStatus.Failed,
+                    "Import Asset",
+                    $"Import failed for {relativePath}.",
+                    ToDiagnosticRecords(operationId, result.Diagnostics),
+                    this.GetSelectedFolderUri());
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[AssetsViewModel] Import exception: {ex}");
+            this.PublishFailure(
+                ContentPipelineOperationKinds.Import,
+                "Import Asset",
+                ex.Message,
+                AssetImportDiagnosticCodes.ImportFailed,
+                this.GetSelectedFolderUri(),
+                ex);
         }
     }
+
+    private string ResolveImportMountName()
+    {
+        var folderUri = this.GetSelectedFolderUri();
+        var path = Uri.UnescapeDataString(folderUri.AbsolutePath).Trim('/');
+        var slash = path.IndexOf('/', StringComparison.Ordinal);
+        var mountName = slash < 0 ? path : path[..slash];
+        if (!string.IsNullOrWhiteSpace(mountName))
+        {
+            return mountName;
+        }
+
+        return projectContextService.ActiveProject?.AuthoringMounts.FirstOrDefault()?.Name ?? "Content";
+    }
+
+    private static IReadOnlyList<DiagnosticRecord> ToDiagnosticRecords(
+        Guid operationId,
+        IReadOnlyList<ImportDiagnostic> diagnostics)
+        => diagnostics.Select(diagnostic => new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.AssetImport,
+                Severity = diagnostic.Severity switch
+                {
+                    ImportDiagnosticSeverity.Error => DiagnosticSeverity.Error,
+                    ImportDiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
+                    ImportDiagnosticSeverity.Info => DiagnosticSeverity.Info,
+                    _ => DiagnosticSeverity.Info,
+                },
+                Code = string.IsNullOrWhiteSpace(diagnostic.Code)
+                    ? AssetImportDiagnosticCodes.ImportFailed
+                    : diagnostic.Code,
+                Message = diagnostic.Message,
+                AffectedPath = diagnostic.SourcePath,
+                AffectedVirtualPath = diagnostic.VirtualPath,
+            })
+            .ToList();
+
+    private DiagnosticRecord CreateCatalogRefreshDiagnostic(
+        Guid operationId,
+        Exception exception,
+        Uri? scopeUri)
+        => new()
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.AssetIdentity,
+            Severity = DiagnosticSeverity.Error,
+            Code = AssetIdentityDiagnosticCodes.RefreshFailed,
+            Message = "Asset catalog refresh failed after import.",
+            TechnicalMessage = exception.Message,
+            ExceptionType = exception.GetType().FullName,
+            AffectedEntity = this.CreateAffectedScope(scopeUri),
+        };
 }

@@ -150,7 +150,7 @@ public sealed partial class MaterialCookService : IMaterialCookService
 
     private static Uri ToAssetUri(string virtualPath)
     {
-        var path = virtualPath.StartsWith("/", StringComparison.Ordinal) ? virtualPath : "/" + virtualPath;
+        var path = virtualPath.StartsWith('/') ? virtualPath : "/" + virtualPath;
         return new Uri($"{AssetUris.Scheme}://{path}");
     }
 

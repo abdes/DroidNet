@@ -30,6 +30,7 @@ public abstract class AssetsLayoutViewModel(
     private bool disposed;
     private bool initialized;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
+    private ContentBrowserAssetItem? selectedAsset;
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
@@ -40,6 +41,15 @@ public abstract class AssetsLayoutViewModel(
     /// Gets the collection of content browser asset rows.
     /// </summary>
     public ObservableCollection<ContentBrowserAssetItem> Assets { get; } = [];
+
+    /// <summary>
+    /// Gets or sets the currently selected asset row, if any.
+    /// </summary>
+    public ContentBrowserAssetItem? SelectedAsset
+    {
+        get => this.selectedAsset;
+        set => this.SetProperty(ref this.selectedAsset, value);
+    }
 
     /// <summary>
     /// Forces a refresh of <see cref="Assets"/> by re-querying the provider.
@@ -118,7 +128,13 @@ public abstract class AssetsLayoutViewModel(
     private bool IsInSelectedFolders(ContentBrowserAssetItem asset)
     {
         var selectedFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
-        return IsInSelectedFolders(asset.DisplayPath, asset.IdentityUri.AbsolutePath, selectedFolders, this.projectContextService.ActiveProject is not null);
+        return IsInSelectedFolders(
+            asset.DisplayPath,
+            asset.IdentityUri.AbsolutePath,
+            selectedFolders,
+            this.projectContextService.ActiveProject is not null,
+            asset.CookedUri?.AbsolutePath,
+            HasCookedProjection(asset));
     }
 
     internal static IReadOnlyList<string> NormalizeSelectedFolders(IEnumerable<string>? folders)
@@ -146,7 +162,9 @@ public abstract class AssetsLayoutViewModel(
         string displayPath,
         string identityAbsolutePath,
         IReadOnlyCollection<string> selectedFolders,
-        bool hasActiveProject)
+        bool hasActiveProject,
+        string? cookedAbsolutePath = null,
+        bool hasCookedProjection = false)
     {
         if (selectedFolders.Count == 0
             || selectedFolders.Contains(".", StringComparer.OrdinalIgnoreCase)
@@ -162,6 +180,18 @@ public abstract class AssetsLayoutViewModel(
 
         foreach (var selected in selectedFolders)
         {
+            if (TryMapCookedSelectionToRuntimePath(selected, out var cookedSelection))
+            {
+                if (hasCookedProjection
+                    && (string.Equals(cookedSelection, "/", StringComparison.OrdinalIgnoreCase)
+                        || (cookedAbsolutePath is not null && IsSameOrChildPath(cookedAbsolutePath, cookedSelection))))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
             if (IsSameOrChildPath(displayPath, selected)
                 || IsSameOrChildPath(identityAbsolutePath, selected))
             {
@@ -171,6 +201,11 @@ public abstract class AssetsLayoutViewModel(
 
         return false;
     }
+
+    private static bool HasCookedProjection(ContentBrowserAssetItem asset)
+        => asset.PrimaryState is AssetState.Cooked
+           || asset.DerivedState is AssetState.Cooked or AssetState.Stale
+           || (asset.PrimaryState is AssetState.Broken && asset.CookedUri == asset.IdentityUri);
 
     private static string NormalizeFolderPath(string value)
     {
@@ -183,5 +218,20 @@ public abstract class AssetsLayoutViewModel(
         var normalizedCandidate = NormalizeFolderPath(candidate);
         return normalizedCandidate.Equals(folder, StringComparison.OrdinalIgnoreCase)
                || normalizedCandidate.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryMapCookedSelectionToRuntimePath(string selectedFolder, out string runtimePath)
+    {
+        runtimePath = string.Empty;
+        var normalized = NormalizeFolderPath(selectedFolder);
+        const string cookedRoot = "/Cooked";
+        if (!normalized.Equals(cookedRoot, StringComparison.OrdinalIgnoreCase)
+            && !normalized.StartsWith(cookedRoot + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        runtimePath = normalized.Length == cookedRoot.Length ? "/" : normalized[cookedRoot.Length..];
+        return true;
     }
 }

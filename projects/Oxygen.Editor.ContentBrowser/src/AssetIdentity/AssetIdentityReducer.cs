@@ -188,6 +188,11 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         }
 
         var mountPoint = AssetUriHelper.GetMountPoint(uri);
+        if (IsDerivedRootMount(mountPoint))
+        {
+            return false;
+        }
+
         if (!string.Equals(mountPoint, "project", StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -210,6 +215,11 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
 
     private static bool IsImportSidecarPath(string path)
         => path.EndsWith(".import.json", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDerivedRootMount(string mountPoint)
+        => string.Equals(mountPoint, "Cooked", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(mountPoint, "Imported", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(mountPoint, "Build", StringComparison.OrdinalIgnoreCase);
 
     private static string GetLogicalKey(Uri uri)
     {

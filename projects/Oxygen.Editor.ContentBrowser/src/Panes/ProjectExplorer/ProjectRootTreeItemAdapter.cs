@@ -223,6 +223,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             // 2) Authoring mounts.
             foreach (var mountPoint in this.ProjectInfo.AuthoringMounts)
             {
+                if (IsDerivedRootMount(mountPoint))
+                {
+                    continue;
+                }
+
                 try
                 {
                     var mountRootLocation = this.storage.NormalizeRelativeTo(
@@ -271,11 +276,24 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
     }
 
+    private static bool IsDerivedRootMount(ProjectMountPoint mount)
+    {
+        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
+        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
+    }
+
     private HashSet<string> GetExcludedDirectFolderNames()
     {
         var excluded = new HashSet<string>(StringComparer.Ordinal);
         foreach (var mount in this.ProjectInfo.AuthoringMounts)
         {
+            if (IsDerivedRootMount(mount))
+            {
+                continue;
+            }
+
             // Only exclude direct children of the project root.
             var relative = mount.RelativePath.Trim().Replace('\\', '/');
             if (relative.Contains('/', StringComparison.Ordinal))
