@@ -2,8 +2,8 @@
 
 **Milestone:** VTX-M06A - Multi-View Proof Closeout
 **Deliverable:** D.17 - Multi-view composition LLD
-**Roadmap Status:** `in_progress`
-**LLD Status:** `review-addressed; implementation in progress`
+**Roadmap Status:** `validated`
+**LLD Status:** `review-addressed; implementation validated`
 
 ## Mandatory Vortex Rule
 
@@ -1281,8 +1281,10 @@ parallel rendering, or a global show-flag clone unless the LLD is updated first.
    auxiliary product extraction and material/stage consumption, not the basic
    ability for a surface plan to route an auxiliary source. Slice F implements
    the typed dependency graph, producer validation, optional typed-invalid
-   bindings, and topological packet ordering; runtime consumer sampling and
-   capture proof remain closure/runtime validation work.
+   bindings, and topological packet ordering. Runtime validation now proves a
+   stage-level same-frame color product consumer with an extracted producer
+   texture copied into the dependent view under a RenderDoc-visible
+   `Vortex.AuxView.Consume` GPU scope.
 6. **Overlay lanes and view extensions:** add typed extension hooks, minimal
    view screen overlays, and surface overlays. Reserve editor primitive
    attachments/lane policy even if full MSAA primitive rasterization is
@@ -1323,9 +1325,7 @@ M06A can be closed only when all of the following are true:
 5. Composition is data-driven by surface plans, with PiP represented as a
    normal layer.
 6. Auxiliary scene views are modeled and at least one same-frame auxiliary
-   producer/consumer path is validated or explicitly deferred with human
-   approval recorded in `design/vortex/IMPLEMENTATION_STATUS.md` and the
-   relevant `design/vortex/plan/` milestone file.
+   producer/consumer path is validated with runtime/capture proof.
 7. Exposure sharing uses previous-frame view-state semantics or the LLD is
    updated with an approved non-UE divergence.
 8. Required docs and implementation-status artifacts are updated.

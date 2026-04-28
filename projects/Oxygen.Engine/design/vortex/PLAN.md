@@ -74,36 +74,32 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M06A - Multi-View Proof Closeout
+### NEXT: VTX-M06B - Offscreen Proof Closeout
 
-**Status:** `in_progress`
+**Status:** `planned`
 
-**Purpose:** Prove that the existing multi-view substrate can execute and
-publish multiple runtime views without product leakage between views.
+**Purpose:** Prove Vortex-native offscreen deferred/forward rendering through
+the existing offscreen facade and composition/product paths.
 
-**Why this is next:** `VTX-M05A` diagnostics, `VTX-M05B` occlusion consumers,
-`VTX-M05C` translucency, and `VTX-M05D` conventional/local-light shadows are
-validated. Multi-view is the next proof surface before offscreen and
-feature-gated runtime variants.
+**Why this is next:** `VTX-M06A` multi-view proof closeout is validated.
+Offscreen proof is the next runtime surface before feature-gated variants.
 
 **Validated prerequisite work packages:** `VTX-M03`, `VTX-M04D.4`,
 `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, and `VTX-M05D`.
 
-**Active work packages:** `VTX-M06A - Multi-view proof closeout`.
+**Active work packages:** `VTX-M06B - Offscreen proof closeout`.
 
-**Detailed plan:** follow
-[`plan/VTX-M06A-multi-view-proof-closeout.md`](plan/VTX-M06A-multi-view-proof-closeout.md).
+**Detailed plan:** pending VTX-M06B plan package.
 
 **In scope:**
 
-- Multi-view runtime scene proof with at least two views.
-- Per-view SceneRenderer product isolation and publication checks.
-- Capture/analyzer proof that views compose/present through the intended
-  runtime path.
+- Offscreen deferred and forward scene proof.
+- Product publication and composition checks for offscreen outputs.
+- Capture/analyzer proof that offscreen products are usable by downstream
+  Vortex-native consumers.
 
 **Out of scope:**
 
-- Offscreen-only proof; that is VTX-M06B.
 - Feature-gated runtime variants; that is VTX-M06C.
 
 **Dependencies:**
@@ -146,7 +142,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
 | VTX-M05C | Translucency stage | `validated` | VTX-M03, VTX-M04D.5, VTX-M05A, VTX-M05B | Stage 18 standard forward-lit translucency consuming prepared transparent draws plus lighting/shadow/environment publications. Focused build/tests, senior-review regression remediation, CDB/D3D12 audit, RenderDoc proof, UE5.7 re-check, and user visual confirmation passed. |
 | VTX-M05D | Conventional shadow parity and local-light expansion | `validated` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | Directional CSM UE5.7 audit/remediation and local-scale `VsmTwoCubes` validation are closed with Release smoke, recook, RenderDoc capture, and sequential shadow/base-pass analysis proof. Spot-light conventional shadows are validated with focused tests, shader validation, CDB/debug-layer audit, RenderDoc probe, and user visual confirmation. Point-light conventional shadows are validated with cube-array six-face Stage 8 rendering, Stage 12 point-shadow sampling, point proxy winding regression coverage, CDB/debug-layer audit, RenderDoc point-shadow probe, and user visual confirmation. Stage 18 translucent local-light shadow consumption, layered one-pass point cubemap rendering, and VSM remain deferred. |
-| VTX-M06A | Multi-view proof closeout | `in_progress` | VTX-M05A, VTX-M05B, VTX-M05C, VTX-M05D | B1 per-view plan/state-handle substrate, B2 classification payloads, C `PerViewScope` serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H runtime proof tooling have focused build/test/runtime evidence. VTX-M06A remains open because auxiliary producer/consumer extraction is test-proven but not runtime/capture-proven or explicitly deferred. |
+| VTX-M06A | Multi-view proof closeout | `validated` | VTX-M05A, VTX-M05B, VTX-M05C, VTX-M05D | B1 per-view plan/state-handle substrate, B2 classification payloads, C `PerViewScope` serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H runtime proof tooling are implemented and validated. Standard and auxiliary MultiView proof layouts pass focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, and 60-frame allocation-churn proof, including runtime/capture proof that an auxiliary producer output is extracted and consumed by a dependent view. |
 | VTX-M06B | Offscreen proof closeout | `planned` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios. |
 | VTX-M06C | Feature-gated runtime variants | `planned` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants. |
 | VTX-M07 | Production readiness and legacy retirement | `planned` | VTX-M06C | All required examples/tests ported; legacy renderer removal path is safe and documented. |
@@ -534,7 +530,7 @@ Parallelism rules:
 | OcclusionModule | VTX-M05B | `validated` | HZB occlusion consumer and visibility publisher over Screen HZB. |
 | TranslucencyModule | VTX-M05C | `validated` | Stage 18 standard forward-lit translucent rendering has focused build/test/CDB/RenderDoc proof and user visual confirmation. |
 | Conventional/local-light shadows | VTX-M05D | `validated` | Directional CSM parity/stability audit/remediation is validated. Spot conventional shadows are validated in `SpotShadowValidation` with focused tests, shader validation, CDB/debug-layer audit, RenderDoc probe, and user visual confirmation. Point conventional shadows are validated in `PointShadowValidation` with cube-array six-face depth rendering, Stage 12 point-shadow sampling, focused tests, shader validation, CDB/debug-layer audit, RenderDoc probe, and user visual confirmation. |
-| Multi-view | VTX-M06A | `in_progress` | B1 per-view plan/state-handle substrate, B2 classification payloads, C serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H proof-layout/tooling implementation exist with CDB/RenderDoc/allocation proof. Remaining closure gap: auxiliary producer/consumer extraction is not runtime/capture-proven or explicitly deferred. |
+| Multi-view | VTX-M06A | `validated` | B1 per-view plan/state-handle substrate, B2 classification payloads, C serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H proof-layout/tooling are implemented and validated with focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, 60-frame allocation-churn proof, and runtime/capture proof that an auxiliary producer output is extracted and consumed by a dependent view. |
 | Offscreen rendering | VTX-M06B | `planned` | Scene-derived offscreen facade with deferred/forward coverage. |
 | Feature-gated variants | VTX-M06C | `planned` | PRD runtime variant matrix. |
 | Legacy renderer retirement | VTX-M07 | `planned` | Vortex is the sole supported renderer path; legacy removal is safe. |
