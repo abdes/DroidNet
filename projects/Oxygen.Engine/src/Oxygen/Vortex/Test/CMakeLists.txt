@@ -295,6 +295,13 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  OffscreenSceneFacade
+  SOURCES
+    "Fakes/Graphics.h"
+    "Harness/OffscreenSceneFacade_test.cpp"
+)
+
+m_gtest_program(
   RendererPublicationSplit
   SOURCES
     "Fakes/Graphics.h"

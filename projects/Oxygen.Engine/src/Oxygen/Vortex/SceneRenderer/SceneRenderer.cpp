@@ -1564,10 +1564,10 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
 
 SceneRenderer::~SceneRenderer() { ResetExtractArtifacts(); }
 
-void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
+void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
+  const frame::Slot slot, const std::optional<glm::uvec2> frame_extent)
 {
-  if (const auto frame_extent = ResolveFrameViewportExtent(frame);
-    frame_extent.has_value() && *frame_extent != scene_textures_.GetExtent()) {
+  if (frame_extent.has_value() && *frame_extent != scene_textures_.GetExtent()) {
     ResizeSceneTextureFamily(*frame_extent);
   }
 
@@ -1583,24 +1583,32 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   lighting_grid_built_sequence_ = frame::SequenceNumber {};
   shadow_depths_built_sequence_ = frame::SequenceNumber {};
   if (lighting_ != nullptr) {
-    lighting_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    lighting_->OnFrameStart(sequence, slot);
   }
   if (shadows_ != nullptr) {
-    shadows_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    shadows_->OnFrameStart(sequence, slot);
   }
   if (environment_ != nullptr) {
-    environment_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    environment_->OnFrameStart(sequence, slot);
   }
   if (post_process_ != nullptr) {
-    post_process_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    post_process_->OnFrameStart(sequence, slot);
   }
   if (screen_hzb_ != nullptr) {
     screen_hzb_->OnFrameStart();
   }
+}
+
+void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
+{
+  BeginFrame(frame.GetFrameSequenceNumber(), frame.GetFrameSlot(),
+    ResolveFrameViewportExtent(frame));
+}
+
+void SceneRenderer::OnStandaloneFrameStart(const frame::SequenceNumber sequence,
+  const frame::Slot slot, const std::optional<glm::uvec2> frame_extent)
+{
+  BeginFrame(sequence, slot, frame_extent);
 }
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }

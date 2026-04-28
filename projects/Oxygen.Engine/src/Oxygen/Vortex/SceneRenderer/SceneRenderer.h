@@ -9,8 +9,11 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
+
+#include <glm/vec2.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -188,6 +191,8 @@ public:
   auto operator=(SceneRenderer&&) -> SceneRenderer& = delete;
 
   OXGN_VRTX_API void OnFrameStart(const engine::FrameContext& frame);
+  OXGN_VRTX_API void OnStandaloneFrameStart(frame::SequenceNumber sequence,
+    frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
   OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
@@ -241,6 +246,8 @@ private:
   };
 
   OXGN_VRTX_API void RefreshSceneTextureBindings();
+  OXGN_VRTX_API void BeginFrame(frame::SequenceNumber sequence,
+    frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void ResetExtractArtifacts();
   OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
   OXGN_VRTX_API void ResetPerViewSceneProducts();

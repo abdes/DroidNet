@@ -118,7 +118,7 @@ NOLINT_TEST_F(
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       ViewId { 5U });
 
   EXPECT_TRUE(facade.CanFinalize());
@@ -133,7 +133,7 @@ NOLINT_TEST_F(FacadePresetsTest,
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
       Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 
   EXPECT_TRUE(facade.CanFinalize());
@@ -148,7 +148,7 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
     = oxygen::vortex::harness::render_graph::presets::ForSingleViewGraph(
       *renderer_,
       Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       MakeResolvedViewInput(),
       [](ViewId, const oxygen::vortex::RenderContext&,
         oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
@@ -170,7 +170,7 @@ NOLINT_TEST_F(FacadePresetsTest,
         .frame_slot = oxygen::frame::Slot { 2U },
         .frame_sequence = oxygen::frame::SequenceNumber { 19U },
       },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       MakeResolvedViewInput(), MakePreparedFrameInput(),
       Renderer::CoreShaderInputsInput {
         .view_id = ViewId { 91U },
@@ -196,7 +196,7 @@ NOLINT_TEST_F(FacadePresetsTest,
         .frame_slot = oxygen::frame::Slot { 2U },
         .frame_sequence = oxygen::frame::SequenceNumber { 23U },
       },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       MakeResolvedViewInput(), MakePreparedFrameInput(),
       Renderer::CoreShaderInputsInput {
         .view_id = ViewId { 91U },
@@ -232,7 +232,7 @@ NOLINT_TEST_F(FacadePresetsTest,
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
       Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 
   auto validation = facade.Validate();

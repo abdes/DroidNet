@@ -86,7 +86,8 @@ Validation:
 
 Evidence:
 
-- Pending until the docs patch validates.
+- Landed in commit `5ddf9c064` after `git diff --check` passed. The
+  milestone remains `in_progress`.
 
 ### B. Offscreen Frame Execution Substrate
 
@@ -107,8 +108,20 @@ Validation:
 
 Evidence:
 
-- Record changed files, tests, and residual gaps before moving to the next
-  slice.
+- Implemented by `Renderer::ValidatedOffscreenSceneSession::Execute()` building
+  a real one-view `RenderContext`, resolving the camera through
+  `SceneCameraViewResolver`, running `SceneRenderer::OnRender()`, and requiring
+  a valid writable offscreen framebuffer. `SceneRenderer::OnStandaloneFrameStart`
+  shares the normal per-frame reset path without a `FrameContext`.
+- Focused validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OffscreenSceneFacade.Tests --parallel 4`.
+- Adjacent API validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SinglePassHarnessFacade.Tests Oxygen.Vortex.RenderGraphHarnessFacade.Tests Oxygen.Vortex.RendererFacadePresets.Tests Oxygen.Vortex.RenderContextMaterializer.Tests Oxygen.Vortex.RendererPublicationSplit.Tests --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(OffscreenSceneFacade|SinglePassHarnessFacade|RenderGraphHarnessFacade|RendererFacadePresets|RenderContextMaterializer|RendererPublicationSplit)" --output-on-failure`
+  with 6/6 test executables passing.
+- Residual gap: this is source/test proof for execution substrate only. It is
+  not runtime/CDB/RenderDoc/final-state/allocation-churn closure.
 
 ### C. Deferred and Forward Pipeline Selection
 
@@ -152,6 +165,8 @@ Required work:
 
 - Add or extend a Vortex-native runtime proof path that renders at least one
   preview-sized offscreen target and one capture/thumbnail-style target.
+- Display the same offscreen products inside a normal Vortex demo view so the
+  proof is inspectable by eye as well as by capture analysis.
 - Add scripted RenderDoc analysis for offscreen pass labels, output resource,
   draw/dispatch presence, and downstream texture consumption.
 - Add readback or analyzer proof that output content is non-empty and isolated

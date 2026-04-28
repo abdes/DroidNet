@@ -125,7 +125,7 @@ public:
   };
 
   struct OutputTargetInput {
-    observer_ptr<const graphics::Framebuffer> framebuffer { nullptr };
+    observer_ptr<graphics::Framebuffer> framebuffer { nullptr };
   };
 
   struct ResolvedViewInput {
