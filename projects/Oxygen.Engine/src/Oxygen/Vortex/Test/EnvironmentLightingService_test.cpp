@@ -56,13 +56,16 @@
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 #include "Fakes/Graphics.h"
+#include "Fixtures/TextureBinderPayloads.h"
 
 namespace {
 
+using oxygen::Format;
 using oxygen::Graphics;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::RendererConfig;
 using oxygen::ResolvedView;
+using oxygen::TextureType;
 using oxygen::ViewId;
 using oxygen::ViewPort;
 using oxygen::vortex::EnvironmentAmbientBridgeBindings;
@@ -142,6 +145,49 @@ auto MakeResolvedView(const float width, const float height,
   params.near_plane = 0.1F;
   params.far_plane = 1000.0F;
   return ResolvedView(params);
+}
+
+auto MakeTestTextureResource(const TextureType texture_type,
+  const Format format, const std::uint16_t array_layers)
+  -> std::shared_ptr<oxygen::data::TextureResource>
+{
+  using oxygen::data::pak::core::TextureResourceDesc;
+  using oxygen::data::pak::render::SubresourceLayout;
+
+  auto bytes_per_pixel = std::size_t { 4U };
+  if (format == Format::kRGBA16Float) {
+    bytes_per_pixel = 8U;
+  } else if (format == Format::kRGBA32Float) {
+    bytes_per_pixel = 16U;
+  }
+
+  TextureResourceDesc desc {};
+  desc.texture_type = static_cast<std::uint8_t>(texture_type);
+  desc.width = 1U;
+  desc.height = 1U;
+  desc.depth = 1U;
+  desc.array_layers = array_layers;
+  desc.mip_levels = 1U;
+  desc.format = static_cast<std::uint8_t>(format);
+  desc.alignment = 256U;
+  desc.content_hash = 0x12345678U;
+
+  std::vector<std::uint8_t> data_region(bytes_per_pixel * array_layers, 0U);
+  std::vector<SubresourceLayout> layouts;
+  layouts.reserve(array_layers);
+  for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
+    layouts.push_back(SubresourceLayout {
+      .offset_bytes = static_cast<std::uint32_t>(layer * bytes_per_pixel),
+      .row_pitch_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
+      .size_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
+    });
+  }
+
+  auto payload = oxygen::vortex::testing::detail::BuildV4TexturePayload(
+    desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+  return std::make_shared<oxygen::data::TextureResource>(
+    desc, std::move(payload));
 }
 
 auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
@@ -604,14 +650,21 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   sky_light.lower_hemisphere_is_solid_color = true;
   sky_light.lower_hemisphere_color = { 0.1F, 0.2F, 0.3F };
   sky_light.lower_hemisphere_blend_alpha = 0.4F;
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U);
 
-  const auto refreshed
-    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light);
+  const auto refreshed = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, source_cubemap.get());
 
   EXPECT_TRUE(refreshed.requested);
   EXPECT_FALSE(refreshed.probe_state.valid);
   EXPECT_EQ(refreshed.probe_state.static_sky_light.key.source_cubemap,
     oxygen::content::ResourceKey { 42U });
+  EXPECT_EQ(
+    refreshed.probe_state.static_sky_light.key.source_revision, 0x12345678U);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.output_face_size, 1U);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.source_format_class,
+    static_cast<std::uint32_t>(Format::kRGBA32Float));
   EXPECT_FLOAT_EQ(
     refreshed.probe_state.static_sky_light.key.source_rotation_radians, 0.75F);
   EXPECT_TRUE(
@@ -620,6 +673,36 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     StaticSkyLightProductStatus::kUnavailable);
   EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
     StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightSpecifiedCubemapRejectsUnresolvedOrInvalidSourceResources)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey { 43U };
+
+  const auto unresolved
+    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light, nullptr);
+  EXPECT_EQ(unresolved.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kResourceResolveFailed);
+
+  const auto non_cube = MakeTestTextureResource(
+    TextureType::kTexture2D, Format::kRGBA32Float, 1U);
+  const auto wrong_shape = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, non_cube.get());
+  EXPECT_EQ(wrong_shape.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kNotTextureCube);
+
+  const auto ldr_cube = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA8UNorm, 6U);
+  const auto unsupported_format = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, ldr_cube.get());
+  EXPECT_EQ(unsupported_format.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kUnsupportedFormat);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

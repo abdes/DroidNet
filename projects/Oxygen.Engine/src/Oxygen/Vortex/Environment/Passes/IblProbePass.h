@@ -11,6 +11,10 @@
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::data {
+class TextureResource;
+}
+
 namespace oxygen::vortex::environment {
 
 class IblProbePass {
@@ -30,6 +34,10 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLight(
     const EnvironmentProbeState& current_state,
     const SkyLightEnvironmentModel& sky_light) const -> RefreshState;
+  [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLight(
+    const EnvironmentProbeState& current_state,
+    const SkyLightEnvironmentModel& sky_light,
+    const data::TextureResource* source_cubemap) const -> RefreshState;
 };
 
 } // namespace oxygen::vortex::environment
