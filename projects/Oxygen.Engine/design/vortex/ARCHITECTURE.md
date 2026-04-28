@@ -536,9 +536,9 @@ a "render graph"; the execution semantics are fundamentally different.
 | `CompositionLighting` (pre-base-pass) | reserved `MaterialCompositionService` pre-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessBeforeBasePass(...)`. UE's family spans deferred decals and AO-related work. Vortex intentionally maps only the material-surface modification subset here. |
 | `CompositionLighting` (post-base-pass) | reserved `MaterialCompositionService` post-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessAfterBasePass(...)`. Vortex keeps deferred decal application and material classification here, while AO remains owned by `IndirectLightingService`. |
 | `LightRendering` | `LightingService` deferred direct-lighting stage | Same role: consume GBuffers, shadows, and direct-light data. Owns the permanent bounded-volume point/spot proxy geometry and deferred-light shader families. The Phase 03 `SV_VertexID` procedural point/spot proxy generation is temporary delivery scaffolding only and must be removed during Phase 4A when CPU-side ownership moves into `LightingService`. If an early capability phase needs a bounded environment-ambient bridge before stage 13 exists, that exception must be documented explicitly and must not redefine stage 12 as the canonical indirect-light owner. ~3.3k lines in UE5. |
-| `IndirectLightRendering` | reserved `IndirectLightingService` stage | GI, reflections, SSR, subsurface scattering, and canonical skylight / indirect environment evaluation. Owns AO framework, indirect/reflection shader families, temporal history. Produces `ScreenSpaceAO` into `SceneTextures`. Consumes environment-owned probe / IBL products published by `EnvironmentLightingService`. ~3.6k lines in UE5. |
+| `IndirectLightRendering` | reserved `IndirectLightingService` stage | GI, reflections, SSR, subsurface scattering, and canonical skylight / indirect environment evaluation. Owns AO framework, indirect/reflection shader families, temporal history. Produces `ScreenSpaceAO` into `SceneTextures`. Consumes environment-owned probe / IBL products published by `EnvironmentLightingService`. Static specified-cubemap SkyLight activation begins as VTX-M08, with environment-owned static SkyLight products separated from later captured-scene and reflection-probe work. ~3.6k lines in UE5. |
 | `ShadowDepthRendering` + `ShadowRendering` | `ShadowService` | Same split between shadow-map production and later lighting consumption. |
-| `SkyAtmosphereRendering` + `FogRendering` | `EnvironmentLightingService` | Same family role, grouped under one Oxygen service for bounded ownership. |
+| `SkyAtmosphereRendering` + `FogRendering` + `SkyPassRendering` | `EnvironmentLightingService` | Same family role, grouped under one Oxygen service for bounded ownership. VTX-M08 adds the architectural split between a visual skybox/SkyPass-style SceneColor background and specified-cubemap SkyLight products consumed by lighting/indirect-lighting paths. |
 | `VolumetricFog` + `VolumetricCloudRendering` | `EnvironmentLightingService` Stage 14 volumetric family | UE 5.7 splits this area across `ComputeVolumetricFog(...)`, `RenderHeterogeneousVolumes(...)`, and `RenderVolumetricCloud(...)`. Vortex groups atmosphere-adjacent volumetric stages under Environment ownership. Volumetric fog is active Phase 4D scope and remains in progress; volumetric clouds and heterogeneous volumes remain future. |
 | `TranslucentLighting` + `TranslucentRendering` | `TranslucencyModule` stage module in `SceneRenderer/Stages/Translucency/` | Owns separate translucency dimensions/resources, composition/upscale helpers, translucency mesh passes. Forward-lit using `LightingService` shared forward data. ~1.77k lines in UE5. |
 | `DistortionRendering` | reserved `DistortionModule` stage module in `SceneRenderer/Stages/Distortion/` | Owns distortion mesh processor, distortion shader families, intermediate-resource handling. ~1.1k lines in UE5. Activates as a stage module when implemented. |
@@ -578,6 +578,50 @@ Allowed architectural differences:
 - Oxygen names and packages subsystems in a way that fits Oxygen module
   boundaries, even when the architectural role aligns with UE5
 
+### 5.1.3.1 Static Cubemap Skybox And SkyLight Split
+
+UE5.7 separates the visual sky surface from the SkyLight lighting products:
+
+- skybox-style visuals are sky materials processed by `SkyPassRendering` and
+  drawn to SceneColor as background content
+- procedural sky/atmosphere rendering is handled by `SkyAtmosphereRendering`
+  and composes before fog in the deferred path
+- static specified-cubemap SkyLight starts from a `USkyLightComponent`
+  `SLS_SpecifiedCubemap` source, then exposes renderer products for diffuse
+  environment lighting and later specular/reflection consumers
+
+Vortex therefore treats these as related but distinct products:
+
+- exactly one authored environment source is selected as the full-frame visible
+  sky background for a view unless a later milestone adds explicit sky
+  blending or layering
+- `SkySphere` / skybox visual authoring controls the cubemap-background path
+  owned by `EnvironmentLightingService` Stage 15
+- procedural `SkyAtmosphere` remains the procedural-background owner when that
+  mode is selected, and can still provide atmosphere/fog/aerial-perspective
+  participation according to the authored environment policy
+- `SkyLight` specified-cubemap authoring controls environment lighting
+  products generated by an environment-owned processing step
+- the visual skybox texture may be the same imported cubemap asset used by
+  SkyLight, but Vortex must not sample the visual texture directly as diffuse
+  SkyLight and call that parity
+- directional sun lights remain scene-lighting and procedural-atmosphere inputs;
+  they do not illuminate a static cubemap skybox image or move a baked sun
+  inside that image
+- static cubemap SkyLight diffuse lighting can feed the existing deferred
+  lighting path during VTX-M08 through a documented environment-product
+  boundary; full specular reflection and reflection-capture ownership remains a
+  later `IndirectLightingService` / reflection-resource expansion unless
+  explicitly pulled into scope
+
+This split preserves the UE5.7 architecture while keeping Oxygen's current
+ownership boundaries: importer/cooker create and validate cubemap assets,
+Environment owns sky/background and SkyLight product publication, Lighting can
+consume the diffuse product through a bounded VTX-M08 integration, and future
+Indirect Lighting owns broader GI/reflection behavior. Exact product layouts,
+filtering algorithms, coefficient packing, shader bindings, and validation
+probes belong in the VTX-M08 LLDs, not in this architecture document.
+
 ### 5.1.4 Detailed Renderer Flow Mapping
 
 | # | UE5 Flow Stage | Vortex Flow Stage | Owner | Integration Note |
@@ -594,9 +638,9 @@ Allowed architectural differences:
 | 10 | Rebuild scene textures with GBuffers | inline `SceneRenderer::PublishDeferredBasePassSceneTextures(ctx)` (invokes `SceneTextures::RebuildWithGBuffers()`) | SceneRenderer | ~50 lines. SceneRenderer-owned state transition plus canonical scene-texture publication boundary, not a standalone module. `SceneTextures::RebuildWithGBuffers()` is only the family-local validation helper inside the stage. `SceneColor` and the active GBuffers become consumable only after the full rebuild/promote/refresh/republish seam runs. `SceneVelocity` becomes publishable only after the full stage-9 producer chain, including any auxiliary merge/update work, completes. |
 | 11 | `CompositionLighting::ProcessAfterBasePass` | reserved `MaterialCompositionService::PostBasePass` | future MaterialCompositionService | UE stage family includes deferred decals plus AO-adjacent work. Vortex keeps deferred decal application and material classification here; AO remains with `IndirectLightingService`. |
 | 12 | `RenderLights` | `LightingService::RenderDeferredLighting` | LightingService | Fullscreen/bounded deferred direct lighting. |
-| 13 | `RenderDeferredReflectionsAndSkyLighting` / `AddSubsurfacePass` | reserved `IndirectLightingService::Execute` | future IndirectLightingService | UE 5.7 splits this family across indirect/reflection and subsurface passes. Vortex keeps the family under one future indirect-lighting owner. |
+| 13 | `RenderDeferredReflectionsAndSkyLighting` / `AddSubsurfacePass` | reserved `IndirectLightingService::Execute` | future IndirectLightingService | UE 5.7 splits this family across indirect/reflection and subsurface passes. Vortex keeps the family under one future indirect-lighting owner. VTX-M08 may introduce static cubemap SkyLight products and diffuse consumption before the full Stage-13 family activates; that is a documented narrow SkyLight activation, not broad GI/reflection closure. |
 | 14 | `ComputeVolumetricFog` / `RenderHeterogeneousVolumes` / `RenderVolumetricCloud` | `EnvironmentLightingService` local/volumetric fog stages | EnvironmentLightingService | UE splits this stage family across multiple volumetric systems. Vortex groups the stage family under Environment ownership. Volumetric fog is active but not parity-closed; clouds and heterogeneous volumes remain future. |
-| 15 | `RenderSkyAtmosphere` / `RenderFog` | `EnvironmentLightingService::RenderSkyAndFog` | EnvironmentLightingService | Same high-level environment role in Vortex. |
+| 15 | `RenderSkyAtmosphere` / `RenderFog` / sky pass background | `EnvironmentLightingService::RenderSkyAndFog` | EnvironmentLightingService | Same high-level environment role in Vortex. VTX-M08 adds a skybox/SkySphere background path that writes SceneColor as unlit sky content and remains separate from SkyLight lighting products. |
 | 16 | `RenderSingleLayerWater` | reserved `WaterService::Execute` | future WaterService | Separate stage and service, not folded into generic translucency. |
 | 17 | `RenderPostOpaqueExtensions` / scene extensions | reserved post-opaque extension stage | SceneRenderer | Reserved for future extensions and tools, aligned to UE's scene-extension hook point rather than a monolithic subsystem. |
 | 18 | `RenderTranslucency` | `TranslucencyModule::Execute` | TranslucencyModule | Forward-lit translucency consuming prior opaque products and shared forward light data from `LightingService`. |
@@ -1430,13 +1474,13 @@ This inventory is the designer-facing map of current domain families.
 
 | Subsystem | Directory | Key UE5 Alignment | Scope | Status |
 | --- | --- | --- | --- | --- |
-| Environment Lighting | `Environment/` | `SkyAtmosphereRendering`, `FogRendering`, `VolumetricFog`, `LocalFogVolumeRendering` | atmosphere, sky, fog, environment-probe / IBL publication, active-in-progress volumetric fog; future clouds and heterogeneous volumes | active |
+| Environment Lighting | `Environment/` | `SkyAtmosphereRendering`, `SkyPassRendering`, `FogRendering`, `VolumetricFog`, `LocalFogVolumeRendering`, specified-cubemap SkyLight products | atmosphere, sky, cubemap skybox background, fog, static SkyLight product publication, active-in-progress volumetric fog; future captured-scene SkyLight, clouds, and heterogeneous volumes | active |
 | Shadows | `Shadows/` | `ShadowRendering`, `ShadowDepthRendering` | conventional shadows, VSM, future shadow-family products | active |
 | Lighting | `Lighting/` | `LightRendering`, `LightGridInjection` | direct lighting, forward-light family, clustered grid | active |
 | Post-Process | `PostProcess/` | `PostProcessing` | tonemap, exposure, bloom, AA/TSR-facing post family | active |
 | Diagnostics | `Diagnostics/` | — | GPU debug, profiling, ImGui panels, debug views | active |
 | Material Composition | `MaterialComposition/` | `CompositionLighting` | DBuffer decals, material classification, deferred decal application. Material-surface modification — not illumination | reserved |
-| Indirect Lighting | `IndirectLighting/` | `IndirectLightRendering` | GI, reflections, SSR, subsurface scattering, SSAO production | reserved |
+| Indirect Lighting | `IndirectLighting/` | `IndirectLightRendering` | GI, reflections, SSR, subsurface scattering, SSAO production, broader reflection/SkyLight integration after VTX-M08 static products | reserved |
 | Water | `Water/` | `SingleLayerWaterRendering` | single-layer water, caustics; separate from generic translucency | reserved |
 | Geometry Virtualization | `GeometryVirtualization/` | `Nanite` family | Nanite-equivalent geometry virtualization and related stateful runtime support | reserved |
 
@@ -1809,11 +1853,11 @@ Anti-patterns:
 | translucency shaders | `TranslucencyModule` | `Vortex/Stages/Translucency/` | translucent rendering and translucent-lighting families |
 | lighting shared data / light grid / deferred lighting | `LightingService` | `Vortex/Services/Lighting/` | `LightGridInjection`, `LightGridCommon`, `DeferredLight*`, `DeferredLightingCommon`, `ForwardLightingCommon` |
 | shadow shaders | `ShadowService` | `Vortex/Services/Shadows/` | `ShadowDepth*`, `ShadowProjection*`, `VirtualShadowMaps/*` |
-| environment shaders | `EnvironmentLightingService` | `Vortex/Services/Environment/` | `SkyAtmosphere*`, `HeightFog*`, `VolumetricFog*`, `VolumetricCloud*` |
+| environment shaders | `EnvironmentLightingService` | `Vortex/Services/Environment/` | `SkyAtmosphere*`, `SkyBox*` / `SkySphere*`, `StaticSkyLight*`, `HeightFog*`, `VolumetricFog*`, `VolumetricCloud*` |
 | post-process shaders | `PostProcessService` | `Vortex/Services/PostProcess/` | `PostProcess*`, `TonemapCommon`, `TSR*` |
 | diagnostics shaders | `DiagnosticsService` | `Vortex/Services/Diagnostics/` | debug visualization / profiling helper families |
 | material-composition shaders | future `MaterialCompositionService` | `Vortex/Services/MaterialComposition/` | `DBuffer*`, deferred decal / material-classification families |
-| indirect-lighting shaders | future `IndirectLightingService` | `Vortex/Services/IndirectLighting/` | SSAO / reflections / GI / subsurface / Lumen-adjacent families |
+| indirect-lighting shaders | future `IndirectLightingService` | `Vortex/Services/IndirectLighting/` | SSAO / reflections / GI / subsurface / Lumen-adjacent families; later reflection-capture and full specular SkyLight integration |
 | water shaders | future `WaterService` | `Vortex/Services/Water/` | `SingleLayerWater*` family |
 | geometry-virtualization shaders | future `GeometryVirtualizationService` | `Vortex/Services/GeometryVirtualization/` | `Nanite/*` family |
 

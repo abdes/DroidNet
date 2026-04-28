@@ -76,6 +76,8 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 | PostProcessService | [`post-process-service.md`](lld/post-process-service.md) |
 | ShadowService | [`shadow-service.md`](lld/shadow-service.md) |
 | EnvironmentLightingService | [`environment-service.md`](lld/environment-service.md) |
+| Cubemap processing for static SkyLight | [`cubemap-processing.md`](lld/cubemap-processing.md) — VTX-M08 draft LLD |
+| Skybox and static specified-cubemap SkyLight | [`skybox-static-skylight.md`](lld/skybox-static-skylight.md) — VTX-M08 draft LLD |
 | DiagnosticsService | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 | Translucency (stage 18) | [`translucency.md`](lld/translucency.md) |
 | Occlusion / HZB (stage 5) | [`occlusion.md`](lld/occlusion.md) |
@@ -210,6 +212,7 @@ Per-subsystem detailed designs:
 | LightingService | 6, 12 | [`lighting-service.md`](lld/lighting-service.md) |
 | ShadowService | 8 | [`shadow-service.md`](lld/shadow-service.md) |
 | EnvironmentLightingService | 14, 15 | [`environment-service.md`](lld/environment-service.md) |
+| Static cubemap SkyLight / Skybox | pre-stage, 12/13 boundary, 15 | VTX-M08 draft LLDs: [`skybox-static-skylight.md`](lld/skybox-static-skylight.md), [`cubemap-processing.md`](lld/cubemap-processing.md) |
 | PostProcessService | 22 | [`post-process-service.md`](lld/post-process-service.md) |
 | DiagnosticsService | overlay | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 
@@ -310,6 +313,7 @@ EngineShaderCatalog registration table.
 | Shadow depth | Light list, view data | LightingService, InitViews |
 | Base pass | Shadow maps (optional) | ShadowService |
 | Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation |
+| Static SkyLight diffuse lighting | published static SkyLight diffuse product only when VTX-M08 validates it | VTX-M08 expands the documented ambient bridge with a typed static-SkyLight SH product. EnvironmentLightingService owns generation/publication; LightingService may consume in Stage 12 through that bridge only. Stage 13 remains reserved for future IndirectLightingService activation, which must retire or absorb the bridge rather than create a second diffuse SkyLight path. |
 | Translucency | SceneColor, SceneDepth, forward light data | Prior stages, LightingService |
 | Post-process | SceneColor, SceneDepth, Velocity | Prior stages |
 | Diagnostics | Any SceneTextures product | Prior stages |
