@@ -81,8 +81,8 @@ until `ED-M02` is `validated`.
 Current resume point:
 
 1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Start `ED-M07` content pipeline and cooking work from its accepted LLDs and
-   detailed plan package.
+2. Start `ED-M07.1` native API/content-pipeline audit and record the selected
+   execution path before ED-M07.2+ coding.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
@@ -418,7 +418,7 @@ Exit evidence required:
 
 ### ED-M07 - Content Pipeline And Cooking
 
-Status: `planned`
+Status: `active`
 
 Trace: `GOAL-001`, `GOAL-002`, `GOAL-005`, `GOAL-006`; `REQ-015`,
 `REQ-016`, `REQ-017`, `REQ-018`, `REQ-019`, `REQ-022`, `REQ-023`,
@@ -428,16 +428,40 @@ Trace: `GOAL-001`, `GOAL-002`, `GOAL-005`, `GOAL-006`; `REQ-015`,
 Outcome: descriptor/manifest generation, cook, inspect, cooked validation,
 catalog refresh, and mount refresh work as explicit workflows.
 
-- [ ] Required LLDs are reviewed:
+- [x] Required LLDs are reviewed:
       `content-pipeline`, `project-services`, `asset-primitives`,
       `runtime-integration`, `diagnostics-operation-results`.
-- [ ] Detailed `ED-M07` implementation plan exists.
-- [ ] Procedural geometry descriptors are generated for supported procedural
+- [x] Detailed `ED-M07` implementation plan exists.
+- [x] Detailed `ED-M07` implementation plan is reviewed and accepted.
+- [x] `ED-M07.1` native API audit records the selected Interop/ImportTool
+      execution path, schema validation path, mount layout, scene descriptor
+      name/environment policies, derived procedural geometry strategy, and
+      unvalidated mount-refresh publisher cleanup before ED-M07.2+ coding.
+- [x] `ED-M07.2` operation-kind/diagnostic vocabulary and content-pipeline
+      contract records are implemented with focused contract tests.
+- [x] Save/import paths no longer publish direct unvalidated cooked-root
+      refresh messages; runtime mount refresh remains reserved for validated
+      content-pipeline completion.
+- [x] Procedural geometry descriptors are generated for supported procedural
       meshes.
-- [ ] Scoped source import produces supported descriptors.
-- [ ] Cooking includes current scene and referenced V0.1 assets.
-- [ ] Cook output validates before mount.
-- [ ] Cook, inspect, and mount failures produce visible operation results.
+- [x] Scene descriptor generation emits native scene descriptor JSON for V0.1
+      scene nodes, generated geometry, material refs, perspective cameras, and
+      lights with focused tests.
+- [x] Scoped source import produces supported descriptor manifests for asset,
+      folder, project, and generated-scene-descriptor inputs.
+- [x] Cooking includes current scene, one asset, selected folder, full project,
+      and referenced V0.1 asset descriptors with focused service tests.
+- [x] Cook output validates before inspection; runtime mount refresh wiring is
+      still pending and must remain validation-gated.
+- [x] Content Browser exposes Cook Selected Asset, Cook Folder, Cook Project,
+      Inspect Cooked Output, and Validate Cooked Output commands; commands
+      publish operation results and refresh catalog state.
+- [x] Scene editor exposes Cook Current Scene from the scene toolbar and routes
+      it through the same explicit content-pipeline service.
+- [x] Runtime cooked-root refresh is requested only from validated cooked-output
+      messages after cook/validate success.
+- [ ] Cook, inspect, and mount failures produce visible operation results across
+      all command entry points and manual failure scenarios.
 
 Exit evidence required:
 
@@ -542,10 +566,11 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
+| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `accepted` | Begin implementation with ED-M07.1 native API/content-pipeline audit; ED-M07.2+ coding waits for recorded decisions. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `deferred` | Covered by `ED-M05-scalar-material-authoring.md` and `ED-M06-asset-identity-content-browser.md`; keep only as historical context. |
-| [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | `planned` | Reconcile with `content-pipeline.md` and `project-services.md`. |
+| [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | `deferred` | Superseded by `ED-M07-content-pipeline-and-cooking.md`; keep only as historical context. |
 | [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | `planned` | ED-M04 settings/environment scope is covered by the ED-M04 plan; re-review for ED-M07 project cook/content-root settings. |
 | [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | `planned` | Reconcile with `diagnostics-operation-results.md`. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
@@ -581,3 +606,4 @@ work package. Do not use it to list unfinished implementation work.
 | `DB-002` | `ED-M02` | `closed` | Multi-viewport stability is deferred out of ED-M02; V0.1 proceeds on the supported single live viewport only. | Do not reopen multi-viewport as an ED-M02 validation or implementation gate. |
 | `DB-003` | `ED-M03` | `closed` | DynamicTree in-place rename has no pre-mutation commit hook today, so ED-M03 uses a loaded-adapter label-change bridge to preserve undo/redo and persistence. | Proper DynamicTree rename commit hook is deferred after ED-M03 and does not block milestone validation. |
 | `DB-004` | `ED-M05`, `ED-M06`, `ED-M07` | `closed` | Project layout and predefined templates were redefined by the accepted game-project filesystem architecture/LLD. ED-M06A is validated, and ED-M05/ED-M06 validation is closed against the corrected layout. | Proceed to ED-M07 planning/implementation after recording any remaining ED-M02 viewport validation separately. |
+| `DB-005` | `ED-M07` | `closed` | ED-M07.1 audit selected: keep ED-M05 material cook on managed `ImportService.ImportAsync` because it already invokes `LooseCookedBuildService`; use native import manifest schema validation; use native `Oxygen.Cooker` through a bounded ImportTool adapter for scene/folder/project import until an in-proc Interop wrapper is added; inspect/validate use native loose cooked `Inspection`/`ValidateRoot` semantics with one synthesized diagnostic on failure; mount layout is `.cooked/<Mount>` with virtual root `/<Mount>`; scene descriptor names normalize from file stems; environment output is complete defaults plus supported overrides or omitted with warnings; procedural geometry descriptors are derived under `.pipeline/Geometry`; every direct unvalidated `AssetsCookedMessage` publisher is removed or rerouted. | ED-M07.2+ coding may proceed against these decisions; do not double-call `LooseCookedBuildService`, do not reintroduce save-time cook or unvalidated mount refresh, and keep multi-viewport deferred. |

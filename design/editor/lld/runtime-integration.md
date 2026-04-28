@@ -1,6 +1,6 @@
 # Runtime Integration LLD
 
-Status: `review`
+Status: `ED-M07 review-ready`
 
 ## 1. Purpose
 
@@ -15,6 +15,10 @@ before live viewport behavior can support later authoring milestones.
 This is not the LLD for scene synchronization, content cooking, standalone
 runtime validation, or viewport authoring tools. Those later milestones consume
 the runtime contracts defined here.
+
+ED-M07 consumes this LLD only for validated cooked-root mount refresh after
+content pipeline cook. Multi-viewport remains deferred and is not reopened by
+ED-M07.
 
 ## 2. PRD Traceability
 
@@ -275,6 +279,27 @@ ED-M02 mount contract:
   parity.
 - Missing cooked roots are non-fatal for workspace entry but must be visible in
   logs/diagnostics because assets may not resolve.
+
+ED-M07 mount contract:
+
+- ContentPipeline requests runtime refresh only after cooked output validation
+  succeeds.
+- Brownfield scene save, material save/cook, Content Browser import/cook, and
+  catalog-only refresh paths must stop publishing unvalidated cooked-root
+  refresh messages; only a validated content-pipeline result may trigger
+  runtime mount refresh in ED-M07.
+- Workspace/runtime code still owns the actual `IEngineService` calls:
+  `UnmountProjectCookedRoot()` followed by `MountProjectCookedRoot(path)`.
+- The path passed to runtime is the validated cooked root for the active
+  project/mount, not an authored asset path or a browser display path.
+- Validated cook-result refresh mounts only the roots carried by that validated
+  result. It must not rescan all `.cooked` child directories and accidentally
+  mount stale or unrelated cooked output.
+- `EditorModule` applies root changes at frame start through its existing
+  `AddLooseCookedRoot` / `ClearCookedRoots` path; ED-M07 must not manipulate
+  native asset-loader mounts mid-frame.
+- Mount refresh failure is reported under `AssetMount` and does not rewrite
+  cook success/failure state.
 
 ## 9. Commands, Services, Or Adapters
 

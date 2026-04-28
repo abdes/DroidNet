@@ -1,6 +1,6 @@
 # Diagnostics And Operation Results LLD
 
-Status: `ED-M06 review-ready`
+Status: `ED-M07 review-ready`
 
 ## 1. Purpose
 
@@ -235,6 +235,24 @@ from descriptor/cooked timestamp comparison. ED-M06 does not allocate
 `OXE.CONTENTBROWSER.*` prefix. Navigation and refresh failures route through
 `OXE.ASSETID.*` when the failed work is catalog/browser data, or
 `OXE.PROJECT.CONTENT_ROOT.*` when the failed work is root selection or restore.
+
+ED-M07 prefix allocations:
+
+| Prefix | Owner |
+| --- | --- |
+| `OXE.CONTENTPIPELINE.SCENE.*` | editor scene to native descriptor generation. |
+| `OXE.CONTENTPIPELINE.GEOMETRY.*` | generated procedural geometry descriptor preparation. |
+| `OXE.CONTENTPIPELINE.MANIFEST.*` | import manifest generation and validation. |
+| `OXE.CONTENTPIPELINE.INSPECT.*` | loose cooked inspection workflows. |
+| `OXE.CONTENTPIPELINE.VALIDATE.*` | cooked output validation workflows. |
+| `OXE.ASSETIMPORT.*` | source import execution and source-read failures. |
+| `OXE.ASSETCOOK.*` | cook execution and loose cooked index failures. |
+| `OXE.ASSETMOUNT.*` | runtime cooked-root mount refresh failures. |
+
+ED-M07 adds `OXE.ASSETID.RefreshFailed` under the existing `OXE.ASSETID.*`
+prefix for post-cook catalog refresh failures. It may continue to use
+`OXE.CONTENTPIPELINE.MATERIAL.*` for the ED-M05 material cook slice when the
+operation is still material-document scoped.
 
 ### Failure Domain
 
@@ -541,6 +559,42 @@ that fail.
 Identity-reducer failures are diagnostics on the triggering browse/query/resolve
 result; they are not a separate top-level operation kind in ED-M06.
 
+ED-M07 producers and operation kinds:
+
+| Producer | Operation Kind | Domain |
+| --- | --- | --- |
+| scene descriptor generator | `Content.Descriptor.Generate` | `ContentPipeline` |
+| manifest builder | `Content.Manifest.Generate` | `ContentPipeline` |
+| content pipeline / engine API adapter | `Content.Import` | `AssetImport` |
+| content pipeline | `Content.Cook.Asset` | `AssetCook` |
+| content pipeline | `Content.Cook.Scene` | `AssetCook` |
+| content pipeline | `Content.Cook.Folder` | `AssetCook` |
+| content pipeline | `Content.Cook.Project` | `AssetCook` |
+| inspect adapter | `Content.CookedOutput.Inspect` | `ContentPipeline` |
+| validation adapter | `Content.CookedOutput.Validate` | `ContentPipeline` |
+| catalog refresh adapter | `Content.Catalog.Refresh` | `AssetIdentity` |
+| workspace/runtime integration | `Runtime.CookedRoot.Refresh` | `AssetMount` |
+
+Required ED-M07 diagnostic codes:
+
+| Code | Domain |
+| --- | --- |
+| `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed` | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed` | `ContentPipeline` |
+| `OXE.ASSETIMPORT.SourceMissing` | `AssetImport` |
+| `OXE.ASSETIMPORT.ImportFailed` | `AssetImport` |
+| `OXE.ASSETCOOK.CookFailed` | `AssetCook` |
+| `OXE.ASSETCOOK.IndexInvalid` | `AssetCook` |
+| `OXE.CONTENTPIPELINE.INSPECT.Failed` | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.VALIDATE.Failed` | `ContentPipeline` |
+| `OXE.ASSETID.RefreshFailed` | `AssetIdentity` |
+| `OXE.ASSETMOUNT.RefreshFailed` | `AssetMount` |
+
+Native cooker/import diagnostic codes are preserved as technical detail and
+mapped to the nearest editor code above for the user-facing result.
+
 ## 12. Operation Results And Diagnostics
 
 ### Status Reduction Rule
@@ -680,6 +734,24 @@ ED-M06 diagnostics are complete when:
   not an `AssetCook` failure.
 - Content Browser output/log summaries include operation ID and selected
   virtual folder for failed browse/refresh operations.
+
+ED-M07 diagnostics are complete when:
+
+- descriptor generation failures publish `Content.Descriptor.Generate` with
+  scene/asset path and the failed field where known.
+- manifest generation failures publish `Content.Manifest.Generate`.
+- import failures preserve native cooker diagnostic code text as technical
+  detail and map to `AssetImport`.
+- cook failures publish `AssetCook` and identify the asset, folder, scene, or
+  project scope.
+- cooked index validation failures publish `Content.CookedOutput.Validate` and
+  block runtime mount refresh.
+- inspect failures publish `Content.CookedOutput.Inspect` without mutating
+  mounted runtime roots.
+- successful cook plus failed catalog refresh is `PartiallySucceeded`, not
+  `Failed`.
+- runtime mount refresh failure publishes `Runtime.CookedRoot.Refresh` under
+  `AssetMount`, not `AssetCook`.
 
 ## 15. Open Issues
 
