@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
@@ -26,6 +29,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
@@ -145,6 +149,7 @@ MainModule::MainModule(
   top_view_id_ = this->GetOrCreateViewId("TopView");
   debug_view_id_ = this->GetOrCreateViewId("DebugView");
   shadow_view_id_ = this->GetOrCreateViewId("ShadowView");
+  diagnostics_view_id_ = this->GetOrCreateViewId("DiagnosticsView");
 }
 
 auto MainModule::BuildDefaultWindowProperties() const
@@ -172,16 +177,16 @@ auto MainModule::OnAttachedImpl(
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
 
-  // Initialize DemoShell with camera controls enabled.
+  // Initialize DemoShell with camera controls enabled outside proof layouts.
   auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.engine = engine;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
-    .camera_controls = true,
+    .camera_controls = !config_.feature_variant_proof_layout,
     .environment = false,
     .lighting = false,
-    .post_process = true,
+    .post_process = !config_.feature_variant_proof_layout,
   };
   shell_config.enable_camera_rig = true;
   shell_config.enable_renderer_bound_panels = false;
@@ -197,12 +202,17 @@ auto MainModule::OnAttachedImpl(
 
   main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
   pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
-  if (config_.proof_layout) {
+  if (config_.proof_layout || config_.aux_proof_layout
+    || config_.feature_variant_proof_layout) {
     top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
     debug_camera_node_
       = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
     shadow_camera_node_
       = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
+  }
+  if (config_.feature_variant_proof_layout) {
+    diagnostics_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
   }
   if (config_.offscreen_proof_layout) {
     offscreen_preview_camera_node_
@@ -338,17 +348,18 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   }
 
   if (!config_.proof_layout && !config_.aux_proof_layout
-    && !config_.offscreen_proof_layout) {
+    && !config_.offscreen_proof_layout && !config_.feature_variant_proof_layout) {
     return;
   }
 
-  const float quadrant_aspect = extent.height > 0
+  const float proof_cell_aspect = extent.height > 0
     ? static_cast<float>(extent.width) / static_cast<float>(extent.height)
     : 1.0F;
-  const auto configure_camera = [quadrant_aspect](scene::SceneNode& node,
+  const auto configure_camera = [](scene::SceneNode& node,
                                   const glm::vec3& position,
                                   const glm::vec3& target,
-                                  const float fov_degrees) {
+                                  const float fov_degrees,
+                                  const float aspect_ratio) {
     if (!node.IsAlive()) {
       return;
     }
@@ -362,17 +373,41 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     node.GetTransform().SetLocalPosition(position);
     node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view_mat)));
     cam.SetFieldOfView(glm::radians(fov_degrees));
-    cam.SetAspectRatio(quadrant_aspect);
+    cam.SetAspectRatio(aspect_ratio);
     cam.SetNearPlane(0.05F);
     cam.SetFarPlane(160.0F);
   };
 
-  configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.1F),
-    glm::vec3(0.0F, 0.0F, -2.0F), 45.0F);
-  configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
-    glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
-  configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
-    glm::vec3(0.0F, 0.0F, -2.0F), 42.0F);
+  if (config_.feature_variant_proof_layout) {
+    constexpr float kMargin = 16.0F;
+    constexpr float kGap = 12.0F;
+    const float cell_w = std::max(1.0F,
+      std::floor((static_cast<float>(extent.width) - (2.0F * kMargin)
+        - (2.0F * kGap)) / 3.0F));
+    const float cell_h = std::max(1.0F,
+      std::floor((static_cast<float>(extent.height) - (2.0F * kMargin)
+        - kGap) / 2.0F));
+    const float cell_aspect = cell_w / cell_h;
+    configure_camera(main_camera_node_, glm::vec3(0.0F, 0.0F, 5.0F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
+    configure_camera(pip_camera_node_, glm::vec3(-4.8F, 1.2F, 4.6F),
+      glm::vec3(-0.4F, -0.1F, -1.4F), 38.0F, cell_aspect);
+    configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.2F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 45.0F, cell_aspect);
+    configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
+    configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
+    configure_camera(diagnostics_camera_node_, glm::vec3(1.8F, 2.0F, 4.0F),
+      glm::vec3(-0.5F, 0.0F, -1.6F), 40.0F, cell_aspect);
+  } else {
+    configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.1F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 45.0F, proof_cell_aspect);
+    configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, proof_cell_aspect);
+    configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
+      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, proof_cell_aspect);
+  }
 
   const auto configure_offscreen_camera = [](scene::SceneNode& node,
                                            const glm::vec3& position,
@@ -468,6 +503,7 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   auto& shell = GetShell();
   CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
   shell.Draw(context);
+  DrawFeatureVariantProofOverlay();
 
   co_return;
 }
@@ -625,12 +661,17 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
     main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
     pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
-    if (config_.proof_layout || config_.aux_proof_layout) {
+    if (config_.proof_layout || config_.aux_proof_layout
+      || config_.feature_variant_proof_layout) {
       top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
       debug_camera_node_
         = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
       shadow_camera_node_
         = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
+    }
+    if (config_.feature_variant_proof_layout) {
+      diagnostics_camera_node_
+        = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
     }
     if (config_.offscreen_proof_layout) {
       offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
@@ -736,6 +777,72 @@ auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*
   });
 }
 
+auto MainModule::DrawFeatureVariantProofOverlay() -> void
+{
+  if (!config_.feature_variant_proof_layout) {
+    return;
+  }
+
+  const auto extent = ResolveRenderExtent();
+  if (!HasPositiveExtent(extent)) {
+    return;
+  }
+
+  constexpr float kMargin = 16.0F;
+  constexpr float kGap = 12.0F;
+  constexpr float kPadX = 10.0F;
+  constexpr float kPadY = 6.0F;
+  constexpr float kHeaderHeight = 30.0F;
+  const float sw = static_cast<float>(extent.width);
+  const float sh = static_cast<float>(extent.height);
+  const float cell_w
+    = std::max(1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap))
+        / 3.0F));
+  const float cell_h
+    = std::max(1.0F, std::floor((sh - (2.0F * kMargin) - kGap) / 2.0F));
+
+  struct Label {
+    const char* text;
+    ImU32 color;
+  };
+  const std::array labels {
+    Label { "M06C Depth-only | BLACK expected",
+      IM_COL32(76, 120, 190, 235) },
+    Label { "M06C Shadow-only | BLACK expected",
+      IM_COL32(90, 80, 62, 235) },
+    Label { "M06C No environment | no sky/fog",
+      IM_COL32(150, 82, 80, 235) },
+    Label { "M06C No shadowing | no shadows",
+      IM_COL32(70, 125, 92, 235) },
+    Label { "M06C No volumetrics | no volume fog",
+      IM_COL32(115, 88, 150, 235) },
+    Label { "M06C Diagnostics-only | BLACK expected",
+      IM_COL32(95, 95, 95, 235) },
+  };
+
+  auto* draw_list = ImGui::GetForegroundDrawList();
+  if (draw_list == nullptr) {
+    return;
+  }
+
+  for (std::size_t index = 0U; index < labels.size(); ++index) {
+    const float x = kMargin
+      + static_cast<float>(index % 3U) * (cell_w + kGap);
+    const float y = kMargin
+      + static_cast<float>(index / 3U) * (cell_h + kGap);
+    const ImVec2 rect_min { x, y };
+    const ImVec2 rect_max { x + cell_w, y + kHeaderHeight };
+    draw_list->AddRectFilled(rect_min, rect_max, labels[index].color, 0.0F);
+    const ImVec4 clip_rect { x + kPadX, y, x + cell_w - kPadX,
+      y + kHeaderHeight };
+    draw_list->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
+      ImVec2 { x + kPadX, y + kPadY }, IM_COL32(255, 255, 255, 255),
+      labels[index].text, nullptr, 0.0F, &clip_rect);
+    draw_list->AddRect(ImVec2 { x, y }, ImVec2 { x + cell_w, y + cell_h },
+      IM_COL32(255, 255, 255, 180), 0.0F, 0, 1.5F);
+  }
+}
+
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
@@ -752,6 +859,130 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   }
   const float sw = static_cast<float>(extent.width);
   const float sh = static_cast<float>(extent.height);
+
+  if (config_.feature_variant_proof_layout) {
+    constexpr float kMargin = 16.0F;
+    constexpr float kGap = 12.0F;
+    const float cell_w
+      = std::max(1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap))
+          / 3.0F));
+    const float cell_h
+      = std::max(1.0F, std::floor((sh - (2.0F * kMargin) - kGap) / 2.0F));
+    const auto make_view = [cell_w, cell_h](const std::size_t index) -> View {
+      const float x = kMargin
+        + static_cast<float>(index % 3U) * (cell_w + kGap);
+      const float y = kMargin
+        + static_cast<float>(index / 3U) * (cell_h + kGap);
+      View view {};
+      view.viewport = ViewPort {
+        .top_left_x = x,
+        .top_left_y = y,
+        .width = cell_w,
+        .height = cell_h,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      };
+      view.scissor = Scissors {
+        .left = static_cast<int32_t>(x),
+        .top = static_cast<int32_t>(y),
+        .right = static_cast<int32_t>(x + cell_w),
+        .bottom = static_cast<int32_t>(y + cell_h),
+      };
+      return view;
+    };
+    const auto configure_variant =
+      [](vortex::CompositionView& view,
+        const vortex::CompositionView::ViewFeatureProfile profile,
+        const graphics::Color clear_color) {
+        const auto spec = vortex::ResolveViewFeatureProfileSpec(profile);
+        view.feature_profile = profile;
+        view.feature_mask = spec.feature_mask;
+        view.with_atmosphere = true;
+        view.with_height_fog = true;
+        view.clear_color = clear_color;
+      };
+
+    auto depth_only = vortex::CompositionView::ForScene(main_view_id_,
+      make_view(0U), main_camera_node_);
+    depth_only.name = "M06C.DepthOnly";
+    configure_variant(depth_only,
+      vortex::CompositionView::ViewFeatureProfile::kDepthOnly,
+      graphics::Color { 0.04F, 0.08F, 0.18F, 1.0F });
+    shell.OnMainViewReady(context, depth_only);
+    views.push_back(std::move(depth_only));
+
+    auto shadow_only = vortex::CompositionView::ForScene(shadow_view_id_,
+      make_view(1U), shadow_camera_node_);
+    shadow_only.name = "M06C.ShadowOnly";
+    configure_variant(shadow_only,
+      vortex::CompositionView::ViewFeatureProfile::kShadowOnly,
+      graphics::Color { 0.10F, 0.08F, 0.04F, 1.0F });
+    views.push_back(std::move(shadow_only));
+
+    auto no_environment = vortex::CompositionView::ForScene(pip_view_id_,
+      make_view(2U), pip_camera_node_);
+    no_environment.name = "M06C.NoEnvironment";
+    configure_variant(no_environment,
+      vortex::CompositionView::ViewFeatureProfile::kNoEnvironment,
+      graphics::Color { 0.16F, 0.06F, 0.05F, 1.0F });
+    views.push_back(std::move(no_environment));
+
+    auto no_shadowing = vortex::CompositionView::ForScene(debug_view_id_,
+      make_view(3U), debug_camera_node_);
+    no_shadowing.name = "M06C.NoShadowing";
+    configure_variant(no_shadowing,
+      vortex::CompositionView::ViewFeatureProfile::kNoShadowing,
+      graphics::Color { 0.04F, 0.12F, 0.08F, 1.0F });
+    views.push_back(std::move(no_shadowing));
+
+    auto no_volumetrics = vortex::CompositionView::ForScene(top_view_id_,
+      make_view(4U), top_camera_node_);
+    no_volumetrics.name = "M06C.NoVolumetrics";
+    configure_variant(no_volumetrics,
+      vortex::CompositionView::ViewFeatureProfile::kNoVolumetrics,
+      graphics::Color { 0.08F, 0.06F, 0.16F, 1.0F });
+    views.push_back(std::move(no_volumetrics));
+
+    auto diagnostics_only = vortex::CompositionView::ForScene(
+      diagnostics_view_id_, make_view(5U), diagnostics_camera_node_);
+    diagnostics_only.name = "M06C.DiagnosticsOnly";
+    configure_variant(diagnostics_only,
+      vortex::CompositionView::ViewFeatureProfile::kDiagnosticsOnly,
+      graphics::Color { 0.08F, 0.08F, 0.08F, 1.0F });
+    views.push_back(std::move(diagnostics_only));
+
+    for (const auto& view : views) {
+      LOG_F(INFO,
+        "Vortex.FeatureVariantProof.View name={} profile={} feature_mask={} "
+        "viewport={}x{}+{},{}",
+        view.name, vortex::ToString(view.feature_profile),
+        view.feature_mask.bits.get(), view.view.viewport.width,
+        view.view.viewport.height, view.view.viewport.top_left_x,
+        view.view.viewport.top_left_y);
+    }
+
+    View overlay_view {};
+    overlay_view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = sw,
+      .height = sh,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    overlay_view.scissor = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<int32_t>(extent.width),
+      .bottom = static_cast<int32_t>(extent.height),
+    };
+
+    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
+    views.push_back(vortex::CompositionView::ForImGui(
+      imgui_view_id, overlay_view,
+      [](graphics::CommandRecorder&) { }));
+    return;
+  }
 
   if (config_.aux_proof_layout) {
     const float half_w = std::floor(sw * 0.5F);

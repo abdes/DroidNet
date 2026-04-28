@@ -1485,11 +1485,20 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         }
         auto fallback = ResolveViewOutputTexture(*context, view_id);
         if (fallback) {
-          LOG_F(WARNING,
-            "Vortex compositing source for published view {} is missing the "
-            "resolved scene-color artifact; falling back to published "
-            "composite source '{}'",
-            view_id.get(), fallback->GetDescriptor().debug_name);
+          const auto feature_spec = ResolveViewFeatureProfileSpec(
+            ResolvePublishedRuntimeFeatureProfile(view_id));
+          if (feature_spec.requires_color_output) {
+            LOG_F(WARNING,
+              "Vortex compositing source for published view {} is missing the "
+              "resolved scene-color artifact; falling back to published "
+              "composite source '{}'",
+              view_id.get(), fallback->GetDescriptor().debug_name);
+          } else {
+            DLOG_F(1,
+              "Vortex compositing source for reduced published view {}: '{}' "
+              "(published composite source)",
+              view_id.get(), fallback->GetDescriptor().debug_name);
+          }
           return fallback;
         }
         LOG_F(ERROR,
@@ -2408,6 +2417,23 @@ auto Renderer::ResolvePublishedRuntimeRenderMode(
     }
   }
   return std::nullopt;
+}
+
+auto Renderer::ResolvePublishedRuntimeFeatureProfile(
+  const ViewId published_view_id) const noexcept
+  -> CompositionView::ViewFeatureProfile
+{
+  if (published_view_id == kInvalidViewId) {
+    return CompositionView::ViewFeatureProfile::kDefault;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.feature_profile;
+    }
+  }
+  return CompositionView::ViewFeatureProfile::kDefault;
 }
 
 auto Renderer::ResolvePublishedRuntimeViewStateHandle(

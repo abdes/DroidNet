@@ -136,6 +136,7 @@ struct ViewFeatureProfileSpec {
         .optional = Family::kScenePreparation,
       },
       .diagnostics_only = true,
+      .requires_color_output = false,
     };
   case Profile::kDefault:
   default:

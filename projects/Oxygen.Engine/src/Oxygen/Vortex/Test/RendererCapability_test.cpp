@@ -161,6 +161,7 @@ NOLINT_TEST(RendererCapabilityTest, ViewFeatureProfilesResolveStableMasks)
   EXPECT_TRUE(diagnostics_only.diagnostics_only);
   EXPECT_TRUE(diagnostics_only.feature_mask.Has(Mask::kDiagnostics));
   EXPECT_FALSE(diagnostics_only.feature_mask.Has(Mask::kSceneLighting));
+  EXPECT_FALSE(diagnostics_only.requires_color_output);
 }
 
 NOLINT_TEST(RendererCapabilityTest, FeatureProfileCapabilitiesReportMissing)

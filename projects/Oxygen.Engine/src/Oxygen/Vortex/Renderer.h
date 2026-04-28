@@ -725,6 +725,9 @@ private:
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
   [[nodiscard]] auto ResolvePublishedRuntimeRenderMode(
     ViewId published_view_id) const noexcept -> std::optional<RenderMode>;
+  [[nodiscard]] auto ResolvePublishedRuntimeFeatureProfile(
+    ViewId published_view_id) const noexcept
+    -> CompositionView::ViewFeatureProfile;
   [[nodiscard]] auto ResolvePublishedRuntimeViewStateHandle(
     ViewId published_view_id) const noexcept -> CompositionView::ViewStateHandle;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;

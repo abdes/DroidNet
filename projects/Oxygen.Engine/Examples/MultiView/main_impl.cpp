@@ -193,6 +193,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool proof_layout = false;
   bool aux_proof_layout = false;
   bool offscreen_proof_layout = false;
+  bool feature_variant_proof_layout = false;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -261,6 +262,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .DefaultValue(false)
               .UserFriendlyName("enabled")
               .StoreTo(&offscreen_proof_layout)
+              .Build())
+          .WithOption(Option::WithKey("feature-variant-proof-layout")
+              .About("Use the M06C feature-variant validation layout")
+              .Long("feature-variant-proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&feature_variant_proof_layout)
               .Build());
 
     auto cli = oxygen::examples::cli::BuildCli(
@@ -287,6 +296,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed aux proof layout option = {}", aux_proof_layout);
     LOG_F(INFO, "Parsed offscreen proof layout option = {}",
       offscreen_proof_layout);
+    LOG_F(INFO, "Parsed feature variant proof layout option = {}",
+      feature_variant_proof_layout);
 
     auto main_module_config = oxygen::examples::multiview::MainModuleConfig {
       .compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend,
@@ -295,6 +306,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .proof_layout = proof_layout,
       .aux_proof_layout = aux_proof_layout,
       .offscreen_proof_layout = offscreen_proof_layout,
+      .feature_variant_proof_layout = feature_variant_proof_layout,
     };
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),

@@ -468,6 +468,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
 
     auto spot_light = std::make_unique<scene::SpotLight>();
     spot_light->Common().affects_world = true;
+    spot_light->Common().casts_shadows = true;
     spot_light->Common().color_rgb
       = glm::vec3(1.0F, 0.98F, 0.95F); // Warm white
     spot_light->SetLuminousFluxLm(5000.0F);
@@ -507,6 +508,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
 
     auto point_light = std::make_unique<scene::PointLight>();
     point_light->Common().affects_world = true;
+    point_light->Common().casts_shadows = true;
     point_light->Common().color_rgb
       = glm::vec3(0.7F, 0.85F, 1.0F); // Cool blue tint
     point_light->SetLuminousFluxLm(2000.0F);

@@ -1,6 +1,6 @@
 # VTX-M06C - Feature-Gated Runtime Variants
 
-Status: `in_progress`
+Status: `validated`
 
 ## 1. Goal
 
@@ -50,7 +50,7 @@ Out of scope:
 
 | Area | Current state | VTX-M06C action |
 | --- | --- | --- |
-| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` list VTX-M06C as planned and require a detailed plan before implementation. | This planning slice creates the implementation package and moves the active work to `in_progress` without claiming implementation closure. |
+| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` now record VTX-M06C as `validated`; VTX-M07 is the next planned milestone. | Keep the VTX-M06C closure evidence in this plan and the status ledger; future production-readiness work belongs to VTX-M07. |
 | Capability families | `RendererCapabilityFamily` gates construction of major services such as scene preparation, deferred shading, lighting, shadowing, environment lighting, final output composition, and diagnostics. | Preserve capability construction gates and add tests for required/optional variant capability sets. |
 | View feature mask | `CompositionView::ViewFeatureMask` carries scene lighting, shadows, environment, translucency, and diagnostics bits, and composition planning copies the mask. | Promote the mask from carried metadata to the source of stage omission truth for per-view variants. |
 | Runtime render context | `RenderContext::ViewExecutionEntry` carries per-view scene flags, render/shading overrides, and composition view pointer. It does not carry an effective runtime variant contract. | Add a typed effective variant/feature contract that SceneRenderer stages consume without consulting demo-only state. |
@@ -300,6 +300,67 @@ Validation:
 
 - `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexFeatureVariantValidation.ps1 -Output out\build-ninja\analysis\vortex\m06c-feature-variants -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4`
 
+Evidence:
+
+- Source implementation adds `Examples/MultiView --feature-variant-proof-layout
+  true`, a visually inspectable 3x2 proof layout for depth-only, shadow-only,
+  no-environment, no-shadowing, no-volumetrics, and diagnostics-only runtime
+  views. The overlay uses one-line clipped labels and explicitly marks the
+  expected black reduced-output views: depth-only, shadow-only, and
+  diagnostics-only.
+- `Examples/MultiView/README.md` now documents the current Vortex-native
+  MultiView demo, all proof-layout switches, the VTX-M06C expected-black
+  views, and the feature-variant validation wrapper.
+- The proof layout uses production `CompositionView::ViewFeatureProfile`
+  inputs. Proof-specific layout, camera, and marker text remain in
+  `Examples/MultiView` and `tools/vortex`; no test-only feature branching was
+  added to the production renderer path.
+- Runtime proof tooling was added:
+  `tools\vortex\Run-VortexFeatureVariantValidation.ps1`,
+  `tools\vortex\AnalyzeRenderDocVortexFeatureVariants.py`, and
+  `tools\vortex\Assert-VortexFeatureVariantProof.ps1`.
+- During visual validation, multi-view shadow flicker exposed two production
+  renderer bugs. Stage 8 shadow rendering now runs per serialized current view
+  instead of reusing one frame-wide shadow-depth build with only the cursor
+  view constants, and `ShadowDepthPass` now allocates per-slice transient
+  structured-buffer constants so later shadow recordings cannot overwrite CPU
+  upload memory still referenced by queued GPU work.
+- The diagnostics-only profile no longer requires a color output. Runtime
+  compositing still warns for color-required views that lack resolved
+  SceneColor, but reduced-output views use their expected published composite
+  source without emitting the per-frame warning.
+- Runtime proof passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexFeatureVariantValidation.ps1 -Output out\build-ninja\analysis\vortex\m06c-feature-variants -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4`.
+  The debug-layer report
+  `out\build-ninja\analysis\vortex\m06c-feature-variants.debug-layer.report.txt`
+  records `runtime_exit_code=0`, `debugger_break_detected=false`,
+  `d3d12_error_count=0`, `dxgi_error_count=0`,
+  `blocking_warning_count=0`, and `overall_verdict=pass`.
+- RenderDoc analysis report
+  `out\build-ninja\analysis\vortex\m06c-feature-variants.renderdoc.txt`
+  records `overall_verdict=true`, `expected_variant_view_count=6`,
+  `composition_view_ids=1,2,3,4,5,6`, `stage3_scope_count=4`,
+  `stage8_scope_count=6`, `stage9_scope_count=3`,
+  `stage12_scope_count=3`, `stage22_scope_count=3`,
+  `depth_products_present=true`, `shadow_products_present=true`,
+  `reduced_variants_omitted_scene_lighting=true`,
+  `stage22_scene_lighting_only=true`, and no volumetric overrun.
+- Allocation-churn report
+  `out\build-ninja\analysis\vortex\m06c-feature-variants.allocation-churn.txt`
+  records `run_frames=65`, `steady_state_frame_count=60`,
+  `steady_state_allocations_after_warmup=0`, and
+  `overall_verdict=pass`.
+- Assertion report
+  `out\build-ninja\analysis\vortex\m06c-feature-variants.validation.txt`
+  records 65 runtime records for each of the six variant views and
+  `overall_verdict=pass`.
+- The validation logs were checked for the previous compositing warning
+  (`missing the resolved scene-color artifact` /
+  `falling back to published composite source`), and the warning was absent.
+- User visual confirmation on 2026-04-28 approved the runtime proof visuals,
+  confirmed the shadow flicker was gone after the per-view shadow lifetime fix,
+  and approved the updated one-line labels plus `BLACK expected` markers.
+
 ### G. Closure and Ledger Update
 
 Required work:
@@ -311,6 +372,21 @@ Required work:
   implementation, focused tests, CDB/debug-layer proof, RenderDoc scripted
   analysis, allocation-churn proof, visual confirmation for the visual layout,
   and recorded residual gaps.
+
+Evidence:
+
+- Full focused build and shader validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.OffscreenSceneFacade.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.ShadowService.Tests Oxygen.Vortex.DiagnosticsService.Tests oxygen-examples-multiview oxygen-graphics-direct3d12_shaders --parallel 4`.
+- Full focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|SceneRendererDeferredCore|SceneRendererPublication|EnvironmentLightingService|ShadowService|DiagnosticsService)" --output-on-failure`
+  with 8/8 test executables passing.
+- Proof-tool syntax checks passed:
+  `python -m py_compile tools\vortex\AnalyzeRenderDocVortexFeatureVariants.py`
+  and PowerShell parser checks for
+  `tools\vortex\Assert-VortexFeatureVariantProof.ps1` and
+  `tools\vortex\Run-VortexFeatureVariantValidation.ps1`.
+- `git diff --check` passed after the final docs/status update.
+- No open VTX-M06C closure gap remains.
 
 ## 8. Test Plan
 
