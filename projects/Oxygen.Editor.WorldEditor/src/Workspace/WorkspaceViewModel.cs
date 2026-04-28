@@ -13,8 +13,8 @@ using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.Diagnostics;
@@ -45,7 +45,7 @@ namespace Oxygen.Editor.World.Workspace;
 ///     inside the workspace must always use the child container, and that navigations, even the absolute
 ///     ones, will always be relative to the workspace.
 /// </remarks>
-public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<AssetsCookedMessage>
+public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 {
     private readonly IContainer container;
     private readonly IProjectContextService projectContextService;
@@ -156,19 +156,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
     }
 
     /// <inheritdoc />
-    public void Receive(AssetsCookedMessage message)
-    {
-        this.logger.LogInformation("Received AssetsCookedMessage, refreshing cooked roots.");
-        _ = this.RefreshCookedRootsAsync();
-    }
-
-    /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
         // Resolve messenger instance from the child container so the view model can use it.
         this.messenger = childContainer.Resolve<IMessenger>();
+        this.messenger.Register<ValidatedCookedOutputMessage>(
+            this,
+            (_, message) => _ = this.MountValidatedCookedRootsAsync(message.CookedRoots));
 
         // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
         // IDocumentService events before DocumentManager starts handling open requests.
@@ -266,12 +262,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             projectLocation,
             cookedBaseRoot);
 
-        // The engine cooker owns the project-level loose cooked root:
-        //   .cooked/container.index.bin
-        // When that authoritative root exists, child directories are payload
-        // folders, not separate roots. Older editor builds produced legacy
-        // per-mount indexes under .cooked/<MountPoint>; use those only as a
-        // fallback for projects that have not been re-cooked yet.
+        // ED-M07 writes one loose cooked root per authoring mount:
+        //   .cooked/<MountPoint>/container.index.bin
+        // Some engine tools may also produce a project-level loose cooked root.
+        // If that exists it is mounted as a single authoritative root; otherwise
+        // each valid per-mount root is mounted.
         this.engineService.UnmountProjectCookedRoot();
 
         if (!System.IO.Directory.Exists(cookedBaseRoot))
@@ -280,7 +275,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 "Cooked root directory does not exist: {CookedBaseRoot}. Assets will not be available in the engine.",
                 cookedBaseRoot);
             this.PublishCookedRootWarning(
-                DiagnosticCodes.AssetMountPrefix + "ROOT_MISSING",
+                AssetMountDiagnosticCodes.RefreshFailed,
                 "Cooked root is missing",
                 "The workspace opened, but cooked assets are not available because the project cooked root does not exist.",
                 cookedBaseRoot);
@@ -302,7 +297,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 {
                     this.logger.LogWarning(ex, "Failed to mount cooked root {CookedBaseRoot}.", cookedBaseRoot);
                     this.PublishCookedRootWarning(
-                        DiagnosticCodes.AssetMountPrefix + "MOUNT_FAILED",
+                        AssetMountDiagnosticCodes.RefreshFailed,
                         "Cooked root mount failed",
                         "The workspace opened, but cooked assets may not be available because the engine rejected the cooked root.",
                         cookedBaseRoot,
@@ -312,7 +307,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             else
             {
                 this.PublishCookedRootWarning(
-                    DiagnosticCodes.AssetMountPrefix + "INDEX_INCOMPATIBLE",
+                    AssetMountDiagnosticCodes.RefreshFailed,
                     "Cooked index is incompatible",
                     "The workspace opened, but cooked assets may not be available because the cooked index could not be read.",
                     cookedBaseIndexPath);
@@ -349,7 +344,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         {
             this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
             this.PublishCookedRootWarning(
-                DiagnosticCodes.AssetMountPrefix + "ENUMERATE_FAILED",
+                AssetMountDiagnosticCodes.RefreshFailed,
                 "Cooked roots could not be enumerated",
                 "The workspace opened, but cooked assets may not be available because the cooked root folders could not be enumerated.",
                 cookedBaseRoot,
@@ -380,7 +375,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             {
                 this.logger.LogWarning(ex, "Failed to mount cooked root {CookedMountRoot}.", cookedMountRoot);
                 this.PublishCookedRootWarning(
-                    DiagnosticCodes.AssetMountPrefix + "MOUNT_FAILED",
+                    AssetMountDiagnosticCodes.RefreshFailed,
                     "Cooked root mount failed",
                     "The workspace opened, but cooked assets may not be available because the engine rejected a cooked mount point.",
                     cookedMountRoot,
@@ -395,7 +390,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 cookedBaseRoot,
                 indexFileName);
             this.PublishCookedRootWarning(
-                DiagnosticCodes.AssetMountPrefix + "INDEX_MISSING",
+                AssetMountDiagnosticCodes.RefreshFailed,
                 "Cooked index is missing",
                 "The workspace opened, but cooked assets are not available because no cooked index was found.",
                 cookedBaseRoot);
@@ -403,6 +398,106 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         }
 
         this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+    }
+
+    private async Task MountValidatedCookedRootsAsync(IReadOnlyList<string> cookedRoots)
+    {
+        if (!await this.EnsureEngineRunningAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        if (this.projectContextService.ActiveProject is not { } activeProject
+            || string.IsNullOrWhiteSpace(activeProject.ProjectRoot))
+        {
+            this.logger.LogWarning("Cannot mount validated cooked roots: No active project context.");
+            return;
+        }
+
+        var projectRoot = System.IO.Path.GetFullPath(activeProject.ProjectRoot);
+        var cookedBaseRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(projectRoot, ".cooked"));
+        var normalizedRoots = cookedRoots
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Select(System.IO.Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static root => root, StringComparer.Ordinal)
+            .ToList();
+
+        if (normalizedRoots.Count == 0)
+        {
+            this.PublishCookedRootWarning(
+                AssetMountDiagnosticCodes.RefreshFailed,
+                "No validated cooked root",
+                "Cooked output validation succeeded, but no cooked root was provided for runtime mount refresh.",
+                cookedBaseRoot);
+            return;
+        }
+
+        var mountableRoots = new List<string>();
+        foreach (var root in normalizedRoots)
+        {
+            if (!IsUnderRoot(root, cookedBaseRoot))
+            {
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Validated cooked root was rejected",
+                    "The validated cooked root is outside the active project's cooked output directory.",
+                    root);
+                continue;
+            }
+
+            var indexPath = System.IO.Path.Combine(root, "container.index.bin");
+            if (!System.IO.File.Exists(indexPath))
+            {
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Validated cooked index is missing",
+                    "The validated cooked root cannot be mounted because its loose cooked index is missing.",
+                    root);
+                continue;
+            }
+
+            if (!this.IsCookedIndexMountable(indexPath))
+            {
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Validated cooked index is incompatible",
+                    "The validated cooked root cannot be mounted because its loose cooked index could not be read.",
+                    indexPath);
+                continue;
+            }
+
+            mountableRoots.Add(root);
+        }
+
+        if (mountableRoots.Count == 0)
+        {
+            return;
+        }
+
+        this.engineService.UnmountProjectCookedRoot();
+        foreach (var root in mountableRoots)
+        {
+            try
+            {
+                this.engineService.MountProjectCookedRoot(root);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.logger.LogWarning(ex, "Failed to mount validated cooked root {CookedRoot}.", root);
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Validated cooked root mount failed",
+                    "Cooked output was validated, but the runtime rejected the cooked root.",
+                    root,
+                    ex);
+            }
+        }
+
+        this.logger.LogInformation(
+            "Mounted {Count} validated cooked roots: {CookedRoots}",
+            mountableRoots.Count,
+            string.Join("; ", mountableRoots));
     }
 
     private async Task OpenInitialSceneAsync()
@@ -571,6 +666,22 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
                 indexPath);
             return false;
         }
+    }
+
+    private static bool IsUnderRoot(string candidatePath, string rootPath)
+    {
+        var normalizedCandidate = System.IO.Path.GetFullPath(candidatePath)
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        var normalizedRoot = System.IO.Path.GetFullPath(rootPath)
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+
+        return normalizedCandidate.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+               || normalizedCandidate.StartsWith(
+                   normalizedRoot + System.IO.Path.DirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase)
+               || normalizedCandidate.StartsWith(
+                   normalizedRoot + System.IO.Path.AltDirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private AffectedScope CreateProjectScope()

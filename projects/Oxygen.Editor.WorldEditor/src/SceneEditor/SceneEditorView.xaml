@@ -56,6 +56,15 @@
                 </dnc:ToolBarButton.Icon>
             </dnc:ToolBarButton>
 
+            <dnc:ToolBarButton
+                Command="{x:Bind ViewModel.CookCurrentSceneCommand}"
+                Label="Cook Scene"
+                ToolBarLabelPosition="Collapsed">
+                <dnc:ToolBarButton.Icon>
+                    <FontIconSource Glyph="&#xE895;" />
+                </dnc:ToolBarButton.Icon>
+            </dnc:ToolBarButton>
+
             <dnc:ToolBarSeparator />
 
             <dnc:ToolBarElementHost>

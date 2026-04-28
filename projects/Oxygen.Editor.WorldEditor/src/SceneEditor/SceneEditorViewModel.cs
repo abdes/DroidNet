@@ -17,8 +17,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Core.Diagnostics;
+using Oxygen.Core;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
@@ -52,6 +56,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ISceneDocumentCommandService commandService;
+    private readonly IContentPipelineService contentPipelineService;
+    private readonly IContentBrowserAssetProvider assetProvider;
     private readonly IDocumentService documentService;
     private readonly WindowId windowId;
     private readonly IContainer container;
@@ -78,6 +84,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
         ISceneDocumentCommandService commandService,
+        IContentPipelineService contentPipelineService,
+        IContentBrowserAssetProvider assetProvider,
         IContainer container,
         IMessenger messenger,
         ILoggerFactory? loggerFactory = null)
@@ -86,6 +94,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.commandService = commandService;
+        this.contentPipelineService = contentPipelineService;
+        this.assetProvider = assetProvider;
         this.documentService = documentService;
         this.windowId = windowId;
         this.loggerFactory = loggerFactory;
@@ -454,6 +464,33 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         await this.SaveAsync().ConfigureAwait(true);
     }
 
+    [RelayCommand]
+    private async Task CookCurrentSceneAsync()
+    {
+        if (this.scene is null)
+        {
+            this.PublishCookFailure("Scene is not loaded.");
+            return;
+        }
+
+        try
+        {
+            var sceneUri = this.GetSceneAssetUri(this.scene);
+            var result = await this.contentPipelineService.CookCurrentSceneAsync(this.scene, sceneUri, CancellationToken.None)
+                .ConfigureAwait(true);
+            result = await this.RefreshCatalogAfterCookAsync(result, sceneUri).ConfigureAwait(true);
+            this.PublishCookResult(result, sceneUri);
+            if (result.Validation?.Succeeded == true && result.Status is not OperationStatus.Failed)
+            {
+                _ = this.messenger.Send(new ValidatedCookedOutputMessage(GetValidatedCookedRoots(result)));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.PublishCookFailure(ex.Message, ex);
+        }
+    }
+
     /// <inheritdoc/>
     public async Task SaveAsync()
     {
@@ -490,6 +527,130 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // TODO: Implement locate in content browser (publish a message / call service). For now log.
         this.LogLocateInContentBrowserRequested();
     }
+
+    private Uri GetSceneAssetUri(Oxygen.Editor.World.Scene scene)
+    {
+        var mountName = scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault(
+                mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
+            ?.Name
+            ?? scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault()?.Name
+            ?? "Content";
+        return new Uri($"{AssetUris.Scheme}:///{mountName}/Scenes/{scene.Name}.oscene.json");
+    }
+
+    private void PublishCookResult(ContentCookResult result, Uri sceneUri)
+    {
+        var diagnostics = result.Diagnostics;
+        this.operationResults.Publish(new OperationResult
+        {
+            OperationId = result.OperationId,
+            OperationKind = ContentPipelineOperationKinds.CookScene,
+            Status = result.Status,
+            Severity = result.Status == OperationStatus.Failed && diagnostics.Count == 0
+                ? DiagnosticSeverity.Error
+                : this.statusReducer.ComputeSeverity(diagnostics),
+            Title = "Cook Current Scene",
+            Message = result.Status == OperationStatus.Failed
+                ? $"Scene cook failed: {sceneUri}."
+                : $"Cooked current scene to {result.Validation?.CookedRoot ?? result.Inspection?.CookedRoot ?? "(no cooked root)"}.",
+            CompletedAt = DateTimeOffset.UtcNow,
+            AffectedScope = new AffectedScope
+            {
+                DocumentId = this.Metadata.DocumentId,
+                DocumentName = this.Metadata.Title,
+                AssetId = sceneUri.ToString(),
+                AssetVirtualPath = sceneUri.AbsolutePath,
+                SceneId = this.scene?.Id,
+                SceneName = this.scene?.Name,
+            },
+            Diagnostics = diagnostics,
+        });
+    }
+
+    private void PublishCookFailure(string message, Exception? exception = null)
+    {
+        var operationId = Guid.NewGuid();
+        var diagnostic = new DiagnosticRecord
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Error,
+            Code = AssetCookDiagnosticCodes.CookFailed,
+            Message = message,
+            TechnicalMessage = exception?.Message,
+            ExceptionType = exception?.GetType().FullName,
+        };
+        this.operationResults.Publish(new OperationResult
+        {
+            OperationId = operationId,
+            OperationKind = ContentPipelineOperationKinds.CookScene,
+            Status = OperationStatus.Failed,
+            Severity = DiagnosticSeverity.Error,
+            Title = "Cook Current Scene",
+            Message = message,
+            CompletedAt = DateTimeOffset.UtcNow,
+            AffectedScope = new AffectedScope
+            {
+                DocumentId = this.Metadata.DocumentId,
+                DocumentName = this.Metadata.Title,
+                SceneId = this.scene?.Id,
+                SceneName = this.scene?.Name,
+            },
+            Diagnostics = [diagnostic],
+        });
+    }
+
+    private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri sceneUri)
+    {
+        if (result.Status == OperationStatus.Failed)
+        {
+            return result;
+        }
+
+        try
+        {
+            await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
+            _ = this.messenger.Send(new AssetsChangedMessage(sceneUri));
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var diagnostic = new DiagnosticRecord
+            {
+                OperationId = result.OperationId,
+                Domain = FailureDomain.AssetIdentity,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetIdentityDiagnosticCodes.RefreshFailed,
+                Message = "Asset catalog refresh failed after scene cook.",
+                TechnicalMessage = ex.Message,
+                ExceptionType = ex.GetType().FullName,
+                AffectedEntity = new AffectedScope
+                {
+                    DocumentId = this.Metadata.DocumentId,
+                    DocumentName = this.Metadata.Title,
+                    AssetId = sceneUri.ToString(),
+                    AssetVirtualPath = sceneUri.AbsolutePath,
+                    SceneId = this.scene?.Id,
+                    SceneName = this.scene?.Name,
+                },
+            };
+            return result with
+            {
+                Status = result.Status == OperationStatus.Succeeded
+                    ? OperationStatus.PartiallySucceeded
+                    : result.Status,
+                Diagnostics = [.. result.Diagnostics, diagnostic],
+            };
+        }
+    }
+
+    private static IReadOnlyList<string> GetValidatedCookedRoots(ContentCookResult result)
+        => result.Validation?.CookedRoot
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+           ?? [];
 
     private IMenuSource BuildQuickAddMenu()
     {

@@ -11,6 +11,13 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Page Update="Assets\Resources\ViewportIcons.xaml">
+            <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+            <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+        </Page>
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Collections" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
@@ -43,6 +50,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Routing\src\Oxygen.Editor.Routing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentBrowser\src\Oxygen.Editor.ContentBrowser.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.MaterialEditor\src\Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />

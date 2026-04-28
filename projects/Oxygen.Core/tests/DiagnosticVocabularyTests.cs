@@ -35,7 +35,7 @@ public class DiagnosticVocabularyTests
         _ = DiagnosticCodes.ViewPrefix.Should().Be("OXE.VIEW.");
         _ = DiagnosticCodes.ViewportPrefix.Should().Be("OXE.VIEWPORT.");
         _ = DiagnosticCodes.SettingsPrefix.Should().Be("OXE.SETTINGS.");
-        _ = DiagnosticCodes.AssetMountPrefix.Should().Be("OXE.ASSET_MOUNT.");
+        _ = DiagnosticCodes.AssetMountPrefix.Should().Be("OXE.ASSETMOUNT.");
     }
 
     [TestMethod]
@@ -59,5 +59,40 @@ public class DiagnosticVocabularyTests
         _ = AssetIdentityDiagnosticCodes.CookedMissing.Should().Be("OXE.ASSETID.Cooked.Missing");
         _ = AssetIdentityDiagnosticCodes.ContentRootInvalidSelection.Should().Be("OXE.PROJECT.CONTENT_ROOT.InvalidSelection");
         _ = AssetIdentityDiagnosticCodes.AssetStale.Should().Be("OXE.CONTENTPIPELINE.Asset.Stale");
+        _ = AssetIdentityDiagnosticCodes.RefreshFailed.Should().Be("OXE.ASSETID.RefreshFailed");
+    }
+
+    [TestMethod]
+    public void OperationKinds_ShouldMatchEdM07ContentPipelineVocabulary()
+    {
+        _ = ContentPipelineOperationKinds.DescriptorGenerate.Should().Be("Content.Descriptor.Generate");
+        _ = ContentPipelineOperationKinds.ManifestGenerate.Should().Be("Content.Manifest.Generate");
+        _ = ContentPipelineOperationKinds.Import.Should().Be("Content.Import");
+        _ = ContentPipelineOperationKinds.CookAsset.Should().Be("Content.Cook.Asset");
+        _ = ContentPipelineOperationKinds.CookScene.Should().Be("Content.Cook.Scene");
+        _ = ContentPipelineOperationKinds.CookFolder.Should().Be("Content.Cook.Folder");
+        _ = ContentPipelineOperationKinds.CookProject.Should().Be("Content.Cook.Project");
+        _ = ContentPipelineOperationKinds.CookedOutputInspect.Should().Be("Content.CookedOutput.Inspect");
+        _ = ContentPipelineOperationKinds.CookedOutputValidate.Should().Be("Content.CookedOutput.Validate");
+        _ = ContentPipelineOperationKinds.CatalogRefresh.Should().Be("Content.Catalog.Refresh");
+    }
+
+    [TestMethod]
+    public void DiagnosticCodes_ShouldMatchEdM07ContentPipelineVocabulary()
+    {
+        _ = ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed
+            .Should().Be("OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed");
+        _ = ContentPipelineDiagnosticCodes.SceneUnsupportedField.Should().Be("OXE.CONTENTPIPELINE.SCENE.UnsupportedField");
+        _ = ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed
+            .Should().Be("OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed");
+        _ = ContentPipelineDiagnosticCodes.ManifestGenerationFailed
+            .Should().Be("OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed");
+        _ = ContentPipelineDiagnosticCodes.InspectFailed.Should().Be("OXE.CONTENTPIPELINE.INSPECT.Failed");
+        _ = ContentPipelineDiagnosticCodes.ValidateFailed.Should().Be("OXE.CONTENTPIPELINE.VALIDATE.Failed");
+        _ = AssetImportDiagnosticCodes.SourceMissing.Should().Be("OXE.ASSETIMPORT.SourceMissing");
+        _ = AssetImportDiagnosticCodes.ImportFailed.Should().Be("OXE.ASSETIMPORT.ImportFailed");
+        _ = AssetCookDiagnosticCodes.CookFailed.Should().Be("OXE.ASSETCOOK.CookFailed");
+        _ = AssetCookDiagnosticCodes.IndexInvalid.Should().Be("OXE.ASSETCOOK.IndexInvalid");
+        _ = AssetMountDiagnosticCodes.RefreshFailed.Should().Be("OXE.ASSETMOUNT.RefreshFailed");
     }
 }
