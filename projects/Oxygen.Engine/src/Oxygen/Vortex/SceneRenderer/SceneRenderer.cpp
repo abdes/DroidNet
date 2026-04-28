@@ -2046,6 +2046,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 9: Base pass
   auto base_pass_published = false;
+  auto base_pass_wrote_scene_color = false;
   auto base_pass_draw_count = std::uint32_t { 0U };
   auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
   if (base_pass_ != nullptr) {
@@ -2057,6 +2058,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     });
     const auto base_pass_result = base_pass_->Execute(ctx, scene_textures);
     base_pass_published = base_pass_result.published_base_pass_products;
+    base_pass_wrote_scene_color = base_pass_result.wrote_scene_color;
     base_pass_draw_count = base_pass_result.draw_count;
     base_pass_occlusion_culled_draw_count
       = base_pass_result.occlusion_culled_draw_count;
@@ -2073,14 +2075,14 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     DiagnosticsPassRecord {
       .name = "Vortex.Stage9.BasePass",
       .kind = DiagnosticsPassKind::kGraphics,
-      .executed = base_pass_published,
+      .executed = base_pass_wrote_scene_color,
       .inputs = ctx.current_view.occlusion_results.get() != nullptr
         ? std::vector<std::string> { "Vortex.PreparedSceneFrame",
             "Vortex.OcclusionFrameResults" }
         : std::vector<std::string> { "Vortex.PreparedSceneFrame" },
       .outputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
     });
-  if (base_pass_published) {
+  if (base_pass_wrote_scene_color) {
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.BasePassDrawCommands",
@@ -2090,6 +2092,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .published = true,
         .valid = true,
       });
+  }
+  if (base_pass_published) {
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.SceneColor",

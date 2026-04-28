@@ -986,7 +986,8 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   -> BasePassExecutionResult
 {
   last_execution_result_ = {};
-  if (config_.shading_mode != ShadingMode::kDeferred) {
+  const auto wireframe_only = config_.render_mode == RenderMode::kWireframe;
+  if (config_.shading_mode != ShadingMode::kDeferred && !wireframe_only) {
     return last_execution_result_;
   }
 
@@ -999,8 +1000,10 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   const auto writes_velocity
     = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
+  const auto draw_command_mode
+    = wireframe_only ? ShadingMode::kDeferred : config_.shading_mode;
   mesh_processor_->BuildDrawCommands(*ctx.current_view.prepared_frame,
-    config_.shading_mode, writes_velocity,
+    draw_command_mode, writes_velocity,
     ctx.current_view.occlusion_results.get());
   last_execution_result_.draw_count
     = static_cast<std::uint32_t>(mesh_processor_->GetDrawCommands().size());
@@ -1040,7 +1043,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  if (config_.render_mode == RenderMode::kWireframe) {
+  if (wireframe_only) {
     const auto depth_read_only = false;
     if (NeedsWireframeFramebufferRebuild(
           wireframe_framebuffer_, scene_textures, depth_read_only)) {
@@ -1093,10 +1096,12 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
     last_execution_result_.completed_velocity_for_dynamic_geometry = true;
     last_execution_result_.wrote_velocity_target = false;
+    last_execution_result_.wrote_scene_color = true;
     return last_execution_result_;
   }
 
   last_execution_result_.published_base_pass_products = true;
+  last_execution_result_.wrote_scene_color = true;
   BeginBasePassResourceTracking(*recorder, scene_textures, config_);
 
   if (NeedsFramebufferRebuild(framebuffer_, scene_textures, writes_velocity)) {
