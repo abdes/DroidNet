@@ -212,7 +212,7 @@ public:
     -> observer_ptr<ui::CameraRigController>;
 
   //! Get the current rendering view mode selection.
-  [[nodiscard]] auto GetRenderingViewMode() const -> renderer::RenderMode;
+  [[nodiscard]] auto GetRenderingViewMode() const -> vortex::RenderMode;
 
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;

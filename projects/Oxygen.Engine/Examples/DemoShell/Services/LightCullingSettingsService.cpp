@@ -12,13 +12,6 @@
 
 namespace oxygen::examples {
 
-auto LightCullingSettingsService::Initialize(
-  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
-{
-  DCHECK_NOTNULL_F(pipeline);
-  pipeline_ = pipeline;
-}
-
 auto LightCullingSettingsService::BindVortexRenderer(
   observer_ptr<vortex::Renderer> renderer) -> void
 {

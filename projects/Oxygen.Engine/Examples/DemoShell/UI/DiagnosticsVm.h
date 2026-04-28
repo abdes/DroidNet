@@ -38,7 +38,7 @@ public:
   explicit DiagnosticsVm(observer_ptr<RenderingSettingsService> service);
 
   //! Returns the cached view mode.
-  [[nodiscard]] auto GetRenderMode() -> renderer::RenderMode;
+  [[nodiscard]] auto GetRenderMode() -> vortex::RenderMode;
 
   //! Returns the requested shader debug mode stored by the UI.
   [[nodiscard]] auto GetRequestedDebugMode() -> engine::ShaderDebugMode;
@@ -62,7 +62,7 @@ public:
   [[nodiscard]] auto IsVortexRuntimeBound() const -> bool;
 
   //! Sets view mode and forwards changes to the service.
-  auto SetRenderMode(renderer::RenderMode mode) -> void;
+  auto SetRenderMode(vortex::RenderMode mode) -> void;
 
   //! Sets the requested debug mode and forwards changes to the service.
   auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
@@ -82,7 +82,7 @@ private:
   mutable std::mutex mutex_ {};
   observer_ptr<RenderingSettingsService> service_;
   std::uint64_t epoch_ { 0 };
-  renderer::RenderMode render_mode_ { renderer::RenderMode::kSolid };
+  vortex::RenderMode render_mode_ { vortex::RenderMode::kSolid };
   engine::ShaderDebugMode requested_debug_mode_ {
     engine::ShaderDebugMode::kDisabled
   };

@@ -138,7 +138,7 @@ NOLINT_TEST_F(RenderingSettingsServiceTest,
   auto renderer = MakeRenderer(graphics);
   service_.BindVortexRenderer(observer_ptr { renderer.get() });
 
-  service_.SetRenderMode(renderer::RenderMode::kWireframe);
+  service_.SetRenderMode(vortex::RenderMode::kWireframe);
   service_.SetWireframeColor(
     oxygen::graphics::Color { 2.5F, 0.5F, 4.0F, 1.0F });
 

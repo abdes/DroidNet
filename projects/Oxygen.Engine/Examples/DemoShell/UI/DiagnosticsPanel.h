@@ -38,7 +38,7 @@ public:
   auto OnUnloaded() -> void override;
 
   //! Get the current render mode from the view model.
-  [[nodiscard]] auto GetRenderMode() const -> renderer::RenderMode;
+  [[nodiscard]] auto GetRenderMode() const -> vortex::RenderMode;
 
 private:
   void DrawRuntimeStatus();

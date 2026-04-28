@@ -16,10 +16,6 @@
 #include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/Services/DomainService.h"
 
-namespace oxygen::renderer {
-class RenderingPipeline;
-} // namespace oxygen::renderer
-
 namespace oxygen::vortex {
 class Renderer;
 } // namespace oxygen::vortex
@@ -35,8 +31,6 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(LightCullingSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(LightCullingSettingsService)
 
-  virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
-    -> void;
   virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
 
@@ -57,7 +51,6 @@ private:
   static constexpr auto kVisualizationModeKey
     = "light_culling.visualization_mode";
 
-  observer_ptr<renderer::RenderingPipeline> pipeline_ { nullptr };
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   mutable std::atomic_uint64_t epoch_ { 0 };
 };

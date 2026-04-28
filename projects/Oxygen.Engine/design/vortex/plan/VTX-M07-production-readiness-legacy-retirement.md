@@ -216,6 +216,24 @@ Validation:
 - `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.LinkTest --parallel 4`
 - `ctest --preset test-debug -R "Oxygen\.Vortex\.LinkTest" --output-on-failure`
 
+Evidence:
+
+- `tools/vortex/Assert-VortexLegacySeams.ps1` now scans current Vortex and
+  required-example source/build files for legacy renderer includes,
+  namespaces, qualified symbols, and target seams while leaving
+  `oxygen::imgui` allowed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\vortex\Assert-VortexLegacySeams.ps1 -ReportPath
+  out\build-ninja\analysis\vortex\m07-legacy-seams.txt` passed, scanning 547
+  current source/build files with no forbidden seams.
+- `cmake --build out\build-ninja --config Debug --target
+  Oxygen.Vortex.LinkTest oxygen-examples-demoshell
+  oxygen-examples-multiview oxygen-examples-texturedcube
+  oxygen-examples-physics --parallel 4` passed after the source cleanup.
+- `ctest --preset test-debug -R
+  "Oxygen\.Vortex\.LinkTest|Oxygen\.Examples\.DemoShell\.RenderingSettingsService\.Tests|Oxygen\.Examples\.DemoShell\.DiagnosticsPanel\.Tests"
+  --output-on-failure` passed with 3/3 test executables.
+
 ### C. Stale Example Source And README Retirement
 
 Required work:
@@ -233,6 +251,19 @@ Validation:
 - Static seam script from Slice B.
 - Focused example builds for touched examples.
 - `git diff --check`
+
+Evidence so far:
+
+- Stale uncompiled `Examples/MultiView/ImGuiView.cpp` and
+  `Examples/MultiView/ImGuiView.h` were removed. They were not part of
+  `Examples/MultiView/CMakeLists.txt` and referenced old renderer APIs and
+  missing local headers.
+- Active DemoShell/TexturedCube/Physics compatibility seams using
+  `oxygen::renderer` or `renderer::` were removed from current source.
+- The Slice B seam guard and focused build/test gates above passed after this
+  cleanup.
+- This slice is not closed yet: `Examples/Async/README.md` and Async
+  proof-tool wording still need current Vortex production-proof language.
 
 ### D. Required Example Build And Runtime Smoke Matrix
 
