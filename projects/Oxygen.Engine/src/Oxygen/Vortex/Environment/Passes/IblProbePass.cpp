@@ -175,9 +175,8 @@ auto IblProbePass::RefreshStaticSkyLight(
       MarkStaticSkyLightUnavailable(
         next_state, StaticSkyLightUnavailableReason::kUnsupportedFormat, key);
     } else {
-      MarkStaticSkyLightUnavailable(next_state,
-        StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete,
-        key);
+      MarkStaticSkyLightUnavailable(
+        next_state, StaticSkyLightUnavailableReason::kGpuProductsPending, key);
     }
   } else {
     MarkStaticSkyLightUnavailable(

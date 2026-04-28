@@ -185,7 +185,7 @@ struct GpuSkyLightParams
     uint cubemap_max_mip;
     uint prefilter_max_mip;
     uint ibl_generation;
-    uint _pad1;
+    uint diffuse_sh_slot;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)

@@ -160,27 +160,35 @@ Implementation evidence:
   creation/upload, descriptor registration, upload-ticket gating, key-change
   resource replacement, and deferred release through existing Vortex
   Graphics/UploadCoordinator systems.
-- Kept completed GPU products out of `EnvironmentProbeBindings` until the
-  shader ABI migration lands; product SRVs are recorded on
-  `StaticSkyLightProducts`, while shading bindings remain invalid and the state
-  remains unavailable with `kShaderConsumerMigrationIncomplete`.
-- Kept specified-cubemap SkyLight unavailable with
-  `kShaderConsumerMigrationIncomplete` until resource generation and shader
-  consumer migration land, so shaders cannot sample mismatched descriptors.
+- Replaced the spare `GpuSkyLightParams` ABI word with `diffuse_sh_slot` while
+  preserving `sizeof(GpuSkyLightParams) == 64` and
+  `sizeof(EnvironmentStaticData) == 672`, and updated the HLSL mirror.
+- Migrated the current shader consumers: `ForwardMesh_PS.hlsl` and
+  `LocalFogVolumeCommon.hlsli` evaluate the dedicated diffuse SH binding, and
+  `ForwardDebug_PS.hlsl` samples only the processed SkyLight cubemap for
+  SkyLight raw-sky diagnostics with `radiance_scale` applied exactly once.
+- Removed the visual `sky_sphere.cubemap_slot` fallback from SkyLight
+  consumers and added a focused source audit covering `ForwardMesh_PS.hlsl`,
+  `ForwardDebug_PS.hlsl`, and `LocalFogVolumeCommon.hlsli`.
+- Completed renderer-owned product publication into
+  `EnvironmentProbeBindings`: completed uploads publish processed cubemap and
+  diffuse SH SRVs, keep unavailable specular resources invalid, mark the
+  static SkyLight product `kValidCurrentKey`, and expose `diffuse_sh_slot`,
+  processed cubemap slot/mip, and HDR `source_radiance_scale` through
+  `EnvironmentStaticData`.
 
 Validation evidence:
 
 - `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4` passed.
-- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 49/49 tests.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 50/50 tests.
 - `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
 - `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
 
 Remaining gaps:
 
-- GPU processed cubemap and SH upload exist, but they are intentionally gated
-  from shader-facing `EnvironmentProbeBindings` until the shader ABI migration
-  and consumers land.
-- `diffuse_sh_slot` in `GpuSkyLightParams` and shader consumer migration remain
-  open for Slice D.
+- Deferred static SkyLight diffuse consumption remains open; the current slice
+  publishes valid products and migrates existing forward/fog/debug consumers.
+- Visual skybox rendering and deterministic runtime procedural-sky versus
+  cubemap-sky selection remain open.
 - Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain
   open for later slices/closeout.
