@@ -119,20 +119,24 @@ Illustrative ED-M05 editor:
 ```text
 +--------------------------------------------------------------+
 | Material: Preview Gold                              [save]   |
-| [preview sphere/cube]     asset:///Content/Materials/Gold    |
+| [swatch preview]          asset:///Content/Materials/Gold... |
 | Descriptor: saved   Cooked: stale                    [cook]  |
 +--------------------------------------------------------------+
-| Surface                                                      |
-|   Base Color     [swatch]  1.00  0.76  0.22  1.00           |
-|   Metallic       [ 1.00 ]                         [reset]    |
-|   Roughness      [ 0.35 ]                         [reset]    |
-| Alpha                                                        |
-|   Mode           [ OPAQUE v ]                                |
-|   Double Sided   [ off ]                                     |
-| > Advanced                                                   |
-| > Raw descriptor metadata                                    |
+| Identity                                                     |
+|   Asset URI      asset:///Content/Materials/Gold...    [copy] |
+|   Asset GUID     0f2d...                               [copy] |
+| PBR Metallic Roughness                                      |
+|   Base Color     R [1.00] G [0.76] B [0.22] A [1.00]        |
+|   Surface        Metallic [1.00] Roughness [0.35]           |
+| > Advanced                                                  |
+|   Alpha          Mode [Opaque v] Cutoff [0.50]              |
+|   Rendering      Double Sided [off]                         |
 +--------------------------------------------------------------+
 ```
+
+The UI uses shared editor property controls (`PropertiesExpander` and
+`PropertyCard`) and DroidNet `NumberBox` scalar editors. ED-M05 must not ship
+one-off number boxes or one-off section chrome for this editor.
 
 ## 6. Ownership
 
@@ -163,22 +167,45 @@ public sealed class MaterialDocument
 {
     public Guid DocumentId { get; }
     public Uri MaterialUri { get; }            // asset:///{Mount}/{Path}.omat.json
-    public MaterialSource Source { get; }      // edited in place; persisted via writer
-    public MaterialAsset Asset { get; }        // identity for assignment
+    public MaterialSource Source { get; }      // immutable source snapshot
+    public MaterialAsset Asset { get; }        // identity only; Source is authoritative while editing
     public bool IsDirty { get; }
     public DescriptorState DescriptorState { get; }
-    public CookState CookState { get; }
+    public MaterialCookState CookState { get; }
 }
 
 public enum DescriptorState { Saved, Dirty, Missing, Invalid }
-public enum CookState       { Cooked, Stale, NotCooked, Failed, Unsupported }
 ```
+
+`MaterialSource` and nested PBR records are immutable in `Oxygen.Assets`.
+Material edits replace the affected record branch and publish a new document
+snapshot; they do not rely on hidden mutable editor-only state.
+
+Material asset name policy is option B: the user-facing asset name is the
+material source file stem. `Content/Materials/Gold.omat.json` opens as `Gold`,
+and saves with `MaterialSource.Name == "Gold"`. The Material Editor header
+shows this name; the Identity section shows the material asset URI and an
+editor-side material GUID with copy buttons. The GUID is derived from the
+canonical asset URI for ED-M05 and is not written into `oxygen.material.v1`.
+The editor must not create a second editable descriptor name that can drift from
+Content Browser and filesystem names. A future Content Browser asset rename
+command owns file/URI rename, stable registry identity, and reference repair.
+
+`MaterialDocument.Source` is the editable snapshot. `MaterialDocument.Asset`
+exists only to expose identity for assignment/open workflows; its optional
+`MaterialAsset.Source` may be stale and is not updated during scalar edits.
+
+`MaterialCookState` and `MaterialCookResult` are owned by
+[content-pipeline.md](./content-pipeline.md). MaterialEditor consumes that
+contract instead of defining a parallel cook-result type.
 
 ### 7.3 Field table (V0.1 PBR)
 
 | UI Field | `MaterialSource` path | Type | Range / Validation | Tier |
 | --- | --- | --- | --- | --- |
-| Name | `Name` | `string` | non-empty, len ≤ 128 | Primary |
+| Asset URI | `MaterialUri` | `Uri` | read-only with copy affordance | Primary |
+| Asset GUID | derived editor identity | `Guid` | read-only with copy affordance; not serialized to material JSON | Primary |
+| Name | `Name` | `string` | derived from `*.omat.json` file stem; shown in header, not edited as a scalar field | Primary |
 | Base Color R | `PbrMetallicRoughness.BaseColorR` | `float` | `[0,1]`, clamped on commit | Primary |
 | Base Color G | `PbrMetallicRoughness.BaseColorG` | `float` | `[0,1]` | Primary |
 | Base Color B | `PbrMetallicRoughness.BaseColorB` | `float` | `[0,1]` | Primary |
@@ -190,7 +217,7 @@ public enum CookState       { Cooked, Stale, NotCooked, Failed, Unsupported }
 | Double Sided | `DoubleSided` | `bool` | — | Advanced |
 | Normal Scale | `NormalTexture.Scale` | `float` | `>= 0`, enabled iff `NormalTexture` exists | Advanced |
 | Occlusion Strength | `OcclusionTexture.Strength` | `float` | `[0,1]`, enabled iff `OcclusionTexture` exists | Advanced |
-| Texture refs (if any) | `BaseColorTexture`, `MetallicRoughnessTexture`, `NormalTexture.Source`, `OcclusionTexture.Source` | refs | **read-only** in V0.1 | Raw |
+| Texture refs (if any) | `PbrMetallicRoughness.BaseColorTexture`, `PbrMetallicRoughness.MetallicRoughnessTexture`, `NormalTexture`, `OcclusionTexture` | refs | **read-only** in V0.1 | Raw |
 | Schema / Type | `Schema`, `Type` | string | read-only | Raw |
 
 Clamp policy: out-of-range numeric input is **clamped on commit** and the
@@ -210,7 +237,7 @@ only the URI; the catalog rehydrates the asset on load.
 ```csharp
 public interface IMaterialDocumentService
 {
-    Task<MaterialDocument> CreateAsync(Uri targetUri, string name, CancellationToken ct);
+    Task<MaterialDocument> CreateAsync(Uri targetUri, CancellationToken ct);
     Task<MaterialDocument> OpenAsync(Uri materialUri, CancellationToken ct);
     Task<MaterialEditResult> EditScalarAsync(Guid documentId, MaterialFieldEdit edit, CancellationToken ct);
     Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken ct);
@@ -224,7 +251,6 @@ public readonly record struct MaterialFieldEdit(
 
 public sealed record MaterialEditResult(bool Succeeded, OperationResultId? ResultId);
 public sealed record MaterialSaveResult(bool Succeeded, OperationResultId? ResultId);
-public sealed record MaterialCookResult(CookState NewState, OperationResultId? ResultId);
 ```
 
 All mutating operations follow the ED-M03 command pattern: validate → mutate
@@ -284,6 +310,18 @@ Material picker:
 +-----------------------------------------------+
 ```
 
+`Create New` flow:
+
+1. Opens a compact prompt for material name and target folder.
+2. Defaults the target folder to `/Content/Materials` under the active project.
+   A content-browser folder becomes the initial target only when it is already
+   under `/Content`; arbitrary project-root folders such as `Scenes` are not
+   inferred as material targets.
+3. Creates `{Name}.omat.json` via `IMaterialDocumentService.CreateAsync`.
+4. Opens the new material document. Assignment to a geometry slot is a separate
+   explicit picker action unless the picker was launched from a slot and the
+   user confirms assigning the newly created material.
+
 ## 10. Persistence And Round Trip
 
 Requirements:
@@ -311,9 +349,15 @@ That service uses `Oxygen.Assets` primitives (`MaterialSourceImporter` and
 `CookedMaterialWriter`) to produce the cooked `.omat`; `Oxygen.Editor.MaterialEditor`
 does not own cook primitive execution. If the descriptor is dirty, cook is
 **rejected** with `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty` (user must
-save first). On success the result transitions `CookState` to `Cooked`. The
+save first). On success the result transitions `MaterialCookState` to `Cooked`. The
 cooked output path follows existing project cooked-root layout — this LLD does
-not invent a new path scheme.
+not invent a new path scheme. For the default Content mount:
+
+```text
+source: <ProjectRoot>/Content/Materials/Gold.omat.json
+cooked: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
+index:  <ProjectRoot>/.cooked/Content/container.index.bin
+```
 
 ### 11.3 Preview
 
@@ -322,11 +366,13 @@ ED-M05 does not introduce a managed material preview API. Preview is:
 1. **In the material document**: a deterministic CPU-rendered swatch driven
    by the scalar PBR values (no engine roundtrip). Shows base color, alpha,
    and a fixed-lighting ball thumbnail.
-2. **In the scene**: the slot assignment is recorded in scene data;
-   `ISceneEngineSync.UpdateMaterialSlotAsync` returns `Unsupported`
-   (`OXE.LIVESYNC.MATERIAL.Unsupported`). The scene preview will reflect
-   the assignment only once the engine exposes a material override API in a
-   later milestone.
+2. **In the scene**: the slot assignment is recorded in scene data. The
+   geometry material override calls on `ISceneEngineSync`
+   (`UpdateMaterialOverrideAsync`, `UpdateTargetedMaterialOverrideAsync`,
+   `RemoveMaterialOverrideAsync`, `RemoveTargetedMaterialOverrideAsync`) return
+   `Unsupported` by V0.1 editor policy (`OXE.LIVESYNC.MATERIAL.Unsupported`).
+   The engine override API exists; ED-M05 does not wire that API into the
+   editor sync surface.
 
 No engine cooked-root remount is forced from the material editor. The user
 triggers cook explicitly; project-level mount/refresh is owned by
@@ -346,7 +392,8 @@ commands) and dilutes diagnostic filtering.
 | --- | --- | --- |
 | Numeric out of range | (clamped, no result) | — |
 | Non-numeric input | `MaterialAuthoring` | `OXE.MATERIAL.Field.Rejected` |
-| Empty / over-long name | `MaterialAuthoring` | `OXE.MATERIAL.Name.Invalid` |
+| Empty / over-long name in Create New prompt | `MaterialAuthoring` | `OXE.MATERIAL.Name.Invalid` |
+| Descriptor-only name edit attempt | `MaterialAuthoring` | `OXE.MATERIAL.Field.Rejected` |
 | Save IO failure | `Document` | `OXE.DOCUMENT.MATERIAL.SaveFailed` |
 | Cook with dirty descriptor | `ContentPipeline` | `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty` |
 | Cook IO / importer failure | `ContentPipeline` | `OXE.CONTENTPIPELINE.MATERIAL.CookFailed` |
@@ -381,7 +428,7 @@ Forbidden:
    the user saves.
 3. Cook with dirty descriptor returns `Rejected` with
    `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty`. After save, cook succeeds
-   and `CookState` becomes `Cooked`.
+   and `MaterialCookState` becomes `Cooked`.
 4. Geometry assignment via picker writes the URI through
    `EditMaterialSlotAsync`, persists round-trip, and reports the slot's
    `MATERIAL.Unsupported` warning from live sync without blocking the edit.

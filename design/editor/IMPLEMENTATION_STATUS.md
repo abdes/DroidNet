@@ -64,12 +64,12 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Prepare `ED-M05 - Scalar Material Authoring`: review/update the required
-   LLDs and produce the detailed implementation plan before coding starts.
-2. Validate or record the supported single live viewport behavior for `ED-M02`.
-3. Record the `ED-M02` validation ledger row only after visual validation
+1. Start ED-M05 implementation from
+   [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md).
+3. Validate or record the supported single live viewport behavior for `ED-M02`.
+4. Record the `ED-M02` validation ledger row only after visual validation
    passes.
-4. Keep this ledger synchronized whenever a milestone or detailed plan changes.
+5. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
 
@@ -286,7 +286,7 @@ Exit evidence required:
 
 ### ED-M05 - Scalar Material Authoring
 
-Status: `planned`
+Status: `active`
 
 Trace: `GOAL-002`, `GOAL-004`, `GOAL-005`, `GOAL-006`; `REQ-010`,
 `REQ-011`, `REQ-012`, `REQ-013`, `REQ-014`, `REQ-021`, `REQ-022`,
@@ -295,10 +295,19 @@ Trace: `GOAL-002`, `GOAL-004`, `GOAL-005`, `GOAL-006`; `REQ-010`,
 Outcome: users can create/open/edit scalar material assets and assign them to
 geometry through real editor UI.
 
-- [ ] Required LLDs are reviewed:
+Current note: the first ED-M05 implementation pass was rejected during manual
+inspection. The corrective pass must make the material workflow user-oriented:
+source descriptors under the Content authoring mount, cooked output under the
+active project's `.cooked/<mount>` root, geometry material picker refresh on
+open, and Material Editor UI built from shared editor property controls and
+DroidNet number controls.
+
+- [x] Required LLDs are reviewed:
       `material-editor`, `content-browser-asset-identity`,
       `asset-primitives`, `content-pipeline`.
-- [ ] Detailed `ED-M05` implementation plan exists.
+- [x] Detailed `ED-M05` implementation plan exists.
+- [ ] Corrective workflow/UI pass is landed after the rejected first
+      implementation.
 - [ ] Users can create/open scalar material assets.
 - [ ] Users can inspect and edit scalar material values.
 - [ ] Users can assign material assets to geometry through asset identity.
@@ -460,6 +469,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
 | [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `validated` | No further action for ED-M04. |
+| [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `active` | Accepted for implementation; start ED-M05. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
 | [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `planned` | Reconcile with `asset-primitives.md` and `content-browser-asset-identity.md`. |
