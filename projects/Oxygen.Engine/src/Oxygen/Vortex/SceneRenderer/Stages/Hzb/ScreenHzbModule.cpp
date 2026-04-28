@@ -291,6 +291,16 @@ struct ScreenHzbModule::Impl {
     };
   };
 
+  struct PassConstantsBlock {
+    std::shared_ptr<graphics::Buffer> buffer {};
+    void* mapped_ptr { nullptr };
+  };
+
+  struct PassConstantsSlot {
+    std::byte* mapped_ptr { nullptr };
+    ShaderVisibleIndex shader_visible_index { kInvalidShaderVisibleIndex };
+  };
+
   struct ViewState {
     std::uint32_t width { 0U };
     std::uint32_t height { 0U };
@@ -315,19 +325,23 @@ struct ScreenHzbModule::Impl {
 
   ~Impl()
   {
-    if (pass_constants_buffer && pass_constants_mapped_ptr != nullptr) {
-      pass_constants_buffer->UnMap();
-      pass_constants_mapped_ptr = nullptr;
-    }
-
     auto gfx = renderer.GetGraphics();
     if (gfx == nullptr) {
       return;
     }
 
     auto& registry = gfx->GetResourceRegistry();
-    if (pass_constants_buffer && registry.Contains(*pass_constants_buffer)) {
-      registry.UnRegisterResource(*pass_constants_buffer);
+    for (auto& block : pass_constants_blocks) {
+      if (block.buffer && block.mapped_ptr != nullptr) {
+        block.buffer->UnMap();
+        block.mapped_ptr = nullptr;
+      }
+      if (block.buffer && registry.Contains(*block.buffer)) {
+        registry.UnRegisterResource(*block.buffer);
+      }
+      if (block.buffer) {
+        gfx->RegisterDeferredRelease(std::move(block.buffer));
+      }
     }
 
     for (auto& [view_id, state] : view_states) {
@@ -376,7 +390,7 @@ struct ScreenHzbModule::Impl {
 
   auto EnsurePassConstantsBuffer(const std::uint32_t slot_count) -> void
   {
-    if (pass_constants_buffer && pass_constants_capacity >= slot_count) {
+    if (pass_constants_slots.size() >= slot_count) {
       return;
     }
 
@@ -385,66 +399,75 @@ struct ScreenHzbModule::Impl {
     auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
 
-    if (pass_constants_buffer && pass_constants_mapped_ptr != nullptr) {
-      pass_constants_buffer->UnMap();
-      pass_constants_mapped_ptr = nullptr;
-    }
-    if (pass_constants_buffer && registry.Contains(*pass_constants_buffer)) {
-      registry.UnRegisterResource(*pass_constants_buffer);
-    }
+    const auto first_missing_slot
+      = static_cast<std::uint32_t>(pass_constants_slots.size());
+    const auto slots_to_add = slot_count - first_missing_slot;
 
     const auto buffer_size
-      = static_cast<std::uint64_t>(slot_count) * kPassConstantsStride;
+      = static_cast<std::uint64_t>(slots_to_add) * kPassConstantsStride;
     const graphics::BufferDesc desc {
       .size_bytes = buffer_size,
       .usage = graphics::BufferUsage::kConstant,
       .memory = graphics::BufferMemory::kUpload,
       .debug_name = "Vortex.Stage5.ScreenHzbBuild.PassConstants",
     };
-    pass_constants_buffer = gfx->CreateBuffer(desc);
+    auto block = PassConstantsBlock {
+      .buffer = gfx->CreateBuffer(desc),
+      .mapped_ptr = nullptr,
+    };
     CHECK_NOTNULL_F(
-      pass_constants_buffer.get(), "Failed to create Screen HZB constants");
-    registry.Register(pass_constants_buffer);
+      block.buffer.get(), "Failed to create Screen HZB constants");
+    registry.Register(block.buffer);
 
-    pass_constants_mapped_ptr = pass_constants_buffer->Map(0U, desc.size_bytes);
+    block.mapped_ptr = block.buffer->Map(0U, desc.size_bytes);
     CHECK_NOTNULL_F(
-      pass_constants_mapped_ptr, "Failed to map Screen HZB constants");
+      block.mapped_ptr, "Failed to map Screen HZB constants");
 
-    pass_constants_indices.clear();
-    pass_constants_indices.reserve(slot_count);
-    for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
+    auto* const block_base_ptr = static_cast<std::byte*>(block.mapped_ptr);
+    pass_constants_slots.reserve(slot_count);
+    for (std::uint32_t local_slot = 0U; local_slot < slots_to_add;
+      ++local_slot) {
       auto handle
         = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
           graphics::DescriptorVisibility::kShaderVisible);
       CHECK_F(handle.IsValid(), "Failed to allocate Screen HZB constants CBV");
 
+      const auto byte_offset
+        = static_cast<std::uint64_t>(local_slot) * kPassConstantsStride;
       graphics::BufferViewDescription view_desc;
       view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
       view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-      view_desc.range = {
-        static_cast<std::uint64_t>(slot) * kPassConstantsStride,
-        kPassConstantsStride,
-      };
+      view_desc.range = { byte_offset, kPassConstantsStride };
 
-      pass_constants_indices.push_back(allocator.GetShaderVisibleIndex(handle));
-      registry.RegisterView(
-        *pass_constants_buffer, std::move(handle), view_desc);
+      pass_constants_slots.push_back(PassConstantsSlot {
+        .mapped_ptr = block_base_ptr + byte_offset,
+        .shader_visible_index = allocator.GetShaderVisibleIndex(handle),
+      });
+      registry.RegisterView(*block.buffer, std::move(handle), view_desc);
     }
 
-    pass_constants_capacity = slot_count;
+    pass_constants_blocks.push_back(std::move(block));
   }
 
   auto WritePassConstants(const std::uint32_t slot,
     const ScreenHzbBuildConstants& constants) const -> void
   {
-    CHECK_NOTNULL_F(
-      pass_constants_mapped_ptr, "Screen HZB constants buffer is not mapped");
-    CHECK_F(slot < pass_constants_indices.size(),
+    CHECK_F(slot < pass_constants_slots.size(),
       "Screen HZB constants slot {} exceeds capacity {}", slot,
-      pass_constants_indices.size());
-    auto* destination = static_cast<std::byte*>(pass_constants_mapped_ptr)
-      + static_cast<std::size_t>(slot) * kPassConstantsStride;
-    std::memcpy(destination, &constants, sizeof(constants));
+      pass_constants_slots.size());
+    const auto& destination_slot = pass_constants_slots[slot];
+    CHECK_NOTNULL_F(destination_slot.mapped_ptr,
+      "Screen HZB constants slot {} is not mapped", slot);
+    std::memcpy(destination_slot.mapped_ptr, &constants, sizeof(constants));
+  }
+
+  auto AllocatePassConstantsRange(const std::uint32_t slot_count)
+    -> std::uint32_t
+  {
+    const auto base_slot = next_pass_constants_slot;
+    next_pass_constants_slot += slot_count;
+    EnsurePassConstantsBuffer(next_pass_constants_slot);
+    return base_slot;
   }
 
   auto EnsureTextureSrv(const graphics::Texture& texture,
@@ -713,10 +736,9 @@ struct ScreenHzbModule::Impl {
 
   Renderer& renderer;
   std::unordered_map<ViewId, ViewState> view_states {};
-  std::shared_ptr<graphics::Buffer> pass_constants_buffer {};
-  void* pass_constants_mapped_ptr { nullptr };
-  std::vector<ShaderVisibleIndex> pass_constants_indices {};
-  std::uint32_t pass_constants_capacity { 0U };
+  std::vector<PassConstantsBlock> pass_constants_blocks {};
+  std::vector<PassConstantsSlot> pass_constants_slots {};
+  std::uint32_t next_pass_constants_slot { 0U };
   std::optional<graphics::ComputePipelineDesc> pipeline_desc {};
 };
 
@@ -728,6 +750,8 @@ ScreenHzbModule::ScreenHzbModule(
 }
 
 ScreenHzbModule::~ScreenHzbModule() = default;
+
+void ScreenHzbModule::OnFrameStart() { impl_->next_pass_constants_slot = 0U; }
 
 void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 {
@@ -787,7 +811,8 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   state.source_view_rect_min_y = source_origin_y;
   state.source_view_rect_width = source_width;
   state.source_view_rect_height = source_height;
-  impl_->EnsurePassConstantsBuffer(mip_count);
+  const auto pass_constants_base_slot
+    = impl_->AllocatePassConstantsRange(mip_count);
   if (!impl_->pipeline_desc.has_value()) {
     impl_->pipeline_desc = BuildPipelineDesc();
   }
@@ -912,8 +937,9 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     const auto furthest_destination_uav = build_furthest
       ? state.furthest.scratch_uav_indices[scratch_slot]
       : kInvalidShaderVisibleIndex;
+    const auto pass_constants_slot = pass_constants_base_slot + mip_level;
 
-    impl_->WritePassConstants(mip_level, ScreenHzbBuildConstants {
+    impl_->WritePassConstants(pass_constants_slot, ScreenHzbBuildConstants {
       .source_closest_texture_index = closest_source_srv,
       .source_furthest_texture_index = furthest_source_srv,
       .destination_closest_texture_uav_index = closest_destination_uav,
@@ -932,7 +958,9 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       0U, 0U);
     recorder->SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-      impl_->pass_constants_indices[mip_level].get(), 1U);
+      impl_->pass_constants_slots[pass_constants_slot]
+        .shader_visible_index.get(),
+      1U);
 
     if (mip_level == 0U) {
       recorder->RequireResourceState(
