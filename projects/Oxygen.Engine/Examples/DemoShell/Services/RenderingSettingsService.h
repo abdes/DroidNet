@@ -18,10 +18,6 @@
 
 #include "DemoShell/Services/DomainService.h"
 
-namespace oxygen::renderer {
-class RenderingPipeline;
-} // namespace oxygen::renderer
-
 namespace oxygen::vortex {
 class Renderer;
 } // namespace oxygen::vortex
@@ -52,20 +48,15 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(RenderingSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(RenderingSettingsService)
 
-  //! Associates the service with a rendering pipeline.
-  virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
-    -> void;
-
-  //! Binds the service to the Vortex runtime seam when no legacy pipeline is
-  //! present.
+  //! Binds the service to the Vortex runtime.
   virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
 
   //! Returns the persisted render mode.
-  [[nodiscard]] virtual auto GetRenderMode() const -> renderer::RenderMode;
+  [[nodiscard]] virtual auto GetRenderMode() const -> vortex::RenderMode;
 
   //! Sets the render mode.
-  virtual auto SetRenderMode(renderer::RenderMode mode) -> void;
+  virtual auto SetRenderMode(vortex::RenderMode mode) -> void;
 
   //! Returns the persisted wireframe color.
   [[nodiscard]] virtual auto GetWireframeColor() const -> graphics::Color;
@@ -123,7 +114,6 @@ private:
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
 
-  observer_ptr<renderer::RenderingPipeline> pipeline_;
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   mutable std::atomic_uint64_t epoch_ { 0 };
 

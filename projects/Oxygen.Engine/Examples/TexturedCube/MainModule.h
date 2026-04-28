@@ -29,10 +29,6 @@
 #include "TexturedCube/UI/MaterialsSandboxPanel.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
 
-namespace oxygen::renderer {
-struct CompositionView;
-} // namespace oxygen::renderer
-
 namespace oxygen::examples::textured_cube {
 
 //! Main module for the TexturedCube demo.

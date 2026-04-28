@@ -435,7 +435,7 @@ auto DemoShell::GetCameraRig() const -> observer_ptr<ui::CameraRigController>
   return observer_ptr { impl_->camera_rig.get() };
 }
 
-auto DemoShell::GetRenderingViewMode() const -> renderer::RenderMode
+auto DemoShell::GetRenderingViewMode() const -> vortex::RenderMode
 {
   return impl_->rendering_settings_service.GetRenderMode();
 }

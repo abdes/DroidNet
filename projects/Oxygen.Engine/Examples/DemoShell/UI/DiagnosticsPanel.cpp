@@ -162,7 +162,7 @@ auto DiagnosticsPanel::OnUnloaded() -> void
   // Persistence is handled by RenderingSettingsService via the ViewModel.
 }
 
-auto DiagnosticsPanel::GetRenderMode() const -> renderer::RenderMode
+auto DiagnosticsPanel::GetRenderMode() const -> vortex::RenderMode
 {
   return vm_->GetRenderMode();
 }
@@ -208,7 +208,7 @@ void DiagnosticsPanel::DrawRendererCapabilities()
 
 void DiagnosticsPanel::DrawViewModeControls()
 {
-  using r = renderer::RenderMode;
+  using r = vortex::RenderMode;
 
   auto mode = vm_->GetRenderMode();
 
@@ -242,7 +242,7 @@ void DiagnosticsPanel::DrawWireframeColor()
 void DiagnosticsPanel::DrawDebugModes()
 {
   using engine::ShaderDebugMode;
-  using RenderMode = renderer::RenderMode;
+  using RenderMode = vortex::RenderMode;
 
   const bool disable_debug_modes = vm_->SupportsRenderModeControls()
     && GetRenderMode() == RenderMode::kWireframe;

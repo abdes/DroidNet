@@ -17,7 +17,7 @@ DiagnosticsVm::DiagnosticsVm(observer_ptr<RenderingSettingsService> service)
   Refresh();
 }
 
-auto DiagnosticsVm::GetRenderMode() -> renderer::RenderMode
+auto DiagnosticsVm::GetRenderMode() -> vortex::RenderMode
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -102,7 +102,7 @@ auto DiagnosticsVm::IsVortexRuntimeBound() const -> bool
   return service_->IsVortexRuntimeBound();
 }
 
-auto DiagnosticsVm::SetRenderMode(renderer::RenderMode mode) -> void
+auto DiagnosticsVm::SetRenderMode(vortex::RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
   if (render_mode_ == mode) {

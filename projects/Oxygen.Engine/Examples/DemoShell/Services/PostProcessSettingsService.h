@@ -15,10 +15,6 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 
 namespace oxygen {
-namespace renderer {
-  struct CompositionView;
-  class RenderingPipeline;
-}
 namespace scene {
   class Scene;
 }
@@ -39,11 +35,6 @@ namespace ui {
 
     OXYGEN_MAKE_NON_COPYABLE(PostProcessSettingsService)
     OXYGEN_MAKE_NON_MOVABLE(PostProcessSettingsService)
-
-    //! Associates the service with a rendering pipeline and synchronizes
-    //! initial state.
-    virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
-      -> void;
 
     //! Binds the camera settings service used for camera exposure settings.
     virtual auto BindCameraSettings(
@@ -180,7 +171,6 @@ namespace ui {
     static constexpr auto kAutoExposureMeteringKey
       = "post_process.auto_exposure.metering";
 
-    observer_ptr<renderer::RenderingPipeline> pipeline_;
     observer_ptr<CameraSettingsService> camera_settings_;
     observer_ptr<scene::Scene> scene_;
     mutable std::atomic_uint64_t epoch_ { 0 };

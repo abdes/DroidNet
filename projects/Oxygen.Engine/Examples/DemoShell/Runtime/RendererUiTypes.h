@@ -11,10 +11,6 @@
 
 #include "DemoShell/Runtime/MainViewContract.h"
 
-namespace oxygen::renderer {
-using RenderMode = vortex::RenderMode;
-} // namespace oxygen::renderer
-
 namespace oxygen::engine {
 using ShaderDebugMode = vortex::ShaderDebugMode;
 using vortex::IsIblDebugMode;

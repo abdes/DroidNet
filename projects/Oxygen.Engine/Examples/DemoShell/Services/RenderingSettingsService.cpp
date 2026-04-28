@@ -49,13 +49,6 @@ namespace {
 
 } // namespace
 
-auto RenderingSettingsService::Initialize(
-  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
-{
-  DCHECK_NOTNULL_F(pipeline);
-  pipeline_ = pipeline;
-}
-
 auto RenderingSettingsService::BindVortexRenderer(
   observer_ptr<vortex::Renderer> renderer) -> void
 {
@@ -64,9 +57,9 @@ auto RenderingSettingsService::BindVortexRenderer(
   ApplyVortexSettings();
 }
 
-auto RenderingSettingsService::GetRenderMode() const -> renderer::RenderMode
+auto RenderingSettingsService::GetRenderMode() const -> vortex::RenderMode
 {
-  using renderer::RenderMode;
+  using vortex::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
@@ -80,9 +73,9 @@ auto RenderingSettingsService::GetRenderMode() const -> renderer::RenderMode
   return RenderMode::kSolid;
 }
 
-auto RenderingSettingsService::SetRenderMode(renderer::RenderMode mode) -> void
+auto RenderingSettingsService::SetRenderMode(vortex::RenderMode mode) -> void
 {
-  using renderer::RenderMode;
+  using vortex::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const char* value = "solid";
@@ -139,8 +132,10 @@ auto RenderingSettingsService::GetEffectiveDebugMode() const
   -> engine::ShaderDebugMode
 {
   const auto requested = GetDebugMode();
-  if ((pipeline_ == nullptr) && (vortex_renderer_ != nullptr)
-    && !SupportsDebugMode(requested)) {
+  if (requested == engine::ShaderDebugMode::kDisabled) {
+    return requested;
+  }
+  if ((vortex_renderer_ == nullptr) || !SupportsDebugMode(requested)) {
     return engine::ShaderDebugMode::kDisabled;
   }
   return requested;
@@ -232,16 +227,13 @@ auto RenderingSettingsService::SupportsAtmosphereBlueNoiseControl() const
 auto RenderingSettingsService::SupportsDebugMode(
   const engine::ShaderDebugMode mode) const -> bool
 {
-  if (pipeline_ != nullptr) {
-    return true;
-  }
   return (vortex_renderer_ != nullptr)
     && SupportsVortexDebugMode(mode, vortex_renderer_->GetCapabilityFamilies());
 }
 
 auto RenderingSettingsService::IsVortexRuntimeBound() const -> bool
 {
-  return (pipeline_ == nullptr) && (vortex_renderer_ != nullptr);
+  return vortex_renderer_ != nullptr;
 }
 
 auto RenderingSettingsService::GetRendererCapabilities() const
@@ -255,7 +247,7 @@ auto RenderingSettingsService::GetRendererCapabilities() const
 
 auto RenderingSettingsService::ApplyVortexSettings() -> void
 {
-  if ((pipeline_ != nullptr) || (vortex_renderer_ == nullptr)) {
+  if (vortex_renderer_ == nullptr) {
     return;
   }
 

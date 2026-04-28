@@ -37,10 +37,6 @@ namespace oxygen::physics {
 class PhysicsModule;
 }
 
-namespace oxygen::renderer {
-struct CompositionView;
-} // namespace oxygen::renderer
-
 namespace oxygen::examples::ui {
 class CameraRigController;
 }
