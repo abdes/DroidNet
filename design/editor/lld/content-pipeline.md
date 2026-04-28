@@ -54,13 +54,12 @@ Brownfield gaps:
 
 - pipeline orchestration is not yet a first-class editor service.
 - material editor workflow does not yet call material cook orchestration.
-- scene save still has legacy cook coupling in project services; full cleanup is
-  ED-M07, not ED-M05.
+- scene save no longer has project-service cook coupling; explicit scene cook
+  orchestration remains deferred to ED-M07.
 - content browser state is not yet consistently linked to cook/index refresh.
 
-Non-regression rule: ED-M05 must not add new save-time cook coupling. Existing
-legacy scene-save cook paths are tolerated only as brownfield debt and removed
-in ED-M07.
+Non-regression rule: ED-M05+ must not add save-time cook coupling. Scene cook
+must be introduced only through explicit content-pipeline orchestration.
 
 ## 5. Target Design
 

@@ -1,6 +1,17 @@
 # ED-M01 Project Browser And Workspace Activation
 
-Status: `review`
+Status: `validated - template layout superseded by ED-M06A`
+
+Planning note:
+
+- ED-M01 remains the project browser, activation, validation, and workspace
+  transition milestone.
+- Concrete predefined template payloads, game project folder skeletons,
+  starter scene paths, default authoring creation targets, and Content Browser
+  root behavior are superseded by
+  [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md).
+- Any future work touching project creation must follow ED-M06A and
+  `project-layout-and-templates.md` for layout details.
 
 ## 1. Purpose
 

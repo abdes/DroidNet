@@ -69,6 +69,7 @@ owner.
 | Area | LLD | Covers |
 | --- | --- | --- |
 | Shell, project open, workspace activation | [project-workspace-shell.md](lld/project-workspace-shell.md) | Project Browser startup, project open/create, workspace activation, restoration, project/service boundaries. |
+| Project layout and templates | [project-layout-and-templates.md](lld/project-layout-and-templates.md) | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules. |
 | Project services | [project-services.md](lld/project-services.md) | Project metadata, project settings, content roots, project cook scope and policy. |
 | Documents, commands, undo, dirty state | [documents-and-commands.md](lld/documents-and-commands.md) | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
 | Scene authoring domain | [scene-authoring-model.md](lld/scene-authoring-model.md) | Scene graph, components, scene persistence, component completion matrix. |
