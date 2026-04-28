@@ -1505,6 +1505,9 @@ auto Renderer::PublishRuntimeCompositionView(
     composition_view.id, std::move(view_context),
     shading_mode_override.has_value() ? shading_mode_override
                                       : composition_view.shading_mode,
+    composition_view.force_wireframe
+      ? std::optional<RenderMode> { RenderMode::kWireframe }
+      : composition_view.render_settings.render_mode,
     composition_view.view_state_handle);
 
   if (composition_view.camera.has_value()) {
@@ -1522,6 +1525,7 @@ auto Renderer::PublishRuntimeCompositionView(
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
   const std::optional<ShadingMode> shading_mode_override,
+  const std::optional<RenderMode> render_mode_override,
   const CompositionView::ViewStateHandle view_state_handle) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
@@ -1533,6 +1537,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     frame_context.UpdateView(it->second.published_view_id, std::move(view));
     it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
     it->second.shading_mode_override = shading_mode_override;
+    it->second.render_mode_override = render_mode_override;
     it->second.view_state_handle = view_state_handle;
     return it->second.published_view_id;
   }
@@ -1543,6 +1548,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .published_view_id = published_view_id,
         .last_seen_frame = frame_context.GetFrameSequenceNumber(),
         .shading_mode_override = shading_mode_override,
+        .render_mode_override = render_mode_override,
         .view_state_handle = view_state_handle,
       };
   return published_view_id;
@@ -2074,6 +2080,7 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .with_local_fog = view.metadata.with_local_fog,
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
+      .render_mode_override = ResolvePublishedRuntimeRenderMode(view.id),
       .resolved_view = {},
       .render_target = view.render_target,
       .composite_source = view.composite_source,
@@ -2108,6 +2115,22 @@ auto Renderer::ResolvePublishedRuntimeShadingMode(
   for (const auto& [_, state] : published_runtime_views_by_intent_) {
     if (state.published_view_id == published_view_id) {
       return state.shading_mode_override;
+    }
+  }
+  return std::nullopt;
+}
+
+auto Renderer::ResolvePublishedRuntimeRenderMode(
+  const ViewId published_view_id) const noexcept -> std::optional<RenderMode>
+{
+  if (published_view_id == kInvalidViewId) {
+    return std::nullopt;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.render_mode_override;
     }
   }
   return std::nullopt;
