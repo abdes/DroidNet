@@ -1,6 +1,6 @@
 # ED-M06 Asset Identity And Content Browser Detailed Plan
 
-Status: `landed - validation held by ED-M06A layout correction`
+Status: `validated`
 
 Planning note:
 
@@ -10,9 +10,8 @@ Planning note:
   projection, folder-click refresh, source-media positioning, and default
   authoring target behavior are now finalized by
   [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md).
-- ED-M06 validation remains pending until ED-M06A confirms Content Browser
-  navigation and material picker filtering against the accepted game project
-  layout.
+- ED-M06 validation closed after ED-M06A confirmed Content Browser navigation
+  and material picker filtering against the accepted game project layout.
 
 ## 1. Purpose
 
@@ -440,8 +439,8 @@ Tasks:
 - Run targeted tests through the approved MSBuild workflow only when build
   validation is requested/allowed.
 - Prepare the manual validation script in this plan for user execution.
-- Update `IMPLEMENTATION_STATUS.md` only with landed facts; do not mark ED-M06
-  validated before the user completes manual validation.
+- Update `IMPLEMENTATION_STATUS.md` with landed facts first, then mark ED-M06
+  validated only after the user completes manual validation.
 
 Exit:
 
@@ -576,10 +575,17 @@ Before implementation starts:
 
 After implementation lands:
 
-- Mark ED-M06 status `landed`, not `validated`.
+- Mark ED-M06 status `landed`, not `validated`, until manual validation
+  completes.
 - Check only implementation rows backed by source changes and tests.
 - Leave the ED-M06 validation ledger row pending until the user completes
   manual validation.
+
+After user validation:
+
+- Mark ED-M06 status `validated`.
+- Record the validation ledger row with the user-confirmed browser, picker,
+  missing/broken reference, and persistence behavior.
 
 Closure evidence must mention:
 

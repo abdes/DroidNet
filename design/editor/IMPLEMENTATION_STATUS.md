@@ -59,7 +59,7 @@ Current execution focus:
       inspectors for supported V0.1 component fields.
 - [x] Land `ED-M05` scalar material authoring implementation and corrective
       UX/content-root pass.
-- [ ] Validate `ED-M05` formally and record the validation ledger row.
+- [x] Validate `ED-M05` formally and record the validation ledger row.
 - [x] Review and remediate `ED-M06` LLDs for Asset Identity and Content
       Browser before any ED-M06 implementation starts.
 - [x] Review the detailed `ED-M06` implementation plan before any ED-M06
@@ -80,11 +80,10 @@ until `ED-M02` is `validated`.
 
 Current resume point:
 
-1. Finish the pending `ED-M05` and `ED-M06`
-   validation rows against the corrected project layout.
-2. Validate or record the supported single live viewport behavior for `ED-M02`.
-3. Start `ED-M07` only after the pending validation rows are resolved.
-4. Keep this ledger synchronized whenever a milestone or detailed plan changes.
+1. Validate or record the supported single live viewport behavior for `ED-M02`.
+2. Start `ED-M07` content pipeline and cooking work from its accepted LLDs and
+   detailed plan package.
+3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
 
@@ -301,7 +300,7 @@ Exit evidence required:
 
 ### ED-M05 - Scalar Material Authoring
 
-Status: `landed`
+Status: `validated`
 
 Trace: `GOAL-002`, `GOAL-004`, `GOAL-005`, `GOAL-006`; `REQ-010`,
 `REQ-011`, `REQ-012`, `REQ-013`, `REQ-014`, `REQ-021`, `REQ-022`,
@@ -315,11 +314,10 @@ source descriptors are created under the Content authoring mount, cooked output
 uses the active project's `.cooked/<mount>` root, geometry material picker
 refreshes on open, and the Material Editor UI uses shared editor property
 controls plus DroidNet number controls. The Material Editor identity section
-shows asset URI and editor-side asset GUID copy affordances. Formal ED-M05
-closure still needs the validation ledger row. ED-M05 validation is held until
-`ED-M06A` confirms project template layout, material create targets, and
-Content Browser/picker refresh behavior under the accepted project filesystem
-contract.
+shows asset URI and editor-side asset GUID copy affordances. ED-M05 validation
+closed after `ED-M06A` confirmed project template layout, material create
+targets, and Content Browser/picker refresh behavior under the accepted project
+filesystem contract.
 
 - [x] Required LLDs are reviewed:
       `material-editor`, `content-browser-asset-identity`,
@@ -336,12 +334,12 @@ contract.
 
 Exit evidence required:
 
-- [ ] One `ED-M05` validation ledger row records material create/edit/assign,
+- [x] One `ED-M05` validation ledger row records material create/edit/assign,
       save/reopen, minimum cook/preview slice, and visible failure behavior.
 
 ### ED-M06 - Asset Identity And Content Browser
 
-Status: `landed`
+Status: `validated`
 
 Trace: `GOAL-004`, `GOAL-005`, `GOAL-006`; `REQ-013`, `REQ-020`,
 `REQ-021`, `REQ-022`, `REQ-024`, `REQ-036`, `REQ-037`; `SUCCESS-006`,
@@ -351,9 +349,9 @@ Outcome: source, generated, descriptor, cooked, missing, broken, and
 runtime-availability overlay states are visible and selectable by identity.
 Authoritative mounted state is deferred to `ED-M07`.
 
-Current note: ED-M06 validation is held until `ED-M06A` corrects project root
-layout, folder navigation, material row filtering, and template-created
-project structure against `project-layout-and-templates.md`.
+Current note: ED-M06 validation closed after `ED-M06A` corrected project root
+layout, folder navigation, material row filtering, and template-created project
+structure against `project-layout-and-templates.md`.
 
 - [x] Required LLDs are reviewed:
       `content-browser-asset-identity`, `asset-primitives`,
@@ -372,7 +370,7 @@ project structure against `project-layout-and-templates.md`.
 
 Exit evidence required:
 
-- [ ] One `ED-M06` validation ledger row records asset browsing, picking,
+- [x] One `ED-M06` validation ledger row records asset browsing, picking,
       missing-reference behavior, and persistence impact.
 
 ### ED-M06A - Game Project Layout And Template Standardization
@@ -541,8 +539,8 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result, then proceed with `ED-M03`. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
 | [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `validated` | No further action for ED-M04. |
-| [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `landed` | Formal validation is held until `ED-M06A` confirms material create/picker behavior under the corrected project layout. |
-| [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `landed` | Manual validation is held until `ED-M06A` corrects project roots, folder navigation, and material row filtering. |
+| [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
+| [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
 | [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
@@ -564,8 +562,8 @@ checklist or detailed plan tracker instead.
 | `ED-M02` | `pending` | - | Not validated. |
 | `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
 | `ED-M04` | `validated` | 2026-04-27 | User manually validated ED-M04 component inspector scenarios after fixes: transform undo/redo field refresh, geometry asset switching, material slot UI, camera/light/default inspector behavior, environment/runtime setting behavior, and Geometry component deletion. Final fix repaired empty/duplicate component IDs during scene hydration so legacy Vortex scene Geometry deletion no longer resolves to locked Transform. MSBuild passed for Oxygen.Editor.World.Tests, Oxygen.Editor.WorldEditor.SceneExplorer.Tests, and Oxygen.Editor.App. |
-| `ED-M05` | `pending` | - | Not validated. |
-| `ED-M06` | `pending` | - | Not validated. |
+| `ED-M05` | `validated` | 2026-04-28 | User manually validated scalar material authoring against the corrected ED-M06A project layout: material creation under `Content/Materials`, editor scalar/color editing with shared controls, save/reopen behavior, material picker refresh/filtering, geometry assignment by asset identity, asset URI/GUID identity display and copy affordances, and minimum cook/catalog behavior. |
+| `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `pending` | - | Not validated. |
 | `ED-M08` | `pending` | - | Not validated. |
@@ -582,4 +580,4 @@ work package. Do not use it to list unfinished implementation work.
 | `DB-001` | `ED-M00` | `closed` | Top-level `PLAN.md` review feedback was applied and accepted. | No further action. |
 | `DB-002` | `ED-M02` | `closed` | Multi-viewport stability is deferred out of ED-M02; V0.1 proceeds on the supported single live viewport unless multi-viewport is explicitly re-scoped later. | No further action for ED-M02. |
 | `DB-003` | `ED-M03` | `closed` | DynamicTree in-place rename has no pre-mutation commit hook today, so ED-M03 uses a loaded-adapter label-change bridge to preserve undo/redo and persistence. | Proper DynamicTree rename commit hook is deferred after ED-M03 and does not block milestone validation. |
-| `DB-004` | `ED-M05`, `ED-M06`, `ED-M07` | `open` | Project layout and predefined templates were redefined by the accepted game-project filesystem architecture/LLD. ED-M06A is validated; ED-M05 and ED-M06 validation must now be closed against the corrected layout before ED-M07 starts. | Close ED-M05/ED-M06 pending validation, then proceed to ED-M07 planning/implementation. |
+| `DB-004` | `ED-M05`, `ED-M06`, `ED-M07` | `closed` | Project layout and predefined templates were redefined by the accepted game-project filesystem architecture/LLD. ED-M06A is validated, and ED-M05/ED-M06 validation is closed against the corrected layout. | Proceed to ED-M07 planning/implementation after recording any remaining ED-M02 viewport validation separately. |
