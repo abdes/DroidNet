@@ -21,6 +21,7 @@ public:
     , saved_current_view_(ctx.current_view)
     , saved_active_view_index_(ctx.active_view_index)
     , saved_pass_target_(ctx.pass_target)
+    , saved_render_mode_(ctx.render_mode)
   {
     CHECK_LT_F(view_index, ctx.frame_views.size(),
       "PerViewScope requires a valid frame view index");
@@ -44,6 +45,9 @@ public:
       .with_height_fog = entry.with_height_fog,
       .with_local_fog = entry.with_local_fog,
     };
+    if (entry.render_mode_override.has_value()) {
+      ctx.render_mode = entry.render_mode_override.value();
+    }
     ctx.pass_target = entry.primary_target;
   }
 
@@ -52,6 +56,7 @@ public:
     ctx_.current_view = saved_current_view_;
     ctx_.active_view_index = saved_active_view_index_;
     ctx_.pass_target = saved_pass_target_;
+    ctx_.render_mode = saved_render_mode_;
     ctx_.per_view_scope_active_ = false;
   }
 
@@ -63,6 +68,7 @@ private:
   RenderContext::ViewSpecific saved_current_view_;
   std::size_t saved_active_view_index_;
   observer_ptr<const graphics::Framebuffer> saved_pass_target_;
+  RenderMode saved_render_mode_;
 };
 
 } // namespace oxygen::vortex::internal
