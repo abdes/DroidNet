@@ -605,7 +605,7 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     vortex::Renderer::OffscreenPipelineInput::Deferred(), false);
   render_product(offscreen_capture_, "M06B.OffscreenCapture.Forward",
     ViewId { 0x060B0102ULL }, offscreen_capture_camera_node_,
-    vortex::Renderer::OffscreenPipelineInput::Forward(), true);
+    vortex::Renderer::OffscreenPipelineInput::Forward(), false);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)

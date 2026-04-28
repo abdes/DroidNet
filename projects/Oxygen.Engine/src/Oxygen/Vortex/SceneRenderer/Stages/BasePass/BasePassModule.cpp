@@ -327,6 +327,33 @@ namespace {
     return desc;
   }
 
+  auto BuildForwardBasePassFramebuffer(SceneTextures& scene_textures,
+    const bool depth_read_only) -> graphics::FramebufferDesc
+  {
+    auto desc = graphics::FramebufferDesc {};
+    desc.AddColorAttachment({
+      .texture = scene_textures.GetSceneColorResource(),
+      .format = scene_textures.GetSceneColor().GetDescriptor().format,
+    });
+    desc.SetDepthAttachment({
+      .texture = scene_textures.GetSceneDepthResource(),
+      .format = scene_textures.GetSceneDepth().GetDescriptor().format,
+      .is_read_only = depth_read_only,
+    });
+    return desc;
+  }
+
+  auto BuildForwardColorClearFramebuffer(SceneTextures& scene_textures)
+    -> graphics::FramebufferDesc
+  {
+    auto desc = graphics::FramebufferDesc {};
+    desc.AddColorAttachment({
+      .texture = scene_textures.GetSceneColorResource(),
+      .format = scene_textures.GetSceneColor().GetDescriptor().format,
+    });
+    return desc;
+  }
+
   auto BuildVelocityAuxFramebuffer(SceneTextures& scene_textures,
     const std::shared_ptr<graphics::Texture>& aux_texture)
     -> graphics::FramebufferDesc
@@ -476,6 +503,38 @@ namespace {
       || desc.depth_attachment.is_read_only != depth_read_only;
   }
 
+  auto NeedsForwardFramebufferRebuild(
+    const std::shared_ptr<graphics::Framebuffer>& framebuffer,
+    const SceneTextures& scene_textures, const bool depth_read_only) -> bool
+  {
+    if (!framebuffer) {
+      return true;
+    }
+
+    const auto& desc = framebuffer->GetDescriptor();
+    return desc.color_attachments.size() != 1U
+      || desc.color_attachments[0].texture.get()
+      != scene_textures.GetSceneColorResource().get()
+      || desc.depth_attachment.texture.get()
+      != scene_textures.GetSceneDepthResource().get()
+      || desc.depth_attachment.is_read_only != depth_read_only;
+  }
+
+  auto NeedsForwardColorClearFramebufferRebuild(
+    const std::shared_ptr<graphics::Framebuffer>& framebuffer,
+    const SceneTextures& scene_textures) -> bool
+  {
+    if (!framebuffer) {
+      return true;
+    }
+
+    const auto& desc = framebuffer->GetDescriptor();
+    return desc.color_attachments.size() != 1U
+      || desc.color_attachments[0].texture.get()
+      != scene_textures.GetSceneColorResource().get()
+      || desc.depth_attachment.texture != nullptr;
+  }
+
   auto MakeWireframeBlendTarget(const bool overlay) -> graphics::BlendTargetDesc
   {
     if (!overlay) {
@@ -612,6 +671,64 @@ namespace {
         root_bindings.data(), root_bindings.size()))
       .SetDebugName(alpha_test ? "Vortex.BasePass.GBuffer.Masked"
                                : "Vortex.BasePass.GBuffer.Opaque")
+      .Build();
+  }
+
+  auto BuildForwardBasePassPipelineDesc(const SceneTextures& scene_textures,
+    const BasePassConfig& config, const bool alpha_test, const bool reverse_z)
+    -> graphics::GraphicsPipelineDesc
+  {
+    auto root_bindings = BuildVortexRootBindings();
+    auto defines = std::vector<graphics::ShaderDefine> {
+      graphics::ShaderDefine {
+        .name = "OXYGEN_HDR_OUTPUT",
+        .value = "1",
+      },
+    };
+    AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+
+    auto blend_target = graphics::BlendTargetDesc {};
+    blend_target.blend_enable = false;
+    blend_target.write_mask = graphics::ColorWriteMask::kAll;
+
+    const auto depth_state = graphics::DepthStencilStateDesc {
+      .depth_test_enable = true,
+      .depth_write_enable = !config.early_z_pass_done,
+      .depth_func = reverse_z ? graphics::CompareOp::kGreaterOrEqual
+                              : graphics::CompareOp::kLessOrEqual,
+      .stencil_enable = false,
+    };
+
+    return graphics::GraphicsPipelineDesc::Builder {}
+      .SetVertexShader(graphics::ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
+        .entry_point = "VS",
+      })
+      .SetPixelShader(graphics::ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
+        .entry_point = "PS",
+        .defines = std::move(defines),
+      })
+      .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
+      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetDepthStencilState(depth_state)
+      .SetBlendState({ blend_target })
+      .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
+        .color_target_formats = std::vector<
+          Format> { scene_textures.GetSceneColor().GetDescriptor().format },
+        .depth_stencil_format
+        = scene_textures.GetSceneDepth().GetDescriptor().format,
+        .sample_count
+        = scene_textures.GetSceneColor().GetDescriptor().sample_count,
+        .sample_quality
+        = scene_textures.GetSceneColor().GetDescriptor().sample_quality,
+      })
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        root_bindings.data(), root_bindings.size()))
+      .SetDebugName(alpha_test ? "Vortex.BasePass.Forward.Masked"
+                               : "Vortex.BasePass.Forward.Opaque")
       .Build();
   }
 
@@ -987,7 +1104,10 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 {
   last_execution_result_ = {};
   const auto wireframe_only = config_.render_mode == RenderMode::kWireframe;
-  if (config_.shading_mode != ShadingMode::kDeferred && !wireframe_only) {
+  const auto forward_solid = config_.shading_mode == ShadingMode::kForward
+    && !wireframe_only;
+  if (config_.shading_mode != ShadingMode::kDeferred && !forward_solid
+    && !wireframe_only) {
     return last_execution_result_;
   }
 
@@ -999,7 +1119,8 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   }
 
   const auto writes_velocity
-    = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
+    = !forward_solid && config_.write_velocity
+    && scene_textures.GetVelocity() != nullptr;
   const auto draw_command_mode
     = wireframe_only ? ShadingMode::kDeferred : config_.shading_mode;
   mesh_processor_->BuildDrawCommands(*ctx.current_view.prepared_frame,
@@ -1085,6 +1206,73 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         root_constants_param, draw_command.draw_index, 0U);
       recorder->SetGraphicsRoot32BitConstant(
         root_constants_param, wireframe_constants_index.get(), 1U);
+      recorder->Draw(draw_command.is_indexed ? draw_command.index_count
+                                             : draw_command.vertex_count,
+        draw_command.instance_count, 0U, draw_command.start_instance);
+    }
+
+    recorder->RequireResourceStateFinal(
+      scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+    recorder->RequireResourceStateFinal(
+      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+    last_execution_result_.completed_velocity_for_dynamic_geometry = true;
+    last_execution_result_.wrote_velocity_target = false;
+    last_execution_result_.wrote_scene_color = true;
+    return last_execution_result_;
+  }
+
+  if (forward_solid) {
+    const auto depth_read_only = config_.early_z_pass_done;
+    if (NeedsForwardFramebufferRebuild(
+          forward_framebuffer_, scene_textures, depth_read_only)) {
+      forward_framebuffer_ = gfx->CreateFramebuffer(
+        BuildForwardBasePassFramebuffer(scene_textures, depth_read_only));
+    }
+    if (config_.early_z_pass_done
+      && NeedsForwardColorClearFramebufferRebuild(
+        forward_color_clear_framebuffer_, scene_textures)) {
+      forward_color_clear_framebuffer_ = gfx->CreateFramebuffer(
+        BuildForwardColorClearFramebuffer(scene_textures));
+    }
+
+    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneColor());
+    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
+    recorder->RequireResourceState(
+      scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+    recorder->RequireResourceState(scene_textures.GetSceneDepth(),
+      depth_read_only ? graphics::ResourceStates::kDepthRead
+                      : graphics::ResourceStates::kDepthWrite);
+    recorder->FlushBarriers();
+
+    graphics::GpuEventScope forward_scope(*recorder,
+      "Vortex.Stage9.BasePass.Forward",
+      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileCategory::kPass);
+    if (!config_.early_z_pass_done) {
+      recorder->ClearFramebuffer(
+        *forward_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
+    } else if (forward_color_clear_framebuffer_) {
+      recorder->ClearFramebuffer(*forward_color_clear_framebuffer_);
+    }
+    recorder->BindFrameBuffer(*forward_framebuffer_);
+    SetViewportAndScissor(*recorder, ctx, scene_textures);
+
+    auto current_alpha_test = std::optional<bool> {};
+    for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
+      const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
+      if (!current_alpha_test.has_value()
+        || current_alpha_test.value() != alpha_test) {
+        recorder->SetPipelineState(BuildForwardBasePassPipelineDesc(
+          scene_textures, config_, alpha_test, reverse_z));
+        recorder->SetGraphicsRootConstantBufferView(
+          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        recorder->SetGraphicsRoot32BitConstant(
+          root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
+        current_alpha_test = alpha_test;
+      }
+
+      recorder->SetGraphicsRoot32BitConstant(
+        root_constants_param, draw_command.draw_index, 0U);
       recorder->Draw(draw_command.is_indexed ? draw_command.index_count
                                              : draw_command.vertex_count,
         draw_command.instance_count, 0U, draw_command.start_instance);

@@ -52,7 +52,7 @@ Out of scope:
 | Presets | `offscreen::scene::presets::ForPreview()` and `ForCapture()` configure the facade. | Make presets produce renderable offscreen sessions, including a valid view identity. |
 | Execution | `ValidatedOffscreenSceneSession::Execute()` currently validates non-null renderer/scene/output and ensures a `SceneRenderer`, but it does not render to the output target. | First implementation slice must replace this no-op with a Vortex-native offscreen frame execution path. |
 | Pipeline settings | `OffscreenPipelineInput` is currently empty. | Add the minimum typed settings needed for deferred/solid-forward proof without leaking cross-domain options. |
-| Forward solid scene path | Vortex currently routes `ShadingMode::kForward`, but the deferred base pass only supports solid deferred output; wireframe forward is a debug path. | Do not close VTX-M06B on wireframe evidence. Add or route a real solid forward SceneColor path before claiming forward offscreen proof. |
+| Forward solid scene path | Vortex routes `ShadingMode::kForward` through the base pass using the shared Forward+ mesh shader path and writes SceneColor directly without publishing GBuffer products. Forward wireframe remains debug/regression coverage only. | Complete RenderDoc/readback/churn proof before claiming the forward offscreen gate closed. |
 | Product handoff | The output framebuffer is accepted but not populated by the facade. | Route scene/post/composition output into the caller target and leave the product in the documented final state. |
 | Runtime proof | No dedicated offscreen runtime proof script or analyzer exists. | Add proof tooling after the render path exists; keep status `in_progress` until the proof passes. |
 
@@ -238,9 +238,27 @@ Evidence:
   and
   `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
   with 45/45 tests passing.
-- Residual gap: implement and prove a solid forward offscreen capture product,
-  then add scripted RenderDoc analysis, assertion wrapper, 60-frame churn
-  report, and user visual confirmation before slice E can close.
+- Solid forward source implementation is now present: the base pass accepts
+  `ShadingMode::kForward` solid draws, binds a SceneColor-only framebuffer,
+  runs the shared Forward+ mesh shader path, avoids deferred GBuffer
+  publication, and the MultiView offscreen proof capture tile now requests
+  forward solid instead of forced wireframe. UE5.7 grounding: local
+  `BasePassCommon.ush` keeps `USES_GBUFFER` false under `FORWARD_SHADING`, and
+  forward opaque fog/lighting is a base-pass concern.
+- Focused solid-forward validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore.Tests oxygen-examples-multiview --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
+  with 46/46 tests passing, including `BasePassSolidForwardWritesSceneColor`.
+- CDB/debug-layer smoke passed for the solid-forward offscreen layout:
+  `cdb -G -g -o -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.MultiView.exe --frames 5 --fps 30 --offscreen-proof-layout true --capture-provider off --debug-layer true`
+  with exit code 0, no `CHECK FAILED`, no D3D12/DXGI errors, no access
+  violation, 5 deferred preview renders, and 5 forward capture renders. The log
+  is recorded at
+  `out\build-ninja\analysis\vortex\m06b-offscreen\cdb-solid-forward-smoke.log`.
+- Residual gap: add scripted RenderDoc analysis, readback/product proof,
+  assertion wrapper, 60-frame churn report, and user visual confirmation before
+  slice E can close.
 
 ### F. Closure and Ledger Update
 

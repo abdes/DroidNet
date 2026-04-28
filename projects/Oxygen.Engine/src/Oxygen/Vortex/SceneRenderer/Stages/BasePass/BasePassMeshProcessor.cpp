@@ -120,7 +120,7 @@ void BasePassMeshProcessor::BuildDrawCommands(
   draw_commands_.clear();
   occlusion_culled_draw_count_ = 0U;
 
-  if (mode != ShadingMode::kDeferred) {
+  if (mode != ShadingMode::kDeferred && mode != ShadingMode::kForward) {
     return;
   }
 

@@ -91,6 +91,9 @@ private:
   std::size_t wireframe_constants_slot_ { 0U };
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer>
+    forward_color_clear_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Texture> velocity_base_copy_ {};
   std::shared_ptr<oxygen::graphics::Texture>
