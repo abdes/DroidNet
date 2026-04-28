@@ -119,6 +119,10 @@ struct RenderContext {
     bool with_local_fog { false };
     std::string debug_name {};
     CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
     std::vector<AuxiliaryResolvedInput> resolved_aux_inputs {};
@@ -149,6 +153,10 @@ struct RenderContext {
       CompositionView::kInvalidViewStateHandle
     };
     observer_ptr<const CompositionView> composition_view;
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;

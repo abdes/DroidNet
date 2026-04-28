@@ -67,6 +67,11 @@ public:
   {
     return view_kind_;
   }
+  [[nodiscard]] auto FeatureProfile() const noexcept
+    -> CompositionView::ViewFeatureProfile
+  {
+    return feature_profile_;
+  }
   [[nodiscard]] auto FeatureMask() const noexcept
     -> const CompositionView::ViewFeatureMask&
   {
@@ -121,6 +126,9 @@ private:
     CompositionView::kInvalidViewStateHandle
   };
   CompositionView::ViewKind view_kind_ { CompositionView::ViewKind::kPrimary };
+  CompositionView::ViewFeatureProfile feature_profile_ {
+    CompositionView::ViewFeatureProfile::kDefault
+  };
   CompositionView::ViewFeatureMask feature_mask_ {};
   std::vector<CompositionView::ViewSurfaceRoute> surface_routes_ {};
   CompositionView::OverlayPolicy overlay_policy_ {};

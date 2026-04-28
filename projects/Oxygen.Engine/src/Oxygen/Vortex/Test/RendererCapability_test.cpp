@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 #include "Fakes/Graphics.h"
 
@@ -29,6 +30,7 @@ using oxygen::vortex::kPhase1DefaultRuntimeCapabilityFamilies;
 using oxygen::vortex::PipelineCapabilityRequirements;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::ResolveViewFeatureProfileSpec;
 using oxygen::vortex::ValidateCapabilityRequirements;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -128,6 +130,53 @@ NOLINT_TEST(RendererCapabilityTest, ValidationReportsMissingFamilies)
   EXPECT_EQ(validation.missing_optional,
     RendererCapabilityFamily::kDeferredShading
       | RendererCapabilityFamily::kDiagnosticsAndProfiling);
+}
+
+NOLINT_TEST(RendererCapabilityTest, ViewFeatureProfilesResolveStableMasks)
+{
+  using Profile = oxygen::vortex::CompositionView::ViewFeatureProfile;
+  using Mask = oxygen::vortex::CompositionView::ViewFeatureMask;
+
+  const auto depth_only = ResolveViewFeatureProfileSpec(Profile::kDepthOnly);
+  EXPECT_TRUE(depth_only.depth_only);
+  EXPECT_FALSE(depth_only.feature_mask.Has(Mask::kSceneLighting));
+  EXPECT_FALSE(depth_only.feature_mask.Has(Mask::kShadows));
+  EXPECT_FALSE(depth_only.requires_color_output);
+
+  const auto no_environment
+    = ResolveViewFeatureProfileSpec(Profile::kNoEnvironment);
+  EXPECT_TRUE(no_environment.feature_mask.Has(Mask::kSceneLighting));
+  EXPECT_TRUE(no_environment.feature_mask.Has(Mask::kShadows));
+  EXPECT_FALSE(no_environment.feature_mask.Has(Mask::kEnvironment));
+  EXPECT_FALSE(no_environment.feature_mask.Has(Mask::kVolumetrics));
+
+  const auto no_shadowing
+    = ResolveViewFeatureProfileSpec(Profile::kNoShadowing);
+  EXPECT_TRUE(no_shadowing.feature_mask.Has(Mask::kSceneLighting));
+  EXPECT_FALSE(no_shadowing.feature_mask.Has(Mask::kShadows));
+  EXPECT_TRUE(no_shadowing.feature_mask.Has(Mask::kEnvironment));
+
+  const auto diagnostics_only
+    = ResolveViewFeatureProfileSpec(Profile::kDiagnosticsOnly);
+  EXPECT_TRUE(diagnostics_only.diagnostics_only);
+  EXPECT_TRUE(diagnostics_only.feature_mask.Has(Mask::kDiagnostics));
+  EXPECT_FALSE(diagnostics_only.feature_mask.Has(Mask::kSceneLighting));
+}
+
+NOLINT_TEST(RendererCapabilityTest, FeatureProfileCapabilitiesReportMissing)
+{
+  using Profile = oxygen::vortex::CompositionView::ViewFeatureProfile;
+
+  const auto shadow_only = ResolveViewFeatureProfileSpec(Profile::kShadowOnly);
+  const auto available = RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData;
+
+  const auto validation = ValidateCapabilityRequirements(
+    available, shadow_only.capability_requirements);
+
+  EXPECT_FALSE(validation.Ok());
+  EXPECT_EQ(validation.missing_required, RendererCapabilityFamily::kShadowing);
 }
 
 NOLINT_TEST_F(

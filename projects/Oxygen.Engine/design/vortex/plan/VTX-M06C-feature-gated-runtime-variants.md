@@ -152,6 +152,29 @@ Validation:
 - `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.OffscreenSceneFacade.Tests --parallel 4`
 - `ctest --preset test-debug -R "Oxygen\.Vortex\.(RendererCapability|RendererCompositionQueue|OffscreenSceneFacade)" --output-on-failure`
 
+Evidence:
+
+- Source implementation adds `CompositionView::ViewFeatureProfile`,
+  `ViewFeatureProfileSpec`, `ResolveViewFeatureProfileSpec()`, the
+  `kVolumetrics` feature bit, offscreen pipeline feature-profile selection,
+  offscreen capability validation, runtime published-view profile/mask carry,
+  render-context profile/mask carry, and frame-packet profile copy.
+- Focused validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.OffscreenSceneFacade.Tests --parallel 4`.
+- Additional carry-path validation passed because the slice updated
+  `CompositionPlanner_test.cpp`:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.CompositionPlanner.Tests --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(RendererCapability|RendererCompositionQueue|OffscreenSceneFacade)" --output-on-failure`
+  with 3/3 test executables passing.
+- Additional tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.CompositionPlanner" --output-on-failure`
+  with 1/1 test executable passing.
+- Residual gap: slice B defines and carries variant intent only. It does not
+  yet implement depth-only, shadow-only, disabled environment/shadow/
+  volumetric stage omission, diagnostics-only rendering, CDB/debug-layer proof,
+  RenderDoc proof, allocation-churn proof, or visual proof.
+
 ### C. Depth-Only and Shadow-Only Stage Gates
 
 Required work:

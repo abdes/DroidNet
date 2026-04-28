@@ -44,6 +44,7 @@
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 #include <Oxygen/Vortex/api_export.h>
 
 struct ImGuiContext;
@@ -360,6 +361,9 @@ public:
 
   struct OffscreenPipelineInput {
     ShadingMode shading_mode { ShadingMode::kDeferred };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
 
     [[nodiscard]] static constexpr auto Deferred() noexcept
       -> OffscreenPipelineInput
@@ -371,6 +375,22 @@ public:
       -> OffscreenPipelineInput
     {
       return OffscreenPipelineInput { .shading_mode = ShadingMode::kForward };
+    }
+
+    [[nodiscard]] static constexpr auto DepthOnly() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput {
+        .feature_profile = CompositionView::ViewFeatureProfile::kDepthOnly,
+      };
+    }
+
+    [[nodiscard]] static constexpr auto ShadowOnly() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput {
+        .feature_profile = CompositionView::ViewFeatureProfile::kShadowOnly,
+      };
     }
   };
 
@@ -393,6 +413,11 @@ public:
     [[nodiscard]] auto GetPipelineShadingMode() const noexcept -> ShadingMode
     {
       return pipeline_.shading_mode;
+    }
+    [[nodiscard]] auto GetPipelineFeatureProfile() const noexcept
+      -> CompositionView::ViewFeatureProfile
+    {
+      return pipeline_.feature_profile;
     }
 
     OXGN_VRTX_API auto ExecuteNow() -> void;
@@ -528,6 +553,9 @@ public:
     CompositionView::ViewStateHandle view_state_handle
     = CompositionView::kInvalidViewStateHandle,
     CompositionView::ViewKind view_kind = CompositionView::ViewKind::kPrimary,
+    CompositionView::ViewFeatureProfile feature_profile
+    = CompositionView::ViewFeatureProfile::kDefault,
+    CompositionView::ViewFeatureMask feature_mask = {},
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs = {},
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs = {},
     std::string debug_name = {}) -> ViewId;
@@ -668,6 +696,10 @@ private:
       CompositionView::kInvalidViewStateHandle
     };
     CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
     std::string debug_name {};

@@ -61,6 +61,7 @@ set(
   "RenderMode.h"
   "ShaderDebugMode.h"
   "ViewExtension.h"
+  "ViewFeatureProfile.h"
   "Diagnostics/DiagnosticsCaptureManifest.h"
   "Diagnostics/DiagnosticsFrameLedger.h"
   "Diagnostics/DiagnosticsService.h"

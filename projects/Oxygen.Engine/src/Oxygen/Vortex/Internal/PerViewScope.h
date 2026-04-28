@@ -38,6 +38,8 @@ public:
       .view_state_handle = entry.view_state_handle,
       .exposure_view_state_handle = entry.exposure_view_state_handle,
       .composition_view = entry.composition_view,
+      .feature_profile = entry.feature_profile,
+      .feature_mask = entry.feature_mask,
       .shading_mode_override = entry.shading_mode_override,
       .resolved_view = entry.resolved_view,
       .is_reflection_capture = entry.is_reflection_capture,

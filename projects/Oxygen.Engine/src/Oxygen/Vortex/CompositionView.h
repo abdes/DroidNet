@@ -58,6 +58,16 @@ struct CompositionView {
     kCompositionOnly,
   };
 
+  enum class ViewFeatureProfile : std::uint8_t {
+    kDefault,
+    kDepthOnly,
+    kShadowOnly,
+    kNoEnvironment,
+    kNoShadowing,
+    kNoVolumetrics,
+    kDiagnosticsOnly,
+  };
+
   using ViewFeatureBits = NamedType<uint64_t, struct ViewFeatureBitsTag,
     Comparable, Hashable, Printable>;
 
@@ -69,8 +79,9 @@ struct CompositionView {
       kEnvironment = 1ULL << 2U,
       kTranslucency = 1ULL << 3U,
       kDiagnostics = 1ULL << 4U,
+      kVolumetrics = 1ULL << 5U,
       kAll = kSceneLighting | kShadows | kEnvironment | kTranslucency
-        | kDiagnostics,
+        | kDiagnostics | kVolumetrics,
     };
 
     ViewFeatureBits bits { kAll };
@@ -78,6 +89,11 @@ struct CompositionView {
     [[nodiscard]] auto Has(Bit bit) const noexcept -> bool
     {
       return (bits.get() & static_cast<uint64_t>(bit)) != 0U;
+    }
+
+    [[nodiscard]] auto HasAny(Bit bit) const noexcept -> bool
+    {
+      return Has(bit);
     }
   };
 
@@ -244,6 +260,7 @@ struct CompositionView {
   ViewRenderSettings render_settings {};
 
   //! Typed per-view feature/show mask placeholder for editor/runtime views.
+  ViewFeatureProfile feature_profile { ViewFeatureProfile::kDefault };
   ViewFeatureMask feature_mask {};
 
   //! Surface routing placeholders. Empty means route to the default surface

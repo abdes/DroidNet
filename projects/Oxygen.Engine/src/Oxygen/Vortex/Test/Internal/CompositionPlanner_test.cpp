@@ -496,6 +496,7 @@ TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
   CompositionView view = CompositionView::ForScene(
     ViewId { 123U }, MakeView(), oxygen::scene::SceneNode {});
   view.view_kind = CompositionView::ViewKind::kAuxiliary;
+  view.feature_profile = CompositionView::ViewFeatureProfile::kNoShadowing;
   view.feature_mask.bits = CompositionView::ViewFeatureBits {
     CompositionView::ViewFeatureMask::kSceneLighting
     | CompositionView::ViewFeatureMask::kDiagnostics
@@ -529,6 +530,8 @@ TEST(CompositionPlannerTest, ViewClassificationPayloadsCopyIntoFramePacket)
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
   const auto& packet = builder.GetFrameViewPackets().front();
   EXPECT_EQ(packet.Kind(), CompositionView::ViewKind::kAuxiliary);
+  EXPECT_EQ(
+    packet.FeatureProfile(), CompositionView::ViewFeatureProfile::kNoShadowing);
   EXPECT_TRUE(packet.FeatureMask().Has(
     CompositionView::ViewFeatureMask::kSceneLighting));
   EXPECT_FALSE(
