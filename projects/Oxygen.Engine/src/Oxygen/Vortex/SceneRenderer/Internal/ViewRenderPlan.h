@@ -52,6 +52,28 @@ enum class ToneMapPolicy : std::uint8_t {
   }
 }
 
+enum class VisibleSkyBackground : std::uint8_t {
+  kNone,
+  kSkyAtmosphere,
+  kSkySphere,
+};
+
+[[nodiscard]] inline auto to_string(VisibleSkyBackground background)
+  -> std::string_view
+{
+  using enum VisibleSkyBackground;
+  switch (background) {
+  case kNone:
+    return "None";
+  case kSkyAtmosphere:
+    return "SkyAtmosphere";
+  case kSkySphere:
+    return "SkySphere";
+  default:
+    return "__Unknown__";
+  }
+}
+
 class ViewRenderPlan {
 public:
   struct Spec {
@@ -60,6 +82,11 @@ public:
     ShaderDebugMode effective_shader_debug_mode { ShaderDebugMode::kDisabled };
     ToneMapPolicy tone_map_policy { ToneMapPolicy::kConfigured };
     DepthPrePassMode depth_prepass_mode { DepthPrePassMode::kOpaqueAndMasked };
+    bool sky_atmo_enabled { false };
+    bool sky_sphere_enabled { false };
+    std::uint32_t sky_sphere_source { 0U };
+    bool sky_sphere_cubemap_authored { false };
+    VisibleSkyBackground visible_sky_background { VisibleSkyBackground::kNone };
     bool run_overlay_wireframe { false };
     bool run_sky_pass { false };
     bool run_sky_lut_update { false };
@@ -71,6 +98,11 @@ public:
     , effective_shader_debug_mode_(spec.effective_shader_debug_mode)
     , tone_map_policy_(spec.tone_map_policy)
     , depth_prepass_mode_(spec.depth_prepass_mode)
+    , sky_atmo_enabled_(spec.sky_atmo_enabled)
+    , sky_sphere_enabled_(spec.sky_sphere_enabled)
+    , sky_sphere_source_(spec.sky_sphere_source)
+    , sky_sphere_cubemap_authored_(spec.sky_sphere_cubemap_authored)
+    , visible_sky_background_(spec.visible_sky_background)
     , run_overlay_wireframe_(spec.run_overlay_wireframe)
     , run_sky_pass_(spec.run_sky_pass)
     , run_sky_lut_update_(spec.run_sky_lut_update)
@@ -135,6 +167,27 @@ public:
   {
     return run_sky_pass_;
   }
+  [[nodiscard]] auto SkyAtmosphereEnabled() const noexcept -> bool
+  {
+    return sky_atmo_enabled_;
+  }
+  [[nodiscard]] auto SkySphereEnabled() const noexcept -> bool
+  {
+    return sky_sphere_enabled_;
+  }
+  [[nodiscard]] auto SkySphereSource() const noexcept -> std::uint32_t
+  {
+    return sky_sphere_source_;
+  }
+  [[nodiscard]] auto SkySphereCubemapAuthored() const noexcept -> bool
+  {
+    return sky_sphere_cubemap_authored_;
+  }
+  [[nodiscard]] auto GetVisibleSkyBackground() const noexcept
+    -> VisibleSkyBackground
+  {
+    return visible_sky_background_;
+  }
   [[nodiscard]] auto RunSkyLutUpdate() const noexcept -> bool
   {
     return run_sky_lut_update_;
@@ -150,6 +203,11 @@ private:
   ShaderDebugMode effective_shader_debug_mode_ { ShaderDebugMode::kDisabled };
   ToneMapPolicy tone_map_policy_ { ToneMapPolicy::kConfigured };
   DepthPrePassMode depth_prepass_mode_ { DepthPrePassMode::kDisabled };
+  bool sky_atmo_enabled_ { false };
+  bool sky_sphere_enabled_ { false };
+  std::uint32_t sky_sphere_source_ { 0U };
+  bool sky_sphere_cubemap_authored_ { false };
+  VisibleSkyBackground visible_sky_background_ { VisibleSkyBackground::kNone };
   bool run_overlay_wireframe_ { false };
   bool run_sky_pass_ { false };
   bool run_sky_lut_update_ { false };

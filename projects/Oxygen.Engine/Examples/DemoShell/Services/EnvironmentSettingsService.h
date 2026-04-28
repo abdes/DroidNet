@@ -702,7 +702,10 @@ private:
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
   bool sky_light_real_time_capture_enabled_ { false };
+  float sky_light_source_cubemap_angle_radians_ { 0.0F };
   glm::vec3 sky_light_lower_hemisphere_color_ { 0.0F, 0.0F, 0.0F };
+  bool sky_light_lower_hemisphere_is_solid_color_ { true };
+  float sky_light_lower_hemisphere_blend_alpha_ { 1.0F };
   float sky_light_volumetric_scattering_intensity_ { 1.0F };
   bool sky_light_affect_reflections_ { true };
   bool sky_light_affect_global_illumination_ { true };

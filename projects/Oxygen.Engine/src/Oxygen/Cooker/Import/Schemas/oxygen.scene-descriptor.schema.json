@@ -669,7 +669,10 @@
                 "diffuse_intensity": { "type": "number", "minimum": 0.0 },
                 "specular_intensity": { "type": "number", "minimum": 0.0 },
                 "real_time_capture_enabled": { "type": "boolean" },
+                "source_cubemap_angle_radians": { "type": "number" },
                 "lower_hemisphere_color": { "$ref": "#/definitions/vec3" },
+                "lower_hemisphere_is_solid_color": { "type": "boolean" },
+                "lower_hemisphere_blend_alpha": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
                 "volumetric_scattering_intensity": { "type": "number", "minimum": 0.0 },
                 "affect_reflections": { "type": "boolean" },
                 "affect_global_illumination": { "type": "boolean" }

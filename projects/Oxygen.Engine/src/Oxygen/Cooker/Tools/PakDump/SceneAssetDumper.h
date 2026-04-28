@@ -41,6 +41,7 @@ public:
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
     using oxygen::data::pak::world::FogEnvironmentRecord;
+    using oxygen::data::pak::world::kSkyLightEnvironmentRecordLegacySize;
     using oxygen::data::pak::world::LocalFogVolumeRecord;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::OrthographicCameraRecord;
@@ -317,10 +318,8 @@ public:
         const auto& rec = volumes[i];
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Enabled", rec.enabled != 0U, 10);
-        PrintUtils::Field(
-          "Radial Extinction", rec.radial_fog_extinction, 10);
-        PrintUtils::Field(
-          "Height Extinction", rec.height_fog_extinction, 10);
+        PrintUtils::Field("Radial Extinction", rec.radial_fog_extinction, 10);
+        PrintUtils::Field("Height Extinction", rec.height_fog_extinction, 10);
         PrintUtils::Field("Height Falloff", rec.height_fog_falloff, 10);
         PrintUtils::Field("Height Offset", rec.height_fog_offset, 10);
         PrintUtils::Field("Phase g", rec.fog_phase_g, 10);
@@ -441,7 +440,8 @@ public:
 
       const auto TryReadSkyLight = [&](const std::span<const std::byte> bytes)
         -> std::optional<SkyLightEnvironmentRecord> {
-        if (bytes.size() != sizeof(SkyLightEnvironmentRecord)) {
+        if (bytes.size() != sizeof(SkyLightEnvironmentRecord)
+          && bytes.size() != kSkyLightEnvironmentRecordLegacySize) {
           return std::nullopt;
         }
         std::vector<std::byte> buffer;
@@ -450,10 +450,47 @@ public:
         oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
         auto packed = reader.ScopedAlignment(1);
         SkyLightEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
+        if (bytes.size() == sizeof(SkyLightEnvironmentRecord)) {
+          const auto res = reader.ReadInto(decoded);
+          if (!res) {
+            return std::nullopt;
+          }
+          return decoded;
+        }
+
+        auto ok = static_cast<bool>(reader.ReadInto(decoded.header));
+        ok = ok && static_cast<bool>(reader.ReadInto(decoded.enabled));
+        ok = ok && static_cast<bool>(reader.ReadInto(decoded.source));
+        ok = ok && static_cast<bool>(reader.ReadInto(decoded.cubemap_asset));
+        ok = ok && static_cast<bool>(reader.ReadInto(decoded.intensity));
+        for (auto& v : decoded.tint_rgb) {
+          ok = ok && static_cast<bool>(reader.ReadInto(v));
+        }
+        ok
+          = ok && static_cast<bool>(reader.ReadInto(decoded.diffuse_intensity));
+        ok = ok
+          && static_cast<bool>(reader.ReadInto(decoded.specular_intensity));
+        ok = ok
+          && static_cast<bool>(
+            reader.ReadInto(decoded.real_time_capture_enabled));
+        for (auto& v : decoded.lower_hemisphere_color) {
+          ok = ok && static_cast<bool>(reader.ReadInto(v));
+        }
+        ok = ok
+          && static_cast<bool>(
+            reader.ReadInto(decoded.volumetric_scattering_intensity));
+        ok = ok
+          && static_cast<bool>(reader.ReadInto(decoded.affect_reflections));
+        ok = ok
+          && static_cast<bool>(
+            reader.ReadInto(decoded.affect_global_illumination));
+        if (!ok) {
           return std::nullopt;
         }
+        decoded.header.record_size = sizeof(SkyLightEnvironmentRecord);
+        decoded.source_cubemap_angle_radians = 0.0F;
+        decoded.lower_hemisphere_is_solid_color = 1U;
+        decoded.lower_hemisphere_blend_alpha = 1.0F;
         return decoded;
       };
 
@@ -535,8 +572,8 @@ public:
           rec->aerial_perspective_distance_scale, 10);
         PrintUtils::Field(
           "Aerial Scattering Strength", rec->aerial_scattering_strength, 10);
-        PrintUtils::Field("Aerial Start Depth (m)",
-          rec->aerial_perspective_start_depth_m, 10);
+        PrintUtils::Field(
+          "Aerial Start Depth (m)", rec->aerial_perspective_start_depth_m, 10);
         PrintUtils::Field(
           "Height Fog Contribution", rec->height_fog_contribution, 10);
         PrintUtils::Field(
@@ -595,10 +632,10 @@ public:
         PrintUtils::Field(
           "Enable Volumetric Fog", rec->enable_volumetric_fog != 0U, 10);
         PrintUtils::Field("Second Fog Density", rec->second_fog_density, 10);
-        PrintUtils::Field("Second Fog Falloff",
-          rec->second_fog_height_falloff, 10);
-        PrintUtils::Field("Second Fog Offset",
-          rec->second_fog_height_offset, 10);
+        PrintUtils::Field(
+          "Second Fog Falloff", rec->second_fog_height_falloff, 10);
+        PrintUtils::Field(
+          "Second Fog Offset", rec->second_fog_height_offset, 10);
         PrintUtils::Field("Inscattering Luminance",
           asset_dump_helpers::FormatVec3(rec->fog_inscattering_luminance), 10);
         PrintUtils::Field("Ambient Contribution",
@@ -607,8 +644,8 @@ public:
           10);
         PrintUtils::Field("Inscattering Cubemap",
           oxygen::data::to_string(rec->inscattering_color_cubemap_asset), 10);
-        PrintUtils::Field("Cubemap Angle",
-          rec->inscattering_color_cubemap_angle, 10);
+        PrintUtils::Field(
+          "Cubemap Angle", rec->inscattering_color_cubemap_angle, 10);
         PrintUtils::Field("Texture Tint",
           asset_dump_helpers::FormatVec3(rec->inscattering_texture_tint), 10);
         PrintUtils::Field("Full Directional Distance",
@@ -619,8 +656,8 @@ public:
           asset_dump_helpers::FormatVec3(
             rec->directional_inscattering_luminance),
           10);
-        PrintUtils::Field("Directional Exponent",
-          rec->directional_inscattering_exponent, 10);
+        PrintUtils::Field(
+          "Directional Exponent", rec->directional_inscattering_exponent, 10);
         PrintUtils::Field("Directional Start Distance",
           rec->directional_inscattering_start_distance, 10);
         PrintUtils::Field("End Distance (m)", rec->end_distance_m, 10);
@@ -636,8 +673,8 @@ public:
           rec->volumetric_fog_extinction_scale, 10);
         PrintUtils::Field(
           "Volumetric Distance", rec->volumetric_fog_distance, 10);
-        PrintUtils::Field("Volumetric Start Distance",
-          rec->volumetric_fog_start_distance, 10);
+        PrintUtils::Field(
+          "Volumetric Start Distance", rec->volumetric_fog_start_distance, 10);
         PrintUtils::Field("Volumetric Near Fade",
           rec->volumetric_fog_near_fade_in_distance, 10);
         PrintUtils::Field("Volumetric Static Lighting",
@@ -668,16 +705,22 @@ public:
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
         PrintUtils::Field("Diffuse Intensity", rec->diffuse_intensity, 10);
         PrintUtils::Field("Specular Intensity", rec->specular_intensity, 10);
-        PrintUtils::Field("Real-Time Capture",
-          rec->real_time_capture_enabled != 0U, 10);
+        PrintUtils::Field(
+          "Real-Time Capture", rec->real_time_capture_enabled != 0U, 10);
+        PrintUtils::Field(
+          "Source Cubemap Angle", rec->source_cubemap_angle_radians, 10);
         PrintUtils::Field("Lower Hemisphere Color",
           asset_dump_helpers::FormatVec3(rec->lower_hemisphere_color), 10);
-        PrintUtils::Field("Volumetric Scattering",
-          rec->volumetric_scattering_intensity, 10);
+        PrintUtils::Field("Lower Hemisphere Solid",
+          rec->lower_hemisphere_is_solid_color != 0U, 10);
+        PrintUtils::Field(
+          "Lower Hemisphere Blend", rec->lower_hemisphere_blend_alpha, 10);
+        PrintUtils::Field(
+          "Volumetric Scattering", rec->volumetric_scattering_intensity, 10);
         PrintUtils::Field(
           "Affect Reflections", rec->affect_reflections != 0U, 10);
-        PrintUtils::Field("Affect GI",
-          rec->affect_global_illumination != 0U, 10);
+        PrintUtils::Field(
+          "Affect GI", rec->affect_global_illumination != 0U, 10);
         break;
       }
       case EnvironmentComponentType::kSkySphere: {

@@ -640,9 +640,18 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     real_time_capture_enabled = _u32_bool(
         spec.get("real_time_capture_enabled"), 0
     )
+    source_cubemap_angle_radians = _f(
+        spec.get("source_cubemap_angle_radians"), 0.0
+    )
     lower_hemisphere_color = _vec3(
         spec.get("lower_hemisphere_color", [0.0, 0.0, 0.0]),
         [0.0, 0.0, 0.0],
+    )
+    lower_hemisphere_is_solid_color = _u32_bool(
+        spec.get("lower_hemisphere_is_solid_color"), 1
+    )
+    lower_hemisphere_blend_alpha = _f(
+        spec.get("lower_hemisphere_blend_alpha"), 1.0
     )
     volumetric_scattering_intensity = _f(
         spec.get("volumetric_scattering_intensity"), 1.0
@@ -652,7 +661,7 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         spec.get("affect_global_illumination"), 1
     )
 
-    record_size = 84
+    record_size = 96
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
         + struct.pack("<I", int(enabled))
@@ -667,6 +676,9 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", volumetric_scattering_intensity)
         + struct.pack("<I", int(affect_reflections))
         + struct.pack("<I", int(affect_global_illumination))
+        + struct.pack("<f", source_cubemap_angle_radians)
+        + struct.pack("<I", int(lower_hemisphere_is_solid_color))
+        + struct.pack("<f", lower_hemisphere_blend_alpha)
     )
     if len(out) != record_size:
         raise PakError(

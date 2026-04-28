@@ -357,11 +357,15 @@ namespace {
     target.SetDiffuseIntensity(source.diffuse_intensity);
     target.SetSpecularIntensity(source.specular_intensity);
     target.SetRealTimeCaptureEnabled(source.real_time_capture_enabled != 0U);
+    target.SetSourceCubemapAngleRadians(source.source_cubemap_angle_radians);
     target.SetLowerHemisphereColor({
       source.lower_hemisphere_color[0],
       source.lower_hemisphere_color[1],
       source.lower_hemisphere_color[2],
     });
+    target.SetLowerHemisphereIsSolidColor(
+      source.lower_hemisphere_is_solid_color != 0U);
+    target.SetLowerHemisphereBlendAlpha(source.lower_hemisphere_blend_alpha);
     target.SetVolumetricScatteringIntensity(
       source.volumetric_scattering_intensity);
     target.SetAffectReflections(source.affect_reflections != 0U);
@@ -3252,7 +3256,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
     light->SetRealTimeCaptureEnabled(sky_light_real_time_capture_enabled_);
+    light->SetSourceCubemapAngleRadians(
+      sky_light_source_cubemap_angle_radians_);
     light->SetLowerHemisphereColor(sky_light_lower_hemisphere_color_);
+    light->SetLowerHemisphereIsSolidColor(
+      sky_light_lower_hemisphere_is_solid_color_);
+    light->SetLowerHemisphereBlendAlpha(
+      sky_light_lower_hemisphere_blend_alpha_);
     light->SetVolumetricScatteringIntensity(
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
@@ -3395,7 +3405,13 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
     sky_light_real_time_capture_enabled_ = light->GetRealTimeCaptureEnabled();
+    sky_light_source_cubemap_angle_radians_
+      = light->GetSourceCubemapAngleRadians();
     sky_light_lower_hemisphere_color_ = light->GetLowerHemisphereColor();
+    sky_light_lower_hemisphere_is_solid_color_
+      = light->GetLowerHemisphereIsSolidColor();
+    sky_light_lower_hemisphere_blend_alpha_
+      = light->GetLowerHemisphereBlendAlpha();
     sky_light_volumetric_scattering_intensity_
       = light->GetVolumetricScatteringIntensity();
     sky_light_affect_reflections_ = light->GetAffectReflections();

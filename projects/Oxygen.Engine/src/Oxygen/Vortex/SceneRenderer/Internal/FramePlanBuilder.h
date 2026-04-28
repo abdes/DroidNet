@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
@@ -95,6 +96,8 @@ private:
   struct SkyState {
     bool sky_atmo_enabled { false };
     bool sky_sphere_enabled { false };
+    std::uint32_t sky_sphere_source { 0U };
+    bool sky_sphere_cubemap_authored { false };
   };
 
   [[nodiscard]] auto EvaluateSkyState(observer_ptr<scene::Scene> scene) const

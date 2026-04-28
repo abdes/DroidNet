@@ -1,14 +1,14 @@
 # Cubemap Processing LLD
 
 **Milestone:** VTX-M08
-**Status:** `draft_for_review`
+**Status:** `active_design`
 
 This LLD defines the VTX-M08 static specified-cubemap processing path used by
 diffuse SkyLight lighting. Visual skyboxes may share the same authored cubemap
 asset and the same resource-resolution path, but they do not share the
 renderer-owned SkyLight lighting products. This is implementation guidance, not
-closure evidence. VTX-M08 remains `planned` until this LLD is reviewed,
-implemented, tested, and runtime proof is recorded.
+closure evidence. VTX-M08 remains `in_progress` until every implementation
+slice is implemented, tested, and runtime proof is recorded.
 
 ## 1. Scope
 
