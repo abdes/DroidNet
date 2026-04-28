@@ -63,4 +63,19 @@ public static class DiagnosticCodes
     /// Live scene sync diagnostic code prefix.
     /// </summary>
     public const string LiveSyncPrefix = "OXE.LIVESYNC.";
+
+    /// <summary>
+    /// Material authoring diagnostic code prefix.
+    /// </summary>
+    public const string MaterialPrefix = "OXE.MATERIAL.";
+
+    /// <summary>
+    /// Asset identity diagnostic code prefix.
+    /// </summary>
+    public const string AssetIdentityPrefix = "OXE.ASSETID.";
+
+    /// <summary>
+    /// Content pipeline diagnostic code prefix.
+    /// </summary>
+    public const string ContentPipelinePrefix = "OXE.CONTENTPIPELINE.";
 }

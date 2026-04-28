@@ -6,7 +6,7 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI"
@@ -31,7 +31,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <local:PropertiesExpander
+    <editorcontrols:PropertiesExpander
         Padding="2"
         HorizontalAlignment="Stretch"
         VerticalAlignment="Top"
@@ -40,8 +40,8 @@
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE7C3;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
-        <local:PropertiesExpander.Items>
-            <local:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
                 <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -131,9 +131,9 @@
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>
                 </Grid>
-            </local:PropertyCard>
+            </editorcontrols:PropertyCard>
 
-            <local:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
                 <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -153,7 +153,7 @@
                         HorizontalAlignment="Stretch"
                         Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
-                            <Flyout x:Name="MaterialPickerFlyout">
+                            <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}">
                                     <ItemsRepeater.Layout>
                                         <StackLayout Spacing="0" />
@@ -223,7 +223,7 @@
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>
                 </Grid>
-            </local:PropertyCard>
-        </local:PropertiesExpander.Items>
-    </local:PropertiesExpander>
+            </editorcontrols:PropertyCard>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
 </UserControl>

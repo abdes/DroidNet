@@ -10,6 +10,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Assets.Catalog;
 using Oxygen.Core;
+using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -24,9 +25,10 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// the scene document command service so undo, dirty state, diagnostics, and live sync stay
 /// on the document command path.
 /// </remarks>
-public partial class GeometryViewModel : ComponentPropertyEditor
+public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly IAssetCatalog assetCatalog;
+    private readonly IMaterialPickerService materialPickerService;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
@@ -36,6 +38,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     private readonly DispatcherQueue dispatcherQueue;
 
     private IDisposable? assetChangesSubscription;
+    private IDisposable? materialResultsSubscription;
 
     private ICollection<SceneNode>? selectedItems;
 
@@ -48,10 +51,12 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     public GeometryViewModel(
         HostingContext hosting,
         IAssetCatalog assetCatalog,
+        IMaterialPickerService materialPickerService,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
         this.assetCatalog = assetCatalog;
+        this.materialPickerService = materialPickerService;
         this.commandService = commandService;
         this.commandContextProvider = commandContextProvider;
         this.dispatcherQueue = hosting.Dispatcher;
@@ -91,6 +96,11 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
         Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
 
+        this.materialResultsSubscription = this.materialPickerService.Results.Subscribe(
+            rows => this.DispatchOnUi(() => this.ReplaceContentMaterialItems(rows)),
+            ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
+        _ = this.materialPickerService.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false });
+
         // Get initial snapshot and track seen assets to deduplicate replay
         _ = Task.Run(async () =>
         {
@@ -98,9 +108,8 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             {
                 var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
                 var meshAssets = allAssets.Where(a => IsSelectableCookedMesh(a.Uri)).ToList();
-                var materialAssets = allAssets.Where(a => IsSelectableMaterial(a.Uri)).ToList();
 
-                Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets; {materialAssets.Count} material assets");
+                Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
 
                 var selectedByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
                 foreach (var asset in meshAssets)
@@ -109,16 +118,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                     if (!selectedByKey.TryGetValue(key, out var existing) || IsPreferredMeshUri(asset.Uri, existing.Uri))
                     {
                         selectedByKey[key] = asset;
-                    }
-                }
-
-                var selectedMaterialsByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
-                foreach (var asset in materialAssets)
-                {
-                    var key = GetMaterialLogicalKey(asset.Uri);
-                    if (!selectedMaterialsByKey.TryGetValue(key, out var existing) || IsPreferredMaterialUri(asset.Uri, existing.Uri))
-                    {
-                        selectedMaterialsByKey[key] = asset;
                     }
                 }
 
@@ -133,33 +132,16 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                             this.contentItemsByKey[key] = item;
                             this.contentItems.Add(item);
                         }
-
-                        foreach (var asset in selectedMaterialsByKey.Values.OrderBy(a => AssetUriHelper.GetVirtualPath(a.Uri), StringComparer.OrdinalIgnoreCase))
-                        {
-                            Debug.WriteLine($"[GeometryViewModel] Initial material asset: {asset.Name} ({asset.Uri})");
-                            var item = CreateContentMaterialItem(asset);
-                            var key = GetMaterialLogicalKey(asset.Uri);
-                            this.contentMaterialItemsByKey[key] = item;
-                            this.contentMaterialItems.Add(item);
-                        }
                     });
 
                 // Subscribe to future changes, deduplicating replayed items.
                 this.assetChangesSubscription = this.assetCatalog.Changes
-                    .Where(n => IsSelectableCookedMesh(n.Uri) || IsSelectableMaterial(n.Uri))
+                    .Where(n => IsSelectableCookedMesh(n.Uri))
                     .Subscribe(
                         notification =>
                             this.DispatchOnUi(() =>
                                 {
-                                    if (IsSelectableCookedMesh(notification.Uri))
-                                    {
-                                        this.ApplyAssetChange(notification);
-                                    }
-
-                                    if (IsSelectableMaterial(notification.Uri))
-                                    {
-                                        this.ApplyMaterialAssetChange(notification);
-                                    }
+                                    this.ApplyAssetChange(notification);
                                 }),
                         ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex}"));
             }
@@ -168,6 +150,13 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                 Debug.WriteLine($"[GeometryViewModel] Failed to initialize content assets: {ex}");
             }
         });
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.assetChangesSubscription?.Dispose();
+        this.materialResultsSubscription?.Dispose();
     }
 
     /// <summary>
@@ -381,6 +370,15 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     }
 
     /// <summary>
+    /// Refreshes the material picker from the live catalog before the material flyout is shown.
+    /// </summary>
+    /// <returns>A task that completes when the picker snapshot has been republished.</returns>
+    public async Task RefreshMaterialPickerAsync()
+        => await this.materialPickerService
+            .RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false })
+            .ConfigureAwait(true);
+
+    /// <summary>
     /// Update the view model state from the given collection of selected scene nodes.
     /// </summary>
     /// <param name="items">The currently selected scene nodes.</param>
@@ -559,58 +557,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             : uri;
     }
 
-    private static bool IsSelectableMaterial(Uri uri)
-    {
-        var mountPoint = AssetUriHelper.GetMountPoint(uri);
-        if (string.IsNullOrWhiteSpace(mountPoint))
-        {
-            return false;
-        }
-
-        if (mountPoint.Equals("Engine", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase)
-            || mountPoint.Equals("Cooked", StringComparison.OrdinalIgnoreCase)
-            || mountPoint.Equals("Imported", StringComparison.OrdinalIgnoreCase)
-            || mountPoint.Equals("Build", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var path = AssetUriHelper.GetRelativePath(uri);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = uri.AbsolutePath;
-        }
-
-        return path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase)
-               || path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetMaterialLogicalKey(Uri uri)
-    {
-        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
-        if (string.IsNullOrWhiteSpace(virtualPath))
-        {
-            virtualPath = uri.AbsolutePath;
-        }
-
-        return virtualPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? virtualPath[..^".json".Length]
-            : virtualPath;
-    }
-
-    private static bool IsPreferredMaterialUri(Uri candidate, Uri existing)
-    {
-        var candidatePath = AssetUriHelper.GetRelativePath(candidate);
-        var existingPath = AssetUriHelper.GetRelativePath(existing);
-        return candidatePath.EndsWith(".omat", StringComparison.OrdinalIgnoreCase)
-               && existingPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase);
-    }
-
     private void ApplyAssetChange(AssetChange notification)
     {
         if (notification.Kind == AssetChangeKind.Added)
@@ -655,54 +601,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                 Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
                 _ = this.contentItems.Remove(existingItem);
                 _ = this.contentItemsByKey.Remove(key);
-            }
-        }
-    }
-
-    private void ApplyMaterialAssetChange(AssetChange notification)
-    {
-        if (notification.Kind == AssetChangeKind.Added)
-        {
-            var key = GetMaterialLogicalKey(notification.Uri);
-
-            if (!this.contentMaterialItemsByKey.TryGetValue(key, out var existingItem))
-            {
-                Debug.WriteLine($"[GeometryViewModel] New material asset added: {notification.Uri}");
-                var record = new AssetRecord(notification.Uri);
-                var newItem = CreateContentMaterialItem(record);
-                this.contentMaterialItemsByKey[key] = newItem;
-                this.contentMaterialItems.Add(newItem);
-                return;
-            }
-
-            if (existingItem.Uri is not null && IsPreferredMaterialUri(notification.Uri, existingItem.Uri))
-            {
-                Debug.WriteLine($"[GeometryViewModel] Replacing material asset for key '{key}': {existingItem.Uri} -> {notification.Uri}");
-                var record = new AssetRecord(notification.Uri);
-                var newItem = CreateContentMaterialItem(record);
-
-                var idx = this.contentMaterialItems.IndexOf(existingItem);
-                if (idx >= 0)
-                {
-                    this.contentMaterialItems[idx] = newItem;
-                }
-                else
-                {
-                    this.contentMaterialItems.Add(newItem);
-                }
-
-                this.contentMaterialItemsByKey[key] = newItem;
-            }
-        }
-        else if (notification.Kind == AssetChangeKind.Removed)
-        {
-            var key = GetMaterialLogicalKey(notification.Uri);
-            if (this.contentMaterialItemsByKey.TryGetValue(key, out var existingItem)
-                && existingItem.Uri == notification.Uri)
-            {
-                Debug.WriteLine($"[GeometryViewModel] Material asset removed: {notification.Uri}");
-                _ = this.contentMaterialItems.Remove(existingItem);
-                _ = this.contentMaterialItemsByKey.Remove(key);
             }
         }
     }
@@ -758,15 +656,28 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             ThumbnailModel: "\uE7C3");
     }
 
-    private static MaterialPickerItem CreateContentMaterialItem(AssetRecord asset)
+    private static MaterialPickerItem CreateContentMaterialItem(MaterialPickerResult asset)
         => new(
-            Name: asset.Name,
-            Uri: asset.Uri,
-            DisplayType: "Material",
-            DisplayPath: AssetUriHelper.GetVirtualPath(asset.Uri),
+            Name: asset.DisplayName,
+            Uri: asset.MaterialUri,
+            DisplayType: asset.State == Oxygen.Editor.ContentBrowser.Materials.AssetState.Missing ? "Missing material" : "Material",
+            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
             Group: AssetPickerGroup.Content,
-            IsEnabled: true,
+            IsEnabled: asset.State is not Oxygen.Editor.ContentBrowser.Materials.AssetState.Missing and not Oxygen.Editor.ContentBrowser.Materials.AssetState.Broken,
             ThumbnailModel: "\uE8B9");
+
+    private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)
+    {
+        this.contentMaterialItems.Clear();
+        this.contentMaterialItemsByKey.Clear();
+
+        foreach (var material in materials.OrderBy(static m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            var item = CreateContentMaterialItem(material);
+            this.contentMaterialItems.Add(item);
+            this.contentMaterialItemsByKey[material.MaterialUri.ToString()] = item;
+        }
+    }
 
     partial void OnIsMixedChanged(bool value)
     {

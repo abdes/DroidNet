@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Editor.ContentPipeline.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Assets\src\Oxygen.Assets.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AwesomeAssertions" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    </ItemGroup>
+</Project>

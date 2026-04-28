@@ -402,7 +402,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                 SceneOperationKinds.EditMaterialSlot,
                 scope,
                 LiveSyncDiagnosticCodes.MaterialUnsupported,
-                $"Live material slot sync is not supported in ED-M04. Slot {slotIndex} remains authored only."));
+                $"Live material slot sync is not supported by the V0.1 editor policy. Slot {slotIndex} remains authored only."));
     }
 
     /// <inheritdoc/>
