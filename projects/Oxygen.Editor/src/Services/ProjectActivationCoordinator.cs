@@ -115,6 +115,7 @@ public sealed class ProjectActivationCoordinator(
 
             if (context is null)
             {
+                ApplyFailureMessageFromDiagnostics();
                 return PublishResult(completed: false);
             }
 
@@ -202,6 +203,19 @@ public sealed class ProjectActivationCoordinator(
         }
 
         return PublishResult(primaryGoalCompleted);
+
+        void ApplyFailureMessageFromDiagnostics()
+        {
+            var diagnostic = diagnostics.LastOrDefault(static item => item.Severity == DiagnosticSeverity.Error);
+            if (diagnostic is null)
+            {
+                return;
+            }
+
+            message = string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage)
+                ? diagnostic.Message
+                : $"{diagnostic.Message} {diagnostic.TechnicalMessage}";
+        }
 
         OperationResult PublishResult(bool completed)
         {
