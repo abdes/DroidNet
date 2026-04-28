@@ -48,6 +48,7 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 #include "Fakes/Graphics.h"
 
@@ -228,7 +229,9 @@ protected:
 
   auto RenderForView(const ViewId active_view_id,
     const ResolvedView& active_view,
-    const ShaderDebugMode debug_mode = ShaderDebugMode::kDisabled)
+    const ShaderDebugMode debug_mode = ShaderDebugMode::kDisabled,
+    const oxygen::vortex::CompositionView::ViewFeatureProfile feature_profile
+    = oxygen::vortex::CompositionView::ViewFeatureProfile::kDefault)
     -> RenderContext
   {
     scene_renderer_->OnFrameStart(frame_context_);
@@ -269,6 +272,10 @@ protected:
     context.current_view.exposure_view_id = active_view_id;
     context.current_view.resolved_view
       = oxygen::observer_ptr<const ResolvedView> { &active_view };
+    context.current_view.feature_profile = feature_profile;
+    context.current_view.feature_mask
+      = oxygen::vortex::ResolveViewFeatureProfileSpec(feature_profile)
+          .feature_mask;
     context.view_constants = view_constants_buffer_;
     renderer_->SetShaderDebugMode(debug_mode);
     context.shader_debug_mode = renderer_->GetShaderDebugMode();
@@ -1238,6 +1245,56 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(lighting_state.published_shadow_frame_slot,
     published_bindings.shadow_frame_slot);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthOnlyFeatureProfilePublishesDepthWithoutSceneColorProducts)
+{
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kDepthOnly);
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kComplete);
+  EXPECT_NE(bindings.scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_FALSE(lighting_state.consumed_published_scene_textures);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  ShadowOnlyFeatureProfilePublishesShadowBindingsWithoutSceneColorProducts)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kShadowOnly);
+  const auto& published_bindings
+    = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kDisabled);
+  EXPECT_NE(
+    published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_FALSE(lighting_state.consumed_published_scene_textures);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
