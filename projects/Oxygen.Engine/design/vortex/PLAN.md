@@ -74,36 +74,59 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-FUTURE - Post-Baseline Family Selection
+### NEXT: VTX-M08 - Skybox And Static Specified-Cubemap SkyLight
 
-**Status:** `future`
+**Status:** `planned`
 
-**Purpose:** Select and plan the first post-baseline renderer family after the
-production-complete desktop deferred baseline.
+**Purpose:** Implement and validate the first cubemap-backed environment
+baseline after production readiness: visual skybox background rendering and
+static specified-cubemap SkyLight diffuse lighting.
 
 **Why this is next:** `VTX-M07` validated production readiness and legacy
-retirement. No detailed post-baseline implementation plan is active yet.
+retirement. UE5.7 parity requires separating a visual skybox/SkyPass-style
+background from SkyLight lighting products. Oxygen already has scene authoring
+and cubemap import surfaces, but real SkyLight cubemap processing remains an
+open resource gap.
 
 **Prerequisite work packages:** `VTX-M03` is landed with downstream validated
 surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
 `VTX-M06A`, `VTX-M06B`, `VTX-M06C`, and `VTX-M07` are validated.
 
-**Active work packages:** none.
+**Active work packages:** `VTX-M08` planning package only.
 
-**Detailed plan:** not selected yet.
+**Detailed plan:** [plan/VTX-M08-skybox-static-skylight.md](plan/VTX-M08-skybox-static-skylight.md).
 
 **In scope:**
 
-- Choose the next concrete family and create a detailed implementation plan.
-- Keep VTX-FUTURE families in `future` until an approved plan exists.
-- Preserve the M07 proof boundary: new post-baseline work must not reopen
-  legacy renderer paths or weaken current Vortex proof gates.
+- Preserve the M07 proof boundary: no legacy renderer reference, fallback, or
+  compatibility path.
+- Use existing Oxygen cubemap import support as the asset-ingestion baseline.
+- Author and review the required LLDs before implementation:
+  `lld/cubemap-processing.md` must define cubemap ingestion boundaries,
+  derived SkyLight product ownership, runtime publication states, shader-facing
+  contracts, and validation surfaces; `lld/skybox-static-skylight.md` must
+  define visual-background selection, procedural-sky interaction, directional
+  sun interaction, SkyLight publication/consumption boundaries, feature gates,
+  and proof scenes/scripts.
+- Implement a visual skybox background path from `SkySphere` / cubemap
+  authoring that writes SceneColor as unlit sky/background content.
+- Implement static specified-cubemap SkyLight diffuse lighting through a
+  documented environment-product boundary, with exact product formats,
+  filtering, shader bindings, and validation defined in the new LLDs.
+- Preserve no-environment, no-volumetrics, diagnostics, multi-view, offscreen,
+  and feature-variant behavior from VTX-M06/VTX-M07.
 
 **Out of scope:**
 
-- New post-baseline feature families such as GI/reflections, VSM, clouds,
-  heterogeneous volumes, water, hair, and distortion unless explicitly
-  reprioritized.
+- Captured-scene SkyLight.
+- Real-time sky capture.
+- Cubemap blend transitions.
+- Distance-field ambient occlusion / SkyLight occlusion.
+- Baked/static-lightmap SkyLight integration.
+- Reflection-capture recapture and broader reflection-probe ecosystem.
+- Volumetric clouds, heterogeneous volumes, water, hair, distortion, and VSM.
+- Treating a visual skybox texture sample or a constant ambient color as
+  SkyLight parity.
 
 **Dependencies:**
 
@@ -111,10 +134,9 @@ surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
   conventional shadows, multi-view, offscreen, and feature-gated variant
   surfaces.
 
-**Recommended next planning target:** Virtual Shadow Maps, if shadow scalability
-and large-scene quality are the next product priority. VSM was explicitly
-deferred from the conventional shadow milestone and is a concrete post-baseline
-ShadowService strategy rather than a broad renderer rewrite.
+**Next candidate after VTX-M08:** Virtual Shadow Maps or the broader
+IndirectLighting/reflection family. Those remain `future` until VTX-M08 is
+reviewed and the next detailed plan is selected.
 
 ## 5. Milestone Roadmap
 
@@ -130,21 +152,22 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M04D | Environment / fog parity closure | `validated` | VTX-M02, VTX-M03 validation context | Parent milestone for environment publication truth, main-view aerial perspective, height fog, local fog, volumetric fog, and consolidated VortexBasic runtime proof. Real SkyLight cubemap capture/filtering remains a later IBL/indirect-lighting resource milestone. |
 | VTX-M04D.1 | Environment publication and sky/fog contract truth | `validated` | VTX-M02, current environment code | Truthful environment binding/publication state, SkyLight/IBL truth, Stage 14 observability. |
 | VTX-M04D.2 | UE5.7 exponential height fog parity | `validated` | VTX-M04D.1 | UE5.7-informed authored parameters, CPU/HLSL publication, analytic Stage-15 application, disabled fast path, focused runtime/capture proof, and city-scale capture proof. Cubemap inscattering resource binding/sampling remains explicitly deferred. |
-| VTX-M04D.3 | UE5.7 local fog volume parity | `validated` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Analytical local-fog volume path is implemented and proven: UE-shaped authoring sanitization, sorting/capping, HZB-backed tiled culling, single draw-indirect compose, SceneColor contribution, far-depth no-op behavior, focused tests, shader validation, and VortexBasic runtime/capture proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
-| VTX-M04D.4 | UE5.7 volumetric fog parity | `validated` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3, VTX-M03 directional CSM proof | Integrated-light-scattering runtime product path is implemented and proven with focused Stage-14 RenderDoc proof, captured Stage-15 fog static-data SRV/flag proof, focused integrated-volume sampling proof, and city-scale RenderScene capture proof. UE5.7-style log froxel depth, primary/secondary height-fog spatial media density, primary directional CSM shadowed-light sampling, Oxygen distant-SkyLight volumetric ambient injection, local-fog participating-media injection, and UE-shaped temporal jitter/reset/history-miss reprojection have focused CPU/shader/runtime-smoke evidence. Term-isolated local-fog, SkyLight, directional-shadow, and temporal artifact proof exists from paired VortexBasic RenderDoc captures. Accepted Oxygen divergences are documented for UE conservative-depth history fixup, pre-exposure transfer, and UE's separate light-scattering history product. Real SkyLight cubemap capture/filtering is an IBL/indirect-lighting resource milestone, not a VTX-M04D.4 closure gate. |
+| VTX-M04D.3 | UE5.7 local fog volume parity | `validated` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Analytical local-fog volume path is implemented and proven: authored parameter sanitization traced to UE5.7 local-fog inputs, deterministic sort/cap policy, HZB-backed tiled culling, single draw-indirect compose, SceneColor contribution, far-depth no-op behavior, focused tests, shader validation, and VortexBasic runtime/capture proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
+| VTX-M04D.4 | UE5.7 volumetric fog parity | `validated` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3, VTX-M03 directional CSM proof | Integrated-light-scattering runtime product path is implemented and proven with focused Stage-14 RenderDoc proof, captured Stage-15 fog static-data SRV/flag proof, focused integrated-volume sampling proof, and city-scale RenderScene capture proof. Evidence covers log-distributed froxel depth, primary/secondary height-fog spatial media density, primary directional CSM shadowed-light sampling, Oxygen distant-SkyLight volumetric ambient injection, local-fog participating-media injection, Halton jitter, reset, history-miss supersampling, and reprojection for Oxygen's integrated-scattering product. Term-isolated local-fog, SkyLight, directional-shadow, and temporal artifact proof exists from paired VortexBasic RenderDoc captures. Accepted Oxygen divergences are documented for UE conservative-depth history fixup, pre-exposure transfer, and UE's separate light-scattering history product. Real SkyLight cubemap capture/filtering is an IBL/indirect-lighting resource milestone, not a VTX-M04D.4 closure gate. |
 | VTX-M04D.5 | Environment runtime proof and Async preparation | `validated` | VTX-M04D.2, VTX-M04D.3, VTX-M04D.4, VTX-M04D.6 | `Run-VortexBasicRuntimeValidation.ps1` now builds, runs a CDB/D3D12 audit, captures RenderDoc frame 5, and asserts one runtime path exercising atmosphere, main-view AP, height fog, local fog, volumetric fog, and authored SkyLight unavailable/volumetric state. Real SkyLight cubemap capture/filtering remains a separate IBL/indirect-lighting resource implementation before usable IBL output can be claimed. |
 | VTX-M04D.6 | UE5.7 aerial perspective parity | `validated` | VTX-M04D.1, VTX-M04D.2 | Main-view camera aerial-perspective volume generation/sampling, main-pass application, height-fog coupling boundary, focused enabled/disabled proof, and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP resource behavior is explicitly deferred to the future reflection-capture resource path. |
 | VTX-M04E | Async migration parity gate | `validated` | VTX-M03, VTX-M04D.5 | `Examples/Async` runs through Vortex with no long-lived compatibility clutter and has RenderDoc-backed structural/product/presentation proof. |
 | VTX-M04F | Single-view composition and presentation closeout | `validated` | VTX-M04E | Single-view composition, resolve, handoff, post-process, and presentation proof with RenderDoc-backed Stage 22 copy, overlay blend, and final present evidence. |
 | VTX-M05A | Diagnostics product service | `validated` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
-| VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | UE5.7-shaped HZB occlusion consumer over the landed generic Screen HZB: visibility publication, readback latency, conservative fallbacks, consumers, diagnostics, and proof. |
+| VTX-M05B | Occlusion consumer closeout | `validated` | VTX-M02 | HZB occlusion consumer over the landed generic Screen HZB with visibility publication, readback latency, conservative fallbacks, base-pass consumers, diagnostics, and proof aligned to the UE5.7 occlusion/HZB source review recorded in the milestone plan. |
 | VTX-M05C | Translucency stage | `validated` | VTX-M03, VTX-M04D.5, VTX-M05A, VTX-M05B | Stage 18 standard forward-lit translucency consuming prepared transparent draws plus lighting/shadow/environment publications. Focused build/tests, senior-review regression remediation, CDB/D3D12 audit, RenderDoc proof, UE5.7 re-check, and user visual confirmation passed. |
 | VTX-M05D | Conventional shadow parity and local-light expansion | `validated` | VTX-M03, VTX-M05A, VTX-M05B, VTX-M05C | Directional CSM UE5.7 audit/remediation and local-scale `VsmTwoCubes` validation are closed with Release smoke, recook, RenderDoc capture, and sequential shadow/base-pass analysis proof. Spot-light conventional shadows are validated with focused tests, shader validation, CDB/debug-layer audit, RenderDoc probe, and user visual confirmation. Point-light conventional shadows are validated with cube-array six-face Stage 8 rendering, Stage 12 point-shadow sampling, point proxy winding regression coverage, CDB/debug-layer audit, RenderDoc point-shadow probe, and user visual confirmation. Stage 18 translucent local-light shadow consumption, layered one-pass point cubemap rendering, and VSM remain deferred. |
 | VTX-M06A | Multi-view proof closeout | `validated` | VTX-M05A, VTX-M05B, VTX-M05C, VTX-M05D | B1 per-view plan/state-handle substrate, B2 classification payloads, C `PerViewScope` serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H runtime proof tooling are implemented and validated. Standard and auxiliary MultiView proof layouts pass focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, and 60-frame allocation-churn proof, including runtime/capture proof that an auxiliary producer output is extracted and consumed by a dependent view. |
 | VTX-M06B | Offscreen proof closeout | `validated` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios are implemented and validated. Closure proof covers focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, non-empty offscreen product proof, downstream texture composition, 60-frame allocation-churn proof, and user visual confirmation. |
 | VTX-M06C | Feature-gated runtime variants | `validated` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants with focused tests, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, and user visual confirmation. |
 | VTX-M07 | Production readiness and legacy retirement | `validated` | VTX-M06C | Static legacy seam guard, stale demo/doc cleanup, required demo refresh/testing, production proof-suite consolidation, binary dependency audit, current-path doc routing, CDB/RenderDoc closure proof, and safe legacy retirement are validated. |
-| VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M07 or explicit reprioritization | Geometry virtualization, material composition, indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
+| VTX-M08 | Skybox and static specified-cubemap SkyLight | `planned` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Visual cubemap skybox background plus static specified-cubemap SkyLight diffuse lighting through a reviewed environment-product boundary. Required LLDs must be reviewed before implementation. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
+| VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M08 or explicit reprioritization | Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
 
 ## 6. Environment Milestone Decomposition
 
@@ -240,8 +263,8 @@ Required work:
 - Integrate scattering and transmittance into a published
   integrated-light-scattering product.
 - Add temporal reprojection/history, jitter policy, reset conditions, and
-  per-view resource ownership. VTX-M04D.4 implements UE-shaped Halton jitter,
-  reset, history-miss supersampling, and reprojection for Oxygen's single
+  per-view resource ownership. VTX-M04D.4 implements Halton jitter, reset,
+  history-miss supersampling, and reprojection for Oxygen's single
   integrated-scattering product; UE conservative-depth history fixup,
   pre-exposure transfer, and separate `LightScattering` history are documented
   accepted divergences.
@@ -349,10 +372,11 @@ Out of scope:
 
 Scope:
 
-- UE5.7-shaped occlusion consumer over the already-landed generic Stage 5
-  Screen HZB: visibility-state publication, HZB-test batching, readback
-  latency, conservative fallbacks, and consumers in base pass and other
-  compatible draw builders where proven.
+- Occlusion consumer over the already-landed generic Stage 5 Screen HZB:
+  visibility-state publication, HZB-test batching, readback latency,
+  conservative fallbacks, and consumers in base pass and other compatible draw
+  builders where proven, with UE5.7 source mapping recorded in the detailed
+  milestone plan.
 
 Dependency note:
 
@@ -485,6 +509,7 @@ VTX-M03 + VTX-M04D.5
                  └─► VTX-M06A / VTX-M06B
                       └─► VTX-M06C
                            └─► VTX-M07
+                                └─► VTX-M08
 ```
 
 Parallelism rules:
@@ -521,11 +546,12 @@ Parallelism rules:
 | ShadowService directional baseline | VTX-M03 / VTX-M04D.4 prerequisite / VTX-M05D | `validated_for_static_projection_reaudit_required` | Directional conventional shadow data publication and projected receiver shadows were validated enough for M04D.4 volumetric consumption, and the city-scale loader preserves cooked manual CSM settings. M05D now owns full UE5.7 CSM parity and camera-stability remediation because `CityEnvironmentValidation` projected shadows are unstable under camera movement. |
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `validated` for main-view AP | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; main-view aerial perspective has focused VortexBasic enabled/disabled proof and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP remains explicitly deferred. |
-| SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
+| SkyLight publication truth | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. |
+| Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `planned` | Visual cubemap skybox background, deterministic procedural-sky versus skybox selection, directional sun interaction rules, and static SkyLight diffuse lighting. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
 | Exponential height fog | VTX-M04D.2 | `validated` | UE5.7-informed authored parameters, algorithms, shaders, disabled fast path, focused runtime/capture proof, and city-scale capture proof. Cubemap inscattering resource binding/sampling remains explicitly deferred. |
 | City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `validated` for M04D fog/AP packages | `CityEnvironmentValidation` banding/quality fixes now have implementation/test/runtime-smoke/focused RenderDoc evidence: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, city-scale directional CSM hydration, city-scale height-fog runtime/capture behavior, city-scale volumetric integrated-scattering runtime behavior, and city-scale main-view AP compose proof. Consolidated runtime closure is validated by VTX-M04D.5. Cubemap fog and reflection/360 AP are deferred. |
 | Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
-| Volumetric fog | VTX-M04D.4 | `validated` | Integrated-light-scattering runtime path is proven with focused RenderDoc proof for Stage-14 dispatch/product write, captured Stage-15 fog `EnvironmentStaticData` SRV/flag/grid proof, integrated-volume min/max/slice proof, term-isolated VortexBasic captures, and city-scale RenderScene capture proof. UE5.7-style log froxel depth, spatial primary/secondary height-fog media density, primary directional CSM shadowed-light sampling, local-fog participating-media injection through validated Stage-14 tiled products, Oxygen distant-SkyLight volumetric ambient injection, and UE-shaped temporal jitter/reset/history-miss reprojection are validated for the Oxygen product shape. Real SkyLight cubemap capture/filtering is deferred to the IBL/indirect-lighting resource track. |
+| Volumetric fog | VTX-M04D.4 | `validated` | Integrated-light-scattering runtime path is proven with focused RenderDoc proof for Stage-14 dispatch/product write, captured Stage-15 fog `EnvironmentStaticData` SRV/flag/grid proof, integrated-volume min/max/slice proof, term-isolated VortexBasic captures, and city-scale RenderScene capture proof. Validated terms include log-distributed froxel depth, spatial primary/secondary height-fog media density, primary directional CSM shadowed-light sampling, local-fog participating-media injection through validated Stage-14 tiled products, Oxygen distant-SkyLight volumetric ambient injection, Halton jitter, reset, history-miss supersampling, and reprojection for the Oxygen integrated-scattering product. Real SkyLight cubemap capture/filtering is deferred to the IBL/indirect-lighting resource track. |
 | Async runtime migration | VTX-M04E | `validated` | Canonical Async runtime proof path with no compatibility clutter, Stage 3/8/12/15/22 RenderDoc evidence, final present output, and overlay composition proof. |
 | Single-view composition/presentation | VTX-M04F | `validated` | Async RenderDoc proof validates Stage 22 tonemap output, exactly one composition copy from `Async.SceneColor` after Stage 22, exactly one overlay blend after the scene copy, final present output, and focused `RendererCompositionQueue` tests. |
 | DiagnosticsService | VTX-M05A | `validated` | Product diagnostics surface, overlays/panels/timeline/debug bindings. |
