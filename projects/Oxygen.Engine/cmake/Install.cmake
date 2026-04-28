@@ -89,8 +89,8 @@ macro(_setup_install_dirs)
     set(OXYGEN_INSTALL_MISC "${CMAKE_INSTALL_DATAROOTDIR}/${META_PROJECT_NAME}") # /etc/init (upstart init scripts)
   else()
     # Install into local directory
-    set(OXYGEN_INSTALL_LIB "${CMAKE_INSTALL_PREFIX}/lib") # ./lib
-    set(OXYGEN_INSTALL_BIN "${CMAKE_INSTALL_PREFIX}/bin") # ./bin
+    set(OXYGEN_INSTALL_LIB "lib") # ./lib
+    set(OXYGEN_INSTALL_BIN "bin") # ./bin
     if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
       set(OXYGEN_INSTALL_SHARED "${OXYGEN_INSTALL_BIN}") # ./lib
     else()
@@ -120,6 +120,7 @@ macro(_setup_install_dirs)
 endmacro()
 
 if(${META_PROJECT_ID}_INSTALL)
+  _oxygen_emit_multi_config_install_prefix_hook()
   _setup_install_dirs()
 
   if(NOT ${META_PROJECT_ID}_IS_MASTER_PROJECT)
