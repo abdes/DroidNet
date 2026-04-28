@@ -21,6 +21,7 @@ implementation-ready workstream.
 | [VTX-M05D-conventional-shadow-parity.md](VTX-M05D-conventional-shadow-parity.md) | Detailed implementation plan for CSM parity/stability remediation followed by local-light conventional shadow expansion. |
 | [VTX-M06A-multi-view-proof-closeout.md](VTX-M06A-multi-view-proof-closeout.md) | Detailed implementation plan for multi-view proof closeout: per-view plans, state handles, serialized view-family execution, scene-texture leases, data-driven surface composition, auxiliary views, overlays, and runtime/capture proof. |
 | [VTX-M06B-offscreen-proof-closeout.md](VTX-M06B-offscreen-proof-closeout.md) | Detailed implementation plan for offscreen proof closeout: `ForOffscreenScene` execution, deferred/forward coverage, offscreen product handoff, runtime/capture proof, and allocation-churn validation. |
+| [VTX-M06C-feature-gated-runtime-variants.md](VTX-M06C-feature-gated-runtime-variants.md) | Detailed implementation plan for feature-gated runtime variants: depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only, and runtime/capture proof. |
 
 ## Planning Rule
 

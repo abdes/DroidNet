@@ -233,6 +233,9 @@ Per PRD §6.6, validate these variants:
 Each variant must compile, run, and produce expected output (capability-
 gated stages are null-safe no-ops).
 
+VTX-M06C tracks this Phase 5F closeout in
+[../plan/VTX-M06C-feature-gated-runtime-variants.md](../plan/VTX-M06C-feature-gated-runtime-variants.md).
+
 ## 7. Open Questions
 
 1. **Headless renderer support:** Does the current D3D12 backend support
