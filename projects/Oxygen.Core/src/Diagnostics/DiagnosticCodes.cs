@@ -47,7 +47,7 @@ public static class DiagnosticCodes
     /// <summary>
     /// Runtime cooked-root mount diagnostic code prefix.
     /// </summary>
-    public const string AssetMountPrefix = "OXE.ASSET_MOUNT.";
+    public const string AssetMountPrefix = "OXE.ASSETMOUNT.";
 
     /// <summary>
     /// Scene authoring diagnostic code prefix.
@@ -78,4 +78,14 @@ public static class DiagnosticCodes
     /// Content pipeline diagnostic code prefix.
     /// </summary>
     public const string ContentPipelinePrefix = "OXE.CONTENTPIPELINE.";
+
+    /// <summary>
+    /// Asset import diagnostic code prefix.
+    /// </summary>
+    public const string AssetImportPrefix = "OXE.ASSETIMPORT.";
+
+    /// <summary>
+    /// Asset cook diagnostic code prefix.
+    /// </summary>
+    public const string AssetCookPrefix = "OXE.ASSETCOOK.";
 }

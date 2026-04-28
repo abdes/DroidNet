@@ -91,6 +91,30 @@ public sealed class AssetIdentityReducerTests
     }
 
     [TestMethod]
+    public void Reduce_WhenCookedFolderIsExposedAsMount_ShouldIgnoreDerivedRootRows()
+    {
+        using var workspace = new TempWorkspace();
+        WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
+        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
+        Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
+        File.WriteAllBytes(cookedPath, [1]);
+
+        var rows = Reduce(
+            workspace,
+            [
+                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
+                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
+                new AssetRecord(new Uri("asset:///Cooked/Content/Materials/Red.omat")),
+            ]);
+
+        Assert.AreEqual(1, rows.Count);
+        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
+        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
+        Assert.AreEqual(AssetState.Cooked, rows[0].DerivedState);
+        CollectionAssert.DoesNotContain(rows[0].DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.CookedMissing);
+    }
+
+    [TestMethod]
     public void Reduce_WhenDescriptorIsNewerThanCooked_ShouldMarkDerivedStateStale()
     {
         using var workspace = new TempWorkspace();

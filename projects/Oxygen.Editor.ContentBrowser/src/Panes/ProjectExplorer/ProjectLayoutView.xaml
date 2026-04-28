@@ -29,20 +29,20 @@
             </ResourceDictionary.ThemeDictionaries>
 
             <!--  Templates and template selector for Folder  -->
-            <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="local:FolderTreeItemAdapter">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            <DataTemplate x:Key="FolderThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
-            <DataTemplate x:Key="ProjectRootThumbnailTemplate" x:DataType="local:ProjectRootTreeItemAdapter">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            <DataTemplate x:Key="ProjectRootThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
-            <DataTemplate x:Key="AuthoringMountThumbnailTemplate" x:DataType="local:AuthoringMountPointTreeItemAdapter">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            <DataTemplate x:Key="AuthoringMountThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
-            <DataTemplate x:Key="VirtualFolderMountThumbnailTemplate" x:DataType="local:VirtualFolderMountTreeItemAdapter">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            <DataTemplate x:Key="VirtualFolderMountThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
             <local:ThumbnailTemplateSelector

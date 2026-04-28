@@ -15,7 +15,7 @@ public interface IMaterialCookService
     /// <param name="request">The material cook request.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The cook result.</returns>
-    Task<MaterialCookResult> CookMaterialAsync(MaterialCookRequest request, CancellationToken cancellationToken = default);
+    public Task<MaterialCookResult> CookMaterialAsync(MaterialCookRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the current material cook state when it can be determined without cooking.
@@ -23,5 +23,5 @@ public interface IMaterialCookService
     /// <param name="materialSourceUri">The material source asset URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The known material cook state.</returns>
-    Task<MaterialCookState> GetMaterialCookStateAsync(Uri materialSourceUri, CancellationToken cancellationToken = default);
+    public Task<MaterialCookState> GetMaterialCookStateAsync(Uri materialSourceUri, CancellationToken cancellationToken = default);
 }

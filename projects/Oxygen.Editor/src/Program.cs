@@ -393,6 +393,14 @@ public static partial class Program
 
         // Register ImportService
         container.Register<IImportService, ImportService>(Reuse.Singleton);
+        container.Register<IProceduralGeometryDescriptorService, ProceduralGeometryDescriptorService>(Reuse.Singleton);
+        container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
+        container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);
+        container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
+        container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
+        container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
+        container.Register<IEngineContentPipelineApi, ImportToolContentPipelineApi>(Reuse.Singleton);
+        container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);

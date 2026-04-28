@@ -16,6 +16,7 @@
             DoubleTapped="ListView_DoubleTapped"
             ItemsSource="{x:Bind ViewModel.Assets}"
             PointerPressed="ListView_PointerPressed"
+            SelectionChanged="ListView_SelectionChanged"
             SelectionMode="Extended">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="identity:ContentBrowserAssetItem">
