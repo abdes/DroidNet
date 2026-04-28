@@ -13,7 +13,11 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
@@ -35,6 +39,7 @@
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 
 namespace oxygen::vortex {
 
@@ -254,6 +259,29 @@ auto EnvironmentLightingService::EnsurePublishResources() -> bool
   return true;
 }
 
+auto EnvironmentLightingService::EnsureSkyTextureBinder()
+  -> resources::TextureBinder*
+{
+  if (sky_texture_binder_ != nullptr) {
+    return sky_texture_binder_.get();
+  }
+
+  auto gfx = renderer_.GetGraphics();
+  auto asset_loader = renderer_.GetAssetLoader();
+  if (gfx == nullptr || asset_loader == nullptr) {
+    return nullptr;
+  }
+
+  sky_texture_binder_ = std::make_unique<resources::TextureBinder>(
+    observer_ptr<Graphics> { gfx.get() },
+    observer_ptr<upload::StagingProvider> { &renderer_.GetStagingProvider() },
+    observer_ptr<upload::UploadCoordinator> {
+      &renderer_.GetUploadCoordinator() },
+    observer_ptr<content::IAssetLoader> { asset_loader });
+  sky_texture_binder_->OnFrameStart();
+  return sky_texture_binder_.get();
+}
+
 auto EnvironmentLightingService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
@@ -300,6 +328,9 @@ auto EnvironmentLightingService::OnFrameStart(
   }
   if (volumetric_fog_pass_ != nullptr) {
     volumetric_fog_pass_->OnFrameStart(sequence, slot);
+  }
+  if (sky_texture_binder_ != nullptr) {
+    sky_texture_binder_->OnFrameStart();
   }
   pending_volumetric_fog_state_ = {};
   pending_local_fog_culling_state_ = {};
@@ -549,7 +580,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
 }
 
 auto EnvironmentLightingService::BuildEnvironmentStaticData(
-  const environment::EnvironmentViewProducts& view_products) const
+  const RenderContext& ctx,
+  const environment::EnvironmentViewProducts& view_products)
   -> EnvironmentStaticData
 {
   auto data = EnvironmentStaticData {};
@@ -803,6 +835,61 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.atmosphere.sky_view_lut_slices = 1U;
   data.atmosphere.sky_view_alt_mapping_mode = 0U;
 
+  if (ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kEnvironment)) {
+    const auto scene_ptr = ctx.GetScene();
+    const auto* env = scene_ptr != nullptr
+      ? scene_ptr->GetEnvironment().get()
+      : nullptr;
+    const auto sky_sphere = env != nullptr
+      ? env->TryGetSystem<oxygen::scene::environment::SkySphere>()
+      : oxygen::observer_ptr<const oxygen::scene::environment::SkySphere> {};
+    if (sky_sphere != nullptr && sky_sphere->IsEnabled()) {
+      data.sky_sphere.source
+        = static_cast<std::uint32_t>(sky_sphere->GetSource());
+      data.sky_sphere.solid_color_rgb = {
+        sky_sphere->GetSolidColorRgb().x,
+        sky_sphere->GetSolidColorRgb().y,
+        sky_sphere->GetSolidColorRgb().z,
+      };
+      data.sky_sphere.tint_rgb = {
+        sky_sphere->GetTintRgb().x,
+        sky_sphere->GetTintRgb().y,
+        sky_sphere->GetTintRgb().z,
+      };
+      data.sky_sphere.intensity = std::max(sky_sphere->GetIntensity(), 0.0F);
+      data.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
+
+      if (sky_sphere->GetSource()
+        == oxygen::scene::environment::SkySphereSource::kSolidColor) {
+        data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
+      } else if (const auto cubemap = sky_sphere->GetCubemapResource();
+                 cubemap.get() != 0U) {
+        data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
+        if (const auto asset_loader = renderer_.GetAssetLoader();
+          asset_loader != nullptr) {
+          const auto texture = asset_loader->GetTexture(cubemap);
+          const auto source_is_valid_cubemap = texture != nullptr
+            && texture->GetTextureType() == oxygen::TextureType::kTextureCube
+            && texture->GetArrayLayers() == 6U;
+          if (source_is_valid_cubemap) {
+            if (auto* binder = EnsureSkyTextureBinder(); binder != nullptr) {
+              const auto slot = binder->GetOrAllocate(cubemap);
+              if (slot.IsValid() && binder->IsResourceReady(cubemap)) {
+                const auto mip_levels = binder->TryGetMipLevels(cubemap);
+                data.sky_sphere.enabled = 1U;
+                data.sky_sphere.cubemap_slot = slot.get();
+                data.sky_sphere.cubemap_max_mip = mip_levels.has_value()
+                  ? std::max(*mip_levels, 1U) - 1U
+                  : 0U;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   data.sky_light.tint_rgb = {
     view_products.sky_light.tint_rgb.x,
     view_products.sky_light.tint_rgb.y,
@@ -835,7 +922,6 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.sky_light.ibl_generation
     = sky_light_ibl_valid ? usable_probe_bindings.probe_revision : 0U;
 
-  data.sky_sphere.enabled = 0U;
   data.clouds.enabled = 0U;
   data.post_process.enabled = 0U;
 
@@ -943,7 +1029,7 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     }
   }
 
-  const auto static_data = BuildEnvironmentStaticData(products);
+  const auto static_data = BuildEnvironmentStaticData(ctx, products);
   const auto resolved_environment_static_slot
     = environment_static_slot.IsValid()
     ? environment_static_slot

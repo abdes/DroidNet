@@ -129,7 +129,7 @@ Remaining gaps:
 
 ### Slice B: Cubemap Product Processing
 
-Status: `in_progress`
+Status: `validated`
 
 Implementation evidence:
 
@@ -192,3 +192,40 @@ Remaining gaps:
   cubemap-sky selection remain open.
 - Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain
   open for later slices/closeout.
+
+### Slice C: Visual SkySphere Background
+
+Status: `in_progress`
+
+Implementation evidence:
+
+- Published scene-authored `SkySphere` data through
+  `EnvironmentStaticData::sky_sphere` for environment-enabled views, including
+  source type, solid color, tint, intensity, rotation, cubemap descriptor slot,
+  and cubemap max mip.
+- Changed `GpuSkySphereParams::cubemap_slot` default to
+  `kInvalidBindlessIndex` so the shader never treats descriptor slot zero as an
+  implicit skybox texture.
+- Reused the Vortex `TextureBinder` resource path for authored SkySphere
+  cubemap descriptors; invalid, missing, or not-yet-ready cubemap descriptors
+  remain explicit invalid bindings instead of using procedural-sky fallback.
+- Updated `VortexSkyPassPS` to render a SkySphere branch before the procedural
+  atmosphere LUT requirement. The branch supports solid-color sky and cubemap
+  sky sampling with Oxygen +Z-up yaw rotation and tint/intensity application.
+- Updated `SkyPass` request gating so SkySphere backgrounds can render without
+  requiring procedural-atmosphere opt-in, while `kNoEnvironment` views still
+  suppress the sky pass.
+
+Validation evidence:
+
+- `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService --parallel 4` passed.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService" --output-on-failure` passed 1/1 test executable, 54/54 tests.
+- `cmake --build out\build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed; ShaderBake updated 186 modules.
+- `ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 1/1 test executable, 4/4 tests.
+
+Remaining gaps:
+
+- Runtime cubemap SkySphere proof through `RenderScene` is still open.
+- CDB/debug-layer, RenderDoc scripted analysis, allocation-churn proof, and
+  user visual confirmation are still required before Slice C can be closed.
+- Deferred static SkyLight diffuse consumption remains open.

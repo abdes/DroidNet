@@ -202,7 +202,7 @@ auto IsSkyRenderingEnabled(const RenderContext& ctx) -> bool
     return false;
   }
   if (const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
-    atmo != nullptr && atmo->IsEnabled()) {
+    atmo != nullptr && atmo->IsEnabled() && ctx.current_view.with_atmosphere) {
     return true;
   }
   if (const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
@@ -221,8 +221,10 @@ SkyPass::~SkyPass() = default;
 auto SkyPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
+  const auto wants_environment = ctx.current_view.feature_mask.Has(
+    CompositionView::ViewFeatureMask::kEnvironment);
   const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_atmosphere && IsSkyRenderingEnabled(ctx);
+    && wants_environment && IsSkyRenderingEnabled(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested
