@@ -92,6 +92,25 @@ auto TriangleWindsOutwardFromOrigin(
   return glm::dot(normal, center) > 0.0F;
 }
 
+auto FindDiagnosticsPass(
+  const oxygen::vortex::DiagnosticsFrameSnapshot& snapshot,
+  const std::string_view name) -> const oxygen::vortex::DiagnosticsPassRecord*
+{
+  const auto iter = std::ranges::find_if(
+    snapshot.passes, [name](const auto& pass) { return pass.name == name; });
+  return iter == snapshot.passes.end() ? nullptr : &*iter;
+}
+
+auto FindDiagnosticsProduct(
+  const oxygen::vortex::DiagnosticsFrameSnapshot& snapshot,
+  const std::string_view name)
+  -> const oxygen::vortex::DiagnosticsProductRecord*
+{
+  const auto iter = std::ranges::find_if(snapshot.products,
+    [name](const auto& product) { return product.name == name; });
+  return iter == snapshot.products.end() ? nullptr : &*iter;
+}
+
 auto DestroyRenderer(Renderer* renderer) -> void
 {
   if (renderer != nullptr) {
@@ -1444,6 +1463,96 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_TRUE(environment_state.stage15_requested);
   EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DiagnosticsOnlyFeatureProfilePublishesLedgerWithoutSceneProducts)
+{
+  RecreateRendererWithCapabilities(RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData
+    | RendererCapabilityFamily::kDiagnosticsAndProfiling);
+  static_cast<void>(AddDirectionalLight("DiagnosticsOnlySun"));
+  renderer_->GetDiagnosticsService().BeginFrame(
+    oxygen::frame::SequenceNumber { 77U });
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_,
+    ShaderDebugMode::kDisabled,
+    oxygen::vortex::CompositionView::ViewFeatureProfile::kDiagnosticsOnly);
+
+  renderer_->GetDiagnosticsService().EndFrame();
+  const auto snapshot = renderer_->GetDiagnosticsService().GetLatestSnapshot();
+  const auto& published_bindings
+    = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  const auto& extracts = scene_renderer_->GetSceneTextureExtracts();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+  const auto& environment_state
+    = scene_renderer_->GetLastEnvironmentLightingState();
+
+  EXPECT_TRUE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kDiagnostics));
+  EXPECT_FALSE(context.current_view.feature_mask.Has(
+    oxygen::vortex::CompositionView::ViewFeatureMask::kSceneLighting));
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kDisabled);
+  EXPECT_EQ(bindings.scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.partial_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.custom_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.custom_stencil_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_FALSE(extracts.resolved_scene_color.valid);
+  EXPECT_FALSE(extracts.resolved_scene_depth.valid);
+  EXPECT_EQ(
+    published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(published_bindings.environment_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_FALSE(lighting_state.consumed_published_scene_textures);
+  EXPECT_FALSE(environment_state.published_bindings);
+
+  const auto* diagnostics_pass
+    = FindDiagnosticsPass(snapshot, "Vortex.FeatureVariant.DiagnosticsOnly");
+  ASSERT_NE(diagnostics_pass, nullptr);
+  EXPECT_TRUE(diagnostics_pass->executed);
+  EXPECT_TRUE(std::ranges::contains(
+    diagnostics_pass->outputs, std::string { "Vortex.DiagnosticsLedger" }));
+  const auto* diagnostics_product
+    = FindDiagnosticsProduct(snapshot, "Vortex.DiagnosticsLedger");
+  ASSERT_NE(diagnostics_product, nullptr);
+  EXPECT_TRUE(diagnostics_product->published);
+  EXPECT_TRUE(diagnostics_product->valid);
+
+  const auto* base_pass
+    = FindDiagnosticsPass(snapshot, "Vortex.Stage9.BasePass");
+  ASSERT_NE(base_pass, nullptr);
+  EXPECT_FALSE(base_pass->executed);
+  EXPECT_TRUE(base_pass->outputs.empty());
+  const auto* deferred_lighting
+    = FindDiagnosticsPass(snapshot, "Vortex.Stage12.DeferredLighting");
+  ASSERT_NE(deferred_lighting, nullptr);
+  EXPECT_FALSE(deferred_lighting->executed);
+  EXPECT_TRUE(deferred_lighting->outputs.empty());
+  const auto* translucency
+    = FindDiagnosticsPass(snapshot, "Vortex.Stage18.Translucency");
+  ASSERT_NE(translucency, nullptr);
+  EXPECT_FALSE(translucency->executed);
+  EXPECT_TRUE(translucency->outputs.empty());
+  const auto* resolve
+    = FindDiagnosticsPass(snapshot, "Vortex.Stage21.ResolveSceneColor");
+  ASSERT_NE(resolve, nullptr);
+  EXPECT_FALSE(resolve->executed);
+  EXPECT_TRUE(resolve->outputs.empty());
+  EXPECT_TRUE(resolve->missing_inputs.empty());
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
