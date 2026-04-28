@@ -9,7 +9,8 @@ This document is the **single source of truth** for the *conceptual model* and
 - PAK format details (layout, alignment): `chunking.md`
 - Dependency + cache mechanics (forward-only model): `deps_and_cache.md`
 - Tooling and diagnostics: `tooling_and_diagnostics.md`
-- GPU uploads: Renderer-owned (`src/Oxygen/Renderer/Upload/README.md`)
+- GPU uploads: Vortex/Graphics-owned (`src/Oxygen/Vortex/Upload/`,
+  `src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/`)
 
 If another document disagrees with this overview, treat this file as
 authoritative and update the other doc.
@@ -40,7 +41,8 @@ Content does **not**:
 - Resolve cross-source references (it is forbidden by design)
 - Interpret editor virtual paths (resolution happens above Content)
 
-GPU staging/submission is handled by the Renderer Upload subsystem.
+GPU staging/submission is handled by the Vortex upload/resource layer on top of
+Graphics command recording.
 
 ---
 
@@ -74,8 +76,8 @@ Why we enforce it:
 Content reaches a terminal state of **DecodedCPUReady**.
 
 Any GPU work (staging buffers, copy commands, fences, resource state
-transitions) belongs to the Renderer and is already implemented in the Upload
-module.
+transitions) belongs to Vortex/Graphics and is already implemented in the
+current upload/resource path.
 
 ---
 
@@ -303,4 +305,5 @@ flowchart TD
 - If you need **async loader architecture**: `truly-async-asset-loader.md`
 - If you need the **roadmap**: `implementation_plan.md`
 - If you need **tooling / diagnostics**: `tooling_and_diagnostics.md`
-- If you need **GPU copy submission**: `src/Oxygen/Renderer/Upload/README.md`
+- If you need **GPU copy submission**: start with `src/Oxygen/Vortex/Upload/`,
+  `src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/Common/`.
