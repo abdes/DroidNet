@@ -162,6 +162,43 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public async Task ProjectCreationService_ShouldIgnoreTemplatePlaceholderIdAndCreateUniqueProjectIds()
+    {
+        var fs = new MockFileSystem();
+        fs.Directory.CreateDirectory(@"C:\Templates\Blank\Content");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateTemplateManifestJson()).ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var first = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "First",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+        var second = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Second",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = first.Succeeded.Should().BeTrue(first.Message);
+        _ = second.Succeeded.Should().BeTrue(second.Message);
+        _ = first.ProjectInfo!.Id.Should().NotBe(second.ProjectInfo!.Id);
+        _ = first.ProjectInfo.Id.Should().NotBeEmpty();
+        _ = second.ProjectInfo.Id.Should().NotBeEmpty();
+    }
+
+    [TestMethod]
     public async Task RecentProjectAdapter_ShouldClassifyStaleProjectsWithoutDeletingUsage()
     {
         var projectUsage = new Mock<IProjectUsageService>();
@@ -253,6 +290,24 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                  }
                  """;
     }
+
+    private static string CreateTemplateManifestJson()
+        => """
+           {
+             "SchemaVersion": 1,
+             "Id": "__FIXME__",
+             "Name": "__FIXME__",
+             "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+             "Thumbnail": "Media/Preview.png",
+             "AuthoringMounts": [
+               {
+                 "Name": "Content",
+                 "RelativePath": "Content"
+               }
+             ],
+             "LocalFolderMounts": []
+           }
+           """;
 
     private static ProjectContext CreateContext(string name)
         => new()
