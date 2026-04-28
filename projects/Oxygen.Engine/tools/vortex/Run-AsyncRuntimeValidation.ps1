@@ -1,20 +1,17 @@
 <#
 .SYNOPSIS
-Runs the end-to-end Async runtime capture flow and validates against a reference baseline.
+Runs the end-to-end Async Vortex runtime capture flow.
 
 .DESCRIPTION
-Captures the current Vortex Async runtime and compares it against an external
-reference baseline produced by Capture-AsyncLegacyReference.ps1. When
--ReferenceRoot is provided, the validator measures parity against that
-baseline instead of self-initializing from the current run.
+Builds the current Vortex Async runtime, captures one RenderDoc frame, and
+validates the capture structure and rendered products directly. This is the
+current production proof path; it does not depend on a legacy renderer
+reference capture.
 #>
 [CmdletBinding()]
 param(
   [Parameter()]
   [string]$Output = 'build/artifacts/vortex/phase-4/async/current',
-
-  [Parameter()]
-  [string]$ReferenceRoot = '',
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
@@ -221,27 +218,7 @@ $capturePath = $captures[0].FullName
 Wait-ForStableFile -Path $capturePath
 Move-Item -LiteralPath $capturePath -Destination $finalCapturePath -Force
 
-$verifyArgs = @(
-  '-NoProfile',
-  '-File', $verifyScript,
-  '-CapturePath', $finalCapturePath
-)
-
-if ([string]::IsNullOrWhiteSpace($ReferenceRoot)) {
-  # Self-baseline mode (legacy fallback)
-  $verifyArgs += '-InitializeBaselineArtifacts'
-} else {
-  # Reference-based parity mode
-  $referenceDirectory = Resolve-RepoPath -RepoRoot $repoRoot -Path $ReferenceRoot
-  if (-not (Test-Path -LiteralPath $referenceDirectory)) {
-    throw "Reference root not found: $referenceDirectory"
-  }
-  $verifyArgs += @(
-    '-ReferenceRoot', $referenceDirectory
-  )
-}
-
-& powershell @verifyArgs
+& powershell -NoProfile -File $verifyScript -CapturePath $finalCapturePath
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
@@ -250,5 +227,5 @@ Write-Host "Build log: $buildLogPath"
 Write-Host "Runtime stdout: $stdoutPath"
 Write-Host "Runtime stderr: $stderrPath"
 Write-Host "Capture: $finalCapturePath"
-Write-Host "Behavior notes: $(Join-Path $outputDirectory 'current_behaviors.md')"
+Write-Host "Behavior notes: $(Join-Path $outputDirectory 'async_behaviors.md')"
 Write-Host "Validation report: $(Join-Path $outputDirectory 'current_renderdoc.rdc.validation.txt')"

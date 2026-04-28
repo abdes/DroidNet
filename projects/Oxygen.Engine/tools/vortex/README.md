@@ -274,25 +274,13 @@ surface:
 
 ## Durable Async Validation Path
 
-- `Capture-AsyncLegacyReference.ps1`
-  - captures the legacy/reference Async baseline into a dedicated `reference/`
-    artifact root
-  - produces `reference_frame10.png`, `reference_depth.png`,
-    `reference_renderdoc.rdc`, and `reference_behaviors.md`
-  - builds and runs the Async example once with RenderDoc capture enabled
-  - uses `Verify-AsyncRuntimeProof.ps1 -InitializeBaselineArtifacts` to
-    extract the reference frame and depth images from the capture
-
 - `Run-AsyncRuntimeValidation.ps1`
   - one-command Async validation entrypoint
   - builds `oxygen-vortex`, `oxygen-graphics-direct3d12`, and
     `oxygen-examples-async` in the standard `out/build-ninja` tree
   - captures the current Vortex Async runtime into a `current/` artifact root
-  - when `-ReferenceRoot` is provided, compares the current capture against
-    the external reference baseline instead of self-initializing from the
-    current run
-  - invokes `Verify-AsyncRuntimeProof.ps1` with `-ReferenceRoot` for
-    reference-based parity
+  - invokes `Verify-AsyncRuntimeProof.ps1` for current-capture structure and
+    product validation
 
 - `Verify-AsyncRuntimeProof.ps1`
   - lower-level Async capture validation wrapper
@@ -300,8 +288,8 @@ surface:
     - `AnalyzeRenderDocAsyncCapture.py` for structural/stage-ordering checks
     - `AnalyzeRenderDocAsyncProducts.py` for product-correctness checks
   - gates the combined result in `Assert-AsyncRuntimeProof.ps1`
-  - when `-ReferenceRoot` is provided, loads baseline frame/depth from the
-    external reference directory for PSNR/depth parity comparison
+  - exports the inspected color/depth products and writes
+    `async_behaviors.md`
 
 - `AnalyzeRenderDocAsyncCapture.py`
   - structural analyzer for the Async runtime capture
@@ -319,18 +307,12 @@ surface:
 - `Assert-AsyncRuntimeProof.ps1`
   - final assertion gate for the Async proof
   - gates on all structural capture checks, all product checks including
-    direct-light nonzero keys, PSNR threshold (40 dB), depth max error
-    (0.001), and Stage 22 input-bundle source contract
+    direct-light nonzero keys, exported color/depth product existence, and
+    Stage 22 input-bundle source contract
 
-### Reference-Based Parity Flow
+### Current Vortex Proof Flow
 
 ```powershell
-# 1. Capture the legacy/reference baseline
-powershell -NoProfile -File tools/vortex/Capture-AsyncLegacyReference.ps1 `
-  -Output build/artifacts/vortex/phase-4/async/reference
-
-# 2. Run the current Vortex capture against the reference
 powershell -NoProfile -File tools/vortex/Run-AsyncRuntimeValidation.ps1 `
-  -Output build/artifacts/vortex/phase-4/async/current `
-  -ReferenceRoot build/artifacts/vortex/phase-4/async/reference
+  -Output build/artifacts/vortex/phase-4/async/current
 ```
