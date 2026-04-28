@@ -4,9 +4,9 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:identity="using:Oxygen.Editor.ContentBrowser.AssetIdentity"
     xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:models="using:Oxygen.Editor.ContentBrowser.Models"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -15,7 +15,7 @@
         <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
 
         <!--  Tile template: card with icon area, colored separator line, and details area  -->
-        <DataTemplate x:Key="GameAssetTemplate" x:DataType="models:GameAsset">
+        <DataTemplate x:Key="GameAssetTemplate" x:DataType="identity:ContentBrowserAssetItem">
             <Grid Width="180">
                 <Border CornerRadius="8">
                     <Grid>
@@ -31,31 +31,42 @@
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 FontSize="48"
-                                Glyph="{x:Bind AssetType, Converter={StaticResource AssetTypeToIconConverter}}" />
+                                Glyph="{x:Bind Kind, Converter={StaticResource AssetTypeToIconConverter}}" />
                         </Grid>
 
                         <!--  Colored separator line per asset type  -->
                         <Border
                             Grid.Row="1"
                             Height="2"
-                            Background="{x:Bind AssetType, Converter={StaticResource AssetTypeToBrushConverter}}" />
+                            Background="{x:Bind Kind, Converter={StaticResource AssetTypeToBrushConverter}}" />
 
                         <!--  Details  -->
                         <StackPanel Grid.Row="2" Padding="12,8,12,12">
                             <TextBlock
                                 MaxLines="1"
                                 Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind Name}"
+                                Text="{x:Bind DisplayName}"
                                 TextTrimming="CharacterEllipsis"
                                 TextWrapping="NoWrap" />
-                            <TextBlock
+                            <StackPanel
                                 Margin="0,2,0,0"
-                                MaxLines="1"
-                                Opacity="0.8"
-                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind TypeDisplayName}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <TextBlock
+                                    MaxLines="1"
+                                    Opacity="0.8"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind PrimaryBadge}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
+                                    MaxLines="1"
+                                    Opacity="0.8"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind DerivedBadge}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </Border>

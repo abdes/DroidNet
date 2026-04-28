@@ -138,6 +138,29 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             .ToList();
     }
 
+    /// <inheritdoc />
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await this.InitializeAsync().ConfigureAwait(false);
+
+        List<IRefreshableAssetCatalog> refreshableCatalogs;
+        await this.lockObj.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            refreshableCatalogs = this.catalogs.OfType<IRefreshableAssetCatalog>().ToList();
+        }
+        finally
+        {
+            this.lockObj.Release();
+        }
+
+        foreach (var catalog in refreshableCatalogs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await catalog.RefreshAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public async Task AddFolderAsync(Oxygen.Storage.IFolder folder, string mountPoint)
     {
         var options = new FileSystemAssetCatalogOptions

@@ -19,6 +19,13 @@ public interface IProjectAssetCatalog : IAssetCatalog
     Task InitializeAsync();
 
     /// <summary>
+    /// Refreshes any underlying catalogs that expose an explicit refresh capability.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A task that completes when refreshable catalog snapshots are current.</returns>
+    Task RefreshAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Adds a folder to the catalog.
     /// </summary>
     /// <param name="folder">The folder to add.</param>

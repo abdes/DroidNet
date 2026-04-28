@@ -21,7 +21,7 @@ namespace Oxygen.Assets.Catalog.FileSystem;
 /// applying changes to an internal keyed store.
 /// </para>
 /// </remarks>
-public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
+public sealed class FileSystemAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {
     private readonly IStorageProvider storage;
     private readonly FileSystemAssetCatalogOptions options;
@@ -107,6 +107,13 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         return results
             .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await this.RescanAsync(publishChanges: false, cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose()
@@ -265,7 +272,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
                 switch (ev.Kind)
                 {
                     case FileSystemCatalogEventKind.RescanRequired:
-                        await this.RescanAsync().ConfigureAwait(false);
+                        await this.RescanAsync(publishChanges: true, CancellationToken.None).ConfigureAwait(false);
                         break;
 
                     case FileSystemCatalogEventKind.Renamed:
@@ -289,7 +296,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidPathException or StorageException)
         {
             // If anything goes wrong while applying deltas, fall back to a full rescan.
-            await this.RescanAsync().ConfigureAwait(false);
+            await this.RescanAsync(publishChanges: true, CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -391,14 +398,27 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         return true;
     }
 
-    private async Task RescanAsync()
+    private async Task RescanAsync(bool publishChanges, CancellationToken cancellationToken)
     {
         if (this.rootFolder is null)
         {
             return;
         }
 
-        var snapshot = await this.EnumerateAllFilesAsync(this.rootFolder, CancellationToken.None).ConfigureAwait(false);
+        if (!await this.rootFolder.ExistsAsync().ConfigureAwait(false))
+        {
+            foreach (var existing in this.records.Keys)
+            {
+                if (this.records.TryRemove(existing, out _) && publishChanges)
+                {
+                    this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, existing));
+                }
+            }
+
+            return;
+        }
+
+        var snapshot = await this.EnumerateAllFilesAsync(this.rootFolder, cancellationToken).ConfigureAwait(false);
         var next = snapshot.ToDictionary(r => r.Uri, r => r);
 
         // Removed
@@ -406,7 +426,10 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         {
             if (!next.ContainsKey(existing) && this.records.TryRemove(existing, out _))
             {
-                this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, existing));
+                if (publishChanges)
+                {
+                    this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, existing));
+                }
             }
         }
 
@@ -415,7 +438,10 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
         {
             if (this.records.TryAdd(kvp.Key, kvp.Value))
             {
-                this.changes.OnNext(new AssetChange(AssetChangeKind.Added, kvp.Key));
+                if (publishChanges)
+                {
+                    this.changes.OnNext(new AssetChange(AssetChangeKind.Added, kvp.Key));
+                }
             }
         }
     }

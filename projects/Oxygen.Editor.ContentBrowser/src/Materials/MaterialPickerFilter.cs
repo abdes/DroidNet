@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Assets.Catalog;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;
 
@@ -33,4 +34,17 @@ public sealed record MaterialPickerFilter(
         IncludeSource: true,
         IncludeCooked: true,
         IncludeMissing: false);
+
+    public AssetBrowserFilter ToAssetBrowserFilter()
+        => new(
+            SearchText: this.SearchText,
+            Kinds: new HashSet<AssetKind> { AssetKind.Material },
+            IncludeGenerated: this.IncludeGenerated,
+            IncludeSource: this.IncludeSource,
+            IncludeDescriptor: this.IncludeSource,
+            IncludeCooked: this.IncludeCooked,
+            IncludeStale: this.IncludeCooked,
+            IncludeMounted: false,
+            IncludeMissing: this.IncludeMissing,
+            IncludeBroken: this.IncludeMissing);
 }

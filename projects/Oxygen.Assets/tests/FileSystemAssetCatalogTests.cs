@@ -78,6 +78,37 @@ public sealed class FileSystemAssetCatalogTests
     }
 
     [TestMethod]
+    public async Task RefreshAsync_WhenFileWasCreatedAfterInitialQuery_ShouldUpdateSnapshotWithoutWatcherEvent()
+    {
+        // Arrange
+        var fs = new MockFileSystem();
+        _ = fs.Directory.CreateDirectory(@"C:\Project\Content\Materials");
+
+        var storage = new NativeStorageProvider(fs);
+        using var events = new ManualEventSource();
+        using var catalog = new FileSystemAssetCatalog(
+            storage,
+            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
+            events);
+
+        var initial = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(
+            @"C:\Project\Content\Materials\Red.omat.json",
+            "{}",
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Act
+        var stale = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var refreshed = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Assert
+        _ = initial.Should().BeEmpty();
+        _ = stale.Should().BeEmpty();
+        _ = refreshed.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Materials/Red.omat.json"));
+    }
+
+    [TestMethod]
     public async Task Changes_WhenRenamed_ShouldEmitRelocatedAndUpdateSnapshot()
     {
         // Arrange

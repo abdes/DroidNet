@@ -8,41 +8,34 @@ using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Core;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;
 
 /// <summary>
-/// Default material picker catalog adapter for ED-M05 material assignment.
+/// Material picker projection over the shared ED-M06 Content Browser asset provider.
 /// </summary>
 public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
 {
-    private readonly IAssetCatalog assetCatalog;
-    private readonly IProjectContextService projectContextService;
+    private readonly IContentBrowserAssetProvider assetProvider;
     private readonly IMessenger? messenger;
     private readonly BehaviorSubject<IReadOnlyList<MaterialPickerResult>> results = new([]);
-    private readonly Lock knownMaterialsSync = new();
-    private readonly Dictionary<string, Uri> knownMaterialUris = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IDisposable changesSubscription;
+    private readonly Lock pinnedMaterialsSync = new();
+    private readonly Dictionary<string, MaterialPickerResult> pinnedMaterials = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IDisposable itemsSubscription;
     private MaterialPickerFilter currentFilter = MaterialPickerFilter.Default;
+    private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private bool disposed;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MaterialPickerService"/> class.
-    /// </summary>
-    /// <param name="assetCatalog">The asset catalog.</param>
     public MaterialPickerService(
-        IAssetCatalog assetCatalog,
-        IProjectContextService projectContextService,
+        IContentBrowserAssetProvider assetProvider,
         IMessenger? messenger = null)
     {
-        this.assetCatalog = assetCatalog ?? throw new ArgumentNullException(nameof(assetCatalog));
-        this.projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
+        this.assetProvider = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.messenger = messenger;
-        this.changesSubscription = this.assetCatalog.Changes
-            .Where(static change => IsMaterialUri(change.Uri) || (change.PreviousUri is not null && IsMaterialUri(change.PreviousUri)))
-            .Subscribe(_change => { _ = this.RefreshAsync(this.currentFilter); });
+        this.itemsSubscription = this.assetProvider.Items
+            .Subscribe(this.Publish);
 
         this.messenger?.Register<AssetsChangedMessage>(this, (_, message) => this.OnAssetsChanged(message));
     }
@@ -55,35 +48,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         this.currentFilter = filter;
-
-        var records = (await this.assetCatalog
-            .QueryAsync(new AssetQuery(filter.Scope, filter.SearchText), cancellationToken)
-            .ConfigureAwait(false)).ToList();
-        this.AddKnownMaterialRecords(records);
-
-        var rows = records
-            .Where(static record => IsMaterialUri(record.Uri))
-            .GroupBy(static record => GetMaterialLogicalKey(record.Uri), StringComparer.OrdinalIgnoreCase)
-            .Select(this.CreateMergedResult)
-            .OfType<MaterialPickerResult>()
-            .Where(row => IsIncluded(row, filter))
-            .OrderBy(static row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (filter.IncludeGenerated)
-        {
-            rows.Insert(
-                0,
-                new MaterialPickerResult(
-                    new Uri(AssetUris.BuildGeneratedUri("Materials/Default"), UriKind.Absolute),
-                    "Default",
-                    AssetState.Generated,
-                    DescriptorPath: null,
-                    CookedPath: null,
-                    BaseColorPreview: new MaterialPreviewColor(1.0f, 1.0f, 1.0f, 1.0f)));
-        }
-
-        this.results.OnNext(rows);
+        await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -91,33 +56,23 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
     {
         ArgumentNullException.ThrowIfNull(materialUri);
         cancellationToken.ThrowIfCancellationRequested();
-
         if (!IsMaterialUri(materialUri))
         {
             return null;
         }
 
-        var rows = await this.assetCatalog
-            .QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken)
-            .ConfigureAwait(false);
-        var found = rows.FirstOrDefault(record => UriValuesEqual(record.Uri, materialUri));
-        if (found is not null)
+        var item = await this.assetProvider.ResolveAsync(materialUri, cancellationToken).ConfigureAwait(false);
+        var result = item is null ? CreateMissingResult(materialUri) : this.CreateResult(item);
+        if (result is not null)
         {
-            return this.CreateMergedResult([found]);
+            lock (this.pinnedMaterialsSync)
+            {
+                this.pinnedMaterials[GetMaterialLogicalKey(materialUri)] = result;
+            }
         }
 
-        if (IsSourceMaterialUri(materialUri) && this.TryGetSourcePath(materialUri) is { } descriptorPath && File.Exists(descriptorPath))
-        {
-            return this.CreateMergedResult([new AssetRecord(materialUri)]);
-        }
-
-        return new MaterialPickerResult(
-            materialUri,
-            GetDisplayName(materialUri),
-            AssetState.Missing,
-            DescriptorPath: null,
-            CookedPath: null,
-            BaseColorPreview: null);
+        this.Publish(this.latestItems);
+        return result;
     }
 
     /// <inheritdoc />
@@ -130,155 +85,130 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
 
         this.disposed = true;
         this.messenger?.UnregisterAll(this);
-        this.changesSubscription.Dispose();
+        this.itemsSubscription.Dispose();
         this.results.Dispose();
     }
 
     private void OnAssetsChanged(AssetsChangedMessage message)
     {
-        if (message.AssetUri is { } assetUri && IsMaterialUri(assetUri))
-        {
-            _ = this.PublishKnownMaterialAsync(assetUri);
-            return;
-        }
-
+        _ = message;
         _ = this.RefreshAsync(this.currentFilter);
     }
 
-    private async Task PublishKnownMaterialAsync(Uri materialUri)
+    private void Publish(IReadOnlyList<ContentBrowserAssetItem> items)
     {
-        MaterialPickerResult? row;
-        try
-        {
-            row = await this.ResolveAsync(materialUri).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
-        {
-            row = new MaterialPickerResult(
-                materialUri,
-                GetDisplayName(materialUri),
-                AssetState.Broken,
-                DescriptorPath: null,
-                CookedPath: null,
-                BaseColorPreview: null);
-        }
-
-        if (row is null || !IsIncluded(row, this.currentFilter))
-        {
-            await this.RefreshAsync(this.currentFilter).ConfigureAwait(false);
-            return;
-        }
-
-        var logicalKey = GetMaterialLogicalKey(row.MaterialUri);
-        lock (this.knownMaterialsSync)
-        {
-            this.knownMaterialUris[logicalKey] = row.MaterialUri;
-        }
-
-        var current = this.results.Value
-            .Where(existing => !string.Equals(GetMaterialLogicalKey(existing.MaterialUri), logicalKey, StringComparison.OrdinalIgnoreCase))
-            .Append(row)
-            .Where(existing => IsIncluded(existing, this.currentFilter))
-            .OrderBy(static existing => existing.DisplayName, StringComparer.OrdinalIgnoreCase)
+        this.latestItems = items;
+        var rows = items
+            .Select(this.CreateResult)
+            .OfType<MaterialPickerResult>()
+            .Where(row => IsIncluded(row, this.currentFilter))
+            .Where(row => MatchesSearch(row, this.currentFilter.SearchText))
             .ToList();
 
-        this.results.OnNext(current);
-    }
+        var pinnedRows = this.ResolvePinnedMissingRows(rows);
+        rows.AddRange(pinnedRows);
 
-    private void AddKnownMaterialRecords(List<AssetRecord> records)
-    {
-        Uri[] knownUris;
-        lock (this.knownMaterialsSync)
+        if (this.currentFilter.IncludeGenerated && rows.All(static row => !IsDefaultMaterial(row.MaterialUri)))
         {
-            knownUris = this.knownMaterialUris.Values.ToArray();
+            rows.Insert(
+                0,
+                new MaterialPickerResult(
+                    new Uri(AssetUris.BuildGeneratedUri("Materials/Default"), UriKind.Absolute),
+                    "Default",
+                    AssetState.Generated,
+                    DerivedState: null,
+                    AssetRuntimeAvailability.NotApplicable,
+                    DescriptorPath: null,
+                    CookedPath: null,
+                    BaseColorPreview: new MaterialPreviewColor(1.0f, 1.0f, 1.0f, 1.0f)));
         }
 
-        foreach (var uri in knownUris)
+        this.results.OnNext(rows
+            .DistinctBy(static row => row.MaterialUri.ToString(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList());
+    }
+
+    private IEnumerable<MaterialPickerResult> ResolvePinnedMissingRows(IReadOnlyList<MaterialPickerResult> rows)
+    {
+        MaterialPickerResult[] pinnedRows;
+        lock (this.pinnedMaterialsSync)
         {
-            if (!records.Any(record => UriValuesEqual(record.Uri, uri))
-                && IsSourceMaterialUri(uri)
-                && this.TryGetSourcePath(uri) is { } descriptorPath
-                && File.Exists(descriptorPath))
+            pinnedRows = this.pinnedMaterials.Values.ToArray();
+        }
+
+        foreach (var pinned in pinnedRows)
+        {
+            if (rows.Any(row => UriValuesEqual(row.MaterialUri, pinned.MaterialUri)))
             {
-                records.Add(new AssetRecord(uri));
+                continue;
+            }
+
+            if (MatchesSearch(pinned, this.currentFilter.SearchText))
+            {
+                yield return pinned;
             }
         }
     }
 
-    private MaterialPickerResult? CreateMergedResult(IEnumerable<AssetRecord> records)
+    private MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
     {
-        var snapshot = records.ToList();
-        if (snapshot.Count == 0)
+        if (item.Kind != AssetKind.Material)
         {
             return null;
         }
 
-        var source = snapshot.FirstOrDefault(static record => IsSourceMaterialUri(record.Uri));
-        var cooked = snapshot.FirstOrDefault(static record => IsCookedMaterialUri(record.Uri));
-        var selectedUri = source?.Uri ?? cooked?.Uri;
-        if (selectedUri is null)
-        {
-            return null;
-        }
-
-        var descriptorPath = source is null ? null : this.TryGetSourcePath(source.Uri);
-        var cookedPath = cooked is null ? this.TryGetCookedPath(GetCookedUri(selectedUri)) : this.TryGetCookedPath(cooked.Uri);
-        var state = DetermineState(source?.Uri, descriptorPath, cooked?.Uri, cookedPath);
         return new MaterialPickerResult(
-            selectedUri,
-            GetDisplayName(selectedUri),
-            state,
-            DescriptorPath: descriptorPath,
-            CookedPath: cookedPath,
-            BaseColorPreview: TryReadBaseColorPreview(descriptorPath));
+            item.IdentityUri,
+            item.DisplayName,
+            item.PrimaryState,
+            item.DerivedState,
+            item.RuntimeAvailability,
+            item.DescriptorPath,
+            item.CookedPath,
+            TryReadBaseColorPreview(item.DescriptorPath));
     }
 
-    private static AssetState DetermineState(Uri? sourceUri, string? descriptorPath, Uri? cookedUri, string? cookedPath)
-    {
-        _ = sourceUri;
-        _ = cookedUri;
-        if (descriptorPath is not null && !File.Exists(descriptorPath))
-        {
-            return AssetState.Broken;
-        }
-
-        if (cookedPath is not null && !File.Exists(cookedPath))
-        {
-            return descriptorPath is null ? AssetState.Broken : AssetState.Source;
-        }
-
-        if (descriptorPath is not null && cookedPath is not null)
-        {
-            var descriptorTime = File.GetLastWriteTimeUtc(descriptorPath);
-            var cookedTime = File.GetLastWriteTimeUtc(cookedPath);
-            return descriptorTime > cookedTime ? AssetState.Stale : AssetState.Cooked;
-        }
-
-        return descriptorPath is not null ? AssetState.Source : AssetState.Cooked;
-    }
+    private static MaterialPickerResult CreateMissingResult(Uri materialUri)
+        => new(
+            materialUri,
+            GetDisplayName(materialUri),
+            AssetState.Missing,
+            DerivedState: null,
+            AssetRuntimeAvailability.Unknown,
+            DescriptorPath: null,
+            CookedPath: null,
+            BaseColorPreview: null);
 
     private static bool IsIncluded(MaterialPickerResult row, MaterialPickerFilter filter)
-        => row.State switch
+        => StateIncluded(row.PrimaryState, filter)
+           || (row.DerivedState is { } derivedState && StateIncluded(derivedState, filter));
+
+    private static bool StateIncluded(AssetState state, MaterialPickerFilter filter)
+        => state switch
         {
             AssetState.Generated => filter.IncludeGenerated,
-            AssetState.Source => filter.IncludeSource,
+            AssetState.Source or AssetState.Descriptor => filter.IncludeSource,
             AssetState.Cooked or AssetState.Stale => filter.IncludeCooked,
             AssetState.Missing or AssetState.Broken => filter.IncludeMissing,
             _ => false,
         };
 
-    private static string GetMaterialLogicalKey(Uri uri)
+    private static bool MatchesSearch(MaterialPickerResult row, string? searchText)
     {
-        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
-        if (string.IsNullOrWhiteSpace(virtualPath))
+        if (string.IsNullOrWhiteSpace(searchText))
         {
-            virtualPath = uri.AbsolutePath;
+            return true;
         }
 
-        return virtualPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? virtualPath[..^".json".Length]
-            : virtualPath;
+        return row.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+               || row.MaterialUri.ToString().Contains(searchText, StringComparison.OrdinalIgnoreCase)
+               || (row.DescriptorPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true)
+               || (row.CookedPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true);
     }
+
+    private static bool IsDefaultMaterial(Uri uri)
+        => string.Equals(uri.ToString(), AssetUris.BuildGeneratedUri("Materials/Default"), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsMaterialUri(Uri uri)
     {
@@ -293,20 +223,22 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
             path = uri.AbsolutePath;
         }
 
-        return IsCookedMaterialPath(path) || IsSourceMaterialPath(path);
+        return path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsSourceMaterialUri(Uri uri)
-        => IsSourceMaterialPath(AssetUriHelper.GetRelativePath(uri));
+    private static string GetMaterialLogicalKey(Uri uri)
+    {
+        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
+        if (string.IsNullOrWhiteSpace(virtualPath))
+        {
+            virtualPath = uri.AbsolutePath;
+        }
 
-    private static bool IsCookedMaterialUri(Uri uri)
-        => IsCookedMaterialPath(AssetUriHelper.GetRelativePath(uri));
-
-    private static bool IsSourceMaterialPath(string path)
-        => path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsCookedMaterialPath(string path)
-        => path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase);
+        return virtualPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? virtualPath[..^".json".Length]
+            : virtualPath;
+    }
 
     private static string GetDisplayName(Uri uri)
     {
@@ -326,65 +258,6 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
     private static bool UriValuesEqual(Uri left, Uri right)
         => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
-    private string? TryGetSourcePath(Uri materialSourceUri)
-    {
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            return null;
-        }
-
-        if (!TryResolveSourcePath(project, materialSourceUri, out var sourcePath))
-        {
-            return null;
-        }
-
-        return sourcePath;
-    }
-
-    private string? TryGetCookedPath(Uri cookedUri)
-    {
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            return null;
-        }
-
-        var relative = cookedUri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        return Path.Combine(project.ProjectRoot, ".cooked", relative);
-    }
-
-    private static Uri GetCookedUri(Uri materialUri)
-    {
-        var path = materialUri.AbsolutePath;
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            path = path[..^".json".Length];
-        }
-
-        return new Uri($"{AssetUris.Scheme}://{path}");
-    }
-
-    private static bool TryResolveSourcePath(ProjectContext project, Uri materialSourceUri, out string sourcePath)
-    {
-        sourcePath = string.Empty;
-        var path = Uri.UnescapeDataString(materialSourceUri.AbsolutePath).TrimStart('/');
-        var slash = path.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            return false;
-        }
-
-        var mountName = path[..slash];
-        var mountRelativePath = path[(slash + 1)..];
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            return false;
-        }
-
-        sourcePath = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
-        return true;
-    }
-
     private static MaterialPreviewColor? TryReadBaseColorPreview(string? descriptorPath)
     {
         if (descriptorPath is null || !File.Exists(descriptorPath))
@@ -398,7 +271,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
             var pbr = source.PbrMetallicRoughness;
             return new MaterialPreviewColor(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or System.Text.Json.JsonException)
         {
             return null;
         }
