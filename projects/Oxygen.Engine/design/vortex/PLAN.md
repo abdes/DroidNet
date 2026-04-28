@@ -78,8 +78,8 @@ Important baseline facts:
 
 **Status:** `in_progress`
 
-**Purpose:** Prove Vortex-native offscreen deferred/forward rendering through
-the existing offscreen facade and composition/product paths.
+**Purpose:** Prove Vortex-native offscreen deferred and solid forward rendering
+through the existing offscreen facade and composition/product paths.
 
 **Why this is next:** `VTX-M06A` multi-view proof closeout is validated.
 Offscreen proof is the next runtime surface before feature-gated variants.
@@ -94,7 +94,7 @@ Offscreen proof is the next runtime surface before feature-gated variants.
 
 **In scope:**
 
-- Offscreen deferred and forward scene proof.
+- Offscreen deferred and solid forward scene proof.
 - Product publication and composition checks for offscreen outputs.
 - Capture/analyzer proof that offscreen products are usable by downstream
   Vortex-native consumers.
@@ -114,6 +114,8 @@ Offscreen proof is the next runtime surface before feature-gated variants.
 - Runtime proof with offscreen preview and capture/thumbnail targets.
 - Focused tests and RenderDoc/CDB proof validate offscreen product isolation,
   final texture-consumer state, downstream consumption, and allocation churn.
+- Forward wireframe/debug output is regression coverage only; it does not close
+  the solid forward offscreen gate.
 - User visual confirmation is recorded if the proof is visual.
 
 **Recommended verification:** start from existing multi-view composition tests,
@@ -401,7 +403,7 @@ Scope:
 Scope:
 
 - `ForOffscreenScene` facade validation for scene-derived offscreen rendering.
-- Deferred and forward-mode permutations.
+- Deferred and solid forward-mode permutations.
 - Preview/thumbnail/capture use cases.
 - Detailed implementation plan:
   [`plan/VTX-M06B-offscreen-proof-closeout.md`](plan/VTX-M06B-offscreen-proof-closeout.md).

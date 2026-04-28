@@ -11,7 +11,7 @@ consumers.
 
 The target is not a validation-only facade. The facade must execute the
 existing Vortex scene renderer path against an offscreen target, cover deferred
-and forward scene permutations, and leave a truthful product/final-state
+and solid forward scene permutations, and leave a truthful product/final-state
 contract for preview, thumbnail, and capture callers.
 
 ## 2. Scope
@@ -22,13 +22,15 @@ In scope:
   output target, and pipeline settings.
 - Real `ValidatedOffscreenSceneSession::Execute()` rendering through Vortex
   frame/view execution, not a no-op or legacy renderer fallback.
-- Deferred and forward-mode selection through offscreen pipeline settings.
+- Deferred and solid forward-mode selection through offscreen pipeline settings.
 - Output-target ownership and final state suitable for texture consumers.
 - Focused unit/integration tests that fail if execution silently skips scene
   rendering.
 - Runtime proof covering preview and capture/thumbnail style offscreen targets.
 - CDB/debug-layer proof, RenderDoc scripted analysis, readback/product proof,
   and allocation-churn proof for repeated offscreen renders.
+- A forward wireframe/debug offscreen product is useful regression coverage,
+  but it is not accepted as the forward scene-product closure gate.
 - Ledger updates only when the matching implementation and validation evidence
   exists.
 
@@ -49,7 +51,8 @@ Out of scope:
 | Public facade | `Renderer::ForOffscreenScene()` returns an `OffscreenSceneFacade` with frame, scene, view, output, and pipeline setters. | Preserve source compatibility while adding real execution semantics. |
 | Presets | `offscreen::scene::presets::ForPreview()` and `ForCapture()` configure the facade. | Make presets produce renderable offscreen sessions, including a valid view identity. |
 | Execution | `ValidatedOffscreenSceneSession::Execute()` currently validates non-null renderer/scene/output and ensures a `SceneRenderer`, but it does not render to the output target. | First implementation slice must replace this no-op with a Vortex-native offscreen frame execution path. |
-| Pipeline settings | `OffscreenPipelineInput` is currently empty. | Add the minimum typed settings needed for deferred/forward proof without leaking cross-domain options. |
+| Pipeline settings | `OffscreenPipelineInput` is currently empty. | Add the minimum typed settings needed for deferred/solid-forward proof without leaking cross-domain options. |
+| Forward solid scene path | Vortex currently routes `ShadingMode::kForward`, but the deferred base pass only supports solid deferred output; wireframe forward is a debug path. | Do not close VTX-M06B on wireframe evidence. Add or route a real solid forward SceneColor path before claiming forward offscreen proof. |
 | Product handoff | The output framebuffer is accepted but not populated by the facade. | Route scene/post/composition output into the caller target and leave the product in the documented final state. |
 | Runtime proof | No dedicated offscreen runtime proof script or analyzer exists. | Add proof tooling after the render path exists; keep status `in_progress` until the proof passes. |
 
@@ -130,6 +133,8 @@ Required work:
 - Add typed offscreen pipeline settings for deferred and forward modes.
 - Route the selected mode through per-view render settings.
 - Validate that invalid or unsupported combinations fail before GPU work.
+- Keep the distinction explicit: API routing proof is not solid forward
+  rendering proof.
 
 Validation:
 
@@ -152,7 +157,8 @@ Evidence:
 - ShaderBake/catalog validation was not run because no shader source, shader
   ABI, root-binding, or catalog files changed.
 - Residual gap: CPU/API routing is validated; runtime RenderDoc proof must
-  still distinguish deferred/forward products in the visual proof scenario.
+  still distinguish deferred and solid forward products in the visual proof
+  scenario. Forward wireframe/debug execution does not satisfy this gap.
 
 ### D. Product Handoff and Final State
 
@@ -188,13 +194,14 @@ Evidence:
 Required work:
 
 - Add or extend a Vortex-native runtime proof path that renders at least one
-  preview-sized offscreen target and one capture/thumbnail-style target.
+  preview-sized deferred offscreen target and one capture/thumbnail-style solid
+  forward offscreen target.
 - Display the same offscreen products inside a normal Vortex demo view so the
   proof is inspectable by eye as well as by capture analysis.
 - Add scripted RenderDoc analysis for offscreen pass labels, output resource,
   draw/dispatch presence, and downstream texture consumption.
-- Add readback or analyzer proof that output content is non-empty and isolated
-  from swap-chain presentation.
+- Add readback or analyzer proof that both output products are non-empty and
+  isolated from swap-chain presentation.
 
 Validation:
 
@@ -204,7 +211,36 @@ Validation:
 
 Evidence:
 
-- Required before `VTX-M06B` can become `validated`.
+- Source implementation landed in commits `f12fcefb9`, `dfc3dab3c`,
+  `5299d6c1c`, and `62b4b525f`. It adds
+  `Examples/MultiView --offscreen-proof-layout true`
+  with a normal Vortex scene plus two visible offscreen products: a deferred
+  preview panel and an interim forward/wireframe capture thumbnail. The
+  products are generated through
+  `ForOffscreenScene`/`ValidatedOffscreenSceneSession` and displayed through
+  Vortex runtime texture composition layers. This proves the offscreen route
+  and caught a production bug where forward wireframe was skipped, but it does
+  not close the required solid forward offscreen product.
+- Focused source validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OffscreenSceneFacade.Tests Oxygen.Vortex.RendererCompositionQueue.Tests oxygen-examples-multiview --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(OffscreenSceneFacade|RendererCompositionQueue)" --output-on-failure`
+  with 2/2 test executables passing.
+- Early CDB smoke passed:
+  `Oxygen.Examples.MultiView.exe --frames 8 --fps 30 --offscreen-proof-layout true --capture-provider off --debug-layer true`
+  under `cdb -G -g`, exit code 0, no `CHECK FAILED`, no D3D12/DXGI
+  errors, no access violation, and runtime logs proving both offscreen products
+  rendered. The same smoke showed warmup lease-pool allocations on frame 1 and
+  `allocations_delta=0` for preview, capture, and main scene passes from frame
+  2 onward.
+- Focused regression validation passed for the forward-wireframe bug:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore.Tests oxygen-examples-multiview --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
+  with 45/45 tests passing.
+- Residual gap: implement and prove a solid forward offscreen capture product,
+  then add scripted RenderDoc analysis, assertion wrapper, 60-frame churn
+  report, and user visual confirmation before slice E can close.
 
 ### F. Closure and Ledger Update
 
@@ -227,6 +263,9 @@ Exit gate:
 - RenderDoc scripted analysis passes.
 - Repeated offscreen renders show no steady-state allocation churn.
 - Offscreen output is proven usable by a downstream Vortex-native consumer.
+- Both deferred and solid forward offscreen scene products are proven. Forward
+  wireframe/debug proof may remain as regression coverage but cannot satisfy
+  the solid forward gate.
 - Remaining gaps are recorded as none, accepted, or deferred with owner.
 
 ## 6. Validation Command Set
