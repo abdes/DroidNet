@@ -267,6 +267,23 @@ Validation:
 - Focused diagnostics and composition tests.
 - Runtime CDB/debug-layer smoke before capture proof.
 
+Evidence:
+
+- Source evidence exists in `SceneRenderer`: diagnostics-only views publish a
+  real diagnostics-ledger pass/product when diagnostics capability is present,
+  keep depth, scene color, custom depth/stencil, GBuffer, shadow, environment,
+  resolve, and deferred-lighting products invalid, and avoid advertising
+  produced scene outputs for omitted stages.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.DiagnosticsService.Tests Oxygen.Vortex.CompositionPlanner.Tests --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(SceneRendererDeferredCore|DiagnosticsService|CompositionPlanner)" --output-on-failure`
+  with 3/3 test executables passing.
+- ShaderBake/catalog validation was not run for this slice because no shader
+  source, shader ABI, root-binding, or catalog files changed. Runtime
+  CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain open
+  until the Slice F proof layout exists. VTX-M06C remains `in_progress`.
+
 ### F. Runtime Proof Layout and Analyzer
 
 Required work:
