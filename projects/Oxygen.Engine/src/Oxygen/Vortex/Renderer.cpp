@@ -1906,13 +1906,13 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
   -> void
 {
   if (input.composite_target == nullptr || input.target_surface == nullptr
-    || input.layers.empty()) {
+    || (input.layers.empty() && input.texture_layers.empty())) {
     return;
   }
 
   auto submission = CompositionSubmission {};
   submission.composite_target = input.composite_target;
-  submission.tasks.reserve(input.layers.size());
+  submission.tasks.reserve(input.layers.size() + input.texture_layers.size());
 
   for (const auto& layer : input.layers) {
     if (layer.intent_view_id == kInvalidViewId || layer.opacity <= 0.0F) {
@@ -1933,6 +1933,15 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
       submission.tasks.push_back(CompositingTask::MakeBlend(
         published_view_id, layer.viewport, layer.opacity));
     }
+  }
+
+  for (const auto& layer : input.texture_layers) {
+    if (!layer.source_texture || layer.opacity <= 0.0F) {
+      continue;
+    }
+
+    submission.tasks.push_back(CompositingTask::MakeTextureBlend(
+      layer.source_texture, layer.viewport, layer.opacity, layer.debug_name));
   }
 
   if (submission.tasks.empty()) {

@@ -191,7 +191,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -232,7 +232,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target_a.get() });
+      oxygen::observer_ptr<Framebuffer> { target_a.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -268,7 +268,7 @@ NOLINT_TEST_F(
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -308,7 +308,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { present_target.get() });
+      oxygen::observer_ptr<Framebuffer> { present_target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -359,6 +359,63 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 }
 
 NOLINT_TEST_F(RendererCompositionQueueTest,
+  RegisterRuntimeCompositionBlendsTextureLayerToPresentationTarget)
+{
+  auto surface_texture = MakeColorTexture("Queue.RuntimeTextureSurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto present_target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<Framebuffer> { present_target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
+
+  auto source_texture = MakeColorTexture("Queue.RuntimeTextureLayer");
+  graphics_->GetResourceRegistry().Register(source_texture);
+
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->draw_log_.draws.clear();
+
+  renderer_->RegisterRuntimeComposition(Renderer::RuntimeCompositionInput {
+    .texture_layers = {
+      Renderer::RuntimeTextureCompositionLayer {
+        .source_texture = source_texture,
+        .viewport = {
+          .top_left_x = 4.0F,
+          .top_left_y = 6.0F,
+          .width = 48.0F,
+          .height = 40.0F,
+          .min_depth = 0.0F,
+          .max_depth = 1.0F,
+        },
+        .opacity = 1.0F,
+        .debug_name = "Queue.RuntimeTextureLayer.Composite",
+      },
+    },
+    .composite_target = present_target,
+    .target_surface = surface,
+  });
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  EXPECT_TRUE(graphics_->texture_copy_log_.copies.empty());
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
+NOLINT_TEST_F(RendererCompositionQueueTest,
   SurfaceOverlayBatchesRunAfterCompositionBeforePresentable)
 {
   auto surface_texture = MakeColorTexture("Queue.SurfaceOverlaySurface");
@@ -374,7 +431,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -445,7 +502,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
