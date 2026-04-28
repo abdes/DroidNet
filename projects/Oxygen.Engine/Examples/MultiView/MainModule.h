@@ -50,6 +50,7 @@ struct MainModuleConfig {
   bool proof_layout { false };
   bool aux_proof_layout { false };
   bool offscreen_proof_layout { false };
+  bool feature_variant_proof_layout { false };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.
@@ -146,6 +147,7 @@ private:
   auto RenderOffscreenProofProducts(engine::FrameContext& context) -> void;
   auto AppendRuntimeCompositionLayers(engine::FrameContext& context,
     vortex::Renderer::RuntimeCompositionInput& input) -> void override;
+  auto DrawFeatureVariantProofOverlay() -> void;
 
   const examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
@@ -159,6 +161,7 @@ private:
   ViewId top_view_id_ { kInvalidViewId };
   ViewId debug_view_id_ { kInvalidViewId };
   ViewId shadow_view_id_ { kInvalidViewId };
+  ViewId diagnostics_view_id_ { kInvalidViewId };
 
   // Cameras
   scene::SceneNode main_camera_node_;
@@ -166,6 +169,7 @@ private:
   scene::SceneNode top_camera_node_;
   scene::SceneNode debug_camera_node_;
   scene::SceneNode shadow_camera_node_;
+  scene::SceneNode diagnostics_camera_node_;
   scene::SceneNode offscreen_preview_camera_node_;
   scene::SceneNode offscreen_capture_camera_node_;
 
