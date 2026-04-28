@@ -12,6 +12,7 @@
 #include <source_location>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include <asio/signal_set.hpp>
@@ -222,6 +223,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool hot_reload = true;
   std::string directional_shadows = "conventional";
   std::string startup_scene_name;
+  std::string startup_skybox_path;
   std::string cvars_archive_path;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
@@ -269,6 +271,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("scene")
         .StoreTo(&startup_scene_name)
         .Build());
+    developer_options->Add(Option::WithKey("startup-skybox")
+        .About("Load and equip a cubemap skybox on the startup scene")
+        .Long("startup-skybox")
+        .WithValue<std::string>()
+        .UserFriendlyName("path")
+        .StoreTo(&startup_skybox_path)
+        .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
@@ -308,6 +317,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (!startup_scene_name.empty()) {
       LOG_F(INFO, "Parsed scene option = {}", startup_scene_name);
     }
+    if (!startup_skybox_path.empty()) {
+      LOG_F(INFO, "Parsed startup-skybox option = {}", startup_skybox_path);
+    }
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
     }
@@ -316,6 +328,44 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     app.directional_shadow_policy
       = ParseDirectionalShadowPolicy(directional_shadows);
     app.startup_scene_name = startup_scene_name;
+    if (const auto settings = SettingsService::ForDemoApp()) {
+      const auto read_int = [&](const std::string_view key,
+                              const int fallback) -> int {
+        return static_cast<int>(settings->GetFloat(key).value_or(
+          static_cast<float>(fallback)));
+      };
+      if (startup_skybox_path.empty()) {
+        constexpr int kSkySphereSourceCubemap = 0;
+        const bool sky_sphere_enabled
+          = settings->GetBool("env.sky_sphere.enabled").value_or(false);
+        const int sky_sphere_source
+          = read_int("env.sky_sphere.source", kSkySphereSourceCubemap);
+        if (sky_sphere_enabled
+          && sky_sphere_source == kSkySphereSourceCubemap) {
+          startup_skybox_path
+            = settings->GetString("env.skybox.path").value_or(std::string {});
+        }
+      }
+      app.startup_skybox_layout = read_int("env.skybox.layout", 0);
+      app.startup_skybox_output_format = read_int("env.skybox.output", 0);
+      app.startup_skybox_face_size = read_int("env.skybox.face_size", 512);
+      app.startup_skybox_flip_y
+        = settings->GetBool("env.skybox.flip_y").value_or(false);
+      app.startup_skybox_tonemap_hdr_to_ldr
+        = settings->GetBool("env.skybox.tonemap_hdr_to_ldr").value_or(false);
+      app.startup_skybox_hdr_exposure_ev
+        = settings->GetFloat("env.skybox.hdr_exposure_ev").value_or(0.0F);
+    }
+    app.startup_skybox_path = startup_skybox_path;
+    if (!app.startup_skybox_path.empty()) {
+      LOG_F(INFO,
+        "Resolved startup skybox path='{}' layout={} output={} face_size={} "
+        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={}",
+        app.startup_skybox_path, app.startup_skybox_layout,
+        app.startup_skybox_output_format, app.startup_skybox_face_size,
+        app.startup_skybox_flip_y, app.startup_skybox_tonemap_hdr_to_ldr,
+        app.startup_skybox_hdr_exposure_ev);
+    }
     LOG_F(INFO, "Resolved directional shadow policy = {}",
       app.directional_shadow_policy);
 

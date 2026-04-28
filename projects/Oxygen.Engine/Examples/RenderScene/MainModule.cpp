@@ -30,6 +30,8 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
@@ -37,6 +39,7 @@
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/PathNormalization.h"
 #include "DemoShell/Services/SceneLoaderService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "RenderScene/MainModule.h"
 
@@ -210,6 +213,16 @@ MainModule::MainModule(const examples::DemoAppContext& app)
   if (!app.startup_scene_name.empty()) {
     startup_scene_name_ = app.startup_scene_name;
   }
+  if (!app.startup_skybox_path.empty()) {
+    startup_skybox_path_ = app.startup_skybox_path;
+    startup_skybox_layout_ = app.startup_skybox_layout;
+    startup_skybox_output_format_ = app.startup_skybox_output_format;
+    startup_skybox_face_size_ = app.startup_skybox_face_size;
+    startup_skybox_flip_y_ = app.startup_skybox_flip_y;
+    startup_skybox_tonemap_hdr_to_ldr_
+      = app.startup_skybox_tonemap_hdr_to_ldr;
+    startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
+  }
 }
 
 MainModule::~MainModule() = default;
@@ -343,6 +356,9 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell->SetStagedMainCamera(main_camera_);
+  if (!startup_scene_name_.has_value()) {
+    ApplyStartupSkyboxToScene(staged_scene, "fallback");
+  }
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
@@ -901,6 +917,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           co_return;
         }
 
+        ApplyStartupSkyboxToScene(staged_scene, data::to_string(swap.scene_key));
         shell.SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
@@ -1039,6 +1056,7 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   scene_loader_.reset();
   pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
+  startup_skybox_service_.reset();
   shell.SetScene(nullptr);
 }
 
@@ -1063,6 +1081,84 @@ auto MainModule::StageFallbackScene() -> void
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
+  if (!startup_scene_name_.has_value()) {
+    ApplyStartupSkyboxToScene(staged_scene, "fallback");
+  }
+}
+
+auto MainModule::ApplyStartupSkyboxToScene(
+  observer_ptr<scene::Scene> scene, const std::string_view scene_label) -> void
+{
+  if (!scene || !startup_skybox_path_.has_value()) {
+    return;
+  }
+
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (!asset_loader) {
+    LOG_F(WARNING,
+      "RenderScene: Startup skybox '{}' skipped for '{}' because the asset "
+      "loader is unavailable",
+      startup_skybox_path_->string(), scene_label);
+    return;
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::exists(*startup_skybox_path_, ec)) {
+    LOG_F(WARNING,
+      "RenderScene: Startup skybox '{}' does not exist for scene '{}'",
+      startup_skybox_path_->string(), scene_label);
+    return;
+  }
+
+  if (auto env = scene->GetEnvironment()) {
+    if (auto atmosphere
+      = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
+      atmosphere->SetEnabled(false);
+      LOG_F(INFO,
+        "RenderScene: Disabled procedural SkyAtmosphere for startup skybox "
+        "scene '{}'",
+        scene_label);
+    }
+  }
+
+  startup_skybox_service_ = std::make_unique<SkyboxService>(
+    observer_ptr<content::IAssetLoader> { asset_loader.get() }, scene);
+
+  SkyboxService::LoadOptions options;
+  options.layout = static_cast<SkyboxService::Layout>(
+    std::clamp(startup_skybox_layout_, 0, 4));
+  options.output_format = static_cast<SkyboxService::OutputFormat>(
+    std::clamp(startup_skybox_output_format_, 0, 3));
+  options.cube_face_size = std::max(startup_skybox_face_size_, 1);
+  options.flip_y = startup_skybox_flip_y_;
+  options.tonemap_hdr_to_ldr = startup_skybox_tonemap_hdr_to_ldr_;
+  options.hdr_exposure_ev = startup_skybox_hdr_exposure_ev_;
+
+  SkyboxService::SkyLightParams params;
+  LOG_F(INFO,
+    "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
+    "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={})",
+    startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
+    startup_skybox_output_format_, options.cube_face_size,
+    startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
+    startup_skybox_hdr_exposure_ev_);
+
+  startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
+    options, params,
+    [scene_name = std::string(scene_label)](SkyboxService::LoadResult result) {
+      if (result.success) {
+        LOG_F(INFO,
+          "RenderScene: Startup skybox equipped for scene '{}' "
+          "(resource_key={} face_size={} status='{}')",
+          scene_name, result.resource_key, result.face_size,
+          result.status_message);
+      } else {
+        LOG_F(WARNING,
+          "RenderScene: Startup skybox failed for scene '{}' (status='{}')",
+          scene_name, result.status_message);
+      }
+    });
+  scene->Update(false);
 }
 
 auto MainModule::ClearBackbufferReferences() -> void { }
