@@ -7,6 +7,8 @@
 #include <limits>
 #include <utility>
 
+#include <glm/mat4x4.hpp>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -406,23 +408,69 @@ namespace {
         "velocity draw metadata");
   }
 
+  auto CopyMatrices(std::span<const glm::mat4> source,
+    std::vector<float>& destination) -> std::span<const float>
+  {
+    destination.clear();
+    if (source.empty()) {
+      return {};
+    }
+
+    const auto float_count = source.size() * kMatrixFloatCount;
+    const auto* const source_data
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+      = reinterpret_cast<const float*>(source.data());
+    destination.assign(source_data, source_data + float_count);
+    return { destination.data(), destination.size() };
+  }
+
   auto PublishPreparedSceneFrame(const sceneprep::ScenePrepState& state,
-    std::vector<sceneprep::RenderItemData>& render_items,
-    PreparedSceneFrame& prepared_frame) -> void
+    InitViewsModule::PreparedSceneViewStorage& storage) -> void
   {
     const auto collected_items = state.CollectedItems();
-    render_items.assign(collected_items.begin(), collected_items.end());
+    storage.render_items.assign(collected_items.begin(), collected_items.end());
+    storage.draw_metadata.clear();
+    storage.world_matrices.clear();
+    storage.previous_world_matrices.clear();
+    storage.normal_matrices.clear();
+    storage.partitions.clear();
+    storage.draw_bounding_spheres.clear();
 
+    auto& prepared_frame = storage.prepared_frame;
     prepared_frame = {};
     prepared_frame.render_items = std::span<const sceneprep::RenderItemData>(
-      render_items.data(), render_items.size());
+      storage.render_items.data(), storage.render_items.size());
 
     if (const auto draw_emitter = state.GetDrawMetadataEmitter();
       draw_emitter != nullptr) {
-      prepared_frame.draw_metadata_bytes = draw_emitter->GetDrawMetadataBytes();
-      prepared_frame.partitions = draw_emitter->GetPartitions();
-      prepared_frame.draw_bounding_spheres
+      // TODO(vortex/multiview): keep these per-view CPU spans stable without
+      // copying every finalized buffer once the scene-prep resource managers
+      // expose view-owned snapshots or frame-arena-backed slices.
+      const auto draw_metadata_bytes = draw_emitter->GetDrawMetadataBytes();
+      if (!draw_metadata_bytes.empty()) {
+        CHECK_F(draw_metadata_bytes.size() % sizeof(DrawMetadata) == 0U,
+          "Draw metadata byte span size {} is not a DrawMetadata multiple",
+          draw_metadata_bytes.size());
+        const auto draw_metadata_count
+          = draw_metadata_bytes.size() / sizeof(DrawMetadata);
+        const auto* const draw_metadata
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+          = reinterpret_cast<const DrawMetadata*>(draw_metadata_bytes.data());
+        storage.draw_metadata.assign(
+          draw_metadata, draw_metadata + draw_metadata_count);
+      }
+      prepared_frame.draw_metadata_bytes
+        = std::as_bytes(std::span(storage.draw_metadata));
+
+      const auto partitions = draw_emitter->GetPartitions();
+      storage.partitions.assign(partitions.begin(), partitions.end());
+      prepared_frame.partitions = storage.partitions;
+
+      const auto draw_bounding_spheres
         = draw_emitter->GetDrawBoundingSpheres();
+      storage.draw_bounding_spheres.assign(
+        draw_bounding_spheres.begin(), draw_bounding_spheres.end());
+      prepared_frame.draw_bounding_spheres = storage.draw_bounding_spheres;
       prepared_frame.bindless_draw_metadata_slot
         = draw_emitter->GetDrawMetadataSrvIndex();
       prepared_frame.bindless_draw_bounds_slot
@@ -433,37 +481,13 @@ namespace {
 
     if (const auto transform_uploader = state.GetTransformUploader();
       transform_uploader != nullptr) {
-      const auto world_matrices = transform_uploader->GetWorldMatrices();
-      if (!world_matrices.empty()) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        const auto* world_data
-          = reinterpret_cast<const float*>(world_matrices.data());
-        prepared_frame.world_matrices = {
-          world_data,
-          world_matrices.size() * kMatrixFloatCount,
-        };
-      }
-      const auto normal_matrices = transform_uploader->GetNormalMatrices();
-      if (!normal_matrices.empty()) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        const auto* normal_data
-          = reinterpret_cast<const float*>(normal_matrices.data());
-        prepared_frame.normal_matrices = {
-          normal_data,
-          normal_matrices.size() * kMatrixFloatCount,
-        };
-      }
-      const auto previous_world_matrices
-        = transform_uploader->GetPreviousWorldMatrices();
-      if (!previous_world_matrices.empty()) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        const auto* previous_world_data
-          = reinterpret_cast<const float*>(previous_world_matrices.data());
-        prepared_frame.previous_world_matrices = {
-          previous_world_data,
-          previous_world_matrices.size() * kMatrixFloatCount,
-        };
-      }
+      prepared_frame.world_matrices = CopyMatrices(
+        transform_uploader->GetWorldMatrices(), storage.world_matrices);
+      prepared_frame.normal_matrices = CopyMatrices(
+        transform_uploader->GetNormalMatrices(), storage.normal_matrices);
+      prepared_frame.previous_world_matrices
+        = CopyMatrices(transform_uploader->GetPreviousWorldMatrices(),
+          storage.previous_world_matrices);
       prepared_frame.bindless_worlds_slot
         = transform_uploader->GetWorldsSrvIndex();
       prepared_frame.bindless_previous_worlds_slot
@@ -582,6 +606,12 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   for (auto& [_, storage] : prepared_views_) {
     storage.published = false;
     storage.render_items.clear();
+    storage.draw_metadata.clear();
+    storage.world_matrices.clear();
+    storage.previous_world_matrices.clear();
+    storage.normal_matrices.clear();
+    storage.partitions.clear();
+    storage.draw_bounding_spheres.clear();
     storage.prepared_frame = {};
   }
 
@@ -617,8 +647,7 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     scene_prep_->PrepareView(
       *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
     scene_prep_->FinalizeView(scene_prep_state_);
-    PublishPreparedSceneFrame(
-      scene_prep_state_, storage.render_items, storage.prepared_frame);
+    PublishPreparedSceneFrame(scene_prep_state_, storage);
     storage.prepared_frame.exposure = ResolvePreparedFrameExposure(
       *scene, view_entry.resolved_view);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,

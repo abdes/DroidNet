@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
@@ -39,6 +41,12 @@ public:
   struct PreparedSceneViewStorage {
     bool published { false };
     std::vector<sceneprep::RenderItemData> render_items;
+    std::vector<DrawMetadata> draw_metadata;
+    std::vector<float> world_matrices;
+    std::vector<float> previous_world_matrices;
+    std::vector<float> normal_matrices;
+    std::vector<PreparedSceneFrame::PartitionRange> partitions;
+    std::vector<glm::vec4> draw_bounding_spheres;
     std::vector<SkinnedPosePublication> current_skinned_pose_publications;
     std::vector<SkinnedPosePublication> previous_skinned_pose_publications;
     std::vector<MorphPublication> current_morph_publications;
