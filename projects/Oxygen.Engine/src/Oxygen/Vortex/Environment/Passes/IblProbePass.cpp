@@ -6,6 +6,10 @@
 
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 
+#include <bit>
+
+#include <Oxygen/Data/TextureResource.h>
+
 namespace oxygen::vortex::environment {
 
 namespace {
@@ -26,14 +30,46 @@ namespace {
     probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
   }
 
-  auto MakeProductKey(const SkyLightEnvironmentModel& sky_light)
+  auto IsHdrLinearCubemapFormat(const Format format) noexcept -> bool
+  {
+    switch (format) {
+    case Format::kRGBA16Float:
+    case Format::kRGBA32Float:
+    case Format::kBC6HFloatU:
+    case Format::kBC6HFloatS:
+    case Format::kR11G11B10Float:
+    case Format::kR9G9B9E5Float:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  auto SelectOutputFaceSize(const std::uint32_t source_size) noexcept
+    -> std::uint32_t
+  {
+    if (source_size == 0U) {
+      return 0U;
+    }
+    return std::bit_floor(source_size);
+  }
+
+  auto MakeProductKey(const SkyLightEnvironmentModel& sky_light,
+    const data::TextureResource* source_cubemap = nullptr)
     -> StaticSkyLightProductKey
   {
+    const auto source_width
+      = source_cubemap != nullptr ? source_cubemap->GetWidth() : 0U;
+    const auto source_format = source_cubemap != nullptr
+      ? static_cast<std::uint32_t>(source_cubemap->GetFormat())
+      : 0U;
+    const auto source_revision
+      = source_cubemap != nullptr ? source_cubemap->GetContentHash() : 0U;
     return {
       .source_cubemap = sky_light.cubemap_resource,
-      .source_revision = 0U,
-      .output_face_size = 0U,
-      .source_format_class = 0U,
+      .source_revision = source_revision,
+      .output_face_size = SelectOutputFaceSize(source_width),
+      .source_format_class = source_format,
       .source_rotation_radians = sky_light.source_cubemap_angle_radians,
       .lower_hemisphere_solid_color = sky_light.lower_hemisphere_is_solid_color,
       .lower_hemisphere_color = sky_light.lower_hemisphere_color,
@@ -100,6 +136,14 @@ auto IblProbePass::RefreshStaticSkyLight(
   const EnvironmentProbeState& current_state,
   const SkyLightEnvironmentModel& sky_light) const -> RefreshState
 {
+  return RefreshStaticSkyLight(current_state, sky_light, nullptr);
+}
+
+auto IblProbePass::RefreshStaticSkyLight(
+  const EnvironmentProbeState& current_state,
+  const SkyLightEnvironmentModel& sky_light,
+  const data::TextureResource* source_cubemap) const -> RefreshState
+{
   auto next_state = current_state;
   const auto previous_revision = next_state.probes.probe_revision;
 
@@ -119,9 +163,22 @@ auto IblProbePass::RefreshStaticSkyLight(
       StaticSkyLightUnavailableReason::kMissingCubemap,
       MakeProductKey(sky_light));
   } else if (sky_light.source == kSkyLightSourceSpecifiedCubemap) {
-    const auto key = MakeProductKey(sky_light);
-    MarkStaticSkyLightUnavailable(next_state,
-      StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete, key);
+    const auto key = MakeProductKey(sky_light, source_cubemap);
+    if (source_cubemap == nullptr) {
+      MarkStaticSkyLightUnavailable(next_state,
+        StaticSkyLightUnavailableReason::kResourceResolveFailed, key);
+    } else if (source_cubemap->GetTextureType() != TextureType::kTextureCube
+      || source_cubemap->GetArrayLayers() != 6U) {
+      MarkStaticSkyLightUnavailable(
+        next_state, StaticSkyLightUnavailableReason::kNotTextureCube, key);
+    } else if (!IsHdrLinearCubemapFormat(source_cubemap->GetFormat())) {
+      MarkStaticSkyLightUnavailable(
+        next_state, StaticSkyLightUnavailableReason::kUnsupportedFormat, key);
+    } else {
+      MarkStaticSkyLightUnavailable(next_state,
+        StaticSkyLightUnavailableReason::kShaderConsumerMigrationIncomplete,
+        key);
+    }
   } else {
     MarkStaticSkyLightUnavailable(
       next_state, StaticSkyLightUnavailableReason::kUnsupportedFormat);
