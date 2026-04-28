@@ -193,7 +193,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
 
   std::uint32_t source { 0U };
   std::uint32_t enabled { 0U };
-  std::uint32_t cubemap_slot { 0U };
+  std::uint32_t cubemap_slot { kInvalidBindlessIndex };
   std::uint32_t cubemap_max_mip { 0U };
 };
 

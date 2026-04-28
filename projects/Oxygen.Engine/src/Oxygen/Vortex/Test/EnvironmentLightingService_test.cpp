@@ -36,6 +36,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -408,9 +409,17 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  EnvironmentStaticSkyLightDefaultsExposeNoUsableIblSlots)
+  EnvironmentStaticSkyDefaultsExposeNoUsableTextureSlots)
 {
   const auto static_data = EnvironmentStaticData {};
+
+  EXPECT_EQ(static_data.sky_sphere.enabled, 0U);
+  EXPECT_EQ(static_data.sky_sphere.source,
+    static_cast<std::uint32_t>(
+      oxygen::scene::environment::SkySphereSource::kCubemap));
+  EXPECT_EQ(
+    static_data.sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data.sky_sphere.cubemap_max_mip, 0U);
 
   EXPECT_EQ(static_data.sky_light.enabled, 0U);
   EXPECT_EQ(static_data.sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
@@ -448,6 +457,26 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_FALSE(Contains(local_fog, "irradiance_map_slot"));
   EXPECT_FALSE(
     Contains(forward_debug, "slot = env_data.sky_sphere.cubemap_slot"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  SkyPassShaderRendersSkySphereBeforeAtmosphereLutRequirement)
+{
+  const auto sky = ReadShaderSource("Services/Environment/Sky.hlsl");
+
+  ASSERT_FALSE(sky.empty());
+  EXPECT_TRUE(Contains(sky, "env_data.sky_sphere.enabled"));
+  EXPECT_TRUE(Contains(sky, "kSkySphereSourceSolidColor"));
+  EXPECT_TRUE(Contains(sky, "TextureCube<float4> sky_cube"));
+  EXPECT_TRUE(Contains(sky, "RotateDirectionAroundOxygenUp"));
+  EXPECT_TRUE(Contains(sky, "CubemapSamplingDirFromOxygenWS"));
+
+  const auto sky_sphere_branch = sky.find("env_data.sky_sphere.enabled");
+  const auto atmosphere_lut_requirement
+    = sky.find("env_data.atmosphere.sky_view_lut_slot");
+  ASSERT_NE(sky_sphere_branch, std::string::npos);
+  ASSERT_NE(atmosphere_lut_requirement, std::string::npos);
+  EXPECT_LT(sky_sphere_branch, atmosphere_lut_requirement);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -585,6 +614,25 @@ auto MakeSceneWithAtmosphereEnvironment()
     = environment->AddSystem<oxygen::scene::environment::SkyLight>();
   sky_light.SetEnabled(true);
   sky_light.SetIntensityMul(1.25F);
+
+  scene->SetEnvironment(std::move(environment));
+  scene->Update();
+  return scene;
+}
+
+auto MakeSceneWithSolidSkySphere() -> std::shared_ptr<oxygen::scene::Scene>
+{
+  auto scene = std::make_shared<oxygen::scene::Scene>("SkySphereScene", 8U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+
+  auto& sky_sphere
+    = environment->AddSystem<oxygen::scene::environment::SkySphere>();
+  sky_sphere.SetEnabled(true);
+  sky_sphere.SetSource(oxygen::scene::environment::SkySphereSource::kSolidColor);
+  sky_sphere.SetSolidColorRgb({ 0.2F, 0.4F, 0.6F });
+  sky_sphere.SetTintRgb({ 1.0F, 0.5F, 0.25F });
+  sky_sphere.SetIntensity(2.0F);
+  sky_sphere.SetRotationRadians(0.75F);
 
   scene->SetEnvironment(std::move(environment));
   scene->Update();
@@ -999,6 +1047,99 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     second.probe_state.probes.probe_revision);
   EXPECT_EQ(third.probe_state.static_sky_light.product_revision,
     second.probe_state.static_sky_light.product_revision);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  PublishedStaticDataCarriesSolidSkySphereWhenEnvironmentFeatureIsEnabled)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 19U };
+  auto ctx = MakeRenderContext(ViewId { 19U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 19U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 1U);
+  EXPECT_EQ(static_data->sky_sphere.source,
+    static_cast<std::uint32_t>(
+      oxygen::scene::environment::SkySphereSource::kSolidColor));
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[0], 0.2F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[1], 0.4F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[2], 0.6F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[0], 1.0F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[1], 0.5F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[2], 0.25F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.intensity, 2.0F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.rotation_radians, 0.75F);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  NoEnvironmentViewFeatureSuppressesPublishedSkySphere)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 18U };
+  composition_view.feature_profile
+    = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoEnvironment;
+  composition_view.feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
+    composition_view.feature_profile)
+                                    .feature_mask;
+  auto ctx = MakeRenderContext(ViewId { 18U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 18U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 0U);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  SkyPassRequestsSkySphereWithoutProceduralAtmosphereOptIn)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 17U };
+  composition_view.with_atmosphere = false;
+  auto ctx = MakeRenderContext(ViewId { 17U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_EQ(stage15.sky_draw_count, 1U);
+  EXPECT_EQ(stage15.atmosphere_draw_count, 0U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

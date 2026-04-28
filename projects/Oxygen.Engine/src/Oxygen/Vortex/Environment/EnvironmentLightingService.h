@@ -59,6 +59,10 @@ namespace environment {
   }
 } // namespace environment
 
+namespace resources {
+class TextureBinder;
+} // namespace resources
+
 class EnvironmentLightingService {
 public:
   struct ProbeRefreshState {
@@ -304,11 +308,12 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
+  auto EnsureSkyTextureBinder() -> resources::TextureBinder*;
   auto PrepareLocalFogForStage14(RenderContext& ctx,
     const SceneTextures& scene_textures)
     -> const environment::internal::LocalFogVolumeState::ViewProducts&;
-  [[nodiscard]] auto BuildEnvironmentStaticData(
-    const environment::EnvironmentViewProducts& view_products) const
+  [[nodiscard]] auto BuildEnvironmentStaticData(const RenderContext& ctx,
+    const environment::EnvironmentViewProducts& view_products)
     -> EnvironmentStaticData;
   [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const
     -> EnvironmentViewData;
@@ -357,6 +362,7 @@ private:
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
     camera_aerial_perspective_pass_ {};
   std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_ {};
+  std::unique_ptr<resources::TextureBinder> sky_texture_binder_ {};
   environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
   environment::LocalFogVolumeTiledCullingPass::RecordState
     pending_local_fog_culling_state_ {};
