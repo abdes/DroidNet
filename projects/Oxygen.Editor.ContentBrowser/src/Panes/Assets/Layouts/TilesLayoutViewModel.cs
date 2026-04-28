@@ -4,8 +4,7 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Assets.Catalog;
-using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -13,18 +12,21 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <summary>
 /// The ViewModel for the tiles layout view.
 /// </summary>
-/// <param name="assetCatalog">The asset catalog.</param>
+/// <param name="assetProvider">The shared content-browser asset provider.</param>
+/// <param name="projectContextService">The active project context service.</param>
+/// <param name="contentBrowserState">The content-browser state.</param>
+/// <param name="hostingContext">The hosting context.</param>
 public partial class TilesLayoutViewModel(
-    IAssetCatalog assetCatalog,
+    IContentBrowserAssetProvider assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext)
-    : AssetsLayoutViewModel(assetCatalog, projectContextService, contentBrowserState, hostingContext)
+    : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext)
 {
     /// <summary>
     /// Invokes the item.
     /// </summary>
-    /// <param name="item">The game asset to invoke.</param>
+    /// <param name="item">The content browser asset row to invoke.</param>
     [RelayCommand]
-    private void InvokeItem(GameAsset item) => this.OnItemInvoked(item);
+    private void InvokeItem(ContentBrowserAssetItem item) => this.OnItemInvoked(item);
 }

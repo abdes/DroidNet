@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -33,7 +33,7 @@ public sealed partial class ListLayoutView
     /// <param name="args">The event data.</param>
     private void ListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        if (sender is not ListView { SelectedItem: GameAsset selectedItem })
+        if (sender is not ListView { SelectedItem: ContentBrowserAssetItem selectedItem })
         {
             return;
         }

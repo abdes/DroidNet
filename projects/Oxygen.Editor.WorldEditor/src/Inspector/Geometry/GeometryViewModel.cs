@@ -10,6 +10,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Assets.Catalog;
 using Oxygen.Core;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -374,9 +375,17 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
     /// </summary>
     /// <returns>A task that completes when the picker snapshot has been republished.</returns>
     public async Task RefreshMaterialPickerAsync()
-        => await this.materialPickerService
+    {
+        await this.materialPickerService
             .RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false })
             .ConfigureAwait(true);
+
+        if (!this.IsMaterialMixed
+            && Uri.TryCreate(this.SelectedMaterialUriString, UriKind.Absolute, out var currentMaterialUri))
+        {
+            _ = await this.materialPickerService.ResolveAsync(currentMaterialUri).ConfigureAwait(true);
+        }
+    }
 
     /// <summary>
     /// Update the view model state from the given collection of selected scene nodes.
@@ -660,10 +669,10 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         => new(
             Name: asset.DisplayName,
             Uri: asset.MaterialUri,
-            DisplayType: asset.State == Oxygen.Editor.ContentBrowser.Materials.AssetState.Missing ? "Missing material" : "Material",
+            DisplayType: asset.DisplayState == AssetState.Missing ? "Missing material" : "Material",
             DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
             Group: AssetPickerGroup.Content,
-            IsEnabled: asset.State is not Oxygen.Editor.ContentBrowser.Materials.AssetState.Missing and not Oxygen.Editor.ContentBrowser.Materials.AssetState.Broken,
+            IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
             ThumbnailModel: "\uE8B9");
 
     private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)

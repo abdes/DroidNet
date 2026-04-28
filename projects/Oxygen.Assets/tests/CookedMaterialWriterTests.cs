@@ -50,9 +50,9 @@ public sealed class CookedMaterialWriterTests
         // material_domain
         _ = bytes[0x5F].Should().Be(3);
 
-        // flags: bit0 double-sided, bit1 alpha test
+        // flags: bit1 double-sided, bit2 alpha test
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x60, 4));
-        _ = flags.Should().Be((1u << 0) | (1u << 1));
+        _ = flags.Should().Be((1u << 1) | (1u << 2));
 
         // scalar offsets match runtime tests (little-endian floats)
         _ = ReadSingle(bytes, 0x68).Should().BeApproximately(0.1f, 0.0001f);
@@ -60,16 +60,18 @@ public sealed class CookedMaterialWriterTests
         _ = ReadSingle(bytes, 0x70).Should().BeApproximately(0.3f, 0.0001f);
         _ = ReadSingle(bytes, 0x74).Should().BeApproximately(0.4f, 0.0001f);
         _ = ReadSingle(bytes, 0x78).Should().BeApproximately(1.5f, 0.0001f);
-        _ = ReadSingle(bytes, 0x7C).Should().BeApproximately(0.7f, 0.0001f);
-        _ = ReadSingle(bytes, 0x80).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadSingle(bytes, 0x84).Should().BeApproximately(0.9f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x7C).Should().BeApproximately(0.7f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x7E).Should().BeApproximately(0.2f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x80).Should().BeApproximately(0.9f, 0.0001f);
 
         // MVP: texture indices are 0.
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x88, 4)).Should().Be(0);
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x8C, 4)).Should().Be(0);
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x90, 4)).Should().Be(0);
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x94, 4)).Should().Be(0);
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x98, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x82, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x86, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x8A, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x8E, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x92, 4)).Should().Be(0);
+
+        _ = ReadUnorm16(bytes, 0xB8).Should().BeApproximately(0.5f, 0.0001f);
     }
 
     [TestMethod]
@@ -148,6 +150,9 @@ public sealed class CookedMaterialWriterTests
         var bits = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4));
         return BitConverter.Int32BitsToSingle((int)bits);
     }
+
+    private static float ReadUnorm16(byte[] bytes, int offset)
+        => BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2)) / 65535.0f;
 
     private static string ReadNullTerminatedUtf8(ReadOnlySpan<byte> bytes)
     {

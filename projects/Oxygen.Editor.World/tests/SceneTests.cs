@@ -87,6 +87,38 @@ public class SceneTests
     }
 
     [TestMethod]
+    public async Task GeometryMaterialSlot_SerializesOnlyMaterialUri()
+    {
+        var scene = new Scene(this.ExampleProject) { Name = "Material Slot Scene" };
+        var node = new SceneNode(scene) { Name = "Cube" };
+        var geometry = new GeometryComponent
+        {
+            Name = "Geometry",
+            Node = node,
+            Geometry = new("asset:///Engine/Generated/BasicShapes/Cube"),
+        };
+        var materialSlot = new Slots.MaterialsSlot();
+        materialSlot.Material.Uri = new("asset:///Content/Materials/Red.omat.json");
+        geometry.OverrideSlots.Add(materialSlot);
+        node.Components.Add(geometry);
+        scene.RootNodes.Add(node);
+
+        var serializer = new SceneSerializer(this.ExampleProject);
+        await using var stream = new MemoryStream();
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        var json = Encoding.UTF8.GetString(stream.ToArray());
+
+        _ = json.Should().Contain("asset:///Content/Materials/Red.omat.json");
+        _ = json.Should().NotContain("DescriptorPath");
+        _ = json.Should().NotContain("CookedPath");
+        _ = json.Should().NotContain("PrimaryState");
+        _ = json.Should().NotContain("DerivedState");
+        _ = json.Should().NotContain("RuntimeAvailability");
+        _ = json.Should().NotContain("ThumbnailKey");
+        _ = json.Should().NotContain("Diagnostic");
+    }
+
+    [TestMethod]
     public async Task Environment_StaleSunNodeId_SurvivesJsonRoundTrip()
     {
         var staleSunNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");

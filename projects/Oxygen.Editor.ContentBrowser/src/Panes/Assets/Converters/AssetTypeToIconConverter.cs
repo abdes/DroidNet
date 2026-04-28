@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Data;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Models;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
@@ -15,6 +16,20 @@ public partial class AssetTypeToIconConverter : IValueConverter
     /// <inheritdoc />
     public object Convert(object value, Type targetType, object parameter, string language)
     {
+        if (value is AssetKind assetKind)
+        {
+            return assetKind switch
+            {
+                AssetKind.Image => "\uE8B9",
+                AssetKind.Scene => "\uE914",
+                AssetKind.Geometry => "\uE8C1",
+                AssetKind.Material => "\uF515",
+                AssetKind.Texture => "\uE8B9",
+                AssetKind.Folder => "\uE8B7",
+                _ => "\uE8A5",
+            };
+        }
+
         if (value is AssetType assetType)
         {
             return assetType switch
