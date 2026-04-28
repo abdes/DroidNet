@@ -234,6 +234,25 @@ Validation:
 - ShaderBake/catalog validation if any shader ABI, root binding, catalog, or
   HLSL source changes.
 
+Evidence:
+
+- Source evidence exists in `EnvironmentLightingService` and
+  `SceneRendererDeferredCore` coverage for no-environment, no-shadowing, and
+  no-volumetrics. No-environment suppresses environment frame bindings while
+  preserving scene lighting; no-shadowing suppresses shadow products while
+  preserving scene lighting; no-volumetrics preserves environment publication
+  and Stage 15 sky/height-fog rendering while suppressing VolumetricFogPass,
+  integrated light scattering, and volumetric GPU flags.
+- Validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(EnvironmentLightingService|SceneRendererDeferredCore)" --output-on-failure`
+  with 2/2 test executables passing.
+- ShaderBake/catalog validation was not run for this slice because no shader
+  source, shader ABI, root-binding, or catalog files changed. Runtime
+  CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain open
+  until the Slice F proof layout exists. VTX-M06C remains `in_progress`.
+
 ### E. Diagnostics-Only and Overlay Variant
 
 Required work:
