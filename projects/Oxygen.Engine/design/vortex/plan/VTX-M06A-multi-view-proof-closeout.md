@@ -1,6 +1,6 @@
 # VTX-M06A - Multi-View Proof Closeout
 
-Status: `in_progress`
+Status: `validated`
 
 ## 1. Goal
 
@@ -765,7 +765,7 @@ Rollback/replan trigger:
 
 ### Slice H - Runtime Validation Scene And Scripts
 
-Status: `in_progress`
+Status: `completed`
 
 Purpose:
 
@@ -790,10 +790,10 @@ Required behavior:
 - RenderDoc analyzer asserts per-view stage labels, distinct outputs, and
   surface layer order. The validation wrapper asserts runtime allocation churn
   bounds from scene-texture lease-pool telemetry.
-- Auxiliary dependency ordering is covered by the focused
-  `AuxiliaryDependencyGraph` tests. Runtime/capture validation of extracted
-  auxiliary products remains a VTX-M06A exit-gate blocker unless explicitly
-  deferred with human approval.
+- Auxiliary dependency ordering is covered by focused unit tests and runtime
+  publication tests. Runtime/capture validation now includes extracted
+  auxiliary color products consumed by a dependent view through a
+  RenderDoc-visible `Vortex.AuxView.Consume` GPU copy scope.
 - CDB gate fails any D3D12/DXGI validation message severity `WARNING` or
   higher unless allow-listed.
 
@@ -829,11 +829,29 @@ Current evidence:
   `blocking_warning_count=0`),
   `multiview-proof.renderdoc.txt` (`overall_verdict=true`,
   `stage9_scope_count=4`, `stage3_scope_count=3`,
-  `stage12_scope_count=3`, `composition_view_ids=1,2,3,4`),
+  `stage12_scope_count=3`, `composition_view_ids=1,2,3,4`,
+  `aux_consume_scope_count=1`, `aux_consume_copy_count=1`,
+  `aux_consume_before_composition=true`),
   `multiview-proof.allocation-churn.txt` (`run_frames=65`,
   `steady_state_frame_count=60`,
   `steady_state_allocations_after_warmup=0`), and
   `multiview-proof.validation.txt` (`overall_verdict=pass`).
+- Auxiliary producer/consumer runtime proof passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexMultiViewValidation.ps1 -AuxProofLayout -Output out\build-ninja\analysis\vortex\m06a-multiview\multiview-aux-proof -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4`.
+  Generated reports:
+  `multiview-aux-proof.debug-layer.report.txt` (`overall_verdict=pass`,
+  `runtime_exit_code=0`, `d3d12_error_count=0`, `dxgi_error_count=0`,
+  `blocking_warning_count=0`),
+  `multiview-aux-proof.renderdoc.txt` (`overall_verdict=true`,
+  `stage9_scope_count=4`, `stage3_scope_count=3`,
+  `stage12_scope_count=3`, `composition_view_ids=1,2,3,4`,
+  `aux_consume_scope_count=1`, `aux_consume_copy_count=1`,
+  `stage9_before_aux_consume=true`,
+  `aux_consume_before_composition=true`),
+  `multiview-aux-proof.allocation-churn.txt` (`run_frames=65`,
+  `steady_state_frame_count=60`,
+  `steady_state_allocations_after_warmup=0`), and
+  `multiview-aux-proof.validation.txt` (`overall_verdict=pass`).
 - Focused section 9 validation passed:
   `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.PreviousViewHistoryCache.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneTextureLeasePool.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.AuxiliaryDependencyGraph.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
   and
@@ -841,10 +859,8 @@ Current evidence:
   with 10/10 matched tests passing.
 - ShaderBake/catalog validation was not run because no shader bytecode, shader
   catalog, HLSL ABI, or root-binding files changed.
-- Remaining VTX-M06A exit-gate gap: the runtime/capture proof still does not
-  validate extracted auxiliary producer/consumer sampling. The current runtime
-  MultiView path does not exercise `FramePlanBuilder`'s auxiliary graph, so
-  auxiliary ordering is test-proven but not runtime/capture-proven.
+- Remaining VTX-M06A exit-gate gap: none. Offscreen-only proof remains VTX-M06B
+  and feature-gated runtime variants remain VTX-M06C.
 
 Runtime closure command shape:
 
@@ -859,7 +875,7 @@ Rollback/replan trigger:
 
 ### Slice I - Closure And Ledger Update
 
-Status: `planned`
+Status: `completed`
 
 Purpose:
 
@@ -949,7 +965,8 @@ constructed to expose the M06A contract:
 Runtime command shape:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexMultiViewValidation.ps1 -Output out\build-ninja\analysis\vortex\m06a-multiview -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexMultiViewValidation.ps1 -Output out\build-ninja\analysis\vortex\m06a-multiview\multiview-proof -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexMultiViewValidation.ps1 -AuxProofLayout -Output out\build-ninja\analysis\vortex\m06a-multiview\multiview-aux-proof -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4
 ```
 
 The generated proof package must contain:
@@ -986,6 +1003,11 @@ RenderDoc analyzer pass criteria:
 - disabled feature products are explicitly empty for disabled views and valid
   for enabled views.
 - auxiliary outputs are extracted before dependent consumers.
+- the auxiliary proof layout includes a required same-frame color texture
+  dependency submitted consumer-first; runtime resolution must order the
+  producer before the consumer, extract the producer output, and record a
+  `Vortex.AuxView.Consume` copy into the consumer output before final surface
+  composition.
 - steady-state scene-texture family allocations after warmup are `0`; if a new
   descriptor key appears after warmup, additional allocations are
   `<= count(new distinct descriptor keys)`.
