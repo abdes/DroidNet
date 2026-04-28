@@ -2,7 +2,13 @@
 
 **Phase:** 5E — Remaining Services
 **Deliverable:** D.18
-**Status:** `ready`
+**Status:** `implementation in progress`
+
+> VTX-M06B implementation note: the public `ForOffscreenScene()` facade exists,
+> but current source inspection found its validated session execution path only
+> validates inputs and ensures a `SceneRenderer`; it does not yet render into
+> the caller-provided framebuffer. The corrected implementation plan is
+> [../plan/VTX-M06B-offscreen-proof-closeout.md](../plan/VTX-M06B-offscreen-proof-closeout.md).
 
 ## Mandatory Vortex Rule
 

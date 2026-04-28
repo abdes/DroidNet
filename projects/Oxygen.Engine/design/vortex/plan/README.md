@@ -20,6 +20,7 @@ implementation-ready workstream.
 | [VTX-M05A-diagnostics-product-service.md](VTX-M05A-diagnostics-product-service.md) | Detailed implementation plan for the diagnostics product-service milestone and its runtime/tooling boundary. |
 | [VTX-M05D-conventional-shadow-parity.md](VTX-M05D-conventional-shadow-parity.md) | Detailed implementation plan for CSM parity/stability remediation followed by local-light conventional shadow expansion. |
 | [VTX-M06A-multi-view-proof-closeout.md](VTX-M06A-multi-view-proof-closeout.md) | Detailed implementation plan for multi-view proof closeout: per-view plans, state handles, serialized view-family execution, scene-texture leases, data-driven surface composition, auxiliary views, overlays, and runtime/capture proof. |
+| [VTX-M06B-offscreen-proof-closeout.md](VTX-M06B-offscreen-proof-closeout.md) | Detailed implementation plan for offscreen proof closeout: `ForOffscreenScene` execution, deferred/forward coverage, offscreen product handoff, runtime/capture proof, and allocation-churn validation. |
 
 ## Planning Rule
 
