@@ -295,24 +295,25 @@ Trace: `GOAL-002`, `GOAL-004`, `GOAL-005`, `GOAL-006`; `REQ-010`,
 Outcome: users can create/open/edit scalar material assets and assign them to
 geometry through real editor UI.
 
-Current note: the first ED-M05 implementation pass was rejected during manual
-inspection. The corrective pass must make the material workflow user-oriented:
-source descriptors under the Content authoring mount, cooked output under the
-active project's `.cooked/<mount>` root, geometry material picker refresh on
-open, and Material Editor UI built from shared editor property controls and
-DroidNet number controls.
+Current note: the corrective ED-M05 implementation pass is landed. Material
+source descriptors are created under the Content authoring mount, cooked output
+uses the active project's `.cooked/<mount>` root, geometry material picker
+refreshes on open, and the Material Editor UI uses shared editor property
+controls plus DroidNet number controls. The Material Editor identity section
+shows asset URI and editor-side asset GUID copy affordances. Formal ED-M05
+closure still needs the validation ledger row.
 
 - [x] Required LLDs are reviewed:
       `material-editor`, `content-browser-asset-identity`,
       `asset-primitives`, `content-pipeline`.
 - [x] Detailed `ED-M05` implementation plan exists.
-- [ ] Corrective workflow/UI pass is landed after the rejected first
+- [x] Corrective workflow/UI pass is landed after the rejected first
       implementation.
-- [ ] Users can create/open scalar material assets.
-- [ ] Users can inspect and edit scalar material values.
-- [ ] Users can assign material assets to geometry through asset identity.
-- [ ] Material values save and reopen.
-- [ ] Minimum scalar material descriptor/cook/preview slice is validated or a
+- [x] Users can create/open scalar material assets.
+- [x] Users can inspect and edit scalar material values.
+- [x] Users can assign material assets to geometry through asset identity.
+- [x] Material values save and reopen.
+- [x] Minimum scalar material descriptor/cook/preview slice is validated or a
       visible engine/API limitation is recorded.
 
 Exit evidence required:
