@@ -58,7 +58,7 @@ struct DemoShellPanelConfig {
   bool lighting { false };
   bool diagnostics { false };
   bool post_process { false };
-  bool ground_grid { false };
+  bool ground_grid { true };
 };
 
 //! Configuration for the demo shell and its standard panels.

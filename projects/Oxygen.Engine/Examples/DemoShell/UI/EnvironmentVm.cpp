@@ -1746,6 +1746,7 @@ auto EnvironmentVm::GetSunAzimuthDeg() const -> float
 
 auto EnvironmentVm::SetSunAzimuthDeg(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunAzimuthDeg(value);
 }
 
@@ -1756,6 +1757,7 @@ auto EnvironmentVm::GetSunElevationDeg() const -> float
 
 auto EnvironmentVm::SetSunElevationDeg(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunElevationDeg(value);
 }
 
@@ -1766,6 +1768,7 @@ auto EnvironmentVm::GetSunColorRgb() const -> glm::vec3
 
 auto EnvironmentVm::SetSunColorRgb(const glm::vec3& value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunColorRgb(value);
 }
 
@@ -1776,6 +1779,7 @@ auto EnvironmentVm::GetSunIlluminanceLx() const -> float
 
 auto EnvironmentVm::SetSunIlluminanceLx(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunIlluminanceLx(value);
 }
 
@@ -1786,6 +1790,7 @@ auto EnvironmentVm::GetSunUseTemperature() const -> bool
 
 auto EnvironmentVm::SetSunUseTemperature(bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunUseTemperature(enabled);
 }
 
@@ -1796,6 +1801,7 @@ auto EnvironmentVm::GetSunTemperatureKelvin() const -> float
 
 auto EnvironmentVm::SetSunTemperatureKelvin(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunTemperatureKelvin(value);
 }
 
@@ -1806,6 +1812,7 @@ auto EnvironmentVm::GetSunSourceAngleDeg() const -> float
 
 auto EnvironmentVm::SetSunSourceAngleDeg(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunSourceAngleDeg(value);
 }
 
@@ -1816,6 +1823,7 @@ auto EnvironmentVm::GetSunAtmosphereLightSlot() const -> int
 
 auto EnvironmentVm::SetSunAtmosphereLightSlot(int value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunAtmosphereLightSlot(value);
 }
 
@@ -1827,6 +1835,7 @@ auto EnvironmentVm::GetSunUsePerPixelAtmosphereTransmittance() const -> bool
 auto EnvironmentVm::SetSunUsePerPixelAtmosphereTransmittance(bool enabled)
   -> void
 {
+  PrepareForManualOverride();
   service_->SetSunUsePerPixelAtmosphereTransmittance(enabled);
 }
 
@@ -1838,6 +1847,7 @@ auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec4
 auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value)
   -> void
 {
+  PrepareForManualOverride();
   service_->SetSunAtmosphereDiskLuminanceScale(value);
 }
 
@@ -1848,6 +1858,7 @@ auto EnvironmentVm::GetSunShadowBias() const -> float
 
 auto EnvironmentVm::SetSunShadowBias(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowBias(value);
 }
 
@@ -1858,6 +1869,7 @@ auto EnvironmentVm::GetSunShadowNormalBias() const -> float
 
 auto EnvironmentVm::SetSunShadowNormalBias(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowNormalBias(value);
 }
 
@@ -1868,6 +1880,7 @@ auto EnvironmentVm::GetSunShadowResolutionHint() const -> int
 
 auto EnvironmentVm::SetSunShadowResolutionHint(int value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowResolutionHint(value);
 }
 
@@ -1878,6 +1891,7 @@ auto EnvironmentVm::GetSunShadowCascadeCount() const -> int
 
 auto EnvironmentVm::SetSunShadowCascadeCount(int value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowCascadeCount(value);
 }
 
@@ -1888,6 +1902,7 @@ auto EnvironmentVm::GetSunShadowSplitMode() const -> int
 
 auto EnvironmentVm::SetSunShadowSplitMode(int value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowSplitMode(value);
 }
 
@@ -1898,6 +1913,7 @@ auto EnvironmentVm::GetSunShadowMaxDistance() const -> float
 
 auto EnvironmentVm::SetSunShadowMaxDistance(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowMaxDistance(value);
 }
 
@@ -1908,6 +1924,7 @@ auto EnvironmentVm::GetSunShadowDistributionExponent() const -> float
 
 auto EnvironmentVm::SetSunShadowDistributionExponent(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowDistributionExponent(value);
 }
 
@@ -1918,6 +1935,7 @@ auto EnvironmentVm::GetSunShadowTransitionFraction() const -> float
 
 auto EnvironmentVm::SetSunShadowTransitionFraction(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowTransitionFraction(value);
 }
 
@@ -1928,6 +1946,7 @@ auto EnvironmentVm::GetSunShadowDistanceFadeoutFraction() const -> float
 
 auto EnvironmentVm::SetSunShadowDistanceFadeoutFraction(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowDistanceFadeoutFraction(value);
 }
 
@@ -1938,6 +1957,7 @@ auto EnvironmentVm::GetSunShadowCascadeDistance(const int index) const -> float
 
 auto EnvironmentVm::SetSunShadowCascadeDistance(int index, float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunShadowCascadeDistance(index, value);
 }
 

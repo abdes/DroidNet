@@ -65,7 +65,6 @@ auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
   }
 
   panel_config.lighting = false;
-  panel_config.ground_grid = false;
   return panel_config;
 }
 

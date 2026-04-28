@@ -767,33 +767,15 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       return;
     }
 
-    if (preset_index_ == kPresetUseScene) {
-      pending_changes_ = false;
-      dirty_domains_ = ToMask(DirtyDomain::kNone);
-      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
-      needs_sync_ = true;
-      SyncFromSceneIfNeeded();
-    } else if (preset_index_ == kPresetCustom) {
-      // Custom mode applies persisted settings when available; otherwise it
-      // mirrors the scene as source-of-truth until user edits.
-      if (has_persisted_settings_) {
-        pending_changes_ = true;
-        dirty_domains_ = ToMask(DirtyDomain::kAll);
-        needs_sync_ = false;
-        skybox_dirty_ = true;
-      } else {
-        pending_changes_ = false;
-        dirty_domains_ = ToMask(DirtyDomain::kNone);
-        needs_sync_ = true;
-        SyncFromSceneIfNeeded();
-      }
-    } else {
-      // Built-in presets are applied by EnvironmentVm, not synced from scene.
-      pending_changes_ = false;
-      dirty_domains_ = ToMask(DirtyDomain::kNone);
-      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
-      needs_sync_ = false;
-    }
+    // Scene-authored demos must start from the scene every time. Persisted
+    // custom state is only re-applied after the user explicitly edits the
+    // environment panel, which switches the service back to Custom mode.
+    preset_index_ = kPresetUseScene;
+    pending_changes_ = false;
+    dirty_domains_ = ToMask(DirtyDomain::kNone);
+    batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+    needs_sync_ = true;
+    SyncFromSceneIfNeeded();
   }
 }
 
@@ -4120,6 +4102,14 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
+    if (!config_.force_environment_override) {
+      needs_sync_ = true;
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      return;
+    }
+
     if (config_.force_environment_override) {
       needs_sync_ = false;
       pending_changes_ = true;
