@@ -154,8 +154,16 @@ public:
     float opacity { 1.0F };
   };
 
+  struct RuntimeTextureCompositionLayer {
+    std::shared_ptr<graphics::Texture> source_texture {};
+    ViewPort viewport {};
+    float opacity { 1.0F };
+    std::string debug_name {};
+  };
+
   struct RuntimeCompositionInput {
     std::vector<RuntimeCompositionLayer> layers {};
+    std::vector<RuntimeTextureCompositionLayer> texture_layers {};
     std::shared_ptr<graphics::Framebuffer> composite_target {};
     std::shared_ptr<graphics::Surface> target_surface {};
   };
