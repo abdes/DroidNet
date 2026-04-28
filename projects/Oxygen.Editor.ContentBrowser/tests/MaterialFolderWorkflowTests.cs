@@ -47,4 +47,24 @@ public sealed class MaterialFolderWorkflowTests
 
         Assert.AreEqual("/Content/Materials/Subfolder", actual);
     }
+
+    [TestMethod]
+    public void CreateMaterialTargetSelection_WhenLocalMountIsSelected_ShouldPassLocalMountName()
+    {
+        var project = new ProjectContext
+        {
+            ProjectId = Guid.NewGuid(),
+            Name = "Test",
+            Category = Category.Games,
+            ProjectRoot = @"C:\Project",
+            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", @"D:\Studio\SharedContent")],
+            Scenes = [],
+        };
+
+        var selection = AssetsViewModel.CreateMaterialTargetSelection(project, "/StudioLibrary/Materials/Shared");
+
+        Assert.AreEqual("/StudioLibrary/Materials/Shared", selection.ProjectRelativeFolder);
+        Assert.AreEqual("StudioLibrary", selection.LocalMountName);
+    }
 }

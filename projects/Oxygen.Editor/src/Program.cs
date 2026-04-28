@@ -306,6 +306,7 @@ public static partial class Program
         container.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
         container.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
         container.Register<IProjectCookScopeProvider, ProjectCookScopeProvider>(Reuse.Singleton);
+        container.Register<IAuthoringTargetResolver, AuthoringTargetResolver>(Reuse.Singleton);
         container.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);

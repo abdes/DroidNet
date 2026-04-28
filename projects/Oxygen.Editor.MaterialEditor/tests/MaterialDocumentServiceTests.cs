@@ -6,6 +6,8 @@ using AwesomeAssertions;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -154,6 +156,31 @@ public sealed class MaterialDocumentServiceTests
             r.OperationKind == MaterialOperationKinds.EditScalar
             && r.Diagnostics.Single().Domain == FailureDomain.MaterialAuthoring
             && r.Diagnostics.Single().Code == MaterialDiagnosticCodes.FieldRejected);
+    }
+
+    [TestMethod]
+    public void ProjectMaterialSourcePathResolver_ShouldResolveLocalFolderMountMaterialUri()
+    {
+        using var workspace = new TempWorkspace();
+        var contextService = new ProjectContextService();
+        contextService.Activate(
+            new ProjectContext
+            {
+                ProjectId = Guid.NewGuid(),
+                Name = "Project",
+                Category = Category.Games,
+                ProjectRoot = @"C:\Project",
+                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+                LocalFolderMounts = [new LocalFolderMount("StudioLibrary", workspace.Root)],
+                Scenes = [],
+            });
+        var resolver = new ProjectMaterialSourcePathResolver(contextService);
+
+        var location = resolver.Resolve(new Uri("asset:///StudioLibrary/Materials/Shared.omat.json"));
+
+        _ = location.MountName.Should().Be("StudioLibrary");
+        _ = location.SourcePath.Should().Be(Path.Combine(workspace.Root, "Materials", "Shared.omat.json"));
+        _ = location.SourceRelativePath.Should().Be("Materials/Shared.omat.json");
     }
 
     private static MaterialSource ReadMaterial(TempWorkspace workspace, string relativePath)
