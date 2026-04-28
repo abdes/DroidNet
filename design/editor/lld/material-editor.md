@@ -313,10 +313,11 @@ Material picker:
 `Create New` flow:
 
 1. Opens a compact prompt for material name and target folder.
-2. Defaults the target folder to `/Content/Materials` under the active project.
-   A content-browser folder becomes the initial target only when it is already
-   under `/Content`; arbitrary project-root folders such as `Scenes` are not
-   inferred as material targets.
+2. Resolves the target folder using the material row in
+   `project-layout-and-templates.md` default creation target table. Project
+   root, `Config`, `Packages`, and derived roots resolve to
+   `/Content/Materials`; an explicit authored mount root resolves to
+   `/<Mount>/Materials`.
 3. Creates `{Name}.omat.json` via `IMaterialDocumentService.CreateAsync`.
 4. Opens the new material document. Assignment to a geometry slot is a separate
    explicit picker action unless the picker was launched from a slot and the

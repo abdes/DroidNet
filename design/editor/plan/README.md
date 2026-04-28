@@ -20,7 +20,7 @@ Detailed milestone/work-package plans should include:
 5. Non-Scope
 6. Implementation Sequence
 7. Project/File Touch Points
-8. Dependency And Migration Risks
+8. Dependency And Execution Risks
 9. Validation Gates
 10. Status Ledger Hook
 
@@ -50,3 +50,5 @@ current milestone ID after the `ED-M01` insertion.
 | [ED-M03-authoring-foundation.md](./ED-M03-authoring-foundation.md) | `ED-M03` | Scene document commands, selection, scene explorer hierarchy operations, dirty state, undo/redo, save/reopen, and authoring diagnostics. |
 | [ED-M04-scene-editing-ux-component-inspectors.md](./ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | Component inspectors, environment authoring, settings handling, and scene-side material slot identity. |
 | [ED-M05-scalar-material-authoring.md](./ED-M05-scalar-material-authoring.md) | `ED-M05` | Scalar material documents, material picker identity, geometry assignment, descriptor save/reopen, and minimum material cook/catalog slice. |
+| [ED-M06-asset-identity-content-browser.md](./ED-M06-asset-identity-content-browser.md) | `ED-M06` | Content Browser asset identity rows, shared state reducer, typed picker projection, missing/broken references, and browser persistence boundaries. |
+| [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | Game project layout, predefined templates, project creation, scene/material authoring targets, Content Browser roots, and material picker filtering before content pipeline work. |

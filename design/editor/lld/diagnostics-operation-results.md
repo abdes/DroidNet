@@ -1,6 +1,6 @@
 # Diagnostics And Operation Results LLD
 
-Status: `review`
+Status: `ED-M06 review-ready`
 
 ## 1. Purpose
 
@@ -221,6 +221,20 @@ when the owning domain remains unchanged:
 
 - `OXE.DOCUMENT.MATERIAL.*` for material document save/open failures.
 - `OXE.LIVESYNC.MATERIAL.*` for material assignment sync warnings.
+
+ED-M06 prefix allocations:
+
+| Prefix | Owner |
+| --- | --- |
+| `OXE.ASSETID.*` | Extended asset browse/reduce/resolve diagnostics. |
+| `OXE.PROJECT.CONTENT_ROOT.*` | Browser-visible project content-root selection and restore diagnostics. |
+
+ED-M06 reuses `OXE.CONTENTPIPELINE.*` for stale/cooked-state warnings produced
+from descriptor/cooked timestamp comparison. ED-M06 does not allocate
+`OXE.ASSETCOOK.*`; full cook execution is ED-M07. ED-M06 also does not add an
+`OXE.CONTENTBROWSER.*` prefix. Navigation and refresh failures route through
+`OXE.ASSETID.*` when the failed work is catalog/browser data, or
+`OXE.PROJECT.CONTENT_ROOT.*` when the failed work is root selection or restore.
 
 ### Failure Domain
 
@@ -507,6 +521,26 @@ ED-M05 implementation adds the corresponding `FailureDomain` values and
 diagnostic-code constants to `Oxygen.Core` before material workflows publish
 results.
 
+ED-M06 producers and operation kinds:
+
+| Producer | Operation Kind | Domain |
+| --- | --- | --- |
+| content browser asset provider | `Asset.Browse` | `AssetIdentity` |
+| content browser / picker provider | `Asset.Query` | `AssetIdentity` |
+| content browser / picker provider | `Asset.Resolve` | `AssetIdentity` |
+| content browser shell | `ContentBrowser.Navigate` | `AssetIdentity` / `ProjectContentRoots` |
+| content browser shell | `ContentBrowser.Refresh` | `AssetIdentity` |
+| content browser row/details | `Asset.CopyIdentity` | `AssetIdentity` |
+| material picker | `Material.Pick` | `AssetIdentity` |
+
+ED-M06 operation results should be quiet for high-frequency filter/search
+changes. Results are required for refresh/query/resolve failures, broken
+descriptor rows, invalid root selection, and user-triggered copy/open actions
+that fail.
+
+Identity-reducer failures are diagnostics on the triggering browse/query/resolve
+result; they are not a separate top-level operation kind in ED-M06.
+
 ## 12. Operation Results And Diagnostics
 
 ### Status Reduction Rule
@@ -631,6 +665,21 @@ Straightforward tests should cover:
 
 UI tests are appropriate for Project Browser inline failure display once ED-M01
 implements the surface.
+
+ED-M06 diagnostics are complete when:
+
+- content browser query failure publishes `Asset.Browse` or `Asset.Query`
+  under `AssetIdentity` with selected folder and search/filter facts.
+- broken descriptor rows carry `OXE.ASSETID.Descriptor.Broken` diagnostics
+  without crashing browser refresh.
+- missing referenced assets carry `OXE.ASSETID.Resolve.Missing` and preserve
+  the unresolved URI in `AffectedScope.AssetVirtualPath`.
+- invalid selected/restored browser roots publish
+  `OXE.PROJECT.CONTENT_ROOT.InvalidSelection` under `ProjectContentRoots`.
+- stale source/cooked state is a warning diagnostic under `ContentPipeline`,
+  not an `AssetCook` failure.
+- Content Browser output/log summaries include operation ID and selected
+  virtual folder for failed browse/refresh operations.
 
 ## 15. Open Issues
 

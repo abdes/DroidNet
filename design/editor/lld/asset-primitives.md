@@ -1,6 +1,6 @@
 # Asset Primitives LLD
 
-Status: `ED-M05 material slice implementation-ready, ED-M06/ED-M07 re-review later`
+Status: `ED-M06 review-ready`
 
 ## 1. Purpose
 
@@ -70,8 +70,9 @@ Brownfield gaps:
 
 - `AssetRecord` is intentionally minimal and does not carry asset type or
   state. Editor adapters must enrich records without mutating the primitive.
-- source, generated, cooked, stale, missing, and broken states are not a
-  primitive enum in `Oxygen.Assets`; the content-browser LLD owns UI state.
+- source, generated, descriptor, cooked, stale, mounted, missing, and broken
+  states are not primitive enums in `Oxygen.Assets`; the content-browser LLD
+  owns UI state and runtime-availability overlays.
 - full descriptor/manifest orchestration is not a primitive; it belongs to
   `Oxygen.Editor.ContentPipeline`.
 
@@ -201,10 +202,35 @@ public sealed record AssetChange(
 | `Updated` | same identity, changed metadata/content. |
 | `Relocated` | identity changed; `PreviousUri` carries the old value. |
 
-Catalogs do not compute user-facing `AssetState`; they provide records and
-changes. `content-browser-asset-identity.md` defines state enrichment.
+Catalogs do not compute user-facing `AssetState`, `AssetKind`, or runtime
+mount availability; they provide records and changes.
+`content-browser-asset-identity.md` defines state enrichment.
 
-### 7.4 Material Source Contract
+### 7.4 Catalog Identity Limits
+
+`AssetRecord` remains intentionally minimal in ED-M06:
+
+```csharp
+public sealed record AssetRecord(Uri Uri)
+{
+    public string Name { get; }
+}
+```
+
+ED-M06 must not add browser state fields directly to `AssetRecord`. The same
+record may represent:
+
+- source descriptor: `asset:///Content/Materials/Red.omat.json`.
+- cooked index entry: `asset:///Content/Materials/Red.omat`.
+- generated asset: `asset:///Engine/Generated/Materials/Default`.
+- local/foreign source file under a mounted folder.
+
+Consumers that need file paths, timestamps, asset type, diagnostics, or mount
+availability resolve those facts in editor-owned adapters using
+`ProjectContext`, catalog provider type, and storage services. This keeps
+`Oxygen.Assets` usable by tools and tests without pulling in editor UI policy.
+
+### 7.5 Material Source Contract
 
 ED-M05 material authoring uses `MaterialSource` with schema
 `oxygen.material.v1` and type `PBR`.
@@ -231,7 +257,7 @@ Material round-trip preserves every `MaterialSource` field not edited by
 ED-M05, including texture-reference payloads. Scalar editing must replace only
 the edited immutable record branch and leave unedited descriptor data intact.
 
-### 7.5 Import/Cook Contracts
+### 7.6 Import/Cook Contracts
 
 `MaterialSourceImporter`:
 
@@ -264,6 +290,7 @@ services:
 | --- | --- |
 | Material document service | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`. |
 | Material picker | `IAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`. |
+| Content browser identity reducer | `IAssetCatalog`, `AssetRecord`, `AssetUriHelper`, `AssetChange`, `AssetQueryScope`. |
 | Content pipeline material slice | `MaterialSourceImporter`, `CookedMaterialWriter`, `LooseCookedBuildService`. |
 | Geometry material slot command | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution. |
 
@@ -282,6 +309,10 @@ UI belongs to:
 
 This LLD only requires UI consumers to preserve asset URI identity and not
 display raw cooked filesystem paths as the authored identity.
+
+ED-M06 Content Browser UI consumes primitive records through an editor-owned
+`ContentBrowserAssetItem` projection. That projection must not move into
+`Oxygen.Assets`.
 
 ## 10. Persistence And Round Trip
 
@@ -362,7 +393,15 @@ ED-M05 gates:
 
 ED-M06/ED-M07 gates:
 
-- broader source/generated/cooked/pak state coverage.
+- ED-M06: Content Browser state reducer merges source descriptor and cooked
+  index records by logical identity without changing `AssetRecord`.
+- ED-M06: `AssetChangeKind.Relocated` is consumed using `PreviousUri` so cached
+  browser rows do not keep stale identities.
+- ED-M06: generated, source, descriptor, cooked, stale, missing, and broken
+  browser states are derived outside `Oxygen.Assets`.
+- ED-M06: runtime mounted availability is represented as an editor overlay, not
+  as a primitive catalog fact.
+- broader pak state coverage.
 - scoped cook/index validation for complete scenes and dependencies.
 - inspect and mount refresh workflows.
 

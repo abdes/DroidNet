@@ -71,9 +71,8 @@ Brownfield gaps:
 - Scene explorer undo records inverse delegates, but command result,
   dirty-state update, validation invalidation, and live-sync failure handling
   are not centralized.
-- `ProjectManagerService.SaveSceneAsync` still carries legacy save/cook
-  coupling; ED-M03 must make scene save reliable but does not own the final
-  ED-M07 content-pipeline extraction.
+- `ProjectManagerService.SaveSceneAsync` persists authoring scene data only;
+  explicit scene cook orchestration is deferred to the content pipeline.
 
 ## 5. Target Design
 
@@ -237,12 +236,9 @@ serializer path. ED-M03 must prove:
 - dirty state is cleared only after successful save.
 - failed save leaves dirty state set.
 
-Cook side effects in the legacy save path are tolerated as brownfield behavior
-but must not become the command contract. `Scene.Save` reports authoring-data
-persistence only. If the legacy cook side effect fails after scene data was
-saved, the save result remains based on scene persistence; the cook failure is
-logged and may emit a separate `ContentPipeline` diagnostic. ED-M07 owns final
-cook orchestration.
+Scene save has no cook side effect. `Scene.Save` reports authoring-data
+persistence only. Explicit scene cook orchestration and any related
+`ContentPipeline` diagnostics are owned by the content pipeline.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 

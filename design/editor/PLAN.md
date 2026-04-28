@@ -61,6 +61,7 @@ flowchart LR
     M04[ED-M04<br/>Scene editing UX]
     M05[ED-M05<br/>Materials]
     M06[ED-M06<br/>Assets and content browser]
+    M06A[ED-M06A<br/>Game project layout and templates]
     M07[ED-M07<br/>Content pipeline]
     M08[ED-M08<br/>Runtime parity and validation]
     M09[ED-M09<br/>Viewport authoring tools]
@@ -69,14 +70,14 @@ flowchart LR
     M00 --> M01
     M01 --> M03
     M02 --> M03
-    M03 --> M04 --> M05 --> M06 --> M07 --> M08 --> M09 --> M10
-    M00 -.parallel validation.-> M02
+    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M08 --> M09 --> M10
 ```
 
-`ED-M02` has partially landed behavior and can be validated in parallel with
-`ED-M00` and `ED-M01`. `ED-M03` LLD review and detailed planning may proceed in
-parallel, but `ED-M03` implementation must not rely on live preview as evidence
-until `ED-M02` is validated.
+`ED-M02` remains landed but not fully validated. Later authoring milestones may
+keep their own manual validation evidence separate from live-preview evidence
+until `ED-M02` is validated. `ED-M06A` is the next prerequisite before
+`ED-M07`; content pipeline work must not start on stale project layout or
+template assumptions.
 
 ## 4. Milestone Roadmap
 
@@ -88,7 +89,8 @@ until `ED-M02` is validated.
 | `ED-M03` | Authoring foundation | Scene documents, commands, dirty state, undo/redo, selection model, scene explorer, operation results, and save/reopen form a reliable authoring core. | `documents-and-commands`, `scene-authoring-model`, `scene-explorer`, `diagnostics-operation-results` | required before implementation |
 | `ED-M04` | Scene editing UX and component inspectors | V0.1 scene components except real material asset authoring have production-ready inspectors, defaults, validation, and live-sync requests. | `property-inspector`, `environment-authoring`, `settings-architecture`, `live-engine-sync`, `runtime-integration` | required before implementation |
 | `ED-M05` | Scalar material authoring | Users can create/open/edit scalar material assets and assign them to geometry through real editor UI; a minimum material cook/preview slice is defined and validated. | `material-editor`, `content-browser-asset-identity`, `asset-primitives`, `content-pipeline` | required before implementation |
-| `ED-M06` | Asset identity and content browser | Source, generated, descriptor, cooked, mounted, missing, and broken asset states are visible and selectable by identity. | `content-browser-asset-identity`, `asset-primitives`, `project-services`, `diagnostics-operation-results` | required before implementation |
+| `ED-M06` | Asset identity and content browser | Source, generated, descriptor, cooked, missing, broken, and runtime-availability overlay states are visible and selectable by identity; authoritative mounted state is deferred to `ED-M07`. | `content-browser-asset-identity`, `asset-primitives`, `project-services`, `diagnostics-operation-results` | required before implementation |
+| `ED-M06A` | Game project layout and template standardization | Newly created projects, predefined templates, scene/material creation targets, content-root navigation, source-media placement, and derived-root presentation match the accepted game-project filesystem contract. | `project-layout-and-templates`, `project-services`, `project-workspace-shell`, `content-browser-asset-identity`, `material-editor`, `scene-authoring-model`, `diagnostics-operation-results` | required before implementation |
 | `ED-M07` | Content pipeline and cooking | Descriptor/manifest generation, cook, inspect, cooked validation, catalog refresh, and mount refresh work as explicit workflows. | `content-pipeline`, `project-services`, `asset-primitives`, `runtime-integration`, `diagnostics-operation-results` | required before implementation |
 | `ED-M08` | Runtime parity and standalone validation | A minimum authored content slice proves embedded preview, cooked output, mounted content, and standalone runtime load agree. | `standalone-runtime-validation`, `live-engine-sync`, `runtime-integration`, `content-pipeline`, `environment-authoring` | required before implementation |
 | `ED-M09` | Viewport authoring tools and overlays | Camera navigation, frame selected/all, selection highlight, transform gizmos, node icons, and overlays are usable in supported viewport layouts. | `viewport-and-tools`, `documents-and-commands`, `scene-explorer`, `runtime-integration` | required before implementation |
@@ -257,11 +259,50 @@ LLD work:
 
 Exit gate:
 
-- Content browser distinguishes source, generated/descriptor, cooked, mounted,
-  missing, and broken states.
+- Content browser distinguishes source, generated/descriptor, cooked, missing,
+  broken, and runtime-availability overlay states. ED-M06 may show
+  `Unknown`/`NotMounted`; authoritative `Mounted` is deferred to `ED-M07`.
 - Asset picker returns typed asset identity.
 - Broken references become visible diagnostics.
 - Authoring data avoids raw cooked-path text as the user-facing identity.
+
+### ED-M06A - Game Project Layout And Template Standardization
+
+Purpose: make the accepted game-project filesystem contract real before
+content pipeline and runtime milestones depend on it.
+
+LLD work:
+
+- `project-layout-and-templates.md` is reviewed in detail for project folder
+  layout, authored content roots, local folder mounts, derived roots,
+  predefined template payloads, template descriptors, and creation targets.
+- `project-services.md` is reviewed for project manifest, project creation,
+  validation, active project context, and cook-scope facts.
+- `project-workspace-shell.md` is reviewed only for create-from-template
+  activation and starter-scene opening behavior.
+- `content-browser-asset-identity.md` is reviewed for browser roots, folder
+  navigation, source-media rows, material picker filtering, and derived-state
+  presentation.
+- `material-editor.md` and `scene-authoring-model.md` are reviewed only for
+  material and scene source locations under authored content roots.
+- `diagnostics-operation-results.md` is reviewed for template, layout, mount,
+  and browser-target failure results.
+
+Exit gate:
+
+- Creating each predefined project template produces a valid project with a
+  unique project id, required folder skeleton, valid manifest, required
+  template media, and starter scene under `Content/Scenes`.
+- New scenes are authored under `Content/Scenes/*.oscene.json`.
+- New materials are authored under `Content/Materials/*.omat.json`.
+- Content Browser folder navigation refreshes visible rows without restart.
+- Material Picker shows one logical row per material and no unrelated project
+  files.
+- Source media, config, packages, and derived roots are presented distinctly
+  and never become implicit authored-asset creation targets.
+- Extra authoring mounts and explicitly selected local mounts follow the
+  project-layout target rules.
+- Project/template/layout failures produce visible operation results.
 
 ### ED-M07 - Content Pipeline And Cooking
 
@@ -359,7 +400,8 @@ Exit gate:
 | LLD | First Milestone That Needs Detailed Review | Notes |
 | --- | --- | --- |
 | `project-workspace-shell.md` | `ED-M00` scaffold; full review at `ED-M01` | Project Browser/workspace behavior is implemented in `ED-M01`. |
-| `project-services.md` | `ED-M01` | Project metadata/policy starts with activation and returns for cook scope in `ED-M07`. |
+| `project-services.md` | `ED-M01` | Project metadata/policy starts with activation, is re-reviewed in `ED-M06A` for project layout/template creation, and returns for cook scope in `ED-M07`. |
+| `project-layout-and-templates.md` | `ED-M06A` | Gating LLD for game project folder layout, template payloads, authored roots, source media, derived roots, and default creation targets. |
 | `documents-and-commands.md` | `ED-M03` | Gating LLD for authoring foundation and selection model. |
 | `scene-authoring-model.md` | `ED-M03` | Gating LLD for component persistence and authoring source of truth. |
 | `scene-explorer.md` | `ED-M03` | Gating LLD for hierarchy and selection behavior. |
@@ -368,7 +410,7 @@ Exit gate:
 | `settings-architecture.md` | `ED-M04` | Scaffold reviewed for project settings in `ED-M01`; detailed review in `ED-M04`; re-reviewed in `ED-M07` for project cook scope and content-root settings. |
 | `material-editor.md` | `ED-M05` | Gating LLD for scalar material authoring. |
 | `asset-primitives.md` | `ED-M05` | Needed by material, browser, and pipeline work. |
-| `content-browser-asset-identity.md` | `ED-M05` material picker slice; full review at `ED-M06` | Starts with material picking, completed in content browser milestone. |
+| `content-browser-asset-identity.md` | `ED-M05` material picker slice; full review at `ED-M06`; layout-root re-check at `ED-M06A` | Starts with material picking, completed in content browser milestone, then aligned with project layout/template rules. |
 | `content-pipeline.md` | `ED-M05` material slice; full review at `ED-M07` | Minimum material descriptor/cook slice first; full pipeline later. |
 | `runtime-integration.md` | `ED-M02` | Re-reviewed in `ED-M04` for sync completion, `ED-M07` for mount, `ED-M08` for parity, and `ED-M09` for input bridge. |
 | `live-engine-sync.md` | `ED-M04` | Needed once command-driven mutations are in place. |
@@ -392,7 +434,7 @@ Detailed plans are expected to contain:
 - scope and non-scope
 - implementation sequencing
 - likely project/file touch points
-- dependency and migration risks
+- dependency and execution risks
 - validation gates
 - rollback or containment notes where useful
 
@@ -417,6 +459,8 @@ Active milestone plans:
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` |
 | [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` |
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` |
+| [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` |
+| [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` |
 
 ## 8. Milestone Closure
 

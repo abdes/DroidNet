@@ -212,12 +212,9 @@ Tasks:
   successful scene save.
 - Ensure failed save leaves dirty state set and publishes a `Scene.Save` /
   `Document` result.
-- Reconcile legacy `ProjectManagerService.SaveSceneAsync` cook side effect:
-  tolerated for ED-M03, but not treated as the command contract.
-- Treat authoring-data save success independently from any legacy cook side
-  effect. `Scene.Save` status and dirty clearing are based on scene persistence;
-  a cook side-effect failure is logged and may publish a separate
-  `ContentPipeline` diagnostic without changing the `Scene.Save` result.
+- Keep `ProjectManagerService.SaveSceneAsync` as authoring-data persistence
+  only. Scene cook is not a save side effect; explicit cook orchestration is
+  owned by the content pipeline.
 - Validate save/reopen for create primitive, create light, rename, delete, and
   reparent.
 
