@@ -76,28 +76,32 @@ Important baseline facts:
 
 ### NEXT: VTX-M07 - Production Readiness And Legacy Retirement
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 **Purpose:** Turn the validated Vortex runtime surfaces into the sole
 production-ready renderer path and retire remaining legacy dependencies safely.
 
 **Why this is next:** `VTX-M06A`, `VTX-M06B`, and `VTX-M06C` have validated
-multi-view, offscreen, and feature-gated runtime proof surfaces. The next proof
-gap is production-readiness and legacy-retirement planning.
+multi-view, offscreen, and feature-gated runtime proof surfaces. The active
+proof gap is production-readiness and safe legacy-retirement execution.
 
-**Validated prerequisite work packages:** `VTX-M03`, `VTX-M04D.4`,
-`VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`, `VTX-M06A`, `VTX-M06B`, and
-`VTX-M06C`.
+**Prerequisite work packages:** `VTX-M03` is landed with downstream validated
+surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
+`VTX-M06A`, `VTX-M06B`, and `VTX-M06C` are validated.
 
 **Active work packages:** `VTX-M07 - Production readiness and legacy
 retirement`.
 
-**Detailed plan:** not yet authored.
+**Detailed plan:**
+[`plan/VTX-M07-production-readiness-legacy-retirement.md`](plan/VTX-M07-production-readiness-legacy-retirement.md).
 
 **In scope:**
 
 - Legacy renderer retirement plan and remaining migration inventory.
 - Production-readiness validation across required examples/tests.
+- Demo refresh/fix/testing for required demos that lack recent accepted proof,
+  while citing recent M04-M06 proof for heavily exercised demos whose code path
+  is unchanged.
 - Explicit residual gaps for post-baseline rendering families.
 
 **Out of scope:**
@@ -114,13 +118,15 @@ retirement`.
 
 **Exit gate:**
 
-- Detailed VTX-M07 plan exists before implementation claims.
+- Static legacy seam validation passes.
 - Required examples/tests run through Vortex without legacy fallback paths.
+- Required demos are either freshly smoke-tested or covered by cited recent
+  proof.
 - Legacy removal or isolation path is documented and validated.
 
-**Recommended verification:** start by inventorying current legacy renderer
-references and Vortex example coverage, then define focused proof slices before
-any source removal.
+**Recommended verification:** start with the static seam guard and stale demo
+cleanup, then refresh/test demos that lack recent accepted proof before
+consolidating the full production-readiness suite.
 
 ## 5. Milestone Roadmap
 
@@ -149,7 +155,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M06A | Multi-view proof closeout | `validated` | VTX-M05A, VTX-M05B, VTX-M05C, VTX-M05D | B1 per-view plan/state-handle substrate, B2 classification payloads, C `PerViewScope` serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H runtime proof tooling are implemented and validated. Standard and auxiliary MultiView proof layouts pass focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, and 60-frame allocation-churn proof, including runtime/capture proof that an auxiliary producer output is extracted and consumed by a dependent view. |
 | VTX-M06B | Offscreen proof closeout | `validated` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios are implemented and validated. Closure proof covers focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, non-empty offscreen product proof, downstream texture composition, 60-frame allocation-churn proof, and user visual confirmation. |
 | VTX-M06C | Feature-gated runtime variants | `validated` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants with focused tests, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, and user visual confirmation. |
-| VTX-M07 | Production readiness and legacy retirement | `planned` | VTX-M06C | All required examples/tests ported; legacy renderer removal path is safe and documented. |
+| VTX-M07 | Production readiness and legacy retirement | `in_progress` | VTX-M06C | Static legacy seam guard, stale demo/doc cleanup, required demo refresh/testing, production proof-suite consolidation, and safe legacy retirement. |
 | VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M07 or explicit reprioritization | Geometry virtualization, material composition, indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
 
 ## 6. Environment Milestone Decomposition
@@ -541,7 +547,7 @@ Parallelism rules:
 | Multi-view | VTX-M06A | `validated` | B1 per-view plan/state-handle substrate, B2 classification payloads, C serialized view-family loop, D scene-texture lease pool, E data-driven surface composition, F auxiliary dependency graph, G overlay lanes/view extensions, and H proof-layout/tooling are implemented and validated with focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, 60-frame allocation-churn proof, and runtime/capture proof that an auxiliary producer output is extracted and consumed by a dependent view. |
 | Offscreen rendering | VTX-M06B | `validated` | Scene-derived offscreen facade with deferred/forward coverage, product final-state proof, deferred preview plus solid forward capture runtime proof, RenderDoc scripted analysis, non-empty product proof, CDB/debug-layer audit, downstream composition proof, 60-frame allocation-churn proof, and user visual confirmation. |
 | Feature-gated variants | VTX-M06C | `validated` | Feature-profile vocabulary/carry, depth-only/shadow-only stage gates, no-environment/no-shadowing/no-volumetrics gates, diagnostics-only ledger/no-scene-product gates, MultiView runtime proof layout, CDB/debug-layer audit, RenderDoc scripted analysis, 60-frame allocation-churn proof, and user visual confirmation are recorded. |
-| Legacy renderer retirement | VTX-M07 | `planned` | Vortex is the sole supported renderer path; legacy removal is safe. |
+| Legacy renderer retirement | VTX-M07 | `in_progress` | Detailed plan exists. Initial inventory found stale uncompiled MultiView legacy source and stale Async README legacy/reference language; static seam guard, demo refresh/testing, proof-suite consolidation, and dependency audit remain open. |
 | Geometry virtualization | VTX-FUTURE | `future` | Nanite-class geometry virtualization. |
 | Material composition | VTX-FUTURE | `future` | DBuffer/deferred decal/material classification family. |
 | Indirect lighting / GI / reflections | VTX-FUTURE | `future` | Canonical indirect environment evaluation and ambient-bridge retirement. |
