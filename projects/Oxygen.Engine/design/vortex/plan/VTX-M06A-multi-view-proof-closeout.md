@@ -765,7 +765,7 @@ Rollback/replan trigger:
 
 ### Slice H - Runtime Validation Scene And Scripts
 
-Status: `planned`
+Status: `in_progress`
 
 Purpose:
 
@@ -787,8 +787,13 @@ Required behavior:
 
 - Tooling reuses `tools/vortex/VortexProofCommon.ps1`.
 - RenderDoc UI analysis runs sequentially through the existing UI lock helper.
-- Analyzer asserts per-view labels, distinct outputs, surface layer order,
-  auxiliary extraction before consumption, and allocation churn bounds.
+- RenderDoc analyzer asserts per-view stage labels, distinct outputs, and
+  surface layer order. The validation wrapper asserts runtime allocation churn
+  bounds from scene-texture lease-pool telemetry.
+- Auxiliary dependency ordering is covered by the focused
+  `AuxiliaryDependencyGraph` tests. Runtime/capture validation of extracted
+  auxiliary products remains a VTX-M06A exit-gate blocker unless explicitly
+  deferred with human approval.
 - CDB gate fails any D3D12/DXGI validation message severity `WARNING` or
   higher unless allow-listed.
 
@@ -800,6 +805,46 @@ powershell -NoProfile -Command "$ps = [System.Management.Automation.PSParser]::T
 python -m py_compile tools\vortex\AnalyzeRenderDocVortexMultiView.py
 git diff --check
 ```
+
+Current evidence:
+
+- Implementation committed in `3dee293e3 test(vortex): add multiview proof
+  validation`: `Examples/MultiView` exposes `--proof-layout true`, the
+  four-view proof layout, and proof scripts/analyzer/schema under
+  `tools/vortex`.
+- Follow-up cleanup fixed proof-script strict-mode failures, aligned the
+  RenderDoc analyzer with the authored four-view proof layout, and added
+  scene-texture lease-pool churn telemetry to the runtime proof.
+- User visual confirmation on 2026-04-28 approved the GroundGrid stability
+  correction after smooth-motion state was made per `ViewId`.
+- Validation passed:
+  `powershell -NoProfile -Command '$parseErrors = $null; $ps = [System.Management.Automation.PSParser]::Tokenize((Get-Content tools\vortex\Run-VortexMultiViewValidation.ps1 -Raw), [ref]$parseErrors); if ($parseErrors -and $parseErrors.Count -gt 0) { $parseErrors | Format-List; exit 1 }; $ps.Count | Out-Null'`,
+  the equivalent parser check for `Assert-VortexMultiViewProof.ps1`, and
+  `python -m py_compile tools\vortex\AnalyzeRenderDocVortexMultiView.py`.
+- Full runtime proof passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Run-VortexMultiViewValidation.ps1 -Output out\build-ninja\analysis\vortex\m06a-multiview\multiview-proof -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4`.
+  Generated reports:
+  `multiview-proof.debug-layer.report.txt` (`overall_verdict=pass`,
+  `runtime_exit_code=0`, `d3d12_error_count=0`, `dxgi_error_count=0`,
+  `blocking_warning_count=0`),
+  `multiview-proof.renderdoc.txt` (`overall_verdict=true`,
+  `stage9_scope_count=4`, `stage3_scope_count=3`,
+  `stage12_scope_count=3`, `composition_view_ids=1,2,3,4`),
+  `multiview-proof.allocation-churn.txt` (`run_frames=65`,
+  `steady_state_frame_count=60`,
+  `steady_state_allocations_after_warmup=0`), and
+  `multiview-proof.validation.txt` (`overall_verdict=pass`).
+- Focused section 9 validation passed:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.PreviousViewHistoryCache.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneTextureLeasePool.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.AuxiliaryDependencyGraph.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  and
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(RenderContext|PreviousViewHistoryCache|SceneTextures|SceneTextureLeasePool|CompositionPlanner|AuxiliaryDependencyGraph|RendererCompositionQueue|SceneRendererPublication|SceneRendererDeferredCore)" --output-on-failure`
+  with 10/10 matched tests passing.
+- ShaderBake/catalog validation was not run because no shader bytecode, shader
+  catalog, HLSL ABI, or root-binding files changed.
+- Remaining VTX-M06A exit-gate gap: the runtime/capture proof still does not
+  validate extracted auxiliary producer/consumer sampling. The current runtime
+  MultiView path does not exercise `FramePlanBuilder`'s auxiliary graph, so
+  auxiliary ordering is test-proven but not runtime/capture-proven.
 
 Runtime closure command shape:
 
