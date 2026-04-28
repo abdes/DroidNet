@@ -262,8 +262,41 @@ Evidence so far:
   `oxygen::renderer` or `renderer::` were removed from current source.
 - The Slice B seam guard and focused build/test gates above passed after this
   cleanup.
-- This slice is not closed yet: `Examples/Async/README.md` and Async
-  proof-tool wording still need current Vortex production-proof language.
+- `Examples/Async/README.md` now describes the current Vortex runtime proof
+  path and no longer instructs a legacy/reference capture flow.
+- Async proof tooling now validates current Vortex capture/products directly:
+  `tools/vortex/Capture-AsyncLegacyReference.ps1` was removed,
+  `Run-AsyncRuntimeValidation.ps1` no longer accepts a reference root, and
+  `Verify-AsyncRuntimeProof.ps1` / `Assert-AsyncRuntimeProof.ps1` now gate the
+  current capture reports, exported color/depth products, and Stage 22
+  input-bundle contract.
+- `tools/vortex/README.md` now documents the current Vortex Async proof flow
+  instead of reference-based parity.
+- `powershell -NoProfile -Command
+  "$null = [scriptblock]::Create((Get-Content -Raw
+  'tools\vortex\Run-AsyncRuntimeValidation.ps1')); $null =
+  [scriptblock]::Create((Get-Content -Raw
+  'tools\vortex\Verify-AsyncRuntimeProof.ps1')); $null =
+  [scriptblock]::Create((Get-Content -Raw
+  'tools\vortex\Assert-AsyncRuntimeProof.ps1'))"` passed PowerShell parse for
+  the edited Async proof scripts.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
+  out\build-ninja\analysis\vortex\m07-legacy-seams-tooling.txt` passed,
+  scanning 577 source/build/tooling files with no forbidden legacy renderer
+  seams.
+- `rg -n
+  "Oxygen\.Renderer|Oxygen/Renderer|legacy/reference|Capture-AsyncLegacyReference|ReferenceRoot|reference baseline|Reference-Based"
+  Examples tools\vortex -g README.md -g "*.ps1" -g
+  "!Assert-VortexLegacySeams.ps1" -S` found no stale current README/tooling
+  proof references.
+- `cmake --build out\build-ninja --config Debug --target
+  oxygen-examples-async --parallel 4` passed.
+- `ctest --preset test-debug -R
+  "Oxygen\.Examples\.DemoShell\.AsyncVortexMigrationSurface\.Tests"
+  --output-on-failure` passed, but the executable currently contains 0 tests;
+  this is recorded as a residual test-coverage gap for later M07 demo/proof
+  consolidation.
 
 ### D. Required Example Build And Runtime Smoke Matrix
 

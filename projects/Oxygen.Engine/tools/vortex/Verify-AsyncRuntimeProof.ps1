@@ -3,10 +3,9 @@
 Runs the Async runtime capture validation flow against an existing RenderDoc capture.
 
 .DESCRIPTION
-When -ReferenceRoot is provided, baseline frame/depth are loaded from the
-external reference directory for parity comparison. When -InitializeBaselineArtifacts
-is set, the current capture exports are written as the baseline (used by
-Capture-AsyncLegacyReference.ps1 to seed the reference).
+Runs RenderDoc structural/product analysis for an existing Async Vortex
+runtime capture, exports the inspected color/depth products, writes a behavior
+summary, and gates the proof through Assert-AsyncRuntimeProof.ps1.
 #>
 [CmdletBinding()]
 param(
@@ -23,19 +22,13 @@ param(
   [string]$ValidationReportPath = '',
 
   [Parameter()]
-  [string]$BaselineFramePath = '',
+  [string]$ExportFramePath = '',
 
   [Parameter()]
-  [string]$BaselineDepthPath = '',
+  [string]$ExportDepthPath = '',
 
   [Parameter()]
-  [string]$BehaviorPath = '',
-
-  [Parameter()]
-  [string]$ReferenceRoot = '',
-
-  [Parameter()]
-  [switch]$InitializeBaselineArtifacts
+  [string]$BehaviorPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -89,7 +82,7 @@ function Write-BehaviorSummary {
   $asyncSettingsPath = Join-Path $RepoRoot 'Examples\Async\AsyncDemoSettingsService.cpp'
 
   $lines = @(
-    '# Async Baseline Behaviors'
+    '# Async Vortex Runtime Behaviors'
     ''
     "Capture: $CaptureFullPath"
     ''
@@ -139,53 +132,22 @@ if ([string]::IsNullOrWhiteSpace($ProductsReportPath)) {
 if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
   $ValidationReportPath = "$captureFullPath.validation.txt"
 }
-# --- Resolve baseline frame/depth paths ---
-# When a reference root is provided, load the baseline from the external
-# reference directory. Otherwise fall back to the capture directory.
-if (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
-  $resolvedReferenceRoot = Resolve-RepoPath -RepoRoot $repoRoot -Path $ReferenceRoot
-  if (-not (Test-Path -LiteralPath $resolvedReferenceRoot)) {
-    throw "Reference root not found: $resolvedReferenceRoot"
-  }
-  if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
-    $BaselineFramePath = Join-Path $resolvedReferenceRoot 'reference_frame10.png'
-  }
-  if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
-    $BaselineDepthPath = Join-Path $resolvedReferenceRoot 'reference_depth.png'
-  }
-} else {
-  if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
-    $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame.png'
-  }
-  if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
-    $BaselineDepthPath = Join-Path $captureDirectory 'baseline_depth.png'
-  }
+if ([string]::IsNullOrWhiteSpace($ExportFramePath)) {
+  $ExportFramePath = Join-Path $captureDirectory 'async_frame.png'
+}
+if ([string]::IsNullOrWhiteSpace($ExportDepthPath)) {
+  $ExportDepthPath = Join-Path $captureDirectory 'async_depth.png'
 }
 if ([string]::IsNullOrWhiteSpace($BehaviorPath)) {
-  $BehaviorPath = Join-Path $captureDirectory 'baseline_behaviors.md'
+  $BehaviorPath = Join-Path $captureDirectory 'async_behaviors.md'
 }
 
 $captureReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CaptureReportPath)
 $productsReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ProductsReportPath)
 $validationReportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ValidationReportPath)
-$baselineFrameFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BaselineFramePath)
-$baselineDepthFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BaselineDepthPath)
+$exportFrameFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ExportFramePath)
+$exportDepthFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ExportDepthPath)
 $behaviorFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($BehaviorPath)
-
-$comparisonFrameFullPath = if ($InitializeBaselineArtifacts) {
-  $baselineFrameFullPath
-} elseif (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
-  Join-Path $captureDirectory 'current_frame.verify.png'
-} else {
-  Join-Path $captureDirectory 'baseline_frame.verify.png'
-}
-$comparisonDepthFullPath = if ($InitializeBaselineArtifacts) {
-  $baselineDepthFullPath
-} elseif (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
-  Join-Path $captureDirectory 'current_depth.verify.png'
-} else {
-  Join-Path $captureDirectory 'baseline_depth.verify.png'
-}
 
 Invoke-VortexRenderDocAnalysis `
   -CapturePath $captureFullPath `
@@ -197,11 +159,11 @@ $environmentSnapshot = @{}
 try {
   Set-ScopedProcessEnvironmentVariable `
     -Name 'OXYGEN_ASYNC_EXPORT_COLOR_PATH' `
-    -Value $comparisonFrameFullPath `
+    -Value $exportFrameFullPath `
     -OriginalValues $environmentSnapshot
   Set-ScopedProcessEnvironmentVariable `
     -Name 'OXYGEN_ASYNC_EXPORT_DEPTH_PATH' `
-    -Value $comparisonDepthFullPath `
+    -Value $exportDepthFullPath `
     -OriginalValues $environmentSnapshot
 
   Invoke-VortexRenderDocAnalysis `
@@ -228,10 +190,8 @@ Invoke-VortexPowerShellProofScript `
   -ArgumentList @(
     '-CaptureReportPath', $captureReportFullPath,
     '-ProductsReportPath', $productsReportFullPath,
-    '-BaselineFramePath', $baselineFrameFullPath,
-    '-ComparisonFramePath', $comparisonFrameFullPath,
-    '-BaselineDepthPath', $baselineDepthFullPath,
-    '-ComparisonDepthPath', $comparisonDepthFullPath,
+    '-ExportFramePath', $exportFrameFullPath,
+    '-ExportDepthPath', $exportDepthFullPath,
     '-ReportPath', $validationReportFullPath
   ) `
   -Label 'Async runtime proof assertion'
