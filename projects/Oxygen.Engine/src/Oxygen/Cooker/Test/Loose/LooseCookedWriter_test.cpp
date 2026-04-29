@@ -169,6 +169,62 @@ namespace {
     EXPECT_EQ(it->descriptor_size, 1U);
   }
 
+  //! Test: Legacy key for same material output is replaced on recook.
+  /*!
+   Scenario: An existing loose index contains a non-canonical AssetKey for the
+   same virtual path and descriptor relpath produced by a recook. Reopening the
+   cooked root with the native virtual-path-derived key must replace the stale
+   mapping instead of failing the index write.
+  */
+  NOLINT_TEST(LooseCookedWriterTest,
+    WriteAssetDescriptorSameVirtualPathAndRelPathReplacesLoadedLegacyKey)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_recook_legacy_key");
+
+    const auto legacy_key = MakeTestAssetKey(0x71);
+    const auto native_key = MakeTestAssetKey(0x72);
+    const auto virtual_path = std::string("/.cooked/Materials/")
+      + LooseCookedLayout::MaterialDescriptorFileName("A");
+    const auto descriptor_relpath = std::string("Materials/")
+      + LooseCookedLayout::MaterialDescriptorFileName("A");
+
+    const std::vector<std::byte> first_bytes = {
+      std::byte { 0x01 },
+    };
+    const std::vector<std::byte> recook_bytes = {
+      std::byte { 0x02 },
+      std::byte { 0x03 },
+    };
+
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(legacy_key, AssetType::kMaterial,
+        virtual_path, descriptor_relpath, first_bytes);
+      (void)writer.Finish();
+    }
+
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(native_key, AssetType::kMaterial,
+        virtual_path, descriptor_relpath, recook_bytes);
+      const auto result = writer.Finish();
+      EXPECT_EQ(result.collision_summary.asset_collisions, 1U);
+      EXPECT_EQ(result.collision_summary.replaced_existing, 1U);
+      EXPECT_EQ(result.collision_summary.rejected, 0U);
+    }
+
+    Inspection inspection;
+    inspection.LoadFromFile(cooked_root / "container.index.bin");
+
+    ASSERT_EQ(inspection.Assets().size(), 1U);
+    EXPECT_EQ(inspection.Assets().front().key, native_key);
+    EXPECT_EQ(inspection.Assets().front().virtual_path, virtual_path);
+    EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
+      descriptor_relpath);
+    EXPECT_EQ(inspection.Assets().front().descriptor_size, 2U);
+  }
+
   //! Test: Conflicting virtual path mapping throws
   /*!
    Scenario: Writes two different AssetKeys with the same virtual path.
@@ -194,13 +250,21 @@ namespace {
       "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes);
 
     // Act & Assert
-    EXPECT_THROW(
+    try {
       writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes),
-      std::runtime_error);
+        bytes);
+      FAIL() << "Expected virtual path collision.";
+    } catch (const std::runtime_error& ex) {
+      const std::string message = ex.what();
+      EXPECT_NE(message.find("Conflicting virtual path mapping"),
+        std::string::npos);
+      EXPECT_NE(message.find("WriteAssetDescriptor"), std::string::npos);
+      EXPECT_NE(message.find("incoming_key="), std::string::npos);
+      EXPECT_NE(message.find("existing_key="), std::string::npos);
+    }
   }
 
   //! Test: Missing required file pair throws
@@ -779,13 +843,23 @@ namespace {
 
     // Act & Assert
     LooseCookedWriter writer(cooked_root);
-    EXPECT_THROW(
+    try {
       writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes),
-      std::runtime_error);
+        bytes);
+      FAIL() << "Expected virtual path collision.";
+    } catch (const std::runtime_error& ex) {
+      const std::string message = ex.what();
+      EXPECT_NE(message.find("Conflicting virtual path mapping"),
+        std::string::npos);
+      EXPECT_NE(message.find("WriteAssetDescriptor"), std::string::npos);
+      EXPECT_NE(message.find("existing_descriptor='Materials/A.omat'"),
+        std::string::npos);
+      EXPECT_NE(message.find("incoming_descriptor='Materials/B.omat'"),
+        std::string::npos);
+    }
   }
 
   //! Test: Descriptor relpath must not contain '..'
