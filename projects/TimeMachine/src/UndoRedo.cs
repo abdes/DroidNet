@@ -33,7 +33,7 @@ namespace DroidNet.TimeMachine;
 /// historyKeeper.Redo();
 /// ]]></code>
 /// </example>
-public sealed class UndoRedo
+public sealed partial class UndoRedo
 {
     private static readonly Lazy<UndoRedo> DefaultInstance = new(() => new UndoRedo());
 
@@ -62,23 +62,4 @@ public sealed class UndoRedo
     /// </param>
     /// <returns>A <see cref="HistoryKeeper"/> instance.</returns>
     public HistoryKeeper this[object root] => Histories.Value.GetValue(root, r => new HistoryKeeper(r));
-
-    /// <summary>
-    /// Gets (or creates) a <see cref="HistoryKeeper"/> for the specified identifier.
-    /// </summary>
-    /// <param name="id">
-    /// A <see cref="Guid"/> that uniquely identifies the document or entity for which this
-    /// <see cref="HistoryKeeper"/> will track Undo/Redo changes.
-    /// </param>
-    /// <returns>A <see cref="HistoryKeeper"/> instance.</returns>
-    public HistoryKeeper this[Guid id] => GuidHistories.Value.GetOrAdd(id, guid => new HistoryKeeper(guid));
-
-    /// <summary>
-    /// Clears the cached undo roots.
-    /// </summary>
-    public static void Clear()
-    {
-        Histories.Value.Clear();
-        GuidHistories.Value.Clear();
-    }
 }
