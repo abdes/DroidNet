@@ -44,6 +44,10 @@
     <ClCompile Include="Commands\CreateViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\PropertyApplierRegistry.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -156,7 +160,12 @@
     <ClInclude Include="Commands\RemoveSceneNodesCommand.h" />
     <ClInclude Include="Commands\RenameSceneNodeCommand.h" />
     <ClInclude Include="Commands\ReparentSceneNodesCommand.h" />
+    <ClInclude Include="Commands\PropertyKeys.h" />
+    <ClInclude Include="Commands\IComponentPropertyApplier.h" />
+    <ClInclude Include="Commands\PropertyApplierRegistry.h" />
+    <ClInclude Include="Commands\TransformPropertyApplier.h" />
     <ClInclude Include="Commands\SetLocalTransformCommand.h" />
+    <ClInclude Include="Commands\SetPropertiesCommand.h" />
     <ClInclude Include="Commands\CreateBasicMeshCommand.h" />
     <ClInclude Include="Commands\SetVisibilityCommand.h" />
     <ClInclude Include="Commands\ReparentSceneNodeCommand.h" />

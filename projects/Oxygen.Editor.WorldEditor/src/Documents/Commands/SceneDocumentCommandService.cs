@@ -28,7 +28,7 @@ using Oxygen.Editor.WorldEditor.Documents.Selection;
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <inheritdoc />
-public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
+public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandService
 {
     private static readonly Uri EmptyMaterialUri = new($"{AssetUris.Scheme}:///__uninitialized__");
 
@@ -175,26 +175,20 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
                 edit).ConfigureAwait(true);
         }
 
-        var before = targets.Select(static target => TransformState.Capture(target.Node, target.Transform!)).ToList();
-        foreach (var target in targets)
-        {
-            ApplyTransformEdit(target.Transform!, edit);
-        }
-
-        var after = targets.Select(static target => TransformState.Capture(target.Node, target.Transform!)).ToList();
-        if (TransformStatesEqual(before, after))
+        // One-shot path is now schema-driven via the property pipeline.
+        // The legacy capture/apply/sync machinery remains for the
+        // session path until it is migrated.
+        var propertyEdit = BuildPropertyEditFromTransformEdit(edit);
+        if (propertyEdit.Count == 0)
         {
             return SceneCommandResult.Success;
         }
 
-        this.RecordTransformHistory(context, before, after);
-        var operationResultId = await this.SyncEditedNodesAsync(
+        return await this.EditPropertiesAsync(
             context,
-            targets.Select(static target => target.Node).ToList(),
-            SceneOperationKinds.EditTransform,
-            node => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, node)).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+            targets.Select(static target => target.Node.Id).ToList(),
+            propertyEdit,
+            "Edit Transform").ConfigureAwait(true);
     }
 
     /// <inheritdoc />
