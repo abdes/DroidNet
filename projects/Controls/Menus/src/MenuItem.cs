@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.System;
 
@@ -85,6 +86,9 @@ namespace DroidNet.Controls.Menus;
 [TemplatePart(Name = AcceleratorTextBlockPart, Type = typeof(TextBlock))]
 [TemplatePart(Name = StateTextBlockPart, Type = typeof(TextBlock))]
 [TemplatePart(Name = SeparatorBorderPart, Type = typeof(Border))]
+[TemplatePart(Name = SeparatorLabelBorderPart, Type = typeof(Border))]
+[TemplatePart(Name = SeparatorLabelTextBlockPart, Type = typeof(TextBlock))]
+[TemplatePart(Name = InteractiveContentPresenterPart, Type = typeof(ContentControl))]
 [TemplatePart(Name = SubmenuArrowPart, Type = typeof(TextBlock))]
 [TemplatePart(Name = CheckmarkPart, Type = typeof(TextBlock))]
 public partial class MenuItem : Control
@@ -125,6 +129,21 @@ public partial class MenuItem : Control
     ///     The name of the Border used to render a separator line when <c>ItemData.IsSeparator</c> is true.
     /// </summary>
     public const string SeparatorBorderPart = "PartSeparatorBorder";
+
+    /// <summary>
+    ///     The name of the TextBlock used to render an optional separator label.
+    /// </summary>
+    public const string SeparatorLabelTextBlockPart = "PartSeparatorLabelTextBlock";
+
+    /// <summary>
+    ///     The name of the Border that provides the overlay background for an optional separator label.
+    /// </summary>
+    public const string SeparatorLabelBorderPart = "PartSeparatorLabelBorder";
+
+    /// <summary>
+    ///     The name of the presenter used to host embedded interactive content.
+    /// </summary>
+    public const string InteractiveContentPresenterPart = "PartInteractiveContentPresenter";
 
     /// <summary>
     ///     The name of the submenu arrow element (shown when item has children).
@@ -251,6 +270,12 @@ public partial class MenuItem : Control
     private TextBlock? acceleratorTextBlock;
     private TextBlock? stateTextBlock;
     private Border? separatorBorder;
+    private Border? separatorLabelBorder;
+    private TextBlock? separatorLabelTextBlock;
+    private ContentControl? interactiveContentPresenter;
+    private MenuItemData? generatedInteractiveContentOwner;
+    private Func<object?>? generatedInteractiveContentFactory;
+    private object? generatedInteractiveContent;
     private TextBlock? submenuArrow;
     private TextBlock? checkmark;
 
@@ -321,7 +346,7 @@ public partial class MenuItem : Control
     /// <param name="inputSource">The <see cref="MenuInteractionInputSource"/> used to trigger this action.</param>
     internal void TryInvoke(MenuInteractionInputSource inputSource)
     {
-        if (this.ItemData is not { IsInteractive: true, HasChildren: false } data)
+        if (this.ItemData is not { IsInteractive: true, HasChildren: false, HasInteractiveContent: false } data)
         {
             return;
         }
@@ -395,6 +420,9 @@ public partial class MenuItem : Control
         this.acceleratorTextBlock = this.GetTemplateChild(AcceleratorTextBlockPart) as TextBlock;
         this.stateTextBlock = this.GetTemplateChild(StateTextBlockPart) as TextBlock;
         this.separatorBorder = this.GetTemplateChild(SeparatorBorderPart) as Border;
+        this.separatorLabelBorder = this.GetTemplateChild(SeparatorLabelBorderPart) as Border;
+        this.separatorLabelTextBlock = this.GetTemplateChild(SeparatorLabelTextBlockPart) as TextBlock;
+        this.interactiveContentPresenter = this.GetTemplateChild(InteractiveContentPresenterPart) as ContentControl;
         this.submenuArrow = this.GetTemplateChild(SubmenuArrowPart) as TextBlock;
         this.checkmark = this.GetTemplateChild(CheckmarkPart) as TextBlock;
 
@@ -408,6 +436,8 @@ public partial class MenuItem : Control
         this.UpdateCommonVisualState();
         this.UpdateIconVisualState();
         this.UpdateAcceleratorVisualState();
+        this.UpdateSeparatorLabelVisibility();
+        this.UpdateInteractiveContentVisibility();
         this.UpdateCheckmarkVisualState();
 
         this.RefreshTextPresentation();
@@ -457,6 +487,12 @@ public partial class MenuItem : Control
     protected override void OnKeyDown(KeyRoutedEventArgs e)
     {
         if (!this.IsInteractive)
+        {
+            base.OnKeyDown(e);
+            return;
+        }
+
+        if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
         {
             base.OnKeyDown(e);
             return;
@@ -554,6 +590,12 @@ public partial class MenuItem : Control
             return;
         }
 
+        if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
+        {
+            this.isPressed = false;
+            return;
+        }
+
         this.LogPointerEvent("Press");
 
         // Capture pointer so we reliably see pointer release/cancel even if pointer moves off the control.
@@ -579,6 +621,12 @@ public partial class MenuItem : Control
 
         if (!this.IsInteractive)
         {
+            return;
+        }
+
+        if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
+        {
+            this.UpdateCommonVisualState();
             return;
         }
 
@@ -651,6 +699,11 @@ public partial class MenuItem : Control
             return;
         }
 
+        if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
         this.LogTapped();
 
         // e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
@@ -676,6 +729,68 @@ public partial class MenuItem : Control
         var state = this.ItemData.Icon is { } ? HasIconVisualState : NoIconVisualState;
         this.LogVisualState(state);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
+    }
+
+    private void UpdateSeparatorLabelVisibility()
+    {
+        if (this.separatorLabelBorder is null)
+        {
+            return;
+        }
+
+        var visibility = this.ItemData is { IsSeparator: true, HasSeparatorLabel: true }
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        this.separatorLabelBorder.Visibility = visibility;
+        if (this.separatorLabelTextBlock is { } labelTextBlock)
+        {
+            labelTextBlock.Visibility = visibility;
+        }
+    }
+
+    private void UpdateInteractiveContentVisibility()
+    {
+        if (this.interactiveContentPresenter is null)
+        {
+            return;
+        }
+
+        if (this.ItemData is not { IsSeparator: false, HasInteractiveContent: true } data)
+        {
+            this.interactiveContentPresenter.Content = null;
+            this.interactiveContentPresenter.ContentTemplate = null;
+            this.interactiveContentPresenter.Visibility = Visibility.Collapsed;
+            this.generatedInteractiveContentOwner = null;
+            this.generatedInteractiveContentFactory = null;
+            this.generatedInteractiveContent = null;
+            return;
+        }
+
+        var content = this.GetInteractiveContent(data);
+        this.interactiveContentPresenter.Content = content;
+        this.interactiveContentPresenter.ContentTemplate = data.InteractiveContentTemplate;
+        this.interactiveContentPresenter.Visibility = Visibility.Visible;
+    }
+
+    private object? GetInteractiveContent(MenuItemData data)
+    {
+        if (data.InteractiveContentFactory is not { } factory)
+        {
+            this.generatedInteractiveContentOwner = null;
+            this.generatedInteractiveContentFactory = null;
+            this.generatedInteractiveContent = null;
+            return data.InteractiveContent;
+        }
+
+        if (!ReferenceEquals(this.generatedInteractiveContentOwner, data) ||
+            !ReferenceEquals(this.generatedInteractiveContentFactory, factory))
+        {
+            this.generatedInteractiveContentOwner = data;
+            this.generatedInteractiveContentFactory = factory;
+            this.generatedInteractiveContent = factory();
+        }
+
+        return this.generatedInteractiveContent;
     }
 
     private void UpdateAcceleratorVisualState()
@@ -744,6 +859,35 @@ public partial class MenuItem : Control
                     : NoDecorationVisualState;
         this.LogVisualState(state);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
+    }
+
+    private bool IsEventFromInteractiveContent(DependencyObject? source)
+    {
+        if (this.ItemData is not { HasInteractiveContent: true } || this.interactiveContentPresenter is null || source is null)
+        {
+            return false;
+        }
+
+        for (var current = source; current is not null; current = GetVisualOrLogicalParent(current))
+        {
+            if (ReferenceEquals(current, this.interactiveContentPresenter))
+            {
+                return true;
+            }
+        }
+
+        return false;
+
+        static DependencyObject? GetVisualOrLogicalParent(DependencyObject element)
+        {
+            var visualParent = VisualTreeHelper.GetParent(element);
+            if (visualParent is not null)
+            {
+                return visualParent;
+            }
+
+            return element is FrameworkElement frameworkElement ? frameworkElement.Parent : null;
+        }
     }
 
     /// <summary>

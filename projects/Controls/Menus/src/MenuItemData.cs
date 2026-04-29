@@ -4,6 +4,7 @@
 
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Menus;
@@ -61,6 +62,64 @@ public partial class MenuItemData : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInteractive))]
     public partial bool IsSeparator { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the optional label displayed on top of the separator line.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSeparatorLabel))]
+    public partial string? SeparatorLabel { get; set; }
+
+    /// <summary>
+    ///     Gets a value indicating whether this separator has a visible label.
+    /// </summary>
+    public bool HasSeparatorLabel => !string.IsNullOrWhiteSpace(this.SeparatorLabel);
+
+    /// <summary>
+    ///     Gets or sets data or content hosted inside this menu item.
+    /// </summary>
+    /// <remarks>
+    ///     The MVVM-friendly pattern is to set this property to a view-model object and render it with
+    ///     <see cref="InteractiveContentTemplate"/>. The template can contain controls such as
+    ///     <see cref="Microsoft.UI.Xaml.Controls.Slider"/>, <see cref="Microsoft.UI.Xaml.Controls.ToggleSwitch"/>,
+    ///     or <c>DroidNet.Controls.NumberBox</c>, with normal two-way bindings for value changes.
+    ///     Assigning a live <see cref="FrameworkElement"/> directly is only appropriate when the item data is realized
+    ///     by one presenter at a time; WinUI elements can only have one visual parent.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasInteractiveContent))]
+    [NotifyPropertyChangedFor(nameof(IsInteractive))]
+    public partial object? InteractiveContent { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a factory that creates content hosted inside each realized menu item.
+    /// </summary>
+    /// <remarks>
+    ///     This is the imperative escape hatch for code-created controls. Prefer
+    ///     <see cref="InteractiveContent"/> plus <see cref="InteractiveContentTemplate"/> for MVVM scenarios.
+    ///     Use the factory when a live <see cref="FrameworkElement"/> must be created in code, because reusable
+    ///     menu data can be displayed by multiple presenters and each presenter needs its own element instance.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasInteractiveContent))]
+    [NotifyPropertyChangedFor(nameof(IsInteractive))]
+    public partial Func<object?>? InteractiveContentFactory { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the template used to render <see cref="InteractiveContent"/>.
+    /// </summary>
+    /// <remarks>
+    ///     This is the preferred MVVM path for embedded controls: keep the menu item data free of UI elements,
+    ///     place state and commands on a model object, and declare the actual controls in this template.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasInteractiveContent))]
+    public partial DataTemplate? InteractiveContentTemplate { get; set; }
+
+    /// <summary>
+    ///     Gets a value indicating whether this item hosts embedded interactive content.
+    /// </summary>
+    public bool HasInteractiveContent => this.InteractiveContent is not null || this.InteractiveContentFactory is not null;
 
     /// <summary>
     ///     Gets a value indicating whether this menu item is interactive (not a separator and enabled for interaction).

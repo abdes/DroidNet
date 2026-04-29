@@ -7,6 +7,7 @@ using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace DroidNet.Controls.Menus;
@@ -134,7 +135,7 @@ public sealed partial class ColumnPresenter : Control
             return null;
         }
 
-        if (FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem { ItemData: MenuItemData data }
+        if (FindOwningMenuItem(FocusManager.GetFocusedElement(this.XamlRoot) as DependencyObject) is { ItemData: MenuItemData data }
             && items.Contains(data))
         {
             this.LogGetFocusedItem(data.Id);
@@ -143,6 +144,30 @@ public sealed partial class ColumnPresenter : Control
 
         this.LogGetFocusedItem(itemId: null);
         return null;
+
+        static MenuItem? FindOwningMenuItem(DependencyObject? focusedElement)
+        {
+            for (var current = focusedElement; current is not null; current = GetVisualOrLogicalParent(current))
+            {
+                if (current is MenuItem menuItem)
+                {
+                    return menuItem;
+                }
+            }
+
+            return null;
+        }
+
+        static DependencyObject? GetVisualOrLogicalParent(DependencyObject element)
+        {
+            var visualParent = VisualTreeHelper.GetParent(element);
+            if (visualParent is not null)
+            {
+                return visualParent;
+            }
+
+            return element is FrameworkElement frameworkElement ? frameworkElement.Parent : null;
+        }
     }
 
     /// <summary>
@@ -464,9 +489,35 @@ public sealed partial class ColumnPresenter : Control
     }
 
     private MenuItem? GetFocusedMenuItem()
-        => FocusManager.GetFocusedElement(this.XamlRoot) is MenuItem focused && focused.ItemData is not null
+    {
+        return FindOwningMenuItem(FocusManager.GetFocusedElement(this.XamlRoot) as DependencyObject) is { ItemData: not null } focused
             ? focused
             : this.itemsHost?.Children.OfType<MenuItem>().FirstOrDefault(item => item.FocusState == FocusState.Keyboard);
+
+        static MenuItem? FindOwningMenuItem(DependencyObject? focusedElement)
+        {
+            for (var current = focusedElement; current is not null; current = GetVisualOrLogicalParent(current))
+            {
+                if (current is MenuItem menuItem)
+                {
+                    return menuItem;
+                }
+            }
+
+            return null;
+        }
+
+        static DependencyObject? GetVisualOrLogicalParent(DependencyObject element)
+        {
+            var visualParent = VisualTreeHelper.GetParent(element);
+            if (visualParent is not null)
+            {
+                return visualParent;
+            }
+
+            return element is FrameworkElement frameworkElement ? frameworkElement.Parent : null;
+        }
+    }
 
     private MenuInteractionContext CreateContext(int columnLevel)
     {

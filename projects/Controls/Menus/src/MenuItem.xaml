@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -18,9 +18,12 @@
     <Thickness x:Key="MenuItemPadding">12,6,12,6</Thickness>
     <Thickness x:Key="MenuItemIconMargin">0,0,8,0</Thickness>
     <Thickness x:Key="MenuItemTextMargin">0,0,12,0</Thickness>
+    <Thickness x:Key="MenuItemInteractiveContentMargin">8,0,12,0</Thickness>
     <Thickness x:Key="MenuItemAcceleratorMargin">0,0,8,0</Thickness>
     <Thickness x:Key="MenuItemStateMargin">0</Thickness>
-    <Thickness x:Key="MenuItemSeparatorMargin">0,1,0,1</Thickness>
+    <Thickness x:Key="MenuItemSeparatorMargin">0,5,0,5</Thickness>
+    <Thickness x:Key="MenuItemSeparatorLabelMargin">12,0,8,0</Thickness>
+    <Thickness x:Key="MenuItemSeparatorLabelPadding">4,0,4,0</Thickness>
 
     <!--  Text styles  -->
     <Style x:Key="MenuItemTextStyle" TargetType="TextBlock">
@@ -74,6 +77,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
                             <!--  Icon / Left Checkmark  -->
@@ -104,10 +108,21 @@
                                 Style="{StaticResource MenuItemTextStyle}"
                                 Text="" />
 
+                            <!--  Embedded interactive content  -->
+                            <ContentControl
+                                x:Name="PartInteractiveContentPresenter"
+                                Grid.Column="2"
+                                MinWidth="96"
+                                Margin="{StaticResource MenuItemInteractiveContentMargin}"
+                                HorizontalAlignment="Stretch"
+                                VerticalContentAlignment="Center"
+                                IsTabStop="False"
+                                Visibility="Collapsed" />
+
                             <!--  Accelerator  -->
                             <TextBlock
                                 x:Name="PartAcceleratorTextBlock"
-                                Grid.Column="2"
+                                Grid.Column="3"
                                 Margin="{StaticResource MenuItemAcceleratorMargin}"
                                 Foreground="{TemplateBinding Foreground}"
                                 Style="{StaticResource MenuItemAcceleratorTextStyle}"
@@ -116,7 +131,7 @@
 
                             <!--  State (Right Checkmark / Submenu Arrow)  -->
                             <Grid
-                                Grid.Column="3"
+                                Grid.Column="4"
                                 Width="{StaticResource MenuItemStateSize}"
                                 Height="{StaticResource MenuItemStateSize}"
                                 Margin="{StaticResource MenuItemStateMargin}">
@@ -136,13 +151,32 @@
                         </Grid>
 
                         <!--  Separator  -->
-                        <Border
-                            x:Name="PartSeparatorBorder"
-                            Height="1"
+                        <Grid
+                            x:Name="PartSeparatorGrid"
+                            MinHeight="1"
                             Margin="{StaticResource MenuItemSeparatorMargin}"
-                            HorizontalAlignment="Stretch"
-                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
-                            Visibility="Collapsed" />
+                            Visibility="Collapsed">
+                            <Border
+                                x:Name="PartSeparatorBorder"
+                                Height="1"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            <Border
+                                x:Name="PartSeparatorLabelBorder"
+                                Margin="{StaticResource MenuItemSeparatorLabelMargin}"
+                                Padding="{StaticResource MenuItemSeparatorLabelPadding}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource FlyoutPresenterBackground}"
+                                Visibility="Collapsed">
+                                <TextBlock
+                                    x:Name="PartSeparatorLabelTextBlock"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource MenuItemAcceleratorTextStyle}"
+                                    Text="{Binding ItemData.SeparatorLabel, RelativeSource={RelativeSource TemplatedParent}}" />
+                            </Border>
+                        </Grid>
 
                         <VisualStateManager.VisualStateGroups>
                             <!--  Common Interaction States  -->
@@ -222,18 +256,18 @@
                                 <VisualState x:Name="Item">
                                     <VisualState.Setters>
                                         <Setter Target="PartContentGrid.Visibility" Value="Visible" />
-                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Collapsed" />
+                                        <Setter Target="PartSeparatorGrid.Visibility" Value="Collapsed" />
                                         <Setter Target="PartRootGrid.MinHeight" Value="{StaticResource MenuItemHeight}" />
-                                        <Setter Target="PartSeparatorBorder.Margin" Value="{StaticResource MenuItemSeparatorMargin}" />
+                                        <Setter Target="PartSeparatorGrid.Margin" Value="{StaticResource MenuItemSeparatorMargin}" />
                                         <Setter Target="PartRootGrid.IsHitTestVisible" Value="True" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Separator">
                                     <VisualState.Setters>
                                         <Setter Target="PartContentGrid.Visibility" Value="Collapsed" />
-                                        <Setter Target="PartSeparatorBorder.Visibility" Value="Visible" />
+                                        <Setter Target="PartSeparatorGrid.Visibility" Value="Visible" />
                                         <Setter Target="PartRootGrid.MinHeight" Value="0" />
-                                        <Setter Target="PartSeparatorBorder.Margin" Value="0" />
+                                        <Setter Target="PartSeparatorGrid.Margin" Value="{StaticResource MenuItemSeparatorMargin}" />
                                         <Setter Target="PartRootGrid.IsHitTestVisible" Value="False" />
                                     </VisualState.Setters>
                                 </VisualState>
