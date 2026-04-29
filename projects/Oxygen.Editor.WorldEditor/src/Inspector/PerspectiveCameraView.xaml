@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.PerspectiveCameraView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+
+    <editorcontrols:PropertiesExpander
+        Padding="2"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE714;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Projection">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:NumberBox
+                        Label="FOV"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Column="1"
+                        Label="Aspect"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}" />
+                </Grid>
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Clipping">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:NumberBox
+                        Label="Near"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Column="1"
+                        Label="Far"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}" />
+                </Grid>
+            </editorcontrols:PropertyCard>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

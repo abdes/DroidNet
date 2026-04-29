@@ -75,23 +75,24 @@
             FontStyle="Italic"
             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
             Style="{ThemeResource CaptionTextBlockStyle}"
-            Text="Select an object to view and edit its properties"
+            Text="Open a scene to view and edit its properties"
             TextAlignment="Center"
             TextWrapping="WrapWholeWords"
-            Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}" />
+            Visibility="{x:Bind ViewModel.HasInspectorContent, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}" />
 
-        <Grid Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+        <Grid Visibility="{x:Bind ViewModel.HasInspectorContent, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
             <Grid.RowDefinitions>
-                <RowDefinition Height="2*" />
+                <RowDefinition Height="{x:Bind ViewModel.TopPaneHeight, Mode=OneWay}" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="3*" />
+                <RowDefinition Height="{x:Bind ViewModel.PropertyPaneHeight, Mode=OneWay}" />
             </Grid.RowDefinitions>
 
             <!--  Top pane: header + components  -->
             <Border
                 Grid.Row="0"
                 Padding="8"
-                Background="{ThemeResource InspectorTopBackground}">
+                Background="{ThemeResource InspectorTopBackground}"
+                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
                 <Grid HorizontalAlignment="Stretch">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="44" />
@@ -138,7 +139,8 @@
                 Grid.Row="1"
                 Grid.ColumnSpan="3"
                 Height="8"
-                Style="{StaticResource InvisibleGridSplitterStyle}" />
+                Style="{StaticResource InvisibleGridSplitterStyle}"
+                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
 
             <!--  Bottom pane: property editors  -->
             <ScrollViewer

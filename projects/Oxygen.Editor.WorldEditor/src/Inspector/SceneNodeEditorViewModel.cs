@@ -13,6 +13,7 @@ using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Dispatching;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
@@ -41,9 +42,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly DispatcherQueue? dispatcher;
     private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
     private readonly Dictionary<GameComponent, SceneNode> componentPropertyNotifiers = [];
+    private readonly EnvironmentViewModel environmentEditor;
 
     private bool isDisposed;
     private ICollection<SceneNode> items;
+    private Scene? activeScene;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
@@ -89,9 +92,18 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 materialPickerService,
                 commandService,
                 this.CreateCommandContext),
+            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(
+                commandService,
+                this.CreateCommandContext),
+            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(
+                commandService,
+                this.CreateCommandContext),
         };
+        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
+        this.activeScene = this.items.FirstOrDefault()?.Scene;
+        this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
         this.UpdateItemsCollection(this.items);
         this.SubscribeToComponentCollections();
         this.LogConstructed(this.items.Count);
@@ -101,9 +113,20 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             _ = hosting.Dispatcher.DispatchAsync(() =>
             {
                 this.items = message.SelectedEntities;
+                this.activeScene = this.items.FirstOrDefault()?.Scene ?? this.activeScene;
+                this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
                 this.LogSelectionChanged(this.items.Count);
                 this.UpdateItemsCollection(this.items);
                 this.SubscribeToComponentCollections();
+            }));
+
+        this.messenger.Register<SceneLoadedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
+            {
+                this.activeScene = message.Scene;
+                this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
+                this.OnPropertyChanged(nameof(this.HasInspectorContent));
+                this.UpdateItemsCollection(this.items);
             }));
 
         // Listen for component add/remove requests coming from the details view (sent via global messenger)
@@ -125,6 +148,21 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// Intended for binding into <see cref="SceneNodeDetailsView"/>.
     /// </summary>
     public SceneNode? SelectedNode => this.items.Count == 1 ? this.items.First() : null;
+
+    /// <summary>
+    /// Gets a value indicating whether the inspector has node or scene-level content to show.
+    /// </summary>
+    public bool HasInspectorContent => this.HasItems || this.activeScene is not null;
+
+    /// <summary>
+    /// Gets the top pane height; empty scene selection should not reserve node-header space.
+    /// </summary>
+    public GridLength TopPaneHeight => this.HasItems ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
+
+    /// <summary>
+    /// Gets the property editor pane height.
+    /// </summary>
+    public GridLength PropertyPaneHeight => this.HasItems ? new GridLength(3, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
 
     /// <summary>
     /// Gets the <see cref="ILoggerFactory"/> used by this view model for creating loggers.
@@ -181,6 +219,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
         this.OnPropertyChanged(nameof(this.SelectedNode));
+        this.OnPropertyChanged(nameof(this.HasInspectorContent));
+        this.OnPropertyChanged(nameof(this.TopPaneHeight));
+        this.OnPropertyChanged(nameof(this.PropertyPaneHeight));
     }
 
     /// <inheritdoc/>
@@ -188,8 +229,21 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         Debug.WriteLine($"[SceneNodeEditorViewModel] FilterPropertyEditors called. Items count: {this.items.Count}");
         var filteredEditors = new Dictionary<Type, IPropertyEditor<SceneNode>>();
+        var result = new List<IPropertyEditor<SceneNode>>();
+
+        this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
+        if (this.items.Count == 0 && this.activeScene is not null)
+        {
+            result.Add(this.environmentEditor);
+        }
+
         var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
         Debug.WriteLine($"[SceneNodeEditorViewModel] propertyEditorFactories has {this.propertyEditorFactories.Count} factories: {string.Join(", ", this.propertyEditorFactories.Keys.Select(k => k.Name))}");
+
+        if (this.items.Count == 0)
+        {
+            return result;
+        }
 
         foreach (var entity in this.items)
         {
@@ -233,12 +287,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         var after = filteredEditors.Count;
         this.LogFiltered(before, after);
 
-        return filteredEditors.Values;
+        result.AddRange(filteredEditors.Values);
+        return result;
     }
 
     private SceneDocumentCommandContext? CreateCommandContext()
     {
-        var scene = this.items.FirstOrDefault()?.Scene;
+        var scene = this.items.FirstOrDefault()?.Scene ?? this.activeScene;
         return scene is null ? null : this.CreateCommandContext(scene);
     }
 

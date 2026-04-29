@@ -75,6 +75,9 @@ public sealed record SceneEnvironmentEdit(
     Optional<bool> AtmosphereEnabled,
     Optional<Guid?> SunNodeId,
     Optional<ExposureMode> ExposureMode,
+    Optional<float> ManualExposureEv,
     Optional<float> ExposureCompensation,
     Optional<ToneMappingMode> ToneMapping,
-    Optional<Vector3> BackgroundColor);
+    Optional<Vector3> BackgroundColor,
+    Optional<SkyAtmosphereEnvironmentData> SkyAtmosphere = default,
+    Optional<PostProcessEnvironmentData> PostProcess = default);

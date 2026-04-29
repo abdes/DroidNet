@@ -8,6 +8,7 @@ using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
+using System.Numerics;
 using Oxygen.Assets.Model;
 using Oxygen.Core;
 using Oxygen.Core.Diagnostics;
@@ -15,6 +16,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Services;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -329,6 +331,7 @@ public sealed class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var first = CreateDirectionalLightNode(scene, "First");
         var second = CreateDirectionalLightNode(scene, "Second");
+        second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight = false;
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var context = CreateContext(scene);
@@ -361,6 +364,272 @@ public sealed class SceneDocumentCommandServiceTests
         _ = context.History.UndoStack.Should().ContainSingle();
         fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, first, It.IsAny<CancellationToken>()), Times.Once);
         fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, second, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditDirectionalLightAsync_WhenEveryEditableFieldChanges_PersistsAndSyncsLight()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = CreateDirectionalLightNode(scene, "Sun");
+        scene.RootNodes.Add(node);
+        var light = node.Components.OfType<DirectionalLightComponent>().Single();
+        var context = CreateContext(scene);
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
+        fixture.Sync
+            .Setup(sync => sync.AttachLightAsync(scene, node, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditDirectionalLightAsync(
+            context,
+            [node.Id],
+            new DirectionalLightEdit(
+                Optional<Vector3>.Supplied(new Vector3(0.25f, 0.5f, 0.75f)),
+                Optional<float>.Supplied(45_000f),
+                Optional<bool>.Supplied(false),
+                Optional<bool>.Supplied(false),
+                Optional<bool>.Supplied(true),
+                Optional<bool>.Supplied(false),
+                Optional<float>.Supplied(0.02f),
+                Optional<float>.Supplied(1.25f)),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = light.Color.Should().Be(new Vector3(0.25f, 0.5f, 0.75f));
+        _ = light.IntensityLux.Should().Be(45_000f);
+        _ = light.IsSunLight.Should().BeFalse();
+        _ = light.EnvironmentContribution.Should().BeFalse();
+        _ = light.CastsShadows.Should().BeTrue();
+        _ = light.AffectsWorld.Should().BeFalse();
+        _ = light.AngularSizeRadians.Should().Be(0.02f);
+        _ = light.ExposureCompensation.Should().Be(1.25f);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, node, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenSunIsBound_ClearsOtherSunLightsAndUndoRestores()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var first = CreateDirectionalLightNode(scene, "First");
+        var second = CreateDirectionalLightNode(scene, "Second");
+        second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight = false;
+        scene.RootNodes.Add(first);
+        scene.RootNodes.Add(second);
+        scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = first.Id });
+        var context = CreateContext(scene);
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditSceneEnvironmentAsync(
+            context,
+            new SceneEnvironmentEdit(
+                Optional<bool>.Unspecified,
+                Optional<Guid?>.Supplied(second.Id),
+                Optional<ExposureMode>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<ToneMappingMode>.Unspecified,
+                Optional<System.Numerics.Vector3>.Unspecified),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.Environment.SunNodeId.Should().Be(second.Id);
+        _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
+        _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
+
+        await context.History.UndoAsync();
+        _ = scene.Environment.SunNodeId.Should().Be(first.Id);
+        _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
+        _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
+
+        await context.History.RedoAsync();
+        _ = scene.Environment.SunNodeId.Should().Be(second.Id);
+        _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
+        _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(3));
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenSkyAtmosphereIsNotFinite_RejectsWithoutMutating()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var before = scene.Environment;
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.EditSceneEnvironmentAsync(
+            context,
+            new SceneEnvironmentEdit(
+                Optional<bool>.Unspecified,
+                Optional<Guid?>.Unspecified,
+                Optional<ExposureMode>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<ToneMappingMode>.Unspecified,
+                Optional<System.Numerics.Vector3>.Unspecified,
+                Optional<SkyAtmosphereEnvironmentData>.Supplied(new() { MieAnisotropy = float.NaN })),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = scene.Environment.Should().Be(before);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid);
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        fixture.DocumentService.Verify(
+            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenManualExposureIsEdited_PersistsAndSyncs()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        scene.SetEnvironment(new SceneEnvironmentData { ExposureMode = ExposureMode.Auto, ManualExposureEv = 9.7f });
+        var context = CreateContext(scene);
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        SceneEnvironmentData? syncedEnvironment = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditSceneEnvironmentAsync(
+            context,
+            new SceneEnvironmentEdit(
+                Optional<bool>.Unspecified,
+                Optional<Guid?>.Unspecified,
+                Optional<ExposureMode>.Supplied(ExposureMode.Manual),
+                Optional<float>.Supplied(3.5f),
+                Optional<float>.Unspecified,
+                Optional<ToneMappingMode>.Unspecified,
+                Optional<System.Numerics.Vector3>.Unspecified),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.Environment.ExposureMode.Should().Be(ExposureMode.Manual);
+        _ = scene.Environment.ManualExposureEv.Should().Be(3.5f);
+        _ = scene.Environment.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
+        _ = scene.Environment.PostProcess.ManualExposureEv.Should().Be(3.5f);
+        _ = syncedEnvironment.Should().NotBeNull();
+        _ = syncedEnvironment!.ExposureMode.Should().Be(ExposureMode.Manual);
+        _ = syncedEnvironment.ManualExposureEv.Should().Be(3.5f);
+        _ = syncedEnvironment.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
+        _ = syncedEnvironment.PostProcess.ManualExposureEv.Should().Be(3.5f);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenPostProcessIsEdited_PersistsNativePostProcessShapeAndSyncs()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var context = CreateContext(scene);
+        var postProcess = new PostProcessEnvironmentData
+        {
+            ToneMapper = ToneMappingMode.Filmic,
+            ExposureMode = ExposureMode.ManualCamera,
+            ExposureEnabled = false,
+            ExposureCompensationEv = 1.25f,
+            ExposureKey = 11.0f,
+            ManualExposureEv = 5.5f,
+            AutoExposureMinEv = -3.0f,
+            AutoExposureMaxEv = 14.0f,
+            AutoExposureSpeedUp = 4.0f,
+            AutoExposureSpeedDown = 2.0f,
+            AutoExposureMeteringMode = MeteringMode.Spot,
+            AutoExposureLowPercentile = 0.2f,
+            AutoExposureHighPercentile = 0.8f,
+            AutoExposureMinLogLuminance = -10.0f,
+            AutoExposureLogLuminanceRange = 20.0f,
+            AutoExposureTargetLuminance = 0.25f,
+            AutoExposureSpotMeterRadius = 0.4f,
+            BloomIntensity = 0.7f,
+            BloomThreshold = 1.5f,
+            Saturation = 0.9f,
+            Contrast = 1.1f,
+            VignetteIntensity = 0.3f,
+            DisplayGamma = 2.4f,
+        };
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        SceneEnvironmentData? syncedEnvironment = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditSceneEnvironmentAsync(
+            context,
+            new SceneEnvironmentEdit(
+                Optional<bool>.Unspecified,
+                Optional<Guid?>.Unspecified,
+                Optional<ExposureMode>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<float>.Unspecified,
+                Optional<ToneMappingMode>.Unspecified,
+                Optional<System.Numerics.Vector3>.Unspecified,
+                Optional<SkyAtmosphereEnvironmentData>.Unspecified,
+                Optional<PostProcessEnvironmentData>.Supplied(postProcess)),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.Environment.PostProcess.Should().Be(postProcess);
+        _ = scene.Environment.ExposureMode.Should().Be(postProcess.ExposureMode);
+        _ = scene.Environment.ManualExposureEv.Should().Be(postProcess.ManualExposureEv);
+        _ = scene.Environment.ExposureCompensation.Should().Be(postProcess.ExposureCompensationEv);
+        _ = scene.Environment.ToneMapping.Should().Be(postProcess.ToneMapper);
+        _ = syncedEnvironment.Should().NotBeNull();
+        _ = syncedEnvironment!.PostProcess.Should().Be(postProcess);
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenManualExposureIsNotFinite_RejectsWithoutMutating()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        scene.SetEnvironment(new SceneEnvironmentData { ManualExposureEv = 9.7f });
+        var before = scene.Environment;
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.EditSceneEnvironmentAsync(
+            context,
+            new SceneEnvironmentEdit(
+                Optional<bool>.Unspecified,
+                Optional<Guid?>.Unspecified,
+                Optional<ExposureMode>.Unspecified,
+                Optional<float>.Supplied(float.NaN),
+                Optional<float>.Unspecified,
+                Optional<ToneMappingMode>.Unspecified,
+                Optional<System.Numerics.Vector3>.Unspecified),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = scene.Environment.Should().Be(before);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentManualExposureInvalid);
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [TestMethod]
@@ -376,6 +645,9 @@ public sealed class SceneDocumentCommandServiceTests
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.AddComponent, AffectedScope.Empty);
         fixture.Sync
             .Setup(sync => sync.AttachLightAsync(scene, target, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(accepted);
+        fixture.Sync
+            .Setup(sync => sync.UpdateNodeTransformAsync(scene, target, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.AddComponentAsync(context, target.Id, typeof(DirectionalLightComponent));

@@ -7,6 +7,7 @@
 #pragma managed
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <glm/fwd.hpp>
@@ -35,7 +36,9 @@
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetGeometryCommand.h>
+#include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
+#include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
@@ -467,6 +470,134 @@ namespace Oxygen::Interop::World {
     auto native_asset_uri = msclr::interop::marshal_as<std::string>(assetUri);
     auto cmd = std::unique_ptr<SetGeometryCommand>(
       commandFactory_->CreateSetGeometry(handle, native_asset_uri));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::SetMaterialOverride(
+    System::Guid nodeId, int slotIndex, String^ materialUri) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    auto b = nodeId.ToByteArray();
+    std::array<uint8_t, 16> key{};
+    for (int i = 0; i < 16; ++i)
+      key[i] = b[i];
+
+    auto opt = NodeRegistry::Lookup(key);
+    if (!opt.has_value())
+      return;
+
+    const auto& handle = opt.value();
+    auto native_material_uri = materialUri == nullptr
+      ? std::string{}
+      : msclr::interop::marshal_as<std::string>(materialUri);
+    auto cmd = std::unique_ptr<SetMaterialOverrideCommand>(
+      commandFactory_->CreateSetMaterialOverride(
+        handle, static_cast<std::size_t>(slotIndex), native_material_uri));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::SetEnvironment(
+    bool atmosphereEnabled,
+    bool sunDiskEnabled,
+    float planetRadiusMeters,
+    float atmosphereHeightMeters,
+    System::Numerics::Vector3 groundAlbedoRgb,
+    float rayleighScaleHeightMeters,
+    float mieScaleHeightMeters,
+    float mieAnisotropy,
+    System::Numerics::Vector3 skyLuminanceFactorRgb,
+    float aerialPerspectiveDistanceScale,
+    float aerialScatteringStrength,
+    float aerialPerspectiveStartDepthMeters,
+    float heightFogContribution,
+    int exposureMode,
+    bool exposureEnabled,
+    float exposureKey,
+    float manualExposureEv,
+    float exposureCompensation,
+    int toneMapping,
+    int autoExposureMeteringMode,
+    float autoExposureMinEv,
+    float autoExposureMaxEv,
+    float autoExposureSpeedUp,
+    float autoExposureSpeedDown,
+    float autoExposureLowPercentile,
+    float autoExposureHighPercentile,
+    float autoExposureMinLogLuminance,
+    float autoExposureLogLuminanceRange,
+    float autoExposureTargetLuminance,
+    float autoExposureSpotMeterRadius,
+    float bloomIntensity,
+    float bloomThreshold,
+    float saturation,
+    float contrast,
+    float vignetteIntensity,
+    float displayGamma) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    SkyAtmosphereParams atmosphere {};
+    atmosphere.enabled = atmosphereEnabled;
+    atmosphere.sun_disk_enabled = sunDiskEnabled;
+    atmosphere.planet_radius_m = planetRadiusMeters;
+    atmosphere.atmosphere_height_m = atmosphereHeightMeters;
+    atmosphere.ground_albedo_rgb
+      = oxygen::Vec3 { groundAlbedoRgb.X, groundAlbedoRgb.Y, groundAlbedoRgb.Z };
+    atmosphere.rayleigh_scale_height_m = rayleighScaleHeightMeters;
+    atmosphere.mie_scale_height_m = mieScaleHeightMeters;
+    atmosphere.mie_anisotropy = mieAnisotropy;
+    atmosphere.sky_luminance_factor_rgb = oxygen::Vec3 {
+      skyLuminanceFactorRgb.X,
+      skyLuminanceFactorRgb.Y,
+      skyLuminanceFactorRgb.Z,
+    };
+    atmosphere.aerial_perspective_distance_scale
+      = aerialPerspectiveDistanceScale;
+    atmosphere.aerial_scattering_strength = aerialScatteringStrength;
+    atmosphere.aerial_perspective_start_depth_m
+      = aerialPerspectiveStartDepthMeters;
+    atmosphere.height_fog_contribution = heightFogContribution;
+
+    PostProcessParams post_process {};
+    post_process.tone_mapper = toneMapping;
+    post_process.exposure_mode = exposureMode;
+    post_process.exposure_enabled = exposureEnabled;
+    post_process.exposure_key = exposureKey;
+    post_process.manual_exposure_ev = manualExposureEv;
+    post_process.exposure_compensation_ev = exposureCompensation;
+    post_process.auto_exposure_metering_mode = autoExposureMeteringMode;
+    post_process.auto_exposure_min_ev = autoExposureMinEv;
+    post_process.auto_exposure_max_ev = autoExposureMaxEv;
+    post_process.auto_exposure_speed_up = autoExposureSpeedUp;
+    post_process.auto_exposure_speed_down = autoExposureSpeedDown;
+    post_process.auto_exposure_low_percentile = autoExposureLowPercentile;
+    post_process.auto_exposure_high_percentile = autoExposureHighPercentile;
+    post_process.auto_exposure_min_log_luminance
+      = autoExposureMinLogLuminance;
+    post_process.auto_exposure_log_luminance_range
+      = autoExposureLogLuminanceRange;
+    post_process.auto_exposure_target_luminance = autoExposureTargetLuminance;
+    post_process.auto_exposure_spot_meter_radius = autoExposureSpotMeterRadius;
+    post_process.bloom_intensity = bloomIntensity;
+    post_process.bloom_threshold = bloomThreshold;
+    post_process.saturation = saturation;
+    post_process.contrast = contrast;
+    post_process.vignette_intensity = vignetteIntensity;
+    post_process.display_gamma = displayGamma;
+
+    auto cmd = std::unique_ptr<SetEnvironmentCommand>(
+      commandFactory_->CreateSetEnvironment(atmosphere, post_process));
     editor_module->get().Enqueue(std::move(cmd));
   }
 

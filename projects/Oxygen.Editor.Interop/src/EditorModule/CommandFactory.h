@@ -8,12 +8,14 @@
 #pragma managed(push, on)
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include <glm/fwd.hpp>
 
+#include <Commands/SetEnvironmentCommand.h>
 #include <EditorModule/ICommandFactory.h>
 
 // Forward declarations for types used in method signatures to avoid heavy
@@ -24,6 +26,7 @@ class RemoveSceneNodeCommand;
 class RenameSceneNodeCommand;
 class SetLocalTransformCommand;
 class SetGeometryCommand;
+class SetMaterialOverrideCommand;
 class SetVisibilityCommand;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
@@ -59,6 +62,15 @@ namespace Oxygen::Interop::World {
 
     virtual oxygen::interop::module::SetGeometryCommand*
       CreateSetGeometry(oxygen::scene::NodeHandle handle, std::string assetUri);
+
+    virtual oxygen::interop::module::SetMaterialOverrideCommand*
+      CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
+        std::size_t slotIndex, std::string materialUri);
+
+    virtual oxygen::interop::module::SetEnvironmentCommand*
+      CreateSetEnvironment(
+        oxygen::interop::module::SkyAtmosphereParams atmosphere,
+        oxygen::interop::module::PostProcessParams postProcess);
 
     virtual oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);
