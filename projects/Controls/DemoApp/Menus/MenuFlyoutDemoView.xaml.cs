@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls.Demo.Menus;
 
@@ -19,5 +20,20 @@ public sealed partial class MenuFlyoutDemoView
     public MenuFlyoutDemoView()
     {
         this.InitializeComponent();
+        this.Loaded += this.OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+
+        if (this.ViewModel is { } viewModel &&
+            this.Resources["MenuNumberBoxItemTemplate"] is DataTemplate numberBoxTemplate &&
+            this.Resources["MenuSliderItemTemplate"] is DataTemplate sliderTemplate &&
+            this.Resources["MenuToggleItemTemplate"] is DataTemplate toggleTemplate)
+        {
+            viewModel.ApplyInteractiveContentTemplates(numberBoxTemplate, sliderTemplate, toggleTemplate);
+        }
     }
 }

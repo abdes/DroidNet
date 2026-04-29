@@ -81,6 +81,7 @@ public partial class MenuItemDemoViewModel : ObservableObject
 
         this.SelectedIconName = "Save";
         this.MnemonicText = "S";
+        this.SeparatorLabelText = string.Empty;
         this.CommandCanExecute = true;
         this.UseCommand = true;
 
@@ -104,6 +105,15 @@ public partial class MenuItemDemoViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string MnemonicText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SeparatorLabelText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool UseEmbeddedControl { get; set; } = false;
+
+    [ObservableProperty]
+    public partial double EmbeddedSliderValue { get; set; } = 50;
 
     /// <summary>
     /// Gets or sets a value indicating whether the command can execute.
@@ -179,11 +189,17 @@ public partial class MenuItemDemoViewModel : ObservableObject
         this.MenuItemData.IsCheckable = false;
         this.MenuItemData.IsChecked = false;
         this.MenuItemData.IsSeparator = false;
+        this.MenuItemData.SeparatorLabel = null;
+        this.MenuItemData.InteractiveContent = null;
+        this.MenuItemData.InteractiveContentFactory = null;
         this.MenuItemData.RadioGroupId = null;
         this.MenuItemData.Mnemonic = 'S';
 
         this.SelectedIconName = "Save";
         this.MnemonicText = "S";
+        this.SeparatorLabelText = string.Empty;
+        this.UseEmbeddedControl = false;
+        this.EmbeddedSliderValue = 50;
         this.UseCommand = true;
         this.CommandCanExecute = true;
 
@@ -232,12 +248,18 @@ public partial class MenuItemDemoViewModel : ObservableObject
             case nameof(this.MnemonicText):
                 this.UpdateMnemonic();
                 break;
+            case nameof(this.SeparatorLabelText):
+                this.MenuItemData.SeparatorLabel = string.IsNullOrWhiteSpace(this.SeparatorLabelText) ? null : this.SeparatorLabelText;
+                break;
             case nameof(this.CommandCanExecute):
                 // Notify the command that CanExecute has changed
                 this.menuItemCommand?.NotifyCanExecuteChanged();
                 break;
             case nameof(this.UseCommand):
                 this.UpdateCommandAttachment();
+                break;
+            case nameof(this.UseEmbeddedControl):
+                this.UpdateEmbeddedControl();
                 break;
         }
     }
@@ -290,5 +312,37 @@ public partial class MenuItemDemoViewModel : ObservableObject
             this.MenuItemData.Command = null;
             this.LastActionMessage = "Command removed - MenuItem operates without a command.";
         }
+    }
+
+    private void UpdateEmbeddedControl()
+    {
+        if (!this.UseEmbeddedControl)
+        {
+            this.MenuItemData.InteractiveContent = null;
+            this.MenuItemData.InteractiveContentFactory = null;
+            this.LastActionMessage = "Embedded control removed - MenuItem invokes normally.";
+            return;
+        }
+
+        this.MenuItemData.InteractiveContent = null;
+        this.MenuItemData.InteractiveContentFactory = () =>
+        {
+            var slider = new Slider
+            {
+                Minimum = 0,
+                Maximum = 100,
+                StepFrequency = 1,
+                Value = this.EmbeddedSliderValue,
+                Width = 140,
+            };
+            slider.ValueChanged += (_, e) =>
+            {
+                this.EmbeddedSliderValue = e.NewValue;
+                this.LastActionMessage = $"Embedded slider value changed to {this.EmbeddedSliderValue:0}. The menu item was not invoked.";
+            };
+            return slider;
+        };
+
+        this.LastActionMessage = "Embedded slider attached - interact with it without invoking the MenuItem.";
     }
 }

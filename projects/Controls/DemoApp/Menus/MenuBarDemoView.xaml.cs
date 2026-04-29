@@ -36,6 +36,14 @@ public sealed partial class MenuBarDemoView : Page
         _ = sender; // unused
         _ = e; // unused
 
+        if (this.ViewModel is { } viewModel &&
+            this.Resources["MenuNumberBoxItemTemplate"] is DataTemplate numberBoxTemplate &&
+            this.Resources["MenuSliderItemTemplate"] is DataTemplate sliderTemplate &&
+            this.Resources["MenuToggleItemTemplate"] is DataTemplate toggleTemplate)
+        {
+            viewModel.ApplyInteractiveContentTemplates(numberBoxTemplate, sliderTemplate, toggleTemplate);
+        }
+
         _ = this.InitializeMenuContext();
     }
 
