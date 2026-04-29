@@ -176,6 +176,7 @@ namespace oxygen::interop::module {
     EditorViewportCameraControlMode control_mode,
     glm::vec3& /*focus_point*/,
     float& /*ortho_half_height*/,
+    float movement_speed_units_per_second,
     float dt_seconds) noexcept -> void {
     if (!camera_node.IsAlive()) {
       return;
@@ -246,7 +247,10 @@ namespace oxygen::interop::module {
     }
 
     const bool fast = input_snapshot.IsActionOngoing("Editor.Fly.Shift");
-    const float speed = params.base_speed_units_per_second
+    const float base_speed = std::isfinite(movement_speed_units_per_second)
+      ? std::max(1.0f, movement_speed_units_per_second)
+      : params.base_speed_units_per_second;
+    const float speed = base_speed
       * (fast ? params.fast_multiplier : 1.0f);
 
     const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);

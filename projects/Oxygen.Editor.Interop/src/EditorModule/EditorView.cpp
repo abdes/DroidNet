@@ -58,6 +58,27 @@ struct SceneFrameBounds {
   return v / std::sqrt(len2);
 }
 
+[[nodiscard]] auto SanitizeFieldOfViewY(const float value) noexcept -> float {
+  constexpr float kMinFovY = 0.0174532925F; // 1 degree.
+  constexpr float kMaxFovY = 3.1241393611F; // 179 degrees.
+  return std::isfinite(value) && value > 0.0F
+    ? std::clamp(value, kMinFovY, kMaxFovY)
+    : kDefaultPerspectiveFovY;
+}
+
+[[nodiscard]] auto SanitizeNearPlane(const float value) noexcept -> float {
+  return std::isfinite(value) && value > 0.0F
+    ? value
+    : kDefaultPerspectiveNearPlane;
+}
+
+[[nodiscard]] auto SanitizeFarPlane(
+  const float value, const float near_plane) noexcept -> float {
+  return std::isfinite(value) && value > near_plane
+    ? value
+    : std::max(near_plane + 1.0F, kDefaultPerspectiveFarPlane);
+}
+
 [[nodiscard]] auto LookRotationFromPositionToTarget(
   const glm::vec3& position,
   const glm::vec3& target_position,
@@ -139,16 +160,21 @@ struct SceneFrameBounds {
   return std::max(8.0F, fit_distance * kFrameMargin);
 }
 
-auto ApplyPerspectiveProjectionDefaults(scene::PerspectiveCamera& camera,
+auto ApplyPerspectiveProjectionSettings(scene::PerspectiveCamera& camera,
   const float aspect,
   const ViewPort& viewport,
   const float scene_radius,
-  const float camera_distance) noexcept -> void {
-  camera.SetFieldOfView(kDefaultPerspectiveFovY);
+  const float camera_distance,
+  const float field_of_view_y,
+  const float near_plane,
+  const float far_plane,
+  const bool use_explicit_far_plane) noexcept -> void {
+  camera.SetFieldOfView(field_of_view_y);
   camera.SetAspectRatio(std::max(0.001F, aspect));
-  camera.SetNearPlane(kDefaultPerspectiveNearPlane);
-  camera.SetFarPlane(std::max(kDefaultPerspectiveFarPlane,
-    camera_distance + scene_radius * 4.0F));
+  camera.SetNearPlane(near_plane);
+  camera.SetFarPlane(use_explicit_far_plane
+      ? far_plane
+      : std::max(far_plane, camera_distance + scene_radius * 4.0F));
   camera.SetViewport(viewport);
 }
 
@@ -496,8 +522,9 @@ void EditorView::CreateCamera(scene::Scene &scene) {
       .max_depth = 1.0f,
   };
   const float default_distance = ResolveDefaultCameraDistance(kDefaultSceneRadius);
-  ApplyPerspectiveProjectionDefaults(
-    *camera, aspect, vp, kDefaultSceneRadius, default_distance);
+  ApplyPerspectiveProjectionSettings(*camera, aspect, vp, kDefaultSceneRadius,
+    default_distance, camera_field_of_view_y_radians_, camera_near_plane_,
+    camera_far_plane_, camera_view_settings_overridden_);
   camera_node_.AttachCamera(std::move(camera));
 
   focus_point_ = kDefaultFocusPoint;
@@ -583,8 +610,9 @@ void EditorView::UpdateCameraForFrame() {
       scene_radius = std::max(scene_radius, ortho_half_height_);
     }
 
-    ApplyPerspectiveProjectionDefaults(
-      cam, aspect, vp, scene_radius, camera_distance);
+    ApplyPerspectiveProjectionSettings(cam, aspect, vp, scene_radius,
+      camera_distance, camera_field_of_view_y_radians_, camera_near_plane_,
+      camera_far_plane_, camera_view_settings_overridden_);
     return;
   }
 
@@ -599,19 +627,25 @@ void EditorView::UpdateCameraForFrame() {
     // Keep near/far in a sane range.
     // Using fixed planes can make orthographic presets appear empty if the
     // camera is far from the focus point (everything gets clipped).
-    constexpr float kNear = 0.1f;
-    float far_plane = 1000.0f;
-    if (auto transform = camera_node_.GetTransform(); true) {
-      const glm::vec3 pos =
-        transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
-      const glm::vec3 focus = focus_point_;
-      const glm::vec3 d = pos - focus;
-      const float dist = std::sqrt(glm::dot(d, d));
-      if (std::isfinite(dist)) {
-        far_plane = std::max(far_plane, dist * 4.0f);
+    const float near_plane = camera_view_settings_overridden_
+      ? camera_near_plane_
+      : 0.1f;
+    float far_plane = camera_far_plane_;
+    if (!camera_view_settings_overridden_) {
+      far_plane = 1000.0f;
+      if (auto transform = camera_node_.GetTransform(); true) {
+        const glm::vec3 pos =
+          transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
+        const glm::vec3 focus = focus_point_;
+        const glm::vec3 d = pos - focus;
+        const float dist = std::sqrt(glm::dot(d, d));
+        if (std::isfinite(dist)) {
+          far_plane = std::max(far_plane, dist * 4.0f);
+        }
       }
     }
-    cam.SetExtents(-half_w, half_w, -half_h, half_h, kNear, far_plane);
+    cam.SetExtents(
+      -half_w, half_w, -half_h, half_h, near_plane, far_plane);
   }
 }
 
@@ -692,6 +726,49 @@ void EditorView::SetCameraControlMode(
   camera_control_mode_ = mode;
   LOG_F(INFO, "EditorView '{}' camera control mode set to {}",
     config_.name, static_cast<int>(mode));
+}
+
+void EditorView::SetCameraMovementSpeed(
+  const float speed_units_per_second) noexcept {
+  if (!std::isfinite(speed_units_per_second)) {
+    return;
+  }
+
+  camera_movement_speed_units_per_second_ =
+    std::max(1.0f, speed_units_per_second);
+}
+
+void EditorView::SetCameraViewSettings(
+  const float field_of_view_y_radians,
+  const float near_plane,
+  const float far_plane) noexcept {
+  const float sanitized_fov_y = SanitizeFieldOfViewY(field_of_view_y_radians);
+  const float sanitized_near = SanitizeNearPlane(near_plane);
+  const float sanitized_far = SanitizeFarPlane(far_plane, sanitized_near);
+  camera_field_of_view_y_radians_ = sanitized_fov_y;
+  camera_near_plane_ = sanitized_near;
+  camera_far_plane_ = sanitized_far;
+  camera_view_settings_overridden_ = true;
+
+  if (!camera_node_.IsAlive()) {
+    return;
+  }
+
+  if (auto perspective = camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+      perspective) {
+    auto& camera = perspective->get();
+    camera.SetFieldOfView(sanitized_fov_y);
+    camera.SetNearPlane(sanitized_near);
+    camera.SetFarPlane(sanitized_far);
+    return;
+  }
+
+  if (auto orthographic = camera_node_.GetCameraAs<scene::OrthographicCamera>();
+      orthographic) {
+    auto extents = orthographic->get().GetExtents();
+    orthographic->get().SetExtents(extents[0], extents[1], extents[2],
+      extents[3], sanitized_near, sanitized_far);
+  }
 }
 
 auto EditorView::GetViewId() const -> ViewId { return view_id_; }

@@ -181,6 +181,20 @@ namespace oxygen::interop::module {
       return camera_control_mode_;
     }
 
+    //! Sets the base movement speed used by fly camera navigation.
+    void SetCameraMovementSpeed(float speed_units_per_second) noexcept;
+
+    //! Gets the base movement speed used by fly camera navigation.
+    [[nodiscard]] auto GetCameraMovementSpeed() const noexcept -> float {
+      return camera_movement_speed_units_per_second_;
+    }
+
+    //! Updates camera lens and clipping settings on the current camera.
+    void SetCameraViewSettings(
+      float field_of_view_y_radians,
+      float near_plane,
+      float far_plane) noexcept;
+
     // Renderer registration
     void RegisterWithRenderer(vortex::Renderer& renderer);
     void UnregisterFromRenderer(vortex::Renderer& renderer);
@@ -215,6 +229,11 @@ namespace oxygen::interop::module {
     CameraViewPreset camera_view_preset_{ CameraViewPreset::kPerspective };
     EditorViewportCameraControlMode camera_control_mode_{
       EditorViewportCameraControlMode::kOrbitTurntable };
+    float camera_movement_speed_units_per_second_{ 5.0f };
+    float camera_field_of_view_y_radians_{ 1.0471975803F };
+    float camera_near_plane_{ 0.05F };
+    float camera_far_plane_{ 1000.0F };
+    bool camera_view_settings_overridden_{ false };
     float ortho_half_height_{ 10.0f };
 
     scene::SceneNode camera_node_;

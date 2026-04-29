@@ -83,6 +83,17 @@ namespace oxygen::interop::module {
     void SetCameraControlMode(
       ViewId engine_id,
       EditorViewportCameraControlMode mode);
+
+    //! Applies the base fly camera movement speed to a specific view.
+    void SetCameraMovementSpeed(ViewId engine_id, float speed_units_per_second);
+
+    //! Applies camera lens and clipping settings to a specific view.
+    void SetCameraViewSettings(
+      ViewId engine_id,
+      float field_of_view_y_radians,
+      float near_plane,
+      float far_plane);
+
     // Returns true if a transient frame context is currently set (OnFrameStart
     // has been called but FinalizeViews has not yet been called). Non-owning.
     bool HasActiveFrameContext() const;

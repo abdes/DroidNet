@@ -332,4 +332,22 @@ public sealed partial class EngineService
 
     private void LogSetViewCameraControlMode(ViewIdManaged viewId, CameraControlModeManaged mode)
         => LogSetViewCameraControlMode(this.logger, viewId.Value, mode);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to set camera movement speed to '{SpeedUnitsPerSecond}'.")]
+    private static partial void LogSetViewCameraMovementSpeed(ILogger logger, ulong viewId, float speedUnitsPerSecond);
+
+    private void LogSetViewCameraMovementSpeed(ViewIdManaged viewId, float speedUnitsPerSecond)
+        => LogSetViewCameraMovementSpeed(this.logger, viewId.Value, speedUnitsPerSecond);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to set camera settings to fov '{FieldOfViewDegrees}', near '{NearPlane}', far '{FarPlane}'.")]
+    private static partial void LogSetViewCameraSettings(ILogger logger, ulong viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
+
+    private void LogSetViewCameraSettings(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
+        => LogSetViewCameraSettings(this.logger, viewId.Value, fieldOfViewDegrees, nearPlane, farPlane);
 }

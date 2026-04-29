@@ -5,6 +5,7 @@
     xmlns:controls="using:Oxygen.Editor.LevelEditor"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:menus="using:DroidNet.Controls.Menus"
     IsTabStop="True"
@@ -13,6 +14,33 @@
     <UserControl.Resources>
         <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />
+        <DataTemplate x:Key="ViewportCameraNumberBoxItemTemplate">
+            <Grid
+                Width="184"
+                HorizontalAlignment="Stretch"
+                ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <dnc:NumberBox
+                    MinWidth="{Binding Width}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalValueAlignment="Left"
+                    Mask="{Binding Mask}"
+                    Multiplier="{Binding Multiplier}"
+                    NumberValue="{Binding NumberValue, Mode=TwoWay}"
+                    Validate="OnCameraNumberBoxValidate"
+                    WithPadding="False" />
+                <TextBlock
+                    Grid.Column="1"
+                    MinWidth="12"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{Binding Unit}" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -37,11 +65,8 @@
                     </menus:MenuButton.Content>
                 </menus:MenuButton>
 
-                <!--  Camera type menu: icon + text  -->
-                <menus:MenuButton Content="{x:Bind ViewModel.CameraType, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ViewMenu, Mode=OneWay}" />
-
-                <!--  Editor camera control mode menu  -->
-                <menus:MenuButton Content="{x:Bind ViewModel.CameraControlModeLabel, Mode=OneWay}" MenuSource="{x:Bind ViewModel.CameraControlMenu, Mode=OneWay}" />
+                <!--  Combined camera projection, movement, and lens menu  -->
+                <menus:MenuButton Content="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}" MenuSource="{x:Bind ViewModel.CameraMenu, Mode=OneWay}" />
 
                 <!--  Shading mode menu: icon + text  -->
                 <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu, Mode=OneWay}" />
