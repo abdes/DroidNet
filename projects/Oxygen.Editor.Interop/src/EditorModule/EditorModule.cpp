@@ -14,7 +14,9 @@
 #include <Commands/DestroyViewCommand.h>
 #include <Commands/HideViewCommand.h>
 #include <Commands/SetViewCameraControlModeCommand.h>
+#include <Commands/SetViewCameraMovementSpeedCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
+#include <Commands/SetViewCameraSettingsCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorCompositor.h>
@@ -547,14 +549,24 @@ namespace oxygen::interop::module {
 
             // If the hovered view differs, keep wheel routing separate.
             if (hovered != kInvalidViewId && hovered != active) {
-              viewport_navigation_->ApplyNonWheel(view->GetCameraNode(),
-                *input_snapshot, view->GetCameraControlMode(), focus_point,
-                ortho_half_height, dt_seconds);
+              viewport_navigation_->ApplyNonWheel(
+                view->GetCameraNode(),
+                *input_snapshot,
+                view->GetCameraControlMode(),
+                focus_point,
+                ortho_half_height,
+                view->GetCameraMovementSpeed(),
+                dt_seconds);
             }
             else {
-              viewport_navigation_->Apply(view->GetCameraNode(),
-                *input_snapshot, view->GetCameraControlMode(), focus_point,
-                ortho_half_height, dt_seconds);
+              viewport_navigation_->Apply(
+                view->GetCameraNode(),
+                *input_snapshot,
+                view->GetCameraControlMode(),
+                focus_point,
+                ortho_half_height,
+                view->GetCameraMovementSpeed(),
+                dt_seconds);
             }
 
             view->SetFocusPoint(focus_point);
@@ -565,9 +577,14 @@ namespace oxygen::interop::module {
           if (hovered != kInvalidViewId && hovered != active && view_id == hovered) {
             auto focus_point = view->GetFocusPoint();
             auto ortho_half_height = view->GetOrthoHalfHeight();
-            viewport_navigation_->ApplyWheelOnly(view->GetCameraNode(),
-              *input_snapshot, view->GetCameraControlMode(), focus_point,
-              ortho_half_height, dt_seconds);
+            viewport_navigation_->ApplyWheelOnly(
+              view->GetCameraNode(),
+              *input_snapshot,
+              view->GetCameraControlMode(),
+              focus_point,
+              ortho_half_height,
+              view->GetCameraMovementSpeed(),
+              dt_seconds);
             view->SetFocusPoint(focus_point);
             view->SetOrthoHalfHeight(ortho_half_height);
           }
@@ -1030,6 +1047,33 @@ namespace oxygen::interop::module {
 
     auto cmd = std::make_unique<SetViewCameraControlModeCommand>(
       view_manager_.get(), view_id, mode);
+    command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewCameraMovementSpeed(
+    ViewId view_id,
+    float speed_units_per_second) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    auto cmd = std::make_unique<SetViewCameraMovementSpeedCommand>(
+      view_manager_.get(), view_id, speed_units_per_second);
+    command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewCameraSettings(
+    ViewId view_id,
+    float field_of_view_y_radians,
+    float near_plane,
+    float far_plane) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    auto cmd = std::make_unique<SetViewCameraSettingsCommand>(
+      view_manager_.get(), view_id, field_of_view_y_radians, near_plane,
+      far_plane);
     command_queue_.Enqueue(std::move(cmd));
   }
 

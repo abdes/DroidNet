@@ -24,6 +24,8 @@ public class DiagnosticVocabularyTests
         _ = RuntimeOperationKinds.ViewDestroy.Should().Be("Runtime.View.Destroy");
         _ = RuntimeOperationKinds.ViewSetCameraPreset.Should().Be("Runtime.View.SetCameraPreset");
         _ = RuntimeOperationKinds.ViewSetCameraControlMode.Should().Be("Runtime.View.SetCameraControlMode");
+        _ = RuntimeOperationKinds.ViewSetCameraMovementSpeed.Should().Be("Runtime.View.SetCameraMovementSpeed");
+        _ = RuntimeOperationKinds.ViewSetCameraSettings.Should().Be("Runtime.View.SetCameraSettings");
         _ = RuntimeOperationKinds.CookedRootRefresh.Should().Be("Runtime.CookedRoot.Refresh");
         _ = ViewportOperationKinds.LayoutChange.Should().Be("Viewport.Layout.Change");
     }

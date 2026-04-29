@@ -2,12 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Runtime.InteropServices;
-using System.Diagnostics;
+using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Input;
@@ -15,11 +17,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Core.Diagnostics;
-using Oxygen.Editor.Runtime.Input;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Runtime.Input;
 using Oxygen.Interop;
 using Oxygen.Interop.Input;
-using System.Numerics;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -223,8 +224,30 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
+        this.ApplyCameraMenuTemplates(current);
 
         _ = this.HandleViewModelChangeAsync(previous, current);
+    }
+
+    private void ApplyCameraMenuTemplates(ViewportViewModel? viewModel)
+    {
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        if (this.Resources["ViewportCameraNumberBoxItemTemplate"] is DataTemplate numberBoxTemplate)
+        {
+            viewModel.ApplyCameraMenuInteractiveContentTemplate(numberBoxTemplate);
+        }
+    }
+
+    private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
+    {
+        if (sender is FrameworkElement { DataContext: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)
+        {
+            e.IsValid = model.IsInRange(value);
+        }
     }
 
     private async Task HandleViewModelChangeAsync(ViewportViewModel? previous, ViewportViewModel? current)
@@ -1007,6 +1030,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         viewModel.AssignedViewId = created;
                         this.LogViewCreated(viewModel.ViewportId, created);
                         await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
+                        await viewModel.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
                     }
                     else
                     {

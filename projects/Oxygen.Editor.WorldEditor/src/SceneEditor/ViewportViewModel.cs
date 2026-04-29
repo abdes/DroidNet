@@ -27,14 +27,36 @@ namespace Oxygen.Editor.LevelEditor;
 /// </summary>
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
+    private const string DegreeUnit = "\u00b0";
+    private const string PerspectiveCameraModeGroup = "PerspectiveCameraMode";
+    private const string OrthographicCameraGroup = "OrthographicCamera";
+    private const string MovementSpeedText = "Movement Speed";
+    private const string FieldOfViewText = "Field of View";
+    private const string NearViewPlaneText = "Near View Plane";
+    private const string FarViewPlaneText = "Far View Plane";
+
+    private static readonly CameraType[] OrthographicCameraTypes =
+    [
+        CameraType.Top,
+        CameraType.Bottom,
+        CameraType.Left,
+        CameraType.Right,
+        CameraType.Front,
+        CameraType.Back,
+    ];
+
     private readonly ILogger logger;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private IMenuSource? viewMenu;
-    private IMenuSource? cameraControlMenu;
+    private readonly ViewportCameraNumberBoxItemModel movementSpeedItem;
+    private readonly ViewportCameraNumberBoxItemModel fieldOfViewItem;
+    private readonly ViewportCameraNumberBoxItemModel nearViewPlaneItem;
+    private readonly ViewportCameraNumberBoxItemModel farViewPlaneItem;
+    private IMenuSource? cameraMenu;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
+    private DataTemplate? cameraNumberBoxItemTemplate;
     private ElementTheme? effectiveThemeOverride;
     private bool isDisposed;
 
@@ -69,6 +91,32 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.appearanceSettings = appearanceSettings;
+        this.movementSpeedItem = this.CreateCameraNumberBoxModel(
+            value: 1.0f,
+            minimum: 1.0f,
+            maximum: float.PositiveInfinity,
+            unit: string.Empty,
+            propertyName: nameof(this.MovementSpeed));
+        this.fieldOfViewItem = this.CreateCameraNumberBoxModel(
+            value: 90.0f,
+            minimum: 0.0f,
+            maximum: 180.0f,
+            unit: DegreeUnit,
+            propertyName: nameof(this.FieldOfViewDegrees));
+        this.nearViewPlaneItem = this.CreateCameraNumberBoxModel(
+            value: 0.1f,
+            minimum: 0.0f,
+            maximum: float.PositiveInfinity,
+            unit: "m",
+            propertyName: nameof(this.NearViewPlane),
+            mask: "~.###");
+        this.farViewPlaneItem = this.CreateCameraNumberBoxModel(
+            value: 1000.0f,
+            minimum: 0.0f,
+            maximum: float.PositiveInfinity,
+            unit: "m",
+            propertyName: nameof(this.FarViewPlane),
+            mask: "~.###");
 
         // Seed effective theme from settings and subscribe for changes.
         this.SetEffectiveTheme(this.appearanceSettings.Settings.AppThemeMode);
@@ -97,9 +145,11 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public partial bool Stat3 { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
     public partial CameraType CameraType { get; set; } = CameraType.Perspective;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
     [NotifyPropertyChangedFor(nameof(CameraControlModeLabel))]
     public partial CameraControlModeManaged CameraControlMode { get; set; } = CameraControlModeManaged.OrbitTurntable;
 
@@ -147,25 +197,61 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public bool IsPrimaryViewport { get; private set; }
 
     /// <summary>
-    /// Gets the menu source for the View menu. Built lazily on first access.
+    /// Gets the menu source for viewport camera projection, movement, and lens settings.
     /// </summary>
-    public IMenuSource ViewMenu => this.viewMenu ??= this.BuildViewMenu();
+    public IMenuSource CameraMenu => this.cameraMenu ??= this.BuildCameraMenu();
 
     /// <summary>
-    /// Gets the menu source for editor camera control modes.
+    /// Gets the display label for the combined camera menu button.
     /// </summary>
-    public IMenuSource CameraControlMenu => this.cameraControlMenu ??= this.BuildCameraControlMenu();
+    public string CameraMenuLabel => this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString();
 
     /// <summary>
     /// Gets the display label for the editor camera control mode.
     /// </summary>
     public string CameraControlModeLabel => this.CameraControlMode switch
     {
-        CameraControlModeManaged.OrbitTurntable => "Orbit",
+        CameraControlModeManaged.OrbitTurntable => "Turntable",
         CameraControlModeManaged.OrbitTrackball => "Trackball",
         CameraControlModeManaged.Fly => "Fly",
         _ => "Camera",
     };
+
+    /// <summary>
+    /// Gets or sets the editor fly movement speed.
+    /// </summary>
+    public float MovementSpeed
+    {
+        get => this.movementSpeedItem.NumberValue;
+        set => this.movementSpeedItem.NumberValue = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the editor camera field of view in degrees.
+    /// </summary>
+    public float FieldOfViewDegrees
+    {
+        get => this.fieldOfViewItem.NumberValue;
+        set => this.fieldOfViewItem.NumberValue = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the editor camera near view plane in meters.
+    /// </summary>
+    public float NearViewPlane
+    {
+        get => this.nearViewPlaneItem.NumberValue;
+        set => this.nearViewPlaneItem.NumberValue = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the editor camera far view plane in meters.
+    /// </summary>
+    public float FarViewPlane
+    {
+        get => this.farViewPlaneItem.NumberValue;
+        set => this.farViewPlaneItem.NumberValue = value;
+    }
 
     /// <summary>
     /// Gets the menu source for the Shading menu. Built lazily on first access.
@@ -234,6 +320,22 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public void UpdateTheme(ElementTheme theme) => this.SetEffectiveTheme(theme);
 
     /// <summary>
+    /// Applies the view-owned template used to render camera menu NumberBox rows.
+    /// </summary>
+    /// <param name="numberBoxItemTemplate">The template that renders <see cref="ViewportCameraNumberBoxItemModel"/> instances.</param>
+    public void ApplyCameraMenuInteractiveContentTemplate(DataTemplate numberBoxItemTemplate)
+    {
+        ArgumentNullException.ThrowIfNull(numberBoxItemTemplate);
+
+        this.cameraNumberBoxItemTemplate = numberBoxItemTemplate;
+        if (this.cameraMenu is not null)
+        {
+            this.cameraMenu = this.BuildCameraMenu();
+            this.OnPropertyChanged(nameof(this.CameraMenu));
+        }
+    }
+
+    /// <summary>
     /// Updates the layout metadata for the viewport, setting its index and primary status.
     /// </summary>
     /// <param name="index">The zero-based index of the viewport in the current layout.</param>
@@ -244,6 +346,15 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.IsPrimaryViewport = isPrimary;
     }
 
+    /// <summary>
+    /// Publishes a runtime failure scoped to this viewport.
+    /// </summary>
+    /// <param name="operationKind">The failed operation kind.</param>
+    /// <param name="domain">The failure domain.</param>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="title">The user-facing failure title.</param>
+    /// <param name="message">The user-facing failure message.</param>
+    /// <param name="exception">Optional exception details.</param>
     internal void PublishRuntimeFailure(
         string operationKind,
         FailureDomain domain,
@@ -263,6 +374,15 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             exception: exception,
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
+    /// <summary>
+    /// Publishes a runtime warning scoped to this viewport.
+    /// </summary>
+    /// <param name="operationKind">The warning operation kind.</param>
+    /// <param name="domain">The warning domain.</param>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="title">The user-facing warning title.</param>
+    /// <param name="message">The user-facing warning message.</param>
+    /// <param name="exception">Optional exception details.</param>
     internal void PublishRuntimeWarning(
         string operationKind,
         FailureDomain domain,
@@ -282,8 +402,22 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             exception: exception,
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
+    /// <summary>
+    /// Applies the currently selected editor camera control mode to the native view, when available.
+    /// </summary>
+    /// <returns>A task that completes when the mode has been submitted.</returns>
     internal async Task ApplyCurrentCameraControlModeAsync()
         => await this.ApplyCameraControlModeAsync(this.CameraControlMode).ConfigureAwait(true);
+
+    /// <summary>
+    /// Applies the current editor camera numeric settings to the native view, when available.
+    /// </summary>
+    /// <returns>A task that completes when the settings have been submitted.</returns>
+    internal async Task ApplyCurrentCameraSettingsAsync()
+    {
+        await this.ApplyCameraMovementSpeedAsync(this.MovementSpeed).ConfigureAwait(true);
+        await this.ApplyCameraSettingsAsync().ConfigureAwait(true);
+    }
 
     /// <summary>
     /// Protected dispose pattern implementation.
@@ -320,6 +454,21 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             }),
         };
 
+    private ViewportCameraNumberBoxItemModel CreateCameraNumberBoxModel(
+        float value,
+        float minimum,
+        float maximum,
+        string unit,
+        string propertyName,
+        string mask = "~.##")
+        => new(
+            value,
+            minimum,
+            maximum,
+            unit,
+            mask,
+            onNumberValueChanged: changedValue => this.OnCameraNumberBoxValueChanged(propertyName, changedValue));
+
     partial void OnIsMaximizedChanged(bool oldValue, bool newValue)
     {
         // keep MaximizeGlyph synched with IsMaximized
@@ -328,8 +477,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private void SetEffectiveTheme(ElementTheme theme)
     {
-        var hadViewMenu = this.viewMenu is not null;
-        var hadCameraControlMenu = this.cameraControlMenu is not null;
+        var hadCameraMenu = this.cameraMenu is not null;
         var hadShadingMenu = this.shadingMenu is not null;
         var hadLayoutMenu = this.layoutMenu is not null;
 
@@ -338,22 +486,16 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
         try
         {
-            if (hadViewMenu)
-            {
-                this.viewMenu = this.BuildViewMenu();
-                this.OnPropertyChanged(nameof(this.ViewMenu));
-            }
-
             if (hadShadingMenu)
             {
                 this.shadingMenu = this.BuildShadingMenu();
                 this.OnPropertyChanged(nameof(this.ShadingMenu));
             }
 
-            if (hadCameraControlMenu)
+            if (hadCameraMenu)
             {
-                this.cameraControlMenu = this.BuildCameraControlMenu();
-                this.OnPropertyChanged(nameof(this.CameraControlMenu));
+                this.cameraMenu = this.BuildCameraMenu();
+                this.OnPropertyChanged(nameof(this.CameraMenu));
             }
 
             if (hadLayoutMenu)
@@ -419,96 +561,119 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         return null;
     }
 
-    private IMenuSource BuildViewMenu()
+    private IMenuSource BuildCameraMenu()
     {
         var builder = new MenuBuilder(this.LoggerFactory);
 
-        async Task ApplyCameraPresetAsync(CameraType type)
+        this.AddPerspectiveCameraItems(builder);
+
+        _ = builder.AddSeparator("Orthographic");
+        foreach (var type in OrthographicCameraTypes)
         {
-            this.CameraType = type;
-
-            if (!this.AssignedViewId.IsValid)
-            {
-                return;
-            }
-
-            var preset = type switch
-            {
-                CameraType.Perspective => CameraViewPresetManaged.Perspective,
-                CameraType.Top => CameraViewPresetManaged.Top,
-                CameraType.Bottom => CameraViewPresetManaged.Bottom,
-                CameraType.Left => CameraViewPresetManaged.Left,
-                CameraType.Right => CameraViewPresetManaged.Right,
-                CameraType.Front => CameraViewPresetManaged.Front,
-                CameraType.Back => CameraViewPresetManaged.Back,
-                _ => CameraViewPresetManaged.Perspective,
-            };
-
-            try
-            {
-                var accepted = await this.EngineService.SetViewCameraPresetAsync(this.AssignedViewId, preset).ConfigureAwait(true);
-                if (!accepted)
-                {
-                    this.PublishRuntimeWarning(
-                        RuntimeOperationKinds.ViewSetCameraPreset,
-                        FailureDomain.RuntimeView,
-                        DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_REJECTED",
-                        "Camera preset was not applied",
-                        "The runtime rejected the camera preset for this viewport.");
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                this.PublishRuntimeFailure(
-                    RuntimeOperationKinds.ViewSetCameraPreset,
-                    FailureDomain.RuntimeView,
-                    DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_FAILED",
-                    "Camera preset failed",
-                    "The runtime could not apply the camera preset for this viewport.",
-                    ex);
-            }
+            _ = builder.AddRadioMenuItem(
+                type.ToString(),
+                OrthographicCameraGroup,
+                this.CameraType == type,
+                new RelayCommand(() => _ = this.ApplyOrthographicCameraPresetAsync(type)));
         }
 
         _ = builder
-            .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => _ = ApplyCameraPresetAsync(CameraType.Perspective)))
-            .AddSeparator();
-
-        foreach (var type in new[] { CameraType.Top, CameraType.Bottom, CameraType.Left, CameraType.Right, CameraType.Front, CameraType.Back })
-        {
-            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => _ = ApplyCameraPresetAsync(type)));
-        }
+            .AddSeparator("View")
+            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(FieldOfViewText, this.fieldOfViewItem))
+            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(NearViewPlaneText, this.nearViewPlaneItem))
+            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(FarViewPlaneText, this.farViewPlaneItem));
 
         return builder.Build();
     }
 
-    private IMenuSource BuildCameraControlMenu()
+    private void AddPerspectiveCameraItems(MenuBuilder builder)
     {
-        var builder = new MenuBuilder(this.LoggerFactory);
         _ = builder
-            .AddRadioMenuItem(
-                "Orbit - Turntable",
-                "CameraControlMode",
-                this.CameraControlMode == CameraControlModeManaged.OrbitTurntable,
-                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTurntable)))
-            .AddRadioMenuItem(
-                "Orbit - Trackball",
-                "CameraControlMode",
-                this.CameraControlMode == CameraControlModeManaged.OrbitTrackball,
-                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTrackball)))
-            .AddRadioMenuItem(
-                "Fly",
-                "CameraControlMode",
-                this.CameraControlMode == CameraControlModeManaged.Fly,
-                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.Fly)));
+            .AddSeparator("Perspective")
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Turntable", CameraControlModeManaged.OrbitTurntable))
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Trackball", CameraControlModeManaged.OrbitTrackball))
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Fly", CameraControlModeManaged.Fly))
+            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(MovementSpeedText, this.movementSpeedItem));
+    }
 
-        return builder.Build();
+    private MenuItemData CreatePerspectiveCameraModeItem(string text, CameraControlModeManaged mode)
+        => new()
+        {
+            Text = text,
+            RadioGroupId = PerspectiveCameraModeGroup,
+            IsChecked = this.CameraType == CameraType.Perspective && this.CameraControlMode == mode,
+            Command = new RelayCommand(() => _ = this.ApplyPerspectiveCameraModeAsync(mode)),
+        };
+
+    private async Task ApplyPerspectiveCameraModeAsync(CameraControlModeManaged mode)
+    {
+        await this.ApplyCameraPresetAsync(CameraType.Perspective).ConfigureAwait(true);
+        await this.ApplyCameraControlModeAsync(mode).ConfigureAwait(true);
+    }
+
+    private async Task ApplyOrthographicCameraPresetAsync(CameraType type)
+    {
+        if (this.CameraControlMode == CameraControlModeManaged.Fly)
+        {
+            await this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTurntable).ConfigureAwait(true);
+        }
+
+        await this.ApplyCameraPresetAsync(type).ConfigureAwait(true);
+    }
+
+    private async Task ApplyCameraPresetAsync(CameraType type)
+    {
+        this.CameraType = type;
+        this.cameraMenu = this.BuildCameraMenu();
+        this.OnPropertyChanged(nameof(this.CameraMenu));
+
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        var preset = type switch
+        {
+            CameraType.Perspective => CameraViewPresetManaged.Perspective,
+            CameraType.Top => CameraViewPresetManaged.Top,
+            CameraType.Bottom => CameraViewPresetManaged.Bottom,
+            CameraType.Left => CameraViewPresetManaged.Left,
+            CameraType.Right => CameraViewPresetManaged.Right,
+            CameraType.Front => CameraViewPresetManaged.Front,
+            CameraType.Back => CameraViewPresetManaged.Back,
+            _ => CameraViewPresetManaged.Perspective,
+        };
+
+        try
+        {
+            var accepted = await this.EngineService.SetViewCameraPresetAsync(this.AssignedViewId, preset).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetCameraPreset,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_REJECTED",
+                    "Camera preset was not applied",
+                    "The runtime rejected the camera preset for this viewport.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetCameraPreset,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CAMERA_PRESET_FAILED",
+                "Camera preset failed",
+                "The runtime could not apply the camera preset for this viewport.",
+                ex);
+        }
     }
 
     private async Task ApplyCameraControlModeAsync(CameraControlModeManaged mode)
     {
         this.CameraControlMode = mode;
-        this.cameraControlMenu = this.BuildCameraControlMenu();
-        this.OnPropertyChanged(nameof(this.CameraControlMenu));
+        this.cameraMenu = this.BuildCameraMenu();
+        this.OnPropertyChanged(nameof(this.CameraMenu));
 
         if (!this.AssignedViewId.IsValid)
         {
@@ -536,6 +701,95 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 DiagnosticCodes.ViewPrefix + "CAMERA_CONTROL_MODE_FAILED",
                 "Camera mode failed",
                 "The runtime could not apply the camera control mode for this viewport.",
+                ex);
+        }
+    }
+
+    private MenuItemData CreateCameraNumberBoxMenuItem(string text, ViewportCameraNumberBoxItemModel model)
+        => new()
+        {
+            Text = text,
+            InteractiveContent = model,
+            InteractiveContentTemplate = this.cameraNumberBoxItemTemplate,
+        };
+
+    private void OnCameraNumberBoxValueChanged(string propertyName, float value)
+    {
+        this.OnPropertyChanged(propertyName);
+
+        if (string.Equals(propertyName, nameof(this.MovementSpeed), StringComparison.Ordinal))
+        {
+            _ = this.ApplyCameraMovementSpeedAsync(value);
+            return;
+        }
+
+        _ = this.ApplyCameraSettingsAsync();
+    }
+
+    private async Task ApplyCameraMovementSpeedAsync(float speedUnitsPerSecond)
+    {
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            var accepted = await this.EngineService.SetViewCameraMovementSpeedAsync(this.AssignedViewId, speedUnitsPerSecond).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetCameraMovementSpeed,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_MOVEMENT_SPEED_REJECTED",
+                    "Camera movement speed was not applied",
+                    "The runtime rejected the camera movement speed for this viewport.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetCameraMovementSpeed,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CAMERA_MOVEMENT_SPEED_FAILED",
+                "Camera movement speed failed",
+                "The runtime could not apply the camera movement speed for this viewport.",
+                ex);
+        }
+    }
+
+    private async Task ApplyCameraSettingsAsync()
+    {
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            var accepted = await this.EngineService.SetViewCameraSettingsAsync(
+                this.AssignedViewId,
+                this.FieldOfViewDegrees,
+                this.NearViewPlane,
+                this.FarViewPlane).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetCameraSettings,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_SETTINGS_REJECTED",
+                    "Camera settings were not applied",
+                    "The runtime rejected the camera settings for this viewport.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetCameraSettings,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CAMERA_SETTINGS_FAILED",
+                "Camera settings failed",
+                "The runtime could not apply the camera settings for this viewport.",
                 ex);
         }
     }

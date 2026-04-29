@@ -102,6 +102,12 @@
     <ClCompile Include="Commands\SetViewCameraControlModeCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraMovementSpeedCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
@@ -265,6 +271,12 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetViewCameraSettingsCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\CommandFactory.h">

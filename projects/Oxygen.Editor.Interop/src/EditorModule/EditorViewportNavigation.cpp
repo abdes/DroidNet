@@ -56,10 +56,11 @@ namespace oxygen::interop::module {
     EditorViewportCameraControlMode control_mode,
     glm::vec3& focus_point,
     float& ortho_half_height,
+    float movement_speed_units_per_second,
     float dt_seconds) noexcept -> void {
     for (auto& feature : features_) {
       feature->Apply(camera_node, input_snapshot, control_mode, focus_point,
-        ortho_half_height, dt_seconds);
+        ortho_half_height, movement_speed_units_per_second, dt_seconds);
     }
   }
 
@@ -69,13 +70,14 @@ namespace oxygen::interop::module {
     EditorViewportCameraControlMode control_mode,
     glm::vec3& focus_point,
     float& ortho_half_height,
+    float movement_speed_units_per_second,
     float dt_seconds) noexcept -> void {
     for (auto& feature : features_) {
       if (feature.get() == wheel_zoom_feature_) {
         continue;
       }
       feature->Apply(camera_node, input_snapshot, control_mode, focus_point,
-        ortho_half_height, dt_seconds);
+        ortho_half_height, movement_speed_units_per_second, dt_seconds);
     }
   }
 
@@ -85,13 +87,15 @@ namespace oxygen::interop::module {
     EditorViewportCameraControlMode control_mode,
     glm::vec3& focus_point,
     float& ortho_half_height,
+    float movement_speed_units_per_second,
     float dt_seconds) noexcept -> void {
     if (wheel_zoom_feature_ == nullptr) {
       return;
     }
 
     wheel_zoom_feature_->Apply(camera_node, input_snapshot, control_mode,
-      focus_point, ortho_half_height, dt_seconds);
+      focus_point, ortho_half_height, movement_speed_units_per_second,
+      dt_seconds);
   }
 
 } // namespace oxygen::interop::module

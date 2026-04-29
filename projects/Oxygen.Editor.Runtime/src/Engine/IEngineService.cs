@@ -367,4 +367,28 @@ public interface IEngineService : IAsyncDisposable
     ///     <see langword="false"/> on failure.
     /// </returns>
     public Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode);
+
+    /// <summary>
+    /// Set the editor camera fly movement speed for an existing view.
+    /// </summary>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="speedUnitsPerSecond">The base movement speed in world units per second.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewCameraMovementSpeedAsync(ViewIdManaged viewId, float speedUnitsPerSecond);
+
+    /// <summary>
+    /// Set the editor camera lens and clipping settings for an existing view.
+    /// </summary>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="fieldOfViewDegrees">The vertical field of view in degrees.</param>
+    /// <param name="nearPlane">The near view plane in meters.</param>
+    /// <param name="farPlane">The far view plane in meters.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewCameraSettingsAsync(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 }

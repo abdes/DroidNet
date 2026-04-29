@@ -98,7 +98,9 @@ namespace oxygen::interop::module {
     const input::InputSnapshot& input_snapshot,
     EditorViewportCameraControlMode control_mode,
     glm::vec3& focus_point,
-    float& /*ortho_half_height*/, float /*dt_seconds*/) noexcept -> void {
+    float& /*ortho_half_height*/,
+    float /*movement_speed_units_per_second*/,
+    float /*dt_seconds*/) noexcept -> void {
     if (!camera_node.IsAlive()) {
       return;
     }
