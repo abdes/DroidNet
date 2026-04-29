@@ -74,59 +74,47 @@ Important baseline facts:
 
 ## 4. Next Milestone
 
-### NEXT: VTX-M08 - Skybox And Static Specified-Cubemap SkyLight
+### NEXT: VTX-FUTURE - Reserved Post-Baseline Families
 
-**Status:** `in_progress`
+**Status:** `future`
 
-**Purpose:** Implement and validate the first cubemap-backed environment
+**Purpose:** Hold the approved future families that remain after the validated
+desktop deferred baseline and VTX-M08 static cubemap environment baseline:
+captured/real-time SkyLight, broader indirect lighting and reflections, Virtual
+Shadow Maps, geometry virtualization, material composition, clouds,
+heterogeneous volumes, water, hair, distortion, and light shafts.
+
+**Why this is next:** `VTX-M08` validated the first cubemap-backed environment
 baseline after production readiness: visual skybox background rendering and
-static specified-cubemap SkyLight diffuse lighting.
-
-**Why this is next:** `VTX-M07` validated production readiness and legacy
-retirement. UE5.7 parity requires separating a visual skybox/SkyPass-style
-background from SkyLight lighting products. Oxygen already has scene authoring
-and cubemap import surfaces, but real SkyLight cubemap processing remains an
-open resource gap.
+static specified-cubemap SkyLight diffuse lighting. No narrower implementation
+milestone is selected yet; the next future family must be promoted with its own
+detailed plan and LLD updates before implementation starts.
 
 **Prerequisite work packages:** `VTX-M03` is landed with downstream validated
 surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
-`VTX-M06A`, `VTX-M06B`, `VTX-M06C`, and `VTX-M07` are validated.
+`VTX-M06A`, `VTX-M06B`, `VTX-M06C`, `VTX-M07`, and `VTX-M08` are validated.
 
-**Active work packages:** VTX-M08 Slice A is implemented and focused-test
-validated. Slice B product-state/resource-validation, CPU cubemap/SH
-processing, GPU product upload, shader-facing ABI publication, and existing
-consumer migration are focused-test and ShaderBake/catalog validated. Slice C
-visual SkySphere publication and Sky pass shader branching are source/shader
-validated, and the RenderScene startup-cubemap route now has CDB/debug-layer and
-RenderDoc scripted proof. Slice D deferred static SkyLight diffuse consumption
-is focused-test, CDB/debug-layer, and RenderDoc-script validated in IBL-only
-mode. Slice E direct-plus-IBL/directional sun interaction proof and static
-SkyLight off/on lifecycle allocation-churn proof are validated. User visual
-confirmation, residual-gap recording, and proof closeout remain open.
+**Active work packages:** None selected. VTX-M08 is validated and retained as
+the latest closed post-baseline milestone. The next work item must be selected
+from `VTX-FUTURE` and promoted out of `future` with explicit scope, LLDs,
+validation gates, and status updates before it becomes active.
 
-**Detailed plan:** [plan/VTX-M08-skybox-static-skylight.md](plan/VTX-M08-skybox-static-skylight.md).
+**Latest closed detailed plan:** [plan/VTX-M08-skybox-static-skylight.md](plan/VTX-M08-skybox-static-skylight.md).
 
-**In scope:**
+**Future selection scope:**
 
 - Preserve the M07 proof boundary: no legacy renderer reference, fallback, or
   compatibility path.
-- Use existing Oxygen cubemap import support as the asset-ingestion baseline.
-- Author and review the required LLDs before implementation:
-  `lld/cubemap-processing.md` must define cubemap ingestion boundaries,
-  derived SkyLight product ownership, runtime publication states, shader-facing
-  contracts, and validation surfaces; `lld/skybox-static-skylight.md` must
-  define visual-background selection, procedural-sky interaction, directional
-  sun interaction, SkyLight publication/consumption boundaries, feature gates,
-  and proof scenes/scripts.
-- Implement a visual skybox background path from `SkySphere` / cubemap
-  authoring that writes SceneColor as unlit sky/background content.
-- Implement static specified-cubemap SkyLight diffuse lighting through a
-  documented environment-product boundary, with exact product formats,
-  filtering, shader bindings, and validation defined in the new LLDs.
+- Preserve the VTX-M08 proof boundary: visual skybox and static
+  specified-cubemap SkyLight diffuse are validated baseline behavior, not
+  future work.
+- Promote exactly one future family at a time with its own detailed plan, LLD
+  updates, UE5.7 source/shader grounding, proof scripts, and status ledger row
+  edits before implementation starts.
 - Preserve no-environment, no-volumetrics, diagnostics, multi-view, offscreen,
   and feature-variant behavior from VTX-M06/VTX-M07.
 
-**Out of scope:**
+**Approved future gaps:**
 
 - Captured-scene SkyLight.
 - Real-time sky capture.
@@ -144,9 +132,9 @@ confirmation, residual-gap recording, and proof closeout remain open.
   conventional shadows, multi-view, offscreen, and feature-gated variant
   surfaces.
 
-**Next candidate after VTX-M08:** Virtual Shadow Maps or the broader
-IndirectLighting/reflection family. Those remain `future` until VTX-M08 is
-reviewed and the next detailed plan is selected.
+**Next candidate:** Virtual Shadow Maps or the broader
+IndirectLighting/reflection family. Both remain `future` until reviewed and
+selected as the next detailed plan.
 
 ## 5. Milestone Roadmap
 
@@ -176,7 +164,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M06B | Offscreen proof closeout | `validated` | VTX-M05A, VTX-M05C | `ForOffscreenScene` deferred/forward validation and preview/capture scenarios are implemented and validated. Closure proof covers focused tests, CDB/debug-layer audit, RenderDoc scripted analysis, non-empty offscreen product proof, downstream texture composition, 60-frame allocation-churn proof, and user visual confirmation. |
 | VTX-M06C | Feature-gated runtime variants | `validated` | VTX-M06A, VTX-M06B | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only variants with focused tests, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, and user visual confirmation. |
 | VTX-M07 | Production readiness and legacy retirement | `validated` | VTX-M06C | Static legacy seam guard, stale demo/doc cleanup, required demo refresh/testing, production proof-suite consolidation, binary dependency audit, current-path doc routing, CDB/RenderDoc closure proof, and safe legacy retirement are validated. |
-| VTX-M08 | Skybox and static specified-cubemap SkyLight | `in_progress` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Slice A data and plan state is implemented and focused-test validated: SkyLight authored fields, current 92-byte SkyLight environment record, scene descriptor/PakGen/PakDump/DemoShell propagation, and per-view visible-sky plan state with no-environment gating. Older cooked SkyLight records are not accepted; content must be re-cooked with the current schema. The stale SkyLight GI authoring/UI switch has been removed from the active contract; static diffuse is controlled by SkyLight enabled/source/product validity, intensity, and diffuse indirect scale. Slice B is implemented and focused-test validated: explicit static SkyLight product state, dedicated `diffuse_sh_srv` probe binding, CPU/HLSL frame-binding mirror update, unavailable-state classification, cached specified-cubemap asset resolution, source TextureCube/HDR validation, static product-key source descriptors, CPU-side specified-cubemap processing for yaw source selection, lower-hemisphere replacement, FP16-domain radiance scale metadata, mip generation, average brightness, UE5.7-shaped packed diffuse SH, renderer-owned GPU upload of the processed TextureCube plus SH structured buffer, shader-facing `GpuSkyLightParams::diffuse_sh_slot`, processed cubemap/SH publication into `EnvironmentProbeBindings`, and forward/debug/local-fog consumer migration are implemented and validated with focused environment tests plus ShaderBake/catalog validation. Slice C is source/shader/runtime validated for visual SkySphere publication, invalid default cubemap descriptor handling, Sky pass solid/cubemap branch before atmosphere LUT requirements, SkySphere pass gating without procedural-atmosphere opt-in, RenderScene startup-skybox loading through `SkyboxService`, explicit identity-vs-authored skybox radiance-scale semantics, CDB/debug-layer audit, RenderDoc skybox proof, and 65-frame allocation-churn proof with zero steady-state scene-texture allocations after warmup. Slice D deferred static SkyLight diffuse consumption is implemented and validated with focused tests, ShaderBake/catalog validation, CDB/debug-layer audit, and IBL-only RenderDoc proof showing one static SkyLight draw, no direct/sky scopes, valid texture-domain processed cubemap and diffuse SH slots, non-black SceneColor, and passing pixel histories. Slice E direct-plus-IBL interaction and off/on lifecycle proof are validated with RenderDoc, CDB/debug-layer, and allocation-churn evidence. Remaining work: user visual confirmation, residual-gap recording, and closure evidence. |
+| VTX-M08 | Skybox and static specified-cubemap SkyLight | `validated` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and user visual confirmation are recorded in the detailed M08 plan and status ledger. Accepted future gaps: captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, static-cubemap specular reflections, broader reflection probes, volumetric-cloud capture, and procedural sun-disk overlay inside static cubemap imagery. |
 | VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M08 or explicit reprioritization | Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
 
 ## 6. Environment Milestone Decomposition
@@ -557,7 +545,7 @@ Parallelism rules:
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `validated` for main-view AP | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; main-view aerial perspective has focused VortexBasic enabled/disabled proof and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP remains explicitly deferred. |
 | SkyLight publication truth | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. |
-| Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `in_progress` | Slice A data/plan state is validated. Slice B product-state/source-validation, CPU cubemap/SH processing, renderer-owned GPU product upload, shader-facing SkyLight ABI publication, and existing forward/debug/local-fog consumer migration are focused-test/shader validated. Slice C visual SkySphere publication and Sky pass shader branching are source/shader/runtime validated through RenderScene startup-skybox loading, CDB/debug-layer audit, RenderDoc capture, scripted skybox analysis, and allocation-churn proof. Slice D deferred static SkyLight diffuse lighting is implemented and validated in IBL-only mode with focused tests, CDB/debug-layer audit, and RenderDoc scripted proof. Slice E directional sun/direct-plus-IBL interaction proof and static SkyLight allocation-churn/off-on lifecycle proof are validated. Remaining work: user visual confirmation, residual-gap recording, and closure evidence. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, and broader reflection probes remain deferred. |
+| Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `validated` | Visual cubemap skybox rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, focused tests, ShaderBake/catalog validation where required, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, user visual confirmation, and residual-gap recording are closed in the M08 detailed plan/status ledger. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, static-cubemap specular reflections, broader reflection probes, volumetric-cloud capture, and static-cubemap sun-disk overlay remain approved future gaps. |
 | Exponential height fog | VTX-M04D.2 | `validated` | UE5.7-informed authored parameters, algorithms, shaders, disabled fast path, focused runtime/capture proof, and city-scale capture proof. Cubemap inscattering resource binding/sampling remains explicitly deferred. |
 | City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `validated` for M04D fog/AP packages | `CityEnvironmentValidation` banding/quality fixes now have implementation/test/runtime-smoke/focused RenderDoc evidence: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, city-scale directional CSM hydration, city-scale height-fog runtime/capture behavior, city-scale volumetric integrated-scattering runtime behavior, and city-scale main-view AP compose proof. Consolidated runtime closure is validated by VTX-M04D.5. Cubemap fog and reflection/360 AP are deferred. |
 | Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |

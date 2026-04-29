@@ -57,8 +57,9 @@ Implementation and review must check:
 
 ## Proof Gate
 
-VTX-M04D.2 remains `in_progress` unless all required implementation exists,
-docs/status are updated, and the following fresh evidence is recorded:
+This was the pre-validation gate for VTX-M04D.2: status had to remain
+`in_progress` unless all required implementation existed, docs/status were
+updated, and the following fresh evidence was recorded:
 
 ```powershell
 cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService Oxygen.Vortex.SceneRendererPublication

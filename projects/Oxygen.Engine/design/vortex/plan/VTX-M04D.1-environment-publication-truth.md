@@ -337,8 +337,8 @@ git diff --check
 Status update:
 
 - append the final evidence row for VTX-M04D.1 after implementation
-- leave VTX-M04D.2 through VTX-M04D.4 `in_progress` until their own proof
-  lands
+- leave VTX-M04D.2 through VTX-M04D.4 unvalidated until their own proof lands;
+  those downstream proof packages are now validated in the status ledger
 
 ## 9. Test Plan
 

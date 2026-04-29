@@ -1,10 +1,11 @@
 # VTX-M08 Skybox And Static Specified-Cubemap SkyLight
 
-Status: `in_progress`
+Status: `validated`
 
 This is the milestone planning and evidence file for the first post-M07
-environment feature family. It exists so PRD, architecture, plan, status, and
-the required LLDs stay aligned as implementation proceeds.
+environment feature family. It records the implementation and proof evidence
+that closed VTX-M08, and preserves the accepted future gaps that remain outside
+this milestone.
 
 ## Purpose
 
@@ -87,14 +88,14 @@ review asks for M05D/M06A-style slice evidence tracking in the plan file.
 - Reflection-capture recapture and broader reflection-probe ecosystem.
 - Volumetric clouds, heterogeneous volumes, water, hair, distortion, and VSM.
 
-## Planning Gate
+## Closure Gate
 
-VTX-M08 remains `in_progress` until every implementation slice and closure proof
-gate passes. Do not mark it validated until skybox rendering, static
-specified-cubemap SkyLight diffuse lighting, shader ABI migration, focused
-tests, ShaderBake/catalog validation where required, CDB/debug-layer proof,
-RenderDoc scripted analysis, allocation-churn proof, and residual-gap recording
-are complete.
+VTX-M08 is `validated` only because every implementation slice and closure proof
+gate below has recorded evidence: skybox rendering, static specified-cubemap
+SkyLight diffuse lighting, shader ABI migration, focused tests,
+ShaderBake/catalog validation where required, CDB/debug-layer proof, RenderDoc
+scripted analysis, allocation-churn proof, user visual confirmation, and
+residual-gap recording.
 
 ## Slice Evidence
 
@@ -125,9 +126,9 @@ Validation evidence:
 
 Remaining gaps:
 
-- Slices B-E are not complete.
-- No runtime CDB/debug-layer, RenderDoc, allocation-churn, or visual proof exists
-  for M08 yet.
+- No open Slice A closure gap. Later slices validated the runtime
+  CDB/debug-layer, RenderDoc, allocation-churn, and visual proof required for
+  full M08 closure.
 
 ### Slice B: Cubemap Product Processing
 
@@ -188,12 +189,9 @@ Validation evidence:
 
 Remaining gaps:
 
-- Deferred static SkyLight diffuse consumption remains open; the current slice
-  publishes valid products and migrates existing forward/fog/debug consumers.
-- Visual skybox rendering and deterministic runtime procedural-sky versus
-  cubemap-sky selection remain open.
-- Runtime CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain
-  open for later slices/closeout.
+- No open Slice B closure gap. Later slices validated visual skybox rendering,
+  deferred static SkyLight diffuse consumption, runtime CDB/debug-layer proof,
+  RenderDoc analysis, allocation-churn proof, and visual confirmation.
 
 ### Slice C: Visual SkySphere Background
 
@@ -239,7 +237,8 @@ Validation evidence:
 
 Remaining gaps:
 
-- Deferred static SkyLight diffuse consumption remains open.
+- No open Slice C closure gap. Slice D validated deferred static SkyLight
+  diffuse consumption.
 
 ### Slice D: Deferred Static SkyLight Diffuse Consumption
 
@@ -279,8 +278,8 @@ Validation evidence:
 
 Remaining gaps:
 
-- User visual confirmation and residual-gap recording remain open for full
-  VTX-M08 closure.
+- No open Slice D closure gap. Slice E and final closeout recorded the
+  interaction/lifecycle proof, user visual confirmation, and residual gaps.
 
 ### Slice E: Interaction And Lifecycle Proof
 
@@ -313,5 +312,35 @@ Validation evidence:
 
 Remaining gaps:
 
-- User visual confirmation remains open for full VTX-M08 closure.
-- Residual-gap recording and final closeout status update remain open.
+- No open Slice E closure gap. User visual confirmation approved the final
+  SkyBox/procedural-atmosphere enable-disable behavior after the skybox
+  suppression fix, and residual gaps are recorded below.
+
+## Final Closure Evidence
+
+- Implementation slices A-E are recorded above with code, focused tests,
+  ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer
+  audits, RenderDoc scripted analysis, static SkyLight lifecycle proof, and
+  allocation-churn proof.
+- Final focused validation after closeout edits passed
+  `ctest --preset test-debug -R "Oxygen\.(Vortex\.CompositionPlanner|Vortex\.EnvironmentLightingService|Examples\.DemoShell\.EnvironmentSettingsService)" --output-on-failure`.
+- Final source hygiene passed `git diff --check`.
+- User visual confirmation approved the final runtime behavior: sun
+  enable/disable/enable, visible SkyLight contribution, correct skybox
+  suppression when disabled or when procedural atmosphere is active, and the
+  final SkyBox/procedural-atmosphere interaction.
+
+## Accepted Deferred Gaps
+
+These remain outside VTX-M08 and must be owned by future milestones before any
+broader indirect-lighting or reflection parity claim:
+
+- Captured-scene SkyLight.
+- Real-time SkyLight capture.
+- Cubemap blend transitions / time-of-day blending.
+- SkyLight AO, DFAO, bent-normal occlusion, and cloud AO.
+- Baked/static-lightmap SkyLight integration.
+- Specular reflection contribution from static cubemap products.
+- Reflection captures and broader reflection-probe arrays.
+- Volumetric-cloud sky capture.
+- Procedural sun-disk overlay composited into static cubemap skybox imagery.
