@@ -15,6 +15,7 @@ This document outlines the best practices and patterns for implementing WinUI 3 
 9. [Memory Management](#memory-management)
 10. [Template Processing](#template-processing)
 11. [Documentation](#documentation)
+12. [Menu Control MVVM Guidance](#menu-control-mvvm-guidance)
 
 ## Project Structure and Code Organization
 
@@ -541,6 +542,18 @@ Provide comprehensive XML documentation:
 - Use `<remarks>` for detailed explanations
 - Include XAML examples where appropriate
 - Use `<see cref="">` for cross-references
+
+## Menu Control MVVM Guidance
+
+The `DroidNet.Controls.Menus` package supports interactive menu content such as sliders, toggles, and number boxes. The preferred pattern is MVVM-first:
+
+- Put menu state in observable model objects.
+- Assign those model objects to `MenuItemData.InteractiveContent`.
+- Render controls with `MenuItemData.InteractiveContentTemplate`.
+- Keep `InteractiveContentFactory` for imperative/code-created controls that cannot reasonably be expressed as a template.
+- Avoid storing shared `UIElement` instances directly in `InteractiveContent`; WinUI elements can only have one visual parent.
+
+The full menu README includes labeled separator examples, MVVM template examples, DroidNet `NumberBox` usage, and the factory escape hatch: [Menus README](Menus/README.md).
 
 ## Summary
 
