@@ -194,7 +194,6 @@ namespace {
     model.volumetric_scattering_intensity
       = sky_light->GetVolumetricScatteringIntensity();
     model.affect_reflections = sky_light->GetAffectReflections();
-    model.affect_global_illumination = sky_light->GetAffectGlobalIllumination();
     return model;
   }
 
@@ -347,8 +346,6 @@ namespace {
       = HashCombineU64(seed, FloatBits(model.volumetric_scattering_intensity));
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(model.affect_reflections));
-    seed = HashCombineU64(
-      seed, static_cast<std::uint64_t>(model.affect_global_illumination));
     return seed;
   }
 

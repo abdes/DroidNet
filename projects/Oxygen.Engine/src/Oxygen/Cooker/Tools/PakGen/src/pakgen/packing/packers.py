@@ -657,11 +657,8 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         spec.get("volumetric_scattering_intensity"), 1.0
     )
     affect_reflections = _u32_bool(spec.get("affect_reflections"), 1)
-    affect_global_illumination = _u32_bool(
-        spec.get("affect_global_illumination"), 1
-    )
 
-    record_size = 96
+    record_size = 92
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
         + struct.pack("<I", int(enabled))
@@ -675,7 +672,6 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *lower_hemisphere_color)
         + struct.pack("<f", volumetric_scattering_intensity)
         + struct.pack("<I", int(affect_reflections))
-        + struct.pack("<I", int(affect_global_illumination))
         + struct.pack("<f", source_cubemap_angle_radians)
         + struct.pack("<I", int(lower_hemisphere_is_solid_color))
         + struct.pack("<f", lower_hemisphere_blend_alpha)

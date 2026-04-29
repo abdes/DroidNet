@@ -1175,16 +1175,6 @@ auto EnvironmentVm::SetSkyLightAffectReflections(bool enabled) -> void
   service_->SetSkyLightAffectReflections(enabled);
 }
 
-auto EnvironmentVm::GetSkyLightAffectGlobalIllumination() const -> bool
-{
-  return service_->GetSkyLightAffectGlobalIllumination();
-}
-
-auto EnvironmentVm::SetSkyLightAffectGlobalIllumination(bool enabled) -> void
-{
-  service_->SetSkyLightAffectGlobalIllumination(enabled);
-}
-
 auto EnvironmentVm::GetFogEnabled() const -> bool
 {
   return service_->GetFogEnabled();

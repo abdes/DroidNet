@@ -364,8 +364,7 @@ namespace {
           "lower_hemisphere_is_solid_color": false,
           "lower_hemisphere_blend_alpha": 0.35,
           "volumetric_scattering_intensity": 0.4,
-          "affect_reflections": true,
-          "affect_global_illumination": false
+          "affect_reflections": true
         }
       },
       "local_fog_volumes": [
@@ -415,7 +414,6 @@ namespace {
     EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
     EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
     EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.4F);
-    EXPECT_EQ(sky_light->affect_global_illumination, 0U);
 
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();

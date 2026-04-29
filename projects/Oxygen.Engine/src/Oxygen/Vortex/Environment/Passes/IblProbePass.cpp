@@ -147,8 +147,7 @@ auto IblProbePass::RefreshStaticSkyLight(
   auto next_state = current_state;
   const auto previous_revision = next_state.probes.probe_revision;
 
-  if (!sky_light.enabled || !sky_light.affect_global_illumination
-    || sky_light.diffuse_intensity <= 0.0F) {
+  if (!sky_light.enabled || sky_light.diffuse_intensity <= 0.0F) {
     DisableStaticSkyLightProducts(next_state);
   } else if (sky_light.source == kSkyLightSourceCapturedScene) {
     MarkStaticSkyLightUnavailable(

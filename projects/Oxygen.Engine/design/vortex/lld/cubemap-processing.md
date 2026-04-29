@@ -135,8 +135,8 @@ has a separate GPU path:
 
 Oxygen does not have baked SkyLight lightmaps in VTX-M08. Therefore:
 
-- `SkyLight::kSpecifiedCubemap` with `affect_global_illumination=true` can feed
-  VTX-M08 dynamic diffuse lighting.
+- Enabled `SkyLight::kSpecifiedCubemap` products can feed VTX-M08 dynamic
+  diffuse lighting when `diffuse_intensity > 0`.
 - `real_time_capture_enabled=true` remains authored but unavailable.
 - Future baked/static-lighting integration must add a separate gate before it
   can disable dynamic diffuse SkyLight.

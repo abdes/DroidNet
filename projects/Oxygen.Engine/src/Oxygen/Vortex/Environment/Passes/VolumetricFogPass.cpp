@@ -431,7 +431,6 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     && height_fog.enable_height_fog
     && (height_fog.fog_density > 0.0F || height_fog.second_fog_density > 0.0F);
   const auto sky_light_injection_requested = sky_light.enabled
-    && sky_light.affect_global_illumination
     && sky_light.volumetric_scattering_intensity > 0.0F
     && sky_light.diffuse_intensity > 0.0F;
   const auto sky_light_injection_ready

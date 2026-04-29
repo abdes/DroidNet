@@ -10876,8 +10876,7 @@
         0.024
       ],
       "volumetric_scattering_intensity": 1.0,
-      "affect_reflections": true,
-      "affect_global_illumination": true
+      "affect_reflections": true
     }
   },
   "local_fog_volumes": [

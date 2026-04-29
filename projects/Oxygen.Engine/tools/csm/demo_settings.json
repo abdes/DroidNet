@@ -277,7 +277,6 @@
       "schema_version": 5.0
     },
     "sky_light": {
-      "affect_global_illumination": true,
       "affect_reflections": true,
       "diffuse": 0.800000011920929,
       "enabled": true,

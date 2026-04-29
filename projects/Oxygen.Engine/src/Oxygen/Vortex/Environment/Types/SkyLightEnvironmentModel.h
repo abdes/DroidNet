@@ -30,7 +30,6 @@ struct SkyLightEnvironmentModel {
   float lower_hemisphere_blend_alpha { 1.0F };
   float volumetric_scattering_intensity { 1.0F };
   bool affect_reflections { true };
-  bool affect_global_illumination { true };
 };
 
 } // namespace oxygen::vortex::environment

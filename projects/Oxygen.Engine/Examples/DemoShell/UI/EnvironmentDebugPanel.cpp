@@ -564,7 +564,6 @@ void EnvironmentDebugPanel::DrawRuntimeStateSection()
     = !environment_vm_->GetSkyLightCubemapResourceKey().IsPlaceholder();
   const bool sky_light_can_light
     = sky_light_enabled && sky_light_source == 1 && sky_light_has_cubemap
-    && environment_vm_->GetSkyLightAffectGlobalIllumination()
     && environment_vm_->GetSkyLightDiffuse() > 0.0F
     && environment_vm_->GetSkyLightIntensityMul() > 0.0F;
 
@@ -1308,8 +1307,8 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();
-  if (ImGui::DragFloat(
-        "Diffuse", &sky_light_diffuse, 0.01F, 0.0F, 2.0F, "%.2F")) {
+  if (ImGui::DragFloat("Diffuse Indirect", &sky_light_diffuse, 0.01F, 0.0F,
+        6.0F, "%.2F")) {
     environment_vm_->SetSkyLightDiffuse(sky_light_diffuse);
   }
 
@@ -1322,14 +1321,9 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   float volumetric_scattering_intensity
     = environment_vm_->GetSkyLightVolumetricScatteringIntensity();
   if (ImGui::DragFloat("Volumetric Scattering",
-        &volumetric_scattering_intensity, 0.01F, 0.0F, 100.0F, "%.2F")) {
+        &volumetric_scattering_intensity, 0.01F, 0.25F, 4.0F, "%.2F")) {
     environment_vm_->SetSkyLightVolumetricScatteringIntensity(
       volumetric_scattering_intensity);
-  }
-
-  bool affect_gi = environment_vm_->GetSkyLightAffectGlobalIllumination();
-  if (ImGui::Checkbox("Affect Global Illumination", &affect_gi)) {
-    environment_vm_->SetSkyLightAffectGlobalIllumination(affect_gi);
   }
 
   ImGui::TextDisabled(

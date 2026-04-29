@@ -222,7 +222,6 @@ def test_build_pak_with_v3_environment_and_local_fog_scene_asset(tmp_path: Path)
                         "lower_hemisphere_blend_alpha": 0.35,
                         "volumetric_scattering_intensity": 0.4,
                         "affect_reflections": True,
-                        "affect_global_illumination": False,
                     },
                 },
                 "local_fog_volumes": [

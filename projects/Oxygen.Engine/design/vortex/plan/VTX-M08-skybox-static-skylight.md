@@ -106,7 +106,9 @@ Implementation evidence:
 
 - Added SkyLight authored state for source cubemap angle, lower-hemisphere solid
   color toggle, and lower-hemisphere blend alpha.
-- Grew `SkyLightEnvironmentRecord` to 96 bytes with legacy 84-byte read support.
+- Updated `SkyLightEnvironmentRecord` to the current 92-byte layout after
+  removing the stale SkyLight GI authoring switch. Older cooked records are not
+  accepted; scene content must be re-cooked with the current schema.
 - Updated scene descriptor import/schema, PakGen, PakDump, DemoShell scene
   record application, Vortex `SkyLightEnvironmentModel`, and model hashing.
 - Added per-view plan state for `VisibleSkyBackground`, sky atmosphere/sphere

@@ -38,65 +38,9 @@ namespace {
   auto IsExpectedEnvironmentRecordSize(
     const uint32_t record_type, const uint32_t record_size) noexcept -> bool
   {
-    if (record_type
-        == nostd::to_underlying(pak::world::EnvironmentComponentType::kSkyLight)
-      && record_size == pak::world::kSkyLightEnvironmentRecordLegacySize) {
-      return true;
-    }
-
     const auto expected_size
       = pak::world::ExpectedEnvironmentRecordSize(record_type);
     return !expected_size.has_value() || record_size == *expected_size;
-  }
-
-  auto DecodeLegacySkyLightRecord(std::span<const std::byte> bytes)
-    -> pak::world::SkyLightEnvironmentRecord
-  {
-    if (bytes.size() != pak::world::kSkyLightEnvironmentRecordLegacySize) {
-      throw std::runtime_error(
-        "SceneAsset legacy SkyLight record size mismatch");
-    }
-
-    std::vector<std::byte> buffer;
-    buffer.assign(bytes.begin(), bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
-    auto packed = reader.ScopedAlignment(1);
-
-    auto record = pak::world::SkyLightEnvironmentRecord {};
-    auto ok = static_cast<bool>(reader.ReadInto(record.header));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.enabled));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.source));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.cubemap_asset));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.intensity));
-    for (auto& v : record.tint_rgb) {
-      ok = ok && static_cast<bool>(reader.ReadInto(v));
-    }
-    ok = ok && static_cast<bool>(reader.ReadInto(record.diffuse_intensity));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.specular_intensity));
-    ok = ok
-      && static_cast<bool>(reader.ReadInto(record.real_time_capture_enabled));
-    for (auto& v : record.lower_hemisphere_color) {
-      ok = ok && static_cast<bool>(reader.ReadInto(v));
-    }
-    ok = ok
-      && static_cast<bool>(
-        reader.ReadInto(record.volumetric_scattering_intensity));
-    ok = ok && static_cast<bool>(reader.ReadInto(record.affect_reflections));
-    ok = ok
-      && static_cast<bool>(reader.ReadInto(record.affect_global_illumination));
-
-    if (!ok) {
-      throw std::runtime_error(
-        "SceneAsset legacy SkyLight record decode failed");
-    }
-
-    record.header.record_size = sizeof(pak::world::SkyLightEnvironmentRecord);
-    record.source_cubemap_angle_radians = 0.0F;
-    record.lower_hemisphere_is_solid_color = 1U;
-    record.lower_hemisphere_blend_alpha = 1.0F;
-    return record;
   }
 
 } // namespace
@@ -483,10 +427,6 @@ auto SceneAsset::TryGetSkyLightEnvironment() const
     if (record.bytes.size() == sizeof(pak::world::SkyLightEnvironmentRecord)) {
       return ReadPackedRecord<pak::world::SkyLightEnvironmentRecord>(
         record.bytes, "SceneAsset SkyLight environment record");
-    }
-    if (record.bytes.size()
-      == pak::world::kSkyLightEnvironmentRecordLegacySize) {
-      return DecodeLegacySkyLightRecord(record.bytes);
     }
     throw std::runtime_error(
       "SceneAsset SkyLight environment record size mismatch");
