@@ -243,6 +243,28 @@ namespace Oxygen::Interop {
       CameraControlModeManaged mode)
       -> System::Threading::Tasks::Task<bool>^;
 
+    /// <summary>
+    /// Set the base movement speed used by fly navigation for an existing view.
+    /// The request is enqueued and applied on the engine thread.
+    /// </summary>
+    auto TrySetViewCameraMovementSpeedAsync(
+      EngineContext^ ctx,
+      ViewIdManaged viewId,
+      float speedUnitsPerSecond)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Set camera lens and clipping parameters for an existing view.
+    /// The request is enqueued and applied on the engine thread.
+    /// </summary>
+    auto TrySetViewCameraSettingsAsync(
+      EngineContext^ ctx,
+      ViewIdManaged viewId,
+      float fieldOfViewDegrees,
+      float nearPlane,
+      float farPlane)
+      -> System::Threading::Tasks::Task<bool>^;
+
   private:
     // Encapsulated logging handler (forward-declared above). This hides any
     // references to native logging libraries from this header.

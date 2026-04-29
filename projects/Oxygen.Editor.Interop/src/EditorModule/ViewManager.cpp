@@ -164,6 +164,39 @@ namespace oxygen::interop::module {
     it->second.view->SetCameraControlMode(mode);
   }
 
+  void ViewManager::SetCameraMovementSpeed(
+    ViewId engine_id,
+    float speed_units_per_second) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = views_.find(engine_id);
+    if (it == views_.end() || !it->second.view) {
+      LOG_F(WARNING, "SetCameraMovementSpeed: invalid view id {}",
+        engine_id.get());
+      return;
+    }
+
+    it->second.view->SetCameraMovementSpeed(speed_units_per_second);
+  }
+
+  void ViewManager::SetCameraViewSettings(
+    ViewId engine_id,
+    float field_of_view_y_radians,
+    float near_plane,
+    float far_plane) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = views_.find(engine_id);
+    if (it == views_.end() || !it->second.view) {
+      LOG_F(WARNING, "SetCameraViewSettings: invalid view id {}",
+        engine_id.get());
+      return;
+    }
+
+    it->second.view->SetCameraViewSettings(
+      field_of_view_y_radians, near_plane, far_plane);
+  }
+
   auto ViewManager::GetAllViews() -> std::vector<EditorView*> {
     std::lock_guard<std::mutex> lock(mutex_);
 

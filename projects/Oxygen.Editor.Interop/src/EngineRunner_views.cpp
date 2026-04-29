@@ -6,6 +6,7 @@
 #pragma managed
 
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -384,6 +385,87 @@ namespace Oxygen::Interop {
     try {
       const auto native_mode = ToNativeCameraControlMode(mode);
       editor_module_opt->get().SetViewCameraControlMode(nativeId, native_mode);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::TrySetViewCameraMovementSpeedAsync(
+    EngineContext^ ctx,
+    ViewIdManaged viewId,
+    float speedUnitsPerSecond)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"SetViewCameraMovementSpeedAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto nativeId = viewId.ToNative();
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      editor_module_opt->get().SetViewCameraMovementSpeed(
+        nativeId, speedUnitsPerSecond);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::TrySetViewCameraSettingsAsync(
+    EngineContext^ ctx,
+    ViewIdManaged viewId,
+    float fieldOfViewDegrees,
+    float nearPlane,
+    float farPlane)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"SetViewCameraSettingsAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto nativeId = viewId.ToNative();
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      constexpr float degrees_to_radians = 0.01745329251994329576923690768489F;
+      editor_module_opt->get().SetViewCameraSettings(nativeId,
+        fieldOfViewDegrees * degrees_to_radians, nearPlane, farPlane);
       return System::Threading::Tasks::Task<bool>::FromResult(true);
     }
     catch (...) {

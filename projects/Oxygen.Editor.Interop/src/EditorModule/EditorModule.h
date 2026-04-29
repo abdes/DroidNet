@@ -167,6 +167,16 @@ namespace oxygen::interop::module {
       ViewId view_id,
       EditorViewportCameraControlMode mode);
 
+    void SetViewCameraMovementSpeed(
+      ViewId view_id,
+      float speed_units_per_second);
+
+    void SetViewCameraSettings(
+      ViewId view_id,
+      float field_of_view_y_radians,
+      float near_plane,
+      float far_plane);
+
     //! Adds a loose cooked root to the virtual path resolver.
     void AddLooseCookedRoot(std::string_view path);
 

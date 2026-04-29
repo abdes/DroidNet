@@ -59,4 +59,20 @@ public sealed partial class EngineService
         this.LogSetViewCameraControlMode(viewId, mode);
         return await runner.TrySetViewCameraControlModeAsync(this.engineContext, viewId, mode).ConfigureAwait(true);
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetViewCameraMovementSpeedAsync(ViewIdManaged viewId, float speedUnitsPerSecond)
+    {
+        var runner = this.EnsureIsRunning();
+        this.LogSetViewCameraMovementSpeed(viewId, speedUnitsPerSecond);
+        return await runner.TrySetViewCameraMovementSpeedAsync(this.engineContext, viewId, speedUnitsPerSecond).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetViewCameraSettingsAsync(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
+    {
+        var runner = this.EnsureIsRunning();
+        this.LogSetViewCameraSettings(viewId, fieldOfViewDegrees, nearPlane, farPlane);
+        return await runner.TrySetViewCameraSettingsAsync(this.engineContext, viewId, fieldOfViewDegrees, nearPlane, farPlane).ConfigureAwait(true);
+    }
 }
