@@ -35,7 +35,9 @@ public static class LiveSyncDiagnosticCodes
 
     public const string LightFailed = DiagnosticCodes.LiveSyncPrefix + "LIGHT.Failed";
 
-    public const string MaterialUnsupported = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Unsupported";
+    public const string MaterialRejected = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Rejected";
+
+    public const string MaterialFailed = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Failed";
 
     public const string EnvironmentAtmosphereUnsupported = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Atmosphere.Unsupported";
 
@@ -48,4 +50,6 @@ public static class LiveSyncDiagnosticCodes
     public const string EnvironmentBackgroundUnsupported = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Background.Unsupported";
 
     public const string EnvironmentRejected = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Rejected";
+
+    public const string EnvironmentFailed = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Failed";
 }

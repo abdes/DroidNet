@@ -11,6 +11,7 @@ using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
@@ -110,6 +111,89 @@ public sealed class SceneDescriptorGeneratorTests
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
         _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task GenerateAsync_ShouldEmitAuthoredSkyAtmosphereValues()
+    {
+        using var workspace = new TempWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var node = new SceneNode(scene) { Name = "Cube" };
+        _ = node.AddComponent(new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))),
+        });
+        scene.RootNodes.Add(node);
+        scene.SetEnvironment(new SceneEnvironmentData
+        {
+            AtmosphereEnabled = true,
+            SkyAtmosphere = new SkyAtmosphereEnvironmentData
+            {
+                PlanetRadiusMeters = 6_400_000.0f,
+                AtmosphereHeightMeters = 90_000.0f,
+                GroundAlbedoRgb = new Vector3(0.2f, 0.3f, 0.4f),
+                RayleighScaleHeightMeters = 7_500.0f,
+                MieScaleHeightMeters = 1_500.0f,
+                MieAnisotropy = 0.75f,
+                SkyLuminanceFactorRgb = new Vector3(1.1f, 1.0f, 0.9f),
+                AerialPerspectiveDistanceScale = 1.25f,
+                AerialScatteringStrength = 0.8f,
+                AerialPerspectiveStartDepthMeters = 50.0f,
+                HeightFogContribution = 0.6f,
+                SunDiskEnabled = false,
+            },
+        });
+
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath).ConfigureAwait(false));
+        var atmosphere = document.RootElement.GetProperty("environment").GetProperty("sky_atmosphere");
+        _ = atmosphere.GetProperty("planet_radius_m").GetSingle().Should().Be(6_400_000.0f);
+        _ = atmosphere.GetProperty("atmosphere_height_m").GetSingle().Should().Be(90_000.0f);
+        _ = atmosphere.GetProperty("ground_albedo_rgb")[0].GetSingle().Should().Be(0.2f);
+        _ = atmosphere.GetProperty("rayleigh_scale_height_m").GetSingle().Should().Be(7_500.0f);
+        _ = atmosphere.GetProperty("mie_scale_height_m").GetSingle().Should().Be(1_500.0f);
+        _ = atmosphere.GetProperty("mie_anisotropy").GetSingle().Should().Be(0.75f);
+        _ = atmosphere.GetProperty("sky_luminance_factor_rgb")[0].GetSingle().Should().Be(1.1f);
+        _ = atmosphere.GetProperty("aerial_perspective_distance_scale").GetSingle().Should().Be(1.25f);
+        _ = atmosphere.GetProperty("aerial_scattering_strength").GetSingle().Should().Be(0.8f);
+        _ = atmosphere.GetProperty("aerial_perspective_start_depth_m").GetSingle().Should().Be(50.0f);
+        _ = atmosphere.GetProperty("height_fog_contribution").GetSingle().Should().Be(0.6f);
+        _ = atmosphere.GetProperty("sun_disk_enabled").GetBoolean().Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task GenerateAsync_ShouldWarnForUnsupportedManualExposureField()
+    {
+        using var workspace = new TempWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var node = new SceneNode(scene) { Name = "Cube" };
+        _ = node.AddComponent(new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))),
+        });
+        scene.RootNodes.Add(node);
+        scene.SetEnvironment(new SceneEnvironmentData
+        {
+            PostProcess = new PostProcessEnvironmentData
+            {
+                ExposureMode = ExposureMode.Manual,
+                ManualExposureEv = 4.0f,
+            },
+        });
+
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().Contain(diagnostic =>
+            diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField
+            && diagnostic.Message.Contains("Environment.ManualExposureEv", StringComparison.Ordinal));
     }
 
     [TestMethod]

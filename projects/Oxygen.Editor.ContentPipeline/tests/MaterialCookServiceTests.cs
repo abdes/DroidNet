@@ -61,7 +61,10 @@ public sealed class MaterialCookServiceTests
         _ = File.Exists(indexPath).Should().BeTrue();
         using var index = File.OpenRead(indexPath);
         var document = LooseCookedIndex.Read(index);
-        _ = document.Assets.Should().Contain(asset => asset.VirtualPath == "/Content/Materials/Wood.omat");
+        _ = document.Assets.Should().ContainSingle(asset => asset.VirtualPath == "/Content/Materials/Wood.omat");
+        var asset = document.Assets.Single(asset => asset.VirtualPath == "/Content/Materials/Wood.omat");
+        var cookedPath = Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat");
+        _ = asset.DescriptorSize.Should().Be((ulong)new FileInfo(cookedPath).Length);
     }
 
     [TestMethod]

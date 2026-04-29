@@ -29,11 +29,15 @@ public static class SceneDiagnosticCodes
 
     public const string EnvironmentExposureModeInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.ExposureMode.Invalid";
 
+    public const string EnvironmentManualExposureInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.ManualExposure.Invalid";
+
     public const string EnvironmentToneMappingInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.ToneMapping.Invalid";
 
     public const string EnvironmentExposureCompensationInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.ExposureCompensation.Invalid";
 
     public const string EnvironmentBackgroundColorInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.BackgroundColor.Invalid";
+
+    public const string EnvironmentSkyAtmosphereInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.SkyAtmosphere.Invalid";
 
     public const string ComponentAddDenied = DiagnosticCodes.ScenePrefix + "COMPONENT.AddDenied";
 
