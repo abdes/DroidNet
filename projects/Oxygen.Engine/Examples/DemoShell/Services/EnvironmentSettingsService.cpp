@@ -929,22 +929,6 @@ auto EnvironmentSettingsService::HasPendingChanges() const -> bool
   return pending_changes_;
 }
 
-auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
-  -> std::pair<bool, bool>
-{
-  bool luts_valid = false;
-  bool luts_dirty = true;
-
-  if (config_.renderer && main_view_id_.has_value()) {
-    const auto state = config_.renderer->GetLastEnvironmentLightingState();
-    luts_valid = state.published_bindings && state.sky_executed
-      && state.atmosphere_executed;
-    luts_dirty = !luts_valid;
-  }
-
-  return { luts_valid, luts_dirty };
-}
-
 auto EnvironmentSettingsService::GetSkyAtmosphereEnabled() const -> bool
 {
   return sky_atmo_enabled_;
@@ -1298,80 +1282,6 @@ auto EnvironmentSettingsService::SetAtmosphereRenderInMainPass(
   MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
-auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
-{
-  return sky_view_lut_slices_;
-}
-
-auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
-{
-  value = std::clamp(value, 1, 128);
-  if (sky_view_lut_slices_ == value) {
-    return;
-  }
-  DLOG_F(1,
-    "SkyView LUT slices are renderer-owned; ignoring UI write {} "
-    "(current={})",
-    value, sky_view_lut_slices_);
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutWidth() const -> int
-{
-  if (config_.renderer != nullptr) {
-    return static_cast<int>(config_.renderer->GetAerialPerspectiveLutWidth());
-  }
-  return 32;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthResolution() const
-  -> int
-{
-  if (config_.renderer != nullptr) {
-    return static_cast<int>(
-      config_.renderer->GetAerialPerspectiveLutDepthResolution());
-  }
-  return 16;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthKm() const -> float
-{
-  if (config_.renderer != nullptr) {
-    return config_.renderer->GetAerialPerspectiveLutDepthKm();
-  }
-  return 96.0F;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutSampleCountMaxPerSlice()
-  const -> float
-{
-  if (config_.renderer != nullptr) {
-    return config_.renderer->GetAerialPerspectiveLutSampleCountMaxPerSlice();
-  }
-  return 2.0F;
-}
-
-auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
-{
-  return sky_view_alt_mapping_mode_;
-}
-
-auto EnvironmentSettingsService::SetSkyViewAltMappingMode(int value) -> void
-{
-  value = std::clamp(value, 0, 1);
-  if (sky_view_alt_mapping_mode_ == value) {
-    return;
-  }
-  DLOG_F(1,
-    "SkyView mapping mode is renderer-owned; ignoring UI write {} "
-    "(current={})",
-    value, sky_view_alt_mapping_mode_);
-}
-
-auto EnvironmentSettingsService::RequestRegenerateLut() -> void
-{
-  DLOG_F(1, "RequestRegenerateLut ignored; renderer owns LUT regeneration");
-}
-
 auto EnvironmentSettingsService::GetSkySphereEnabled() const -> bool
 {
   return sky_sphere_enabled_;
@@ -1444,6 +1354,12 @@ auto EnvironmentSettingsService::SetSkySphereRotationDeg(float value) -> void
   }
   sky_sphere_rotation_deg_ = value;
   MarkDirty(ToMask(DirtyDomain::kSkySphere));
+}
+
+auto EnvironmentSettingsService::GetSkySphereCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return sky_sphere_cubemap_resource_key_;
 }
 
 auto EnvironmentSettingsService::GetSkyboxPath() const -> std::string
@@ -1603,6 +1519,8 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
       skybox_last_face_size_ = result.face_size;
       skybox_last_resource_key_ = result.resource_key;
       if (result.success) {
+        sky_sphere_cubemap_resource_key_ = result.resource_key;
+        sky_light_cubemap_resource_key_ = result.resource_key;
         RequestResync();
       }
     });
@@ -1643,6 +1561,12 @@ auto EnvironmentSettingsService::SetSkyLightSource(int source) -> void
   }
   sky_light_source_ = source;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return sky_light_cubemap_resource_key_;
 }
 
 auto EnvironmentSettingsService::GetSkyLightTint() const -> glm::vec3
@@ -2973,17 +2897,6 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   light.CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
 }
 
-auto EnvironmentSettingsService::GetUseLut() const -> bool { return use_lut_; }
-
-auto EnvironmentSettingsService::SetUseLut(bool enabled) -> void
-{
-  if (use_lut_ == enabled) {
-    return;
-  }
-  use_lut_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kRendererFlags));
-}
-
 auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 {
   if (!pending_changes_ || !config_.scene) {
@@ -3240,6 +3153,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sky->SetSolidColorRgb(sky_sphere_solid_color_);
     sky->SetIntensity(sky_intensity_);
     sky->SetRotationRadians(sky_sphere_rotation_deg_ * kDegToRad);
+    sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
   }
 
   auto light = env->TryGetSystem<scene::environment::SkyLight>();
@@ -3268,6 +3182,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
     light->SetAffectGlobalIllumination(sky_light_affect_global_illumination_);
+    sky_light_cubemap_resource_key_ = light->GetCubemapResource();
   }
 
   if (apply_skybox || apply_sky_sphere) {
@@ -3384,23 +3299,22 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
 
   SyncLocalFogVolumesFromScene();
 
-  // DemoShell currently owns the user-facing slice/mapping controls; keep the
-  // persisted values as the source of truth until the Vortex runtime surfaces
-  // per-view LUT parameter introspection directly.
-
   if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
     sky_sphere_enabled_ = sky->IsEnabled();
     sky_sphere_source_ = static_cast<int>(sky->GetSource());
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
     sky_intensity_ = sky->GetIntensity();
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
+    sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
   } else {
     sky_sphere_enabled_ = false;
+    sky_sphere_cubemap_resource_key_ = content::ResourceKey { 0U };
   }
 
   if (auto light = env->TryGetSystem<scene::environment::SkyLight>()) {
     sky_light_enabled_ = light->IsEnabled();
     sky_light_source_ = static_cast<int>(light->GetSource());
+    sky_light_cubemap_resource_key_ = light->GetCubemapResource();
     sky_light_tint_ = light->GetTintRgb();
     sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
@@ -3420,6 +3334,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       = light->GetAffectGlobalIllumination();
   } else {
     sky_light_enabled_ = false;
+    sky_light_cubemap_resource_key_ = content::ResourceKey { 0U };
   }
 
   UpdateSunLightCandidate();
@@ -3722,9 +3637,6 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   // For the canonical two-layer ozone profile, this term is commonly > 1
   // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
   clamp_float(ozone_profile_.layers[1].constant_term, -8.0F, 8.0F);
-
-  clamp_int(sky_view_lut_slices_, 1, 128);
-  clamp_int(sky_view_alt_mapping_mode_, 0, 1);
 
   clamp_int(sky_sphere_source_, 0, 1);
   clamp_vec3_min(sky_sphere_solid_color_, 0.0F);

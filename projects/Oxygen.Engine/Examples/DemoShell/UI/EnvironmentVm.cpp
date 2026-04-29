@@ -409,11 +409,6 @@ auto EnvironmentVm::ApplyPendingChanges() -> void
   service_->ApplyPendingChanges();
 }
 
-auto EnvironmentVm::GetAtmosphereLutStatus() const -> std::pair<bool, bool>
-{
-  return service_->GetAtmosphereLutStatus();
-}
-
 auto EnvironmentVm::GetPresetCount() const -> int
 {
   return static_cast<int>(kEnvironmentPresets.size()) + 2;
@@ -880,52 +875,6 @@ auto EnvironmentVm::SetOzoneDensityProfile(
   service_->SetOzoneDensityProfile(profile);
 }
 
-auto EnvironmentVm::GetSkyViewLutSlices() const -> int
-{
-  return service_->GetSkyViewLutSlices();
-}
-
-auto EnvironmentVm::SetSkyViewLutSlices(int value) -> void
-{
-  service_->SetSkyViewLutSlices(value);
-}
-
-auto EnvironmentVm::GetAerialPerspectiveLutWidth() const -> int
-{
-  return service_->GetAerialPerspectiveLutWidth();
-}
-
-auto EnvironmentVm::GetAerialPerspectiveLutDepthResolution() const -> int
-{
-  return service_->GetAerialPerspectiveLutDepthResolution();
-}
-
-auto EnvironmentVm::GetAerialPerspectiveLutDepthKm() const -> float
-{
-  return service_->GetAerialPerspectiveLutDepthKm();
-}
-
-auto EnvironmentVm::GetAerialPerspectiveLutSampleCountMaxPerSlice() const
-  -> float
-{
-  return service_->GetAerialPerspectiveLutSampleCountMaxPerSlice();
-}
-
-auto EnvironmentVm::GetSkyViewAltMappingMode() const -> int
-{
-  return service_->GetSkyViewAltMappingMode();
-}
-
-auto EnvironmentVm::SetSkyViewAltMappingMode(int value) -> void
-{
-  service_->SetSkyViewAltMappingMode(value);
-}
-
-auto EnvironmentVm::RequestRegenerateLut() -> void
-{
-  service_->RequestRegenerateLut();
-}
-
 auto EnvironmentVm::GetSkySphereEnabled() const -> bool
 {
   return service_->GetSkySphereEnabled();
@@ -975,6 +924,12 @@ auto EnvironmentVm::GetSkySphereRotationDeg() const -> float
 auto EnvironmentVm::SetSkySphereRotationDeg(float value) -> void
 {
   service_->SetSkySphereRotationDeg(value);
+}
+
+auto EnvironmentVm::GetSkySphereCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return service_->GetSkySphereCubemapResourceKey();
 }
 
 auto EnvironmentVm::GetSkyboxPath() const -> std::string
@@ -1130,6 +1085,12 @@ auto EnvironmentVm::GetSkyLightSource() const -> int
 auto EnvironmentVm::SetSkyLightSource(int source) -> void
 {
   service_->SetSkyLightSource(source);
+}
+
+auto EnvironmentVm::GetSkyLightCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return service_->GetSkyLightCubemapResourceKey();
 }
 
 auto EnvironmentVm::GetSkyLightTint() const -> glm::vec3
@@ -1969,13 +1930,6 @@ auto EnvironmentVm::GetSunLightAvailable() const -> bool
 auto EnvironmentVm::UpdateSunLightCandidate() -> void
 {
   service_->UpdateSunLightCandidate();
-}
-
-auto EnvironmentVm::GetUseLut() const -> bool { return service_->GetUseLut(); }
-
-auto EnvironmentVm::SetUseLut(bool enabled) -> void
-{
-  service_->SetUseLut(enabled);
 }
 
 } // namespace oxygen::examples::ui
