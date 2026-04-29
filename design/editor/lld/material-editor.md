@@ -367,13 +367,12 @@ ED-M05 does not introduce a managed material preview API. Preview is:
 1. **In the material document**: a deterministic CPU-rendered swatch driven
    by the scalar PBR values (no engine roundtrip). Shows base color, alpha,
    and a fixed-lighting ball thumbnail.
-2. **In the scene**: the slot assignment is recorded in scene data. The
-   geometry material override calls on `ISceneEngineSync`
-   (`UpdateMaterialOverrideAsync`, `UpdateTargetedMaterialOverrideAsync`,
-   `RemoveMaterialOverrideAsync`, `RemoveTargetedMaterialOverrideAsync`) return
-   `Unsupported` by V0.1 editor policy (`OXE.LIVESYNC.MATERIAL.Unsupported`).
-   The engine override API exists; ED-M05 does not wire that API into the
-   editor sync surface.
+2. **In the scene**: the slot assignment is recorded in scene data and the
+   geometry material slot sync maps the descriptor URI to the cooked `.omat`
+   virtual path before queuing the runtime material override. The editor does
+   not force a cook or mount refresh from assignment; if the material is not
+   mounted yet, authoring remains valid and the native command logs the runtime
+   load failure.
 
 No engine cooked-root remount is forced from the material editor. The user
 triggers cook explicitly; project-level mount/refresh is owned by
@@ -400,7 +399,7 @@ commands) and dilutes diagnostic filtering.
 | Cook IO / importer failure | `ContentPipeline` | `OXE.CONTENTPIPELINE.MATERIAL.CookFailed` |
 | Picker selected URI not in catalog | `AssetIdentity` | `OXE.ASSETID.MATERIAL.Missing` |
 | Picker selected URI not yet cooked | `AssetIdentity` | `OXE.ASSETID.MATERIAL.NotCooked` (warning only) |
-| Slot live preview unsupported | `LiveSync` | `OXE.LIVESYNC.MATERIAL.Unsupported` |
+| Slot live preview rejected/failed | `LiveSync` | `OXE.LIVESYNC.MATERIAL.Rejected` / `OXE.LIVESYNC.MATERIAL.Failed` |
 
 `AffectedScope` always carries `AssetVirtualPath` (the material URI) for any
 material-scoped diagnostic.
@@ -431,8 +430,9 @@ Forbidden:
    `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty`. After save, cook succeeds
    and `MaterialCookState` becomes `Cooked`.
 4. Geometry assignment via picker writes the URI through
-   `EditMaterialSlotAsync`, persists round-trip, and reports the slot's
-   `MATERIAL.Unsupported` warning from live sync without blocking the edit.
+   `EditMaterialSlotAsync`, persists round-trip, and queues live material
+   override sync using the cooked `.omat` virtual path without blocking the
+   authoring edit.
 5. A material URI removed from the catalog after assignment surfaces as
    `OXE.ASSETID.MATERIAL.Missing` on next scene open; the slot keeps the
    URI text and shows a missing badge.

@@ -165,7 +165,7 @@ Task<SyncOutcome> DetachCameraAsync(Scene scene, Guid nodeId, CancellationToken 
 Task<SyncOutcome> AttachLightAsync(Scene scene, SceneNode node, CancellationToken ct = default);
 Task<SyncOutcome> DetachLightAsync(Scene scene, Guid nodeId, CancellationToken ct = default);
 
-Task<SyncOutcome> UpdateMaterialSlotAsync(Scene scene, SceneNode node, int slotIndex, CancellationToken ct = default);
+Task<SyncOutcome> UpdateMaterialSlotAsync(Scene scene, SceneNode node, int slotIndex, Uri? materialUri, CancellationToken ct = default);
 
 Task<EnvironmentSyncResult> UpdateEnvironmentAsync(Scene scene, SceneEnvironmentData environment, CancellationToken ct = default);
 ```
@@ -179,20 +179,25 @@ Task<EnvironmentSyncResult> UpdateEnvironmentAsync(Scene scene, SceneEnvironment
 | `Scene.Component.EditTransform` | `UpdateNodeTransformAsync` | `world.UpdateNodeTransform(...)` | `SkippedNotRunning` | n/a (always present) |
 | `Scene.Component.EditGeometry` (URI changed or added) | `AttachGeometryAsync` | `world.AttachGeometry(...)` | `SkippedNotRunning` | n/a |
 | `Scene.Component.EditGeometry` (cleared / component removed) | `DetachGeometryAsync` | `world.DetachGeometry(nodeId)` | `SkippedNotRunning` | n/a |
-| `Scene.Component.EditMaterialSlot` | `UpdateMaterialSlotAsync` | (no engine API in V0.1) | `SkippedNotRunning` | `Unsupported` (`OXE.LIVESYNC.MATERIAL.Unsupported`) |
+| `Scene.Component.EditMaterialSlot` | `UpdateMaterialSlotAsync` | `world.SetMaterialOverride(nodeId, slotIndex, materialPath)` / clear override | `SkippedNotRunning` | n/a |
 | `Scene.Component.EditCamera` | `AttachCameraAsync` (re-apply) | `world.AttachCamera(...)` | `SkippedNotRunning` | n/a |
 | `Scene.Component.EditLight` | `AttachLightAsync` (re-apply) | `world.AttachLight(...)` | `SkippedNotRunning` | n/a |
 | `Scene.Component.Add` (Geometry/Camera/DirectionalLight) | matching `Attach*Async` | as above | `SkippedNotRunning` | n/a |
 | `Scene.Component.Remove` | matching `Detach*Async` or implicit via geometry/light/camera detach | as above | `SkippedNotRunning` | n/a for V0.1 supported types; `Unsupported` for OrthographicCamera/Point/Spot if engine lacks specific API |
-| `Scene.Environment.Edit` | `UpdateEnvironmentAsync` | per-field engine calls (atmosphere/exposure/tone-map/clear-color) | `SkippedNotRunning` (overall) | per-field `Unsupported`; overall = worst |
+| `Scene.Environment.Edit` | `UpdateEnvironmentAsync` | queued native scene-system updates for `SkyAtmosphere` and full native-parity `PostProcessVolume`; post-process sync includes exposure enabled, mode, key, manual EV, compensation EV, auto-exposure range/speeds/metering/histogram/window/target/spot radius, tone mapper, bloom, saturation, contrast, vignette, and display gamma; sun binding via light sync | `SkippedNotRunning` (overall) | per-field `Unsupported`; overall = worst |
 
 ### 8.2 Material-slot V0.1 behavior
 
-Until the engine exposes a material override API, `UpdateMaterialSlotAsync`
-returns `SyncOutcome { Status = Unsupported, Code = "OXE.LIVESYNC.MATERIAL.Unsupported", Scope = { SceneId, NodeId, NodeName, ComponentType="GeometryComponent", AssetVirtualPath = MaterialUri } }`.
-The adapter must not throw `NotImplementedException`; existing throw sites in
-`SceneEngineSync` for material override are converted to `Unsupported`
-returns.
+`UpdateMaterialSlotAsync` maps the authored material URI to the cooked engine
+virtual path before calling the runtime override API:
+
+- `asset:///<Mount>/<Path>.omat.json` -> `/<Mount>/<Path>.omat`.
+- `asset:///<Mount>/<Path>.omat` -> `/<Mount>/<Path>.omat`.
+- `null` or the empty material sentinel clears the slot override.
+
+The sync outcome is `Accepted` once the engine command is queued. Runtime asset
+resolution/load failure is logged by the native command because the material may
+not be mounted yet; it must not roll back the authored scene slot.
 
 ### 8.3 Component remove → detach
 
@@ -299,7 +304,7 @@ Diagnostic codes (under `OXE.LIVESYNC.`):
 - `GEOMETRY.Rejected`, `GEOMETRY.Failed`, `GEOMETRY.UnresolvedAtRuntime`.
 - `CAMERA.Rejected`, `CAMERA.Failed`.
 - `LIGHT.Rejected`, `LIGHT.Failed`.
-- `MATERIAL.Unsupported`.
+- `MATERIAL.Rejected`, `MATERIAL.Failed`.
 - `ENVIRONMENT.<Field>.Unsupported`, `ENVIRONMENT.<Field>.Rejected`,
   `ENVIRONMENT.Rejected`.
 
@@ -324,17 +329,20 @@ Forbidden:
 1. Each ED-M04 operation in §8.1 has a unit/integration test covering
    `Accepted`, `SkippedNotRunning`, and either `Unsupported` or `Rejected`
    paths (mocked `IEngineService`).
-2. `EditMaterialSlot` produces `Unsupported` and never throws, with the
-   `MaterialUri` populated in `AffectedScope.AssetVirtualPath`.
+2. `EditMaterialSlot` maps descriptor URIs to cooked `.omat` engine paths,
+   accepts clear operations, and never throws, with the `MaterialUri`
+   populated in `AffectedScope.AssetVirtualPath`.
 3. With engine `Running`, dragging position 100 samples produces throttled
    preview sync calls (for example, roughly one per 16 ms during a continuous
    drag), exactly one terminal sync call on commit, and exactly one undo entry.
 4. With engine in `Faulted`, every Update* returns `SkippedNotRunning` with
    `OXE.LIVESYNC.RuntimeFaulted`. Authoring still succeeds.
-5. Environment edit with no engine atmosphere/exposure API returns
-   `EnvironmentSyncResult` with per-field `Unsupported` and `Overall =
-   Unsupported`. The command publishes a `SucceededWithWarnings` result with
-   one diagnostic per unsupported field.
+5. Environment edit with engine `Running` queues native `SkyAtmosphere` and
+   full native-parity `PostProcessVolume` updates, preserving native enum
+   ordinals and authored scalar values, and reports those fields as `Accepted`.
+   Fields without a native API, such as background color, return
+   `Unsupported`. The command publishes a `SucceededWithWarnings` result only
+   for unsupported or rejected fields.
 6. No sync method throws `NotImplementedException` or any exception that
    escapes the adapter; verified by exception-tape test that calls every
    method against an in-process mock world.

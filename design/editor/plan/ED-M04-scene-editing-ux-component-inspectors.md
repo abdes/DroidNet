@@ -338,10 +338,11 @@ Tasks:
   - `session.Cancel()` issues one sync with the pre-Begin value;
   - the coalescer is owned by `SceneEngineSync`, NOT by inspector view
     models.
-- Convert current `NotImplementedException` paths for material override and
-  unsupported slots to `Unsupported` outcomes.
-- Add `UpdateMaterialSlotAsync` returning `Unsupported` in V0.1 with the
-  material URI in affected scope.
+- Convert current material override paths to typed `Accepted`/`Rejected`/`Failed`
+  outcomes.
+- Add `UpdateMaterialSlotAsync` that maps descriptor URIs to cooked `.omat`
+  engine paths and queues the runtime material override with the material URI
+  in affected scope.
 - Add `UpdateEnvironmentAsync` with per-field `Unsupported` outcomes where
   engine APIs are absent.
 - Ensure sync never starts the engine and never rolls back authoring state.
@@ -352,7 +353,7 @@ Tasks:
   - runtime not running maps to `SkippedNotRunning`;
   - `World == null` (engine in `Running` but world reference torn down) maps
     to `SkippedNotRunning`, not exception;
-  - material slot maps to `Unsupported`, not throw;
+  - material slot maps descriptor URI to cooked `.omat` path and does not throw;
   - cancellation maps to `Cancelled`;
   - environment missing APIs aggregate unsupported fields;
   - coalescer test: 100 sub-commits across 100 ms produce ≤7 engine calls
@@ -368,8 +369,8 @@ Exit:
 Implementation note:
 
 - ED-M04.4 code adds typed `SyncOutcome` contracts, live-sync diagnostic
-  codes, runtime-readiness classification, non-throwing unsupported material
-  paths, environment sync aggregation with sun binding falling through light
+  codes, runtime-readiness classification, material override sync,
+  environment sync aggregation with sun binding falling through light
   sync where possible, and executable preview/terminal/cancel coalescer
   methods on `ISceneEngineSync`. Tests cover not-running, faulted,
   cancellation, world-null race, legacy unsupported material paths, and
@@ -395,7 +396,7 @@ Tasks:
   - ensure `MaterialsSlot` at component override slot index 0 exists as needed;
   - set/clear `AssetReference<MaterialAsset>`;
   - preserve unresolved URI verbatim;
-  - request material slot sync and surface `Unsupported` warning.
+  - request material slot sync through the runtime override path.
 - Implement `EditPerspectiveCameraAsync`:
   - clamp FOV to `[1,179]`;
   - reject `NearPlane <= 0`;
@@ -686,7 +687,7 @@ Likely test files:
 | Material slot turns into a hidden material editor. | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook. |
 | Environment schema drifts from engine concepts. | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape. |
 | Runtime not running blocks authoring. | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning. |
-| Unsupported engine APIs throw. | Unsupported material/environment paths return `SyncOutcome.Unsupported`. |
+| Unsupported engine APIs throw. | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure. |
 | Point/spot/orthographic editor scope creeps in. | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added. |
 | Tests become fake because WinUI is hard to automate. | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result. |
 | ED-M02 multi-viewport remains deferred. | ED-M04 validates only the supported single live viewport path. |
@@ -727,7 +728,8 @@ The user should validate these visually after implementation and build:
      shows `--`; picking an asset assigns it to both with one undo entry;
      `<None>` clears both;
    - unresolved identity is preserved across save/reopen;
-   - live sync unsupported appears as a warning, not a crash.
+  - live sync maps the descriptor URI to the cooked `.omat` runtime path and
+    does not crash or block authoring.
 7. PerspectiveCamera:
    - add/select a node with PerspectiveCamera;
    - edit FOV and Near/Far;
