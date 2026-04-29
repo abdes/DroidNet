@@ -117,6 +117,8 @@ public partial class MenuItem
                 this.UpdateCommonVisualState();
                 this.UpdateIconVisualState();
                 this.UpdateAcceleratorVisualState();
+                this.UpdateSeparatorLabelVisibility();
+                this.UpdateInteractiveContentVisibility();
                 this.UpdateCheckmarkVisualState();
 
                 this.RefreshTextPresentation();
@@ -128,50 +130,61 @@ public partial class MenuItem
     {
         Debug.Assert(sender is MenuItemData, "Expecting sender to be MenuItemData");
 
-        // Update visual states based on which property changed
-        _ = this.DispatcherQueue.TryEnqueue(() =>
+        _ = this.DispatcherQueue.TryEnqueue(() => this.UpdateForItemDataProperty(e.PropertyName));
+    }
+
+    private void UpdateForItemDataProperty(string? propertyName)
+    {
+        switch (propertyName)
         {
-            switch (e.PropertyName)
-            {
-                case nameof(MenuItemData.IsEnabled):
-                case nameof(MenuItemData.IsExpanded):
-                case nameof(MenuItemData.IsInteractive):
-                    this.UpdateCommonVisualState();
-                    break;
+            case nameof(MenuItemData.IsEnabled):
+            case nameof(MenuItemData.IsExpanded):
+            case nameof(MenuItemData.IsInteractive):
+                this.UpdateCommonVisualState();
+                break;
 
-                case nameof(MenuItemData.Icon):
-                    this.UpdateIconVisualState();
-                    break;
+            case nameof(MenuItemData.Icon):
+                this.UpdateIconVisualState();
+                break;
 
-                case nameof(MenuItemData.AcceleratorText):
-                    this.UpdateAcceleratorVisualState();
-                    break;
+            case nameof(MenuItemData.AcceleratorText):
+                this.UpdateAcceleratorVisualState();
+                break;
 
-                case nameof(MenuItemData.Mnemonic):
-                    this.AccessKey = this.ItemData?.Mnemonic?.ToString() ?? string.Empty;
-                    this.RefreshTextPresentation();
-                    break;
+            case nameof(MenuItemData.Mnemonic):
+                this.AccessKey = this.ItemData?.Mnemonic?.ToString() ?? string.Empty;
+                this.RefreshTextPresentation();
+                break;
 
-                case nameof(MenuItemData.Text):
-                    this.RefreshTextPresentation();
-                    break;
+            case nameof(MenuItemData.Text):
+                this.RefreshTextPresentation();
+                break;
 
-                case nameof(MenuItemData.IsSeparator):
-                    this.UpdateTypeVisualState();
-                    break;
+            case nameof(MenuItemData.IsSeparator):
+                this.UpdateTypeVisualState();
+                this.UpdateSeparatorLabelVisibility();
+                this.UpdateInteractiveContentVisibility();
+                break;
 
-                case nameof(MenuItemData.SubItems):
-                case nameof(MenuItemData.IsCheckable):
-                case nameof(MenuItemData.IsChecked):
-                case nameof(MenuItemData.RadioGroupId):
-                    this.UpdateCheckmarkVisualState();
-                    break;
+            case nameof(MenuItemData.SeparatorLabel):
+            case nameof(MenuItemData.HasSeparatorLabel):
+                this.UpdateSeparatorLabelVisibility();
+                break;
 
-                default:
-                    // For other properties (Command, etc.), no visual state update needed
-                    // The control simply responds to specific property changes above
-                    break;
-            }
-        });
+            case nameof(MenuItemData.InteractiveContent):
+            case nameof(MenuItemData.InteractiveContentFactory):
+            case nameof(MenuItemData.InteractiveContentTemplate):
+            case nameof(MenuItemData.HasInteractiveContent):
+                this.UpdateInteractiveContentVisibility();
+                this.UpdateCommonVisualState();
+                break;
+
+            case nameof(MenuItemData.SubItems):
+            case nameof(MenuItemData.IsCheckable):
+            case nameof(MenuItemData.IsChecked):
+            case nameof(MenuItemData.RadioGroupId):
+                this.UpdateCheckmarkVisualState();
+                break;
+        }
     }
 }
