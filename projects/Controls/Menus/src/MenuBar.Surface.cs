@@ -89,7 +89,7 @@ public sealed partial class MenuBar : IRootMenuSurface
     {
         this.LogGetAdjacentItem(itemData.Id, direction, wrap);
 
-        var items = this.MenuSource?.Items
+        var items = this.MenuSource?.Items.Where(static item => item.IsMenuFocusTarget).ToList()
             ?? throw new InvalidOperationException("MenuSource is not set.");
 
         var index = items.IndexOf(itemData);
@@ -130,7 +130,7 @@ public sealed partial class MenuBar : IRootMenuSurface
             return true; // Already focused
         }
 
-        if (!itemData.IsInteractive)
+        if (!itemData.IsMenuFocusTarget)
         {
             return false; // Cannot focus non-interactive items
         }
@@ -155,7 +155,7 @@ public sealed partial class MenuBar : IRootMenuSurface
     {
         foreach (var item in this.Items)
         {
-            if (item.IsInteractive)
+            if (item.IsMenuFocusTarget)
             {
                 return this.FocusItem(item, navigationMode);
             }

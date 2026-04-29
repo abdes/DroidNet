@@ -23,6 +23,7 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
     private PopupMenuHost? menuHost;
     private MenuItemData? buttonItemData;
     private bool isMenuOpen;
+    private MenuNavigationMode pendingOpenNavigationMode = MenuNavigationMode.Programmatic;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="MenuButton"/> class.
@@ -135,6 +136,7 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
         }
 
         // Show the menu below the button
+        this.pendingOpenNavigationMode = navigationMode;
         this.menuHost.ShowAt(this, navigationMode);
 
         return true;
@@ -286,8 +288,10 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
         this.IsMenuOpen = true;
         this.ButtonItemData.IsExpanded = true;
 
-        // Setup initial keyboard navigation
-        if (sender is ICascadedMenuHost host)
+        // Pointer-opened menus must not steal focus from embedded editors that can
+        // receive focus as soon as the popup becomes visible.
+        if (this.pendingOpenNavigationMode == MenuNavigationMode.KeyboardInput &&
+            sender is ICascadedMenuHost host)
         {
             host.SetupInitialKeyboardNavigation();
         }
