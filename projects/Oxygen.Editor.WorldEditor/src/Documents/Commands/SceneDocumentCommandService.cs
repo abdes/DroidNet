@@ -13,6 +13,7 @@ using Oxygen.Core;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Diagnostics;
@@ -41,7 +42,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
     private readonly IMessenger messenger;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private readonly Dictionary<Guid, TransformEditSessionState> transformEditSessions = [];
+    private readonly CommitGroupController transformCommitGroups = new();
 
     public SceneDocumentCommandService(
         ISceneExplorerService sceneExplorerService,
@@ -171,13 +172,10 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context,
                 session,
                 targets.Select(static target => target.Node).ToList(),
-                targets.Select(static target => target.Transform!).ToList(),
                 edit).ConfigureAwait(true);
         }
 
-        // One-shot path is now schema-driven via the property pipeline.
-        // The legacy capture/apply/sync machinery remains for the
-        // session path until it is migrated.
+        // One-shot path is schema-driven via the property pipeline.
         var propertyEdit = BuildPropertyEditFromTransformEdit(edit);
         if (propertyEdit.Count == 0)
         {
@@ -1046,87 +1044,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
            float.IsFinite(value.VignetteIntensity) &&
            float.IsFinite(value.DisplayGamma);
 
-    private static void ApplyTransformEdit(TransformComponent transform, TransformEdit edit)
-    {
-        if (edit.Position.HasValue)
-        {
-            transform.LocalPosition = Get(edit.Position);
-        }
-
-        if (edit.PositionX.HasValue || edit.PositionY.HasValue || edit.PositionZ.HasValue)
-        {
-            var position = transform.LocalPosition;
-            if (edit.PositionX.HasValue)
-            {
-                position.X = Get(edit.PositionX);
-            }
-
-            if (edit.PositionY.HasValue)
-            {
-                position.Y = Get(edit.PositionY);
-            }
-
-            if (edit.PositionZ.HasValue)
-            {
-                position.Z = Get(edit.PositionZ);
-            }
-
-            transform.LocalPosition = position;
-        }
-
-        if (edit.RotationEulerDegrees.HasValue)
-        {
-            transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(Get(edit.RotationEulerDegrees));
-        }
-
-        if (edit.RotationXDegrees.HasValue || edit.RotationYDegrees.HasValue || edit.RotationZDegrees.HasValue)
-        {
-            var rotation = TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation);
-            if (edit.RotationXDegrees.HasValue)
-            {
-                rotation.X = Get(edit.RotationXDegrees);
-            }
-
-            if (edit.RotationYDegrees.HasValue)
-            {
-                rotation.Y = Get(edit.RotationYDegrees);
-            }
-
-            if (edit.RotationZDegrees.HasValue)
-            {
-                rotation.Z = Get(edit.RotationZDegrees);
-            }
-
-            transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(rotation);
-        }
-
-        if (edit.Scale.HasValue)
-        {
-            transform.LocalScale = Get(edit.Scale);
-        }
-
-        if (edit.ScaleX.HasValue || edit.ScaleY.HasValue || edit.ScaleZ.HasValue)
-        {
-            var scale = transform.LocalScale;
-            if (edit.ScaleX.HasValue)
-            {
-                scale.X = Get(edit.ScaleX);
-            }
-
-            if (edit.ScaleY.HasValue)
-            {
-                scale.Y = Get(edit.ScaleY);
-            }
-
-            if (edit.ScaleZ.HasValue)
-            {
-                scale.Z = Get(edit.ScaleZ);
-            }
-
-            transform.LocalScale = scale;
-        }
-    }
-
     private static void ApplyPerspectiveCameraEdit(PerspectiveCamera camera, PerspectiveCameraEdit edit)
     {
         if (edit.FieldOfViewDegrees.HasValue)
@@ -1348,11 +1265,38 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         return nodesById.Values.ToList();
     }
 
+    private static string TransformSessionKey(EditSessionToken session)
+        => $"transform-session:{session.SessionId:N}";
+
+    private static List<PropertyDescriptor> GetTransformDescriptors(PropertyEdit edit)
+    {
+        var descriptors = new List<PropertyDescriptor>(edit.Count);
+        foreach (var id in edit.Ids)
+        {
+            descriptors.Add(Transform.ById[id]);
+        }
+
+        return descriptors;
+    }
+
+    private static Dictionary<Guid, object> BuildTransformTargetMap(IReadOnlyList<SceneNode> nodes)
+    {
+        var targets = new Dictionary<Guid, object>(nodes.Count);
+        foreach (var node in nodes)
+        {
+            if (node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform)
+            {
+                targets[node.Id] = transform;
+            }
+        }
+
+        return targets;
+    }
+
     private async Task<SceneCommandResult> EditTransformSessionAsync(
         SceneDocumentCommandContext context,
         EditSessionToken session,
         IReadOnlyList<SceneNode> nodes,
-        IReadOnlyList<TransformComponent> transforms,
         TransformEdit edit)
     {
         if (session.State == EditSessionState.Cancelled)
@@ -1360,32 +1304,48 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             return await this.CancelTransformEditSessionAsync(context, session).ConfigureAwait(true);
         }
 
-        var before = this.transformEditSessions.TryGetValue(session.SessionId, out var existing)
-            ? existing.Before
-            : nodes.Zip(transforms, static (node, transform) => TransformState.Capture(node, transform)).ToList();
-
-        foreach (var transform in transforms)
+        var propertyEdit = BuildPropertyEditFromTransformEdit(edit);
+        if (propertyEdit.Count == 0)
         {
-            ApplyTransformEdit(transform, edit);
-        }
-
-        var after = nodes.Zip(transforms, static (node, transform) => TransformState.Capture(node, transform)).ToList();
-        if (session.State == EditSessionState.Open)
-        {
-            this.transformEditSessions[session.SessionId] = new TransformEditSessionState(session, before, after);
-            await this.PreviewTransformSessionAsync(context, nodes).ConfigureAwait(true);
             return SceneCommandResult.Success;
         }
 
-        _ = this.transformEditSessions.Remove(session.SessionId);
-        if (TransformStatesEqual(before, after))
+        var descriptors = GetTransformDescriptors(propertyEdit);
+        var key = TransformSessionKey(session);
+        var before = PropertySnapshot.Capture(BuildTransformTargetMap(nodes), descriptors);
+        var group = this.transformCommitGroups.Begin(
+            key,
+            nodes.Select(static node => node.Id).ToList(),
+            before,
+            "Edit Transform");
+        var sessionNodes = ResolveNodes(context.Scene, group.Nodes);
+        var nodeTargets = BuildTransformTargetMap(sessionNodes);
+        var sceneNodes = sessionNodes.ToDictionary(static node => node.Id);
+
+        foreach (var target in nodeTargets.Values)
         {
-            var noOpOperationResultId = await this.SyncTerminalTransformSessionAsync(context, nodes).ConfigureAwait(true);
-            return new SceneCommandResult(true, noOpOperationResultId);
+            PropertyApply.ApplyToTarget(target, propertyEdit, Transform.ById);
         }
 
-        this.RecordTransformHistory(context, before, after);
-        var operationResultId = await this.SyncTerminalTransformSessionAsync(context, nodes).ConfigureAwait(true);
+        var after = PropertySnapshot.Capture(nodeTargets, descriptors);
+        this.transformCommitGroups.RecordPreview(key, after);
+
+        if (session.State == EditSessionState.Open)
+        {
+            await this.PreviewTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
+            return SceneCommandResult.Success;
+        }
+
+        var closed = this.transformCommitGroups.Close(key, after) ?? group;
+        var op = new PropertyOp(closed.Nodes, closed.Before, after, closed.Label);
+        var operationResultId = await this.CompleteTerminalTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
+        if (op.EffectiveEdit().Count == 0)
+        {
+            return new SceneCommandResult(true, operationResultId);
+        }
+
+        var resolver = new TransformPropertyTarget(this, context, sceneNodes);
+        RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         return new SceneCommandResult(true, operationResultId);
     }
@@ -1394,74 +1354,102 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         SceneDocumentCommandContext context,
         EditSessionToken session)
     {
-        if (!this.transformEditSessions.Remove(session.SessionId, out var state))
+        var key = TransformSessionKey(session);
+        var active = this.transformCommitGroups.GetActive(key);
+        if (active is null)
         {
             return SceneCommandResult.Success;
         }
 
-        foreach (var before in state.Before)
+        _ = this.transformCommitGroups.Close(key, active.Before);
+        var sceneNodes = ResolveNodes(context.Scene, active.Nodes).ToDictionary(static node => node.Id);
+        foreach (var (nodeId, edit) in active.Before.PerNode)
         {
-            before.Apply();
+            if (!sceneNodes.TryGetValue(nodeId, out var node)
+                || node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform)
+            {
+                continue;
+            }
+
+            PropertyApply.ApplyToTarget(transform, edit, Transform.ById);
         }
 
-        foreach (var before in state.Before)
+        foreach (var (nodeId, edit) in active.Before.PerNode)
         {
+            if (!sceneNodes.TryGetValue(nodeId, out var node))
+            {
+                continue;
+            }
+
+            var entries = BuildTransformPropertyEntries(edit);
+            if (entries.Count == 0)
+            {
+                continue;
+            }
+
             _ = await this.sceneEngineSync.CancelPreviewSyncAsync(
                 context.Scene.Id,
-                before.Node.Id,
-                _ => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, before.Node)).ConfigureAwait(true);
+                node.Id,
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
         }
 
         return SceneCommandResult.Success;
     }
 
-    private async Task PreviewTransformSessionAsync(SceneDocumentCommandContext context, IReadOnlyList<SceneNode> nodes)
+    private async Task PreviewTransformSessionAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyDictionary<Guid, SceneNode> nodes,
+        PropertySnapshot snapshot)
     {
         var observedAt = DateTimeOffset.UtcNow;
-        foreach (var node in nodes)
+        foreach (var (nodeId, edit) in snapshot.PerNode)
         {
+            if (!nodes.TryGetValue(nodeId, out var node))
+            {
+                continue;
+            }
+
+            var entries = BuildTransformPropertyEntries(edit);
+            if (entries.Count == 0)
+            {
+                continue;
+            }
+
             _ = await this.sceneEngineSync.TryPreviewSyncAsync(
                 context.Scene.Id,
                 node.Id,
                 observedAt,
-                _ => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, node)).ConfigureAwait(true);
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
         }
     }
 
-    private async Task<Guid?> SyncTerminalTransformSessionAsync(SceneDocumentCommandContext context, IReadOnlyList<SceneNode> nodes)
+    private async Task<Guid?> CompleteTerminalTransformSessionAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyDictionary<Guid, SceneNode> nodes,
+        PropertySnapshot snapshot)
     {
         Guid? firstOperationResultId = null;
-        foreach (var node in nodes)
+        foreach (var (nodeId, edit) in snapshot.PerNode)
         {
+            if (!nodes.TryGetValue(nodeId, out var node))
+            {
+                continue;
+            }
+
+            var entries = BuildTransformPropertyEntries(edit);
+            if (entries.Count == 0)
+            {
+                continue;
+            }
+
             var outcome = await this.sceneEngineSync.CompleteTerminalSyncAsync(
                 context.Scene.Id,
                 node.Id,
-                _ => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, node)).ConfigureAwait(true);
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
             firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.EditTransform, outcome).ConfigureAwait(true);
         }
 
         return firstOperationResultId;
-    }
-
-    private static bool TransformStatesEqual(IReadOnlyList<TransformState> before, IReadOnlyList<TransformState> after)
-    {
-        if (before.Count != after.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < before.Count; i++)
-        {
-            if (before[i].Node.Id != after[i].Node.Id ||
-                before[i].Position != after[i].Position ||
-                before[i].Rotation != after[i].Rotation ||
-                before[i].Scale != after[i].Scale)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
@@ -1511,21 +1499,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
     private static Uri? ToMaterialSyncUri(Uri? uri)
         => IsEmptyMaterialUri(uri) ? null : uri;
-
-    private void RecordTransformHistory(SceneDocumentCommandContext context, IReadOnlyList<TransformState> before, IReadOnlyList<TransformState> after)
-        => context.History.AddChange("Restore Transform", async () => await this.ApplyTransformStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
-
-    private async Task ApplyTransformStatesForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<TransformState> states, IReadOnlyList<TransformState> inverse)
-    {
-        foreach (var state in states)
-        {
-            state.Apply();
-        }
-
-        context.History.AddChange("Reapply Transform", async () => await this.ApplyTransformStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        _ = await this.SyncEditedNodesAsync(context, states.Select(static state => state.Node).ToList(), SceneOperationKinds.EditTransform, node => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, node)).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-    }
 
     private void RecordGeometryHistory(SceneDocumentCommandContext context, IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
         => context.History.AddChange("Restore Geometry", async () => await this.ApplyGeometryStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
@@ -2017,11 +1990,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             this.Transform.LocalScale = this.Scale;
         }
     }
-
-    private sealed record TransformEditSessionState(
-        EditSessionToken Session,
-        IReadOnlyList<TransformState> Before,
-        IReadOnlyList<TransformState> Latest);
 
     private sealed record GeometryState(SceneNode Node, GeometryComponent Geometry, Uri? GeometryUri)
     {

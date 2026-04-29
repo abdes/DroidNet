@@ -47,6 +47,7 @@ public sealed partial class MaterialCookService : IMaterialCookService
             || string.IsNullOrWhiteSpace(request.MountName)
             || string.IsNullOrWhiteSpace(request.SourceRelativePath))
         {
+            this.LogMaterialCookRejected(request.MaterialSourceUri, request.ProjectRoot, request.MountName, request.SourceRelativePath);
             return new MaterialCookResult(
                 request.MaterialSourceUri,
                 CookedMaterialUri: null,
@@ -54,50 +55,14 @@ public sealed partial class MaterialCookService : IMaterialCookService
                 OperationId: null);
         }
 
+        var cookedUri = GetCookedUri(request.MaterialSourceUri);
+        var virtualPath = "/" + GetCookedRelativePath(cookedUri);
+        this.LogMaterialCookStarted(request.MaterialSourceUri, request.ProjectRoot, request.MountName, request.SourceRelativePath, virtualPath);
+
         try
         {
-            var result = await this.importService.ImportAsync(
-                new ImportRequest(
-                    ProjectRoot: request.ProjectRoot,
-                    Inputs:
-                    [
-                        new ImportInput(
-                            SourcePath: NormalizeRelativePath(request.SourceRelativePath),
-                            MountPoint: request.MountName,
-                            VirtualPath: "/" + GetCookedRelativePath(GetCookedUri(request.MaterialSourceUri))),
-                    ],
-                    Options: new ImportOptions(ReimportIfUnchanged: true, FailFast: request.FailFast)),
-                cancellationToken).ConfigureAwait(false);
-
-            if (!result.Succeeded)
-            {
-                this.LogMaterialCookFailed(request.MaterialSourceUri, result.Diagnostics.Count);
-                return new MaterialCookResult(
-                    request.MaterialSourceUri,
-                    CookedMaterialUri: null,
-                    MaterialCookState.Failed,
-                    OperationId: null);
-            }
-
-            var cookedUri = result.Imported
-                .Where(static asset => string.Equals(asset.AssetType, "Material", StringComparison.OrdinalIgnoreCase))
-                .Select(static asset => ToAssetUri(asset.VirtualPath))
-                .FirstOrDefault();
-            if (cookedUri is not null && !CookedOutputIsVisible(request.ProjectRoot, cookedUri))
-            {
-                this.LogMaterialCookFailed(request.MaterialSourceUri, result.Diagnostics.Count);
-                return new MaterialCookResult(
-                    request.MaterialSourceUri,
-                    CookedMaterialUri: null,
-                    MaterialCookState.Failed,
-                    OperationId: null);
-            }
-
-            return new MaterialCookResult(
-                request.MaterialSourceUri,
-                cookedUri,
-                cookedUri is null ? MaterialCookState.NotCooked : MaterialCookState.Cooked,
-                OperationId: null);
+            var result = await this.ImportMaterialAsync(request, virtualPath, cancellationToken).ConfigureAwait(false);
+            return this.CreateCookResult(request, result);
         }
         catch (OperationCanceledException)
         {
@@ -147,6 +112,26 @@ public sealed partial class MaterialCookService : IMaterialCookService
 
     private static string NormalizeRelativePath(string sourceRelativePath)
         => sourceRelativePath.Replace('\\', '/').TrimStart('/');
+
+    private static string SummarizeDiagnostics(IReadOnlyList<ImportDiagnostic> diagnostics)
+    {
+        if (diagnostics.Count == 0)
+        {
+            return "<none>";
+        }
+
+        return string.Join(
+            "; ",
+            diagnostics.Select(static diagnostic =>
+                $"{diagnostic.Severity}:{diagnostic.Code} source='{diagnostic.SourcePath ?? string.Empty}' virtual='{diagnostic.VirtualPath ?? string.Empty}' message='{diagnostic.Message}'"));
+    }
+
+    private static MaterialCookResult Failed(MaterialCookRequest request)
+        => new(
+            request.MaterialSourceUri,
+            CookedMaterialUri: null,
+            MaterialCookState.Failed,
+            OperationId: null);
 
     private static Uri ToAssetUri(string virtualPath)
     {
@@ -235,15 +220,105 @@ public sealed partial class MaterialCookService : IMaterialCookService
         return true;
     }
 
+    private async Task<ImportResult> ImportMaterialAsync(
+        MaterialCookRequest request,
+        string virtualPath,
+        CancellationToken cancellationToken)
+    {
+        var importRequest = new ImportRequest(
+            ProjectRoot: request.ProjectRoot,
+            Inputs:
+            [
+                new ImportInput(
+                    SourcePath: NormalizeRelativePath(request.SourceRelativePath),
+                    MountPoint: request.MountName,
+                    VirtualPath: virtualPath),
+            ],
+            Options: new ImportOptions(ReimportIfUnchanged: true, FailFast: request.FailFast));
+
+        return await this.importService.ImportAsync(importRequest, cancellationToken).ConfigureAwait(false);
+    }
+
+    private MaterialCookResult CreateCookResult(MaterialCookRequest request, ImportResult result)
+    {
+        if (!result.Succeeded)
+        {
+            this.LogMaterialCookFailed(request.MaterialSourceUri, result.Diagnostics.Count, SummarizeDiagnostics(result.Diagnostics));
+            this.LogMaterialCookDiagnostics(result.Diagnostics);
+            return Failed(request);
+        }
+
+        var cookedUri = result.Imported
+            .Where(static asset => string.Equals(asset.AssetType, "Material", StringComparison.OrdinalIgnoreCase))
+            .Select(static asset => ToAssetUri(asset.VirtualPath))
+            .FirstOrDefault();
+        if (cookedUri is not null && !CookedOutputIsVisible(request.ProjectRoot, cookedUri))
+        {
+            this.LogMaterialCookOutputMissing(request.MaterialSourceUri, cookedUri, request.ProjectRoot);
+            this.LogMaterialCookDiagnostics(result.Diagnostics);
+            return Failed(request);
+        }
+
+        this.LogMaterialCookSucceeded(request.MaterialSourceUri, cookedUri, result.Imported.Count, result.Diagnostics.Count);
+        return new MaterialCookResult(
+            request.MaterialSourceUri,
+            cookedUri,
+            cookedUri is null ? MaterialCookState.NotCooked : MaterialCookState.Cooked,
+            OperationId: null);
+    }
+
+    private void LogMaterialCookDiagnostics(IReadOnlyList<ImportDiagnostic> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            this.LogMaterialCookDiagnostic(
+                diagnostic.Severity.ToString(),
+                diagnostic.Code,
+                diagnostic.Message,
+                diagnostic.SourcePath ?? string.Empty,
+                diagnostic.VirtualPath ?? string.Empty);
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 1000,
+        Level = LogLevel.Information,
+        Message = "Material cook started for {MaterialUri}. ProjectRoot='{ProjectRoot}', Mount='{MountName}', Source='{SourceRelativePath}', VirtualPath='{VirtualPath}'.")]
+    private partial void LogMaterialCookStarted(Uri materialUri, string projectRoot, string mountName, string sourceRelativePath, string virtualPath);
+
     [LoggerMessage(
         EventId = 1001,
         Level = LogLevel.Warning,
-        Message = "Material cook failed for {MaterialUri} with {DiagnosticCount} diagnostics.")]
-    private partial void LogMaterialCookFailed(Uri materialUri, int diagnosticCount);
+        Message = "Material cook failed for {MaterialUri} with {DiagnosticCount} diagnostics: {DiagnosticSummary}")]
+    private partial void LogMaterialCookFailed(Uri materialUri, int diagnosticCount, string diagnosticSummary);
 
     [LoggerMessage(
         EventId = 1002,
         Level = LogLevel.Warning,
         Message = "Material cook failed for {MaterialUri}.")]
     private partial void LogMaterialCookException(Uri materialUri, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1003,
+        Level = LogLevel.Warning,
+        Message = "Material cook rejected for {MaterialUri}; missing project facts. ProjectRoot='{ProjectRoot}', Mount='{MountName}', Source='{SourceRelativePath}'.")]
+    private partial void LogMaterialCookRejected(Uri materialUri, string projectRoot, string mountName, string sourceRelativePath);
+
+    [LoggerMessage(
+        EventId = 1004,
+        Level = LogLevel.Warning,
+        Message = "Material cook output was imported but is not visible in loose cooked index. MaterialUri={MaterialUri}, CookedUri={CookedUri}, ProjectRoot='{ProjectRoot}'.")]
+    private partial void LogMaterialCookOutputMissing(Uri materialUri, Uri cookedUri, string projectRoot);
+
+    [LoggerMessage(
+        EventId = 1005,
+        Level = LogLevel.Information,
+        Message = "Material cook succeeded for {MaterialUri}. CookedUri={CookedUri}, ImportedAssets={ImportedAssetCount}, Diagnostics={DiagnosticCount}.")]
+    private partial void LogMaterialCookSucceeded(Uri materialUri, Uri? cookedUri, int importedAssetCount, int diagnosticCount);
+
+    [LoggerMessage(
+        EventId = 1006,
+        Level = LogLevel.Warning,
+        Message = "Material cook diagnostic: Severity={Severity}, Code={Code}, Source='{SourcePath}', VirtualPath='{VirtualPath}', Message='{Message}'.")]
+    private partial void LogMaterialCookDiagnostic(string severity, string code, string message, string sourcePath, string virtualPath);
 }
