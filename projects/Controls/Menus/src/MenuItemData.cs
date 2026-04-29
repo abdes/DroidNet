@@ -190,6 +190,11 @@ public partial class MenuItemData : ObservableObject
     /// </summary>
     public bool HasSelectionState => this.IsCheckable || !string.IsNullOrEmpty(this.RadioGroupId);
 
+    /// <summary>
+    ///     Gets a value indicating whether the menu row itself should receive menu navigation focus.
+    /// </summary>
+    internal bool IsMenuFocusTarget => this.IsInteractive && !this.HasInteractiveContent;
+
     partial void OnCommandChanged(ICommand? oldValue, ICommand? newValue)
     {
         if (oldValue != null)
