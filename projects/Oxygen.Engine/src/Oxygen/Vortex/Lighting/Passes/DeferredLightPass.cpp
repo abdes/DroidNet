@@ -47,6 +47,7 @@ namespace {
     kDirectional = 0U,
     kPoint = 1U,
     kSpot = 2U,
+    kStaticSkyLight = 3U,
   };
 
   enum class DeferredLocalLightDrawMode : std::uint8_t {
@@ -297,6 +298,7 @@ namespace {
         ? DeferredLocalLightDrawMode::kCameraInsideVolume
         : DeferredLocalLightDrawMode::kOutsideVolume;
     case DeferredLightKind::kDirectional:
+    case DeferredLightKind::kStaticSkyLight:
       break;
     }
     return DeferredLocalLightDrawMode::kOutsideVolume;
@@ -332,6 +334,8 @@ namespace {
     using enum ShaderDebugMode;
     switch (mode) {
     case kDirectLightingOnly:
+    case kIblOnly:
+    case kDirectPlusIbl:
     case kDirectLightingFull:
     case kDirectLightGates:
     case kDirectBrdfCore:
@@ -349,6 +353,26 @@ namespace {
     case kDirectLightingOnly:
     case kDirectLightGates:
     case kDirectBrdfCore:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  [[nodiscard]] auto ShouldSkipDirectLightingForIblDebug(
+    const ShaderDebugMode mode) -> bool
+  {
+    return mode == ShaderDebugMode::kIblOnly;
+  }
+
+  [[nodiscard]] auto ShouldDrawStaticSkyLightDiffuse(
+    const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDisabled:
+    case kIblOnly:
+    case kDirectPlusIbl:
       return true;
     default:
       return false;
@@ -555,13 +579,18 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
   const graphics::Texture* spot_shadow_surface,
-  const graphics::Texture* point_shadow_surface) -> ExecutionState
+  const graphics::Texture* point_shadow_surface,
+  const bool static_sky_light_available) -> ExecutionState
 {
   auto state = ExecutionState {};
   if (ctx.view_constants == nullptr) {
     return state;
   }
-  if (!packets.directional.has_value() && packets.local_lights.empty()) {
+  const auto wants_static_sky_light
+    = static_sky_light_available
+    && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
+  if (!packets.directional.has_value() && packets.local_lights.empty()
+    && !wants_static_sky_light) {
     return state;
   }
   if (directional_shadow_bindings != nullptr
@@ -620,22 +649,26 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     }
   };
 
-  if (point_geometry_buffer_ == nullptr) {
-    const auto point_vertices
-      = internal::GeneratePointLightProxySphereVertices();
-    ensure_geometry_buffer(point_geometry_buffer_, point_geometry_srv_,
-      point_geometry_vertex_count_, "LightingService.PointProxyGeometry",
-      std::span(point_vertices));
-  }
-  if (spot_geometry_buffer_ == nullptr) {
-    const auto spot_vertices = internal::GenerateSpotLightProxyConeVertices();
-    ensure_geometry_buffer(spot_geometry_buffer_, spot_geometry_srv_,
-      spot_geometry_vertex_count_, "LightingService.SpotProxyGeometry",
-      std::span(spot_vertices));
+  const auto skip_direct_lighting
+    = ShouldSkipDirectLightingForIblDebug(ctx.shader_debug_mode);
+  if (!skip_direct_lighting && !packets.local_lights.empty()) {
+    if (point_geometry_buffer_ == nullptr) {
+      const auto point_vertices
+        = internal::GeneratePointLightProxySphereVertices();
+      ensure_geometry_buffer(point_geometry_buffer_, point_geometry_srv_,
+        point_geometry_vertex_count_, "LightingService.PointProxyGeometry",
+        std::span(point_vertices));
+    }
+    if (spot_geometry_buffer_ == nullptr) {
+      const auto spot_vertices = internal::GenerateSpotLightProxyConeVertices();
+      ensure_geometry_buffer(spot_geometry_buffer_, spot_geometry_srv_,
+        spot_geometry_vertex_count_, "LightingService.SpotProxyGeometry",
+        std::span(spot_vertices));
+    }
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
-  if (packets.directional.has_value()) {
+  if (!skip_direct_lighting && packets.directional.has_value()) {
     draws.push_back(DeferredLightDraw {
       .kind = DeferredLightKind::kDirectional,
       .geometry_vertex_count = 3U,
@@ -643,7 +676,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     ++state.directional_draw_count;
   }
   const auto skip_local_lights
-    = ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
+    = skip_direct_lighting
+    || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
   if (!skip_local_lights) {
     for (const auto& packet : packets.local_lights) {
       const auto kind = packet.kind == LocalLightKind::kPoint
@@ -665,12 +699,24 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       }
     }
   }
+  if (wants_static_sky_light) {
+    draws.push_back(DeferredLightDraw {
+      .kind = DeferredLightKind::kStaticSkyLight,
+      .geometry_vertex_count = 3U,
+    });
+    ++state.static_sky_light_draw_count;
+    state.consumed_static_sky_light_product = true;
+  }
   state.local_light_count = state.point_light_count + state.spot_light_count;
   state.consumed_packets = !draws.empty();
   state.used_service_owned_geometry = state.local_light_count > 0U;
+  if (draws.empty()) {
+    return state;
+  }
 
   for (auto& draw : draws) {
-    if (draw.kind == DeferredLightKind::kDirectional) {
+    if (draw.kind == DeferredLightKind::kDirectional
+      || draw.kind == DeferredLightKind::kStaticSkyLight) {
       continue;
     }
     draw.draw_mode = ResolveLocalLightDrawMode(ctx, draw);
@@ -851,12 +897,16 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     const auto& draw = draws[i];
     const auto pass_index = pass_constants_indices[i];
 
-    if (draw.kind == DeferredLightKind::kDirectional) {
+    if (draw.kind == DeferredLightKind::kDirectional
+      || draw.kind == DeferredLightKind::kStaticSkyLight) {
       graphics::GpuEventScope light_scope(*recorder,
-        "Vortex.Stage12.DirectionalLight",
+        draw.kind == DeferredLightKind::kDirectional
+          ? "Vortex.Stage12.DirectionalLight"
+          : "Vortex.Stage12.StaticSkyLight",
         profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
-      if (directional_shadow_surface != nullptr
+      if (draw.kind == DeferredLightKind::kDirectional
+        && directional_shadow_surface != nullptr
         && state.consumed_directional_shadow_product) {
         recorder->RequireResourceState(*directional_shadow_surface,
           graphics::ResourceStates::kShaderResource);

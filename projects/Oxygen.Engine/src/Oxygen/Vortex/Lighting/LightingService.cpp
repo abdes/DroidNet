@@ -66,12 +66,13 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
   const graphics::Texture* spot_shadow_surface,
-  const graphics::Texture* point_shadow_surface) -> void
+  const graphics::Texture* point_shadow_surface,
+  const bool static_sky_light_available) -> void
 {
   const auto packets = deferred_packets_->Build(frame_light_set);
   const auto pass_state = deferred_pass_->Record(ctx, scene_textures, packets,
     directional_shadow_bindings, directional_shadow_surface, spot_shadow_surface,
-    point_shadow_surface);
+    point_shadow_surface, static_sky_light_available);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,
@@ -82,7 +83,10 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     = pass_state.used_camera_inside_local_lights,
     .used_non_perspective_local_lights
     = pass_state.used_non_perspective_local_lights,
+    .consumed_static_sky_light_product
+    = pass_state.consumed_static_sky_light_product,
     .directional_draw_count = pass_state.directional_draw_count,
+    .static_sky_light_draw_count = pass_state.static_sky_light_draw_count,
     .point_light_count = pass_state.point_light_count,
     .spot_light_count = pass_state.spot_light_count,
     .local_light_count = pass_state.local_light_count,

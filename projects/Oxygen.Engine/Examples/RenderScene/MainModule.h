@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <glm/vec3.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -164,6 +166,11 @@ private:
   bool startup_skybox_tonemap_hdr_to_ldr_ { false };
   float startup_skybox_hdr_exposure_ev_ { 0.0F };
   float startup_sky_sphere_intensity_ { 1.0F };
+  float startup_sky_light_intensity_mul_ { 1.0F };
+  float startup_sky_light_diffuse_ { 1.0F };
+  float startup_sky_light_specular_ { 1.0F };
+  bool startup_sky_light_real_time_capture_enabled_ { false };
+  glm::vec3 startup_sky_light_tint_ { 1.0F, 1.0F, 1.0F };
   std::unique_ptr<SkyboxService> startup_skybox_service_;
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };

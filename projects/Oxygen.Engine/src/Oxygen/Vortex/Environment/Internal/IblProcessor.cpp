@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -209,7 +210,6 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
         .probe_state = state,
       };
     }
-
     auto gfx = renderer_.GetGraphics();
     if (gfx == nullptr) {
       state.static_sky_light.unavailable_reason
@@ -406,6 +406,31 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     refreshed.refreshed = true;
   }
 
+  const auto cache_has_valid_products =
+    !key_changed
+    && cache.products.status == StaticSkyLightProductStatus::kValidCurrentKey
+    && cache.products.processed_cubemap_srv.IsValid()
+    && cache.products.diffuse_irradiance_sh_srv.IsValid()
+    && cache.products.product_revision != 0U;
+  if (cache_has_valid_products) {
+    state.static_sky_light = cache.products;
+    state.probes.environment_map_srv
+      = state.static_sky_light.processed_cubemap_srv;
+    state.probes.diffuse_sh_srv
+      = state.static_sky_light.diffuse_irradiance_sh_srv;
+    state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
+    state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
+    state.probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
+    state.probes.probe_revision = cache.products.product_revision;
+    state.valid = true;
+    state.flags = kEnvironmentProbeStateFlagResourcesValid;
+    return {
+      .requested = false,
+      .refreshed = false,
+      .probe_state = state,
+    };
+  }
+
   auto uploads_complete = false;
   if (cache.processed_cubemap_upload.has_value()
     && cache.diffuse_sh_upload.has_value()) {
@@ -470,6 +495,9 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     refreshed.requested = false;
     refreshed.refreshed = false;
   }
+  cache.products = state.static_sky_light;
+  cache.processed_cubemap_upload.reset();
+  cache.diffuse_sh_upload.reset();
 
   return {
     .requested = refreshed.requested,

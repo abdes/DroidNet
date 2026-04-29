@@ -93,6 +93,52 @@ namespace {
       CompositionView::ViewFeatureMask::kVolumetrics);
   }
 
+  auto StaticSkyLightProductStatusName(
+    const environment::StaticSkyLightProductStatus status) -> const char*
+  {
+    using environment::StaticSkyLightProductStatus;
+    switch (status) {
+    case StaticSkyLightProductStatus::kDisabled:
+      return "disabled";
+    case StaticSkyLightProductStatus::kUnavailable:
+      return "unavailable";
+    case StaticSkyLightProductStatus::kRegeneratingCurrentKey:
+      return "regenerating-current-key";
+    case StaticSkyLightProductStatus::kValidCurrentKey:
+      return "valid-current-key";
+    case StaticSkyLightProductStatus::kStaleWrongKeyRejected:
+      return "stale-wrong-key-rejected";
+    }
+    return "unknown";
+  }
+
+  auto StaticSkyLightUnavailableReasonName(
+    const environment::StaticSkyLightUnavailableReason reason) -> const char*
+  {
+    using environment::StaticSkyLightUnavailableReason;
+    switch (reason) {
+    case StaticSkyLightUnavailableReason::kNone:
+      return "none";
+    case StaticSkyLightUnavailableReason::kCapturedSceneDeferred:
+      return "captured-scene-deferred";
+    case StaticSkyLightUnavailableReason::kRealTimeCaptureDeferred:
+      return "real-time-capture-deferred";
+    case StaticSkyLightUnavailableReason::kMissingCubemap:
+      return "missing-cubemap";
+    case StaticSkyLightUnavailableReason::kResourceResolveFailed:
+      return "resource-resolve-failed";
+    case StaticSkyLightUnavailableReason::kNotTextureCube:
+      return "not-texture-cube";
+    case StaticSkyLightUnavailableReason::kUnsupportedFormat:
+      return "unsupported-format";
+    case StaticSkyLightUnavailableReason::kProcessingFailed:
+      return "processing-failed";
+    case StaticSkyLightUnavailableReason::kGpuProductsPending:
+      return "gpu-products-pending";
+    }
+    return "unknown";
+  }
+
   //! Builds the shared sky-view local basis used by both the LUT producer and
   //! the main-view sky consumer.
   /*!
@@ -301,6 +347,9 @@ auto EnvironmentLightingService::OnFrameStart(
     .sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_),
     .sky_light_ibl_stale
     = (probe_state_.flags & kEnvironmentProbeStateFlagStale) != 0U,
+    .sky_light_ibl_status = probe_state_.static_sky_light.status,
+    .sky_light_ibl_unavailable_reason
+    = probe_state_.static_sky_light.unavailable_reason,
   };
   last_view_product_generation_state_ = {};
   last_stage14_state_ = {};
@@ -1067,6 +1116,10 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     = sky_light_authored_enabled && !sky_light_ibl_valid;
   last_publication_state_.sky_light_ibl_stale
     = (probe_state_.flags & kEnvironmentProbeStateFlagStale) != 0U;
+  last_publication_state_.sky_light_ibl_status
+    = probe_state_.static_sky_light.status;
+  last_publication_state_.sky_light_ibl_unavailable_reason
+    = probe_state_.static_sky_light.unavailable_reason;
   last_publication_state_.volumetric_fog_authored_enabled
     = products.volumetric_fog.enabled;
   last_publication_state_.integrated_light_scattering_valid
@@ -1143,6 +1196,9 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .sky_light_ibl_valid = sky_light_ibl_valid,
     .sky_light_ibl_unavailable
     = sky_light_authored_enabled && !sky_light_ibl_valid,
+    .sky_light_ibl_status = probe_state_.static_sky_light.status,
+    .sky_light_ibl_unavailable_reason
+    = probe_state_.static_sky_light.unavailable_reason,
     .volumetric_fog_authored_enabled = products.volumetric_fog.enabled,
     .integrated_light_scattering_valid
     = products.integrated_light_scattering_srv.IsValid(),
@@ -1183,7 +1239,9 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     "distant_sky_light_lut_published={} sky_view_lut_published={} "
     "camera_aerial_perspective_published={} "
     "sky_light_authored_enabled={} sky_light_ibl_valid={} "
-    "sky_light_ibl_unavailable={} volumetric_fog_authored_enabled={} "
+    "sky_light_ibl_unavailable={} sky_light_ibl_status={} "
+    "sky_light_ibl_unavailable_reason={} "
+    "volumetric_fog_authored_enabled={} "
     "integrated_light_scattering_valid={}",
     last_view_product_generation_state_.environment_view_products_published,
     last_view_product_generation_state_.environment_view_published,
@@ -1196,6 +1254,10 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     last_view_product_generation_state_.sky_light_authored_enabled,
     last_view_product_generation_state_.sky_light_ibl_valid,
     last_view_product_generation_state_.sky_light_ibl_unavailable,
+    StaticSkyLightProductStatusName(
+      last_view_product_generation_state_.sky_light_ibl_status),
+    StaticSkyLightUnavailableReasonName(last_view_product_generation_state_
+        .sky_light_ibl_unavailable_reason),
     last_view_product_generation_state_.volumetric_fog_authored_enabled,
     last_view_product_generation_state_.integrated_light_scattering_valid);
 

@@ -309,6 +309,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky_light.SetIntensityMul(params.intensity_mul);
     sky_light.SetDiffuseIntensity(params.diffuse_intensity);
     sky_light.SetSpecularIntensity(params.specular_intensity);
+    sky_light.SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
     sky_light.SetTintRgb(params.tint_rgb);
 
     scene_->SetEnvironment(std::move(new_env));
@@ -334,6 +335,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
     sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
+    sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
     sky_light->SetTintRgb(params.tint_rgb);
   }
 }
@@ -379,6 +381,7 @@ auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
     sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
+    sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
     sky_light->SetTintRgb(params.tint_rgb);
   }
 }

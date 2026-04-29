@@ -1040,6 +1040,9 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     second.probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(second.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
 
+  renderer->GetUploadCoordinator().OnFrameStart(
+    oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1U });
   const auto third = processor.RefreshStaticSkyLightProducts(
     second.probe_state, sky_light, source_cubemap.get());
 
@@ -2435,11 +2438,21 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FALSE(service.GetLastPublicationState().sky_light_ibl_valid);
   EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_unavailable);
   EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_stale);
+  EXPECT_EQ(service.GetLastPublicationState().sky_light_ibl_status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(
+    service.GetLastPublicationState().sky_light_ibl_unavailable_reason,
+    StaticSkyLightUnavailableReason::kCapturedSceneDeferred);
   EXPECT_TRUE(
     service.GetLastViewProductGenerationState().sky_light_authored_enabled);
   EXPECT_FALSE(service.GetLastViewProductGenerationState().sky_light_ibl_valid);
   EXPECT_TRUE(
     service.GetLastViewProductGenerationState().sky_light_ibl_unavailable);
+  EXPECT_EQ(service.GetLastViewProductGenerationState().sky_light_ibl_status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(service.GetLastViewProductGenerationState()
+      .sky_light_ibl_unavailable_reason,
+    StaticSkyLightUnavailableReason::kCapturedSceneDeferred);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

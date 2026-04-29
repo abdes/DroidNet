@@ -235,6 +235,25 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DocumentsKnownUnwiredIblNoBrdfLutMode)
   EXPECT_FALSE(info->unsupported_reason.empty());
 }
 
+NOLINT_TEST(
+  ShaderDebugModeRegistryTest, StaticSkyLightDiffuseDebugModesUseServicePass)
+{
+  for (const auto mode :
+    { ShaderDebugMode::kIblOnly, ShaderDebugMode::kDirectPlusIbl }) {
+    const auto* info = FindShaderDebugModeInfo(mode);
+    ASSERT_NE(info, nullptr);
+    EXPECT_TRUE(info->supported) << info->canonical_name;
+    EXPECT_EQ(info->path, DiagnosticsDebugPath::kServicePass)
+      << info->canonical_name;
+    EXPECT_TRUE(info->requires_scene_depth) << info->canonical_name;
+    EXPECT_TRUE(info->requires_gbuffer) << info->canonical_name;
+    EXPECT_TRUE(info->requires_lighting_products) << info->canonical_name;
+    EXPECT_TRUE(CatalogContainsDefineForPath(info->shader_define,
+      "Vortex/Services/Lighting/DeferredLightDirectional.hlsl"))
+      << info->canonical_name;
+  }
+}
+
 NOLINT_TEST(ShaderDebugModeRegistryTest, FamilyStringsAreStableForUiGroups)
 {
   EXPECT_EQ(oxygen::vortex::to_string(ShaderDebugModeFamily::kLightCulling),

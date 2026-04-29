@@ -15,6 +15,8 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
+static const uint DEFERRED_LIGHT_TYPE_STATIC_SKY_LIGHT = 3u;
+
 [shader("vertex")]
 VortexFullscreenTriangleOutput DeferredLightDirectionalVS(uint vertex_id : SV_VertexID)
 {
@@ -35,10 +37,21 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
     const float scene_depth = SampleSceneDepth(input.uv, bindings);
     const float3 world_position =
         ReconstructDeferredWorldPosition(input.uv, scene_depth);
-    const float3 light_dir =
-        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz);
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         input.uv, world_position, camera_position, bindings);
+    if (light_constants.light_type == DEFERRED_LIGHT_TYPE_STATIC_SKY_LIGHT) {
+        if (!HasDeferredLightingInputs(bindings) || scene_depth >= 1.0f) {
+            return 0.0f.xxxx;
+        }
+        return float4(EvaluateDeferredStaticSkyLightDiffuse(surface), 0.0f);
+    }
+
+#if defined(DEBUG_IBL_ONLY)
+    return 0.0f.xxxx;
+#endif
+
+    const float3 light_dir =
+        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz);
     float light_attenuation = 1.0f;
     if (light_constants.shadow_info.x > 0u) {
         light_attenuation = ComputeDirectionalShadowVisibility(

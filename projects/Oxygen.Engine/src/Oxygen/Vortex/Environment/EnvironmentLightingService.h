@@ -86,6 +86,13 @@ public:
     bool sky_light_ibl_valid { false };
     bool sky_light_ibl_unavailable { false };
     bool sky_light_ibl_stale { false };
+    environment::StaticSkyLightProductStatus sky_light_ibl_status {
+      environment::StaticSkyLightProductStatus::kDisabled
+    };
+    environment::StaticSkyLightUnavailableReason
+      sky_light_ibl_unavailable_reason {
+        environment::StaticSkyLightUnavailableReason::kNone
+      };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
     bool integrated_light_scattering_unavailable { false };
@@ -148,6 +155,13 @@ public:
     bool sky_light_authored_enabled { false };
     bool sky_light_ibl_valid { false };
     bool sky_light_ibl_unavailable { false };
+    environment::StaticSkyLightProductStatus sky_light_ibl_status {
+      environment::StaticSkyLightProductStatus::kDisabled
+    };
+    environment::StaticSkyLightUnavailableReason
+      sky_light_ibl_unavailable_reason {
+        environment::StaticSkyLightUnavailableReason::kNone
+      };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
     bool integrated_light_scattering_unavailable { false };

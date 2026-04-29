@@ -45,8 +45,8 @@ using enum ShaderType;
 //   DEBUG_ROUGHNESS: Roughness visualization
 //   DEBUG_METALNESS: Metalness visualization
 //   DEBUG_DIRECT_LIGHTING_ONLY: Forward mesh direct-light term only
-//   DEBUG_IBL_ONLY: Forward mesh IBL term only
-//   DEBUG_DIRECT_PLUS_IBL: Forward mesh direct + IBL terms only
+//   DEBUG_IBL_ONLY: IBL term only
+//   DEBUG_DIRECT_PLUS_IBL: Direct + IBL terms only
 //   DEBUG_DIRECT_LIGHTING_FULL: Full forward direct-light term only
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
@@ -357,6 +357,16 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHTING_ONLY" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_ONLY" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_PLUS_IBL" }
   },
   RequiredDefineShaderFileSpec<1, 1> {
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",

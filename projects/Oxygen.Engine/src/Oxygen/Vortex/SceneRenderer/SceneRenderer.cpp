@@ -2049,10 +2049,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       published_view_frame_bindings_.shadow_frame_slot);
   }
   if (environment_ != nullptr && wants_environment) {
+    const auto enable_static_sky_light_ambient_bridge
+      = shading_mode == ShadingMode::kDeferred;
     published_view_frame_bindings_.environment_frame_slot
       = environment_->PublishEnvironmentBindings(ctx,
-        kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
-        &scene_textures);
+        kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
+        enable_static_sky_light_ambient_bridge, &scene_textures);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -3118,7 +3120,8 @@ void SceneRenderer::RenderDeferredLighting(
     : nullptr;
   lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
     shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
-    shadow_surface, spot_shadow_surface, point_shadow_surface);
+    shadow_surface, spot_shadow_surface, point_shadow_surface,
+    environment_lighting_state_.ambient_bridge_published);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -3142,8 +3145,12 @@ void SceneRenderer::RenderDeferredLighting(
     = lighting_state.used_camera_inside_local_lights;
   deferred_lighting_state_.used_non_perspective_local_lights
     = lighting_state.used_non_perspective_local_lights;
+  deferred_lighting_state_.consumed_static_sky_light_product
+    = lighting_state.consumed_static_sky_light_product;
   deferred_lighting_state_.accumulated_into_scene_color
     = lighting_state.accumulated_into_scene_color;
+  deferred_lighting_state_.static_sky_light_draw_count
+    = lighting_state.static_sky_light_draw_count;
   deferred_lighting_state_.consumed_directional_shadow_product
     = lighting_state.consumed_directional_shadow_product;
   deferred_lighting_state_.directional_shadow_vsm_active

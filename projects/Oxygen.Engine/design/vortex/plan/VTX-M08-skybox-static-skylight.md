@@ -195,7 +195,7 @@ Remaining gaps:
 
 ### Slice C: Visual SkySphere Background
 
-Status: `in_progress`
+Status: `validated`
 
 Implementation evidence:
 
@@ -230,9 +230,56 @@ Validation evidence:
 - `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Verify-VortexSkyboxProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity_capture.rdc -CaptureReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.vortex-skybox.txt -AnalysisTimeoutSeconds 240` passed. The report proves one `Vortex.Stage15.Sky` scope, one sky draw, zero `Vortex.Stage15.Atmosphere` scopes, `atmosphere_enabled=0`, cubemap `SkySphere` source/enabled/texture-domain descriptor state, authored `sky_sphere_intensity=1000`, one `SceneColor` output, non-black Stage-15 sky samples, and 25/25 non-black Stage-22 tonemap sky samples.
 - `RenderScene --frames 65 --fps 0 --capture-provider off` passed with startup SkySphere cubemap enabled from local demo settings; runtime log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log` records the startup skybox route and 65 `Vortex.SceneTextureLeasePool.Churn` telemetry records.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Assert-VortexSkyboxAllocationChurn.ps1 -RuntimeLogPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log -RunFrames 65 -WarmupFrames 5 -ReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.allocation-churn.txt` passed. The report proves `telemetry_frame_count=65`, `steady_state_frame_count=60`, `steady_state_allocations_after_warmup=0`, `steady_state_allocations_zero=true`, and `overall_verdict=pass`.
+- User visual confirmation accepted the corrected RenderScene skybox settings
+  after the black-window configuration issue was fixed and before the final
+  short 10 fps capture proof.
 - `git diff --check` passed.
 
 Remaining gaps:
 
-- User visual confirmation is still required before Slice C can be closed.
 - Deferred static SkyLight diffuse consumption remains open.
+
+### Slice D: Deferred Static SkyLight Diffuse Consumption
+
+Status: `validated`
+
+Implementation evidence:
+
+- Added a deferred static SkyLight Stage 12 draw owned by `LightingService` /
+  `DeferredLightPass`, using the existing full-screen deferred-light pipeline
+  with an explicit static SkyLight light kind.
+- Added shader-side static SkyLight diffuse evaluation from the dedicated
+  eight-`float4` SH binding, applying tint, radiance scale, and diffuse
+  intensity exactly once before multiplying by non-metallic base color.
+- Added service-pass debug routing for `ibl-only` and `direct-plus-ibl` so
+  static SkyLight diffuse can be isolated without executing directional,
+  point, spot, or visual-sky passes in the IBL-only proof.
+- Preserved M08 specular scope by keeping `prefilter_map_slot` and
+  `brdf_lut_slot` invalid while leaving guarded forward specular paths in
+  place for future reflection work.
+- Fixed the renderer-owned static SkyLight product cache so completed uploads
+  remain valid after upload-ticket retirement instead of regressing to a
+  regenerating state for the same product key.
+- Extended RenderScene/DemoShell startup skybox plumbing so validation scenes
+  can seed SkySphere and SkyLight settings through the existing `SkyboxService`
+  path without adding renderer test hooks.
+- Added scripted RenderDoc static SkyLight analysis and assertion tooling under
+  `tools/vortex`.
+
+Validation evidence:
+
+- `cmake --build out\build-ninja --config Debug --target oxygen-examples-renderscene Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.ShaderDebugModeRegistry.Tests --parallel 4` passed and rebaked the changed deferred-light shader variants.
+- `ctest --preset test-debug -R "Oxygen\.Vortex\.(EnvironmentLightingService|SceneRendererDeferredCore|ShaderDebugModeRegistry)|Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 4/4 matched test executables.
+- Runtime cache proof `RenderScene --frames 80 --fps 10 --capture-provider off` recorded steady `sky_light_ibl_status=valid-current-key`, `sky_light_ibl_valid=true`, and `sky_light_ibl_unavailable_reason=none` after product generation.
+- CDB/debug-layer audit `cdb -logo out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps.cdb.log -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --frames 60 --fps 10 --capture-provider off` exited 0 and the D3D12/DXGI/device-removal scan found 0 blocking hits; the known live `IDXGIFactory` shutdown warning remains non-blocking for this gate.
+- RenderDoc capture `out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps_capture.rdc` was produced with `RenderScene --frames 60 --fps 10 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps --capture-from-frame 45 --capture-frame-count 1`.
+- `tools\vortex\Verify-VortexStaticSkyLightProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps_capture.rdc -AnalysisTimeoutSeconds 240` passed. The report proves one `Vortex.Stage12.StaticSkyLight` draw, zero directional/point/spot/Stage15 sky scopes in IBL-only mode, enabled specified-cubemap SkyLight state, texture-domain processed cubemap slot `35818`, valid diffuse SH slot `49`, invalid prefilter slot, positive radiance/diffuse intensity, `scene_color_max_luminance=0.128336914`, 31 non-black scanned pixels after the static SkyLight draw, 16/16 sampled pixel histories passing through the static SkyLight draw, and `static_skylight_pixel_history_verdict=true`.
+
+Remaining gaps:
+
+- Combined direct-plus-IBL/directional sun interaction proof remains open for
+  the M08 closeout gate.
+- Allocation-churn proof for static SkyLight product off/on lifecycle remains
+  open.
+- User visual confirmation and residual-gap recording remain open for full
+  VTX-M08 closure.
