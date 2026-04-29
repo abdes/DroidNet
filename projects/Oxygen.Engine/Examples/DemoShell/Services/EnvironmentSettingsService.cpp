@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -142,6 +143,43 @@ namespace {
     auto transform = node.GetTransform();
     transform.SetLocalRotation(
       ComputeLocalRotationForWorldDirection(node, direction_ws));
+  }
+
+  auto FindTaggedSunLightNodeIncludingDisabled(scene::Scene& scene_ref)
+    -> std::optional<scene::SceneNode>
+  {
+    std::optional<scene::SceneNode> candidate;
+    auto candidate_count = 0U;
+    auto stack = scene_ref.GetRootNodes();
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      if (const auto light = node.GetLightAs<scene::DirectionalLight>();
+        light.has_value() && light->get().IsSunLight()
+        && light->get().GetEnvironmentContribution()) {
+        candidate = candidate.value_or(node);
+        ++candidate_count;
+      }
+
+      auto child = node.GetFirstChild();
+      while (child.has_value()) {
+        stack.push_back(*child);
+        child = child->GetNextSibling();
+      }
+    }
+
+    if (candidate_count > 1U) {
+      throw scene::DirectionalLightContractError(
+        "scene has more than one directional light with is_sun_light=true "
+        "and environment_contribution=true");
+    }
+
+    return candidate;
   }
 
   template <typename Record>
@@ -1509,7 +1547,14 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
   options.hdr_exposure_ev = hdr_exposure_ev;
 
   config_.skybox_service->LoadAndEquip(std::string(path), options,
-    { .sky_sphere_intensity = sky_intensity_,
+    { .enable_sky_sphere = sky_sphere_enabled_
+        && sky_sphere_source_
+          == static_cast<int>(scene::environment::SkySphereSource::kCubemap),
+      .enable_sky_light = sky_light_enabled_
+        && sky_light_source_
+          == static_cast<int>(
+            scene::environment::SkyLightSource::kSpecifiedCubemap),
+      .sky_sphere_intensity = sky_intensity_,
       .intensity_mul = sky_light_intensity_mul_,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
@@ -3185,7 +3230,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sky_light_cubemap_resource_key_ = light->GetCubemapResource();
   }
 
-  if (apply_skybox || apply_sky_sphere) {
+  if (apply_skybox || apply_sky_sphere || apply_sky_light) {
     MaybeAutoLoadSkybox();
   }
 
@@ -3423,7 +3468,14 @@ auto EnvironmentSettingsService::MaybeAutoLoadSkybox() -> void
   if (!config_.skybox_service) {
     return;
   }
-  if (!sky_sphere_enabled_ || sky_sphere_source_ != 0) {
+  const bool sky_sphere_needs_cubemap = sky_sphere_enabled_
+    && sky_sphere_source_
+      == static_cast<int>(scene::environment::SkySphereSource::kCubemap);
+  const bool sky_light_needs_cubemap = sky_light_enabled_
+    && sky_light_source_
+      == static_cast<int>(
+        scene::environment::SkyLightSource::kSpecifiedCubemap);
+  if (!sky_sphere_needs_cubemap && !sky_light_needs_cubemap) {
     return;
   }
   if (skybox_path_.empty()) {
@@ -4361,6 +4413,16 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
     DLOG_F(1, "resolved scene sun candidate '{}' in scene '{}'",
       primary->Node().GetName(), config_.scene->GetName());
     return config_.scene->GetNode(primary->NodeHandle());
+  }
+
+  if (const auto disabled_candidate
+    = FindTaggedSunLightNodeIncludingDisabled(*config_.scene);
+    disabled_candidate.has_value()) {
+    DLOG_F(1,
+      "resolved disabled scene sun candidate '{}' in scene '{}' for "
+      "environment-panel lifecycle control",
+      disabled_candidate->GetName(), config_.scene->GetName());
+    return disabled_candidate;
   }
 
   DLOG_F(1, "resolved no scene sun candidate in scene '{}'",

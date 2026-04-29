@@ -21,6 +21,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
@@ -28,6 +29,7 @@
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::testing {
@@ -352,6 +354,11 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FALSE(light->get().Common().casts_shadows);
   EXPECT_TRUE(service_.GetSunLightAvailable());
 
+  service_.RequestResync();
+  service_.SyncFromSceneIfNeeded();
+  EXPECT_TRUE(service_.GetSunLightAvailable());
+  EXPECT_FALSE(service_.GetSunEnabled());
+
   service_.SetSunEnabled(true);
   service_.ApplyPendingChanges();
 
@@ -362,6 +369,49 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "AuthoredSun");
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SkyboxServiceCanFeedSkyLightWithoutEnablingVisualSkySphere)
+{
+  auto scene = MakeScene("DemoShell.SkyboxSkylightOnly");
+  auto env = std::make_unique<scene::SceneEnvironment>();
+  auto& sky = env->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(false);
+  auto& sky_light = env->AddSystem<scene::environment::SkyLight>();
+  sky_light.SetEnabled(true);
+  sky_light.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
+  scene->SetEnvironment(std::move(env));
+
+  SkyboxService skybox_service(nullptr, observer_ptr { scene.get() });
+  const auto key = content::ResourceKey { 42U };
+  skybox_service.SetSkyboxResourceKey(key);
+  skybox_service.ApplyToScene(SkyboxService::SkyLightParams {
+    .enable_sky_sphere = false,
+    .enable_sky_light = true,
+    .intensity_mul = 11.0F,
+    .diffuse_intensity = 2.0F,
+    .specular_intensity = 0.5F,
+    .tint_rgb = { 0.7F, 0.8F, 0.9F },
+  });
+
+  auto updated_env = scene->GetEnvironment();
+  ASSERT_NE(updated_env.get(), nullptr);
+  auto updated_sky = updated_env->TryGetSystem<scene::environment::SkySphere>();
+  ASSERT_NE(updated_sky.get(), nullptr);
+  EXPECT_FALSE(updated_sky->IsEnabled());
+
+  auto updated_sky_light
+    = updated_env->TryGetSystem<scene::environment::SkyLight>();
+  ASSERT_NE(updated_sky_light.get(), nullptr);
+  EXPECT_TRUE(updated_sky_light->IsEnabled());
+  EXPECT_EQ(updated_sky_light->GetSource(),
+    scene::environment::SkyLightSource::kSpecifiedCubemap);
+  EXPECT_EQ(updated_sky_light->GetCubemapResource(), key);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetIntensityMul(), 11.0F);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetDiffuseIntensity(), 2.0F);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetSpecularIntensity(), 0.5F);
+  EXPECT_EQ(updated_sky_light->GetTintRgb(), glm::vec3(0.7F, 0.8F, 0.9F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

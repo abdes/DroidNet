@@ -66,6 +66,8 @@ public:
   bool startup_skybox_flip_y { false };
   bool startup_skybox_tonemap_hdr_to_ldr { false };
   float startup_skybox_hdr_exposure_ev { 0.0F };
+  bool startup_skybox_enable_sky_sphere { true };
+  bool startup_skybox_enable_sky_light { true };
   float startup_sky_sphere_intensity { 1.0F };
   float startup_sky_light_intensity_mul { 1.0F };
   float startup_sky_light_diffuse { 1.0F };

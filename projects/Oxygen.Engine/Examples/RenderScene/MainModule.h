@@ -168,6 +168,8 @@ private:
   bool startup_skybox_flip_y_ { false };
   bool startup_skybox_tonemap_hdr_to_ldr_ { false };
   float startup_skybox_hdr_exposure_ev_ { 0.0F };
+  bool startup_skybox_enable_sky_sphere_ { true };
+  bool startup_skybox_enable_sky_light_ { true };
   float startup_sky_sphere_intensity_ { 1.0F };
   float startup_sky_light_intensity_mul_ { 1.0F };
   float startup_sky_light_diffuse_ { 1.0F };

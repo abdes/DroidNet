@@ -224,6 +224,9 @@ MainModule::MainModule(const examples::DemoAppContext& app)
     startup_skybox_tonemap_hdr_to_ldr_
       = app.startup_skybox_tonemap_hdr_to_ldr;
     startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
+    startup_skybox_enable_sky_sphere_
+      = app.startup_skybox_enable_sky_sphere;
+    startup_skybox_enable_sky_light_ = app.startup_skybox_enable_sky_light;
     startup_sky_sphere_intensity_
       = std::max(app.startup_sky_sphere_intensity, 0.0F);
     startup_sky_light_intensity_mul_
@@ -1138,14 +1141,16 @@ auto MainModule::ApplyStartupSkyboxToScene(
     return;
   }
 
-  if (auto env = scene->GetEnvironment()) {
-    if (auto atmosphere
-      = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
-      atmosphere->SetEnabled(false);
-      LOG_F(INFO,
-        "RenderScene: Disabled procedural SkyAtmosphere for startup skybox "
-        "scene '{}'",
-        scene_label);
+  if (startup_skybox_enable_sky_sphere_) {
+    if (auto env = scene->GetEnvironment()) {
+      if (auto atmosphere
+        = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
+        atmosphere->SetEnabled(false);
+        LOG_F(INFO,
+          "RenderScene: Disabled procedural SkyAtmosphere for startup skybox "
+          "scene '{}'",
+          scene_label);
+      }
     }
   }
 
@@ -1163,6 +1168,8 @@ auto MainModule::ApplyStartupSkyboxToScene(
   options.hdr_exposure_ev = startup_skybox_hdr_exposure_ev_;
 
   SkyboxService::SkyLightParams params;
+  params.enable_sky_sphere = startup_skybox_enable_sky_sphere_;
+  params.enable_sky_light = startup_skybox_enable_sky_light_;
   params.sky_sphere_intensity = startup_sky_sphere_intensity_;
   params.intensity_mul = startup_sky_light_intensity_mul_;
   params.diffuse_intensity = startup_sky_light_diffuse_;
@@ -1174,13 +1181,15 @@ auto MainModule::ApplyStartupSkyboxToScene(
     "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
     "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} "
     "sky_intensity={} sky_light_intensity={} sky_light_diffuse={} "
-    "sky_light_specular={} sky_light_real_time_capture={})",
+    "sky_light_specular={} sky_light_real_time_capture={} "
+    "enable_sky_sphere={} enable_sky_light={})",
     startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
     startup_skybox_output_format_, options.cube_face_size,
     startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
     startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity,
     params.intensity_mul, params.diffuse_intensity, params.specular_intensity,
-    params.real_time_capture_enabled);
+    params.real_time_capture_enabled, params.enable_sky_sphere,
+    params.enable_sky_light);
 
   startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
     options, params,
