@@ -199,6 +199,38 @@ namespace {
       && lhs.size == rhs.size;
   }
 
+  [[nodiscard]] auto BuildVirtualPathCollisionMessage(
+    std::string_view context, const StoredAsset& incoming,
+    const data::AssetKey& existing_key, const StoredAsset* existing)
+    -> std::string
+  {
+    auto message = std::string(
+      "Conflicting virtual path mapping in loose cooked container");
+    message += ": context=";
+    message += context;
+    message += " virtual_path='";
+    message += incoming.virtual_path;
+    message += "' existing_key=";
+    message += data::to_string(existing_key);
+    message += " incoming_key=";
+    message += data::to_string(incoming.key);
+    message += " incoming_descriptor='";
+    message += incoming.descriptor_relpath;
+    message += "' incoming_type=";
+    message += std::to_string(static_cast<uint16_t>(incoming.asset_type));
+
+    if (existing != nullptr) {
+      message += " existing_descriptor='";
+      message += existing->descriptor_relpath;
+      message += "' existing_type=";
+      message += std::to_string(static_cast<uint16_t>(existing->asset_type));
+    } else {
+      message += " existing_descriptor=<missing-or-current-session>";
+    }
+
+    return message;
+  }
+
   auto WriteBinaryFile(const std::filesystem::path& path,
     const std::span<const std::byte> bytes) -> void
   {
@@ -335,6 +367,71 @@ struct LooseCookedWriter::Impl final {
     return true;
   }
 
+  auto HandleVirtualPathCollision(
+    const StoredAsset& incoming, std::string_view context) -> bool
+  {
+    const auto existing_key_it = key_by_virtual_path_.find(incoming.virtual_path);
+    if (existing_key_it == key_by_virtual_path_.end()) {
+      return true;
+    }
+
+    const auto existing_key = existing_key_it->second;
+    if (existing_key == incoming.key) {
+      return true;
+    }
+
+    const auto existing_asset_it = assets_.find(existing_key);
+    if (existing_asset_it == assets_.end()
+      || !loaded_asset_keys_.contains(existing_key)) {
+      throw std::runtime_error(BuildVirtualPathCollisionMessage(
+        context, incoming, existing_key, nullptr));
+    }
+
+    const auto& existing = existing_asset_it->second;
+    if (existing.asset_type != incoming.asset_type
+      || existing.descriptor_relpath != incoming.descriptor_relpath) {
+      throw std::runtime_error(BuildVirtualPathCollisionMessage(
+        context, incoming, existing_key, &existing));
+    }
+
+    const auto already_replaced
+      = replaced_loaded_virtual_paths_.contains(incoming.virtual_path);
+
+    if (!already_replaced) {
+      ++collision_summary_.asset_collisions;
+    }
+    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
+      ++collision_summary_.rejected;
+      throw std::runtime_error(std::string(context)
+        + ": virtual path collision for " + incoming.virtual_path);
+    }
+    if (collision_policy_
+      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
+      if (!already_replaced) {
+        ++collision_summary_.kept_existing;
+        LOG_F(WARNING,
+          "{}: virtual path collision for '{}' policy=warn_keep_existing "
+          "action=keep existing_key={} incoming_key={} descriptor='{}'",
+          context, incoming.virtual_path, data::to_string(existing_key),
+          data::to_string(incoming.key), incoming.descriptor_relpath);
+      }
+      return false;
+    }
+
+    if (!already_replaced) {
+      ++collision_summary_.replaced_existing;
+      LOG_F(WARNING,
+        "{}: virtual path collision for '{}' policy=warn_replace "
+        "action=replace existing_key={} incoming_key={} descriptor='{}'",
+        context, incoming.virtual_path, data::to_string(existing_key),
+        data::to_string(incoming.key), incoming.descriptor_relpath);
+      replaced_loaded_virtual_paths_.insert(incoming.virtual_path);
+    }
+    assets_.erase(existing_asset_it);
+    loaded_asset_keys_.erase(existing_key);
+    return true;
+  }
+
   auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes)
@@ -342,13 +439,6 @@ struct LooseCookedWriter::Impl final {
   {
     ValidateVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
-
-    if (const auto existing_it
-      = key_by_virtual_path_.find(std::string(virtual_path));
-      existing_it != key_by_virtual_path_.end() && existing_it->second != key) {
-      throw std::runtime_error(
-        "Conflicting virtual path mapping in loose cooked container");
-    }
 
     std::optional<base::Sha256Digest> digest;
     if (compute_sha256_) {
@@ -363,6 +453,11 @@ struct LooseCookedWriter::Impl final {
       .descriptor_size = (bytes.size()),
       .descriptor_sha256 = CopyDigestOrZero(digest),
     };
+
+    if (!HandleVirtualPathCollision(record, "WriteAssetDescriptor")) {
+      return;
+    }
+
     if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
       && !HandleAssetCollision_(
         key, existing_it->second, record, "WriteAssetDescriptor")) {
@@ -440,13 +535,6 @@ struct LooseCookedWriter::Impl final {
     ValidateVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
 
-    if (const auto existing_it
-      = key_by_virtual_path_.find(std::string(virtual_path));
-      existing_it != key_by_virtual_path_.end() && existing_it->second != key) {
-      throw std::runtime_error(
-        "Conflicting virtual path mapping in loose cooked container");
-    }
-
     const auto path_on_disk
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
 
@@ -485,6 +573,11 @@ struct LooseCookedWriter::Impl final {
       .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
     };
 
+    if (!HandleVirtualPathCollision(
+          record, "RegisterExternalAssetDescriptor")) {
+      return;
+    }
+
     if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
       && !HandleAssetCollision_(
         key, existing_it->second, record, "RegisterExternalAssetDescriptor")) {
@@ -505,16 +598,13 @@ struct LooseCookedWriter::Impl final {
     assets_.clear();
     files_.clear();
     key_by_virtual_path_.clear();
+    loaded_asset_keys_.clear();
 
     LoadExistingIndexIfPresent_();
 
     for (const auto& [key, asset] : current_assets) {
-      if (const auto existing_it
-        = key_by_virtual_path_.find(asset.virtual_path);
-        existing_it != key_by_virtual_path_.end()
-        && existing_it->second != key) {
-        throw std::runtime_error(
-          "Conflicting virtual path mapping in loose cooked container");
+      if (!HandleVirtualPathCollision(asset, "Finish.merge_assets")) {
+        continue;
       }
       if (const auto existing = assets_.find(key); existing != assets_.end()
         && !HandleAssetCollision_(
@@ -640,6 +730,7 @@ private:
 
         assets_.insert_or_assign(key, record);
         key_by_virtual_path_.insert_or_assign(record.virtual_path, key);
+        loaded_asset_keys_.insert(key);
       }
 
       for (const auto kind : index.GetAllFileKinds()) {
@@ -871,6 +962,8 @@ private:
   std::unordered_map<data::AssetKey, StoredAsset> assets_;
   std::unordered_map<FileKind, StoredFile> files_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
+  std::unordered_set<data::AssetKey> loaded_asset_keys_;
+  std::unordered_set<std::string> replaced_loaded_virtual_paths_;
   LooseCookedCollisionSummary collision_summary_ {};
 };
 
