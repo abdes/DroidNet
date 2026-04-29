@@ -19,11 +19,15 @@
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
-#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
+
+namespace internal {
+  class GpuTimelineProfiler;
+  struct GpuTimelineDiagnostic;
+} // namespace internal
 
 struct DiagnosticsConfig {
   DiagnosticsFeatureSet default_features { DiagnosticsFeature::kNone };
@@ -62,21 +66,14 @@ public:
     std::string_view canonical_name) const noexcept
     -> std::optional<ShaderDebugMode>;
 
-  OXGN_VRTX_API auto SetGpuTimelineProfiler(
-    observer_ptr<internal::GpuTimelineProfiler> profiler) -> void;
   OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
   OXGN_VRTX_API auto SetGpuTimelineMaxScopesPerFrame(std::uint32_t max_scopes)
     -> void;
   OXGN_VRTX_API auto SetGpuTimelineRetainLatestFrame(bool retain_latest_frame)
     -> void;
-  OXGN_VRTX_API auto AddGpuTimelineSink(
-    std::shared_ptr<internal::GpuTimelineSink> sink) -> void;
   OXGN_VRTX_API auto RequestGpuTimelineExport(
     const std::filesystem::path& path) -> void;
-  [[nodiscard]] OXGN_VRTX_API auto GetLatestGpuTimelineFrame() const
-    -> std::optional<internal::GpuTimelineFrame>;
-  OXGN_VRTX_API auto SyncGpuTimelineDiagnostics() -> void;
   [[nodiscard]] OXGN_VRTX_API auto ExportCaptureManifest(
     const std::filesystem::path& path,
     const DiagnosticsCaptureManifestOptions& options = {}) -> bool;
@@ -91,6 +88,12 @@ public:
     -> DiagnosticsFrameSnapshot;
 
 private:
+  friend class Renderer;
+
+  OXGN_VRTX_API auto SetGpuTimelineProfiler(
+    observer_ptr<internal::GpuTimelineProfiler> profiler) -> void;
+  OXGN_VRTX_API auto SyncGpuTimelineDiagnostics() -> void;
+
   [[nodiscard]] auto ComputeEffectiveFeatures() const noexcept
     -> DiagnosticsFeatureSet;
   [[nodiscard]] auto IsFrameLedgerEnabled() const noexcept -> bool;

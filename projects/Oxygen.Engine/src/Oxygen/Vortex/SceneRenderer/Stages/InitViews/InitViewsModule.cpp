@@ -17,6 +17,7 @@
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
