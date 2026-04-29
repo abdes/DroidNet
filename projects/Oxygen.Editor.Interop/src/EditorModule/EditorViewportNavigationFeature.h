@@ -11,6 +11,8 @@
 
 #include <memory>
 
+#include <EditorModule/EditorViewportCameraControlMode.h>
+
 namespace oxygen::input {
   class InputMappingContext;
   class InputSnapshot;
@@ -51,6 +53,7 @@ namespace oxygen::interop::module {
     //! Applies this feature to the given camera node for the current frame.
     virtual auto Apply(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
+      EditorViewportCameraControlMode control_mode,
       glm::vec3& focus_point,
       float& ortho_half_height,
       float dt_seconds) noexcept -> void = 0;

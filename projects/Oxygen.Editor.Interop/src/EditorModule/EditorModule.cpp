@@ -13,6 +13,7 @@
 #include <Commands/DestroySceneCommand.h>
 #include <Commands/DestroyViewCommand.h>
 #include <Commands/HideViewCommand.h>
+#include <Commands/SetViewCameraControlModeCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
@@ -547,11 +548,13 @@ namespace oxygen::interop::module {
             // If the hovered view differs, keep wheel routing separate.
             if (hovered != kInvalidViewId && hovered != active) {
               viewport_navigation_->ApplyNonWheel(view->GetCameraNode(),
-                *input_snapshot, focus_point, ortho_half_height, dt_seconds);
+                *input_snapshot, view->GetCameraControlMode(), focus_point,
+                ortho_half_height, dt_seconds);
             }
             else {
               viewport_navigation_->Apply(view->GetCameraNode(),
-                *input_snapshot, focus_point, ortho_half_height, dt_seconds);
+                *input_snapshot, view->GetCameraControlMode(), focus_point,
+                ortho_half_height, dt_seconds);
             }
 
             view->SetFocusPoint(focus_point);
@@ -563,7 +566,8 @@ namespace oxygen::interop::module {
             auto focus_point = view->GetFocusPoint();
             auto ortho_half_height = view->GetOrthoHalfHeight();
             viewport_navigation_->ApplyWheelOnly(view->GetCameraNode(),
-              *input_snapshot, focus_point, ortho_half_height, dt_seconds);
+              *input_snapshot, view->GetCameraControlMode(), focus_point,
+              ortho_half_height, dt_seconds);
             view->SetFocusPoint(focus_point);
             view->SetOrthoHalfHeight(ortho_half_height);
           }
@@ -1014,6 +1018,18 @@ namespace oxygen::interop::module {
 
     auto cmd = std::make_unique<SetViewCameraPresetCommand>(
       view_manager_.get(), view_id, preset);
+    command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewCameraControlMode(
+    ViewId view_id,
+    EditorViewportCameraControlMode mode) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    auto cmd = std::make_unique<SetViewCameraControlModeCommand>(
+      view_manager_.get(), view_id, mode);
     command_queue_.Enqueue(std::move(cmd));
   }
 

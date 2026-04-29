@@ -683,6 +683,17 @@ void EditorView::SetCameraViewPreset(CameraViewPreset preset) {
   initial_orientation_set_ = true;
 }
 
+void EditorView::SetCameraControlMode(
+  const EditorViewportCameraControlMode mode) noexcept {
+  if (camera_control_mode_ == mode) {
+    return;
+  }
+
+  camera_control_mode_ = mode;
+  LOG_F(INFO, "EditorView '{}' camera control mode set to {}",
+    config_.name, static_cast<int>(mode));
+}
+
 auto EditorView::GetViewId() const -> ViewId { return view_id_; }
 
 auto EditorView::GetState() const -> ViewState { return state_; }
