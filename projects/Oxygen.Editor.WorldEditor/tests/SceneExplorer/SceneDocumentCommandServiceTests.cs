@@ -124,44 +124,19 @@ public sealed class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(node);
         var transform = node.Components.OfType<TransformComponent>().Single();
         var context = CreateContext(scene);
-        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty);
-        fixture.Sync
-            .Setup(sync => sync.TryPreviewSyncAsync(
-                scene.Id,
-                node.Id,
-                It.IsAny<DateTimeOffset>(),
-                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(accepted);
-        fixture.Sync
-            .Setup(sync => sync.CompleteTerminalSyncAsync(
-                scene.Id,
-                node.Id,
-                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(accepted);
-        fixture.Sync
-            .Setup(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(accepted);
+        var synced = new List<IReadOnlyList<EnginePropertyValueEntry>>();
+        ConfigureTransformSessionPropertySync(fixture, scene, node, synced);
         var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [node.Id], "PositionX");
 
         _ = await fixture.Sut.EditTransformAsync(
             context,
             [node.Id],
-            new TransformEdit(
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(1f)),
+            PositionXEdit(1f),
             session);
         _ = await fixture.Sut.EditTransformAsync(
             context,
             [node.Id],
-            new TransformEdit(
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(2f)),
+            PositionXEdit(2f),
             session);
 
         _ = transform.LocalPosition.X.Should().Be(2f);
@@ -172,11 +147,7 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditTransformAsync(
             context,
             [node.Id],
-            new TransformEdit(
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(2f)),
+            PositionXEdit(2f),
             session);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -206,7 +177,54 @@ public sealed class SceneDocumentCommandServiceTests
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
-        fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(5));
+        _ = synced.Select(entries => entries.Should().ContainSingle().Which.Value)
+            .Should().Equal(1f, 2f, 2f, 0f, 2f);
+        _ = synced.Select(entries => entries.Should().ContainSingle().Which.FieldId)
+            .Should().OnlyContain(field => field == (ushort)TransformField.PositionX);
+        fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditTransformAsync_WhenSessionNodeIdsChange_ShouldKeepOriginalSessionNodes()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var first = new SceneNode(scene) { Name = "First" };
+        var second = new SceneNode(scene) { Name = "Second" };
+        scene.RootNodes.Add(first);
+        scene.RootNodes.Add(second);
+        var firstTransform = first.Components.OfType<TransformComponent>().Single();
+        var secondTransform = second.Components.OfType<TransformComponent>().Single();
+        var context = CreateContext(scene);
+        var synced = new List<IReadOnlyList<EnginePropertyValueEntry>>();
+        ConfigureTransformSessionPropertySync(fixture, scene, first, synced);
+        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [first.Id], "PositionX");
+
+        _ = await fixture.Sut.EditTransformAsync(context, [first.Id], PositionXEdit(1f), session);
+        _ = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session);
+        session.Commit();
+
+        var result = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = firstTransform.LocalPosition.X.Should().Be(2f);
+        _ = secondTransform.LocalPosition.X.Should().Be(0f);
+        _ = synced.Select(entries => entries.Should().ContainSingle().Which.Value)
+            .Should().Equal(1f, 2f, 2f);
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                second,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [TestMethod]
@@ -781,6 +799,47 @@ public sealed class SceneDocumentCommandServiceTests
         var node = new SceneNode(scene) { Name = name };
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Directional Light", IsSunLight = true });
         return node;
+    }
+
+    private static TransformEdit PositionXEdit(float value)
+        => new(
+            Optional<Vector3>.Unspecified,
+            Optional<Vector3>.Unspecified,
+            Optional<Vector3>.Unspecified,
+            PositionX: Optional<float>.Supplied(value));
+
+    private static void ConfigureTransformSessionPropertySync(
+        Fixture fixture,
+        Scene scene,
+        SceneNode node,
+        List<IReadOnlyList<EnginePropertyValueEntry>> synced)
+    {
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty);
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced.Add(entries))
+            .ReturnsAsync(accepted);
+        fixture.Sync
+            .Setup(sync => sync.TryPreviewSyncAsync(
+                scene.Id,
+                node.Id,
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<Guid, Guid, DateTimeOffset, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
+                async (_, _, _, sync, cancellationToken) => (SyncOutcome?)await sync(cancellationToken).ConfigureAwait(false));
+        fixture.Sync
+            .Setup(sync => sync.CompleteTerminalSyncAsync(
+                scene.Id,
+                node.Id,
+                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<Guid, Guid, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
+                (_, _, sync, cancellationToken) => sync(cancellationToken));
     }
 
     private static Scene CreateScene()

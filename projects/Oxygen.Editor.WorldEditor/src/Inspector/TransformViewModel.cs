@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Core.Diagnostics;
+using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -29,6 +30,15 @@ public partial class TransformViewModel(
     private static readonly TimeSpan MouseWheelCommitDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
+    private readonly PropertyBinding<float> positionXBinding = new(SceneDocumentCommandService.Transform.PositionXDescriptor);
+    private readonly PropertyBinding<float> positionYBinding = new(SceneDocumentCommandService.Transform.PositionYDescriptor);
+    private readonly PropertyBinding<float> positionZBinding = new(SceneDocumentCommandService.Transform.PositionZDescriptor);
+    private readonly PropertyBinding<float> rotationXBinding = new(SceneDocumentCommandService.Transform.RotationXDescriptor);
+    private readonly PropertyBinding<float> rotationYBinding = new(SceneDocumentCommandService.Transform.RotationYDescriptor);
+    private readonly PropertyBinding<float> rotationZBinding = new(SceneDocumentCommandService.Transform.RotationZDescriptor);
+    private readonly PropertyBinding<float> scaleXBinding = new(SceneDocumentCommandService.Transform.ScaleXDescriptor);
+    private readonly PropertyBinding<float> scaleYBinding = new(SceneDocumentCommandService.Transform.ScaleYDescriptor);
+    private readonly PropertyBinding<float> scaleZBinding = new(SceneDocumentCommandService.Transform.ScaleZDescriptor);
 
     // Keep track of the current selection so property-change handlers can apply edits back
     // to the selected SceneNode instances.
@@ -483,179 +493,64 @@ public partial class TransformViewModel(
 
     private void UpdatePositionValues(ICollection<SceneNode> items)
     {
-        var mixedPosX = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalPosition.X ?? 0;
-        });
-
-        if (mixedPosX.HasValue)
-        {
-            this.PositionX = mixedPosX.Value;
-            this.PositionXIsIndeterminate = false;
-        }
-        else
-        {
-            this.PositionXIsIndeterminate = true;
-            this.PositionX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.X ?? 0
-                : 0;
-        }
-
-        var mixedPosY = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalPosition.Y ?? 0;
-        });
-
-        if (mixedPosY.HasValue)
-        {
-            this.PositionY = mixedPosY.Value;
-            this.PositionYIsIndeterminate = false;
-        }
-        else
-        {
-            this.PositionYIsIndeterminate = true;
-            this.PositionY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.Y ?? 0
-                : 0;
-        }
-
-        var mixedPosZ = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalPosition.Z ?? 0;
-        });
-
-        if (mixedPosZ.HasValue)
-        {
-            this.PositionZ = mixedPosZ.Value;
-            this.PositionZIsIndeterminate = false;
-        }
-        else
-        {
-            this.PositionZIsIndeterminate = true;
-            this.PositionZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.Z ?? 0
-                : 0;
-        }
+        this.UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0019:Use pattern matching", Justification = "code clarity")]
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
-        var mixedRotX = MixedValues.GetMixedValue(items, static e =>
-        {
-            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
-            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).X;
-        });
-
-        if (mixedRotX.HasValue)
-        {
-            this.RotationX = mixedRotX.Value;
-            this.RotationXIsIndeterminate = false;
-        }
-        else
-        {
-            this.RotationXIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            this.RotationX = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).X;
-        }
-
-        var mixedRotY = MixedValues.GetMixedValue(items, static e =>
-        {
-            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
-            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Y;
-        });
-
-        if (mixedRotY.HasValue)
-        {
-            this.RotationY = mixedRotY.Value;
-            this.RotationYIsIndeterminate = false;
-        }
-        else
-        {
-            this.RotationYIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            this.RotationY = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Y;
-        }
-
-        var mixedRotZ = MixedValues.GetMixedValue(items, static e =>
-        {
-            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
-            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Z;
-        });
-
-        if (mixedRotZ.HasValue)
-        {
-            this.RotationZ = mixedRotZ.Value;
-            this.RotationZIsIndeterminate = false;
-        }
-        else
-        {
-            this.RotationZIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            this.RotationZ = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Z;
-        }
+        this.UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
     }
 
     private void UpdateScaleValues(ICollection<SceneNode> items)
     {
-        // Local helper: retrieve a (possibly mixed) scale component value for the collection.
-        static float? GetMixedScale(ICollection<SceneNode> nodes, Func<TransformComponent, float> selector)
-            => MixedValues.GetMixedValue(nodes, e => e.Components.FirstOrDefault(c => c is TransformComponent) is not TransformComponent transform ? 0 : selector(transform));
+        this.UpdateBindingValue(
+            this.scaleXBinding,
+            items,
+            value => this.ScaleX = value,
+            mixed => this.ScaleXIsIndeterminate = mixed,
+            this.NormalizeScaleBindingValue);
+        this.UpdateBindingValue(
+            this.scaleYBinding,
+            items,
+            value => this.ScaleY = value,
+            mixed => this.ScaleYIsIndeterminate = mixed,
+            this.NormalizeScaleBindingValue);
+        this.UpdateBindingValue(
+            this.scaleZBinding,
+            items,
+            value => this.ScaleZ = value,
+            mixed => this.ScaleZIsIndeterminate = mixed,
+            this.NormalizeScaleBindingValue);
+    }
 
-        // Local helper: handle one axis (X/Y/Z) — use delegates to extract/replace the component within the scale Vector3,
-        // and to write back to the ViewModel properties.
-        static void ProcessAxis(
-            ICollection<SceneNode> nodes,
-            Func<System.Numerics.Vector3, float> extract,
-            Action<float> setViewModelScale,
-            Action<bool> setIsIndeterminate)
+    private void UpdateBindingValue(
+        PropertyBinding<float> binding,
+        ICollection<SceneNode> items,
+        Action<float> setValue,
+        Action<bool> setMixed,
+        Func<PropertyBinding<float>, float>? displayValue = null)
+    {
+        var nodeIds = items.Select(static node => node.Id).ToList();
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());
+        binding.UpdateFromModel(nodeIds, id => targets.GetValueOrDefault(id));
+
+        if (!binding.HasValue)
         {
-            var mixed = GetMixedScale(nodes, t => extract(t.LocalScale));
-            if (mixed.HasValue)
-            {
-                setViewModelScale(mixed.Value);
-                setIsIndeterminate(false);
-                return;
-            }
-
-            setIsIndeterminate(true);
-
-            var firstTransform = nodes.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            if (firstTransform is null)
-            {
-                setViewModelScale(0);
-                return;
-            }
-
-            var s = firstTransform.LocalScale;
-            var comp = extract(s);
-            setViewModelScale(TransformConverter.NormalizeScaleValue(comp));
+            setValue(0);
+            setMixed(false);
+            return;
         }
 
-        // Process X axis
-        ProcessAxis(
-            items,
-            v => v.X,
-            value => this.ScaleX = value,
-            indet => this.ScaleXIsIndeterminate = indet);
-
-        // Process Y axis
-        ProcessAxis(
-            items,
-            v => v.Y,
-            value => this.ScaleY = value,
-            indet => this.ScaleYIsIndeterminate = indet);
-
-        // Process Z axis
-        ProcessAxis(
-            items,
-            v => v.Z,
-            value => this.ScaleZ = value,
-            indet => this.ScaleZIsIndeterminate = indet);
+        setValue(displayValue?.Invoke(binding) ?? binding.Value);
+        setMixed(binding.IsMixed);
     }
+
+    private float NormalizeScaleBindingValue(PropertyBinding<float> binding)
+        => binding.IsMixed ? TransformConverter.NormalizeScaleValue(binding.Value) : binding.Value;
 
     private sealed record TransformEditSession(
         EditSessionToken Token,

@@ -26,8 +26,8 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// the schema-layer abstractions (<see cref="PropertyDescriptor{T}"/>,
 /// <see cref="PropertyEdit"/>, <see cref="PropertyApply"/>,
 /// <see cref="PropertyOp"/>) to the concrete C# transform model
-/// (<see cref="TransformComponent"/>) and to the existing engine sync
-/// (<see cref="ISceneEngineSync.UpdateNodeTransformAsync"/>).
+/// (<see cref="TransformComponent"/>) and to the generic engine property sync
+/// (<see cref="ISceneEngineSync.UpdatePropertiesAsync"/>).
 /// </para>
 /// <para>
 /// <b>EditTransformAsync</b> in the sibling partial keeps its public
@@ -282,22 +282,93 @@ public sealed partial class SceneDocumentCommandService
         return result;
     }
 
-    private static void RegisterPropertyOpHistory(
+    /// <summary>
+    /// Converts descriptor-addressed transform edits into the compact engine property wire format.
+    /// </summary>
+    /// <param name="edit">The descriptor-addressed property edit map.</param>
+    /// <returns>The engine property entries that can be sent to the runtime.</returns>
+    internal static List<EnginePropertyValueEntry> BuildTransformPropertyEntries(PropertyEdit edit)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+
+        var entries = new List<EnginePropertyValueEntry>(edit.Count);
+        foreach (var (id, value) in edit)
+        {
+            if (!Transform.ById.TryGetValue(id, out var descriptor)
+                || value is not float floatValue
+                || !TryMapTransformField(descriptor.EngineCommandKey, out var field))
+            {
+                continue;
+            }
+
+            entries.Add(new EnginePropertyValueEntry(
+                EngineComponentId.Transform,
+                (ushort)field,
+                floatValue));
+        }
+
+        return entries;
+    }
+
+    private static bool TryMapTransformField(string engineCommandKey, out TransformField field)
+    {
+        switch (engineCommandKey)
+        {
+            case "transform.position.x": field = TransformField.PositionX; return true;
+            case "transform.position.y": field = TransformField.PositionY; return true;
+            case "transform.position.z": field = TransformField.PositionZ; return true;
+            case "transform.rotation.x": field = TransformField.RotationXDegrees; return true;
+            case "transform.rotation.y": field = TransformField.RotationYDegrees; return true;
+            case "transform.rotation.z": field = TransformField.RotationZDegrees; return true;
+            case "transform.scale.x": field = TransformField.ScaleX; return true;
+            case "transform.scale.y": field = TransformField.ScaleY; return true;
+            case "transform.scale.z": field = TransformField.ScaleZ; return true;
+            default: field = default; return false;
+        }
+    }
+
+    private void RegisterPropertyOpHistory(
         SceneDocumentCommandContext context,
         PropertyOp op,
         IPropertyTarget resolver,
         IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors)
+        => this.RegisterPropertyOpHistory(
+            context,
+            op,
+            resolver,
+            descriptors,
+            ApplySide.Before,
+            "Restore Transform",
+            ApplySide.After,
+            "Reapply Transform");
+
+    private void RegisterPropertyOpHistory(
+        SceneDocumentCommandContext context,
+        PropertyOp op,
+        IPropertyTarget resolver,
+        IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors,
+        ApplySide applySide,
+        string label,
+        ApplySide inverseSide,
+        string inverseLabel)
     {
         // The label "Restore Transform" is reused so the existing tests
         // that observe TimeMachine labels keep passing.
         context.History.AddChange(
-            "Restore Transform",
+            label,
             async () =>
             {
-                await PropertyApply.ApplyAsync(op, ApplySide.Before, resolver, descriptors).ConfigureAwait(true);
-                context.History.AddChange(
-                    "Reapply Transform",
-                    async () => await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(true));
+                await PropertyApply.ApplyAsync(op, applySide, resolver, descriptors).ConfigureAwait(true);
+                this.RegisterPropertyOpHistory(
+                    context,
+                    op,
+                    resolver,
+                    descriptors,
+                    inverseSide,
+                    inverseLabel,
+                    applySide,
+                    label);
+                await this.MarkDirtyAsync(context).ConfigureAwait(true);
             });
     }
 
@@ -345,30 +416,7 @@ public sealed partial class SceneDocumentCommandService
                 return Task.CompletedTask;
             }
 
-            var entries = new List<EnginePropertyValueEntry>(edit.Count);
-            foreach (var (id, value) in edit)
-            {
-                if (!SceneDocumentCommandService.Transform.ById.TryGetValue(id, out var descriptor))
-                {
-                    continue;
-                }
-
-                if (value is not float floatValue)
-                {
-                    continue;
-                }
-
-                if (!TryMapTransformField(descriptor.EngineCommandKey, out var field))
-                {
-                    continue;
-                }
-
-                entries.Add(new EnginePropertyValueEntry(
-                    EngineComponentId.Transform,
-                    (ushort)field,
-                    floatValue));
-            }
-
+            var entries = BuildTransformPropertyEntries(edit);
             if (entries.Count == 0)
             {
                 return Task.CompletedTask;
@@ -391,23 +439,6 @@ public sealed partial class SceneDocumentCommandService
                 context,
                 SceneOperationKinds.EditTransform,
                 outcome).ConfigureAwait(true);
-        }
-
-        private static bool TryMapTransformField(string engineCommandKey, out TransformField field)
-        {
-            switch (engineCommandKey)
-            {
-                case "transform.position.x": field = TransformField.PositionX; return true;
-                case "transform.position.y": field = TransformField.PositionY; return true;
-                case "transform.position.z": field = TransformField.PositionZ; return true;
-                case "transform.rotation.x": field = TransformField.RotationXDegrees; return true;
-                case "transform.rotation.y": field = TransformField.RotationYDegrees; return true;
-                case "transform.rotation.z": field = TransformField.RotationZDegrees; return true;
-                case "transform.scale.x": field = TransformField.ScaleX; return true;
-                case "transform.scale.y": field = TransformField.ScaleY; return true;
-                case "transform.scale.z": field = TransformField.ScaleZ; return true;
-                default: field = default; return false;
-            }
         }
     }
 }
