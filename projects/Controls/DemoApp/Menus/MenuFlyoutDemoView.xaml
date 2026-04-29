@@ -1,9 +1,35 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.Menus.MenuFlyoutDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:cm="using:DroidNet.Controls.Menus">
+    xmlns:cm="using:DroidNet.Controls.Menus"
+    xmlns:controls="using:DroidNet.Controls">
+
+    <Page.Resources>
+        <DataTemplate x:Key="MenuNumberBoxItemTemplate">
+            <controls:NumberBox
+                Width="{Binding Width}"
+                Mask="{Binding Mask}"
+                Multiplier="{Binding Multiplier}"
+                NumberValue="{Binding NumberValue, Mode=TwoWay}" />
+        </DataTemplate>
+        <DataTemplate x:Key="MenuSliderItemTemplate">
+            <Slider
+                Width="{Binding Width}"
+                Maximum="{Binding Maximum}"
+                Minimum="{Binding Minimum}"
+                StepFrequency="{Binding StepFrequency}"
+                Value="{Binding Value, Mode=TwoWay}" />
+        </DataTemplate>
+        <DataTemplate x:Key="MenuToggleItemTemplate">
+            <ToggleSwitch
+                MinWidth="{Binding MinWidth}"
+                IsOn="{Binding IsOn, Mode=TwoWay}"
+                OffContent="{Binding OffContent}"
+                OnContent="{Binding OnContent}" />
+        </DataTemplate>
+    </Page.Resources>
 
     <ScrollViewer>
         <StackPanel Margin="20" Spacing="30">

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -25,6 +26,10 @@ public partial class MenuBarDemoViewModel : ObservableObject
 
     // Track commands that depend on ReadOnlyMode so we can notify them when it changes
     private readonly List<RelayCommand> conditionalCommands = [];
+
+    private MenuItemData? editorZoomItem;
+    private MenuItemData? tabSizeItem;
+    private MenuItemData? smoothScrollingItem;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuBarDemoViewModel"/> class.
@@ -82,6 +87,15 @@ public partial class MenuBarDemoViewModel : ObservableObject
     public partial bool ReadOnlyMode { get; set; } = false;
 
     [ObservableProperty]
+    public partial double EditorZoom { get; set; } = 100;
+
+    [ObservableProperty]
+    public partial double TabSize { get; set; } = 4;
+
+    [ObservableProperty]
+    public partial bool SmoothScrolling { get; set; } = true;
+
+    [ObservableProperty]
     public partial bool IsExpandableMenuExpanded { get; set; } = false;
 
     [ObservableProperty]
@@ -94,6 +108,30 @@ public partial class MenuBarDemoViewModel : ObservableObject
     /// The toggle is interactive when the menu is collapsed, or when it is expanded but dismissal forwarding has been disabled.
     /// </remarks>
     public bool IsProgrammaticToggleEnabled => !this.IsExpandableMenuExpanded || !this.DismissOnFlyoutDismissal;
+
+    /// <summary>
+    /// Applies the XAML templates used by MVVM-backed interactive menu items.
+    /// </summary>
+    /// <param name="numberBoxTemplate">The template for numeric menu item content.</param>
+    /// <param name="sliderTemplate">The template for slider menu item content.</param>
+    /// <param name="toggleTemplate">The template for toggle menu item content.</param>
+    public void ApplyInteractiveContentTemplates(DataTemplate numberBoxTemplate, DataTemplate sliderTemplate, DataTemplate toggleTemplate)
+    {
+        if (this.tabSizeItem is { } numberItem)
+        {
+            numberItem.InteractiveContentTemplate = numberBoxTemplate;
+        }
+
+        if (this.editorZoomItem is { } sliderItem)
+        {
+            sliderItem.InteractiveContentTemplate = sliderTemplate;
+        }
+
+        if (this.smoothScrollingItem is { } toggleItem)
+        {
+            toggleItem.InteractiveContentTemplate = toggleTemplate;
+        }
+    }
 
     partial void OnIsExpandableMenuExpandedChanged(bool value)
     {
@@ -190,7 +228,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
                         this.CreateMenuCommand("Open File...", Symbol.OpenFile, 'F', "Ctrl+O", "Opened a file"),
                         this.CreateMenuCommand("Open Folder...", Symbol.Folder, 'L', "Ctrl+K, Ctrl+O", "Opened a folder"),
                         this.CreateMenuCommand("Open Workspace...", Symbol.Folder, 'W', "Ctrl+Shift+W", "Opened a workspace"),
-                        new MenuItemData { IsSeparator = true },
+                        new MenuItemData { IsSeparator = true, SeparatorLabel = "Recent" },
                         this.CreateMenuCommand("Recent Workspace: DroidNet", Symbol.Clock, 'R', accelerator: null, "Reopened workspace 'DroidNet'"),
                         this.CreateMenuCommand("Recent File: MenuBarDemoView.xaml", Symbol.Document, 'F', accelerator: null, "Reopened recent file 'MenuBarDemoView.xaml'"),
                     ],
@@ -200,7 +238,7 @@ public partial class MenuBarDemoViewModel : ObservableObject
                 this.CreateMenuCommand("Save As...", Symbol.SaveLocal, 'A', "Ctrl+Shift+S", "Opened Save As dialog"),
                 this.CreateMenuCommand("Save All", Symbol.Save, 'L', "Ctrl+Alt+S", "Saved all open documents"),
                 this.CreateMenuCommand("Revert File", Symbol.Refresh, 'R', accelerator: null, "Reverted changes in the current file"),
-                new MenuItemData { IsSeparator = true },
+                new MenuItemData { IsSeparator = true, SeparatorLabel = "Persistence" },
                 this.CreateToggleMenuItem("Auto Save", Symbol.Save, 'U', () => this.AutoSaveEnabled, value => this.AutoSaveEnabled = value),
                 new MenuItemData { IsSeparator = true },
                 this.CreateMenuCommand("Preferences...", Symbol.Setting, 'P', "Ctrl+,", "Opened preferences"),
@@ -267,6 +305,9 @@ public partial class MenuBarDemoViewModel : ObservableObject
                         this.CreateToggleMenuItem("Show Minimap", Symbol.Map, 'M', () => this.ShowMinimap, value => this.ShowMinimap = value),
                         this.CreateToggleMenuItem("Show Line Numbers", Symbol.Bullets, 'L', () => this.ShowLineNumbers, value => this.ShowLineNumbers = value),
                         this.CreateToggleMenuItem("Word Wrap", Symbol.Switch, 'W', () => this.WordWrapEnabled, value => this.WordWrapEnabled = value),
+                        new MenuItemData { IsSeparator = true, SeparatorLabel = "Editor Controls" },
+                        this.CreateSmoothScrollingItem(),
+                        this.CreateTabSizeItem(),
                     ],
                 },
                 new MenuItemData
@@ -279,6 +320,8 @@ public partial class MenuBarDemoViewModel : ObservableObject
                         this.CreateMenuCommand("Zoom In", Symbol.ZoomIn, 'I', "Ctrl+=", "Zoomed in"),
                         this.CreateMenuCommand("Zoom Out", Symbol.ZoomOut, 'O', "Ctrl+-", "Zoomed out"),
                         this.CreateMenuCommand("Reset Zoom", Symbol.Zoom, 'R', "Ctrl+0", "Reset zoom level"),
+                        new MenuItemData { IsSeparator = true, SeparatorLabel = "Precise" },
+                        this.CreateEditorZoomItem(),
                     ],
                 },
                 new MenuItemData { IsSeparator = true },
@@ -443,6 +486,83 @@ public partial class MenuBarDemoViewModel : ObservableObject
         };
 
         return this.RegisterThemeHandler(item, theme);
+    }
+
+    private MenuItemData CreateEditorZoomItem()
+    {
+        var model = new SliderMenuItemModel
+        {
+            Minimum = 50,
+            Maximum = 200,
+            StepFrequency = 5,
+            Value = this.EditorZoom,
+            Width = 150,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(SliderMenuItemModel.Value), StringComparison.Ordinal))
+            {
+                this.EditorZoom = model.Value;
+                this.LastActionMessage = $"Editor Zoom: {this.EditorZoom:0}%";
+            }
+        };
+
+        this.editorZoomItem = new MenuItemData
+        {
+            Text = "Zoom Level",
+            InteractiveContent = model,
+        };
+
+        return this.editorZoomItem;
+    }
+
+    private MenuItemData CreateTabSizeItem()
+    {
+        var model = new NumberBoxMenuItemModel
+        {
+            NumberValue = (float)this.TabSize,
+            Width = 88,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(NumberBoxMenuItemModel.NumberValue), StringComparison.Ordinal))
+            {
+                this.TabSize = model.NumberValue;
+                this.LastActionMessage = $"Tab Size: {this.TabSize:0}";
+            }
+        };
+
+        this.tabSizeItem = new MenuItemData
+        {
+            Text = "Tab Size",
+            InteractiveContent = model,
+        };
+
+        return this.tabSizeItem;
+    }
+
+    private MenuItemData CreateSmoothScrollingItem()
+    {
+        var model = new ToggleMenuItemModel
+        {
+            IsOn = this.SmoothScrolling,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(ToggleMenuItemModel.IsOn), StringComparison.Ordinal))
+            {
+                this.SmoothScrolling = model.IsOn;
+                this.LastActionMessage = $"Smooth Scrolling: {(model.IsOn ? "ON" : "OFF")}";
+            }
+        };
+
+        this.smoothScrollingItem = new MenuItemData
+        {
+            Text = "Smooth Scrolling",
+            InteractiveContent = model,
+        };
+
+        return this.smoothScrollingItem;
     }
 
     private void AttachSelectionHandlers(IEnumerable<MenuItemData> items)

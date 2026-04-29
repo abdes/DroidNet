@@ -221,6 +221,18 @@
                 <!--  Separator  -->
                 <ToggleSwitch Header="Is Separator" IsOn="{x:Bind ViewModel.MenuItemData.IsSeparator, Mode=TwoWay}" />
 
+                <StackPanel Spacing="4">
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Separator Label" />
+                    <TextBox PlaceholderText="e.g., VIEW" Text="{x:Bind ViewModel.SeparatorLabelText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <!--  Embedded interactive content  -->
+                <ToggleSwitch
+                    Header="Embedded Slider"
+                    IsOn="{x:Bind ViewModel.UseEmbeddedControl, Mode=TwoWay}"
+                    OffContent="Menu item invokes normally"
+                    OnContent="Slider handles value changes" />
+
                 <!--  Radio Group  -->
                 <StackPanel Spacing="4">
                     <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="Radio Group ID" />
