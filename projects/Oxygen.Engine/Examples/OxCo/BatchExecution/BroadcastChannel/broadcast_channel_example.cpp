@@ -4,6 +4,7 @@
 // with caller-provided result containers
 //===----------------------------------------------------------------------===//
 
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -305,7 +306,7 @@ private:
 // Example Usage
 //===----------------------------------------------------------------------===//
 
-extern "C" void MainImpl(std::span<const char*> /*args*/)
+extern "C" auto MainImpl(std::span<const char*> /*args*/) -> int
 {
   std::cout
     << "=== BroadcastChannel Batch Processing with Result Population ===\n";
@@ -333,4 +334,5 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     << "- Built-in OxCo synchronization primitives (BroadcastChannel)\n";
   std::cout << "- More scalable for complex operations and larger datasets\n";
   std::cout << "- Natural support for early termination via channel closure\n";
+  return EXIT_SUCCESS;
 }

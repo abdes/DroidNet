@@ -4,11 +4,46 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
+#include <string>
+#include <string_view>
+
 namespace oxygen::data {
+
+namespace {
+
+  template <typename RecordT>
+  auto ReadPackedRecord(const std::span<const std::byte> bytes,
+    const std::string_view what) -> RecordT
+  {
+    std::vector<std::byte> buffer;
+    buffer.assign(bytes.begin(), bytes.end());
+
+    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
+    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    auto packed = reader.ScopedAlignment(1);
+
+    RecordT record {};
+    const auto res = reader.ReadInto(record);
+    if (!res) {
+      throw std::runtime_error(std::string(what) + " decode failed");
+    }
+    return record;
+  }
+
+  auto IsExpectedEnvironmentRecordSize(
+    const uint32_t record_type, const uint32_t record_size) noexcept -> bool
+  {
+    const auto expected_size
+      = pak::world::ExpectedEnvironmentRecordSize(record_type);
+    return !expected_size.has_value() || record_size == *expected_size;
+  }
+
+} // namespace
 
 SceneAsset::SceneAsset(AssetKey key, std::span<const std::byte> data)
   : Asset(key)
@@ -96,7 +131,8 @@ auto SceneAsset::ParseAndValidate() -> void
     throw std::runtime_error("SceneAsset data too small for header");
   }
 
-  std::memcpy(&desc_, data_.data(), sizeof(pak::world::SceneAssetDesc));
+  desc_ = ReadPackedRecord<pak::world::SceneAssetDesc>(
+    data_.first(sizeof(pak::world::SceneAssetDesc)), "SceneAsset header");
 
   if (desc_.header.version != pak::world::kSceneAssetVersion) {
     throw std::runtime_error("SceneAsset unsupported descriptor version");
@@ -167,8 +203,8 @@ auto SceneAsset::ParseAndValidate() -> void
       const auto entry_bytes = dir_span.subspan(
         static_cast<size_t>(i) * sizeof(pak::world::SceneComponentTableDesc),
         sizeof(pak::world::SceneComponentTableDesc));
-      pak::world::SceneComponentTableDesc entry {};
-      std::memcpy(&entry, entry_bytes.data(), sizeof(entry));
+      const auto entry = ReadPackedRecord<pak::world::SceneComponentTableDesc>(
+        entry_bytes, "SceneAsset component table descriptor");
 
       if (entry.table.count == 0) {
         continue;
@@ -244,10 +280,11 @@ auto SceneAsset::ParseAndValidate() -> void
   // the end of the scene payload.
   if (payload_end + sizeof(pak::world::SceneEnvironmentBlockHeader)
     <= data_.size()) {
-    pak::world::SceneEnvironmentBlockHeader env_header {};
-    std::memcpy(&env_header,
-      data_.subspan(payload_end, sizeof(env_header)).data(),
-      sizeof(env_header));
+    const auto env_header
+      = ReadPackedRecord<pak::world::SceneEnvironmentBlockHeader>(
+        data_.subspan(
+          payload_end, sizeof(pak::world::SceneEnvironmentBlockHeader)),
+        "SceneAsset environment block header");
 
     if (env_header.byte_size
       < sizeof(pak::world::SceneEnvironmentBlockHeader)) {
@@ -274,71 +311,31 @@ auto SceneAsset::ParseAndValidate() -> void
           "SceneAsset environment record header out of bounds");
       }
 
-      pak::world::SceneEnvironmentSystemRecordHeader record_header {};
-      std::memcpy(&record_header,
-        data_.subspan(cursor, sizeof(record_header)).data(),
-        sizeof(record_header));
+      const auto record_header
+        = ReadPackedRecord<pak::world::SceneEnvironmentSystemRecordHeader>(
+          data_.subspan(
+            cursor, sizeof(pak::world::SceneEnvironmentSystemRecordHeader)),
+          "SceneAsset environment record header");
 
-      if (record_header.record_size
+      const uint32_t record_type = record_header.system_type;
+      const uint32_t record_size = record_header.record_size;
+
+      if (record_size
         < sizeof(pak::world::SceneEnvironmentSystemRecordHeader)) {
         throw std::runtime_error(
           "SceneAsset environment record_size too small");
       }
 
-      const size_t record_end = cursor + record_header.record_size;
+      const size_t record_end = cursor + record_size;
       if (record_end > env_end || record_end < cursor) {
         throw std::runtime_error("SceneAsset environment record out of bounds");
       }
 
-      // Known record types must match their packed sizes.
-      const auto type = static_cast<pak::world::EnvironmentComponentType>(
-        record_header.system_type);
-      switch (type) {
-      case pak::world::EnvironmentComponentType::kSkyAtmosphere:
-        if (record_header.record_size
-          != sizeof(pak::world::SkyAtmosphereEnvironmentRecord)) {
-          throw std::runtime_error(
-            "SceneAsset SkyAtmosphere record size mismatch");
-        }
-        break;
-      case pak::world::EnvironmentComponentType::kVolumetricClouds:
-        if (record_header.record_size
-          != sizeof(pak::world::VolumetricCloudsEnvironmentRecord)) {
-          throw std::runtime_error(
-            "SceneAsset VolumetricClouds record size mismatch");
-        }
-        break;
-      case pak::world::EnvironmentComponentType::kFog:
-        if (record_header.record_size
-          != sizeof(pak::world::FogEnvironmentRecord)) {
-          throw std::runtime_error("SceneAsset Fog record size mismatch");
-        }
-        break;
-      case pak::world::EnvironmentComponentType::kSkyLight:
-        if (record_header.record_size
-          != sizeof(pak::world::SkyLightEnvironmentRecord)) {
-          throw std::runtime_error("SceneAsset SkyLight record size mismatch");
-        }
-        break;
-      case pak::world::EnvironmentComponentType::kSkySphere:
-        if (record_header.record_size
-          != sizeof(pak::world::SkySphereEnvironmentRecord)) {
-          throw std::runtime_error("SceneAsset SkySphere record size mismatch");
-        }
-        break;
-      case pak::world::EnvironmentComponentType::kPostProcessVolume:
-        if (record_header.record_size
-          != sizeof(pak::world::PostProcessVolumeEnvironmentRecord)) {
-          throw std::runtime_error(
-            "SceneAsset PostProcessVolume record size mismatch");
-        }
-        break;
-      default:
-        // Unknown types are permitted; they are skipped via record_size.
-        break;
+      if (!IsExpectedEnvironmentRecordSize(record_type, record_size)) {
+        throw std::runtime_error("SceneAsset environment record size mismatch");
       }
 
-      const auto bytes = data_.subspan(cursor, record_header.record_size);
+      const auto bytes = data_.subspan(cursor, record_size);
       environment_system_records_.push_back(EnvironmentSystemRecordView {
         .header = record_header, .bytes = bytes });
       cursor = record_end;
@@ -362,7 +359,7 @@ auto SceneAsset::TryGetEnvironmentRecordAs(
 
   const auto records = GetEnvironmentSystemRecords();
   for (const auto& record : records) {
-    if (record.header.system_type != static_cast<uint32_t>(type)) {
+    if (record.header.system_type != nostd::to_underlying(type)) {
       continue;
     }
 
@@ -415,8 +412,27 @@ auto SceneAsset::TryGetFogEnvironment() const
 auto SceneAsset::TryGetSkyLightEnvironment() const
   -> std::optional<pak::world::SkyLightEnvironmentRecord>
 {
-  return TryGetEnvironmentRecordAs<pak::world::SkyLightEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kSkyLight);
+  if (!HasEnvironmentBlock()) {
+    return std::nullopt;
+  }
+
+  const auto records = GetEnvironmentSystemRecords();
+  for (const auto& record : records) {
+    if (record.header.system_type
+      != nostd::to_underlying(
+        pak::world::EnvironmentComponentType::kSkyLight)) {
+      continue;
+    }
+
+    if (record.bytes.size() == sizeof(pak::world::SkyLightEnvironmentRecord)) {
+      return ReadPackedRecord<pak::world::SkyLightEnvironmentRecord>(
+        record.bytes, "SceneAsset SkyLight environment record");
+    }
+    throw std::runtime_error(
+      "SceneAsset SkyLight environment record size mismatch");
+  }
+
+  return std::nullopt;
 }
 
 auto SceneAsset::TryGetSkySphereEnvironment() const

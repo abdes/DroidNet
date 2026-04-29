@@ -11,25 +11,21 @@
 #include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/RenderingVm.h"
+#include "DemoShell/UI/DiagnosticsVm.h"
 
 namespace oxygen::examples::ui {
 
-class RenderingVm;
+class DiagnosticsVm;
 
-//! Rendering panel with view and debug mode controls
+//! Diagnostics panel with Vortex runtime status and debug controls.
 /*!
- Provides two collapsible sections: "View Mode" and "Debug Modes".
- Debug modes toggle the shader debug mode automatically (Normal disables
- debug).
-
- This panel follows the MVVM pattern, receiving a RenderingVm that owns
- the state and handles persistence.
+ This panel follows the MVVM pattern, receiving a DiagnosticsVm that owns
+ the requested UI state and exposes the renderer effective state.
 */
-class RenderingPanel final : public DemoPanel {
+class DiagnosticsPanel final : public DemoPanel {
 public:
   //! Create the panel bound to a rendering view model.
-  explicit RenderingPanel(observer_ptr<RenderingVm> vm);
+  explicit DiagnosticsPanel(observer_ptr<DiagnosticsVm> vm);
 
   //! Draws the panel content without creating a window.
   auto DrawContents() -> void override;
@@ -42,15 +38,16 @@ public:
   auto OnUnloaded() -> void override;
 
   //! Get the current render mode from the view model.
-  [[nodiscard]] auto GetRenderMode() const -> renderer::RenderMode;
+  [[nodiscard]] auto GetRenderMode() const -> vortex::RenderMode;
 
 private:
-  void DrawShadowSettings();
+  void DrawRuntimeStatus();
+  void DrawRendererCapabilities();
   void DrawViewModeControls();
   void DrawWireframeColor();
   void DrawDebugModes();
 
-  observer_ptr<RenderingVm> vm_;
+  observer_ptr<DiagnosticsVm> vm_;
 };
 
 } // namespace oxygen::examples::ui

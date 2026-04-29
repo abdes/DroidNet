@@ -95,14 +95,6 @@ namespace {
     float gamma { 2.2F };
   };
 
-  auto ApplyExposureToPipeline(
-    observer_ptr<renderer::RenderingPipeline> /*pipeline*/,
-    const engine::ExposureMode /*mode*/, const float /*manual_ev*/,
-    const float /*manual_camera_ev*/, const float /*compensation_ev*/,
-    const float /*exposure_key*/, const bool /*enabled*/) -> void
-  {
-  }
-
   auto ResolveSceneToneMapper(const PersistedPostProcessState& state)
     -> engine::ToneMapper
   {
@@ -209,24 +201,11 @@ namespace {
   }
 } // namespace
 
-auto PostProcessSettingsService::Initialize(
-  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
-{
-  pipeline_ = pipeline;
-  SyncScenePostProcessState();
-}
-
 auto PostProcessSettingsService::BindCameraSettings(
   observer_ptr<CameraSettingsService> camera_settings) -> void
 {
   camera_settings_ = camera_settings;
   epoch_++;
-
-  if (pipeline_) {
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-      ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-      GetExposureKey(), GetExposureEnabled());
-  }
 }
 
 auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
@@ -235,11 +214,6 @@ auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
   scene_ = scene;
   epoch_++;
 
-  if (pipeline_) {
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-      ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-      GetExposureKey(), GetExposureEnabled());
-  }
   SyncScenePostProcessState();
 }
 
@@ -275,9 +249,6 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
   settings->SetBool(kExposureEnabledKey, enabled);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-    ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-    GetExposureKey(), enabled);
   SyncScenePostProcessState();
 
   if (enabled) {
@@ -296,9 +267,6 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   // Ensure target is updated when switching modes (e.g. into Auto)
   UpdateAutoExposureTarget();
 
-  ApplyExposureToPipeline(pipeline_, mode, GetManualExposureEv(),
-    ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-    GetExposureKey(), GetExposureEnabled());
   SyncScenePostProcessState();
 }
 
@@ -317,9 +285,6 @@ auto PostProcessSettingsService::SetManualExposureEv(float ev) -> void
   settings->SetFloat(kExposureManualEVKey, ev);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev,
-    ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-    GetExposureKey(), GetExposureEnabled());
   SyncScenePostProcessState();
 }
 
@@ -336,10 +301,6 @@ auto PostProcessSettingsService::SetManualCameraAperture(float aperture) -> void
   if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->aperture_f = aperture;
     epoch_++;
-
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-      ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-      GetExposureKey(), GetExposureEnabled());
   }
 }
 
@@ -357,10 +318,6 @@ auto PostProcessSettingsService::SetManualCameraShutterRate(float shutter_rate)
   if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->shutter_rate = shutter_rate;
     epoch_++;
-
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-      ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-      GetExposureKey(), GetExposureEnabled());
   }
 }
 
@@ -377,10 +334,6 @@ auto PostProcessSettingsService::SetManualCameraIso(float iso) -> void
   if (auto* exposure = ResolveActiveCameraExposure(camera_settings_)) {
     exposure->iso = iso;
     epoch_++;
-
-    ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-      ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-      GetExposureKey(), GetExposureEnabled());
   }
 }
 
@@ -404,9 +357,6 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
   settings->SetFloat(kExposureCompensationKey, stops);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-    ResolveManualCameraEv(camera_settings_), stops, GetExposureKey(),
-    GetExposureEnabled());
   SyncScenePostProcessState();
 
   UpdateAutoExposureTarget();
@@ -427,9 +377,6 @@ auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
   settings->SetFloat(kExposureKeyKey, exposure_key);
   epoch_++;
 
-  ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
-    ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
-    exposure_key, GetExposureEnabled());
   SyncScenePostProcessState();
 
   // Also update auto-exposure target if in use (as Key affects Target scalar)
@@ -749,8 +696,7 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
 
   epoch_++;
 
-  // Re-apply everything
-  Initialize(pipeline_);
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
@@ -775,7 +721,7 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
     kAutoExposureMeteringKey, static_cast<float>(kDefaultMeteringMode));
 
   epoch_++;
-  Initialize(pipeline_);
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::UpdateAutoExposureTarget() -> void { }

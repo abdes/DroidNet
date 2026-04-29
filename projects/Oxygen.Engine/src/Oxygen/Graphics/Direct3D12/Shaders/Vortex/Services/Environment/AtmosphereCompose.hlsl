@@ -53,7 +53,7 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
     // for sky rays would overwrite the real sky color with near-zero aerial
     // inscatter. Match UE5 by restricting AP composition to in-atmosphere
     // geometry.
-    if (far_background > 0.0f) {
+    if (far_background > 0.999f) {
         discard;
     }
     const float reconstruct_depth = raw_depth;

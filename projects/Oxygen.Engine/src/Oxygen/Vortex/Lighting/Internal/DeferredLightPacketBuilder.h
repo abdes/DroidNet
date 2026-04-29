@@ -12,6 +12,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -24,6 +25,8 @@ struct DeferredLightPacket {
   glm::vec4 light_direction_and_falloff { 0.0F };
   glm::vec4 spot_angles { 0.0F };
   glm::mat4 light_world_matrix { 1.0F };
+  std::uint32_t shadow_index { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t shadow_flags { 0U };
 };
 
 struct DeferredLightPacketSet {

@@ -16,6 +16,9 @@
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
+static const uint kSkySphereSourceCubemap = 0u;
+static const uint kSkySphereSourceSolidColor = 1u;
+
 static inline bool IsReverseZProjection()
 {
     return reverse_z != 0u;
@@ -47,6 +50,16 @@ static inline float3 ReconstructViewDirection(float2 uv)
     return distance_to_sample > 1.0e-4f
         ? view_vector / distance_to_sample
         : normalize(float3(uv - 0.5f, 1.0f));
+}
+
+static inline float3 RotateDirectionAroundOxygenUp(float3 direction, float radians)
+{
+    const float c = cos(radians);
+    const float s = sin(radians);
+    return float3(
+        c * direction.x - s * direction.y,
+        s * direction.x + c * direction.y,
+        direction.z);
 }
 
 static inline bool IsAtmosphereRenderedInMain(EnvironmentViewData environment_view)
@@ -183,6 +196,40 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     {
         discard;
     }
+
+    const float3 view_direction = ReconstructViewDirection(input.uv);
+    if (env_data.sky_sphere.enabled != 0u)
+    {
+        float3 sky_color = 0.0f.xxx;
+        if (env_data.sky_sphere.source == kSkySphereSourceSolidColor)
+        {
+            sky_color = env_data.sky_sphere.solid_color_rgb;
+        }
+        else if (env_data.sky_sphere.source == kSkySphereSourceCubemap
+            && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX
+            && BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot))
+        {
+            TextureCube<float4> sky_cube =
+                ResourceDescriptorHeap[env_data.sky_sphere.cubemap_slot];
+            const float3 rotated_direction = RotateDirectionAroundOxygenUp(
+                view_direction, env_data.sky_sphere.rotation_radians);
+            SamplerState linear_sampler =
+                SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
+            sky_color = sky_cube.SampleLevel(
+                linear_sampler,
+                CubemapSamplingDirFromOxygenWS(rotated_direction),
+                0.0f).rgb;
+        }
+        else
+        {
+            discard;
+        }
+
+        sky_color *= env_data.sky_sphere.tint_rgb
+            * max(env_data.sky_sphere.intensity, 0.0f);
+        return float4(max(sky_color, 0.0f.xxx), 1.0f);
+    }
+
     if (env_data.atmosphere.sky_view_lut_slot == K_INVALID_BINDLESS_INDEX)
     {
         discard;
@@ -193,8 +240,6 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     {
         discard;
     }
-    const float3 view_direction = ReconstructViewDirection(input.uv);
-
     float3 view_direction_local = 0.0f.xxx;
     float view_height = 0.0f;
     float bottom_radius = 0.0f;

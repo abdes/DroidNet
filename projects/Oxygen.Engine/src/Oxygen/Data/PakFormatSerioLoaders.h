@@ -226,6 +226,54 @@ inline auto Load(AnyReader& reader, engine::ExposureMode& value) -> Result<void>
 
 //=== Scene: Nodes & Components (v2/v3) ===----------------------------------//
 
+inline auto Load(AnyReader& reader, data::pak::world::SceneDataTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.count));
+  CHECK_RESULT(reader.ReadInto(table.entry_size));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::SceneStringTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.size));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(desc.header));
+  CHECK_RESULT(reader.ReadInto(desc.nodes));
+  CHECK_RESULT(reader.ReadInto(desc.scene_strings));
+  CHECK_RESULT(reader.ReadInto(desc.component_table_directory_offset));
+  CHECK_RESULT(reader.ReadInto(desc.component_table_count));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::SceneComponentTableDesc& desc) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(desc.component_type));
+  CHECK_RESULT(reader.ReadInto(desc.table));
+
+  return {};
+}
+
 inline auto Load(AnyReader& reader, data::pak::world::NodeRecord& record)
   -> Result<void>
 {
@@ -462,7 +510,8 @@ inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
   for (auto& v : r.inscattering_texture_tint) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.fully_directional_inscattering_color_distance));
+  CHECK_RESULT(
+    reader.ReadInto(r.fully_directional_inscattering_color_distance));
   CHECK_RESULT(reader.ReadInto(r.non_directional_inscattering_color_distance));
   for (auto& v : r.directional_inscattering_luminance) {
     CHECK_RESULT(reader.ReadInto(v));
@@ -517,7 +566,9 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.volumetric_scattering_intensity));
   CHECK_RESULT(reader.ReadInto(r.affect_reflections));
-  CHECK_RESULT(reader.ReadInto(r.affect_global_illumination));
+  CHECK_RESULT(reader.ReadInto(r.source_cubemap_angle_radians));
+  CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_is_solid_color));
+  CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_blend_alpha));
 
   return {};
 }

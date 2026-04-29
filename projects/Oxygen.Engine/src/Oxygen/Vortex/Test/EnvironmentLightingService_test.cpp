@@ -6,12 +6,20 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -28,6 +36,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -35,6 +44,8 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
@@ -45,22 +56,40 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Environment/Types/VolumetricFogModel.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 #include "Fakes/Graphics.h"
+#include "Fixtures/TextureBinderPayloads.h"
+
+#ifndef OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR
+#  define OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR ""
+#endif
+
+namespace oxygen::vortex::internal {
+auto RendererTagFactory::Get() noexcept -> RendererTag
+{
+  return RendererTag {};
+}
+} // namespace oxygen::vortex::internal
 
 namespace {
 
+using oxygen::Format;
 using oxygen::Graphics;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::RendererConfig;
 using oxygen::ResolvedView;
+using oxygen::TextureType;
 using oxygen::ViewId;
 using oxygen::ViewPort;
 using oxygen::vortex::EnvironmentAmbientBridgeBindings;
@@ -79,6 +108,8 @@ using oxygen::vortex::kGpuFogFlagHoldout;
 using oxygen::vortex::kGpuFogFlagRenderInMainPass;
 using oxygen::vortex::kGpuFogFlagVisibleInRealTimeSkyCaptures;
 using oxygen::vortex::kGpuFogFlagVisibleInReflectionCaptures;
+using oxygen::vortex::kGpuVolumetricFogFlagEnabled;
+using oxygen::vortex::kGpuVolumetricFogFlagIntegratedScatteringValid;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -92,7 +123,13 @@ using oxygen::vortex::environment::IblProbePass;
 using oxygen::vortex::environment::kAtmosphereLightSlotCount;
 using oxygen::vortex::environment::kInvalidAtmosphereLightSlot;
 using oxygen::vortex::environment::SkyLightEnvironmentModel;
+using oxygen::vortex::environment::StaticSkyLightProductStatus;
+using oxygen::vortex::environment::StaticSkyLightUnavailableReason;
 using oxygen::vortex::environment::VolumetricFogModel;
+using oxygen::vortex::environment::internal::
+  EvaluatePackedStaticSkyLightDiffuseSh;
+using oxygen::vortex::environment::internal::IblProcessor;
+using oxygen::vortex::environment::internal::ProcessStaticSkyLightCubemapCpu;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto DestroyRenderer(Renderer* renderer) -> void
@@ -113,6 +150,26 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   return { new Renderer(std::weak_ptr<Graphics>(graphics), std::move(config),
              kCapabilities),
     DestroyRenderer };
+}
+
+auto ReadShaderSource(const std::filesystem::path& relative_path) -> std::string
+{
+  const auto shader_path
+    = std::filesystem::path { OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR }
+    / relative_path;
+  auto input = std::ifstream(shader_path, std::ios::binary);
+  EXPECT_TRUE(input.is_open()) << shader_path.string();
+  if (!input.is_open()) {
+    return {};
+  }
+
+  return { std::istreambuf_iterator<char>(input),
+    std::istreambuf_iterator<char>() };
+}
+
+auto Contains(const std::string& text, const std::string_view needle) -> bool
+{
+  return text.find(needle) != std::string::npos;
 }
 
 auto MakeResolvedView(const float width, const float height,
@@ -136,6 +193,60 @@ auto MakeResolvedView(const float width, const float height,
   params.near_plane = 0.1F;
   params.far_plane = 1000.0F;
   return ResolvedView(params);
+}
+
+auto MakeTestTextureResource(const TextureType texture_type,
+  const Format format, const std::uint16_t array_layers,
+  const std::span<const glm::vec4> layer_colors = {})
+  -> std::shared_ptr<oxygen::data::TextureResource>
+{
+  using oxygen::data::pak::core::TextureResourceDesc;
+  using oxygen::data::pak::render::SubresourceLayout;
+
+  auto bytes_per_pixel = std::size_t { 4U };
+  if (format == Format::kRGBA16Float) {
+    bytes_per_pixel = 8U;
+  } else if (format == Format::kRGBA32Float) {
+    bytes_per_pixel = 16U;
+  }
+
+  TextureResourceDesc desc {};
+  desc.texture_type = static_cast<std::uint8_t>(texture_type);
+  desc.width = 1U;
+  desc.height = 1U;
+  desc.depth = 1U;
+  desc.array_layers = array_layers;
+  desc.mip_levels = 1U;
+  desc.format = static_cast<std::uint8_t>(format);
+  desc.alignment = 256U;
+  desc.content_hash = 0x12345678U;
+
+  std::vector<std::uint8_t> data_region(bytes_per_pixel * array_layers, 0U);
+  if (format == Format::kRGBA32Float) {
+    for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
+      const auto color = layer < layer_colors.size()
+        ? layer_colors[layer]
+        : glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+      std::memcpy(
+        data_region.data() + (layer * bytes_per_pixel), &color, sizeof(color));
+    }
+  }
+
+  std::vector<SubresourceLayout> layouts;
+  layouts.reserve(array_layers);
+  for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
+    layouts.push_back(SubresourceLayout {
+      .offset_bytes = static_cast<std::uint32_t>(layer * bytes_per_pixel),
+      .row_pitch_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
+      .size_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
+    });
+  }
+
+  auto payload = oxygen::vortex::testing::detail::BuildV4TexturePayload(
+    desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+  return std::make_shared<oxygen::data::TextureResource>(
+    desc, std::move(payload));
 }
 
 auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
@@ -167,6 +278,8 @@ auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
   ctx.current_view.with_atmosphere = composition_view.with_atmosphere;
   ctx.current_view.with_height_fog = composition_view.with_height_fog;
   ctx.current_view.with_local_fog = composition_view.with_local_fog;
+  ctx.current_view.feature_profile = composition_view.feature_profile;
+  ctx.current_view.feature_mask = composition_view.feature_mask;
   return ctx;
 }
 
@@ -189,6 +302,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(bindings.sky_view_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.camera_aerial_perspective_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -214,6 +328,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_FALSE(state.valid);
   EXPECT_EQ(state.flags, 0U);
   EXPECT_EQ(state.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -294,9 +409,17 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  EnvironmentStaticSkyLightDefaultsExposeNoUsableIblSlots)
+  EnvironmentStaticSkyDefaultsExposeNoUsableTextureSlots)
 {
   const auto static_data = EnvironmentStaticData {};
+
+  EXPECT_EQ(static_data.sky_sphere.enabled, 0U);
+  EXPECT_EQ(static_data.sky_sphere.source,
+    static_cast<std::uint32_t>(
+      oxygen::scene::environment::SkySphereSource::kCubemap));
+  EXPECT_EQ(
+    static_data.sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data.sky_sphere.cubemap_max_mip, 0U);
 
   EXPECT_EQ(static_data.sky_light.enabled, 0U);
   EXPECT_EQ(static_data.sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
@@ -305,7 +428,58 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     static_data.sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data.sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data.sky_light.diffuse_sh_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data.sky_light.ibl_generation, 0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightShaderConsumersUseDiffuseShBindingWithoutVisualFallback)
+{
+  const auto forward_mesh
+    = ReadShaderSource("Stages/Translucency/ForwardMesh_PS.hlsl");
+  const auto forward_debug
+    = ReadShaderSource("Stages/Translucency/ForwardDebug_PS.hlsl");
+  const auto local_fog
+    = ReadShaderSource("Services/Environment/LocalFogVolumeCommon.hlsli");
+
+  ASSERT_FALSE(forward_mesh.empty());
+  ASSERT_FALSE(forward_debug.empty());
+  ASSERT_FALSE(local_fog.empty());
+
+  EXPECT_TRUE(Contains(forward_mesh, "EvaluateStaticSkyLightDiffuseSh"));
+  EXPECT_TRUE(Contains(local_fog, "EvaluateStaticSkyLightDiffuseSh"));
+  EXPECT_TRUE(Contains(forward_debug, "sky_light.cubemap_slot"));
+
+  EXPECT_FALSE(Contains(forward_mesh, "sky_sphere.cubemap_slot"));
+  EXPECT_FALSE(Contains(forward_debug, "sky_sphere.cubemap_slot"));
+  EXPECT_FALSE(Contains(forward_mesh, "irradiance_map_slot"));
+  EXPECT_FALSE(Contains(local_fog, "irradiance_map_slot"));
+  EXPECT_FALSE(
+    Contains(forward_debug, "slot = env_data.sky_sphere.cubemap_slot"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  SkyPassShaderRendersSkySphereBeforeAtmosphereLutRequirement)
+{
+  const auto sky = ReadShaderSource("Services/Environment/Sky.hlsl");
+
+  ASSERT_FALSE(sky.empty());
+  EXPECT_TRUE(Contains(sky, "env_data.sky_sphere.enabled"));
+  EXPECT_TRUE(Contains(sky, "kSkySphereSourceSolidColor"));
+  EXPECT_TRUE(Contains(sky, "TextureCube<float4> sky_cube"));
+  EXPECT_TRUE(
+    Contains(sky, "env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX"));
+  EXPECT_TRUE(Contains(sky, "BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot)"));
+  EXPECT_TRUE(Contains(sky, "RotateDirectionAroundOxygenUp"));
+  EXPECT_TRUE(Contains(sky, "CubemapSamplingDirFromOxygenWS"));
+
+  const auto sky_sphere_branch = sky.find("env_data.sky_sphere.enabled");
+  const auto atmosphere_lut_requirement
+    = sky.find("env_data.atmosphere.sky_view_lut_slot");
+  ASSERT_NE(sky_sphere_branch, std::string::npos);
+  ASSERT_NE(atmosphere_lut_requirement, std::string::npos);
+  EXPECT_LT(sky_sphere_branch, atmosphere_lut_requirement);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -314,12 +488,19 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   const auto static_data = EnvironmentStaticData {};
 
   EXPECT_EQ(sizeof(static_data.fog), 128U);
+  EXPECT_EQ(sizeof(static_data.volumetric_fog), 96U);
   EXPECT_EQ(static_data.fog.flags, 0U);
   EXPECT_EQ(static_data.fog.primary_density, 0.0F);
   EXPECT_EQ(static_data.fog.secondary_density, 0.0F);
   EXPECT_EQ(static_data.fog.cubemap_srv, oxygen::kInvalidBindlessIndex);
   EXPECT_FLOAT_EQ(static_data.fog.max_opacity, 1.0F);
   EXPECT_FLOAT_EQ(static_data.fog.min_transmittance, 0.0F);
+  EXPECT_EQ(static_data.volumetric_fog.flags, 0U);
+  EXPECT_EQ(static_data.volumetric_fog.integrated_light_scattering_srv,
+    oxygen::kInvalidBindlessIndex);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[0], 0.0F);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[1], 1.0F);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[2], 1.0F);
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -383,6 +564,36 @@ auto MakeSceneWithLocalFog() -> std::shared_ptr<oxygen::scene::Scene>
   return scene;
 }
 
+auto MakeSceneWithLocalFogVolumeCount(const std::uint32_t volume_count)
+  -> std::shared_ptr<oxygen::scene::Scene>
+{
+  auto scene = std::make_shared<oxygen::scene::Scene>("LocalFogCapScene", 32U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+  scene->SetEnvironment(std::move(environment));
+
+  for (std::uint32_t index = 0; index < volume_count; ++index) {
+    auto node = scene->CreateNode(
+      "LocalFogCap" + std::to_string(static_cast<unsigned long long>(index)));
+    const auto impl = node.GetImpl();
+    EXPECT_TRUE(impl.has_value());
+    if (!impl.has_value()) {
+      continue;
+    }
+    impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+    auto& fog
+      = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+    fog.SetEnabled(true);
+    fog.SetRadialFogExtinction(0.25F + static_cast<float>(index) * 0.01F);
+    fog.SetHeightFogExtinction(0.1F);
+    fog.SetSortPriority(static_cast<int>(index) - 1);
+    node.GetTransform().SetLocalPosition(
+      { static_cast<float>(index) * 4.0F, 0.0F, 1.0F });
+    node.GetTransform().SetLocalScale({ 2.0F, 2.0F, 2.0F });
+  }
+  scene->Update();
+  return scene;
+}
+
 auto MakeSceneWithAtmosphereEnvironment()
   -> std::shared_ptr<oxygen::scene::Scene>
 {
@@ -406,6 +617,25 @@ auto MakeSceneWithAtmosphereEnvironment()
     = environment->AddSystem<oxygen::scene::environment::SkyLight>();
   sky_light.SetEnabled(true);
   sky_light.SetIntensityMul(1.25F);
+
+  scene->SetEnvironment(std::move(environment));
+  scene->Update();
+  return scene;
+}
+
+auto MakeSceneWithSolidSkySphere() -> std::shared_ptr<oxygen::scene::Scene>
+{
+  auto scene = std::make_shared<oxygen::scene::Scene>("SkySphereScene", 8U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+
+  auto& sky_sphere
+    = environment->AddSystem<oxygen::scene::environment::SkySphere>();
+  sky_sphere.SetEnabled(true);
+  sky_sphere.SetSource(oxygen::scene::environment::SkySphereSource::kSolidColor);
+  sky_sphere.SetSolidColorRgb({ 0.2F, 0.4F, 0.6F });
+  sky_sphere.SetTintRgb({ 1.0F, 0.5F, 0.25F });
+  sky_sphere.SetIntensity(512.0F);
+  sky_sphere.SetRotationRadians(0.75F);
 
   scene->SetEnvironment(std::move(environment));
   scene->Update();
@@ -462,6 +692,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FALSE(probe_state.valid);
   EXPECT_EQ(probe_state.probes.probe_revision, 1U);
   EXPECT_EQ(probe_state.probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -480,6 +711,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   current.valid = true;
   current.flags = oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid;
   current.probes.environment_map_srv = oxygen::ShaderVisibleIndex { 11U };
+  current.probes.diffuse_sh_srv = oxygen::ShaderVisibleIndex { 15U };
   current.probes.irradiance_map_srv = oxygen::ShaderVisibleIndex { 12U };
   current.probes.prefiltered_map_srv = oxygen::ShaderVisibleIndex { 13U };
   current.probes.brdf_lut_srv = oxygen::ShaderVisibleIndex { 14U };
@@ -493,6 +725,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(refreshed.probe_state.probes.probe_revision, 8U);
   EXPECT_EQ(refreshed.probe_state.probes.environment_map_srv,
     kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    refreshed.probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(refreshed.probe_state.probes.irradiance_map_srv,
     kInvalidShaderVisibleIndex);
   EXPECT_EQ(refreshed.probe_state.probes.prefiltered_map_srv,
@@ -508,6 +742,443 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(refreshed.probe_state.flags
       & oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid,
     0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightProductRefreshClassifiesMissingSpecifiedCubemap)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey {};
+
+  const auto refreshed
+    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light);
+
+  EXPECT_TRUE(refreshed.requested);
+  EXPECT_TRUE(refreshed.refreshed);
+  EXPECT_FALSE(refreshed.probe_state.valid);
+  EXPECT_EQ(refreshed.probe_state.probes.probe_revision, 1U);
+  EXPECT_EQ(refreshed.probe_state.probes.environment_map_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    refreshed.probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kMissingCubemap);
+  EXPECT_NE(refreshed.probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
+    0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightSpecifiedCubemapClassifiesPendingGpuProducts)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey { 42U };
+  sky_light.source_cubemap_angle_radians = 0.75F;
+  sky_light.lower_hemisphere_is_solid_color = true;
+  sky_light.lower_hemisphere_color = { 0.1F, 0.2F, 0.3F };
+  sky_light.lower_hemisphere_blend_alpha = 0.4F;
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U);
+
+  const auto refreshed = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, source_cubemap.get());
+
+  EXPECT_TRUE(refreshed.requested);
+  EXPECT_FALSE(refreshed.probe_state.valid);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.source_cubemap,
+    oxygen::content::ResourceKey { 42U });
+  EXPECT_EQ(
+    refreshed.probe_state.static_sky_light.key.source_revision, 0x12345678U);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.output_face_size, 1U);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.key.source_format_class,
+    static_cast<std::uint32_t>(Format::kRGBA32Float));
+  EXPECT_FLOAT_EQ(
+    refreshed.probe_state.static_sky_light.key.source_rotation_radians, 0.75F);
+  EXPECT_TRUE(
+    refreshed.probe_state.static_sky_light.key.lower_hemisphere_solid_color);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(refreshed.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kGpuProductsPending);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightSpecifiedCubemapRejectsUnresolvedOrInvalidSourceResources)
+{
+  const auto pass = IblProbePass {};
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey { 43U };
+
+  const auto unresolved
+    = pass.RefreshStaticSkyLight(EnvironmentProbeState {}, sky_light, nullptr);
+  EXPECT_EQ(unresolved.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kResourceResolveFailed);
+
+  const auto non_cube = MakeTestTextureResource(
+    TextureType::kTexture2D, Format::kRGBA32Float, 1U);
+  const auto wrong_shape = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, non_cube.get());
+  EXPECT_EQ(wrong_shape.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kNotTextureCube);
+
+  const auto ldr_cube = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA8UNorm, 6U);
+  const auto unsupported_format = pass.RefreshStaticSkyLight(
+    EnvironmentProbeState {}, sky_light, ldr_cube.get());
+  EXPECT_EQ(unsupported_format.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kUnsupportedFormat);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorPacksUeStyleDiffuseShForSolidCubemap)
+{
+  const std::array face_colors {
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = false;
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  EXPECT_FLOAT_EQ(processed->source_radiance_scale, 1.0F);
+  EXPECT_NEAR(processed->average_brightness, 4.0F, 1.0e-4F);
+
+  const auto upward = EvaluatePackedStaticSkyLightDiffuseSh(
+    processed->diffuse_irradiance_sh, glm::vec3(0.0F, 0.0F, 1.0F));
+  const auto side = EvaluatePackedStaticSkyLightDiffuseSh(
+    processed->diffuse_irradiance_sh, glm::vec3(1.0F, 0.0F, 0.0F));
+  EXPECT_NEAR(upward.r, 2.0F, 2.0e-3F);
+  EXPECT_NEAR(upward.g, 4.0F, 2.0e-3F);
+  EXPECT_NEAR(upward.b, 6.0F, 2.0e-3F);
+  EXPECT_NEAR(side.r, 2.0F, 2.0e-3F);
+  EXPECT_NEAR(side.g, 4.0F, 2.0e-3F);
+  EXPECT_NEAR(side.b, 6.0F, 2.0e-3F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorAppliesLowerHemisphereAndHdrScale)
+{
+  constexpr auto kHdrValue = 131008.0F;
+  const std::array face_colors {
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+    glm::vec4(kHdrValue, kHdrValue, kHdrValue, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = true;
+  sky_light.lower_hemisphere_color = glm::vec3(0.25F, 0.5F, 0.75F);
+  sky_light.lower_hemisphere_blend_alpha = 1.0F;
+
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  EXPECT_FLOAT_EQ(processed->source_radiance_scale, 2.0F);
+  ASSERT_EQ(processed->processed_rgba.size(), 6U);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].r, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].g, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].b, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].a, 1.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].r, 0.25F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].g, 0.5F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].b, 0.75F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[5].a, 1.0F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorAppliesCubemapYawRotation)
+{
+  const std::array face_colors {
+    glm::vec4(1.0F, 0.0F, 0.0F, 1.0F), // +X
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -X
+    glm::vec4(0.0F, 1.0F, 0.0F, 1.0F), // +Y
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Y
+    glm::vec4(0.0F, 0.0F, 1.0F, 1.0F), // +Z
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Z
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = false;
+  sky_light.source_cubemap_angle_radians = glm::half_pi<float>();
+
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 1U);
+
+  ASSERT_TRUE(processed.has_value());
+  ASSERT_GE(processed->processed_rgba.size(), 1U);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].r, 0.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].g, 1.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[0].b, 0.0F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorGeneratesProcessedCubemapMipChain)
+{
+  const std::array face_colors {
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+    glm::vec4(0.25F, 0.5F, 0.75F, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.lower_hemisphere_is_solid_color = false;
+
+  const auto processed
+    = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 2U);
+
+  ASSERT_TRUE(processed.has_value());
+  EXPECT_EQ(processed->mip_count, 2U);
+  ASSERT_EQ(processed->processed_rgba.size(), 30U);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].r, 0.25F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].g, 0.5F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba[4].b, 0.75F);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightGpuProductsUploadProcessedCubemapAndDiffuseShBindings)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics);
+  auto processor = IblProcessor(*renderer);
+
+  const std::array face_colors {
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+    glm::vec4(2.0F, 4.0F, 6.0F, 1.0F),
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+  auto sky_light = SkyLightEnvironmentModel {};
+  sky_light.enabled = true;
+  sky_light.source
+    = oxygen::vortex::environment::kSkyLightSourceSpecifiedCubemap;
+  sky_light.cubemap_resource = oxygen::content::ResourceKey { 44U };
+  sky_light.lower_hemisphere_is_solid_color = false;
+
+  const auto first = processor.RefreshStaticSkyLightProducts(
+    EnvironmentProbeState {}, sky_light, source_cubemap.get());
+
+  EXPECT_TRUE(first.requested);
+  EXPECT_TRUE(first.refreshed);
+  EXPECT_FALSE(first.probe_state.valid);
+  EXPECT_EQ(first.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kRegeneratingCurrentKey);
+  EXPECT_EQ(first.probe_state.static_sky_light.processed_cubemap_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first.probe_state.static_sky_light.diffuse_irradiance_sh_srv,
+    kInvalidShaderVisibleIndex);
+  ASSERT_TRUE(graphics->texture_log_.copy_called);
+  ASSERT_EQ(graphics->texture_log_.regions.size(), 6U);
+  EXPECT_TRUE(graphics->buffer_log_.copy_called);
+
+  renderer->GetUploadCoordinator().OnFrameStart(
+    oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 0U });
+  const auto second = processor.RefreshStaticSkyLightProducts(
+    first.probe_state, sky_light, source_cubemap.get());
+
+  EXPECT_TRUE(second.probe_state.valid);
+  EXPECT_EQ(second.probe_state.static_sky_light.status,
+    StaticSkyLightProductStatus::kValidCurrentKey);
+  EXPECT_EQ(second.probe_state.static_sky_light.unavailable_reason,
+    StaticSkyLightUnavailableReason::kNone);
+  EXPECT_TRUE(
+    second.probe_state.static_sky_light.processed_cubemap_srv.IsValid());
+  EXPECT_TRUE(
+    second.probe_state.static_sky_light.diffuse_irradiance_sh_srv.IsValid());
+  EXPECT_EQ(second.probe_state.static_sky_light.processed_cubemap_max_mip, 0U);
+  EXPECT_FLOAT_EQ(
+    second.probe_state.static_sky_light.source_radiance_scale, 1.0F);
+  EXPECT_NEAR(
+    second.probe_state.static_sky_light.average_brightness, 4.0F, 1.0e-4F);
+  EXPECT_EQ(second.probe_state.probes.environment_map_srv,
+    second.probe_state.static_sky_light.processed_cubemap_srv);
+  EXPECT_EQ(second.probe_state.probes.diffuse_sh_srv,
+    second.probe_state.static_sky_light.diffuse_irradiance_sh_srv);
+  EXPECT_EQ(
+    second.probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    second.probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(second.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
+
+  renderer->GetUploadCoordinator().OnFrameStart(
+    oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1U });
+  const auto third = processor.RefreshStaticSkyLightProducts(
+    second.probe_state, sky_light, source_cubemap.get());
+
+  EXPECT_FALSE(third.requested);
+  EXPECT_FALSE(third.refreshed);
+  EXPECT_TRUE(third.probe_state.valid);
+  EXPECT_EQ(third.probe_state.probes.probe_revision,
+    second.probe_state.probes.probe_revision);
+  EXPECT_EQ(third.probe_state.static_sky_light.product_revision,
+    second.probe_state.static_sky_light.product_revision);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  PublishedStaticDataCarriesSolidSkySphereWhenEnvironmentFeatureIsEnabled)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 19U };
+  auto ctx = MakeRenderContext(ViewId { 19U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 19U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 1U);
+  EXPECT_EQ(static_data->sky_sphere.source,
+    static_cast<std::uint32_t>(
+      oxygen::scene::environment::SkySphereSource::kSolidColor));
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[0], 0.2F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[1], 0.4F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.solid_color_rgb[2], 0.6F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[0], 1.0F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[1], 0.5F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[2], 0.25F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.intensity, 512.0F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.rotation_radians, 0.75F);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AtmosphereSelectedViewSuppressesPublishedSkySpherePayload)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto* env = scene->GetEnvironment().get();
+  ASSERT_NE(env, nullptr);
+  auto& atmosphere
+    = env->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 20U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 20U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 20U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->atmosphere.enabled, 1U);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 0U);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  NoEnvironmentViewFeatureSuppressesPublishedSkySphere)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 18U };
+  composition_view.feature_profile
+    = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoEnvironment;
+  composition_view.feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
+    composition_view.feature_profile)
+                                    .feature_mask;
+  auto ctx = MakeRenderContext(ViewId { 18U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 18U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 0U);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  SkyPassRequestsSkySphereWithoutProceduralAtmosphereOptIn)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 17U };
+  composition_view.with_atmosphere = false;
+  auto ctx = MakeRenderContext(ViewId { 17U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_EQ(stage15.sky_draw_count, 1U);
+  EXPECT_EQ(stage15.atmosphere_draw_count, 0U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -1767,8 +2438,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagSkyLightIblValid,
     0U);
-  EXPECT_EQ(bindings->probes.probe_revision, 1U);
+  EXPECT_EQ(bindings->probes.probe_revision, 2U);
   EXPECT_EQ(bindings->probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
@@ -1780,6 +2452,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     static_data->sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data->sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data->sky_light.diffuse_sh_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data->sky_light.ibl_generation, 0U);
   EXPECT_NE(products->flags
       & oxygen::vortex::environment::
@@ -1797,11 +2471,21 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FALSE(service.GetLastPublicationState().sky_light_ibl_valid);
   EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_unavailable);
   EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_stale);
+  EXPECT_EQ(service.GetLastPublicationState().sky_light_ibl_status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(
+    service.GetLastPublicationState().sky_light_ibl_unavailable_reason,
+    StaticSkyLightUnavailableReason::kCapturedSceneDeferred);
   EXPECT_TRUE(
     service.GetLastViewProductGenerationState().sky_light_authored_enabled);
   EXPECT_FALSE(service.GetLastViewProductGenerationState().sky_light_ibl_valid);
   EXPECT_TRUE(
     service.GetLastViewProductGenerationState().sky_light_ibl_unavailable);
+  EXPECT_EQ(service.GetLastViewProductGenerationState().sky_light_ibl_status,
+    StaticSkyLightProductStatus::kUnavailable);
+  EXPECT_EQ(service.GetLastViewProductGenerationState()
+      .sky_light_ibl_unavailable_reason,
+    StaticSkyLightUnavailableReason::kCapturedSceneDeferred);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -1849,7 +2533,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
-  AuthoredVolumetricFogDoesNotPublishIntegratedScatteringBeforeRuntimePathExists)
+  AuthoredVolumetricFogStaysUnavailableWhenCurrentViewDoesNotRequestFog)
 {
   auto service = EnvironmentLightingService(*renderer_);
   service.OnFrameStart(
@@ -1901,6 +2585,356 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogPublishesIntegratedScatteringForFogView)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 11U }, oxygen::frame::Slot { 2U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(50.0F);
+  fog->SetVolumetricFogNearFadeInDistance(100.0F);
+  fog->SetVolumetricFogAlbedo({ 0.6F, 0.7F, 0.8F });
+  fog->SetVolumetricFogEmissive({ 0.01F, 0.02F, 0.03F });
+  fog->SetVolumetricFogExtinctionScale(1.5F);
+  scene->Update();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 31U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 31U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricFog.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 31U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 31U });
+  ASSERT_NE(products, nullptr);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 31U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_TRUE(products->volumetric_fog.enabled);
+  EXPECT_NE(
+    products->integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::
+        kEnvironmentContractFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_EQ(static_data->volumetric_fog.integrated_light_scattering_srv,
+    products->integrated_light_scattering_srv.get());
+  EXPECT_NE(
+    static_data->volumetric_fog.flags & kGpuVolumetricFogFlagEnabled, 0U);
+  EXPECT_NE(static_data->volumetric_fog.flags
+      & kGpuVolumetricFogFlagIntegratedScatteringValid,
+    0U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_width, 8U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_height, 8U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_depth, 32U);
+  EXPECT_GT(static_data->volumetric_fog.grid_z_params[0], 0.0F);
+  EXPECT_LT(static_data->volumetric_fog.grid_z_params[1], 1.0F);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.grid_z_params[2], 32.0F);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.distance_m, 96000.0F);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.start_distance_m, 50.0F);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().volumetric_fog_authored_enabled);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().integrated_light_scattering_valid);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().integrated_light_scattering_unavailable);
+  EXPECT_TRUE(graphics_->dispatch_log_.dispatches.size() >= 1U);
+
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(generation.integrated_light_scattering_valid);
+  EXPECT_FALSE(generation.integrated_light_scattering_unavailable);
+  EXPECT_TRUE(generation.volumetric_fog_view_constants_bound);
+  EXPECT_TRUE(generation.volumetric_fog_ue_log_depth_distribution);
+  EXPECT_TRUE(generation.volumetric_fog_directional_shadowed_light_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_requested);
+  EXPECT_FALSE(
+    generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_reset);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  NoVolumetricsFeatureProfileSuppressesIntegratedScatteringButKeepsEnvironment)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 11U }, oxygen::frame::Slot { 2U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(50.0F);
+  fog->SetVolumetricFogNearFadeInDistance(100.0F);
+  scene->Update();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 33U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  composition_view.feature_profile
+    = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoVolumetrics;
+  composition_view.feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
+    composition_view.feature_profile)
+                                    .feature_mask;
+  auto ctx = MakeRenderContext(ViewId { 33U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "EnvironmentLightingServiceBehaviorTest."
+                  "NoVolumetrics.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 33U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 33U });
+  ASSERT_NE(products, nullptr);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 33U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_NE(bindings->environment_static_slot, kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings->environment_view_slot, kInvalidShaderVisibleIndex);
+  EXPECT_FALSE(products->volumetric_fog.enabled);
+  EXPECT_FALSE(products->height_fog.enable_volumetric_fog);
+  EXPECT_EQ(
+    products->integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::
+        kEnvironmentContractFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_EQ(static_data->volumetric_fog.integrated_light_scattering_srv,
+    oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data->volumetric_fog.flags & kGpuVolumetricFogFlagEnabled, 0U);
+  EXPECT_EQ(static_data->volumetric_fog.flags
+      & kGpuVolumetricFogFlagIntegratedScatteringValid,
+    0U);
+  EXPECT_EQ(
+    static_data->fog.flags & oxygen::vortex::kGpuFogFlagVolumetricFogAuthored,
+    0U);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().volumetric_fog_authored_enabled);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().integrated_light_scattering_valid);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().integrated_light_scattering_unavailable);
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(generation.environment_view_products_published);
+  EXPECT_FALSE(generation.volumetric_fog_authored_enabled);
+  EXPECT_FALSE(generation.integrated_light_scattering_valid);
+  EXPECT_FALSE(generation.integrated_light_scattering_unavailable);
+  EXPECT_FALSE(generation.volumetric_fog_view_constants_bound);
+  EXPECT_FALSE(generation.volumetric_fog_height_fog_media_requested);
+  EXPECT_FALSE(generation.volumetric_fog_sky_light_injection_requested);
+  EXPECT_FALSE(generation.volumetric_fog_temporal_history_requested);
+  EXPECT_FALSE(generation.volumetric_fog_local_fog_injection_requested);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogReusesPerViewTemporalHistoryOnSecondFrame)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(50.0F);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 33U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 33U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricHistory.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 13U }, oxygen::frame::Slot { 2U });
+  ASSERT_NE(
+    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  auto first_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(first_generation.volumetric_fog_temporal_history_requested);
+  EXPECT_FALSE(
+    first_generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_TRUE(first_generation.volumetric_fog_temporal_history_reset);
+
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 14U }, oxygen::frame::Slot { 0U });
+  ASSERT_NE(
+    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  const auto& second_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(second_generation.volumetric_fog_temporal_history_requested);
+  EXPECT_TRUE(
+    second_generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_FALSE(second_generation.volumetric_fog_temporal_history_reset);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogInjectsTiledLocalFogProductsWhenAvailable)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 12U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(10.0F);
+  fog->SetVolumetricFogNearFadeInDistance(50.0F);
+
+  auto local_fog_node = scene->CreateNode("VolumetricLocalFog");
+  const auto impl = local_fog_node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+  auto& local_fog
+    = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+  local_fog.SetEnabled(true);
+  local_fog.SetRadialFogExtinction(0.45F);
+  local_fog.SetHeightFogExtinction(0.25F);
+  local_fog.SetHeightFogFalloff(0.2F);
+  local_fog.SetFogAlbedo({ 0.7F, 0.8F, 0.9F });
+  local_fog.SetFogEmissive({ 0.1F, 0.2F, 0.3F });
+  local_fog_node.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 12.0F });
+  local_fog_node.GetTransform().SetLocalScale({ 4.0F, 4.0F, 4.0F });
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 32U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 32U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricLocalFog.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  const auto slot
+    = service.PublishEnvironmentBindings(ctx, kInvalidShaderVisibleIndex,
+      kInvalidShaderVisibleIndex, false, &scene_textures);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(generation.integrated_light_scattering_valid);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_requested);
+  EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_executed);
+  EXPECT_EQ(generation.volumetric_fog_local_fog_instance_count, 1U);
+  EXPECT_GE(graphics_->dispatch_log_.dispatches.size(), 2U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   LocalFogStage14AndStage15RunWhenSceneContainsLocalFogVolumes)
 {
   auto service = EnvironmentLightingService(*renderer_);
@@ -1931,7 +2965,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->draw_log_.draws.clear();
   graphics_->dispatch_log_.dispatches.clear();
-  graphics_->indirect_log_.counted_draws.clear();
+  graphics_->indirect_log_.draws.clear();
 
   service.RenderSkyAndFog(ctx, scene_textures);
 
@@ -1952,12 +2986,13 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(stage15.local_fog_draw_count, 1U);
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 3U);
-  ASSERT_EQ(graphics_->indirect_log_.counted_draws.size(), 1U);
-  EXPECT_EQ(graphics_->indirect_log_.counted_draws[0].command_desc.kind,
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 1U);
+  EXPECT_EQ(graphics_->indirect_log_.draws[0].command_desc.kind,
     oxygen::graphics::CommandRecorder::IndirectCommandKind::kDraw);
-  EXPECT_NE(
-    graphics_->indirect_log_.counted_draws[0].execution_desc.count_buffer,
-    nullptr);
+  EXPECT_EQ(graphics_->indirect_log_.draws[0].execution_desc.command_count,
+    oxygen::graphics::CommandRecorder::IndirectCommandCount { 1U });
+  EXPECT_EQ(
+    graphics_->indirect_log_.draws[0].execution_desc.count_buffer, nullptr);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2040,6 +3075,44 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogStage14HonorsUeShapedPerViewInstanceCapOfOne)
+{
+  oxygen::console::Console console {};
+  renderer_->RegisterConsoleBindings(oxygen::observer_ptr { &console });
+  EXPECT_EQ(console.Execute("vtx.local_fog.tile_max_instance_count 1").status,
+    oxygen::console::ExecutionStatus::kOk);
+
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 12U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 29U };
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 29U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithLocalFogVolumeCount(3U);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_TRUE(stage14.local_fog_requested);
+  EXPECT_TRUE(stage14.local_fog_executed);
+  EXPECT_EQ(stage14.local_fog_instance_count, 1U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   OptionalFogLayersStayDisabledByDefaultEvenWhenSceneContainsLocalFogVolumes)
 {
   auto service = EnvironmentLightingService(*renderer_);
@@ -2067,7 +3140,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->draw_log_.draws.clear();
   graphics_->dispatch_log_.dispatches.clear();
-  graphics_->indirect_log_.counted_draws.clear();
+  graphics_->indirect_log_.draws.clear();
 
   service.RenderSkyAndFog(ctx, scene_textures);
 
@@ -2092,7 +3165,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(stage15.total_draw_count, 0U);
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
   EXPECT_TRUE(graphics_->dispatch_log_.dispatches.empty());
-  EXPECT_TRUE(graphics_->indirect_log_.counted_draws.empty());
+  EXPECT_TRUE(graphics_->indirect_log_.draws.empty());
 }
 
 } // namespace

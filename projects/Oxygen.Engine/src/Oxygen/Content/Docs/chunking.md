@@ -149,7 +149,8 @@ future-proofing the format.
 
 **Module boundary note:** This document explains the *format* constraints.
 Actual upload planning, staging, command recording, and fence tracking are
-Renderer responsibilities (see `src/Oxygen/Renderer/Upload/README.md`).
+Vortex/Graphics responsibilities (see `src/Oxygen/Vortex/Upload/`,
+`src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/`).
 
 ---
 

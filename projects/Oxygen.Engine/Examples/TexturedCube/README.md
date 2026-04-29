@@ -100,6 +100,10 @@ The sample uses the new texture import pipeline with support for:
      an Exposure (EV) control is shown.
 6. Enable "Flip Y" if the skybox appears upside-down
 7. Click "Load skybox"
+8. If the HDRI is normalized and appears dim under daylight exposure, raise the
+   environment Skybox Exposure. The runtime multiplier is scene-linear: `1.0`
+   preserves imported texels, while `+8 EV` / `+10 EV` corresponds to `256x` /
+   `1024x`.
 
 ### Loading a Cross/Strip Layout Skybox
 

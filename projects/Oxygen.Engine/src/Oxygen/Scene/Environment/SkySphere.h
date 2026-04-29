@@ -76,14 +76,15 @@ public:
     return solid_color_rgb_;
   }
 
-  //! Sets the sky sphere intensity multiplier.
-  //! 1.0 is the default (unity) intensity.
+  //! Sets the scene-linear radiance multiplier for the sky background.
+  //! 1.0 preserves imported texel values; normalized HDRIs commonly require
+  //! larger authored multipliers to be luminous under daylight exposure.
   auto SetIntensity(const float intensity) noexcept -> void
   {
     intensity_ = intensity;
   }
 
-  //! Gets the sky sphere intensity multiplier.
+  //! Gets the scene-linear radiance multiplier for the sky background.
   [[nodiscard]] auto GetIntensity() const noexcept -> float
   {
     return intensity_;

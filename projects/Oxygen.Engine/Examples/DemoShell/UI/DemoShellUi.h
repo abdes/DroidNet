@@ -37,7 +37,7 @@ struct DemoShellPanelConfig;
 
 namespace ui {
 
-  class RenderingVm;
+  class DiagnosticsVm;
   class LightCullingVm;
   class CameraVm;
   class ContentVm;
@@ -72,7 +72,7 @@ namespace ui {
     auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
     auto RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
-    [[nodiscard]] auto GetRenderingVm() const -> observer_ptr<RenderingVm>;
+    [[nodiscard]] auto GetDiagnosticsVm() const -> observer_ptr<DiagnosticsVm>;
     [[nodiscard]] auto GetLightCullingVm() const
       -> observer_ptr<LightCullingVm>;
     [[nodiscard]] auto GetCameraVm() const -> observer_ptr<CameraVm>;

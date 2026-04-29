@@ -468,8 +468,10 @@ non-owning view:
 - `Scene::SetEnvironment(std::unique_ptr<SceneEnvironment>) -> void` (transfers ownership into the Scene)
 - `Scene::ClearEnvironment() -> void`
 
-Renderer integration details (extraction, culling, GPU formats, shading, and
-passes) are documented in `src/Oxygen/Renderer/Docs/lighting_overview.md`.
+Vortex integration details (extraction, culling, GPU formats, shading, and
+passes) are documented in `design/vortex/lld/lighting-service.md`,
+`design/vortex/lld/deferred-lighting.md`, and
+`design/vortex/lld/shadow-service.md`.
 
 ---
 
@@ -569,6 +571,7 @@ Tasks:
 - [x] Add a content/loader test proving “scene assets can carry SceneEnvironment” end-to-end (parse/validate).
   - Include: empty environment block (0 components), and a populated block with multiple system records.
 
-> Renderer-side lighting work (extraction, culling, GPU formats, shading, and
-> validation) is tracked in `src/Oxygen/Renderer/Docs/lighting_overview.md` and
-> `src/Oxygen/Renderer/Docs/implementation_plan.md`.
+> Vortex-side lighting work (extraction, culling, GPU formats, shading, and
+> validation) is tracked in `design/vortex/lld/lighting-service.md`,
+> `design/vortex/lld/deferred-lighting.md`, and
+> `design/vortex/PLAN.md`.

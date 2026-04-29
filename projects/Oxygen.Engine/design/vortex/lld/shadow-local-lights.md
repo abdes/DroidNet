@@ -1,8 +1,8 @@
 # ShadowService Local-Light Conventional Expansion LLD
 
-**Phase:** 5G — Remaining Services
-**Deliverable:** reserved future LLD
-**Status:** `planned`
+**Phase:** 5D — Conventional Shadow Parity And Expansion
+**Deliverable:** `VTX-M05D`
+**Status:** `m05d_spot_slice_validated`
 
 ## Mandatory Vortex Rule
 
@@ -23,8 +23,8 @@
 
 ### 1.1 What This Covers
 
-This document captures the planned ShadowService expansion that follows the
-Phase 4C directional-first baseline:
+This document captures the ShadowService local-light expansion that follows the
+VTX-M05D directional CSM parity/stability gate:
 
 - spot-light conventional shadows
 - explicit point-light conventional shadow strategy
@@ -37,16 +37,22 @@ storage. This future LLD is the handoff artifact that closes that gap. The
 ShadowService roadmap now has a named later-phase owner for local-light
 conventional shadows instead of leaving the issue as an open-ended note.
 
-The corrected Phase 4C contract publishes **directional** conventional shadow
-data only. Phase 5G begins from that truthful baseline and extends
-`ShadowFrameBindings` without pretending that Phase 4 already shipped
-spot-light or point-light conventional shadow payloads.
+The corrected Phase 4C contract published **directional** conventional shadow
+data only. VTX-M05D first audits and stabilizes that directional CSM baseline,
+then extends `ShadowFrameBindings` without pretending that Phase 4 already
+shipped spot-light or point-light conventional shadow payloads.
+
+The local-light implementation is blocked until the M05D CSM audit/remediation
+gate records why city-scale projected shadows were unstable under camera
+movement and proves the corrected behavior.
 
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §8](../ARCHITECTURE.md) — `ShadowService` ownership
 - [PLAN.md §7](../PLAN.md) — Phase 5 expansion scope
 - [shadow-service.md](shadow-service.md) — Phase 4C directional-first baseline
+- [../plan/VTX-M05D-conventional-shadow-parity.md](../plan/VTX-M05D-conventional-shadow-parity.md)
+  — CSM-first M05D execution plan
 
 ## 2. Interface Contracts
 
@@ -58,12 +64,14 @@ expansion.
 ### 2.2 Published Payload Contract
 
 `ShadowFrameBindings` remains the canonical GPU-facing publication seam.
-Phase 5G may extend it with local-light-specific fields, but it must not bake
+VTX-M05D may extend it with local-light-specific fields, but it must not bake
 today's conventional storage choice into the long-lived binding ABI.
 
-Phase 5G therefore inherits these rules from the remediated Phase 4C baseline:
+VTX-M05D therefore inherits these rules from the remediated directional
+baseline:
 
-1. directional conventional shadow publication already exists
+1. directional conventional shadow publication exists but must pass the M05D
+   parity/stability gate before local-light work starts
 2. local-light conventional shadow publication is added here for the first time
 3. the public binding seam stays consumer-oriented and does not freeze one
    internal storage layout
@@ -96,26 +104,26 @@ ShadowService upgrades.
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Spot-light shadow publications | LightingService / translucency | `ShadowFrameBindings` through `ViewFrameBindings` |
-| Point-light shadow publications | LightingService / translucency | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Spot-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Point-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
 
 ## 4. Resource Management
 
 ### 4.1 Point-Light Decision Matrix
 
-The design must explicitly choose one point-light conventional storage strategy
-before implementation. The baseline options are:
+The design explicitly chose the first point-light conventional storage strategy
+for M05D. The baseline options were:
 
 | Option | Pros | Cons | Vortex Verdict |
 | ------ | ---- | ---- | -------------- |
-| One-pass cubemap depth targets | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Higher memory footprint than some niche alternatives | **Preferred baseline** |
-| Atlased six-face conventional targets | Reuses atlas infrastructure, may simplify allocation bookkeeping | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity | Acceptable only if it clearly improves Oxygen resource management |
+| One-pass cubemap depth targets | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Requires layered cubemap rendering support that Oxygen does not yet have wired through the shadow-depth pass | Future upgrade target |
+| Cube-array six-face conventional targets | Uses the same cube-family storage shape while reusing the existing `ShadowDepthPass::RecordSlices` path | Six face draws instead of UE's one-pass path; deterministic `Texture2DArray` sampling instead of texture-cube compare sampling | **M05D validated baseline** |
+| Atlased six-face conventional targets | Reuses atlas infrastructure, may simplify allocation bookkeeping | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity | Deferred unless it clearly improves Oxygen resource management |
 | Dual-paraboloid or other compressed representation | Lower target count in some cases | Projection / filtering complexity, less aligned with UE reference path, higher risk of bespoke artifact handling | Rejected unless a future profiling / platform constraint forces it |
 
-Vortex therefore chooses **one-pass cubemap depth targets** as the default
-conventional point-light direction unless later evidence overturns it. This is
-the closest useful match to UE 5.7 and avoids inventing a niche representation
-with little architectural value.
+Vortex therefore chooses **cube-array six-face conventional targets** as the
+M05D validated baseline. This stays close to UE 5.7's cubemap model without
+claiming one-pass layered rendering parity before Oxygen has that backend path.
 
 That choice remains an internal storage decision, not the definition of the
 published shadow-binding ABI.
@@ -142,29 +150,125 @@ upgrade:
 ### 5.1 Chosen First Activation Order
 
 1. Spot-light conventional shadows
-2. One-pass cubemap point-light shadows
+2. Six-face cube-array point-light shadows
 3. Validation that both flow through the same published binding seam
 
 This order is intentional. Spot lights are cheaper to land and validate first,
 but the document now also gives point lights a concrete target rather than
 leaving them as an abstract future choice.
 
+### 5.2 Slice E Spot-Light Conventional Contract
+
+Slice E adds the first local-light conventional payload to
+`ShadowFrameBindings`. It follows the local UE5.7 spot whole-scene shadow path:
+
+- one projected shadow per shadow-casting spot light;
+- light-space projection derived from light position, light forward direction,
+  outer cone angle, `MinLightW = 0.1`, and authored range;
+- UE-style whole-scene spot depth-bias scaling before the shadow-depth draw;
+- perspective spot depth uses a UE-style separation between raster projection
+  and biased shadow depth: Stage 8 clips/rasterizes with the projected cone but
+  writes biased linear reversed depth along the spot axis, and Stage 12 compares
+  receivers against the same spot-axis depth convention;
+- Stage-8 depth rendering through the existing Vortex shadow-caster draw path;
+- Stage-12 spot deferred lighting multiplies local-light attenuation by the
+  sampled spot shadow visibility.
+- Stage-18 translucent spot-shadow consumption is not part of Slice E. The
+  current forward/translucency path accumulates positional lights without a
+  conventional spot shadow lookup, so this remains deferred until the forward
+  local-light shadow contract is designed and validated.
+
+Intentional Slice E divergences, not closure claims:
+
+- no local-light shadow caching;
+- no per-light CPU interaction list or screen-radius resolution fade yet;
+- no UE shadow border emulation for the dedicated `Texture2DArray` storage;
+- no point-light cubemap payload until Slice F.
+
+Slice E implementation evidence:
+
+- `ShadowFrameBindings` now carries a conventional spot shadow surface handle,
+  spot count, and per-spot bindings.
+- `SpotShadowSetup` builds one projected shadow binding per shadow-casting spot
+  light from authored light position, direction, cone angle, range, and
+  UE-shaped whole-scene spot bias scaling.
+- Stage 8 renders spot depth slices through `ShadowDepthPass::RecordSlices`.
+- Stage 12 spot deferred lighting samples the conventional spot shadow array
+  and multiplies local-light attenuation by shadow visibility.
+- `SpotShadowValidation` is the focused no-sun/no-atmosphere validation scene.
+  On 2026-04-27 the user confirmed visible spot shadows and then confirmed the
+  shadows were perfect after the authored spot shadow bias was set to `0.0` and
+  the scene was recooked.
+- Fresh post-review RenderDoc proof
+  `spot-shadow-validation.bias0.final.spot-shadow-probe.txt` shows Stage 8
+  spot draws `168,171`, non-clear `Vortex.SpotShadowSurface` depth
+  (`max=0.463512063`, center `0.447184265`), Stage 12 spot draw `248`, and
+  Stage 12 spot-light binding of `Vortex.SpotShadowSurface`.
+- Focused tests/shader validation passed: ShadowService `8/8`,
+  SceneRendererDeferredCore `41/41`, LightingService `4/4`, and
+  ShaderBakeCatalog `4/4`.
+- CDB/D3D12 audit
+  `spot-shadow-validation.bias0.final.debug-layer.report.txt` passed with
+  runtime exit `0`, no debugger break, `0` D3D12/DXGI errors, and no blocking
+  warnings.
+
+### 5.3 Slice F Point-Light Conventional Contract
+
+Slice F adds the point-light conventional payload to the same
+`ShadowFrameBindings` publication seam:
+
+- one conventional point-shadow binding per shadow-casting point light;
+- six 90-degree reversed-Z face matrices per point light;
+- cube-array shadow storage allocated by `ConventionalShadowTargetAllocator`;
+- Stage 8 renders six `ShadowDepthPass::DepthSlice` entries per point light;
+- each face slice carries the point-light position, inverse range, face
+  direction, and authored bias parameters into the shared shadow-depth shader;
+- Stage 12 point deferred lighting selects the face from the receiver vector,
+  samples the published point shadow surface, and compares the same reversed
+  axial depth convention written by Stage 8.
+
+UE5.7 uses a one-pass cubemap point-light path when the runtime supports layered
+point-light shadow rendering. Oxygen's M05D baseline intentionally renders the
+six faces through `RecordSlices` and samples them through a deterministic
+`Texture2DArray` view of the cube-array surface. This is an accepted first
+activation divergence, not a claim of one-pass parity. The binding/storage
+choice keeps the upgrade path open for a later layered cubemap implementation.
+
+Slice F implementation evidence:
+
+- `PointShadowSetup` builds point bindings from shadow-casting point lights.
+- `ShadowService` publishes point-shadow surface/count/bindings alongside the
+  existing directional and spot conventional products.
+- `LightingService` and `DeferredLightPass` consume the point-shadow product for
+  Stage 12 point lights.
+- `DirectionalShadowCommon.hlsli` implements point face selection, 3x3 PCF over
+  the point shadow surface, and receiver-depth comparison in the same axial
+  reversed-depth convention as the point depth pass.
+- `DeferredLightProxyGeometry` owns service point/spot proxy geometry. The point
+  sphere winding regression is covered so the outside-volume point-light path
+  does not reintroduce the solid-shell failure.
+- `PointShadowValidation` is the focused no-sun validation scene, and
+  `ProbeRenderDocPointShadow.py` proves Stage 8/Stage 12 point-shadow bindings
+  and SceneColor contribution in a capture.
+- On 2026-04-27 the user visually confirmed the point-light shell bug and the
+  point-shadow cube artifact were both fixed.
+
 ## 6. Design Decision
 
-The hard requirement for this future phase is not “implement point-light
-shadows somehow.” It is “make the storage choice explicit, bind it through the
-existing publication seam, and preserve a clean upgrade path to VSM later.”
+The hard requirement is not “implement point-light shadows somehow.” It is
+“make the storage choice explicit, bind it through the existing publication
+seam, and preserve a clean upgrade path to VSM later.”
 
-The concrete decision taken here is to prefer one-pass cubemap depth targets
-for conventional point-light shadows. That aligns with UE's mature path and
-gives Vortex a clear conventional baseline before 7C upgrades ShadowService to
-VSM.
+The concrete M05D decision is to use cube-array storage with six explicit face
+draws and deterministic array-face sampling. This is less efficient than UE's
+one-pass cubemap path, but it gives Vortex a validated conventional baseline
+before later work decides between layered cubemap rendering and VSM.
 
 ## 7. Testability Approach
 
 1. Spot-light conventional shadows render correctly in deferred lighting.
-2. Point-light conventional shadows render correctly using the one-pass
-   cubemap baseline.
+2. Point-light conventional shadows render correctly using the six-face
+   cube-array baseline.
 3. `ShadowFrameBindings` remains valid for both directional and local-light
    consumers.
 4. The same consuming shader path remains compatible with later VSM activation
@@ -172,7 +276,7 @@ VSM.
 
 ## 8. Open Questions
 
-1. Whether atlased six-face allocation offers any concrete Oxygen-specific win
-   over the preferred one-pass cubemap baseline.
+1. Whether layered one-pass cubemap rendering should replace the six-face
+   `RecordSlices` implementation before VSM work.
 2. Whether point-light conventional shadows should remain behind a capability
    gate until content justifies their runtime cost.

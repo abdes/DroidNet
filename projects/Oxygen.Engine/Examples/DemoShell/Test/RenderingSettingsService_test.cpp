@@ -44,8 +44,7 @@ namespace {
     auto config = RendererConfig {};
     config.upload_queue_key
       = graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics).get();
-    constexpr auto kCapabilities
-      = RendererCapabilityFamily::kScenePreparation
+    constexpr auto kCapabilities = RendererCapabilityFamily::kScenePreparation
       | RendererCapabilityFamily::kDeferredShading
       | RendererCapabilityFamily::kLightingData
       | RendererCapabilityFamily::kEnvironmentLighting;
@@ -73,36 +72,8 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_DefaultsToUltraForBackwardCompatibility)
-{
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kUltra);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_PersistsReadableStringValues)
-{
-  service_.SetShadowQualityTier(ShadowQualityTier::kMedium);
-
-  const auto settings = SettingsService::ForDemoApp();
-  ASSERT_NE(settings, nullptr);
-  ASSERT_TRUE(settings->GetString("rendering.shadow_quality_tier").has_value());
-  EXPECT_EQ(*settings->GetString("rendering.shadow_quality_tier"), "medium");
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kMedium);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  ShadowQualityTier_ReadsLegacyNumericPersistence)
-{
-  const auto settings = SettingsService::ForDemoApp();
-  ASSERT_NE(settings, nullptr);
-  settings->SetFloat("rendering.shadow_quality_tier", 1.0F);
-
-  EXPECT_EQ(service_.GetShadowQualityTier(), ShadowQualityTier::kMedium);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  VortexBoundDebugModePersistsDirectLightingOnly)
+NOLINT_TEST_F(
+  RenderingSettingsServiceTest, VortexBoundDebugModePersistsDirectLightingOnly)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
@@ -115,6 +86,27 @@ NOLINT_TEST_F(RenderingSettingsServiceTest,
     service_.SupportsDebugMode(engine::ShaderDebugMode::kDirectLightingOnly));
   EXPECT_EQ(
     service_.GetDebugMode(), engine::ShaderDebugMode::kDirectLightingOnly);
+  EXPECT_EQ(service_.GetEffectiveDebugMode(),
+    engine::ShaderDebugMode::kDirectLightingOnly);
+}
+
+NOLINT_TEST_F(RenderingSettingsServiceTest,
+  VortexBoundUnsupportedDebugModeKeepsRequestedAndDisablesEffectiveMode)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics);
+  service_.BindVortexRenderer(observer_ptr { renderer.get() });
+
+  service_.SetDebugMode(engine::ShaderDebugMode::kDirectionalShadowMask);
+
+  EXPECT_FALSE(service_.SupportsDebugMode(
+    engine::ShaderDebugMode::kDirectionalShadowMask));
+  EXPECT_EQ(
+    service_.GetDebugMode(), engine::ShaderDebugMode::kDirectionalShadowMask);
+  EXPECT_EQ(
+    service_.GetEffectiveDebugMode(), engine::ShaderDebugMode::kDisabled);
+  EXPECT_EQ(renderer->GetShaderDebugMode(), vortex::ShaderDebugMode::kDisabled);
 }
 
 NOLINT_TEST_F(RenderingSettingsServiceTest,
@@ -129,12 +121,33 @@ NOLINT_TEST_F(RenderingSettingsServiceTest,
   light_culling_service.BindVortexRenderer(observer_ptr { renderer.get() });
 
   service_.SetDebugMode(engine::ShaderDebugMode::kDirectLightingOnly);
-  light_culling_service.SetVisualizationMode(engine::ShaderDebugMode::kDisabled);
+  light_culling_service.SetVisualizationMode(
+    engine::ShaderDebugMode::kDisabled);
   light_culling_service.OnMainViewReady(
     engine::FrameContext {}, vortex::CompositionView {});
 
   EXPECT_EQ(renderer->GetShaderDebugMode(),
     vortex::ShaderDebugMode::kDirectLightingOnly);
+}
+
+NOLINT_TEST_F(RenderingSettingsServiceTest,
+  VortexBoundRenderModeAndWireframeColorApplyToRenderer)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics);
+  service_.BindVortexRenderer(observer_ptr { renderer.get() });
+
+  service_.SetRenderMode(vortex::RenderMode::kWireframe);
+  service_.SetWireframeColor(
+    oxygen::graphics::Color { 2.5F, 0.5F, 4.0F, 1.0F });
+
+  EXPECT_TRUE(service_.SupportsRenderModeControls());
+  EXPECT_TRUE(service_.SupportsWireframeColorControl());
+  EXPECT_EQ(renderer->GetRenderMode(), vortex::RenderMode::kWireframe);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().r, 2.5F);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().g, 0.5F);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().b, 4.0F);
 }
 
 } // namespace oxygen::examples::testing

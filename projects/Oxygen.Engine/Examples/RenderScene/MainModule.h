@@ -6,12 +6,15 @@
 
 #pragma once
 
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <unordered_map>
 #include <vector>
+
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -42,6 +45,7 @@ namespace vortex {
 
 namespace oxygen::examples {
 class SceneLoaderService;
+class SkyboxService;
 } // namespace oxygen::examples
 
 namespace oxygen::examples::render_scene {
@@ -108,6 +112,11 @@ private:
 
   auto ClearSceneRuntime(const char* reason) -> void;
   auto StageFallbackScene() -> void;
+  auto ApplyStartupSkyboxToScene(
+    oxygen::observer_ptr<oxygen::scene::Scene> scene,
+    std::string_view scene_label) -> void;
+  auto ApplySkyLightLifecycleProofToggle(oxygen::scene::Scene& scene,
+    std::uint64_t frame_index) -> void;
 
   struct SceneLoadRequest {
     data::AssetKey key {};
@@ -151,6 +160,30 @@ private:
   };
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
+  std::optional<std::string> startup_scene_name_;
+  std::optional<std::filesystem::path> startup_skybox_path_;
+  int startup_skybox_layout_ { 0 };
+  int startup_skybox_output_format_ { 0 };
+  int startup_skybox_face_size_ { 512 };
+  bool startup_skybox_flip_y_ { false };
+  bool startup_skybox_tonemap_hdr_to_ldr_ { false };
+  float startup_skybox_hdr_exposure_ev_ { 0.0F };
+  bool startup_skybox_enable_sky_sphere_ { true };
+  bool startup_skybox_enable_sky_light_ { true };
+  float startup_sky_sphere_intensity_ { 1.0F };
+  float startup_sky_light_intensity_mul_ { 1.0F };
+  float startup_sky_light_diffuse_ { 1.0F };
+  float startup_sky_light_specular_ { 1.0F };
+  bool startup_sky_light_real_time_capture_enabled_ { false };
+  glm::vec3 startup_sky_light_tint_ { 1.0F, 1.0F, 1.0F };
+  bool startup_sky_light_lifecycle_proof_enabled_ { false };
+  std::uint32_t startup_sky_light_lifecycle_disable_frame_ { 0U };
+  std::uint32_t startup_sky_light_lifecycle_enable_frame_ { 0U };
+  bool startup_sky_light_lifecycle_disable_applied_ { false };
+  bool startup_sky_light_lifecycle_enable_applied_ { false };
+  std::unique_ptr<SkyboxService> startup_skybox_service_;
+  bool startup_scene_load_requested_ { false };
+  bool startup_scene_missing_logged_ { false };
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>

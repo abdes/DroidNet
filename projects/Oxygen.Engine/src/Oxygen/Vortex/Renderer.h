@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -31,6 +30,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
@@ -43,6 +43,8 @@
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/ViewExtension.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 #include <Oxygen/Vortex/api_export.h>
 
 struct ImGuiContext;
@@ -124,7 +126,7 @@ public:
   };
 
   struct OutputTargetInput {
-    observer_ptr<const graphics::Framebuffer> framebuffer { nullptr };
+    observer_ptr<graphics::Framebuffer> framebuffer { nullptr };
   };
 
   struct ResolvedViewInput {
@@ -153,8 +155,16 @@ public:
     float opacity { 1.0F };
   };
 
+  struct RuntimeTextureCompositionLayer {
+    std::shared_ptr<graphics::Texture> source_texture {};
+    ViewPort viewport {};
+    float opacity { 1.0F };
+    std::string debug_name {};
+  };
+
   struct RuntimeCompositionInput {
     std::vector<RuntimeCompositionLayer> layers {};
+    std::vector<RuntimeTextureCompositionLayer> texture_layers {};
     std::shared_ptr<graphics::Framebuffer> composite_target {};
     std::shared_ptr<graphics::Surface> target_surface {};
   };
@@ -349,7 +359,40 @@ public:
     CompositionView composition_view_ {};
   };
 
-  struct OffscreenPipelineInput { };
+  struct OffscreenPipelineInput {
+    ShadingMode shading_mode { ShadingMode::kDeferred };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+
+    [[nodiscard]] static constexpr auto Deferred() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .shading_mode = ShadingMode::kDeferred };
+    }
+
+    [[nodiscard]] static constexpr auto Forward() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .shading_mode = ShadingMode::kForward };
+    }
+
+    [[nodiscard]] static constexpr auto DepthOnly() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput {
+        .feature_profile = CompositionView::ViewFeatureProfile::kDepthOnly,
+      };
+    }
+
+    [[nodiscard]] static constexpr auto ShadowOnly() noexcept
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput {
+        .feature_profile = CompositionView::ViewFeatureProfile::kShadowOnly,
+      };
+    }
+  };
 
   class ValidatedOffscreenSceneSession {
   public:
@@ -367,6 +410,19 @@ public:
       return view_intent_.ViewIntent().id;
     }
 
+    [[nodiscard]] auto GetPipelineShadingMode() const noexcept -> ShadingMode
+    {
+      return pipeline_.shading_mode;
+    }
+    [[nodiscard]] auto GetPipelineFeatureProfile() const noexcept
+      -> CompositionView::ViewFeatureProfile
+    {
+      return pipeline_.feature_profile;
+    }
+
+    OXGN_VRTX_API auto ExecuteNow() -> void;
+    OXGN_VRTX_API auto ExecuteInsideFrame(engine::FrameContext& frame_context)
+      -> void;
     OXGN_VRTX_API auto Execute() -> co::Co<void>;
 
   private:
@@ -492,7 +548,17 @@ public:
   OXGN_VRTX_API auto UpsertPublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id,
     engine::ViewContext view,
-    std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
+    std::optional<ShadingMode> shading_mode_override = std::nullopt,
+    std::optional<RenderMode> render_mode_override = std::nullopt,
+    CompositionView::ViewStateHandle view_state_handle
+    = CompositionView::kInvalidViewStateHandle,
+    CompositionView::ViewKind view_kind = CompositionView::ViewKind::kPrimary,
+    CompositionView::ViewFeatureProfile feature_profile
+    = CompositionView::ViewFeatureProfile::kDefault,
+    CompositionView::ViewFeatureMask feature_mask = {},
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs = {},
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs = {},
+    std::string debug_name = {}) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   auto GetRigidTransformHistoryCache() noexcept
@@ -517,6 +583,7 @@ public:
     const RuntimeCompositionInput& input) -> void;
   OXGN_VRTX_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
+  OXGN_VRTX_API auto RegisterViewExtension(ViewExtensionPtr extension) -> void;
 
   OXGN_VRTX_API auto ForSinglePassHarness() -> SinglePassHarnessFacade;
   OXGN_VRTX_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
@@ -528,6 +595,11 @@ public:
   [[nodiscard]] auto GetCapabilityFamilies() const noexcept -> CapabilitySet
   {
     return capability_families_;
+  }
+
+  [[nodiscard]] auto GetShadowQualityTier() const noexcept -> ShadowQualityTier
+  {
+    return config_.shadow_quality_tier;
   }
 
   [[nodiscard]] auto HasCapability(
@@ -546,6 +618,15 @@ public:
 
   OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
   OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
+  OXGN_VRTX_API auto SetRenderMode(RenderMode mode) noexcept -> void;
+  OXGN_VRTX_NDAPI auto GetRenderMode() const noexcept -> RenderMode;
+  OXGN_VRTX_API auto SetWireframeColor(const graphics::Color& color) noexcept
+    -> void;
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetWireframeColor() const noexcept
+    -> const graphics::Color&;
+  OXGN_VRTX_NDAPI auto GetDiagnosticsService() noexcept -> DiagnosticsService&;
+  OXGN_VRTX_NDAPI auto GetDiagnosticsService() const noexcept
+    -> const DiagnosticsService&;
   OXGN_VRTX_API auto SetGroundGridConfig(
     const GroundGridConfig& config) noexcept -> void;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetGroundGridConfig() const noexcept
@@ -567,7 +648,17 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogGlobalStartDistanceMeters() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto
+  GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogTemporalReprojectionEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogJitterEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogHistoryMissSupersampleCount() const noexcept -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto
@@ -581,6 +672,10 @@ public:
   GetAerialPerspectiveLutDepthKm() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto
   GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionEnabled() const noexcept
+    -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionMaxCandidateCount()
+    const noexcept -> std::uint32_t;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
@@ -596,6 +691,25 @@ private:
     ViewId published_view_id { kInvalidViewId };
     frame::SequenceNumber last_seen_frame { 0U };
     std::optional<ShadingMode> shading_mode_override;
+    std::optional<RenderMode> render_mode_override;
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
+    std::string debug_name {};
+  };
+
+  struct DetachedPublishedRuntimeViewState {
+    ViewId published_view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
   };
 
   static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {
@@ -609,8 +723,16 @@ private:
     bool prefer_composite_source) const -> void;
   [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
+  [[nodiscard]] auto ResolvePublishedRuntimeRenderMode(
+    ViewId published_view_id) const noexcept -> std::optional<RenderMode>;
+  [[nodiscard]] auto ResolvePublishedRuntimeFeatureProfile(
+    ViewId published_view_id) const noexcept
+    -> CompositionView::ViewFeatureProfile;
+  [[nodiscard]] auto ResolvePublishedRuntimeViewStateHandle(
+    ViewId published_view_id) const noexcept -> CompositionView::ViewStateHandle;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
-  [[nodiscard]] auto BuildViewHistoryFrameBindings(ViewId view_id,
+  [[nodiscard]] auto BuildViewHistoryFrameBindings(
+    CompositionView::ViewStateHandle view_state_handle,
     const ResolvedView& view, observer_ptr<const scene::Scene> scene)
     -> ViewHistoryFrameBindings;
   auto EnsureSceneRenderer(const CompositionView* composition_view = nullptr)
@@ -619,10 +741,20 @@ private:
   auto EnsurePublicationState(Graphics& gfx) -> RendererPublicationState&;
   auto BeginPublicationFrame(
     Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  [[nodiscard]] auto PublishCurrentViewHistoryFrameBindings(
+    RenderContext& render_context, RendererPublicationState& publication_state)
+    -> ShaderVisibleIndex;
+  auto WriteCurrentViewConstants(RenderContext& render_context, Graphics& gfx,
+    ShaderVisibleIndex view_frame_bindings_slot) -> void;
   auto RefreshCurrentViewFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+  auto PublishCurrentViewPreSceneFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+  auto PublishCurrentViewPostSceneFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;
-  auto DetachPublishedRuntimeViewState(ViewId intent_view_id) -> ViewId;
+  auto DetachPublishedRuntimeViewState(ViewId intent_view_id)
+    -> DetachedPublishedRuntimeViewState;
   auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
@@ -639,6 +771,20 @@ private:
     -> co::Co<>;
   auto DispatchSceneRendererCompositing(
     observer_ptr<engine::FrameContext> context) -> co::Co<>;
+  [[nodiscard]] auto SnapshotViewExtensions() const
+    -> std::vector<ViewExtensionPtr>;
+  auto DispatchViewExtensionsOnFamilyAssembled(
+    engine::FrameContext& frame_context, RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnViewSetup(RenderContext& render_context) -> void;
+  auto DispatchViewExtensionsOnPreRenderViewGpu(RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnPostRenderViewGpu(RenderContext& render_context)
+    -> void;
+  auto DispatchViewExtensionsOnPostComposition(
+    engine::FrameContext& frame_context,
+    CompositionView::SurfaceRouteId surface_id, graphics::Framebuffer& target,
+    graphics::CommandRecorder& recorder) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_;
   observer_ptr<IAsyncEngine> engine_ { nullptr };
@@ -655,9 +801,12 @@ private:
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
   std::shared_ptr<internal::CompositingPass> compositing_pass_;
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
+  std::unique_ptr<DiagnosticsService> diagnostics_service_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
   std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
   GroundGridConfig ground_grid_config_ {};
+  RenderMode render_mode_ { RenderMode::kSolid };
+  graphics::Color wireframe_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
@@ -685,11 +834,13 @@ private:
   std::mutex composition_mutex_;
   std::vector<PendingComposition> pending_compositions_;
   std::uint64_t next_composition_sequence_in_frame_ { 0 };
+
+  mutable std::mutex view_extension_mutex_;
+  std::vector<ViewExtensionPtr> view_extensions_;
+
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
   float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };
-  std::atomic<std::uint8_t> shader_debug_mode_ { static_cast<std::uint8_t>(
-    ShaderDebugMode::kDisabled) };
   bool shutdown_called_ { false };
   observer_ptr<console::Console> console_ { nullptr };
 };

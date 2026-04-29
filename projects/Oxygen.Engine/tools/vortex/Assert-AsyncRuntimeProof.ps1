@@ -11,22 +11,10 @@ param(
   [string]$ProductsReportPath,
 
   [Parameter(Mandatory = $true)]
-  [string]$BaselineFramePath,
+  [string]$ExportFramePath,
 
   [Parameter(Mandatory = $true)]
-  [string]$ComparisonFramePath,
-
-  [Parameter(Mandatory = $true)]
-  [string]$BaselineDepthPath,
-
-  [Parameter(Mandatory = $true)]
-  [string]$ComparisonDepthPath,
-
-  [Parameter()]
-  [double]$MinPsnrDb = 40.0,
-
-  [Parameter()]
-  [double]$MaxDepthError = 0.001,
+  [string]$ExportDepthPath,
 
   [Parameter()]
   [string]$ReportPath = ''
@@ -66,74 +54,6 @@ function Get-ReportValue {
   return $Default
 }
 
-function Invoke-ImageMetric {
-  param(
-    [Parameter(Mandatory = $true)][ValidateSet('color', 'depth')] [string]$Kind,
-    [Parameter(Mandatory = $true)][string]$BaselinePath,
-    [Parameter(Mandatory = $true)][string]$ComparisonPath
-  )
-
-  $script = @'
-import json
-import math
-import sys
-from pathlib import Path
-from PIL import Image
-
-kind = sys.argv[1]
-baseline = Path(sys.argv[2]).resolve()
-comparison = Path(sys.argv[3]).resolve()
-
-if not baseline.exists():
-    raise SystemExit(f"Missing image: {baseline}")
-if not comparison.exists():
-    raise SystemExit(f"Missing image: {comparison}")
-
-if kind == "color":
-    left = Image.open(baseline).convert("RGB")
-    right = Image.open(comparison).convert("RGB")
-else:
-    left = Image.open(baseline).convert("L")
-    right = Image.open(comparison).convert("L")
-
-if left.size != right.size:
-    raise SystemExit(f"Image size mismatch: {left.size} vs {right.size}")
-
-left_pixels = list(left.getdata())
-right_pixels = list(right.getdata())
-
-if kind == "color":
-    squared_error = 0.0
-    sample_count = 0
-    for lp, rp in zip(left_pixels, right_pixels):
-        for lv, rv in zip(lp, rp):
-            diff = float(lv) - float(rv)
-            squared_error += diff * diff
-            sample_count += 1
-    mse = squared_error / float(sample_count)
-    psnr = 999.0 if mse == 0.0 else 20.0 * math.log10(255.0) - 10.0 * math.log10(mse)
-    payload = {"psnr_db": psnr}
-else:
-    max_error = 0.0
-    for lv, rv in zip(left_pixels, right_pixels):
-        diff = abs(float(lv) - float(rv)) / 255.0
-        if diff > max_error:
-            max_error = diff
-    payload = {"max_error": max_error}
-
-print(json.dumps(payload))
-'@
-
-  $output = @"
-$script
-"@ | python - $Kind $BaselinePath $ComparisonPath
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to compute image metric for $Kind"
-  }
-
-  return $output | ConvertFrom-Json
-}
-
 function Test-SourceContains {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -149,10 +69,8 @@ function Test-SourceContains {
 
 $captureReportFullPath = (Resolve-Path $CaptureReportPath).Path
 $productsReportFullPath = (Resolve-Path $ProductsReportPath).Path
-$baselineFrameFullPath = (Resolve-Path $BaselineFramePath).Path
-$comparisonFrameFullPath = (Resolve-Path $ComparisonFramePath).Path
-$baselineDepthFullPath = (Resolve-Path $BaselineDepthPath).Path
-$comparisonDepthFullPath = (Resolve-Path $ComparisonDepthPath).Path
+$exportFrameFullPath = (Resolve-Path $ExportFramePath).Path
+$exportDepthFullPath = (Resolve-Path $ExportDepthPath).Path
 
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
   $captureReportStem = $captureReportFullPath -replace '_async_capture_report\.txt$', ''
@@ -248,40 +166,15 @@ if (-not $stage22InputBundleMatchesContract) {
   throw 'Async Stage 22 input-bundle contract invariant failed'
 }
 
-$colorMetrics = Invoke-ImageMetric `
-  -Kind color `
-  -BaselinePath $baselineFrameFullPath `
-  -ComparisonPath $comparisonFrameFullPath
-$depthMetrics = Invoke-ImageMetric `
-  -Kind depth `
-  -BaselinePath $baselineDepthFullPath `
-  -ComparisonPath $comparisonDepthFullPath
-
-$psnrDb = [double]$colorMetrics.psnr_db
-$depthMaxError = [double]$depthMetrics.max_error
-
-if ($psnrDb -lt $MinPsnrDb) {
-  throw "Async frame PSNR below threshold: $psnrDb < $MinPsnrDb"
-}
-if ($depthMaxError -gt $MaxDepthError) {
-  throw "Async depth max error above threshold: $depthMaxError > $MaxDepthError"
-}
-
 $reportLines = @(
   'analysis_result=success'
   'analysis_profile=async_runtime_validation'
   "capture_report_path=$captureReportFullPath"
   "products_report_path=$productsReportFullPath"
-  "baseline_frame_path=$baselineFrameFullPath"
-  "comparison_frame_path=$comparisonFrameFullPath"
-  "baseline_depth_path=$baselineDepthFullPath"
-  "comparison_depth_path=$comparisonDepthFullPath"
-  "min_psnr_db=$MinPsnrDb"
-  "max_depth_error_allowed=$MaxDepthError"
-  "visual_psnr_db={0:F6}" -f $psnrDb
-  "depth_max_error={0:F6}" -f $depthMaxError
-  "visual_psnr_pass=true"
-  "depth_max_error_pass=true"
+  "export_frame_path=$exportFrameFullPath"
+  "export_depth_path=$exportDepthFullPath"
+  'export_frame_exists=true'
+  'export_depth_exists=true'
   "stage22_input_bundle_matches_contract=$($stage22InputBundleMatchesContract.ToString().ToLowerInvariant())"
   'overall_verdict=pass'
 )

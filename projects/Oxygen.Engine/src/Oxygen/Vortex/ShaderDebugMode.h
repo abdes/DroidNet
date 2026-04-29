@@ -20,8 +20,6 @@ enum class ShaderDebugMode : std::uint8_t {
   kIblRawSky = 5,
   kIblIrradiance = 6,
   kBaseColor = 7,
-  kUv0 = 8,
-  kOpacity = 9,
   kWorldNormals = 10,
   kRoughness = 11,
   kMetalness = 12,
@@ -33,7 +31,7 @@ enum class ShaderDebugMode : std::uint8_t {
   kDirectLightingFull = 18,
   kDirectLightGates = 19,
   kDirectBrdfCore = 20,
-  kVirtualShadowMask = 21,
+  kDirectionalShadowMask = 21,
   kSceneDepthRaw = 22,
   kSceneDepthLinear = 23,
   kSceneDepthMismatch = 24,
@@ -53,8 +51,6 @@ constexpr auto to_string(const ShaderDebugMode mode) noexcept
       case ShaderDebugMode::kIblRawSky: return "IblRawSky";
       case ShaderDebugMode::kIblIrradiance: return "IblIrradiance";
       case ShaderDebugMode::kBaseColor: return "BaseColor";
-      case ShaderDebugMode::kUv0: return "Uv0";
-      case ShaderDebugMode::kOpacity: return "Opacity";
       case ShaderDebugMode::kWorldNormals: return "WorldNormals";
       case ShaderDebugMode::kRoughness: return "Roughness";
       case ShaderDebugMode::kMetalness: return "Metalness";
@@ -66,7 +62,7 @@ constexpr auto to_string(const ShaderDebugMode mode) noexcept
       case ShaderDebugMode::kDirectLightingFull: return "DirectLightingFull";
       case ShaderDebugMode::kDirectLightGates: return "DirectLightGates";
       case ShaderDebugMode::kDirectBrdfCore: return "DirectBrdfCore";
-      case ShaderDebugMode::kVirtualShadowMask: return "VirtualShadowMask";
+      case ShaderDebugMode::kDirectionalShadowMask: return "DirectionalShadowMask";
       case ShaderDebugMode::kSceneDepthRaw: return "SceneDepthRaw";
       case ShaderDebugMode::kSceneDepthLinear: return "SceneDepthLinear";
       case ShaderDebugMode::kSceneDepthMismatch: return "SceneDepthMismatch";
@@ -109,8 +105,6 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
   case ShaderDebugMode::kDepthSlice:
   case ShaderDebugMode::kClusterIndex:
   case ShaderDebugMode::kBaseColor:
-  case ShaderDebugMode::kUv0:
-  case ShaderDebugMode::kOpacity:
   case ShaderDebugMode::kWorldNormals:
   case ShaderDebugMode::kRoughness:
   case ShaderDebugMode::kMetalness:
@@ -120,7 +114,7 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
   case ShaderDebugMode::kDirectLightingFull:
   case ShaderDebugMode::kDirectLightGates:
   case ShaderDebugMode::kDirectBrdfCore:
-  case ShaderDebugMode::kVirtualShadowMask:
+  case ShaderDebugMode::kDirectionalShadowMask:
   case ShaderDebugMode::kSceneDepthRaw:
   case ShaderDebugMode::kSceneDepthLinear:
   case ShaderDebugMode::kSceneDepthMismatch:
@@ -134,17 +128,7 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
 constexpr auto UsesForwardMeshDebugVariant(const ShaderDebugMode mode) noexcept
   -> bool
 {
-  switch (mode) {
-  case ShaderDebugMode::kDirectLightingOnly:
-  case ShaderDebugMode::kIblOnly:
-  case ShaderDebugMode::kDirectPlusIbl:
-  case ShaderDebugMode::kDirectLightingFull:
-  case ShaderDebugMode::kDirectLightGates:
-  case ShaderDebugMode::kDirectBrdfCore:
-    return true;
-  default:
-    return false;
-  }
+  return mode == ShaderDebugMode::kSceneDepthMismatch;
 }
 
 constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
@@ -167,10 +151,6 @@ constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
     return "DEBUG_IBL_FACE_INDEX";
   case ShaderDebugMode::kBaseColor:
     return "DEBUG_BASE_COLOR";
-  case ShaderDebugMode::kUv0:
-    return "DEBUG_UV0";
-  case ShaderDebugMode::kOpacity:
-    return "DEBUG_OPACITY";
   case ShaderDebugMode::kWorldNormals:
     return "DEBUG_WORLD_NORMALS";
   case ShaderDebugMode::kRoughness:
@@ -189,8 +169,8 @@ constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
     return "DEBUG_DIRECT_LIGHT_GATES";
   case ShaderDebugMode::kDirectBrdfCore:
     return "DEBUG_DIRECT_BRDF_CORE";
-  case ShaderDebugMode::kVirtualShadowMask:
-    return "DEBUG_VIRTUAL_SHADOW_MASK";
+  case ShaderDebugMode::kDirectionalShadowMask:
+    return "DEBUG_DIRECTIONAL_SHADOW_MASK";
   case ShaderDebugMode::kSceneDepthRaw:
     return "DEBUG_SCENE_DEPTH_RAW";
   case ShaderDebugMode::kSceneDepthLinear:

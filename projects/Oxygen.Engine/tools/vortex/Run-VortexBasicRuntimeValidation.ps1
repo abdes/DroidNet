@@ -270,6 +270,9 @@ $debugAuditArguments = @(
   '--with-atmosphere',
   '--with-height-fog',
   '--with-local-fog',
+  '--with-volumetric-fog',
+  '--aerial-start-depth', '0',
+  '--aerial-scattering-strength', '1',
   '--debug-layer', 'true',
   '--capture-provider', 'off'
 )
@@ -338,6 +341,9 @@ $appArguments = @(
   '--with-atmosphere',
   '--with-height-fog',
   '--with-local-fog',
+  '--with-volumetric-fog',
+  '--aerial-start-depth', '0',
+  '--aerial-scattering-strength', '1',
   '--capture-provider', 'renderdoc',
   '--capture-load', 'path',
   '--capture-library', $renderDocLibraryPath,

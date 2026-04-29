@@ -4,6 +4,7 @@
 // Each item is processed by ALL operations before moving to the next item
 //===----------------------------------------------------------------------===//
 
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -288,7 +289,7 @@ private:
 // Example Usage
 //===----------------------------------------------------------------------===//
 
-extern "C" void MainImpl(std::span<const char*> /*args*/)
+extern "C" auto MainImpl(std::span<const char*> /*args*/) -> int
 {
   std::cout
     << "=== RepeatableShared Batch Processing with Result Population ===\n";
@@ -320,4 +321,5 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
                "YieldAwaiter\n";
   std::cout << "- Natural support for per-element synchronization\n";
   std::cout << "- Ensures ordered processing while maintaining concurrency\n";
+  return EXIT_SUCCESS;
 }

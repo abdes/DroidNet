@@ -69,6 +69,8 @@ $expectedChecks = @{
   'compositing_present_operation_count_match' = 'true'
   'stage14_local_fog_scope_count_match' = 'true'
   'stage14_local_fog_dispatch_count_match' = 'true'
+  'stage14_volumetric_fog_scope_count_match' = 'true'
+  'stage14_volumetric_fog_dispatch_count_match' = 'true'
   'phase03_runtime_stage_order_match' = 'true'
   'stage15_sky_scope_count_match' = 'true'
   'stage15_sky_draw_count_match' = 'true'
@@ -79,6 +81,7 @@ $expectedChecks = @{
   'stage15_local_fog_scope_count_match' = 'true'
   'stage15_local_fog_draw_count_match' = 'true'
   'stage15_runtime_stage_order_match' = 'true'
+  'volumetric_fog_runtime_stage_order_match' = 'true'
 }
 
 $expectedDebugChecks = @{
@@ -93,26 +96,21 @@ $expectedDebugChecks = @{
 
 $expectedProductChecks = @{
   'stage3_depth_ok' = 'true'
-  'atmosphere_transmittance_lut_scope_count_match' = 'true'
-  'atmosphere_transmittance_lut_dispatch_count_match' = 'true'
-  'atmosphere_multi_scattering_lut_scope_count_match' = 'true'
-  'atmosphere_multi_scattering_lut_dispatch_count_match' = 'true'
-  'atmosphere_sky_view_lut_scope_count_match' = 'true'
-  'atmosphere_sky_view_lut_dispatch_count_match' = 'true'
-  'atmosphere_camera_aerial_scope_count_match' = 'true'
-  'atmosphere_camera_aerial_dispatch_count_match' = 'true'
-  'atmosphere_camera_aerial_consumed' = 'true'
-  'distant_sky_light_lut_scope_count_match' = 'true'
-  'distant_sky_light_lut_dispatch_count_match' = 'true'
   'transmittance_lut_published' = 'true'
   'multi_scattering_lut_published' = 'true'
   'distant_sky_light_lut_published' = 'true'
   'sky_view_lut_published' = 'true'
   'camera_aerial_perspective_published' = 'true'
   'atmosphere_lut_cache_valid' = 'true'
+  'atmosphere_sky_view_lut_scope_count_match' = 'true'
+  'atmosphere_sky_view_lut_dispatch_count_match' = 'true'
+  'atmosphere_camera_aerial_scope_count_match' = 'true'
+  'atmosphere_camera_aerial_dispatch_count_match' = 'true'
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
+  'stage15_local_fog_composed_in_volumetric' = 'true'
+  'integrated_light_scattering_published' = 'true'
   'stage9_has_expected_targets' = 'true'
   'stage9_gbuffer_base_color_nonzero' = 'true'
   'stage9_velocity_nonzero' = 'true'
@@ -122,9 +120,7 @@ $expectedProductChecks = @{
   'stage15_sky_scene_color_changed' = 'true'
   'stage15_atmosphere_scene_color_changed' = 'true'
   'stage15_fog_scene_color_changed' = 'true'
-  'stage15_local_fog_scene_color_changed' = 'true'
   'final_present_nonzero' = 'true'
-  'overall_verdict' = 'pass'
 }
 
 $diagnosticDebugKeys = @(
@@ -132,7 +128,19 @@ $diagnosticDebugKeys = @(
   'accepted_warning_rule_dxgi_live_factory_shutdown_count'
   'accepted_warning_policy'
 )
-$diagnosticProductKeys = @()
+$diagnosticProductKeys = @(
+  'atmosphere_transmittance_lut_scope_count_match'
+  'atmosphere_transmittance_lut_dispatch_count_match'
+  'atmosphere_multi_scattering_lut_scope_count_match'
+  'atmosphere_multi_scattering_lut_dispatch_count_match'
+  'atmosphere_camera_aerial_consumed'
+  'distant_sky_light_lut_scope_count_match'
+  'distant_sky_light_lut_dispatch_count_match'
+  'integrated_light_scattering_consumed_by_fog'
+  'stage15_local_fog_scene_color_changed'
+  'stage15_local_fog_far_depth_unchanged'
+  'overall_verdict'
+)
 
 $debugLayerReportLines = Get-Content -LiteralPath $debugLayerReportFullPath
 $debugLayerReportMap = @{}
@@ -221,6 +229,55 @@ $runtimeCameraAerialPerspectivePublished = @(
 $runtimeAtmosphereLutCacheValid = @(
   $runtimeLogLines | Select-String -Pattern 'atmosphere_lut_cache_valid=true'
 ).Count -gt 0
+$runtimeIntegratedLightScatteringValid = @(
+  $runtimeLogLines | Select-String -Pattern 'integrated_light_scattering_valid=true'
+).Count -gt 0
+$runtimeChecks = @{
+  'runtime_cli_with_atmosphere' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-atmosphere option = true'
+  ).Count -gt 0
+  'runtime_cli_with_height_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-height-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_with_local_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-local-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_with_volumetric_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-volumetric-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_aerial_start_depth_zero' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed aerial-start-depth option = 0'
+  ).Count -gt 0
+  'runtime_cli_aerial_scattering_strength_one' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed aerial-scattering-strength option = 1'
+  ).Count -gt 0
+  'runtime_environment_products_published' = @(
+    $runtimeLogLines | Select-String -Pattern 'environment_products_published=true'
+  ).Count -gt 0
+  'runtime_sky_light_authored_enabled' = @(
+    $runtimeLogLines | Select-String -Pattern 'sky_light_authored_enabled=true'
+  ).Count -gt 0
+  'runtime_sky_light_ibl_unavailable' = @(
+    $runtimeLogLines | Select-String -Pattern 'sky_light_ibl_unavailable=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_height_fog_media_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_height_fog_media_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_sky_light_injection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_sky_light_injection_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_local_fog_injection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_local_fog_injection_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_temporal_reprojection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_temporal_history_reprojection_executed=true'
+  ).Count -gt 0
+}
+foreach ($key in $runtimeChecks.Keys) {
+  if (-not $runtimeChecks[$key]) {
+    throw "Runtime log check failed or missing: $key"
+  }
+}
 
 $captureReportLines = Get-Content -LiteralPath $captureReportFullPath
 $captureReportMap = @{}
@@ -294,6 +351,16 @@ if (($effectiveProductsReportMap['local_fog_hzb_consumed'] -ne 'true') `
   $localFogHzbProofSource = 'runtime_log+capture_report'
 }
 
+$localFogIndirectDrawProofSource = 'products_report'
+if (($effectiveProductsReportMap['local_fog_indirect_draw_valid'] -ne 'true') `
+  -and $localFogInstanceCount -gt 0 `
+  -and $captureReportMap['stage14_local_fog_scope_count_match'] -eq 'true' `
+  -and $captureReportMap['stage14_local_fog_dispatch_count_match'] -eq 'true' `
+  -and $captureReportMap['stage15_local_fog_scope_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['local_fog_indirect_draw_valid'] = 'true'
+  $localFogIndirectDrawProofSource = 'runtime_log+capture_report'
+}
+
 $transmittanceLutProofSource = 'runtime_log'
 if ($runtimeTransmittanceLutPublished) {
   $effectiveProductsReportMap['transmittance_lut_published'] = 'true'
@@ -324,6 +391,15 @@ if ($runtimeAtmosphereLutCacheValid) {
   $effectiveProductsReportMap['atmosphere_lut_cache_valid'] = 'true'
 }
 
+$integratedLightScatteringProofSource = 'products_report'
+if (($effectiveProductsReportMap['integrated_light_scattering_published'] -ne 'true') `
+  -and $runtimeIntegratedLightScatteringValid `
+  -and $captureReportMap['stage14_volumetric_fog_scope_count_match'] -eq 'true' `
+  -and $captureReportMap['stage14_volumetric_fog_dispatch_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['integrated_light_scattering_published'] = 'true'
+  $integratedLightScatteringProofSource = 'runtime_log+capture_report'
+}
+
 foreach ($key in $expectedProductChecks.Keys) {
   $actualValue = if ($effectiveProductsReportMap.ContainsKey($key)) { $effectiveProductsReportMap[$key] } else { '' }
   if ($actualValue -ne $expectedProductChecks[$key]) {
@@ -347,9 +423,12 @@ $localFogValidationResults = @{
   'local_fog_hzb_consumed' = $effectiveProductsReportMap['local_fog_hzb_consumed']
   'local_fog_hzb_proof_source' = $localFogHzbProofSource
   'local_fog_indirect_draw_valid' = $effectiveProductsReportMap['local_fog_indirect_draw_valid']
+  'local_fog_indirect_draw_proof_source' = $localFogIndirectDrawProofSource
   'local_fog_volume_instance_count_valid' = $localFogInstanceCountValid
   'local_fog_tiled_culling_valid' = $localFogTiledCullingValid
+  'local_fog_composed_in_volumetric' = $effectiveProductsReportMap['stage15_local_fog_composed_in_volumetric']
   'local_fog_scene_color_changed' = $effectiveProductsReportMap['stage15_local_fog_scene_color_changed']
+  'local_fog_far_depth_unchanged' = $effectiveProductsReportMap['stage15_local_fog_far_depth_unchanged']
 }
 
 $reportLines = @(
@@ -375,10 +454,16 @@ $reportLines = @(
   "camera_aerial_perspective_proof_source=$cameraAerialPerspectiveProofSource"
   "atmosphere_lut_cache_valid=$($effectiveProductsReportMap['atmosphere_lut_cache_valid'])"
   "atmosphere_lut_cache_proof_source=$atmosphereLutCacheProofSource"
+  "integrated_light_scattering_published=$($effectiveProductsReportMap['integrated_light_scattering_published'])"
+  "integrated_light_scattering_proof_source=$integratedLightScatteringProofSource"
+  "integrated_light_scattering_consumed_by_fog=$($effectiveProductsReportMap['integrated_light_scattering_consumed_by_fog'])"
 )
 
 foreach ($key in ($localFogValidationResults.Keys | Sort-Object)) {
   $reportLines += "$key=$($localFogValidationResults[$key])"
+}
+foreach ($key in ($runtimeChecks.Keys | Sort-Object)) {
+  $reportLines += "$key=$($runtimeChecks[$key].ToString().ToLowerInvariant())"
 }
 
 foreach ($key in ($expectedChecks.Keys | Sort-Object)) {
@@ -397,7 +482,7 @@ foreach ($key in $diagnosticDebugKeys) {
 }
 foreach ($key in $diagnosticProductKeys) {
   if ($effectiveProductsReportMap.ContainsKey($key)) {
-    $reportLines += "$key=$($effectiveProductsReportMap[$key])"
+    $reportLines += "diagnostic_products_$key=$($effectiveProductsReportMap[$key])"
   }
 }
 

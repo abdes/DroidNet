@@ -261,6 +261,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetConfig() const noexcept
     -> const SceneTexturesConfig&;
 
+  OXGN_VRTX_API static void ValidateConfig(const SceneTexturesConfig& config);
+
 private:
   // Substrate constraint: Graphics::CreateTexture() returns shared_ptr.
   // SceneTextures is the sole logical owner of these resources; the shared_ptr
@@ -269,7 +271,6 @@ private:
     std::shared_ptr<graphics::Texture> resource;
   };
 
-  OXGN_VRTX_API static void ValidateConfig(const SceneTexturesConfig& config);
   OXGN_VRTX_API static void ValidateExtent(glm::uvec2 extent);
   OXGN_VRTX_API void AllocateTextures();
   OXGN_VRTX_API void ReleaseTextures() noexcept;

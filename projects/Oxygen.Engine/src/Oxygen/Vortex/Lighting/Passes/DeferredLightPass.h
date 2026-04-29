@@ -36,7 +36,9 @@ public:
     bool used_outside_volume_local_lights { false };
     bool used_camera_inside_local_lights { false };
     bool used_non_perspective_local_lights { false };
+    bool consumed_static_sky_light_product { false };
     std::uint32_t directional_draw_count { 0U };
+    std::uint32_t static_sky_light_draw_count { 0U };
     std::uint32_t point_light_count { 0U };
     std::uint32_t spot_light_count { 0U };
     std::uint32_t local_light_count { 0U };
@@ -50,6 +52,12 @@ public:
     ShaderVisibleIndex directional_shadow_surface_srv {
       kInvalidShaderVisibleIndex
     };
+    bool consumed_spot_shadow_product { false };
+    std::uint32_t spot_shadow_count { 0U };
+    ShaderVisibleIndex spot_shadow_surface_srv { kInvalidShaderVisibleIndex };
+    bool consumed_point_shadow_product { false };
+    std::uint32_t point_shadow_count { 0U };
+    ShaderVisibleIndex point_shadow_surface_srv { kInvalidShaderVisibleIndex };
   };
 
   explicit DeferredLightPass(Renderer& renderer);
@@ -59,7 +67,10 @@ public:
     const SceneTextures& scene_textures,
     const internal::DeferredLightPacketSet& packets,
     const ShadowFrameBindings* directional_shadow_bindings,
-    const graphics::Texture* directional_shadow_surface) -> ExecutionState;
+    const graphics::Texture* directional_shadow_surface,
+    const graphics::Texture* spot_shadow_surface,
+    const graphics::Texture* point_shadow_surface,
+    bool static_sky_light_available) -> ExecutionState;
 
 private:
   Renderer& renderer_;

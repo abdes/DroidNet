@@ -183,7 +183,11 @@ TextureLoadingService::TextureLoadingService(
  @note If the service is still running, it is stopped here to satisfy the
        AsyncImportService contract.
 */
-TextureLoadingService::~TextureLoadingService() { import_service_.Stop(); }
+TextureLoadingService::~TextureLoadingService()
+{
+  import_service_.Stop();
+  ReleasePinnedTextures();
+}
 
 auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 {
@@ -731,7 +735,7 @@ auto TextureLoadingService::StartLoadCookedTexture(
       .key = resource_key,
       .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
     },
-    [on_complete = std::move(on_complete), packed,
+    [this, on_complete = std::move(on_complete), packed,
       width = static_cast<int>(desc.width),
       height = static_cast<int>(desc.height),
       texture_type = static_cast<TextureType>(desc.texture_type), resource_key](
@@ -744,6 +748,9 @@ auto TextureLoadingService::StartLoadCookedTexture(
 
       if (!tex) {
         callback_result.status_message = "Texture upload failed";
+      } else if (!PinSyntheticTexture(resource_key)) {
+        callback_result.status_message
+          = "Loaded texture but could not pin synthetic resource";
       } else {
         callback_result.success = true;
         callback_result.status_message = "Loaded cooked texture";
@@ -753,6 +760,35 @@ auto TextureLoadingService::StartLoadCookedTexture(
         on_complete(std::move(callback_result));
       }
     });
+}
+
+auto TextureLoadingService::PinSyntheticTexture(
+  oxygen::content::ResourceKey key) -> bool
+{
+  if (!asset_loader_ || key == oxygen::content::ResourceKey { 0U }) {
+    return false;
+  }
+  if (std::ranges::find(pinned_texture_keys_, key)
+    != pinned_texture_keys_.end()) {
+    return true;
+  }
+  if (!asset_loader_->PinResource(key)) {
+    return false;
+  }
+  pinned_texture_keys_.push_back(key);
+  return true;
+}
+
+auto TextureLoadingService::ReleasePinnedTextures() noexcept -> void
+{
+  if (!asset_loader_) {
+    pinned_texture_keys_.clear();
+    return;
+  }
+  for (const auto key : pinned_texture_keys_) {
+    static_cast<void>(asset_loader_->UnpinResource(key));
+  }
+  pinned_texture_keys_.clear();
 }
 
 void TextureLoadingService::LoadTexturesJson()

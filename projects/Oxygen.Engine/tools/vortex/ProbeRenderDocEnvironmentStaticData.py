@@ -1,4 +1,4 @@
-"""Dump EnvironmentStaticData bytes for the Stage 15 sky draw."""
+"""Dump EnvironmentStaticData bytes for the Stage 15 fog draw."""
 
 import builtins
 import struct
@@ -64,6 +64,20 @@ from renderdoc_ui_analysis import (  # noqa: E402
 
 
 REPORT_SUFFIX = "_environment_static_data_probe.txt"
+ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
+ENVIRONMENT_STATIC_DATA_U32_COUNT = ENVIRONMENT_STATIC_DATA_BYTE_SIZE // 4
+VOLUMETRIC_FOG_U32_OFFSET = 128 // 4
+VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = (
+    VOLUMETRIC_FOG_U32_OFFSET + 12
+)
+VOLUMETRIC_FOG_FLAGS_U32 = VOLUMETRIC_FOG_U32_OFFSET + 13
+VOLUMETRIC_FOG_GRID_WIDTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 14
+VOLUMETRIC_FOG_GRID_HEIGHT_U32 = VOLUMETRIC_FOG_U32_OFFSET + 15
+VOLUMETRIC_FOG_GRID_DEPTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 16
+VOLUMETRIC_FOG_GRID_Z_PARAMS_F32 = VOLUMETRIC_FOG_U32_OFFSET + 20
+GPU_VOLUMETRIC_FOG_FLAG_ENABLED = 1 << 0
+GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID = 1 << 1
+INVALID_BINDLESS_INDEX = 0xFFFFFFFF
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -73,11 +87,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     target = None
     for record in actions:
-        if "Vortex.Stage15.Sky" in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            "Vortex.Stage15.Fog" in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             target = record
             break
     if target is None:
-        raise RuntimeError("No Stage15 sky draw found")
+        raise RuntimeError("No Stage15 fog draw found")
 
     controller.SetFrameEvent(target.event_id, True)
     state = controller.GetPipelineState()
@@ -85,11 +102,18 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     descriptor = None
     for binding in readonly:
         candidate = binding.descriptor
-        if int(safe_getattr(candidate, "byteSize", 0) or 0) == 496:
+        if (
+            int(safe_getattr(candidate, "byteSize", 0) or 0)
+            == ENVIRONMENT_STATIC_DATA_BYTE_SIZE
+        ):
             descriptor = candidate
             break
     if descriptor is None:
-        raise RuntimeError("Could not locate the 496-byte EnvironmentStaticData buffer")
+        raise RuntimeError(
+            "Could not locate the {}-byte EnvironmentStaticData buffer".format(
+                ENVIRONMENT_STATIC_DATA_BYTE_SIZE
+            )
+        )
 
     resource = safe_getattr(descriptor, "resource")
     byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)
@@ -105,6 +129,64 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     values_u32 = struct.unpack("<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
     values_f32 = struct.unpack("<{}f".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
+    integrated_srv = (
+        values_u32[VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32]
+        if len(values_u32) > VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32
+        else INVALID_BINDLESS_INDEX
+    )
+    volumetric_flags = (
+        values_u32[VOLUMETRIC_FOG_FLAGS_U32]
+        if len(values_u32) > VOLUMETRIC_FOG_FLAGS_U32
+        else 0
+    )
+    grid_width = (
+        values_u32[VOLUMETRIC_FOG_GRID_WIDTH_U32]
+        if len(values_u32) > VOLUMETRIC_FOG_GRID_WIDTH_U32
+        else 0
+    )
+    grid_height = (
+        values_u32[VOLUMETRIC_FOG_GRID_HEIGHT_U32]
+        if len(values_u32) > VOLUMETRIC_FOG_GRID_HEIGHT_U32
+        else 0
+    )
+    grid_depth = (
+        values_u32[VOLUMETRIC_FOG_GRID_DEPTH_U32]
+        if len(values_u32) > VOLUMETRIC_FOG_GRID_DEPTH_U32
+        else 0
+    )
+    grid_z_params = (
+        values_f32[
+            VOLUMETRIC_FOG_GRID_Z_PARAMS_F32 : VOLUMETRIC_FOG_GRID_Z_PARAMS_F32 + 3
+        ]
+        if len(values_f32) > VOLUMETRIC_FOG_GRID_Z_PARAMS_F32 + 2
+        else (0.0, 0.0, 0.0)
+    )
+    integrated_srv_valid = integrated_srv != INVALID_BINDLESS_INDEX
+    volumetric_enabled = (volumetric_flags & GPU_VOLUMETRIC_FOG_FLAG_ENABLED) != 0
+    integrated_flag_valid = (
+        volumetric_flags & GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID
+    ) != 0
+    grid_valid = grid_width > 0 and grid_height > 0 and grid_depth > 0
+    grid_z_valid = (
+        grid_z_params[0] > 0.0
+        and grid_z_params[1] < 1.0
+        and abs(grid_z_params[2] - 32.0) < 0.001
+    )
+    report.append(f"volumetric_fog_integrated_light_scattering_srv={integrated_srv}")
+    report.append(f"volumetric_fog_flags={volumetric_flags}")
+    report.append(f"volumetric_fog_grid={grid_width}x{grid_height}x{grid_depth}")
+    report.append(
+        "volumetric_fog_grid_z_params={:.9g},{:.9g},{:.9g}".format(
+            grid_z_params[0],
+            grid_z_params[1],
+            grid_z_params[2],
+        )
+    )
+    report.append(f"volumetric_fog_integrated_light_scattering_srv_valid={str(integrated_srv_valid).lower()}")
+    report.append(f"volumetric_fog_enabled_flag={str(volumetric_enabled).lower()}")
+    report.append(f"volumetric_fog_integrated_scattering_valid_flag={str(integrated_flag_valid).lower()}")
+    report.append(f"volumetric_fog_grid_valid={str(grid_valid).lower()}")
+    report.append(f"volumetric_fog_grid_z_valid={str(grid_z_valid).lower()}")
     for index, value in enumerate(values_u32):
         report.append(f"u32_{index}={value}")
     for index, value in enumerate(values_f32):

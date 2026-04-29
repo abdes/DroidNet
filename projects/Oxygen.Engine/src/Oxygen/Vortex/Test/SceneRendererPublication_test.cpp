@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <memory>
+#include <limits>
 #include <ranges>
 
 #include <Oxygen/Config/RendererConfig.h>
@@ -34,6 +35,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -370,7 +372,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  FrameStartResizeInvalidatesPublicationUntilTheNextRenderRefresh)
+  FrameStartInvalidatesPublicationUntilRenderTimeResize)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(
@@ -401,7 +403,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   renderer_->OnFrameStart(oxygen::observer_ptr<FrameContext> { &frame_context });
 
-  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(), (glm::uvec2 { 128U, 72U }));
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 64U, 64U }));
   EXPECT_EQ(scene_renderer->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(scene_renderer->GetSceneTextureBindings().scene_color_srv,
@@ -411,6 +414,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto loop = TestEventLoop {};
   oxygen::co::Run(loop, RunRenderAsync(renderer_, &frame_context));
 
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 128U, 72U }));
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindings().scene_texture_frame_slot,
@@ -826,7 +831,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  RenderContextViewStateMaterializesAllEligibleViewsBeforeSelectingTheCursor)
+  RenderContextViewStateMaterializesAllEligibleViewsWithoutSelectingTheCursor)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(
@@ -849,13 +854,92 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     *renderer_, render_context, frame_context, false);
 
   ASSERT_EQ(render_context.frame_views.size(), 3U);
-  ASSERT_NE(render_context.GetActiveViewEntry(), nullptr);
-  EXPECT_EQ(render_context.current_view.view_id, first_scene_id);
+  EXPECT_EQ(render_context.GetActiveViewEntry(), nullptr);
+  EXPECT_EQ(render_context.current_view.view_id, oxygen::kInvalidViewId);
   EXPECT_EQ(render_context.current_view.prepared_frame.get(), nullptr);
-  EXPECT_EQ(render_context.GetActiveViewEntry()->view_id, first_scene_id);
-  EXPECT_TRUE(render_context.GetActiveViewEntry()->is_scene_view);
+  EXPECT_EQ(render_context.active_view_index,
+    std::numeric_limits<std::size_t>::max());
+  EXPECT_EQ(render_context.frame_views[1].view_id, first_scene_id);
+  EXPECT_TRUE(render_context.frame_views[1].is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
-    render_context.GetActiveViewEntry()->primary_target.get());
+    render_context.frame_views.front().primary_target.get());
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  RuntimeAuxiliaryDependencyOrdersProducerBeforeConsumer)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+
+  auto consumer_fb
+    = MakeFramebuffer("SceneRendererPublicationTest.AuxConsumer");
+  auto producer_fb
+    = MakeFramebuffer("SceneRendererPublicationTest.AuxProducer");
+
+  auto make_composition_view = [](const ViewId id, std::string_view name) {
+    auto view = CompositionView {};
+    view.name = name;
+    view.id = id;
+    view.view.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 64.0F,
+      .height = 64.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    return view;
+  };
+
+  auto consumer
+    = make_composition_view(ViewId { 501U }, "AuxConsumer");
+  consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
+    .id = CompositionView::AuxOutputId { 7001U },
+    .kind = CompositionView::AuxOutputKind::kColorTexture,
+    .required = true,
+  });
+  auto producer
+    = make_composition_view(ViewId { 502U }, "AuxProducer");
+  producer.view_kind = CompositionView::ViewKind::kAuxiliary;
+  producer.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
+    .id = CompositionView::AuxOutputId { 7001U },
+    .kind = CompositionView::AuxOutputKind::kColorTexture,
+    .debug_name = "AuxProducer.Color",
+  });
+
+  const auto published_consumer_id = renderer_->PublishRuntimeCompositionView(
+    frame_context,
+    Renderer::RuntimeViewPublishInput {
+      .composition_view = consumer,
+      .render_target = oxygen::observer_ptr { consumer_fb.get() },
+      .composite_source = oxygen::observer_ptr { consumer_fb.get() },
+    });
+  const auto published_producer_id = renderer_->PublishRuntimeCompositionView(
+    frame_context,
+    Renderer::RuntimeViewPublishInput {
+      .composition_view = producer,
+      .render_target = oxygen::observer_ptr { producer_fb.get() },
+      .composite_source = oxygen::observer_ptr { producer_fb.get() },
+    });
+
+  auto render_context = RenderContext {};
+  RendererPublicationProbe::PopulateRenderContextViewState(
+    *renderer_, render_context, frame_context, false);
+
+  ASSERT_EQ(render_context.frame_views.size(), 2U);
+  EXPECT_EQ(render_context.frame_views[0].view_id, published_producer_id);
+  EXPECT_EQ(render_context.frame_views[0].view_kind,
+    CompositionView::ViewKind::kAuxiliary);
+  EXPECT_EQ(render_context.frame_views[1].view_id, published_consumer_id);
+  ASSERT_EQ(render_context.frame_views[1].resolved_aux_inputs.size(), 1U);
+  const auto& resolved = render_context.frame_views[1].resolved_aux_inputs[0];
+  EXPECT_TRUE(resolved.valid);
+  EXPECT_EQ(resolved.input.id, CompositionView::AuxOutputId { 7001U });
+  EXPECT_EQ(resolved.kind, CompositionView::AuxOutputKind::kColorTexture);
+  EXPECT_EQ(resolved.producer_view_id, published_producer_id);
+  EXPECT_EQ(resolved.debug_name, "AuxProducer.Color");
+  EXPECT_EQ(render_context.pass_target.get(), producer_fb.get());
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
@@ -936,6 +1020,59 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
         && bind.desc.ComputeShader().entry_point == "VortexScreenHzbBuildCS";
     }));
   EXPECT_GE(graphics_->texture_copy_log_.copies.size(), screen_hzb.mip_count * 2U);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage5HzbConstantsReserveOneRangePerViewInFrame)
+{
+  const auto config = SceneTexturesConfig {
+    .extent = { 128U, 72U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, config);
+  auto screen_hzb
+    = oxygen::vortex::ScreenHzbModule(*renderer_, config);
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage5HzbConstants", 16U);
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5HzbConstants",
+      128U, 72U);
+
+  auto first_view = MakeResolvedView(128.0F, 72.0F);
+  auto first_context = MakeSceneRenderContext(scene, ViewId { 31U },
+    first_view, oxygen::observer_ptr { framebuffer.get() });
+  first_context.current_view.screen_hzb_request.current_closest = true;
+  first_context.current_view.screen_hzb_request.current_furthest = true;
+  auto second_view = MakeResolvedView(64.0F, 36.0F);
+  auto second_context = MakeSceneRenderContext(scene, ViewId { 32U },
+    second_view, oxygen::observer_ptr { framebuffer.get() });
+  second_context.current_view.screen_hzb_request.current_closest = true;
+  second_context.current_view.screen_hzb_request.current_furthest = true;
+
+  const auto constant_buffer_count = [&]() {
+    return graphics_->GetDescriptorAllocator()
+      .GetAllocatedDescriptorsCount(
+        oxygen::graphics::ResourceViewType::kConstantBuffer,
+        oxygen::graphics::DescriptorVisibility::kShaderVisible)
+      .get();
+  };
+
+  const auto before = constant_buffer_count();
+  screen_hzb.OnFrameStart();
+  screen_hzb.Execute(first_context, scene_textures);
+  const auto after_first_view = constant_buffer_count();
+  EXPECT_GT(after_first_view, before);
+
+  screen_hzb.Execute(second_context, scene_textures);
+  const auto after_second_view = constant_buffer_count();
+  EXPECT_GT(after_second_view, after_first_view);
+
+  screen_hzb.OnFrameStart();
+  screen_hzb.Execute(first_context, scene_textures);
+  EXPECT_EQ(constant_buffer_count(), after_second_view);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

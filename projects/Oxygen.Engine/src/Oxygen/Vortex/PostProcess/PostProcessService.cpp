@@ -152,10 +152,11 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   };
 }
 
-auto PostProcessService::RemoveViewState(const ViewId view_id) -> void
+auto PostProcessService::RemoveViewState(const ViewId view_id,
+  const CompositionView::ViewStateHandle view_state_handle) -> void
 {
   published_views_.erase(view_id);
-  exposure_pass_->RemoveViewState(view_id);
+  exposure_pass_->RemoveViewState(view_state_handle);
 }
 
 auto PostProcessService::InspectBindings(const ViewId view_id) const

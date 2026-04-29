@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <limits>
 #include <string_view>
 
@@ -17,6 +18,7 @@
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 #include <Oxygen/Tracy/D3D12.h>
@@ -40,6 +42,31 @@ auto ToKnownStates(
       { .resource = state.resource, .state = state.state });
   }
   return known_states;
+}
+
+auto ReportDeviceRemovalIfPresent(
+  oxygen::graphics::d3d12::dx::IDevice* device) noexcept -> void
+{
+  static std::atomic_bool reported { false };
+  if (device == nullptr) {
+    return;
+  }
+
+  const HRESULT reason = device->GetDeviceRemovedReason();
+  if (SUCCEEDED(reason)) {
+    return;
+  }
+  bool expected = false;
+  if (!reported.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
+  LOG_F(ERROR, "D3D12 device removed while waiting for GPU work: {}",
+    oxygen::windows::ComError {
+      static_cast<oxygen::windows::ComErrorEnum>(reason) }
+      .what());
+  oxygen::graphics::d3d12::DebugLayer::NotifyDeviceRemoved();
+  oxygen::graphics::d3d12::DebugLayer::PrintDredReport(device);
 }
 } // namespace
 
@@ -261,6 +288,9 @@ void CommandQueue::Wait(
     }
     DLOG_F(2, "CommandQueue[{}] reached {}", GetName(), value);
   }
+  if (completed_value == (std::numeric_limits<uint64_t>::max)()) {
+    ReportDeviceRemovalIfPresent(CurrentDevice());
+  }
   DLOG_F(2, "CommandQueue[{}] at completed value: {} (current={})", GetName(),
     completed_value, GetCurrentValue());
 }
@@ -292,6 +322,9 @@ auto CommandQueue::TryGetTimestampFrequency(uint64_t& out_hz) const -> bool
 auto CommandQueue::Flush() const -> void
 {
   Base::Flush();
+  if (GetCompletedValue() == (std::numeric_limits<uint64_t>::max)()) {
+    ReportDeviceRemovalIfPresent(CurrentDevice());
+  }
 #if defined(OXYGEN_WITH_TRACY)
   if (tracy_context_ != nullptr) {
     oxygen::tracy::d3d12::CollectContext(tracy_context_);

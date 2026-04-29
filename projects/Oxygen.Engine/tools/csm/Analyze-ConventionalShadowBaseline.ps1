@@ -40,22 +40,24 @@ Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
-  -PassName 'ConventionalShadowRasterPass' `
+  -PassName 'Vortex.Stage8.ShadowDepths' `
   -ReportPath "$outputStemFullPath.shadow_timing.txt" `
+  -SuccessPattern '^total_gpu_duration_ms=(.+)$' `
   -Label 'Conventional shadow timing report'
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
-  -PassName 'ShaderPass' `
+  -PassName 'Vortex.Stage9.BasePass.MainPass' `
   -ReportPath "$outputStemFullPath.shader_timing.txt" `
+  -SuccessPattern '^total_gpu_duration_ms=(.+)$' `
   -Label 'Conventional shader timing report'
 
 & $invokeScript `
   -CapturePath $captureFullPath `
   -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassFocus.py') `
-  -PassName 'ConventionalShadowRasterPass' `
+  -PassName 'Vortex.Stage8.ShadowDepths' `
   -ReportPath "$outputStemFullPath.shadow_parent_focus.txt"
 
 Write-Output "Baseline analysis complete for $captureFullPath"

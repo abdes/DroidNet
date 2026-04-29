@@ -900,6 +900,77 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
 }
 
 auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
+  const CubeMapImageLayout layout, const TextureImportDesc& desc,
+  const ITexturePackingPolicy& policy)
+  -> Result<TextureImportResult, TextureImportError>
+{
+  if (layout == CubeMapImageLayout::kUnknown) {
+    LOG_F(WARNING, "Explicit layout cannot be kUnknown: {}", path.string());
+    return Err(TextureImportError::kInvalidDimensions);
+  }
+
+  auto layout_image = LoadTexture(path, desc);
+  if (!layout_image) {
+    LOG_F(WARNING, "Failed to load layout image: {}", path.string());
+    return Err(layout_image.error());
+  }
+
+  const auto detection = DetectCubeMapLayout(*layout_image);
+  if (!detection.has_value()) {
+    LOG_F(WARNING,
+      "Image dimensions ({}x{}) don't match any cube map "
+      "layout: {}",
+      layout_image->Meta().width, layout_image->Meta().height, path.string());
+    return Err(TextureImportError::kDimensionMismatch);
+  }
+
+  if (layout != CubeMapImageLayout::kAuto && detection->layout != layout) {
+    LOG_F(WARNING,
+      "Explicit layout {} doesn't match detected layout {} "
+      "for image ({}x{}): {}",
+      to_string(layout), to_string(detection->layout),
+      layout_image->Meta().width, layout_image->Meta().height, path.string());
+    return Err(TextureImportError::kDimensionMismatch);
+  }
+
+  const auto resolved_layout
+    = layout == CubeMapImageLayout::kAuto ? detection->layout : layout;
+  DLOG_F(INFO, "Using {} layout with {}px faces: {}",
+    to_string(resolved_layout), detection->face_size, path.string());
+
+  auto cube = ExtractCubeFacesFromLayout(*layout_image, resolved_layout);
+  if (!cube) {
+    LOG_F(
+      WARNING, "Failed to extract cube faces from layout: {}", path.string());
+    return Err(cube.error());
+  }
+
+  TextureImportDesc resolved_desc = desc;
+  resolved_desc.texture_type = TextureType::kTextureCube;
+  resolved_desc.width = detection->face_size;
+  resolved_desc.height = detection->face_size;
+  resolved_desc.array_layers = kCubeFaceCount;
+  if (resolved_desc.source_id.empty()) {
+    resolved_desc.source_id = path.string();
+  }
+
+  auto cooked = CookTexture(std::move(*cube), resolved_desc, policy);
+  if (!cooked) {
+    LOG_F(WARNING, "Cube map cooking failed (error: {}): {}",
+      to_string(cooked.error()), path.string());
+    return Err(cooked.error());
+  }
+
+  TextureImportResult result {
+    .payload = std::move(*cooked),
+    .source_path = path.string(),
+    .applied_preset = TexturePreset::kData,
+  };
+
+  return Ok(std::move(result));
+}
+
+auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
   const CubeMapImageLayout layout, const TexturePreset preset,
   const ITexturePackingPolicy& policy)
   -> Result<TextureImportResult, TextureImportError>

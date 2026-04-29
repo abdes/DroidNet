@@ -21,12 +21,16 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::testing {
 
@@ -350,6 +354,11 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FALSE(light->get().Common().casts_shadows);
   EXPECT_TRUE(service_.GetSunLightAvailable());
 
+  service_.RequestResync();
+  service_.SyncFromSceneIfNeeded();
+  EXPECT_TRUE(service_.GetSunLightAvailable());
+  EXPECT_FALSE(service_.GetSunEnabled());
+
   service_.SetSunEnabled(true);
   service_.ApplyPendingChanges();
 
@@ -360,6 +369,83 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "AuthoredSun");
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SkyboxServiceCanFeedSkyLightWithoutEnablingVisualSkySphere)
+{
+  auto scene = MakeScene("DemoShell.SkyboxSkylightOnly");
+  auto env = std::make_unique<scene::SceneEnvironment>();
+  auto& sky = env->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(false);
+  auto& sky_light = env->AddSystem<scene::environment::SkyLight>();
+  sky_light.SetEnabled(true);
+  sky_light.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
+  scene->SetEnvironment(std::move(env));
+
+  SkyboxService skybox_service(nullptr, observer_ptr { scene.get() });
+  const auto key = content::ResourceKey { 42U };
+  skybox_service.SetSkyboxResourceKey(key);
+  skybox_service.ApplyToScene(SkyboxService::SkyLightParams {
+    .enable_sky_sphere = false,
+    .enable_sky_light = true,
+    .intensity_mul = 11.0F,
+    .diffuse_intensity = 2.0F,
+    .specular_intensity = 0.5F,
+    .tint_rgb = { 0.7F, 0.8F, 0.9F },
+  });
+
+  auto updated_env = scene->GetEnvironment();
+  ASSERT_NE(updated_env.get(), nullptr);
+  auto updated_sky = updated_env->TryGetSystem<scene::environment::SkySphere>();
+  ASSERT_NE(updated_sky.get(), nullptr);
+  EXPECT_FALSE(updated_sky->IsEnabled());
+
+  auto updated_sky_light
+    = updated_env->TryGetSystem<scene::environment::SkyLight>();
+  ASSERT_NE(updated_sky_light.get(), nullptr);
+  EXPECT_TRUE(updated_sky_light->IsEnabled());
+  EXPECT_EQ(updated_sky_light->GetSource(),
+    scene::environment::SkyLightSource::kSpecifiedCubemap);
+  EXPECT_EQ(updated_sky_light->GetCubemapResource(), key);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetIntensityMul(), 11.0F);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetDiffuseIntensity(), 2.0F);
+  EXPECT_FLOAT_EQ(updated_sky_light->GetSpecularIntensity(), 0.5F);
+  EXPECT_EQ(updated_sky_light->GetTintRgb(), glm::vec3(0.7F, 0.8F, 0.9F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  EnablingSkyAtmosphereDisablesSceneSkySphere)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.AtmosphereDisablesSkySphere");
+  auto environment = std::make_unique<scene::SceneEnvironment>();
+  auto& sky = environment->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+  sky.SetSolidColorRgb({ 0.1F, 0.2F, 0.3F });
+  sky.SetIntensity(100.0F);
+  scene->SetEnvironment(std::move(environment));
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+  ASSERT_TRUE(service_.GetSkySphereEnabled());
+
+  service_.SetSkyAtmosphereEnabled(true);
+  service_.ApplyPendingChanges();
+
+  auto env = scene->GetEnvironment();
+  ASSERT_NE(env.get(), nullptr);
+  auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+  ASSERT_NE(atmo.get(), nullptr);
+  EXPECT_TRUE(atmo->IsEnabled());
+
+  auto updated_sky = env->TryGetSystem<scene::environment::SkySphere>();
+  ASSERT_NE(updated_sky.get(), nullptr);
+  EXPECT_FALSE(updated_sky->IsEnabled());
+  EXPECT_FALSE(service_.GetSkySphereEnabled());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -829,7 +915,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSkyLightLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
   service_.SetSkyLightVolumetricScatteringIntensity(0.6F);
   service_.SetSkyLightAffectReflections(false);
-  service_.SetSkyLightAffectGlobalIllumination(false);
   service_.ApplyPendingChanges();
 
   auto env = scene->GetEnvironment();
@@ -865,7 +950,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
   EXPECT_FLOAT_EQ(sky_light->GetVolumetricScatteringIntensity(), 0.6F);
   EXPECT_FALSE(sky_light->GetAffectReflections());
-  EXPECT_FALSE(sky_light->GetAffectGlobalIllumination());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -965,6 +1049,87 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(service_.GetHeightFogPassRequested());
   EXPECT_TRUE(service_.GetLocalFogPassRequested());
   EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredModePreservesDefaultSceneLightingEnvironment)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.DefaultSceneLightingEnvironment");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_TRUE(service_.GetSkyAtmosphereEnabled());
+  EXPECT_TRUE(service_.GetSkyLightEnabled());
+  EXPECT_TRUE(service_.GetSunPresent());
+  EXPECT_TRUE(service_.GetSunEnabled());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredModeIgnoresPersistedCustomSunOnStartup)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.sun.atmosphere_light_slot",
+    static_cast<float>(scene::AtmosphereLightSlot::kSecondary));
+  settings->SetFloat("env.sun.illuminance_lx", 120000.0F);
+  settings->Save();
+  settings->Load();
+
+  auto scene = MakeScene("DemoShell.SceneAuthoredIgnoresCustomStartup");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
+    static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
+  EXPECT_FLOAT_EQ(service_.GetSunIlluminanceLx(), 100000.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredSunEditSwitchesToCustomBeforeApplying)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SceneAuthoredSunManualOverride");
+  const auto sun_node = EnsureDefaultSceneLighting(*scene);
+  ASSERT_TRUE(sun_node.IsAlive());
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+  service_.SetPresetIndex(-2);
+  service_.ActivateUseSceneMode();
+  ASSERT_EQ(service_.GetPresetIndex(), -2);
+  ASSERT_FALSE(service_.HasPendingChanges());
+
+  auto vm = ui::EnvironmentVm(
+    observer_ptr<EnvironmentSettingsService> { &service_ }, nullptr, nullptr);
+  vm.SetSunAzimuthDeg(123.0F);
+
+  EXPECT_EQ(service_.GetPresetIndex(), -1);
+  EXPECT_TRUE(service_.HasPendingChanges());
+  EXPECT_FLOAT_EQ(service_.GetSunAzimuthDeg(), 123.0F);
+
+  service_.ApplyPendingChanges();
+
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_FLOAT_EQ(service_.GetSunAzimuthDeg(), 123.0F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

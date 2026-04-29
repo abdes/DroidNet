@@ -226,7 +226,6 @@ LocalFogVolumeTiledCullingPass::~LocalFogVolumeTiledCullingPass()
   unregister_texture_if_present(tile_data_texture_);
   unregister_buffer_if_present(occupied_tile_buffer_);
   unregister_buffer_if_present(indirect_args_buffer_);
-  unregister_buffer_if_present(indirect_count_buffer_);
   unregister_buffer_if_present(indirect_count_clear_buffer_);
   for (const auto& retired : retired_textures_) {
     unregister_texture_if_present(retired);
@@ -350,11 +349,9 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
     return false;
   }
   if (occupied_tile_buffer_ != nullptr && indirect_args_buffer_ != nullptr
-    && indirect_count_buffer_ != nullptr
     && occupied_tile_capacity_ >= tile_count
     && occupied_tile_buffer_uav_.IsValid() && occupied_tile_buffer_srv_.IsValid()
     && indirect_args_buffer_uav_.IsValid()
-    && indirect_count_buffer_uav_.IsValid()
     && indirect_count_clear_buffer_ != nullptr) {
     return true;
   }
@@ -386,17 +383,14 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
     static_cast<std::uint64_t>(tile_count) * sizeof(std::uint32_t));
   auto new_indirect_args = create_device_buffer(
     "Vortex.Environment.LocalFogTileDrawArgs",
-    static_cast<std::uint64_t>(tile_count) * sizeof(std::uint32_t) * 4U);
-  auto new_indirect_count = create_device_buffer(
-    "Vortex.Environment.LocalFogTileDrawCount", sizeof(std::uint32_t));
+    sizeof(std::uint32_t) * 4U);
   if (new_occupied_tiles == nullptr || new_indirect_args == nullptr
-    || new_indirect_count == nullptr) {
+    || tile_count == 0U) {
     return false;
   }
 
   RegisterResourceIfNeeded(*gfx, new_occupied_tiles);
   RegisterResourceIfNeeded(*gfx, new_indirect_args);
-  RegisterResourceIfNeeded(*gfx, new_indirect_count);
 
   auto occupied_uav_handle = allocator.AllocateRaw(
     graphics::ResourceViewType::kStructuredBuffer_UAV,
@@ -436,53 +430,39 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
     MakeStructuredViewDesc(graphics::ResourceViewType::kStructuredBuffer_UAV,
       new_indirect_args->GetSize(), sizeof(std::uint32_t)));
 
-  auto count_uav_handle = allocator.AllocateRaw(
-    graphics::ResourceViewType::kStructuredBuffer_UAV,
-    graphics::DescriptorVisibility::kShaderVisible);
-  if (!count_uav_handle.IsValid()) {
-    throw std::runtime_error(
-      "LocalFogVolumeTiledCullingPass: failed to allocate indirect-count UAV");
-  }
-  const auto count_uav_index = allocator.GetShaderVisibleIndex(count_uav_handle);
-  registry.RegisterView(*new_indirect_count, std::move(count_uav_handle),
-    MakeStructuredViewDesc(graphics::ResourceViewType::kStructuredBuffer_UAV,
-      new_indirect_count->GetSize(), sizeof(std::uint32_t)));
-
   if (occupied_tile_buffer_ != nullptr) {
     retired_buffers_.push_back(std::move(occupied_tile_buffer_));
   }
   if (indirect_args_buffer_ != nullptr) {
     retired_buffers_.push_back(std::move(indirect_args_buffer_));
   }
-  if (indirect_count_buffer_ != nullptr) {
-    retired_buffers_.push_back(std::move(indirect_count_buffer_));
-  }
 
   occupied_tile_buffer_ = std::move(new_occupied_tiles);
   indirect_args_buffer_ = std::move(new_indirect_args);
-  indirect_count_buffer_ = std::move(new_indirect_count);
   occupied_tile_buffer_uav_ = occupied_uav_index;
   occupied_tile_buffer_srv_ = occupied_srv_index;
   indirect_args_buffer_uav_ = args_uav_index;
-  indirect_count_buffer_uav_ = count_uav_index;
   occupied_tile_capacity_ = tile_count;
 
   if (indirect_count_clear_buffer_ == nullptr) {
     indirect_count_clear_buffer_ = gfx->CreateBuffer({
-      .size_bytes = sizeof(std::uint32_t),
+      .size_bytes = sizeof(std::uint32_t) * 4U,
       .usage = graphics::BufferUsage::kNone,
       .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Vortex.Environment.LocalFogTileDrawCount.Clear",
+      .debug_name = "Vortex.Environment.LocalFogTileDrawArgs.Clear",
     });
     if (indirect_count_clear_buffer_ == nullptr) {
       return false;
     }
     auto* mapped = static_cast<std::uint32_t*>(
-      indirect_count_clear_buffer_->Map(0U, sizeof(std::uint32_t)));
+      indirect_count_clear_buffer_->Map(0U, sizeof(std::uint32_t) * 4U));
     if (mapped == nullptr) {
       return false;
     }
-    *mapped = 0U;
+    mapped[0] = 6U;
+    mapped[1] = 0U;
+    mapped[2] = 0U;
+    mapped[3] = 0U;
   }
 
   return true;
@@ -499,7 +479,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   products.tile_resolution_y = 0U;
   products.tile_capacity = 0U;
   products.occupied_tile_draw_args_buffer = nullptr;
-  products.occupied_tile_draw_count_buffer = nullptr;
 
   auto state = RecordState {
     .requested = renderer_.GetLocalFogEnabled() && ctx.current_view.with_local_fog
@@ -574,7 +553,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
     .tile_data_texture_slot = tile_data_texture_uav_.get(),
     .occupied_tile_buffer_slot = occupied_tile_buffer_uav_.get(),
     .indirect_args_buffer_slot = indirect_args_buffer_uav_.get(),
-    .indirect_count_buffer_slot = indirect_count_buffer_uav_.get(),
     .instance_count = products.instance_count,
     .tile_resolution_x = tile_resolution_x,
     .tile_resolution_y = tile_resolution_y,
@@ -605,17 +583,16 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   TrackTextureFromKnownOrInitial(*recorder, *tile_data_texture_);
   TrackBufferFromKnownOrInitial(*recorder, *occupied_tile_buffer_);
   TrackBufferFromKnownOrInitial(*recorder, *indirect_args_buffer_);
-  TrackBufferFromKnownOrInitial(*recorder, *indirect_count_buffer_);
   TrackBufferFromKnownOrInitial(*recorder, *indirect_count_clear_buffer_);
 
   recorder->RequireResourceState(
     *indirect_count_clear_buffer_, graphics::ResourceStates::kCopySource);
   recorder->RequireResourceState(
-    *indirect_count_buffer_, graphics::ResourceStates::kCopyDest);
+    *indirect_args_buffer_, graphics::ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBuffer(
-    *indirect_count_buffer_, 0U, *indirect_count_clear_buffer_, 0U,
-    sizeof(std::uint32_t));
+    *indirect_args_buffer_, 0U, *indirect_count_clear_buffer_, 0U,
+    sizeof(std::uint32_t) * 4U);
 
   recorder->RequireResourceState(
     *tile_data_texture_, graphics::ResourceStates::kUnorderedAccess);
@@ -623,8 +600,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
     *occupied_tile_buffer_, graphics::ResourceStates::kUnorderedAccess);
   recorder->RequireResourceState(
     *indirect_args_buffer_, graphics::ResourceStates::kUnorderedAccess);
-  recorder->RequireResourceState(
-    *indirect_count_buffer_, graphics::ResourceStates::kUnorderedAccess);
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
@@ -655,8 +630,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
     *occupied_tile_buffer_, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceStateFinal(
     *indirect_args_buffer_, graphics::ResourceStates::kIndirectArgument);
-  recorder->RequireResourceStateFinal(
-    *indirect_count_buffer_, graphics::ResourceStates::kIndirectArgument);
 
   products.tile_data_ready = true;
   products.tile_data_texture_slot = tile_data_texture_srv_;
@@ -666,8 +639,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   products.tile_capacity = tile_count;
   products.occupied_tile_draw_args_buffer
     = observer_ptr<const graphics::Buffer> { indirect_args_buffer_.get() };
-  products.occupied_tile_draw_count_buffer
-    = observer_ptr<const graphics::Buffer> { indirect_count_buffer_.get() };
 
   LOG_F(INFO,
     "local_fog_hzb_consumed={} screen_hzb={}x{} mips={}",

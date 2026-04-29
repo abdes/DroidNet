@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <source_location>
+#include <string>
 #include <string_view>
 
+#include <glm/common.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -28,6 +31,9 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
@@ -35,6 +41,7 @@
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/PathNormalization.h"
 #include "DemoShell/Services/SceneLoaderService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "RenderScene/MainModule.h"
 
@@ -45,6 +52,14 @@ namespace oxygen::examples::render_scene {
 namespace {
   constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
   constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
+
+  auto ToLowerAscii(std::string value) -> std::string
+  {
+    std::ranges::transform(value, value.begin(), [](const unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+  }
 
   auto TryGetLastWriteTime(const std::filesystem::path& path)
     -> std::optional<std::filesystem::file_time_type>
@@ -81,6 +96,19 @@ namespace {
           == content::IAssetLoader::ContentSourceKind::kLooseCooked
           && runtime::NormalizePath(source.source_path) == normalized;
       });
+  }
+
+  auto SceneEntryMatchesStartupToken(
+    const ui::SceneEntry& entry, std::string_view token) -> bool
+  {
+    const auto desired = ToLowerAscii(std::string(token));
+    const auto scene_name = ToLowerAscii(entry.name);
+    const auto scene_key = ToLowerAscii(data::to_string(entry.key));
+    auto scene_stem = std::filesystem::path(entry.name).stem().string();
+    scene_stem = ToLowerAscii(std::move(scene_stem));
+
+    return scene_name == desired || scene_stem == desired
+      || scene_key == desired || scene_name.find(desired) != std::string::npos;
   }
 
   auto LooseIndexPathForRoot(const std::filesystem::path& root_path)
@@ -184,6 +212,50 @@ MainModule::MainModule(const examples::DemoAppContext& app)
   : Base(app)
   , last_viewport_({ 0, 0 })
 {
+  if (!app.startup_scene_name.empty()) {
+    startup_scene_name_ = app.startup_scene_name;
+  }
+  if (!app.startup_skybox_path.empty()) {
+    startup_skybox_path_ = app.startup_skybox_path;
+    startup_skybox_layout_ = app.startup_skybox_layout;
+    startup_skybox_output_format_ = app.startup_skybox_output_format;
+    startup_skybox_face_size_ = app.startup_skybox_face_size;
+    startup_skybox_flip_y_ = app.startup_skybox_flip_y;
+    startup_skybox_tonemap_hdr_to_ldr_
+      = app.startup_skybox_tonemap_hdr_to_ldr;
+    startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
+    startup_skybox_enable_sky_sphere_
+      = app.startup_skybox_enable_sky_sphere;
+    startup_skybox_enable_sky_light_ = app.startup_skybox_enable_sky_light;
+    startup_sky_sphere_intensity_
+      = std::max(app.startup_sky_sphere_intensity, 0.0F);
+    startup_sky_light_intensity_mul_
+      = std::max(app.startup_sky_light_intensity_mul, 0.0F);
+    startup_sky_light_diffuse_
+      = std::max(app.startup_sky_light_diffuse, 0.0F);
+    startup_sky_light_specular_
+      = std::max(app.startup_sky_light_specular, 0.0F);
+    startup_sky_light_real_time_capture_enabled_
+      = app.startup_sky_light_real_time_capture_enabled;
+    startup_sky_light_tint_
+      = glm::max(app.startup_sky_light_tint, glm::vec3 { 0.0F });
+    startup_sky_light_lifecycle_proof_enabled_
+      = app.startup_sky_light_lifecycle_proof_enabled;
+    startup_sky_light_lifecycle_disable_frame_
+      = app.startup_sky_light_lifecycle_disable_frame;
+    startup_sky_light_lifecycle_enable_frame_
+      = app.startup_sky_light_lifecycle_enable_frame;
+    if (startup_sky_light_lifecycle_proof_enabled_
+      && startup_sky_light_lifecycle_enable_frame_
+        <= startup_sky_light_lifecycle_disable_frame_) {
+      startup_sky_light_lifecycle_proof_enabled_ = false;
+      LOG_F(WARNING,
+        "RenderScene: disabled static SkyLight lifecycle proof because "
+        "enable_frame ({}) must be greater than disable_frame ({})",
+        startup_sky_light_lifecycle_enable_frame_,
+        startup_sky_light_lifecycle_disable_frame_);
+    }
+  }
 }
 
 MainModule::~MainModule() = default;
@@ -231,7 +303,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
-  shell_config.panel_config.rendering = true;
+  shell_config.panel_config.diagnostics = true;
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
@@ -280,6 +352,27 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
     return nullptr;
+  }
+
+  if (startup_scene_name_.has_value()) {
+    if (const auto vm = shell->GetContentVm(); vm && vm->IsSceneLoading()) {
+      vm->CancelSceneLoad();
+    }
+    pending_scene_load_.reset();
+    scene_load_cancel_requested_ = false;
+    scene_loader_.reset();
+    pending_physics_sidecar_.reset();
+    active_scene_load_key_.reset();
+
+    const auto cooked_index = demo_root.parent_path() / "Content" / ".cooked"
+      / std::filesystem::path(kLooseCookedIndexFileName);
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kMountIndex,
+      .path = cooked_index,
+    });
+    LOG_F(INFO,
+      "RenderScene: Startup scene override '{}' will mount '{}'",
+      *startup_scene_name_, cooked_index.string());
   }
 
   LOG_F(INFO, "RenderScene: Staging fallback default scene");
@@ -376,6 +469,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 
   const auto scene_ptr = shell.TryGetScene();
+  if (scene_ptr != nullptr) {
+    ApplySkyLightLifecycleProofToggle(
+      *scene_ptr, frame_context.GetFrameSequenceNumber().get());
+  }
   frame_context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
@@ -574,6 +671,51 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         vm->RefreshLibrary();
         vm->PersistLibraryState();
       }
+    }
+  }
+
+  if (startup_scene_name_.has_value() && !startup_scene_load_requested_
+    && pending_scene_load_) {
+    LOG_F(INFO,
+      "RenderScene: Discarding restored scene load '{}' because startup "
+      "scene override '{}' is active",
+      pending_scene_load_->scene_name, *startup_scene_name_);
+    if (const auto vm = shell.GetContentVm(); vm && vm->IsSceneLoading()) {
+      vm->CancelSceneLoad();
+    }
+    pending_scene_load_.reset();
+    scene_load_cancel_requested_ = false;
+  }
+
+  if (startup_scene_name_.has_value() && !startup_scene_load_requested_
+    && !pending_scene_load_ && !scene_loader_) {
+    if (const auto vm = shell.GetContentVm()) {
+      for (const auto& scene : vm->GetAvailableScenes()) {
+        if (!SceneEntryMatchesStartupToken(scene, *startup_scene_name_)) {
+          continue;
+        }
+        pending_scene_load_ = SceneLoadRequest {
+          .key = scene.key,
+          .source_kind = scene.source.kind,
+          .source_path = scene.source.path,
+          .scene_name = scene.name,
+        };
+        startup_scene_load_requested_ = true;
+        LOG_F(INFO,
+          "RenderScene: Resolved startup scene override '{}' to scene='{}' "
+          "key={} source='{}'",
+          *startup_scene_name_, scene.name, data::to_string(scene.key),
+          scene.source.path.string());
+        break;
+      }
+    }
+
+    if (!startup_scene_load_requested_ && !startup_scene_missing_logged_) {
+      startup_scene_missing_logged_ = true;
+      LOG_F(WARNING,
+        "RenderScene: Startup scene override '{}' did not match any mounted "
+        "scene",
+        *startup_scene_name_);
     }
   }
 
@@ -809,6 +951,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           co_return;
         }
 
+        ApplyStartupSkyboxToScene(staged_scene, data::to_string(swap.scene_key));
         shell.SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
@@ -947,6 +1090,7 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   scene_loader_.reset();
   pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
+  startup_skybox_service_.reset();
   shell.SetScene(nullptr);
 }
 
@@ -971,6 +1115,140 @@ auto MainModule::StageFallbackScene() -> void
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
+}
+
+auto MainModule::ApplyStartupSkyboxToScene(
+  observer_ptr<scene::Scene> scene, const std::string_view scene_label) -> void
+{
+  if (!scene || !startup_skybox_path_.has_value()) {
+    return;
+  }
+
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (!asset_loader) {
+    LOG_F(WARNING,
+      "RenderScene: Startup skybox '{}' skipped for '{}' because the asset "
+      "loader is unavailable",
+      startup_skybox_path_->string(), scene_label);
+    return;
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::exists(*startup_skybox_path_, ec)) {
+    LOG_F(WARNING,
+      "RenderScene: Startup skybox '{}' does not exist for scene '{}'",
+      startup_skybox_path_->string(), scene_label);
+    return;
+  }
+
+  if (startup_skybox_enable_sky_sphere_) {
+    if (auto env = scene->GetEnvironment()) {
+      if (auto atmosphere
+        = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
+        atmosphere->SetEnabled(false);
+        LOG_F(INFO,
+          "RenderScene: Disabled procedural SkyAtmosphere for startup skybox "
+          "scene '{}'",
+          scene_label);
+      }
+    }
+  }
+
+  startup_skybox_service_ = std::make_unique<SkyboxService>(
+    observer_ptr<content::IAssetLoader> { asset_loader.get() }, scene);
+
+  SkyboxService::LoadOptions options;
+  options.layout = static_cast<SkyboxService::Layout>(
+    std::clamp(startup_skybox_layout_, 0, 4));
+  options.output_format = static_cast<SkyboxService::OutputFormat>(
+    std::clamp(startup_skybox_output_format_, 0, 3));
+  options.cube_face_size = std::max(startup_skybox_face_size_, 1);
+  options.flip_y = startup_skybox_flip_y_;
+  options.tonemap_hdr_to_ldr = startup_skybox_tonemap_hdr_to_ldr_;
+  options.hdr_exposure_ev = startup_skybox_hdr_exposure_ev_;
+
+  SkyboxService::SkyLightParams params;
+  params.enable_sky_sphere = startup_skybox_enable_sky_sphere_;
+  params.enable_sky_light = startup_skybox_enable_sky_light_;
+  params.sky_sphere_intensity = startup_sky_sphere_intensity_;
+  params.intensity_mul = startup_sky_light_intensity_mul_;
+  params.diffuse_intensity = startup_sky_light_diffuse_;
+  params.specular_intensity = startup_sky_light_specular_;
+  params.real_time_capture_enabled
+    = startup_sky_light_real_time_capture_enabled_;
+  params.tint_rgb = startup_sky_light_tint_;
+  LOG_F(INFO,
+    "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
+    "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} "
+    "sky_intensity={} sky_light_intensity={} sky_light_diffuse={} "
+    "sky_light_specular={} sky_light_real_time_capture={} "
+    "enable_sky_sphere={} enable_sky_light={})",
+    startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
+    startup_skybox_output_format_, options.cube_face_size,
+    startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
+    startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity,
+    params.intensity_mul, params.diffuse_intensity, params.specular_intensity,
+    params.real_time_capture_enabled, params.enable_sky_sphere,
+    params.enable_sky_light);
+
+  startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
+    options, params,
+    [scene_name = std::string(scene_label)](SkyboxService::LoadResult result) {
+      if (result.success) {
+        LOG_F(INFO,
+          "RenderScene: Startup skybox equipped for scene '{}' "
+          "(resource_key={} face_size={} status='{}')",
+          scene_name, result.resource_key, result.face_size,
+          result.status_message);
+      } else {
+        LOG_F(WARNING,
+          "RenderScene: Startup skybox failed for scene '{}' (status='{}')",
+          scene_name, result.status_message);
+      }
+    });
+  scene->Update(false);
+}
+
+auto MainModule::ApplySkyLightLifecycleProofToggle(
+  scene::Scene& scene, const std::uint64_t frame_index) -> void
+{
+  if (!startup_sky_light_lifecycle_proof_enabled_) {
+    return;
+  }
+
+  const auto toggle_sky_light
+    = [&](const bool enabled, const char* action) -> void {
+    auto env = scene.GetEnvironment();
+    auto sky_light = env != nullptr
+      ? env->TryGetSystem<scene::environment::SkyLight>()
+      : observer_ptr<scene::environment::SkyLight> {};
+    if (sky_light == nullptr) {
+      LOG_F(WARNING,
+        "RenderScene: Static SkyLight lifecycle proof could not {} SkyLight "
+        "at frame {} because the active scene has no SkyLight",
+        action, frame_index);
+      return;
+    }
+
+    sky_light->SetEnabled(enabled);
+    scene.Update(false);
+    LOG_F(INFO,
+      "RenderScene: Static SkyLight lifecycle proof {} SkyLight at frame {}",
+      action, frame_index);
+  };
+
+  if (!startup_sky_light_lifecycle_disable_applied_
+    && frame_index >= startup_sky_light_lifecycle_disable_frame_) {
+    startup_sky_light_lifecycle_disable_applied_ = true;
+    toggle_sky_light(false, "disabled");
+  }
+
+  if (startup_sky_light_lifecycle_disable_applied_
+    && !startup_sky_light_lifecycle_enable_applied_
+    && frame_index >= startup_sky_light_lifecycle_enable_frame_) {
+    startup_sky_light_lifecycle_enable_applied_ = true;
+    toggle_sky_light(true, "re-enabled");
+  }
 }
 
 auto MainModule::ClearBackbufferReferences() -> void { }

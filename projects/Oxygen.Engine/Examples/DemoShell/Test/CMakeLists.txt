@@ -14,6 +14,10 @@ m_gtest_program(
 
 m_gtest_program(ConsoleDefaults SOURCES "DemoShellConsoleDefaults_test.cpp")
 
+m_gtest_program(DemoShellPanelConfig SOURCES "DemoShellPanelConfig_test.cpp")
+
+m_gtest_program(DefaultSceneLighting SOURCES "DefaultSceneLighting_test.cpp")
+
 m_gtest_program(
   EnvironmentSettingsService
   SOURCES
@@ -24,6 +28,12 @@ m_gtest_program(
   RenderingSettingsService
   SOURCES
     "RenderingSettingsService_test.cpp"
+)
+
+m_gtest_program(
+  DiagnosticsPanel
+  SOURCES
+    "DiagnosticsPanel_test.cpp"
 )
 
 m_gtest_program(

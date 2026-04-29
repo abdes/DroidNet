@@ -49,6 +49,9 @@ static const uint GPU_FOG_FLAG_DIRECTIONAL_INSCATTERING = 1u << 7u;
 static const uint GPU_FOG_FLAG_CUBEMAP_AUTHORED = 1u << 8u;
 static const uint GPU_FOG_FLAG_CUBEMAP_USABLE = 1u << 9u;
 
+static const uint GPU_VOLUMETRIC_FOG_FLAG_ENABLED = 1u << 0u;
+static const uint GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID = 1u << 1u;
+
 // Mirrors oxygen::vortex::GpuFogParams (sizeof = 128)
 struct GpuFogParams
 {
@@ -83,6 +86,34 @@ struct GpuFogParams
     uint cubemap_srv;
     uint flags;
     uint model;
+};
+
+// Mirrors oxygen::vortex::GpuVolumetricFogParams (sizeof = 96)
+struct GpuVolumetricFogParams
+{
+    float3 albedo_rgb;
+    float scattering_distribution;
+
+    float3 emissive_rgb;
+    float extinction_scale;
+
+    float distance_m;
+    float start_distance_m;
+    float near_fade_in_distance_m;
+    float static_lighting_scattering_intensity;
+
+    uint integrated_light_scattering_srv;
+    uint flags;
+    uint grid_width;
+    uint grid_height;
+
+    uint grid_depth;
+    float depth_slice_length_m;
+    float inv_depth_slice_length_m;
+    uint _pad0;
+
+    float3 grid_z_params;
+    uint _pad1;
 };
 
 // Mirrors oxygen::vortex::GpuSkyAtmosphereParams (sizeof = 208)
@@ -154,7 +185,7 @@ struct GpuSkyLightParams
     uint cubemap_max_mip;
     uint prefilter_max_mip;
     uint ibl_generation;
-    uint _pad1;
+    uint diffuse_sh_slot;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)
@@ -216,10 +247,11 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 576)
+// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 672)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;
+    GpuVolumetricFogParams volumetric_fog;
     GpuSkyAtmosphereParams atmosphere;
     GpuSkyLightParams sky_light;
     GpuSkySphereParams sky_sphere;

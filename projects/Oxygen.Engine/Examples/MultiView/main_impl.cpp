@@ -190,6 +190,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   std::string compositing_mode_value = "copy";
   bool pip_wireframe = true;
   uint32_t pip_scissor_inset_px = 0U;
+  bool proof_layout = false;
+  bool aux_proof_layout = false;
+  bool offscreen_proof_layout = false;
+  bool feature_variant_proof_layout = false;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -234,6 +238,38 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .DefaultValue(0U)
               .UserFriendlyName("pixels")
               .StoreTo(&pip_scissor_inset_px)
+              .Build())
+          .WithOption(Option::WithKey("proof-layout")
+              .About("Use the four-view M06A validation layout")
+              .Long("proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&proof_layout)
+              .Build())
+          .WithOption(Option::WithKey("aux-proof-layout")
+              .About("Use the M06A auxiliary producer/consumer validation layout")
+              .Long("aux-proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&aux_proof_layout)
+              .Build())
+          .WithOption(Option::WithKey("offscreen-proof-layout")
+              .About("Use the M06B offscreen preview/capture validation layout")
+              .Long("offscreen-proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&offscreen_proof_layout)
+              .Build())
+          .WithOption(Option::WithKey("feature-variant-proof-layout")
+              .About("Use the M06C feature-variant validation layout")
+              .Long("feature-variant-proof-layout")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .UserFriendlyName("enabled")
+              .StoreTo(&feature_variant_proof_layout)
               .Build());
 
     auto cli = oxygen::examples::cli::BuildCli(
@@ -256,11 +292,21 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed composite mode option = {}", compositing_mode_value);
     LOG_F(INFO, "Parsed pip wireframe option = {}", pip_wireframe);
     LOG_F(INFO, "Parsed pip scissor inset option = {}", pip_scissor_inset_px);
+    LOG_F(INFO, "Parsed proof layout option = {}", proof_layout);
+    LOG_F(INFO, "Parsed aux proof layout option = {}", aux_proof_layout);
+    LOG_F(INFO, "Parsed offscreen proof layout option = {}",
+      offscreen_proof_layout);
+    LOG_F(INFO, "Parsed feature variant proof layout option = {}",
+      feature_variant_proof_layout);
 
     auto main_module_config = oxygen::examples::multiview::MainModuleConfig {
       .compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend,
       .pip_force_wireframe = pip_wireframe,
       .pip_scissor_inset_px = pip_scissor_inset_px,
+      .proof_layout = proof_layout,
+      .aux_proof_layout = aux_proof_layout,
+      .offscreen_proof_layout = offscreen_proof_layout,
+      .feature_variant_proof_layout = feature_variant_proof_layout,
     };
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),

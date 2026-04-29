@@ -9,16 +9,21 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
+
+#include <glm/vec2.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -52,6 +57,8 @@ class PostProcessService;
 class GroundGridPass;
 class EnvironmentLightingService;
 class ScreenHzbModule;
+class OcclusionModule;
+class TranslucencyModule;
 namespace testing {
   struct RendererPublicationProbe;
 }
@@ -66,6 +73,7 @@ public:
     bool used_outside_volume_local_lights { false };
     bool used_camera_inside_local_lights { false };
     bool used_non_perspective_local_lights { false };
+    bool consumed_static_sky_light_product { false };
     std::uint32_t consumed_scene_depth_srv {
       SceneTextureBindings::kInvalidIndex
     };
@@ -79,6 +87,7 @@ public:
       SceneTextureBindings::kInvalidIndex,
     };
     std::uint32_t directional_light_count { 0U };
+    std::uint32_t static_sky_light_draw_count { 0U };
     std::uint32_t point_light_count { 0U };
     std::uint32_t spot_light_count { 0U };
     std::uint32_t local_light_count { 0U };
@@ -107,6 +116,12 @@ public:
     bool consumed_directional_shadow_product { false };
     bool directional_shadow_vsm_active { false };
     std::uint32_t directional_shadow_cascade_count { 0U };
+    bool consumed_spot_shadow_product { false };
+    std::uint32_t spot_shadow_count { 0U };
+    ShaderVisibleIndex spot_shadow_surface_srv { kInvalidShaderVisibleIndex };
+    bool consumed_point_shadow_product { false };
+    std::uint32_t point_shadow_count { 0U };
+    ShaderVisibleIndex point_shadow_surface_srv { kInvalidShaderVisibleIndex };
   };
 
   struct EnvironmentLightingState {
@@ -123,6 +138,30 @@ public:
     std::uint32_t stage14_local_fog_dispatch_count_x { 0U };
     std::uint32_t stage14_local_fog_dispatch_count_y { 0U };
     std::uint32_t stage14_local_fog_dispatch_count_z { 0U };
+    bool stage14_volumetric_fog_requested { false };
+    bool stage14_volumetric_fog_executed { false };
+    bool stage14_integrated_light_scattering_valid { false };
+    ShaderVisibleIndex stage14_integrated_light_scattering_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t stage14_volumetric_fog_grid_width { 0U };
+    std::uint32_t stage14_volumetric_fog_grid_height { 0U };
+    std::uint32_t stage14_volumetric_fog_grid_depth { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_x { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_y { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_z { 0U };
+    bool stage14_volumetric_fog_height_fog_media_requested { false };
+    bool stage14_volumetric_fog_height_fog_media_executed { false };
+    bool stage14_volumetric_fog_sky_light_injection_requested { false };
+    bool stage14_volumetric_fog_sky_light_injection_executed { false };
+    bool stage14_volumetric_fog_temporal_history_requested { false };
+    bool stage14_volumetric_fog_temporal_history_reprojection_executed {
+      false
+    };
+    bool stage14_volumetric_fog_temporal_history_reset { false };
+    bool stage14_volumetric_fog_local_fog_injection_requested { false };
+    bool stage14_volumetric_fog_local_fog_injection_executed { false };
+    std::uint32_t stage14_volumetric_fog_local_fog_instance_count { 0U };
     bool stage15_requested { false };
     bool sky_requested { false };
     bool sky_executed { false };
@@ -154,12 +193,18 @@ public:
   auto operator=(SceneRenderer&&) -> SceneRenderer& = delete;
 
   OXGN_VRTX_API void OnFrameStart(const engine::FrameContext& frame);
+  OXGN_VRTX_API void OnStandaloneFrameStart(frame::SequenceNumber sequence,
+    frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
+  OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
+  OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
-  OXGN_VRTX_API void RemoveViewState(ViewId view_id);
+  OXGN_VRTX_API void RemoveViewState(ViewId view_id,
+    CompositionView::ViewStateHandle view_state_handle
+    = CompositionView::kInvalidViewStateHandle);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
   OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
@@ -203,8 +248,17 @@ private:
   };
 
   OXGN_VRTX_API void RefreshSceneTextureBindings();
+  OXGN_VRTX_API void BeginFrame(frame::SequenceNumber sequence,
+    frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void ResetExtractArtifacts();
   OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
+  OXGN_VRTX_API void ResetPerViewSceneProducts();
+  OXGN_VRTX_API auto ActiveSceneTextures() -> SceneTextures&;
+  OXGN_VRTX_NDAPI auto ActiveSceneTextures() const -> const SceneTextures&;
+  OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(
+    const RenderContext& ctx) const -> SceneTextureLeaseKey;
+  OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
+  OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
     std::string_view debug_name, const graphics::Texture& source)
     -> graphics::Texture*;
@@ -223,7 +277,12 @@ private:
 
   Renderer& renderer_;
   Graphics& gfx_;
+  ViewFrameBindings published_view_frame_bindings_ {};
+  ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   SceneTextures scene_textures_;
+  SceneTextureLeasePool scene_texture_pool_;
+  SceneTextures* active_scene_textures_ { nullptr };
+  SceneTextures* inspected_scene_textures_ { nullptr };
   SceneTextureSetupMode setup_mode_ {};
   SceneTextureBindings scene_texture_bindings_ {};
   SceneTextureExtracts scene_texture_extracts_ {};
@@ -233,8 +292,6 @@ private:
   ExtractArtifact prev_velocity_artifact_ {};
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
   ViewId published_view_id_ { kInvalidViewId };
-  ViewFrameBindings published_view_frame_bindings_ {};
-  ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
     kInvalidShaderVisibleIndex
   };
@@ -245,11 +302,12 @@ private:
   std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
   std::vector<PreparedViewShadowInput> frame_shadow_views_ {};
   frame::SequenceNumber lighting_grid_built_sequence_ { 0U };
-  frame::SequenceNumber shadow_depths_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<ScreenHzbModule> screen_hzb_;
+  std::unique_ptr<OcclusionModule> occlusion_;
   std::unique_ptr<BasePassModule> base_pass_;
+  std::unique_ptr<TranslucencyModule> translucency_;
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;
   std::unique_ptr<EnvironmentLightingService> environment_;

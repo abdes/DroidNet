@@ -18,9 +18,9 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "TexturedCube/SceneSetup.h"
 
 namespace {
@@ -231,6 +231,14 @@ SceneSetup::SceneSetup(observer_ptr<scene::Scene> scene,
 auto SceneSetup::Initialize() -> void
 {
   EnsureNodes();
+  if (scene_ && !sun_light_node_.IsAlive()) {
+    sun_light_node_ = EnsureDefaultSceneLighting(*scene_,
+      DefaultSceneLightingDesc {
+        .sun_node_name = "SunLight",
+        .sun_position = { -8.0F, -10.0F, 14.0F },
+        .focus_point = { 0.0F, 0.0F, 3.5F },
+      });
+  }
   EnsureFillLight();
 }
 

@@ -58,6 +58,7 @@ set(
   "Concepts.h"
   "Constants.h"
   "DeferredObjectRelease.h"
+  "DescriptorAllocationHandle.h"
   "DescriptorAllocator.h"
   "DescriptorHandle.h"
   "Detail/Barriers.h"

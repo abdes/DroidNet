@@ -9,11 +9,14 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
+static const uint ENVIRONMENT_CONTRACT_FLAG_INTEGRATED_LIGHT_SCATTERING_VALID = 1u << 8u;
+
 struct EnvironmentFrameBindings
 {
     struct EnvironmentProbeBindings
     {
         uint environment_map_srv;
+        uint diffuse_sh_srv;
         uint irradiance_map_srv;
         uint prefiltered_map_srv;
         uint brdf_lut_srv;
@@ -69,6 +72,7 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.sky_view_lut_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.camera_aerial_perspective_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.environment_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.diffuse_sh_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;

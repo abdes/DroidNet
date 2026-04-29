@@ -95,7 +95,7 @@ protected:
   {
     return Renderer::OutputTargetInput {
       .framebuffer
-      = oxygen::observer_ptr<const Framebuffer>(framebuffer_.get()),
+      = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
     };
   }
 

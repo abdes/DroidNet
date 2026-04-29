@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
+#include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -52,13 +53,25 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         = light_constants.light_position_and_radius.xyz - world_position;
     const float attenuation = ComputeLocalLightDistanceAttenuation(
         light_vector, light_constants.light_position_and_radius.w);
+    float shadow_visibility = 1.0f;
+    if (light_constants.shadow_info.x != INVALID_BINDLESS_INDEX) {
+        const VortexShadowFrameBindings shadow_bindings =
+            LoadVortexShadowFrameBindings();
+        const GBufferData gbuffer = ReadGBuffer(screen_uv, bindings);
+        shadow_visibility = ComputePointShadowVisibility(
+            shadow_bindings,
+            light_constants.shadow_info.x,
+            world_position,
+            gbuffer.world_normal,
+            VortexSafeNormalize(light_vector));
+    }
     const float3 lighting = EvaluateDeferredLightAtWorldPosition(
         screen_uv,
         scene_depth,
         world_position,
         VortexSafeNormalize(light_vector),
         LoadDeferredLightColor(light_constants.light_color_and_intensity),
-        attenuation,
+        attenuation * shadow_visibility,
         camera_position,
         bindings);
     return float4(lighting, 0.0f);

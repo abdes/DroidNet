@@ -47,6 +47,10 @@ struct MainModuleConfig {
   CompositingMode compositing_mode { CompositingMode::kBlend };
   bool pip_force_wireframe { true };
   uint32_t pip_scissor_inset_px { 0U };
+  bool proof_layout { false };
+  bool aux_proof_layout { false };
+  bool offscreen_proof_layout { false };
+  bool feature_variant_proof_layout { false };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.
@@ -130,8 +134,20 @@ protected:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
+  struct OffscreenProofProduct {
+    std::shared_ptr<graphics::Framebuffer> framebuffer {};
+    uint32_t width { 0U };
+    uint32_t height { 0U };
+  };
+
   [[nodiscard]] auto ResolveRenderExtent() const -> platform::window::ExtentT;
   auto UpdateCameras(const platform::window::ExtentT& extent) -> void;
+  auto EnsureOffscreenProofProduct(OffscreenProofProduct& product,
+    uint32_t width, uint32_t height, std::string_view debug_name) -> bool;
+  auto RenderOffscreenProofProducts(engine::FrameContext& context) -> void;
+  auto AppendRuntimeCompositionLayers(engine::FrameContext& context,
+    vortex::Renderer::RuntimeCompositionInput& input) -> void override;
+  auto DrawFeatureVariantProofOverlay() -> void;
 
   const examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
@@ -142,10 +158,23 @@ private:
   // View identifiers
   ViewId main_view_id_ { kInvalidViewId };
   ViewId pip_view_id_ { kInvalidViewId };
+  ViewId top_view_id_ { kInvalidViewId };
+  ViewId debug_view_id_ { kInvalidViewId };
+  ViewId shadow_view_id_ { kInvalidViewId };
+  ViewId diagnostics_view_id_ { kInvalidViewId };
 
   // Cameras
   scene::SceneNode main_camera_node_;
   scene::SceneNode pip_camera_node_;
+  scene::SceneNode top_camera_node_;
+  scene::SceneNode debug_camera_node_;
+  scene::SceneNode shadow_camera_node_;
+  scene::SceneNode diagnostics_camera_node_;
+  scene::SceneNode offscreen_preview_camera_node_;
+  scene::SceneNode offscreen_capture_camera_node_;
+
+  OffscreenProofProduct offscreen_preview_;
+  OffscreenProofProduct offscreen_capture_;
 
   observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
   MainModuleConfig config_ {};

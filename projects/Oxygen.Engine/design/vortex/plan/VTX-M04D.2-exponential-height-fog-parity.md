@@ -1,6 +1,6 @@
 # VTX-M04D.2 — UE5.7 Exponential Height Fog Parity
 
-Status: `in_progress`
+Status: `validated`
 
 This plan covers only exponential height fog. It preserves the validated
 VTX-M04D.1 publication-truth baseline and does not claim local fog,
@@ -57,8 +57,9 @@ Implementation and review must check:
 
 ## Proof Gate
 
-VTX-M04D.2 remains `in_progress` unless all required implementation exists and
-the following fresh evidence is recorded:
+This was the pre-validation gate for VTX-M04D.2: status had to remain
+`in_progress` unless all required implementation existed, docs/status were
+updated, and the following fresh evidence was recorded:
 
 ```powershell
 cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService Oxygen.Vortex.SceneRendererPublication
@@ -77,12 +78,8 @@ bake/catalog validation and record the exact command and result.
   deferred nice-to-have, not the current priority for VTX-M04D closure. It must
   not block city-scale atmosphere/fog artifact work, aerial-perspective proof,
   local-fog proof, volumetric-fog proof, or environment runtime proof.
-- Current visual priority: diagnose and fix the city-scale environment path
-  where long far planes, aerial-perspective volume resolution/depth mapping,
-  DemoShell environment overrides, height fog, local fog, and volumetric fog
-  interact to produce banding or unstable atmosphere/fog output.
-- UE5.7 local fog volume parity.
-- UE5.7 volumetric fog parity.
+- Aerial perspective capture/reflection proof remains VTX-M04D.6 scope.
+- Full environment runtime closure remains VTX-M04D.5 scope.
 - Real SkyLight capture/filtering.
 - Async runtime migration proof.
 - DiagnosticsService implementation.
@@ -129,7 +126,45 @@ bake/catalog validation and record the exact command and result.
   and direct `ShaderBake update`; the direct run reported
   `expanded_requests=182`, `dirty_requests=0`, `clean_requests=182`, and
   `stale_requests=0`.
-- Completion status remains `in_progress` because city-scale runtime/capture
-  proof is not closed and the environment/fog artifacts seen in the city
-  validation scene have not been diagnosed and fixed. Cubemap inscattering
-  resource binding/sampling remains explicitly deferred.
+2026-04-26 runtime/capture closure evidence:
+
+- Added focused height-fog RenderDoc proof tooling:
+  `tools/vortex/AnalyzeRenderDocVortexHeightFog.py`,
+  `tools/vortex/Assert-VortexHeightFogProof.ps1`, and
+  `tools/vortex/Verify-VortexHeightFogProof.ps1`.
+- Focused build passed:
+  `cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService Oxygen.Vortex.SceneRendererPublication --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen.Vortex.(EnvironmentLightingService|SceneRendererPublication)" --output-on-failure`
+  with `Oxygen.Vortex.EnvironmentLightingService.Tests` 40/40 and
+  `Oxygen.Vortex.SceneRendererPublication.Tests` 16/16.
+- VortexBasic build passed:
+  `cmake --build out/build-ninja --config Debug --target oxygen-examples-vortexbasic --parallel 4`.
+- Focused VortexBasic enabled proof passed:
+  `tools/vortex/Verify-VortexHeightFogProof.ps1` against
+  `out/build-ninja/analysis/vortex/m04d2-heightfog-proof/vortexbasic_heightfog_enabled_frame5_capture.rdc`.
+  Validation report records `overall_verdict=pass`,
+  `stage15_fog_scope_count=1`, `stage15_fog_draw_count=1`,
+  `runtime_cli_observed=true`, `height_fog_scene_color_delta_max=43`,
+  and `height_fog_far_depth_sample_count=33`.
+- Focused VortexBasic disabled proof passed:
+  `tools/vortex/Verify-VortexHeightFogProof.ps1 -ExpectDisabled` against
+  `out/build-ninja/analysis/vortex/m04d2-heightfog-proof/vortexbasic_heightfog_disabled_frame5_capture.rdc`.
+  Validation report records `overall_verdict=pass`,
+  `stage15_fog_scope_count=0`, `stage15_fog_draw_count=0`, and
+  `runtime_cli_observed=false`.
+- City-scale RenderScene proof passed:
+  `tools/vortex/Verify-VortexHeightFogProof.ps1 -SkipRuntimeCliCheck` against
+  `out/build-ninja/analysis/vortex/m04d4-city-volumetric-proof/renderscene_city_volumetric_frame90_capture.rdc`.
+  Validation report records `overall_verdict=pass`,
+  `stage15_fog_scope_count=1`, `stage15_fog_draw_count=1`,
+  `height_fog_scene_color_delta_max=593.5`,
+  `height_fog_far_depth_sample_count=53`, captured 672-byte
+  `EnvironmentStaticData`, positive primary density, valid max
+  opacity/min-transmittance, enabled/render-in-main-pass flags, and cubemap
+  unavailable state.
+- Status: VTX-M04D.2 is validated for UE5.7-informed exponential height-fog
+  authored parameters, CPU/HLSL publication, analytic Stage-15 application,
+  disabled fast path, focused runtime/capture proof, and city-scale capture
+  proof. Cubemap inscattering resource binding/sampling remains explicitly
+  deferred and is not claimed.

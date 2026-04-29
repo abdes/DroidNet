@@ -6,6 +6,7 @@
 
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -44,6 +45,39 @@ static float3 EvaluateBasePassDebugView(
     const float linear_eye_depth = max(-view_position.z, 0.0f);
     const float display = saturate(1.0f / (1.0f + linear_eye_depth));
     return display.xxx;
+#elif defined(DEBUG_DIRECTIONAL_SHADOW_MASK)
+    if (!IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_SCENE_DEPTH)
+        || !IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_GBUFFERS))
+    {
+        return float3(1.0f, 0.0f, 1.0f);
+    }
+
+    const VortexShadowFrameBindings shadow_bindings =
+        LoadVortexShadowFrameBindings();
+    if ((shadow_bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) == 0u
+        || shadow_bindings.cascade_count == 0u
+        || shadow_bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+        return float3(0.0f, 0.0f, 1.0f);
+    }
+
+    const float device_depth = SampleSceneDepth(uv, bindings);
+    const float3 world_position = ReconstructWorldPosition(
+        uv, device_depth, inverse_view_projection_matrix);
+    const GBufferData data = ReadGBuffer(uv, bindings);
+    const float visibility = ComputeDirectionalShadowVisibility(
+        world_position,
+        data.world_normal,
+        normalize(shadow_bindings.light_direction_to_source.xyz));
+    return saturate(visibility).xxx;
+#elif defined(DEBUG_MASKED_ALPHA_COVERAGE)
+    const GBufferData data = ReadGBuffer(uv, bindings);
+    if (data.custom_data.x < 0.5f)
+    {
+        return 0.15f.xxx;
+    }
+    return data.custom_data.y >= data.custom_data.z
+        ? float3(0.0f, 1.0f, 0.0f)
+        : float3(1.0f, 0.0f, 0.0f);
 #else
     return float3(1.0f, 0.0f, 1.0f);
 #endif
@@ -61,7 +95,7 @@ float4 BasePassDebugViewPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     if (!IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_GBUFFERS)) {
-#if !defined(DEBUG_SCENE_DEPTH_RAW) && !defined(DEBUG_SCENE_DEPTH_LINEAR)
+#if !defined(DEBUG_SCENE_DEPTH_RAW) && !defined(DEBUG_SCENE_DEPTH_LINEAR) && !defined(DEBUG_DIRECTIONAL_SHADOW_MASK)
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
 #endif
     }

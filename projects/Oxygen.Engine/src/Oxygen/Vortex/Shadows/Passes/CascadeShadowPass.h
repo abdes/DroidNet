@@ -7,12 +7,14 @@
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -26,7 +28,9 @@ class ShadowDepthPass;
 namespace internal {
 class CascadeShadowSetup;
 class ConventionalShadowTargetAllocator;
+class PointShadowSetup;
 class ShadowCasterCulling;
+class SpotShadowSetup;
 } // namespace internal
 
 class CascadeShadowPass {
@@ -36,6 +40,22 @@ public:
     std::shared_ptr<graphics::Texture> shadow_surface {};
     std::uint32_t shadow_caster_draw_count { 0U };
     std::uint32_t rendered_cascade_count { 0U };
+    std::uint32_t rendered_draw_count { 0U };
+  };
+
+  struct ViewSpotShadowPassState {
+    ShadowFrameBindings bindings {};
+    std::shared_ptr<graphics::Texture> shadow_surface {};
+    std::uint32_t shadow_caster_draw_count { 0U };
+    std::uint32_t rendered_shadow_count { 0U };
+    std::uint32_t rendered_draw_count { 0U };
+  };
+
+  struct ViewPointShadowPassState {
+    ShadowFrameBindings bindings {};
+    std::shared_ptr<graphics::Texture> shadow_surface {};
+    std::uint32_t shadow_caster_draw_count { 0U };
+    std::uint32_t rendered_shadow_count { 0U };
     std::uint32_t rendered_draw_count { 0U };
   };
 
@@ -52,10 +72,20 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto RenderDirectionalView(
     const PreparedViewShadowInput& view_input,
     const FrameDirectionalLightSelection& directional_light) -> ViewShadowPassState;
+  [[nodiscard]] OXGN_VRTX_API auto RenderSpotView(
+    const PreparedViewShadowInput& view_input,
+    std::span<const FrameLocalLightSelection> local_lights)
+    -> ViewSpotShadowPassState;
+  [[nodiscard]] OXGN_VRTX_API auto RenderPointView(
+    const PreparedViewShadowInput& view_input,
+    std::span<const FrameLocalLightSelection> local_lights)
+    -> ViewPointShadowPassState;
 
 private:
   Renderer& renderer_;
   std::unique_ptr<internal::CascadeShadowSetup> cascade_setup_;
+  std::unique_ptr<internal::SpotShadowSetup> spot_setup_;
+  std::unique_ptr<internal::PointShadowSetup> point_setup_;
   std::unique_ptr<internal::ConventionalShadowTargetAllocator> allocator_;
   std::unique_ptr<internal::ShadowCasterCulling> shadow_caster_culling_;
   std::unique_ptr<ShadowDepthPass> depth_pass_;

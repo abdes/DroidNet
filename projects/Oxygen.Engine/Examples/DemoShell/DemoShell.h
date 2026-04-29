@@ -56,9 +56,9 @@ struct DemoShellPanelConfig {
   bool camera_controls { false };
   bool environment { false };
   bool lighting { false };
-  bool rendering { false };
+  bool diagnostics { false };
   bool post_process { false };
-  bool ground_grid { false };
+  bool ground_grid { true };
 };
 
 //! Configuration for the demo shell and its standard panels.
@@ -212,7 +212,7 @@ public:
     -> observer_ptr<ui::CameraRigController>;
 
   //! Get the current rendering view mode selection.
-  [[nodiscard]] auto GetRenderingViewMode() const -> renderer::RenderMode;
+  [[nodiscard]] auto GetRenderingViewMode() const -> vortex::RenderMode;
 
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;

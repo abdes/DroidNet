@@ -121,6 +121,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "stage12_point": "Vortex.Stage12.PointLight",
         "stage15_sky": "Vortex.Stage15.Sky",
         "debug_basecolor": "Vortex.DebugVisualization.BaseColor",
+        "debug_directional_shadow_mask":
+            "Vortex.DebugVisualization.DirectionalShadowMask",
     }
 
     for label, scope_name in targets.items():

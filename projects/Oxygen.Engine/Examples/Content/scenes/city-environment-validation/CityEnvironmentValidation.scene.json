@@ -15,7 +15,7 @@
       "flags": {
         "visible": true,
         "static": true,
-        "casts_shadows": false,
+        "casts_shadows": true,
         "receives_shadows": true
       },
       "transform": {
@@ -10706,7 +10706,7 @@
           "mobility": 0,
           "casts_shadows": true,
           "shadow": {
-            "bias": 0.0006,
+            "bias": 0.125,
             "normal_bias": 0.02,
             "contact_shadows": true,
             "resolution_hint": 1
@@ -10780,7 +10780,7 @@
         1.0,
         1.0
       ],
-      "aerial_perspective_distance_scale": 700.0,
+      "aerial_perspective_distance_scale": 1.0,
       "aerial_scattering_strength": 1.0,
       "aerial_perspective_start_depth_m": 40.0,
       "height_fog_contribution": 1.0,
@@ -10876,8 +10876,7 @@
         0.024
       ],
       "volumetric_scattering_intensity": 1.0,
-      "affect_reflections": true,
-      "affect_global_illumination": true
+      "affect_reflections": true
     }
   },
   "local_fog_volumes": [

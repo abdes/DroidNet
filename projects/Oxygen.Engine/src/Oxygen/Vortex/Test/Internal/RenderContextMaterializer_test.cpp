@@ -107,7 +107,7 @@ protected:
       .frame_session = FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
       .output_target
       = OutputTargetInput {
-          .framebuffer = oxygen::observer_ptr<const Framebuffer>(framebuffer_.get()),
+          .framebuffer = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
         },
       .resolved_view = MakeResolvedViewInput(),
       .prepared_frame = PreparedFrameInput {},

@@ -2,7 +2,19 @@
 
 **Phase:** 5E — Remaining Services
 **Deliverable:** D.18
-**Status:** `ready`
+**Status:** `validated by VTX-M06B`
+
+> VTX-M06B implementation note: the public `ForOffscreenScene()` facade now
+> executes a Vortex-native one-view scene-renderer path into the
+> caller-provided framebuffer, with deferred and forward shading selection.
+> Runtime closeout is validated under
+> [../plan/VTX-M06B-offscreen-proof-closeout.md](../plan/VTX-M06B-offscreen-proof-closeout.md).
+>
+> Scope correction: `ShadingMode::kForward` means a real solid forward scene
+> product that writes directly to SceneColor with forward lighting. A forward
+> wireframe/debug render is useful proof that the offscreen route can execute a
+> forward-selected view, but it is not a substitute for the solid forward
+> offscreen product required by this LLD.
 
 ## Mandatory Vortex Rule
 
@@ -104,13 +116,13 @@ auto ForOffscreenScene(
 **Vortex adaptation:**
 
 - Creates a full Vortex rendering pipeline targeting an offscreen texture
-- Supports both deferred and forward `ShadingMode` per config
+- Supports both deferred and solid forward `ShadingMode` per config
 - Used for thumbnails, material previews, scene screenshots
 
 **Validation tasks (Phase 5E):**
 
 1. Render scene offscreen in deferred mode → verify GBuffer + lighting
-2. Render scene offscreen in forward mode → verify direct SceneColor
+2. Render scene offscreen in solid forward mode → verify direct SceneColor
 3. Read back offscreen texture → verify content matches expectations
 4. Thumbnail scenario: render at reduced resolution → verify correct output
 
@@ -126,6 +138,10 @@ deferred lighting, post-process. Full fidelity but higher GPU cost.
 Lightweight forward pipeline: no GBuffer allocation, BasePass writes
 directly to SceneColor with forward lighting. Lower cost, suitable for
 thumbnails and material previews.
+
+Forward wireframe/debug rendering may reuse the opaque/masked draw selection
+without GBuffer publication, but it does not close this solid forward
+contract.
 
 ### 3.3 Configuration
 
@@ -200,7 +216,7 @@ preserved during the Vortex migration.
 ### 6.3 ForOffscreenScene Tests
 
 1. Offscreen deferred → read back → verify lit scene
-2. Offscreen forward → read back → verify lit scene (no GBuffer)
+2. Offscreen solid forward → read back → verify lit scene (no GBuffer)
 3. Thumbnail (256×256) → read back → verify correct downscaled output
 4. Material preview → read back → verify material appearance
 
@@ -216,6 +232,9 @@ Per PRD §6.6, validate these variants:
 
 Each variant must compile, run, and produce expected output (capability-
 gated stages are null-safe no-ops).
+
+VTX-M06C tracks this Phase 5F closeout in
+[../plan/VTX-M06C-feature-gated-runtime-variants.md](../plan/VTX-M06C-feature-gated-runtime-variants.md).
 
 ## 7. Open Questions
 

@@ -21,6 +21,29 @@
 #include "DemoShell/Services/SkyboxService.h"
 
 namespace oxygen::examples {
+namespace {
+
+auto CubeLayoutFromSkyboxLayout(const SkyboxService::Layout layout)
+  -> content::import::CubeMapImageLayout
+{
+  using content::import::CubeMapImageLayout;
+
+  switch (layout) {
+  case SkyboxService::Layout::kHorizontalCross:
+    return CubeMapImageLayout::kHorizontalCross;
+  case SkyboxService::Layout::kVerticalCross:
+    return CubeMapImageLayout::kVerticalCross;
+  case SkyboxService::Layout::kHorizontalStrip:
+    return CubeMapImageLayout::kHorizontalStrip;
+  case SkyboxService::Layout::kVerticalStrip:
+    return CubeMapImageLayout::kVerticalStrip;
+  case SkyboxService::Layout::kEquirectangular:
+    return CubeMapImageLayout::kUnknown;
+  }
+  return CubeMapImageLayout::kUnknown;
+}
+
+} // namespace
 
 SkyboxService::SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
   observer_ptr<scene::Scene> scene)
@@ -28,6 +51,8 @@ SkyboxService::SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
   , scene_(scene)
 {
 }
+
+SkyboxService::~SkyboxService() { ReleasePinnedResource(); }
 
 auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const LoadOptions& options, LoadCallback on_complete) -> void
@@ -151,8 +176,9 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
     desc.mip_filter = MipFilter::kKaiser;
     desc.mip_filter_space = ColorSpace::kLinear;
 
+    const auto layout = CubeLayoutFromSkyboxLayout(options.layout);
     auto layout_result = ImportCubeMapFromLayoutImage(
-      img_path, desc, D3D12PackingPolicy::Instance());
+      img_path, layout, desc, D3D12PackingPolicy::Instance());
 
     if (!layout_result.has_value()) {
       result.status_message = to_string(layout_result.error());
@@ -216,6 +242,9 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
 
       if (!tex) {
         callback_result.status_message = "Skybox texture upload failed";
+      } else if (!PinCurrentResource(resource_key)) {
+        callback_result.status_message
+          = "Skybox texture loaded but could not be pinned";
       } else {
         current_resource_key_ = resource_key;
         callback_result.success = true;
@@ -248,12 +277,19 @@ auto SkyboxService::LoadAndEquip(const std::string& file_path,
 
 auto SkyboxService::SetSkyboxResourceKey(content::ResourceKey key) -> void
 {
+  if (asset_loader_ && key != content::ResourceKey { 0U }
+    && asset_loader_->HasTexture(key)) {
+    static_cast<void>(PinCurrentResource(key));
+  } else if (key != pinned_resource_key_) {
+    ReleasePinnedResource();
+  }
   current_resource_key_ = key;
 }
 
 auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
 {
-  if (!scene_ || current_resource_key_ == content::ResourceKey { 0U }) {
+  if (!scene_ || current_resource_key_ == content::ResourceKey { 0U }
+    || (!params.enable_sky_sphere && !params.enable_sky_light)) {
     return;
   }
 
@@ -261,46 +297,83 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
   if (!env) {
     auto new_env = std::make_unique<scene::SceneEnvironment>();
 
-    auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
-    sky.SetEnabled(true);
-    sky.SetSource(scene::environment::SkySphereSource::kCubemap);
-    sky.SetCubemapResource(current_resource_key_);
-    sky.SetIntensity(params.sky_sphere_intensity);
+    if (params.enable_sky_sphere) {
+      auto& sky = new_env->AddSystem<scene::environment::SkySphere>();
+      sky.SetEnabled(true);
+      sky.SetSource(scene::environment::SkySphereSource::kCubemap);
+      sky.SetCubemapResource(current_resource_key_);
+      sky.SetIntensity(params.sky_sphere_intensity);
+    }
 
-    auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
-    sky_light.SetEnabled(true);
-    sky_light.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
-    sky_light.SetCubemapResource(current_resource_key_);
-    sky_light.SetIntensityMul(params.intensity_mul);
-    sky_light.SetDiffuseIntensity(params.diffuse_intensity);
-    sky_light.SetSpecularIntensity(params.specular_intensity);
-    sky_light.SetTintRgb(params.tint_rgb);
+    if (params.enable_sky_light) {
+      auto& sky_light = new_env->AddSystem<scene::environment::SkyLight>();
+      sky_light.SetEnabled(true);
+      sky_light.SetSource(
+        scene::environment::SkyLightSource::kSpecifiedCubemap);
+      sky_light.SetCubemapResource(current_resource_key_);
+      sky_light.SetIntensityMul(params.intensity_mul);
+      sky_light.SetDiffuseIntensity(params.diffuse_intensity);
+      sky_light.SetSpecularIntensity(params.specular_intensity);
+      sky_light.SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
+      sky_light.SetTintRgb(params.tint_rgb);
+    }
 
     scene_->SetEnvironment(std::move(new_env));
   } else {
-    auto sky = env->TryGetSystem<scene::environment::SkySphere>();
-    if (!sky) {
-      auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
-      sky = observer_ptr(&sky_ref);
+    if (params.enable_sky_sphere) {
+      auto sky = env->TryGetSystem<scene::environment::SkySphere>();
+      if (!sky) {
+        auto& sky_ref = env->AddSystem<scene::environment::SkySphere>();
+        sky = observer_ptr(&sky_ref);
+      }
+      sky->SetEnabled(true);
+      sky->SetSource(scene::environment::SkySphereSource::kCubemap);
+      sky->SetCubemapResource(current_resource_key_);
+      sky->SetIntensity(params.sky_sphere_intensity);
     }
-    sky->SetEnabled(true);
-    sky->SetSource(scene::environment::SkySphereSource::kCubemap);
-    sky->SetCubemapResource(current_resource_key_);
-    sky->SetIntensity(params.sky_sphere_intensity);
 
-    auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
-    if (!sky_light) {
-      auto& sky_light_ref = env->AddSystem<scene::environment::SkyLight>();
-      sky_light = observer_ptr(&sky_light_ref);
+    if (params.enable_sky_light) {
+      auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
+      if (!sky_light) {
+        auto& sky_light_ref = env->AddSystem<scene::environment::SkyLight>();
+        sky_light = observer_ptr(&sky_light_ref);
+      }
+      sky_light->SetEnabled(true);
+      sky_light->SetSource(
+        scene::environment::SkyLightSource::kSpecifiedCubemap);
+      sky_light->SetCubemapResource(current_resource_key_);
+      sky_light->SetIntensityMul(params.intensity_mul);
+      sky_light->SetDiffuseIntensity(params.diffuse_intensity);
+      sky_light->SetSpecularIntensity(params.specular_intensity);
+      sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
+      sky_light->SetTintRgb(params.tint_rgb);
     }
-    sky_light->SetEnabled(true);
-    sky_light->SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
-    sky_light->SetCubemapResource(current_resource_key_);
-    sky_light->SetIntensityMul(params.intensity_mul);
-    sky_light->SetDiffuseIntensity(params.diffuse_intensity);
-    sky_light->SetSpecularIntensity(params.specular_intensity);
-    sky_light->SetTintRgb(params.tint_rgb);
   }
+}
+
+auto SkyboxService::PinCurrentResource(content::ResourceKey key) -> bool
+{
+  if (!asset_loader_ || key == content::ResourceKey { 0U }) {
+    return false;
+  }
+  if (key == pinned_resource_key_) {
+    return true;
+  }
+  if (!asset_loader_->PinResource(key)) {
+    return false;
+  }
+  ReleasePinnedResource();
+  pinned_resource_key_ = key;
+  return true;
+}
+
+auto SkyboxService::ReleasePinnedResource() noexcept -> void
+{
+  if (!asset_loader_ || pinned_resource_key_ == content::ResourceKey { 0U }) {
+    return;
+  }
+  static_cast<void>(asset_loader_->UnpinResource(pinned_resource_key_));
+  pinned_resource_key_ = content::ResourceKey { 0U };
 }
 
 auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
@@ -319,6 +392,7 @@ auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
     sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
+    sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
     sky_light->SetTintRgb(params.tint_rgb);
   }
 }
