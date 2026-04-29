@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Oxygen.Core;
 using Oxygen.Editor.World.Serialization;
@@ -57,6 +58,7 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     public static GameComponent CreateAndHydrate(ComponentData data)
     {
         ArgumentNullException.ThrowIfNull(data);
+        EnsureBuiltInFactories();
         var dtoType = data.GetType();
         return Factories.TryGetValue(dtoType, out var factory)
             ? factory(data)
@@ -96,5 +98,16 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     {
         ArgumentNullException.ThrowIfNull(creator);
         Factories[typeof(TDto)] = dto => creator((TDto)dto);
+    }
+
+    private static void EnsureBuiltInFactories()
+    {
+        RuntimeHelpers.RunClassConstructor(typeof(TransformComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(GeometryComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(PerspectiveCamera).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(OrthographicCamera).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(DirectionalLightComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(PointLightComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
     }
 }

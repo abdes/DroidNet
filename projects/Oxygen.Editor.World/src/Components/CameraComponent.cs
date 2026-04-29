@@ -13,15 +13,26 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 public abstract partial class CameraComponent : GameComponent
 {
+    private float nearPlane = 0.1f;
+    private float farPlane = 1000f;
+
     /// <summary>
     /// Gets or sets the near clipping plane distance.
     /// </summary>
-    public float NearPlane { get; set; } = 0.1f;
+    public float NearPlane
+    {
+        get => this.nearPlane;
+        set => _ = this.SetProperty(ref this.nearPlane, value);
+    }
 
     /// <summary>
     /// Gets or sets the far clipping plane distance.
     /// </summary>
-    public float FarPlane { get; set; } = 1000f;
+    public float FarPlane
+    {
+        get => this.farPlane;
+        set => _ = this.SetProperty(ref this.farPlane, value);
+    }
 
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
