@@ -228,10 +228,11 @@ Validation evidence:
 - CDB/debug-layer runtime audit passed for `Oxygen.Examples.RenderScene.exe -v=-1 --frames 40 --fps 0 --capture-provider off`; log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.cdb.log` records exit code 0, no D3D12/DXGI errors after excluding the known non-blocking live `IDXGIFactory` shutdown warning, no device removal/hang, and no access violation.
 - RenderDoc capture passed for `RenderScene -v=-1 --frames 100 --fps 0 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.rdc --capture-from-frame 75 --capture-frame-count 1`; capture `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity_capture.rdc` was produced.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Verify-VortexSkyboxProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity_capture.rdc -CaptureReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.vortex-skybox.txt -AnalysisTimeoutSeconds 240` passed. The report proves one `Vortex.Stage15.Sky` scope, one sky draw, zero `Vortex.Stage15.Atmosphere` scopes, `atmosphere_enabled=0`, cubemap `SkySphere` source/enabled/texture-domain descriptor state, authored `sky_sphere_intensity=1000`, one `SceneColor` output, non-black Stage-15 sky samples, and 25/25 non-black Stage-22 tonemap sky samples.
+- `RenderScene --frames 65 --fps 0 --capture-provider off` passed with startup SkySphere cubemap enabled from local demo settings; runtime log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log` records the startup skybox route and 65 `Vortex.SceneTextureLeasePool.Churn` telemetry records.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Assert-VortexSkyboxAllocationChurn.ps1 -RuntimeLogPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log -RunFrames 65 -WarmupFrames 5 -ReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.allocation-churn.txt` passed. The report proves `telemetry_frame_count=65`, `steady_state_frame_count=60`, `steady_state_allocations_after_warmup=0`, `steady_state_allocations_zero=true`, and `overall_verdict=pass`.
 - `git diff --check` passed.
 
 Remaining gaps:
 
-- Allocation-churn proof and user visual confirmation are still required before
-  Slice C can be closed.
+- User visual confirmation is still required before Slice C can be closed.
 - Deferred static SkyLight diffuse consumption remains open.
