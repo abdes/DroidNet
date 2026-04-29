@@ -321,6 +321,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (!startup_skybox_path.empty()) {
       LOG_F(INFO, "Parsed startup-skybox option = {}", startup_skybox_path);
     }
+    const bool explicit_startup_skybox = !startup_skybox_path.empty();
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
     }
@@ -344,14 +345,26 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           settings->GetFloat(std::string(prefix) + ".z").value_or(fallback.z),
         };
       };
+      constexpr int kSkySphereSourceCubemap = 0;
+      constexpr int kSkyLightSourceSpecifiedCubemap = 1;
+      const bool sky_sphere_enabled
+        = settings->GetBool("env.sky_sphere.enabled").value_or(false);
+      const int sky_sphere_source
+        = read_int("env.sky_sphere.source", kSkySphereSourceCubemap);
+      const bool sky_light_enabled
+        = settings->GetBool("env.sky_light.enabled").value_or(false);
+      const int sky_light_source
+        = read_int("env.sky_light.source", kSkyLightSourceSpecifiedCubemap);
+      const bool sky_sphere_requests_cubemap = sky_sphere_enabled
+        && sky_sphere_source == kSkySphereSourceCubemap;
+      const bool sky_light_requests_cubemap = sky_light_enabled
+        && sky_light_source == kSkyLightSourceSpecifiedCubemap;
+      if (!explicit_startup_skybox) {
+        app.startup_skybox_enable_sky_sphere = sky_sphere_requests_cubemap;
+        app.startup_skybox_enable_sky_light = sky_light_requests_cubemap;
+      }
       if (startup_skybox_path.empty()) {
-        constexpr int kSkySphereSourceCubemap = 0;
-        const bool sky_sphere_enabled
-          = settings->GetBool("env.sky_sphere.enabled").value_or(false);
-        const int sky_sphere_source
-          = read_int("env.sky_sphere.source", kSkySphereSourceCubemap);
-        if (sky_sphere_enabled
-          && sky_sphere_source == kSkySphereSourceCubemap) {
+        if (sky_sphere_requests_cubemap || sky_light_requests_cubemap) {
           startup_skybox_path
             = settings->GetString("env.skybox.path").value_or(std::string {});
         }
@@ -396,12 +409,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (!app.startup_skybox_path.empty()) {
       LOG_F(INFO,
         "Resolved startup skybox path='{}' layout={} output={} face_size={} "
-        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} sky_intensity={}",
+        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} sky_intensity={} "
+        "enable_sky_sphere={} enable_sky_light={}",
         app.startup_skybox_path, app.startup_skybox_layout,
         app.startup_skybox_output_format, app.startup_skybox_face_size,
         app.startup_skybox_flip_y, app.startup_skybox_tonemap_hdr_to_ldr,
         app.startup_skybox_hdr_exposure_ev,
-        app.startup_sky_sphere_intensity);
+        app.startup_sky_sphere_intensity, app.startup_skybox_enable_sky_sphere,
+        app.startup_skybox_enable_sky_light);
     }
     LOG_F(INFO, "Resolved directional shadow policy = {}",
       app.directional_shadow_policy);

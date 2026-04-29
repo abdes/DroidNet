@@ -83,6 +83,8 @@ public:
 
   //! Sky lighting parameters.
   struct SkyLightParams {
+    bool enable_sky_sphere { true };
+    bool enable_sky_light { true };
     //! Scene-linear sky background radiance scale; 1.0 is imported-texel
     //! identity, not a physically calibrated daylight brightness guarantee.
     float sky_sphere_intensity { 1.0F };
