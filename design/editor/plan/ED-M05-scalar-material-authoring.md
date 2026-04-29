@@ -118,8 +118,8 @@ ED-M05 includes:
   `Source -> Cooked -> Stale -> Missing/Broken` for the material slice.
 - Refresh the Geometry material picker from the live catalog when its flyout is
   opened; watcher/index delivery is not enough for a user-visible picker.
-- Route live material assignment sync warnings through the existing
-  `Unsupported` policy; do not wire engine material override APIs in ED-M05.
+- Route live material assignment through the scene command/live-sync surface;
+  descriptor URIs are mapped to cooked `.omat` runtime paths by the sync layer.
 - Add focused non-UI tests and prepare exact manual validation scenarios.
 
 ## 5. Non-Scope
@@ -227,7 +227,8 @@ Tasks:
   - `OXE.ASSETID.MATERIAL.Missing`
   - `OXE.ASSETID.MATERIAL.Broken`
   - `OXE.ASSETID.MATERIAL.NotCooked`
-  - `OXE.LIVESYNC.MATERIAL.Unsupported`
+  - `OXE.LIVESYNC.MATERIAL.Rejected`
+  - `OXE.LIVESYNC.MATERIAL.Failed`
 - Define shared ED-M05 records in their owning projects:
   - `MaterialCookRequest`, `MaterialCookResult`, `MaterialCookState` →
     `Oxygen.Editor.ContentPipeline`.
@@ -514,7 +515,7 @@ Likely existing files/projects:
 | UI becomes a generic JSON form. | Build a focused material editor with grouped scalar controls, swatch preview, state strip, and advanced/raw disclosure. |
 | Missing material references get auto-cleared. | Missing URI remains persisted; picker/slot show missing state and re-pick/clear affordances. |
 | Filesystem watcher refresh is flaky. | Test service/catalog state directly; validate visible row transitions manually. |
-| Engine material preview scope leaks in. | CPU swatch only; live scene material sync remains `Unsupported`. |
+| Engine material preview scope leaks in. | CPU swatch only; scene preview uses the Geometry material slot override path, not a material-editor preview renderer. |
 
 ## 9. Manual Validation Script
 
@@ -545,8 +546,8 @@ The user should validate these visually after implementation and build:
     shows `--`; picking one material assigns it to both with one undo entry.
 12. Delete or rename the material descriptor outside the editor, then reopen or
     refresh. The assigned slot shows missing/broken state but preserves the URI.
-13. Verify live sync unsupported appears as a warning and does not block the
-    scene edit.
+13. Verify live material override sync does not block the scene edit; runtime
+    rejection/failure appears as a warning/error operation result.
 
 ## 10. Code/Test Validation Gates
 
@@ -576,8 +577,8 @@ ED-M05 cannot be called landed until these are true:
    build phase produces loose cooked output, and exposes cooked material through
    `LooseCookedIndexAssetCatalog`.
 10. Geometry assignment test: picker result URI flows into
-    `EditMaterialSlotAsync`, persists round-trip, and live sync unsupported is
-    non-blocking.
+    `EditMaterialSlotAsync`, persists round-trip, and live sync maps the
+    descriptor URI to the cooked `.omat` runtime path without blocking the edit.
 11. Manual validation script above is completed by the user.
 
 ## 11. Status Ledger Hook

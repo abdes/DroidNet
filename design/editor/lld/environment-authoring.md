@@ -4,9 +4,10 @@ Status: `ED-M04 implementation-ready`
 
 ## 1. Purpose
 
-Concrete design for V0.1 scene environment authoring: atmosphere on/off, sun
-binding, exposure, and tone mapping. ED-M04 owns authoring data, the
-scene-level inspector section, persistence, validation, command/undo, and the
+Concrete design for V0.1 scene environment authoring: sky atmosphere, sun
+binding, and background intent, plus the adjacent scene-level post-processing
+controls that affect preview and descriptor output. ED-M04 owns authoring data,
+scene-level inspector sections, persistence, validation, command/undo, and the
 live-sync request boundary. Cook output and runtime parity are validated by
 ED-M07 / ED-M08 and consume the data shape defined here.
 
@@ -39,64 +40,55 @@ ED-M07 / ED-M08 and consume the data shape defined here.
 
 Concrete state of the code:
 
-- `Oxygen.Editor.World/src/Scene.cs` exposes `RootNodes`, `ExplorerLayout`,
-  `Project`. **No `Environment` member.**
-- `Oxygen.Editor.World/src/Serialization/SceneData.cs` defines
-  `RootNodes : IList<SceneNodeData>` and `ExplorerLayout :
-  IList<ExplorerEntryData>?`. **No environment field.**
-- `DirectionalLightComponent` already carries `IsSunLight : bool` (default
-  `true`) and `EnvironmentContribution : bool` (default `true`).
-  `DirectionalLightData` mirrors both.
-- `SceneEngineSync` applies directional light components via `AttachLightAsync`
-  including the sun/environment-contribution flags. There is **no environment
-  adapter** today (no atmosphere call, no exposure call, no tone-mapping
-  call).
-- `IEngineSettings` / `EngineSettingsService` carry process-startup engine
-  config; renderer/post-process state is engine-default at runtime.
-
-Brownfield gap summary: scene environment intent is implicit in
-`DirectionalLightComponent` flags; the rest of the desired V0.1 surface
-(atmosphere toggle, exposure, tone mapping) has no authoring storage and no
-sync surface.
+- `Oxygen.Editor.World/src/Scene.cs` exposes `Scene.Environment` and normalizes
+  missing/null nested environment data on hydrate and set.
+- `Oxygen.Editor.World/src/Serialization/SceneData.cs` persists
+  `SceneEnvironmentData` alongside `RootNodes` and `ExplorerLayout`.
+- `DirectionalLightComponent` carries `IsSunLight` and
+  `EnvironmentContribution`; `Scene.Environment.Edit` keeps sun binding and
+  light flags coherent in one undo entry.
+- `SceneEngineSync.UpdateEnvironmentAsync` owns the live-sync boundary. V0.1
+  syncs sun binding through existing light paths and queues scene-level updates
+  for native `SkyAtmosphere` and `PostProcessVolume` systems. Background color
+  remains authored/persisted intent until a native clear/background API is
+  exposed.
+- `IEngineSettings` / `EngineSettingsService` remain process-startup engine
+  config only. They do not store scene environment data.
 
 ## 5. Schema Decision
 
-The Oxygen engine **scene descriptor** does not currently expose an environment
-sub-schema that the editor can consume directly: native engine state for
-atmosphere/exposure/tone-mapping is set imperatively at runtime. The Oxygen
-material descriptor (`oxygen.material.v1`) is unrelated. There is therefore no
-existing engine JSON schema that fits as-is.
+The Oxygen native **scene descriptor** contains an `environment.sky_atmosphere`
+block. The editor authoring model mirrors the V0.1 scalar subset needed to
+produce that native block without inventing an editor-only JSON schema. The
+Oxygen material descriptor (`oxygen.material.v1`) is unrelated.
 
 Decision (recorded for ED-M04):
 
 1. **Augment editor scene authoring** with a new `SceneEnvironmentData`
    record persisted inside `SceneData`. This is the editor authoring source of
    truth for V0.1.
-2. Field names and units mirror what the engine's renderer subsystems already
-   consume (lux, EV stops, ACES/Reinhard tone-map identifiers) so ED-M07's
-   cook step can emit a 1:1 engine descriptor without translating concepts.
-3. ED-M07 owns the cook output: it emits a parallel descriptor (proposed
-   filename `<scene>.env.json` or an inline block in the cooked scene
-   descriptor; final shape decided by ED-M07). The editor authoring schema
-   defined here is stable for ED-M04.
-4. If a future engine-side environment descriptor schema lands (proposed name
-   `oxygen.scene.environment.v1`), `SceneEnvironmentData` becomes a 1:1
-   shadow. ED-M04 introduces no compatibility shim because no engine schema
-   exists yet.
-
-This is an "augment editor schema now, propose engine schema later" path. It
-is not a parallel format introduced for UI convenience; it captures real
-authored intent that has no engine-side home today.
+2. Field names and units mirror the native descriptor where the descriptor has
+   fields today: meters for planet/atmosphere/scattering lengths, linear RGB
+   for albedo and luminance factors, dimensionless scalars for Mie anisotropy
+   and aerial controls.
+3. Exposure, tone mapping, bloom, and color grading are post-processing
+   controls, not environment controls. They are stored in
+   `SceneEnvironmentData` only because the V0.1 scene DTO has one
+   scene-settings record; the inspector renders them in separate
+   domain-specific sections and live sync maps them to native
+   `PostProcessVolume`.
+4. ED-M07 cook output embeds the authored sky-atmosphere subset into the native
+   scene descriptor. ED-M08 validates runtime parity from that cooked output.
 
 ## 6. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
 | `Oxygen.Editor.World` | `SceneEnvironmentData` DTO, `Scene.Environment` runtime accessor, defaults, hydrate/dehydrate. |
-| `Oxygen.Editor.WorldEditor` Inspector | Environment section UI (`SelectionPolicy.SceneOnly`). |
+| `Oxygen.Editor.WorldEditor` Inspector | Scene-level Sky Atmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background sections (`SelectionPolicy.SceneOnly`). |
 | `Oxygen.Editor.WorldEditor` Commands | `Scene.Environment.Edit`, undo, dirty, sync request. |
-| `Oxygen.Editor.WorldEditor` Services / `SceneEngineSync` | Environment sync adapter; sun-binding mapping to engine API. |
-| `Oxygen.Editor.Runtime` | Engine readiness; surfaces missing-API as `Unsupported`. |
+| `Oxygen.Editor.WorldEditor` Services / `SceneEngineSync` | Scene-settings sync adapter; sun-binding, sky-atmosphere, and post-process mapping to engine API. |
+| `Oxygen.Editor.Runtime` | Engine readiness; surfaces missing API such as background color as `Unsupported`. |
 
 ## 7. Data Contracts
 
@@ -107,28 +99,76 @@ public sealed record SceneEnvironmentData
 {
     public bool AtmosphereEnabled { get; init; } = true;
 
+    public SkyAtmosphereEnvironmentData SkyAtmosphere { get; init; } = new();
+
     // Reference to the DirectionalLight node intended as the sun.
     // null = no sun bound. Stored as a node Guid that resolves to a node
     // owning a DirectionalLightComponent. The component's IsSunLight flag
     // is kept in sync by Scene.Environment.Edit (see §8.4).
     public Guid? SunNodeId { get; init; }
 
+    // Legacy mirror fields kept only for old call sites; PostProcess is the
+    // native-parity source of truth and Dehydrate normalizes these from it.
     public ExposureMode ExposureMode { get; init; } = ExposureMode.Auto;
-
-    // EV stops applied on top of the chosen ExposureMode.
-    // Range [-10, 10]; clamped on commit.
+    public float ManualExposureEv { get; init; } = 9.7f;
     public float ExposureCompensation { get; init; } = 0f;
+    public ToneMappingMode ToneMapping { get; init; } = ToneMappingMode.AcesFitted;
 
-    public ToneMappingMode ToneMapping { get; init; } = ToneMappingMode.Aces;
+    public PostProcessEnvironmentData PostProcess { get; init; } = new();
 
     // Optional clear/sky color when AtmosphereEnabled = false.
     // Linear RGB in [0,1]^3.
     public Vector3 BackgroundColor { get; init; } = new(0f, 0f, 0f);
 }
 
-public enum ExposureMode { Auto, Manual }
+public enum ExposureMode { Manual = 0, ManualCamera = 1, Auto = 2 }
 
-public enum ToneMappingMode { None, Aces, Reinhard, Filmic }
+public enum ToneMappingMode { None = 0, AcesFitted = 1, Filmic = 2, Reinhard = 3 }
+
+public enum MeteringMode { Average = 0, CenterWeighted = 1, Spot = 2 }
+
+public sealed record SkyAtmosphereEnvironmentData
+{
+    public float PlanetRadiusMeters { get; init; } = 6_360_000.0f;
+    public float AtmosphereHeightMeters { get; init; } = 80_000.0f;
+    public Vector3 GroundAlbedoRgb { get; init; } = new(0.4f, 0.4f, 0.4f);
+    public float RayleighScaleHeightMeters { get; init; } = 8_000.0f;
+    public float MieScaleHeightMeters { get; init; } = 1_200.0f;
+    public float MieAnisotropy { get; init; } = 0.8f;
+    public Vector3 SkyLuminanceFactorRgb { get; init; } = Vector3.One;
+    public float AerialPerspectiveDistanceScale { get; init; } = 1.0f;
+    public float AerialScatteringStrength { get; init; } = 1.0f;
+    public float AerialPerspectiveStartDepthMeters { get; init; }
+    public float HeightFogContribution { get; init; } = 1.0f;
+    public bool SunDiskEnabled { get; init; } = true;
+}
+
+public sealed record PostProcessEnvironmentData
+{
+    public ToneMappingMode ToneMapper { get; init; } = ToneMappingMode.AcesFitted;
+    public ExposureMode ExposureMode { get; init; } = ExposureMode.Auto;
+    public bool ExposureEnabled { get; init; } = true;
+    public float ExposureCompensationEv { get; init; }
+    public float ExposureKey { get; init; } = 10.0f;
+    public float ManualExposureEv { get; init; } = 9.7f;
+    public float AutoExposureMinEv { get; init; } = -6.0f;
+    public float AutoExposureMaxEv { get; init; } = 16.0f;
+    public float AutoExposureSpeedUp { get; init; } = 3.0f;
+    public float AutoExposureSpeedDown { get; init; } = 1.0f;
+    public MeteringMode AutoExposureMeteringMode { get; init; } = MeteringMode.Average;
+    public float AutoExposureLowPercentile { get; init; } = 0.1f;
+    public float AutoExposureHighPercentile { get; init; } = 0.9f;
+    public float AutoExposureMinLogLuminance { get; init; } = -12.0f;
+    public float AutoExposureLogLuminanceRange { get; init; } = 25.0f;
+    public float AutoExposureTargetLuminance { get; init; } = 0.18f;
+    public float AutoExposureSpotMeterRadius { get; init; } = 0.2f;
+    public float BloomIntensity { get; init; }
+    public float BloomThreshold { get; init; } = 1.0f;
+    public float Saturation { get; init; } = 1.0f;
+    public float Contrast { get; init; } = 1.0f;
+    public float VignetteIntensity { get; init; }
+    public float DisplayGamma { get; init; } = 2.2f;
+}
 ```
 
 ### 7.2 `SceneData` extension
@@ -163,10 +203,27 @@ emits the current value.
 | Field | Rule | Diagnostic code |
 | --- | --- | --- |
 | `AtmosphereEnabled` | bool | — |
+| `SkyAtmosphere.PlanetRadiusMeters` | finite, clamp minimum `1m` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.AtmosphereHeightMeters` | finite, clamp minimum `1m` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.GroundAlbedoRgb` | finite, clamp per-channel `[0,1]` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.RayleighScaleHeightMeters` | finite, clamp minimum `1m` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.MieScaleHeightMeters` | finite, clamp minimum `1m` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.MieAnisotropy` | finite, clamp `[-0.999,0.999]` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.SkyLuminanceFactorRgb` | finite, clamp minimum `0` per channel | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.AerialPerspectiveDistanceScale` | finite, clamp minimum `0` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.AerialScatteringStrength` | finite, clamp minimum `0` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.AerialPerspectiveStartDepthMeters` | finite, clamp minimum `0m` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.HeightFogContribution` | finite, clamp minimum `0` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` for non-finite |
+| `SkyAtmosphere.SunDiskEnabled` | bool | — |
 | `SunNodeId` | must resolve to a node owning a `DirectionalLightComponent`; `null` allowed | `OXE.SCENE.ENVIRONMENT.SunRefStale` (warning) |
-| `ExposureMode` | enum | `OXE.SCENE.ENVIRONMENT.ExposureMode.Invalid` |
-| `ExposureCompensation` | clamp `[-10, 10]` | clamp silently, no error |
-| `ToneMapping` | enum | `OXE.SCENE.ENVIRONMENT.ToneMapping.Invalid` |
+| `PostProcess.ExposureMode` | native enum ordinal: `Manual=0`, `ManualCamera=1`, `Auto=2` | `OXE.SCENE.ENVIRONMENT.ExposureMode.Invalid` |
+| `PostProcess.ExposureEnabled` | bool | — |
+| `PostProcess.ManualExposureEv` | finite, clamp `[-24, 24]` | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` for non-finite |
+| `PostProcess.ExposureCompensationEv` | finite | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` for non-finite |
+| `PostProcess.ExposureKey` | finite, clamp minimum `0.001` | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` for non-finite |
+| `PostProcess.ToneMapper` | native enum ordinal: `None=0`, `AcesFitted=1`, `Filmic=2`, `Reinhard=3` | `OXE.SCENE.ENVIRONMENT.ToneMapping.Invalid` |
+| `PostProcess.AutoExposure*` | finite; min/max EV sorted; speeds/ranges/luminance/radius clamped to valid native ranges | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` for non-finite |
+| `PostProcess.BloomIntensity`, `BloomThreshold`, `Saturation`, `Contrast`, `VignetteIntensity`, `DisplayGamma` | finite; non-negative where native expects non-negative, vignette `[0,1]`, gamma minimum `0.001` | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` for non-finite |
 | `BackgroundColor` | clamp per-channel `[0, 1]` | clamp silently |
 
 ## 8. Commands, Services, Adapters
@@ -225,10 +282,9 @@ Implementation in `SceneEngineSync` calls per-field engine APIs:
 
 | Field | Engine call (when API exists) | If absent |
 | --- | --- | --- |
-| `AtmosphereEnabled` | renderer atmosphere toggle | `Unsupported` warning, value persisted |
+| `AtmosphereEnabled` + `SkyAtmosphere` | queued native `SkyAtmosphere` scene-system update | `Unsupported` warning, value persisted and cooked |
 | `SunNodeId` | propagate via existing `AttachLightAsync` for the new sun light, or by re-applying `IsSunLight`/`EnvironmentContribution` | falls through existing light sync |
-| `ExposureMode` + `ExposureCompensation` | renderer exposure call | `Unsupported` warning |
-| `ToneMapping` | renderer tone-map call | `Unsupported` warning |
+| `PostProcess` | queued native `PostProcessVolume` update. ED-M04 maps every authored field with native enum ordinals and names: exposure mode, enabled flag, key, manual EV, compensation EV, auto-exposure range/speeds/metering/histogram/window/target/spot radius, tone mapper, bloom, saturation, contrast, vignette, display gamma. | `Unsupported` warning only when the runtime API is unavailable |
 | `BackgroundColor` | renderer clear-color call | `Unsupported` warning |
 
 The adapter never throws when an API is missing. It returns a result aggregating
@@ -236,33 +292,94 @@ per-field statuses (see [live-engine-sync.md](./live-engine-sync.md) §7).
 
 ## 9. UI Surfaces
 
-The Environment section is visible:
+The scene-level settings sections are visible:
 
 - when no scene node is selected (empty selection state shows "Scene"),
-- through a "Scene → Environment" entry from the inspector breadcrumb at any
-  time (selection-independent affordance),
 - never as a fake component on a node.
 
 ```text
 +--------------------------------------------------------------+
-| [icon] Environment                                  [^/v]    |
-|        Atmosphere, sun, exposure, tone mapping.              |
+| [icon] Sky Atmosphere                              [^/v]      |
+|        Atmospheric sky and aerial perspective.                |
 +--------------------------------------------------------------+
-| Atmosphere   [x] enabled                                     |
-| Sun          [v] DirectionalLight 01           [Bind] [X]    |
-|              ! Stale reference (node deleted)                |
-| Exposure     [Auto v]   Comp [ +0.0 ] EV                     |
-| Tone Map     [ACES v]                                        |
-| > Advanced                                                   |
-|   Background [swatch] 0.00 0.00 0.00                         |
+| Enabled       [ On ]                                          |
+| Sun Disk      [x] Visible                                     |
+| Planet Radius [ 6360.000 ] km                                 |
+| Atmos. Height [   80.000 ] km                                 |
+| Ground Albedo X [0.400] Y [0.400] Z [0.400]                  |
+| Rayleigh Hgt. [    8.000 ] km                                 |
+| Mie Height    [    1.200 ] km                                 |
+| Mie Anisot.   [    0.800 ]                                    |
+| Sky Luminance X [1.000] Y [1.000] Z [1.000]                  |
+| Aerial Dist.  [    1.000 ]                                    |
+| Aerial Str.   [    1.000 ]                                    |
+| Aerial Start  [    0.000 ] m                                  |
+| Height Fog    [    1.000 ]                                    |
 +--------------------------------------------------------------+
-| ! Live preview of exposure/tone-mapping unavailable in       |
-|   current engine API. Authoring saved.                       |
+| [icon] Sun Binding                                 [^/v]      |
++--------------------------------------------------------------+
+| Sun Light     [ DirectionalLight 01 v ]          [clear]      |
+| ! Stale reference (node deleted)                              |
++--------------------------------------------------------------+
+| [icon] Exposure                                     [^/v]      |
++--------------------------------------------------------------+
+| Enabled       [ On ]                                          |
+| Mode          [ Auto v ]                                      |
+| Compensation  [    0.000 ] EV                                 |
+| Key           [   10.000 ]                                    |
+| Metering      [ Average v ]             (Auto only)            |
+| Auto Min EV   [   -6.000 ] EV100        (Auto only)            |
+| Auto Max EV   [   16.000 ] EV100        (Auto only)            |
+| Adapt Up      [    3.000 ] EV/s         (Auto only)            |
+| Adapt Down    [    1.000 ] EV/s         (Auto only)            |
+| Low Percent.  [    0.100 ]              (Auto only)            |
+| High Percent. [    0.900 ]              (Auto only)            |
+| Min Log Lum.  [  -12.000 ]              (Auto only)            |
+| Log Lum Range [   25.000 ]              (Auto only)            |
+| Target Lum.   [    0.180 ]              (Auto only)            |
+| Spot Radius   [    0.200 ]              (Auto only)            |
+| Manual EV     [    9.700 ] EV100        (Manual/Camera only)   |
++--------------------------------------------------------------+
+| [icon] Tone Mapping                                [^/v]       |
++--------------------------------------------------------------+
+| Mapper        [ ACES Fitted v ]                              |
+| Display Gamma [    2.200 ]              (hidden when None)     |
++--------------------------------------------------------------+
+| [icon] Bloom                                       [>/v]       |
++--------------------------------------------------------------+
+| Intensity     [    0.000 ]                                    |
+| Threshold     [    1.000 ]                                    |
++--------------------------------------------------------------+
+| [icon] Color Grading                               [>/v]       |
++--------------------------------------------------------------+
+| Saturation    [    1.000 ]              (hidden when None)     |
+| Contrast      [    1.000 ]              (hidden when None)     |
+| Vignette      [    0.000 ]              (hidden when None)     |
++--------------------------------------------------------------+
+| [icon] Background                                   [^/v]     |
++--------------------------------------------------------------+
+| Color         [swatch] X [0.00] Y [0.00] Z [0.00]             |
 +--------------------------------------------------------------+
 ```
 
 UI rules:
 
+- The scene-level sections appear only when the scene itself is selected / no
+  scene node is selected. They are not shown while editing a node.
+- Sections are top-aligned in the inspector, using the same property-section
+  composition as Transform/Geometry.
+- Atmosphere and post-processing scalar/vector rows use DroidNet property
+  sections, `DroidNet.Controls.NumberBox`, and
+  `DroidNet.Controls.VectorBox`; no bespoke numeric editor is introduced.
+- Exposure is its own section. `ManualExposureEv` is visible only for
+  `Manual` and `ManualCamera`; the auto metering/range/adaptation/histogram
+  rows are visible only for `Auto`. `ExposureCompensationEv` and
+  `ExposureKey` remain visible because native fixed and auto exposure both
+  consume them.
+- Tone Mapping is its own section. `DisplayGamma` is hidden when
+  `ToneMapper = None`.
+- Bloom is its own section and is independent of tone-mapper selection.
+- Color Grading is its own section and is hidden when `ToneMapper = None`.
 - Sun picker lists every node with a `DirectionalLightComponent`; selecting
   one issues `Scene.Environment.Edit { SunNodeId = id }` (which transitively
   flips `IsSunLight` per §8.4).
@@ -279,10 +396,14 @@ UI rules:
   type to the `JsonSerializerContext`).
 - Save → reopen reproduces all fields exactly. `SunNodeId` survives even when
   the target node is missing.
-- Defaults for new scenes are: `AtmosphereEnabled = true`, `SunNodeId = null`
+- Defaults for new scenes are: `AtmosphereEnabled = true`,
+  `SkyAtmosphere = new()`, `SunNodeId = null`
   (set automatically when the new scene's first directional light is created
-  if the scene template does so), `ExposureMode = Auto`, `Compensation = 0`,
-  `ToneMapping = Aces`, `BackgroundColor = (0,0,0)`.
+  if the scene template does so), `PostProcess = new()` using native
+  `PostProcessVolume` defaults (`ExposureMode = Auto`,
+  `ManualExposureEv = 9.7`, `ExposureKey = 10.0`,
+  `ExposureCompensationEv = 0`, `ToneMapper = AcesFitted`),
+  `BackgroundColor = (0,0,0)`.
 - Cook descriptor generation is ED-M07 scope. ED-M04 must persist the
   authored data unchanged.
 
@@ -301,8 +422,9 @@ Scene.Environment.Edit
         Failed                     authoring failed (validation only)
 ```
 
-Cook: ED-M07 reads `Scene.Environment` and emits the engine descriptor. ED-M04
-must not embed cook policy.
+Cook: ED-M07 reads `Scene.Environment` and emits the native scene descriptor
+`environment.sky_atmosphere` block for the supported sky-atmosphere subset.
+ED-M04 must not embed cook policy.
 
 Standalone parity: ED-M08 validates the cooked descriptor. ED-M04 only
 guarantees authored data is present.
@@ -312,6 +434,8 @@ guarantees authored data is present.
 | Failure | Domain | Code |
 | --- | --- | --- |
 | Invalid enum / out-of-range | `SceneAuthoring` | `OXE.SCENE.ENVIRONMENT.<Field>.Invalid` |
+| Invalid sky-atmosphere scalar/vector | `SceneAuthoring` | `OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid` |
+| Invalid manual exposure scalar | `SceneAuthoring` | `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid` |
 | Stale `SunNodeId` | `SceneAuthoring` (warning) | `OXE.SCENE.ENVIRONMENT.SunRefStale` |
 | Engine API missing for field | `LiveSync` | `OXE.LIVESYNC.ENVIRONMENT.<Field>.Unsupported` |
 | Engine rejected call | `LiveSync` | `OXE.LIVESYNC.ENVIRONMENT.Rejected` |
@@ -340,22 +464,30 @@ Forbidden:
 
 ED-M04 environment closure requires:
 
-1. New scene → Environment section shows defaults (Atmosphere on, no sun,
-   Auto/0/Aces, black background).
+1. New scene → scene-level settings show defaults (Atmosphere on, default sky
+   atmosphere scalar/vector rows, no sun, Auto/manual EV 9.7/compensation
+   0/Aces, black background).
 2. Toggle Atmosphere → save → reopen → state preserved.
 3. Bind sun to light A → A's `IsSunLight = true`, others `false`, single undo
    entry. Undo restores the previous configuration in one step.
 4. Delete the sun node externally → Environment section shows stale-warning row;
    binding survives reopen.
-5. Set `ExposureCompensation` to `+15` → clamped to `+10` silently; no error.
-6. With engine `Running` and exposure API available, edit shows visible
-   change in viewport. Without API, `Unsupported` warning appears at section
-   top; authored value persists.
+5. Set `ManualExposureEv` to a non-finite value → rejected with
+   `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid`; set `ExposureCompensation`
+   to `+15` → clamped to `+10` silently; no error.
+6. With engine `Running`, edits to sky-atmosphere and post-processing fields
+   queue native scene-system updates and show a visible viewport change for
+   visually observable values. Fields without a native API, such as background
+   color, return `Unsupported`; authored value persists.
 7. With engine not `Running`, edits succeed authoring-side, surface
    `LiveSync.SkippedNotRunning` warning.
-8. Round-trip JSON test: load `SceneData`, mutate every environment field,
-   serialize, deserialize, assert deep equality.
-9. No `SceneEnvironmentData` reference appears in `Oxygen.Editor` settings,
+8. Round-trip JSON test: load `SceneData`, mutate every environment field
+   including `SkyAtmosphere`, serialize, deserialize, assert deep equality.
+9. Null-safety test: loading a scene whose nested `SkyAtmosphere` is missing or
+   null normalizes to defaults and does not crash scene-load UI refresh.
+10. Cook descriptor generation test: authored sky atmosphere values appear in
+    native scene descriptor JSON with matching units.
+11. No `SceneEnvironmentData` reference appears in `Oxygen.Editor` settings,
    project, or runtime modules.
 
 ## 15. Open Issues
@@ -363,10 +495,5 @@ ED-M04 environment closure requires:
 - Whether `BackgroundColor` should also accept HDR (`> 1.0`) values for
   non-atmosphere clear. Default ED-M04: clamped `[0,1]`; revisit when engine
   HDR clear API is exposed.
-- Engine API coverage for atmosphere/exposure/tone-mapping toggles is
-  uncertain at ED-M04 start; the LLD assumes adapters return `Unsupported`
-  until confirmed during implementation. No authoring contract changes when
-  engine APIs land.
-- ED-M07 will choose between inline embedding in the cooked scene descriptor
-  vs. a sidecar `<scene>.env.json`; the editor authoring contract is
-  decoupled from that choice.
+- Background native descriptor/API coverage is deferred. V0.1 persists that
+  value and reports unsupported cook/live-sync coverage where applicable.

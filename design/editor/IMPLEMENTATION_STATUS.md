@@ -74,6 +74,12 @@ Current execution focus:
       filtering corrections.
 - [x] Validate `ED-M06A` manually before resuming `ED-M07`.
 - [x] Implement and manually validate `ED-M07` content pipeline and cooking.
+- [ ] Close every non-deferred V0.1 LLD gate before V0.1 acceptance. The only
+      deferred V0.1 feature is multi-viewport engine stability/support, by
+      explicit user decision. Current reopened gates include
+      `property-inspector` and `environment-authoring`, and any additional LLD
+      gate discovered during audit must be implemented rather than silently
+      narrowed.
 
 `ED-M02` may close in parallel with `ED-M03` LLD review and detailed planning.
 `ED-M03` implementation may not rely on live preview as validation evidence
@@ -82,8 +88,9 @@ until `ED-M02` is `validated`.
 Current resume point:
 
 1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Prepare `ED-M08` runtime parity and standalone validation LLD review and
-   detailed planning.
+2. Audit the accepted V0.1 LLDs and complete every non-deferred gate before
+   `ED-M08` parity closure. Do not reinterpret or simplify scope; only
+   multi-viewport remains deferred.
 3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
 
 ## 3. Milestone Tracker
@@ -253,14 +260,16 @@ Exit evidence required:
 
 ### ED-M04 - Scene Editing UX And Component Inspectors
 
-Status: `validated`
+Status: `landed`
 
 Trace: `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-005`, `REQ-007`,
 `REQ-008`, `REQ-009`, `REQ-022`, `REQ-024`, `REQ-026`, `REQ-037`;
 `SUCCESS-002`, `SUCCESS-003`, `SUCCESS-004`
 
-Outcome: V0.1 scene components except real material asset authoring have
-production-ready inspectors, defaults, validation, and live-sync requests.
+Outcome: command/data support for V0.1 scene components is landed, but the
+visible inspector closure is reopened because accepted `property-inspector` and
+`environment-authoring` gates were not fully implemented. All non-deferred gates
+from those LLDs remain in scope; only multi-viewport is deferred.
 
 - [x] Required LLDs are reviewed:
       `property-inspector`, `environment-authoring`, `settings-architecture`,
@@ -289,14 +298,28 @@ production-ready inspectors, defaults, validation, and live-sync requests.
       direct interop.
 - [x] Inspector host view models route ED-M04-supported fields through the
       command service instead of direct mutation.
-- [x] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
+- [ ] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
       DirectionalLight, Environment, and material slot editing end to end.
 - [x] Component edits persist through save/reopen from the migrated inspector
       UI.
+- [ ] Scene-level Environment editing is reachable from empty selection or the
+      accepted Scene/Environment affordance and routes edits through
+      `EditSceneEnvironmentAsync`.
+- [ ] Environment authoring satisfies `environment-authoring.md` validation:
+      defaults are visible, sun reference/stale warning behavior is visible,
+      supported fields save/reopen, undo/redo, and sync/unsupported outcomes
+      produce operation results.
+- [ ] Geometry material assignment applies to the live preview through the
+      supported runtime sync path; it must not remain a persisted-only identity
+      edit.
+- [ ] Any additional `property-inspector.md` or `environment-authoring.md`
+      V0.1 validation gate not explicitly listed above is audited,
+      implemented, and validated unless it is the explicitly deferred
+      multi-viewport feature.
 
 Exit evidence required:
 
-- [x] One `ED-M04` validation ledger row records component editor coverage,
+- [ ] One `ED-M04` validation ledger row records component editor coverage,
       settings/environment behavior, persistence, and live preview readiness.
 
 ### ED-M05 - Scalar Material Authoring
@@ -471,7 +494,7 @@ Exit evidence required:
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `planned`
+Status: `blocked`
 
 Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-018`,
 `REQ-019`, `REQ-022`, `REQ-023`, `REQ-024`, `REQ-026`, `REQ-030`,
@@ -480,6 +503,10 @@ Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-018`,
 Outcome: a minimum authored content slice proves embedded preview, cooked
 output, mounted content, and standalone runtime load agree.
 
+- [ ] All accepted non-deferred V0.1 LLD gates are audited and closed first.
+      `property-inspector` and `environment-authoring` are explicitly reopened;
+      additional gaps discovered during audit must be implemented. The only
+      deferred feature is multi-viewport.
 - [ ] Required LLDs are reviewed:
       `standalone-runtime-validation`, `live-engine-sync`,
       `runtime-integration`, `content-pipeline`, `environment-authoring`.
@@ -563,7 +590,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result only; multi-viewport remains deferred and is not an ED-M02 gate. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
-| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `validated` | No further action for ED-M04. |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `landed` | Corrective pass required before ED-M08: implement every non-deferred `property-inspector` and `environment-authoring` V0.1 gate; only multi-viewport is deferred. |
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
@@ -587,7 +614,7 @@ checklist or detailed plan tracker instead.
 | `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
 | `ED-M02` | `pending` | - | Not validated; pending scope is the supported single live viewport only. Multi-viewport stability remains deferred. |
 | `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
-| `ED-M04` | `validated` | 2026-04-27 | User manually validated ED-M04 component inspector scenarios after fixes: transform undo/redo field refresh, geometry asset switching, material slot UI, camera/light/default inspector behavior, environment/runtime setting behavior, and Geometry component deletion. Final fix repaired empty/duplicate component IDs during scene hydration so legacy Vortex scene Geometry deletion no longer resolves to locked Transform. MSBuild passed for Oxygen.Editor.World.Tests, Oxygen.Editor.WorldEditor.SceneExplorer.Tests, and Oxygen.Editor.App. |
+| `ED-M04` | `landed` | 2026-04-28 | Reopened after ED-M07 because accepted `property-inspector.md` and `environment-authoring.md` gates were overclaimed. All non-deferred gates from those LLDs must be implemented and validated before ED-M08 runtime parity; the only deferred feature is multi-viewport. Earlier manual validation remains partial evidence for Transform, Geometry asset switching, material slot persistence UI, camera/light/default inspector behavior, Geometry deletion, and save/reopen behavior. |
 | `ED-M05` | `validated` | 2026-04-28 | User manually validated scalar material authoring against the corrected ED-M06A project layout: material creation under `Content/Materials`, editor scalar/color editing with shared controls, save/reopen behavior, material picker refresh/filtering, geometry assignment by asset identity, asset URI/GUID identity display and copy affordances, and minimum cook/catalog behavior. |
 | `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |

@@ -52,7 +52,7 @@ storing a setting outside its row.
 | --- | --- | --- | --- | --- | --- | --- |
 | `TransformComponent.LocalPosition/Rotation/Scale` | Scene component | `ISceneDocumentCommandService.EditTransformAsync` | scene file (`TransformData`) | command | yes | yes (sync) |
 | `GeometryComponent.Geometry` (URI) | Scene component | `EditGeometryAsync` | `GeometryComponentData.GeometryUri` | command | yes | yes |
-| `MaterialsSlot.Material` (URI) | Scene component | `EditMaterialSlotAsync` | `MaterialsSlotData.MaterialUri` | command | yes | best-effort (`Unsupported`) |
+| `MaterialsSlot.Material` (URI) | Scene component | `EditMaterialSlotAsync` | `MaterialsSlotData.MaterialUri` | command | yes | yes, best-effort runtime override |
 | `PerspectiveCamera.{FOV, Near, Far, Aspect}` | Scene component | `EditPerspectiveCameraAsync` | `PerspectiveCameraData` | command | yes | yes |
 | `DirectionalLightComponent.*` | Scene component | `EditDirectionalLightAsync` | `DirectionalLightData` | command | yes | yes |
 | `Scene.Environment.*` | Scene | `EditSceneEnvironmentAsync` | `SceneData.Environment` | command | yes | per-field, see env LLD |
