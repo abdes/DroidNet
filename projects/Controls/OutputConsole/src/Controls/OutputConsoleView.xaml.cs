@@ -160,9 +160,9 @@ public sealed partial class OutputConsoleView
         // Bind the ListView to a UI-thread-bound proxy collection
         this.List.ItemsSource = this.viewItems;
         this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
-        if (this.scrollViewer is not null)
+        if (this.scrollViewer is { } viewer)
         {
-            this.scrollViewer.ViewChanged += this.OnScrollViewerViewChanged;
+            viewer.ViewChanged += this.OnScrollViewerViewChanged;
         }
     }
 
@@ -495,15 +495,15 @@ public sealed partial class OutputConsoleView
 
         this.disposed = true;
 
-        if (this.contentChangingHandler is not null)
+        if (this.contentChangingHandler is { } handler)
         {
-            this.List.ContainerContentChanging -= this.contentChangingHandler;
+            this.List.ContainerContentChanging -= handler;
             this.contentChangingHandler = null;
         }
 
-        if (this.scrollViewer is not null)
+        if (this.scrollViewer is { } viewer)
         {
-            this.scrollViewer.ViewChanged -= this.OnScrollViewerViewChanged;
+            viewer.ViewChanged -= this.OnScrollViewerViewChanged;
             this.scrollViewer = null;
         }
 
@@ -678,15 +678,15 @@ public sealed partial class OutputConsoleView
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         this.isLoaded = false;
-        if (this.contentChangingHandler is not null)
+        if (this.contentChangingHandler is { } handler)
         {
-            this.List.ContainerContentChanging -= this.contentChangingHandler;
+            this.List.ContainerContentChanging -= handler;
             this.contentChangingHandler = null;
         }
 
-        if (this.scrollViewer is not null)
+        if (this.scrollViewer is { } viewer)
         {
-            this.scrollViewer.ViewChanged -= this.OnScrollViewerViewChanged;
+            viewer.ViewChanged -= this.OnScrollViewerViewChanged;
         }
 
         this.DetachCollectionChanged(this.ItemsSource);

@@ -158,7 +158,7 @@ internal sealed partial class Recognizer(
 
         try
         {
-            this.LogProgress($"Process root segment group o={OutletName.Primary} sg={urlTree.Root}", config);
+            this.LogProgressIfEnabled(() => $"Process root segment group o={OutletName.Primary} sg={urlTree.Root}", config);
             var states = this.ProcessSegmentGroup(state, urlTree.Root, OutletName.Primary, config);
 
             if (states.Count != 1)
@@ -393,7 +393,7 @@ internal sealed partial class Recognizer(
         OutletName outlet,
         IRoutes routes)
     {
-        this.LogProgress($"Process segments {string.Join('/', segments)}", routes);
+        this.LogProgressIfEnabled(() => $"Process segments {string.Join('/', segments)}", routes);
 
         var match = this.MatchSegments(parentState, segmentGroup, segments, outlet, routes);
         if (!match.IsMatch)
@@ -489,18 +489,18 @@ internal sealed partial class Recognizer(
             return [];
         }
 
-        this.LogProgress($"Process children of segment group sg={segmentGroup}", routes);
+        this.LogProgressIfEnabled(() => $"Process children of segment group sg={segmentGroup}", routes);
 
         var childStates = new List<ActiveRoute>();
 
         // Process child outlets one at a time, starting with the primary outlet.
         foreach (var child in segmentGroup.SortedChildren)
         {
-            this.LogProgress($"Process child segment group o={child.Key} sg={segmentGroup}", routes);
+            this.LogProgressIfEnabled(() => $"Process child segment group o={child.Key} sg={segmentGroup}", routes);
             var contributedStates = this.ProcessSegmentGroup(parentState, child.Value, child.Key, routes);
             if (contributedStates.Count == 0)
             {
-                this.LogProgress($"No match for child segment group o={child.Key} sg={segmentGroup}", routes);
+                this.LogProgressIfEnabled(() => $"No match for child segment group o={child.Key} sg={segmentGroup}", routes);
                 throw new NoRouteForSegmentsException
                 {
                     Segments = child.Value.Segments,
@@ -510,14 +510,12 @@ internal sealed partial class Recognizer(
             if (contributedStates.Count == 1)
             {
                 var state = contributedStates[0];
-                this.LogProgress($"Match contributed 1 active route, {state}", routes);
+                this.LogProgressIfEnabled(() => $"Match contributed 1 active route, {state}", routes);
                 childStates.Add(state);
             }
             else
             {
-                this.LogProgress(
-                    $"Match contributed {contributedStates.Count} active routes, {contributedStates}",
-                    routes);
+                this.LogProgressIfEnabled(() => $"Match contributed {contributedStates.Count} active routes, {contributedStates}", routes);
 
                 // Params and QueryParams are empty until the child state is added to its parent state.
                 // At that time, both will be updated and propagated to the child's children.
@@ -654,6 +652,17 @@ internal sealed partial class Recognizer(
     Level = LogLevel.Debug,
     Message = "{Message} c={Config}")]
     private partial void LogProgress(string message, IRoutes config);
+
+    private void LogProgressIfEnabled(Func<string> createMessage, IRoutes config)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var message = createMessage();
+        this.LogProgress(message, config);
+    }
 
     /// <summary>
     /// Represents a successful match.

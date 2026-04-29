@@ -348,7 +348,7 @@ public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, ID
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
             foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
             {
-                if (item != root && item.CanAcceptChildren)
+                if (!ReferenceEquals(item, root) && item.CanAcceptChildren)
                 {
                     await vm.ExpandItemAsync(item).ConfigureAwait(true);
                 }
@@ -385,7 +385,7 @@ public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, ID
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
             foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
             {
-                if (item != root && item.CanAcceptChildren)
+                if (!ReferenceEquals(item, root) && item.CanAcceptChildren)
                 {
                     await vm.ExpandItemAsync(item).ConfigureAwait(true);
                 }

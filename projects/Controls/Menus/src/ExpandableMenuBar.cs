@@ -68,9 +68,9 @@ public sealed partial class ExpandableMenuBar : Control
 
         this.innerMenuBar.DismissOnFlyoutDismissal = this.DismissOnFlyoutDismissal;
 
-        if (this.MenuSource is not null)
+        if (this.MenuSource is { } menuSource)
         {
-            this.innerMenuBar.MenuSource = this.MenuSource;
+            this.innerMenuBar.MenuSource = menuSource;
         }
 
         this.templateApplied = true;
@@ -81,15 +81,15 @@ public sealed partial class ExpandableMenuBar : Control
 
     private void DetachTemplateParts()
     {
-        if (this.hamburgerButton is not null)
+        if (this.hamburgerButton is { } button)
         {
-            this.hamburgerButton.Click -= this.OnHamburgerButtonClick;
+            button.Click -= this.OnHamburgerButtonClick;
         }
 
-        if (this.innerMenuBar is not null)
+        if (this.innerMenuBar is { } menuBar)
         {
-            this.innerMenuBar.Dismissed -= this.OnInnerMenuBarDismissed;
-            this.innerMenuBar.DismissOnFlyoutDismissal = false;
+            menuBar.Dismissed -= this.OnInnerMenuBarDismissed;
+            menuBar.DismissOnFlyoutDismissal = false;
         }
 
         this.templateApplied = false;

@@ -163,9 +163,9 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
         this.flyout.Closing -= this.OnFlyoutClosing;
         this.flyout.Closed -= this.OnFlyoutClosed;
 
-        if (this.presenter is not null)
+        if (this.presenter is { } currentPresenter)
         {
-            this.presenter.ItemInvoked -= this.OnPresenterItemInvoked;
+            currentPresenter.ItemInvoked -= this.OnPresenterItemInvoked;
         }
 
         this.MenuSource = null;
@@ -181,9 +181,9 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
         this.LogCreatePresenter();
 
         // Clean up existing presenter if it exists
-        if (this.presenter is not null)
+        if (this.presenter is { } currentPresenter)
         {
-            this.presenter.ItemInvoked -= this.OnPresenterItemInvoked;
+            currentPresenter.ItemInvoked -= this.OnPresenterItemInvoked;
         }
 
         this.presenter = new CascadedColumnsPresenter

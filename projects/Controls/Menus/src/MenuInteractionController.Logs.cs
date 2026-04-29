@@ -34,7 +34,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogHoverStarted(MenuItemData menuItem, bool menuIsExpanded, MenuInteractionContext context)
-        => LogHoverStarted(services.InteractionLogger, menuItem.Id, menuItem.HasChildren, menuItem.IsExpanded, menuIsExpanded, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogHoverStarted(logger, menuItem.Id, menuItem.HasChildren, menuItem.IsExpanded, menuIsExpanded, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3403,
@@ -44,7 +51,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogHoverEnded(MenuItemData menuItem, MenuInteractionContext context)
-        => LogHoverEnded(services.InteractionLogger, menuItem.Id, menuItem.IsExpanded, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogHoverEnded(logger, menuItem.Id, menuItem.IsExpanded, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3404,
@@ -54,7 +68,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogItemGotFocus(MenuItemData menuItem, MenuInteractionInputSource source, MenuInteractionContext context)
-        => LogItemGotFocus(services.InteractionLogger, menuItem.Id, source, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogItemGotFocus(logger, menuItem.Id, source, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3405,
@@ -64,7 +85,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogItemLostFocus(MenuItemData menuItem, MenuInteractionContext context)
-        => LogItemLostFocus(services.InteractionLogger, menuItem.Id, menuItem.IsExpanded, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogItemLostFocus(logger, menuItem.Id, menuItem.IsExpanded, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3406,
@@ -74,7 +102,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogItemExpandRequested(MenuItemData menuItem, MenuInteractionInputSource source, MenuInteractionContext context)
-        => LogItemExpandRequested(services.InteractionLogger, menuItem.Id, source, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogItemExpandRequested(logger, menuItem.Id, source, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3407,
@@ -84,7 +119,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogNavigateToAdjacentItem(MenuNavigationDirection direction, string adjacentItemId, MenuInteractionContext context)
-        => LogNavigateToAdjacentItem(services.InteractionLogger, direction, adjacentItemId, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogNavigateToAdjacentItem(logger, direction, adjacentItemId, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3408,
@@ -93,7 +135,14 @@ public partial class MenuInteractionController
     private static partial void LogItemInvoked(ILogger logger, string itemId, MenuInteractionInputSource Source, object context);
 
     private void LogItemInvoked(MenuItemData menuItem, MenuInteractionInputSource source, MenuInteractionContext context)
-        => LogItemInvoked(services.InteractionLogger, menuItem.Id, source, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogItemInvoked(logger, menuItem.Id, source, serializedContext);
+        }
+    }
 
     [LoggerMessage(
         EventId = 3409,
@@ -103,7 +152,14 @@ public partial class MenuInteractionController
 
     [Conditional("DEBUG")]
     private void LogNavigateToParentColumn(int parentLevel, string parentActiveItemId, MenuInteractionContext context)
-        => LogNavigateToParentColumn(services.InteractionLogger, parentLevel, parentActiveItemId, this.SerializeContext(context));
+    {
+        var logger = services.InteractionLogger;
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            var serializedContext = this.SerializeContext(context);
+            LogNavigateToParentColumn(logger, parentLevel, parentActiveItemId, serializedContext);
+        }
+    }
 
     private object SerializeContext(MenuInteractionContext context) => new
     {

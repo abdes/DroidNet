@@ -48,7 +48,13 @@ internal partial class ReorderStrategy
 
     [Conditional("DEBUG")]
     private void LogDragCompletedWithDrop(int dragIndex, int dropIndex)
-        => LogDragCompletedWithDrop(this.logger, GetDraggedItemName(this.context), dragIndex, dropIndex);
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var item = GetDraggedItemName(this.context);
+            LogDragCompletedWithDrop(this.logger, item, dragIndex, dropIndex);
+        }
+    }
 
     [LoggerMessage(
         Level = LogLevel.Debug,
@@ -57,7 +63,13 @@ internal partial class ReorderStrategy
 
     [Conditional("DEBUG")]
     private void LogDragCompletedNoDrop()
-        => LogDragCompletedNoDrop(this.logger, GetDraggedItemName(this.context));
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var item = GetDraggedItemName(this.context);
+            LogDragCompletedNoDrop(this.logger, item);
+        }
+    }
 
     [LoggerMessage(
         Level = LogLevel.Debug,
@@ -138,7 +150,13 @@ internal partial class ReorderStrategy
 
         [Conditional("DEBUG")]
         private void LogResolveGapVisualIndex(double gapLeft, double[] slotOrigins, int resolvedIndex)
-            => LogResolveGapVisualIndex(this.logger, gapLeft, string.Join(',', slotOrigins), resolvedIndex);
+        {
+            if (this.logger.IsEnabled(LogLevel.Trace))
+            {
+                var origins = string.Join(',', slotOrigins);
+                LogResolveGapVisualIndex(this.logger, gapLeft, origins, resolvedIndex);
+            }
+        }
 
         [LoggerMessage(
             Level = LogLevel.Debug,

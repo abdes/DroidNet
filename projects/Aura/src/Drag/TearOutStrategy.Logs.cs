@@ -36,7 +36,13 @@ internal sealed partial class TearOutStrategy
 
     [Conditional("DEBUG")]
     private void LogDragCompletedNoDrop()
-        => LogDragCompletedNoDrop(this.logger, this.GetDraggedItemName());
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var item = this.GetDraggedItemName();
+            LogDragCompletedNoDrop(this.logger, item);
+        }
+    }
 
     [LoggerMessage(
         Level = LogLevel.Debug,

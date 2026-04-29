@@ -263,12 +263,13 @@ public partial class DynamicTree
     [Conditional("DEBUG")]
     private void LogFocusApplyAttempt(ITreeItem item, int index, FocusState state, bool pending)
     {
-        if (this.logger is not ILogger logger)
+        if (this.logger is not ILogger logger || !logger.IsEnabled(LogLevel.Debug))
         {
             return;
         }
 
-        LogFocusApplyAttempt(logger, item.Label, index, state.ToString(), pending);
+        var focusState = state.ToString();
+        LogFocusApplyAttempt(logger, item.Label, index, focusState, pending);
     }
 
     [LoggerMessage(
@@ -280,12 +281,13 @@ public partial class DynamicTree
     [Conditional("DEBUG")]
     private void LogApplyFocus(ITreeItem? item, bool pending, FocusState state)
     {
-        if (this.logger is not ILogger logger)
+        if (this.logger is not ILogger logger || !logger.IsEnabled(LogLevel.Debug))
         {
             return;
         }
 
-        LogApplyFocus(logger, item?.Label, pending, state.ToString());
+        var focusState = state.ToString();
+        LogApplyFocus(logger, item?.Label, pending, focusState);
     }
 
     [LoggerMessage(
