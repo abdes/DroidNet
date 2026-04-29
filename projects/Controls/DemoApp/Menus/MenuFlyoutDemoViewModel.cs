@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -18,6 +19,10 @@ namespace DroidNet.Controls.Demo.Menus;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModels must be public")]
 public partial class MenuFlyoutDemoViewModel : ObservableObject
 {
+    private MenuItemData? fontSizeItem;
+    private MenuItemData? lineSpacingItem;
+    private MenuItemData? livePreviewItem;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MenuFlyoutDemoViewModel"/> class.
     /// </summary>
@@ -41,13 +46,46 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
     [ObservableProperty]
     public partial string TextAlignment { get; set; } = "Left";
 
+    [ObservableProperty]
+    public partial double FontSize { get; set; } = 14;
+
+    [ObservableProperty]
+    public partial double LineSpacing { get; set; } = 1.2;
+
+    [ObservableProperty]
+    public partial bool LivePreviewEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Applies the XAML templates used by MVVM-backed interactive menu items.
+    /// </summary>
+    /// <param name="numberBoxTemplate">The template for numeric menu item content.</param>
+    /// <param name="sliderTemplate">The template for slider menu item content.</param>
+    /// <param name="toggleTemplate">The template for toggle menu item content.</param>
+    public void ApplyInteractiveContentTemplates(DataTemplate numberBoxTemplate, DataTemplate sliderTemplate, DataTemplate toggleTemplate)
+    {
+        if (this.fontSizeItem is { } numberItem)
+        {
+            numberItem.InteractiveContentTemplate = numberBoxTemplate;
+        }
+
+        if (this.lineSpacingItem is { } sliderItem)
+        {
+            sliderItem.InteractiveContentTemplate = sliderTemplate;
+        }
+
+        if (this.livePreviewItem is { } toggleItem)
+        {
+            toggleItem.InteractiveContentTemplate = toggleTemplate;
+        }
+    }
+
     private IMenuSource BuildSharedMenu(ILoggerFactory loggerFactory)
     {
         var menuBuilder = new MenuBuilder(loggerFactory)
             .AddMenuItem(this.CreateClipboardItem("Cut", Symbol.Cut, "Ctrl+X", "Text cut to clipboard"))
             .AddMenuItem(this.CreateClipboardItem("Copy", Symbol.Copy, "Ctrl+C", "Text copied to clipboard"))
             .AddMenuItem(this.CreateClipboardItem("Paste", Symbol.Paste, "Ctrl+V", "Text pasted from clipboard"))
-            .AddSeparator()
+            .AddSeparator("Formatting")
             .AddMenuItem(this.CreateFormattingSubmenu());
 
         return menuBuilder.Build();
@@ -74,10 +112,14 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
             SubItems =
             [
                 this.CreateWordWrapItem(),
-                new MenuItemData { IsSeparator = true },
+                new MenuItemData { IsSeparator = true, SeparatorLabel = "Alignment" },
                 this.CreateAlignmentItem("Left"),
                 this.CreateAlignmentItem("Center"),
                 this.CreateAlignmentItem("Right"),
+                new MenuItemData { IsSeparator = true, SeparatorLabel = "Live Controls" },
+                this.CreateFontSizeItem(),
+                this.CreateLineSpacingItem(),
+                this.CreateLivePreviewItem(),
             ],
         };
 
@@ -103,6 +145,83 @@ public partial class MenuFlyoutDemoViewModel : ObservableObject
             IsChecked = string.Equals(this.TextAlignment, alignment, StringComparison.Ordinal),
             Command = new RelayCommand<MenuItemData?>(this.SelectAlignment),
         };
+
+    private MenuItemData CreateFontSizeItem()
+    {
+        var model = new NumberBoxMenuItemModel
+        {
+            NumberValue = (float)this.FontSize,
+            Width = 96,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(NumberBoxMenuItemModel.NumberValue), StringComparison.Ordinal))
+            {
+                this.FontSize = model.NumberValue;
+                this.LastActionMessage = $"Font Size: {this.FontSize:0}";
+            }
+        };
+
+        this.fontSizeItem = new MenuItemData
+        {
+            Text = "Font Size",
+            InteractiveContent = model,
+        };
+
+        return this.fontSizeItem;
+    }
+
+    private MenuItemData CreateLineSpacingItem()
+    {
+        var model = new SliderMenuItemModel
+        {
+            Minimum = 0.8,
+            Maximum = 2.0,
+            StepFrequency = 0.1,
+            Value = this.LineSpacing,
+            Width = 140,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(SliderMenuItemModel.Value), StringComparison.Ordinal))
+            {
+                this.LineSpacing = model.Value;
+                this.LastActionMessage = $"Line Spacing: {this.LineSpacing:0.0}";
+            }
+        };
+
+        this.lineSpacingItem = new MenuItemData
+        {
+            Text = "Line Spacing",
+            InteractiveContent = model,
+        };
+
+        return this.lineSpacingItem;
+    }
+
+    private MenuItemData CreateLivePreviewItem()
+    {
+        var model = new ToggleMenuItemModel
+        {
+            IsOn = this.LivePreviewEnabled,
+        };
+        model.PropertyChanged += (_, e) =>
+        {
+            if (string.Equals(e.PropertyName, nameof(ToggleMenuItemModel.IsOn), StringComparison.Ordinal))
+            {
+                this.LivePreviewEnabled = model.IsOn;
+                this.LastActionMessage = $"Live Preview: {(model.IsOn ? "ON" : "OFF")}";
+            }
+        };
+
+        this.livePreviewItem = new MenuItemData
+        {
+            Text = "Live Preview",
+            InteractiveContent = model,
+        };
+
+        return this.livePreviewItem;
+    }
 
     private void ToggleWordWrap(MenuItemData? menuItem)
     {
