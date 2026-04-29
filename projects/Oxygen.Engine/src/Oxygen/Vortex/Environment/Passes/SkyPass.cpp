@@ -201,8 +201,14 @@ auto IsSkyRenderingEnabled(const RenderContext& ctx) -> bool
   if (env == nullptr) {
     return false;
   }
-  if (const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
-    atmo != nullptr && atmo->IsEnabled() && ctx.current_view.with_atmosphere) {
+  const auto atmosphere_active
+    = [&ctx, env]() {
+        const auto atmosphere
+          = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+        return atmosphere != nullptr && atmosphere->IsEnabled()
+          && ctx.current_view.with_atmosphere;
+      }();
+  if (atmosphere_active) {
     return true;
   }
   if (const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();

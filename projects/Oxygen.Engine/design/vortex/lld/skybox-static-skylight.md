@@ -194,20 +194,23 @@ Required behavior:
 
 ## 4. Background Selection Policy
 
+3. Else if `SkySphere` is enabled and its source is valid, select `SkySphere`.
 Per view, resolve `VisibleSkyBackground` in this order:
 
 1. If the view feature mask disables environment, select `None`.
-2. If `SkySphere` is enabled and its source is valid, select `SkySphere`.
-3. Else if `SkyAtmosphere` is enabled and its Stage-15 sky view LUT is valid,
+2. If `SkyAtmosphere` is enabled and the view opts into atmosphere rendering,
    select `SkyAtmosphere`.
 4. Else select `None`.
 
 Reasoning:
 
-- `SkySphere` is explicit visual background authoring. When present and valid,
-  it owns the full-frame background.
-- `SkyAtmosphere` remains the procedural fallback/background owner.
-- This resolves scenes that author both systems without pass-order accidents.
+- `SkyAtmosphere` is the procedural background owner when the view enables it.
+  It must suppress visual SkySphere drawing so the UI and scene state cannot
+  leave both full-frame sky paths active at once.
+- `SkySphere` is explicit visual background authoring when procedural
+  atmosphere is disabled for the view.
+- This resolves scenes that author both systems without pass-order accidents or
+  stale SkySphere payloads drawing behind the atmosphere path.
 
 When `SkySphere` is selected:
 

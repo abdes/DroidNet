@@ -1091,6 +1091,39 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AtmosphereSelectedViewSuppressesPublishedSkySpherePayload)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithSolidSkySphere();
+  auto* env = scene->GetEnvironment().get();
+  ASSERT_NE(env, nullptr);
+  auto& atmosphere
+    = env->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 20U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 20U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data
+    = service.InspectEnvironmentStaticData(ViewId { 20U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->atmosphere.enabled, 1U);
+  EXPECT_EQ(static_data->sky_sphere.enabled, 0U);
+  EXPECT_EQ(
+    static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   NoEnvironmentViewFeatureSuppressesPublishedSkySphere)
 {
   auto service = EnvironmentLightingService(*renderer_);
