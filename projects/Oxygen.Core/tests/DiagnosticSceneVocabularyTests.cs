@@ -58,7 +58,8 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = LiveSyncDiagnosticCodes.CameraFailed.Should().Be("OXE.LIVESYNC.CAMERA.Failed");
         _ = LiveSyncDiagnosticCodes.LightRejected.Should().Be("OXE.LIVESYNC.LIGHT.Rejected");
         _ = LiveSyncDiagnosticCodes.LightFailed.Should().Be("OXE.LIVESYNC.LIGHT.Failed");
-        _ = LiveSyncDiagnosticCodes.MaterialUnsupported.Should().Be("OXE.LIVESYNC.MATERIAL.Unsupported");
+        _ = LiveSyncDiagnosticCodes.MaterialRejected.Should().Be("OXE.LIVESYNC.MATERIAL.Rejected");
+        _ = LiveSyncDiagnosticCodes.MaterialFailed.Should().Be("OXE.LIVESYNC.MATERIAL.Failed");
         _ = LiveSyncDiagnosticCodes.EnvironmentAtmosphereUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Atmosphere.Unsupported");
         _ = LiveSyncDiagnosticCodes.EnvironmentSunUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Sun.Unsupported");
         _ = LiveSyncDiagnosticCodes.EnvironmentExposureUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Exposure.Unsupported");
@@ -81,8 +82,10 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = SceneDiagnosticCodes.EnvironmentSunRefStale.Should().Be("OXE.SCENE.ENVIRONMENT.SunRefStale");
         _ = SceneDiagnosticCodes.EnvironmentExposureModeInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ExposureMode.Invalid");
         _ = SceneDiagnosticCodes.EnvironmentToneMappingInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ToneMapping.Invalid");
+        _ = SceneDiagnosticCodes.EnvironmentManualExposureInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid");
         _ = SceneDiagnosticCodes.EnvironmentExposureCompensationInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ExposureCompensation.Invalid");
         _ = SceneDiagnosticCodes.EnvironmentBackgroundColorInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.BackgroundColor.Invalid");
+        _ = SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.SkyAtmosphere.Invalid");
         _ = SceneDiagnosticCodes.ComponentAddDenied.Should().Be("OXE.SCENE.COMPONENT.AddDenied");
         _ = SceneDiagnosticCodes.ComponentRemoveDenied.Should().Be("OXE.SCENE.COMPONENT.RemoveDenied");
     }

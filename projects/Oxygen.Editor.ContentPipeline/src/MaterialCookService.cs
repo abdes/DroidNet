@@ -168,7 +168,14 @@ public sealed partial class MaterialCookService : IMaterialCookService
         using var stream = File.OpenRead(index);
         var document = LooseCookedIndex.Read(stream);
         var expectedVirtualPath = "/" + GetCookedRelativePath(cookedUri);
-        return document.Assets.Any(asset => string.Equals(asset.VirtualPath, expectedVirtualPath, StringComparison.Ordinal));
+        var asset = document.Assets.FirstOrDefault(asset => string.Equals(asset.VirtualPath, expectedVirtualPath, StringComparison.Ordinal));
+        if (asset is null)
+        {
+            return false;
+        }
+
+        var actualSize = new FileInfo(cookedOutput).Length;
+        return actualSize >= 0 && (ulong)actualSize == asset.DescriptorSize;
     }
 
     private static string GetCookedPath(string projectRoot, Uri cookedUri)
