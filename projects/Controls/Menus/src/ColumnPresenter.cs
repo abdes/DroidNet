@@ -68,7 +68,7 @@ public sealed partial class ColumnPresenter : Control
     {
         this.LogGetAdjacentItem(itemData.Id, direction, wrap);
         Debug.Assert(this.ItemsSource is not null, "Expecting ItemsSource to be not null");
-        var items = this.ItemsSource.OfType<MenuItemData>().Where(it => it.IsInteractive).ToList();
+        var items = this.ItemsSource.OfType<MenuItemData>().Where(static it => it.IsMenuFocusTarget).ToList();
         var index = items.FindIndex(item => ReferenceEquals(item, itemData));
         if (index < 0)
         {
@@ -248,7 +248,22 @@ public sealed partial class ColumnPresenter : Control
     ///     <see langword="true"/> if the first item was focused successfully; otherwise <see langword="false"/>.
     /// </returns>
     internal bool FocusFirstItem(MenuNavigationMode navMode)
-        => this.FocusItemAt(0, navMode);
+    {
+        if (this.itemsHost is null)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < this.itemsHost.Children.Count; index++)
+        {
+            if (this.itemsHost.Children[index] is MenuItem { IsFocusable: true })
+            {
+                return this.FocusItemAt(index, navMode);
+            }
+        }
+
+        return false;
+    }
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -540,7 +555,7 @@ public sealed partial class ColumnPresenter : Control
             return active;
         }
 
-        var fallback = this.itemsHost.Children.OfType<MenuItem>().FirstOrDefault(item => item.ItemData is { IsEnabled: true } data && !data.IsSeparator);
+        var fallback = this.itemsHost.Children.OfType<MenuItem>().FirstOrDefault(static item => item.IsFocusable);
         return fallback;
     }
 }

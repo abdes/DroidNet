@@ -329,7 +329,10 @@ public partial class MenuItem : Control
     ///     updates should be processed for this control.
     /// </remarks>
     internal bool IsFocusable =>
-        this is { IsInteractive: true, IsTabStop: true, Visibility: Visibility.Visible };
+        this is { Visibility: Visibility.Visible } && this.ShouldReceiveMenuItemFocus;
+
+    private bool ShouldReceiveMenuItemFocus =>
+        this.ItemData?.IsMenuFocusTarget == true;
 
     /// <summary>
     ///     Gets a value indicating whether the control template has been applied.
@@ -494,6 +497,7 @@ public partial class MenuItem : Control
 
         if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
         {
+            e.Handled = true;
             base.OnKeyDown(e);
             return;
         }
@@ -521,6 +525,13 @@ public partial class MenuItem : Control
     {
         if (!this.IsInteractive)
         {
+            base.OnKeyUp(e);
+            return;
+        }
+
+        if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
+        {
+            e.Handled = true;
             base.OnKeyUp(e);
             return;
         }
@@ -593,6 +604,7 @@ public partial class MenuItem : Control
         if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
         {
             this.isPressed = false;
+            e.Handled = true;
             return;
         }
 
@@ -627,6 +639,7 @@ public partial class MenuItem : Control
         if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
         {
             this.UpdateCommonVisualState();
+            e.Handled = true;
             return;
         }
 
@@ -701,6 +714,7 @@ public partial class MenuItem : Control
 
         if (this.IsEventFromInteractiveContent(e.OriginalSource as DependencyObject))
         {
+            e.Handled = true;
             return;
         }
 
@@ -714,7 +728,7 @@ public partial class MenuItem : Control
         Debug.Assert(this.ItemData is { }, "Expecting a menu item with non-null ItemData");
 
         var isSeparator = this.ItemData?.IsSeparator ?? false;
-        this.IsTabStop = !isSeparator;
+        this.IsTabStop = !isSeparator && this.ShouldReceiveMenuItemFocus;
         AutomationProperties.SetAccessibilityView(this, isSeparator ? AccessibilityView.Raw : AccessibilityView.Control);
         _ = VisualStateManager.GoToState(
                 this,
@@ -813,9 +827,9 @@ public partial class MenuItem : Control
             return;
         }
 
-        // Update IsTabStop based on whether the item is interactive
-        // Non-interactive items should not receive keyboard focus
-        this.IsTabStop = this.ItemData.IsInteractive;
+        // Embedded controls own focus for editor rows. If the host row remains
+        // focusable, WinUI can steal focus back after the child starts editing.
+        this.IsTabStop = this.ShouldReceiveMenuItemFocus;
 
         // Update cursor based on interactive state and pointer position
         // Centralized cursor management - single source of truth

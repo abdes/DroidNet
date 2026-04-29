@@ -264,6 +264,21 @@ public class MenuItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task InteractiveContentHost_DoesNotReceiveMenuItemFocus_Async() => EnqueueAsync(async () =>
+    {
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Field of View",
+            InteractiveContent = new Slider { Width = 120 },
+        }).ConfigureAwait(true);
+
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = menuItem.IsTabStop.Should().BeFalse("embedded editors own focus; the menu row must not steal it after in-place editing starts");
+        _ = menuItem.IsFocusable.Should().BeFalse();
+    });
+
+    [TestMethod]
     public Task InteractiveContentFactoryCreatesContentPerMenuItem_Async() => EnqueueAsync(async () =>
     {
         var createdCount = 0;
