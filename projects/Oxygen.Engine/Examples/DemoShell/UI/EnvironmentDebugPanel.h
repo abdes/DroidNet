@@ -70,7 +70,7 @@ private:
   void DrawFog();
   void DrawLocalFogVolumes();
   void DrawSunSection();
-  void DrawRendererDebugSection();
+  void DrawRuntimeStateSection();
   void HandleSkyboxAutoLoad();
 
   //=== Configuration ===----------------------------------------------------//
