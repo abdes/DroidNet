@@ -89,6 +89,7 @@ public:
     float intensity_mul { 1.0F };
     float diffuse_intensity { 1.0F };
     float specular_intensity { 1.0F };
+    bool real_time_capture_enabled { false };
     glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
   };
 

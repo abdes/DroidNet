@@ -16,6 +16,7 @@
 #include <thread>
 
 #include <asio/signal_set.hpp>
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -334,6 +335,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         return static_cast<int>(settings->GetFloat(key).value_or(
           static_cast<float>(fallback)));
       };
+      const auto read_vec3
+        = [&](const std::string_view prefix,
+            const glm::vec3 fallback) -> glm::vec3 {
+        return glm::vec3 {
+          settings->GetFloat(std::string(prefix) + ".x").value_or(fallback.x),
+          settings->GetFloat(std::string(prefix) + ".y").value_or(fallback.y),
+          settings->GetFloat(std::string(prefix) + ".z").value_or(fallback.z),
+        };
+      };
       if (startup_skybox_path.empty()) {
         constexpr int kSkySphereSourceCubemap = 0;
         const bool sky_sphere_enabled
@@ -357,6 +367,17 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         = settings->GetFloat("env.skybox.hdr_exposure_ev").value_or(0.0F);
       app.startup_sky_sphere_intensity
         = settings->GetFloat("env.sky_sphere.intensity").value_or(1.0F);
+      app.startup_sky_light_intensity_mul
+        = settings->GetFloat("env.sky_light.intensity_mul").value_or(1.0F);
+      app.startup_sky_light_diffuse
+        = settings->GetFloat("env.sky_light.diffuse").value_or(1.0F);
+      app.startup_sky_light_specular
+        = settings->GetFloat("env.sky_light.specular").value_or(1.0F);
+      app.startup_sky_light_real_time_capture_enabled
+        = settings->GetBool("env.sky_light.real_time_capture_enabled")
+            .value_or(false);
+      app.startup_sky_light_tint
+        = read_vec3("env.sky_light.tint", glm::vec3 { 1.0F });
     }
     app.startup_skybox_path = startup_skybox_path;
     if (!app.startup_skybox_path.empty()) {

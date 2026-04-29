@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 
+#include <glm/common.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -224,6 +225,16 @@ MainModule::MainModule(const examples::DemoAppContext& app)
     startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
     startup_sky_sphere_intensity_
       = std::max(app.startup_sky_sphere_intensity, 0.0F);
+    startup_sky_light_intensity_mul_
+      = std::max(app.startup_sky_light_intensity_mul, 0.0F);
+    startup_sky_light_diffuse_
+      = std::max(app.startup_sky_light_diffuse, 0.0F);
+    startup_sky_light_specular_
+      = std::max(app.startup_sky_light_specular, 0.0F);
+    startup_sky_light_real_time_capture_enabled_
+      = app.startup_sky_light_real_time_capture_enabled;
+    startup_sky_light_tint_
+      = glm::max(app.startup_sky_light_tint, glm::vec3 { 0.0F });
   }
 }
 
@@ -1132,14 +1143,23 @@ auto MainModule::ApplyStartupSkyboxToScene(
 
   SkyboxService::SkyLightParams params;
   params.sky_sphere_intensity = startup_sky_sphere_intensity_;
+  params.intensity_mul = startup_sky_light_intensity_mul_;
+  params.diffuse_intensity = startup_sky_light_diffuse_;
+  params.specular_intensity = startup_sky_light_specular_;
+  params.real_time_capture_enabled
+    = startup_sky_light_real_time_capture_enabled_;
+  params.tint_rgb = startup_sky_light_tint_;
   LOG_F(INFO,
     "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
     "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} "
-    "sky_intensity={})",
+    "sky_intensity={} sky_light_intensity={} sky_light_diffuse={} "
+    "sky_light_specular={} sky_light_real_time_capture={})",
     startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
     startup_skybox_output_format_, options.cube_face_size,
     startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
-    startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity);
+    startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity,
+    params.intensity_mul, params.diffuse_intensity, params.specular_intensity,
+    params.real_time_capture_enabled);
 
   startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
     options, params,

@@ -10,6 +10,8 @@
 #include <memory>
 #include <string>
 
+#include <glm/vec3.hpp>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -64,6 +66,11 @@ public:
   bool startup_skybox_tonemap_hdr_to_ldr { false };
   float startup_skybox_hdr_exposure_ev { 0.0F };
   float startup_sky_sphere_intensity { 1.0F };
+  float startup_sky_light_intensity_mul { 1.0F };
+  float startup_sky_light_diffuse { 1.0F };
+  float startup_sky_light_specular { 1.0F };
+  bool startup_sky_light_real_time_capture_enabled { false };
+  glm::vec3 startup_sky_light_tint { 1.0F, 1.0F, 1.0F };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
