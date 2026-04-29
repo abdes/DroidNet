@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <Title>Oxygen Editor Schemas</Title>
+        <Description>Property descriptor pipeline driven by engine JSON schemas plus editor overlays.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;editor;property-pipeline;json-schema</PackageTags>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <RootNamespace>Oxygen.Editor.Schemas</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="JsonSchema.Net" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    </ItemGroup>
+
+    <!--
+      Bring the engine schemas (and editor overlays sitting next to them) into
+      this assembly's output without copying them in source control.
+
+      Engine schemas: *.schema.json (excluding *.editor.schema.json — handled by
+      the second glob so we can give it a distinct link path / pattern).
+      Editor overlays: *.editor.schema.json
+    -->
+    <ItemGroup>
+        <Content
+            Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.schema.json"
+            Exclude="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.editor.schema.json"
+            Link="Schemas\%(FileName)%(Extension)"
+            CopyToOutputDirectory="PreserveNewest"
+            Visible="true" />
+
+        <Content
+            Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.editor.schema.json"
+            Link="Schemas\%(FileName)%(Extension)"
+            CopyToOutputDirectory="PreserveNewest"
+            Visible="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" Condition="Exists('README.md')" />
+    </ItemGroup>
+
+</Project>

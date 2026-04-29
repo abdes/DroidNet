@@ -589,6 +589,112 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
+    public Task<SyncOutcome> UpdatePropertiesAsync(
+        Scene scene,
+        SceneNode node,
+        IReadOnlyList<EnginePropertyValueEntry> entries,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(entries);
+        var scope = Scope(scene, node, componentType: nameof(TransformComponent));
+        if (entries.Count == 0)
+        {
+            return Task.FromResult(Accepted(SceneOperationKinds.EditTransform, scope));
+        }
+
+        if (TryGetReadyWorld(
+                this.engineService,
+                SceneOperationKinds.EditTransform,
+                scope,
+                cancellationToken,
+                out var world,
+                out var readinessOutcome))
+        {
+            this.logger.LogInformation(
+                "SetProperties skipped. SceneId={SceneId} NodeId={NodeId} Status={Status} Code={Code} EntryCount={EntryCount}",
+                scene.Id,
+                node.Id,
+                readinessOutcome.Status,
+                readinessOutcome.Code,
+                entries.Count);
+            return Task.FromResult(readinessOutcome);
+        }
+
+        var wire = new Oxygen.Interop.World.PropertyValueEntry[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+        {
+            wire[i] = new Oxygen.Interop.World.PropertyValueEntry
+            {
+                ComponentId = (ushort)entries[i].Component,
+                FieldId = entries[i].FieldId,
+                Value = entries[i].Value,
+            };
+        }
+
+        try
+        {
+            world!.SetProperties(node.Id, wire);
+            this.logger.LogDebug(
+                "SetProperties enqueued. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}",
+                scene.Id,
+                node.Id,
+                entries.Count);
+            return Task.FromResult(Accepted(SceneOperationKinds.EditTransform, scope));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Cancelled(SceneOperationKinds.EditTransform, scope));
+        }
+        catch (ArgumentException ex)
+        {
+            this.logger.LogWarning(
+                ex,
+                "SetProperties rejected. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}",
+                scene.Id,
+                node.Id,
+                entries.Count);
+            return Task.FromResult(Rejected(
+                SceneOperationKinds.EditTransform,
+                scope,
+                LiveSyncDiagnosticCodes.TransformRejected,
+                ex.Message,
+                ex));
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.logger.LogWarning(
+                ex,
+                "SetProperties rejected. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}",
+                scene.Id,
+                node.Id,
+                entries.Count);
+            return Task.FromResult(Rejected(
+                SceneOperationKinds.EditTransform,
+                scope,
+                LiveSyncDiagnosticCodes.TransformRejected,
+                ex.Message,
+                ex));
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(
+                ex,
+                "SetProperties failed. SceneId={SceneId} NodeId={NodeId} EntryCount={EntryCount}",
+                scene.Id,
+                node.Id,
+                entries.Count);
+            return Task.FromResult(Failed(
+                SceneOperationKinds.EditTransform,
+                scope,
+                LiveSyncDiagnosticCodes.TransformFailed,
+                ex.Message,
+                ex));
+        }
+    }
+
+    /// <inheritdoc/>
     public Task AttachGeometryAsync(SceneNode node, GeometryComponent geometry)
     {
         ArgumentNullException.ThrowIfNull(node);

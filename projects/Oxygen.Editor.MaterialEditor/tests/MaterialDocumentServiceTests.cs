@@ -7,6 +7,7 @@ using Oxygen.Assets.Import.Materials;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -138,6 +139,152 @@ public sealed class MaterialDocumentServiceTests
     }
 
     [TestMethod]
+    public async Task EditPropertiesAsync_ShouldApplyDescriptorBackedMaterialEditAndMarkDocumentStale()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
+        var service = CreateService(workspace);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var edit = new PropertyEdit();
+        edit.Set(MaterialDescriptors.Metalness, 0.8f);
+        edit.Set(MaterialDescriptors.Roughness, 0.25f);
+        edit.Set(MaterialDescriptors.DoubleSided, true);
+
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = save.Succeeded.Should().BeTrue();
+        _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.8f);
+        _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.25f);
+        _ = reopened.Source.DoubleSided.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_ShouldApplyAlphaModeThroughDescriptor()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
+        var service = CreateService(workspace);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
+            created.DocumentId,
+            PropertyEdit.Single(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask)).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = save.Succeeded.Should().BeTrue();
+        _ = reopened.Source.AlphaMode.Should().Be(MaterialAlphaMode.Mask);
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenScalarViolatesEngineRange_ShouldRejectWithoutMutating()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
+        var publisher = new RecordingOperationPublisher();
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), publisher);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var edit = PropertyEdit.Single(MaterialDescriptors.Metalness, 2.0f);
+
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = save.Succeeded.Should().BeTrue();
+        _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.0f);
+        _ = publisher.Published.Should().ContainSingle(r =>
+            r.Diagnostics.Single().Code == "PROPERTY_OUT_OF_RANGE"
+            && r.Diagnostics.Single().Domain == FailureDomain.MaterialAuthoring);
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenValueIsUnchanged_ShouldNotDirtyOrMarkCookStale()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
+        var cook = new RecordingCookService();
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
+            created.DocumentId,
+            PropertyEdit.Single(MaterialDescriptors.Metalness, created.Source.PbrMetallicRoughness.MetallicFactor)).ConfigureAwait(false);
+        var cookResult = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = cookResult.State.Should().Be(MaterialCookState.Cooked);
+        _ = cook.LastRequest.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenPropertyIdIsUnknown_ShouldRejectWithoutMutating()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
+        var publisher = new RecordingOperationPublisher();
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), publisher);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var unknown = new PropertyId<float>("material", "/parameters/unknown");
+
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
+            created.DocumentId,
+            PropertyEdit.Single(unknown, 0.25f)).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = save.Succeeded.Should().BeTrue();
+        _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.0f);
+        _ = publisher.Published.Should().ContainSingle(r =>
+            r.Diagnostics.Single().Code == "PROPERTY_UNKNOWN"
+            && r.Diagnostics.Single().Domain == FailureDomain.MaterialAuthoring);
+    }
+
+    [TestMethod]
+    public void MaterialSchemaValidator_ShouldKeepEngineAndMergedOverlayAcceptanceEquivalent()
+    {
+        var schemaRoot = FindSchemaRoot();
+        var catalog = EditorSchemaCatalog.LoadFromDirectory(schemaRoot);
+        var validator = new MaterialSchemaValidator(catalog);
+        var source = new MaterialSource(
+            schema: "oxygen.material.v1",
+            type: "PBR",
+            name: "Gold",
+            pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
+                baseColorR: 1.0f,
+                baseColorG: 0.8f,
+                baseColorB: 0.2f,
+                baseColorA: 1.0f,
+                metallicFactor: 1.0f,
+                roughnessFactor: 0.35f,
+                baseColorTexture: null,
+                metallicRoughnessTexture: null),
+            normalTexture: null,
+            occlusionTexture: null,
+            alphaMode: MaterialAlphaMode.Opaque,
+            alphaCutoff: 0.5f,
+            doubleSided: false);
+        var valid = MaterialSourceProjection.ToEngineJson(source);
+        var invalid = MaterialSourceProjection.ToEngineJson(source);
+        invalid["parameters"]!.AsObject()["metalness"] = 2.0;
+
+        _ = validator.ValidatorParityHolds(valid).Should().BeTrue();
+        _ = validator.ValidatorParityHolds(invalid).Should().BeTrue();
+        _ = validator.ValidateAgainstEngineSchema(valid).IsValid.Should().BeTrue();
+        _ = validator.ValidateAgainstEngineSchema(invalid).IsValid.Should().BeFalse();
+        _ = validator.LintOverlay().Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task EditScalarAsync_WhenNameIsEdited_ShouldRejectBecauseAssetFileStemIsCanonical()
     {
         using var workspace = new TempWorkspace();
@@ -181,6 +328,31 @@ public sealed class MaterialDocumentServiceTests
         _ = location.MountName.Should().Be("StudioLibrary");
         _ = location.SourcePath.Should().Be(Path.Combine(workspace.Root, "Materials", "Shared.omat.json"));
         _ = location.SourceRelativePath.Should().Be("Materials/Shared.omat.json");
+    }
+
+    private static string FindSchemaRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(
+                current.FullName,
+                "projects",
+                "Oxygen.Engine",
+                "src",
+                "Oxygen",
+                "Cooker",
+                "Import",
+                "Schemas");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not find Oxygen.Engine cooker schema directory.");
     }
 
     private static MaterialSource ReadMaterial(TempWorkspace workspace, string relativePath)

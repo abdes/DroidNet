@@ -5,6 +5,8 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Model;
 using Oxygen.Core.Diagnostics;
@@ -15,7 +17,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <summary>
 /// Default scalar material document service.
 /// </summary>
-public sealed class MaterialDocumentService : IMaterialDocumentService
+public sealed partial class MaterialDocumentService : IMaterialDocumentService, IMaterialPropertyEditService
 {
     private const string MaterialSchema = "oxygen.material.v1";
     private const string MaterialType = "PBR";
@@ -23,8 +25,11 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
     private readonly IMaterialSourcePathResolver pathResolver;
     private readonly IMaterialCookService cookService;
     private readonly IOperationResultPublisher? operationResults;
+    private readonly ILogger<MaterialDocumentService> logger;
     private readonly Dictionary<Guid, MaterialDocument> documents = [];
     private readonly Lock sync = new();
+    private MaterialSchemaValidator? cachedValidator;
+    private bool validatorLoadAttempted;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialDocumentService"/> class.
@@ -35,11 +40,14 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
     public MaterialDocumentService(
         IMaterialSourcePathResolver pathResolver,
         IMaterialCookService cookService,
-        IOperationResultPublisher? operationResults = null)
+        IOperationResultPublisher? operationResults = null,
+        ILoggerFactory? loggerFactory = null)
     {
         this.pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
         this.cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
         this.operationResults = operationResults;
+        this.logger = loggerFactory?.CreateLogger<MaterialDocumentService>()
+            ?? NullLoggerFactory.Instance.CreateLogger<MaterialDocumentService>();
     }
 
     /// <inheritdoc />
@@ -101,6 +109,13 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
 
         if (!TryApplyEdit(document.Source, edit, out var updatedSource))
         {
+            this.logger.LogWarning(
+                "Rejected material scalar edit. DocumentId={DocumentId} MaterialUri={MaterialUri} Field={FieldKey} ValueType={ValueType} Value={Value}",
+                document.DocumentId,
+                document.MaterialUri,
+                edit.FieldKey,
+                edit.NewValue?.GetType().FullName ?? "<null>",
+                edit.NewValue);
             var operationId = this.PublishMaterialFailure(
                 MaterialOperationKinds.EditScalar,
                 document,
@@ -140,6 +155,34 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
         }
 
         var source = WithName(document.Source, document.DisplayName);
+
+        // Property pipeline §5.10 — validate against the engine schema
+        // before persisting. The validator is the same one the cooker
+        // would run; if the editor produces a non-conformant document,
+        // the cooker would reject it and we surface that failure here.
+        var validator = this.GetSchemaValidator();
+        if (validator is not null)
+        {
+            var engineJson = MaterialSourceProjection.ToEngineJson(source);
+            var validation = validator.ValidateAgainstEngineSchema(engineJson);
+            if (!validation.IsValid)
+            {
+                this.logger.LogWarning(
+                    "Rejected material save because engine schema validation failed. DocumentId={DocumentId} MaterialUri={MaterialUri} Errors={Errors}",
+                    document.DocumentId,
+                    document.MaterialUri,
+                    string.Join("; ", validation.Errors));
+                var operationId = this.PublishMaterialFailure(
+                    MaterialOperationKinds.Save,
+                    document,
+                    "MATERIAL_SCHEMA_REJECTED",
+                    "Material did not match the engine schema.",
+                    string.Join("; ", validation.Errors),
+                    FailureDomain.MaterialAuthoring);
+                return new MaterialSaveResult(Succeeded: false, OperationId: operationId);
+            }
+        }
+
         await WriteSourceAsync(document.SourcePath, source, cancellationToken).ConfigureAwait(false);
         lock (this.sync)
         {
@@ -173,6 +216,11 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
 
         if (document.IsDirty)
         {
+            this.logger.LogInformation(
+                "Rejected material cook because descriptor is dirty. DocumentId={DocumentId} MaterialUri={MaterialUri} SourcePath={SourcePath}",
+                document.DocumentId,
+                document.MaterialUri,
+                document.SourcePath);
             var operationId = this.PublishMaterialFailure(
                 MaterialOperationKinds.Cook,
                 document,
@@ -204,6 +252,12 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
                 MountName: location.MountName,
                 SourceRelativePath: location.SourceRelativePath),
             cancellationToken).ConfigureAwait(false);
+        this.logger.LogInformation(
+            "Material cook completed. DocumentId={DocumentId} MaterialUri={MaterialUri} State={State} OperationId={OperationId}",
+            document.DocumentId,
+            document.MaterialUri,
+            result.State,
+            result.OperationId);
 
         lock (this.sync)
         {
@@ -591,6 +645,33 @@ public sealed class MaterialDocumentService : IMaterialDocumentService
         }
 
         return document;
+    }
+
+    private MaterialSchemaValidator? GetSchemaValidator()
+    {
+        if (this.validatorLoadAttempted)
+        {
+            return this.cachedValidator;
+        }
+
+        this.validatorLoadAttempted = true;
+        try
+        {
+            this.cachedValidator = MaterialSchemaValidator.LoadFromAssemblyOutput();
+            this.logger.LogDebug("Loaded material schema validator from assembly output.");
+        }
+        catch (Exception ex)
+        {
+            // Validator unavailable (missing schemas in output, etc.).
+            // Saves proceed without engine-schema enforcement; the
+            // cooker will catch any drift on cook.
+            this.logger.LogWarning(
+                ex,
+                "Material schema validator could not be loaded; material saves will rely on cooker validation.");
+            this.cachedValidator = null;
+        }
+
+        return this.cachedValidator;
     }
 
     private Guid? PublishMaterialFailure(

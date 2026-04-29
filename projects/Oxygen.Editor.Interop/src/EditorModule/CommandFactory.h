@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <glm/fwd.hpp>
@@ -25,6 +26,9 @@ class CreateSceneNodeCommand;
 class RemoveSceneNodeCommand;
 class RenameSceneNodeCommand;
 class SetLocalTransformCommand;
+class SetPropertiesCommand;
+struct PropertyEntry;
+enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
 class SetMaterialOverrideCommand;
 class SetVisibilityCommand;
@@ -59,6 +63,10 @@ namespace Oxygen::Interop::World {
     virtual oxygen::interop::module::SetLocalTransformCommand*
       CreateSetLocalTransform(oxygen::scene::NodeHandle handle, glm::vec3 position,
         glm::quat rotation, glm::vec3 scale);
+
+    virtual oxygen::interop::module::SetPropertiesCommand*
+      CreateSetProperties(oxygen::scene::NodeHandle handle,
+        std::vector<oxygen::interop::module::PropertyEntry> entries);
 
     virtual oxygen::interop::module::SetGeometryCommand*
       CreateSetGeometry(oxygen::scene::NodeHandle handle, std::string assetUri);

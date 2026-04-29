@@ -36,6 +36,7 @@
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
+#include <Commands/SetPropertiesCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
@@ -68,6 +69,12 @@ namespace Oxygen::Interop::World {
       glm::vec3 position, glm::quat rotation,
       glm::vec3 scale) {
     return new SetLocalTransformCommand(handle, position, rotation, scale);
+  }
+
+  SetPropertiesCommand*
+    CommandFactory::CreateSetProperties(oxygen::scene::NodeHandle handle,
+      std::vector<PropertyEntry> entries) {
+    return new SetPropertiesCommand(handle, std::move(entries));
   }
 
   SetGeometryCommand*
