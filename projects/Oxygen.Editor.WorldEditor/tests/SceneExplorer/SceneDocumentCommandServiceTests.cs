@@ -210,6 +210,122 @@ public sealed class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task EditTransformAsync_WhenOneShot_ShouldUsePropertyPipelineTransport()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var transform = node.Components.OfType<TransformComponent>().Single();
+        var context = CreateContext(scene);
+        IReadOnlyList<EnginePropertyValueEntry>? synced = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
+
+        var result = await fixture.Sut.EditTransformAsync(
+            context,
+            [node.Id],
+            new TransformEdit(
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                PositionX: Optional<float>.Supplied(4.0f)),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = transform.LocalPosition.X.Should().Be(4.0f);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        _ = synced.Should().ContainSingle()
+            .Which.Should().Be(new EnginePropertyValueEntry(EngineComponentId.Transform, (ushort)TransformField.PositionX, 4.0f));
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditTransformAsync_WhenOneShotValueIsUnchanged_ShouldNotDirtySyncOrRecordHistory()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.EditTransformAsync(
+            context,
+            [node.Id],
+            new TransformEdit(
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                PositionX: Optional<float>.Supplied(0.0f)),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                It.IsAny<Scene>(),
+                It.IsAny<SceneNode>(),
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        fixture.DocumentService.Verify(
+            service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditTransformAsync_WhenPropertySyncIsSkipped_ShouldPublishLiveSyncDiagnostic()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncOutcome(
+                SyncStatus.SkippedNotRunning,
+                SceneOperationKinds.EditTransform,
+                AffectedScope.Empty,
+                LiveSyncDiagnosticCodes.NotRunning,
+                "The runtime engine is not running; live sync was skipped."));
+
+        var result = await fixture.Sut.EditTransformAsync(
+            context,
+            [node.Id],
+            new TransformEdit(
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                Optional<Vector3>.Unspecified,
+                PositionX: Optional<float>.Supplied(4.0f)),
+            EditSessionToken.OneShot);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
+    }
+
+    [TestMethod]
     public async Task EditMaterialSlotAsync_WhenCleared_PersistsEmptySentinelSlot()
     {
         var fixture = CreateFixture();

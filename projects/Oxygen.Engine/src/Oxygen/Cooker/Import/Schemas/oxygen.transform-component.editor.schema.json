@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://oxygen.editor/schemas/oxygen.transform-component.editor.schema.json",
+    "$ref": "oxygen.transform-component.schema.json",
+    "title": "TransformComponent (editor overlay)",
+    "description": "Editor metadata layered on top of the engine schema. Adds x-editor-* annotations only; introduces no constraints.",
+    "properties": {
+        "local_position": {
+            "x-editor-label": "Position",
+            "x-editor-group": "Transform",
+            "x-editor-order": 0,
+            "x-editor-renderer": "vector3-box",
+            "x-editor-step": 0.01,
+            "x-editor-tooltip": "Local position relative to the parent node.",
+            "items": {
+                "x-editor-step": 0.01
+            }
+        },
+        "local_rotation_euler_degrees": {
+            "x-editor-label": "Rotation",
+            "x-editor-group": "Transform",
+            "x-editor-order": 1,
+            "x-editor-renderer": "vector3-box",
+            "x-editor-step": 0.5,
+            "x-editor-tooltip": "Local rotation in Euler angles (degrees), applied as XYZ.",
+            "items": {
+                "x-editor-step": 0.5
+            }
+        },
+        "local_scale": {
+            "x-editor-label": "Scale",
+            "x-editor-group": "Transform",
+            "x-editor-order": 2,
+            "x-editor-renderer": "vector3-box",
+            "x-editor-step": 0.01,
+            "x-editor-tooltip": "Local non-uniform scale.",
+            "items": {
+                "x-editor-step": 0.01
+            }
+        }
+    }
+}

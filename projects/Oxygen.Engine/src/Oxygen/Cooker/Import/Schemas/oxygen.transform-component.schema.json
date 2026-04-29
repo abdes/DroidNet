@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://oxygen.engine/schemas/oxygen.transform-component.schema.json",
+    "title": "TransformComponent",
+    "description": "Authoring contract for a scene-node transform component.",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "kind": {
+            "const": "transform"
+        },
+        "local_position": {
+            "$ref": "#/definitions/vec3"
+        },
+        "local_rotation_euler_degrees": {
+            "$ref": "#/definitions/vec3"
+        },
+        "local_scale": {
+            "$ref": "#/definitions/vec3"
+        }
+    },
+    "required": ["kind", "local_position", "local_rotation_euler_degrees", "local_scale"],
+    "definitions": {
+        "vec3": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+        }
+    }
+}

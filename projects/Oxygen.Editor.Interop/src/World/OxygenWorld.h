@@ -15,10 +15,24 @@ using namespace System::Numerics;
 
 namespace Oxygen::Interop::World {
 
-  // Future Enhancements:
-  // - Implement Two-Way Synchronization (Engine -> Editor events for
-  // physics/scripts).
-  // - Implement Read-Replica for thread-safe immediate property access.
+  //! Wire-format entry for the property-pipeline transport (§5.3).
+  /*!
+   The (ComponentId, FieldId) pair is the property-pipeline §5.3 wire
+   address. ComponentId is a stable engine-wide enum (see
+   `oxygen::interop::module::ComponentId` in PropertyKeys.h);
+   FieldId is a component-local enumerator owned by the matching
+   `IComponentPropertyApplier`. Adding a new component or property
+   never requires changing this struct.
+
+   The payload is intentionally a single `float`: vector/quaternion/
+   color values decompose into per-axis float entries so the transport
+   remains uniform. Non-scalar payloads will tag-extend later.
+  */
+  public value struct PropertyValueEntry {
+    System::UInt16 ComponentId;
+    System::UInt16 FieldId;
+    float Value;
+  };
 
   public
   ref class OxygenWorld {
@@ -55,6 +69,10 @@ namespace Oxygen::Interop::World {
       System::Numerics::Vector3 position,
       System::Numerics::Quaternion rotation,
       System::Numerics::Vector3 scale);
+
+    //! Property pipeline §5.3 — enqueue a generic SetProperties command.
+    void SetProperties(System::Guid nodeId,
+      array<PropertyValueEntry>^ entries);
 
     // Geometry management
     void SetGeometry(System::Guid nodeId, String^ assetUri);

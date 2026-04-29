@@ -98,6 +98,22 @@ public interface ISceneEngineSync
     /// <returns>A task that completes when the transform is updated.</returns>
     public Task UpdateNodeTransformAsync(SceneNode node);
 
+    /// <summary>
+    ///     Property pipeline §5.3 transport — enqueues a generic
+    ///     <c>SetProperties</c> command for a node carrying scalar
+    ///     property entries identified by <see cref="EnginePropertyValueEntry"/>.
+    /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The scene node id and diagnostic scope.</param>
+    /// <param name="entries">The property entries.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
+    public Task<SyncOutcome> UpdatePropertiesAsync(
+        Scene scene,
+        SceneNode node,
+        IReadOnlyList<EnginePropertyValueEntry> entries,
+        CancellationToken cancellationToken = default);
+
     // ============================================================================
     // Geometry Operations - Coarse-Grained
     // ============================================================================

@@ -39,6 +39,8 @@
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetPropertiesCommand.h>
+#include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
@@ -445,6 +447,57 @@ namespace Oxygen::Interop::World {
     auto cmd = std::unique_ptr<SetLocalTransformCommand>(
       commandFactory_->CreateSetLocalTransform(nodeHandle, glm_pos, glm_rot,
         glm_scale));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::SetProperties(System::Guid nodeId,
+    array<PropertyValueEntry>^ entries) {
+    if (entries == nullptr || entries->Length == 0) {
+      return;
+    }
+
+    // Property pipeline §5.3: ensure the per-component dispatch
+    // registry is populated before the first SetProperties command
+    // runs. Bootstrap is idempotent (std::call_once).
+    oxygen::interop::module::PropertyApplierRegistry::Bootstrap();
+
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew System::InvalidOperationException(
+        "SetProperties failed because the native engine context is not available.");
+    }
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module) {
+      throw gcnew System::InvalidOperationException(
+        "SetProperties failed because EditorModule is not available.");
+    }
+
+    auto b = nodeId.ToByteArray();
+    std::array<uint8_t, 16> key{};
+    for (int i = 0; i < 16; ++i)
+      key[i] = b[i];
+
+    auto opt = NodeRegistry::Lookup(key);
+    if (!opt.has_value()) {
+      throw gcnew System::ArgumentException(
+        "SetProperties failed because the target scene node is not registered.");
+    }
+
+    const auto& nodeHandle = opt.value();
+
+    std::vector<oxygen::interop::module::PropertyEntry> native_entries;
+    native_entries.reserve(entries->Length);
+    for (int i = 0; i < entries->Length; ++i) {
+      PropertyValueEntry entry = entries[i];
+      native_entries.push_back({
+        static_cast<oxygen::interop::module::ComponentId>(entry.ComponentId),
+        entry.FieldId,
+        entry.Value });
+    }
+
+    auto cmd = std::unique_ptr<SetPropertiesCommand>(
+      commandFactory_->CreateSetProperties(nodeHandle, std::move(native_entries)));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
