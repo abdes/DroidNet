@@ -28,6 +28,9 @@ namespace oxygen::examples::ui {
 namespace {
 
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
+  constexpr float kMaxSkySphereIntensity = 100000.0F;
+  constexpr float kMinSkySphereExposureEv = -16.0F;
+  constexpr float kMaxSkySphereExposureEv = 16.6F;
   constexpr const char* kShadowResolutionLabels[] = {
     "Low",
     "Medium",
@@ -54,6 +57,24 @@ namespace {
       cos_el * std::sin(az_rad),
       std::sin(el_rad),
     };
+  }
+
+  auto SkySphereRadianceScaleToEv(float scale) -> float
+  {
+    if (!(scale > 0.0F)) {
+      return kMinSkySphereExposureEv;
+    }
+    scale = std::clamp(scale, 0.0F, kMaxSkySphereIntensity);
+    return std::clamp(
+      std::log2(scale), kMinSkySphereExposureEv, kMaxSkySphereExposureEv);
+  }
+
+  auto SkySphereExposureEvToRadianceScale(float exposure_ev) -> float
+  {
+    exposure_ev = std::clamp(
+      exposure_ev, kMinSkySphereExposureEv, kMaxSkySphereExposureEv);
+    return std::clamp(
+      std::exp2(exposure_ev), 0.0F, kMaxSkySphereIntensity);
   }
 
   auto KelvinToLinearRgb(float kelvin) -> glm::vec3
@@ -1219,10 +1240,20 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     }
   }
 
-  float sky_intensity = environment_vm_->GetSkyIntensity();
-  if (ImGui::DragFloat(
-        "SkySphere Intensity", &sky_intensity, 0.01F, 0.0F, 20.0F, "%.2F")) {
-    environment_vm_->SetSkyIntensity(sky_intensity);
+  const float sky_intensity = environment_vm_->GetSkyIntensity();
+  float sky_exposure_ev = SkySphereRadianceScaleToEv(sky_intensity);
+  const char* exposure_label = sky_sphere_source == 0
+    ? "Skybox Exposure (EV)"
+    : "Sky Color Exposure (EV)";
+  if (ImGui::DragFloat(exposure_label, &sky_exposure_ev, 0.05F,
+        kMinSkySphereExposureEv, kMaxSkySphereExposureEv, "%+.2f")) {
+    environment_vm_->SetSkyIntensity(
+      SkySphereExposureEvToRadianceScale(sky_exposure_ev));
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Radiance scale %.6g. EV +8 = 256, EV +10 = 1024.",
+      static_cast<double>(sky_intensity));
   }
 
   float sky_sphere_rotation_deg = environment_vm_->GetSkySphereRotationDeg();

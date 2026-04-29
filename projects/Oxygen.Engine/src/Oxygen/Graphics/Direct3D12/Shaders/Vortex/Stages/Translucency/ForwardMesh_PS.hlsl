@@ -99,7 +99,7 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
   float3 ibl_specular = 0.0.xxx;
 
   if (env_state.data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX
-    && BX_IN_GLOBAL_SRV(env_state.data.sky_light.prefilter_map_slot)) {
+    && BX_IN_TEXTURES(env_state.data.sky_light.prefilter_map_slot)) {
     TextureCube<float4> pref_map
       = ResourceDescriptorHeap[env_state.data.sky_light.prefilter_map_slot];
     ibl_specular

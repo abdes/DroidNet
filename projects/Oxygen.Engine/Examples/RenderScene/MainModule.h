@@ -163,6 +163,7 @@ private:
   bool startup_skybox_flip_y_ { false };
   bool startup_skybox_tonemap_hdr_to_ldr_ { false };
   float startup_skybox_hdr_exposure_ev_ { 0.0F };
+  float startup_sky_sphere_intensity_ { 1.0F };
   std::unique_ptr<SkyboxService> startup_skybox_service_;
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };

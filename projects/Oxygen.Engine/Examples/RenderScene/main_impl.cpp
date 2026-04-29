@@ -355,16 +355,19 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         = settings->GetBool("env.skybox.tonemap_hdr_to_ldr").value_or(false);
       app.startup_skybox_hdr_exposure_ev
         = settings->GetFloat("env.skybox.hdr_exposure_ev").value_or(0.0F);
+      app.startup_sky_sphere_intensity
+        = settings->GetFloat("env.sky_sphere.intensity").value_or(1.0F);
     }
     app.startup_skybox_path = startup_skybox_path;
     if (!app.startup_skybox_path.empty()) {
       LOG_F(INFO,
         "Resolved startup skybox path='{}' layout={} output={} face_size={} "
-        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={}",
+        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} sky_intensity={}",
         app.startup_skybox_path, app.startup_skybox_layout,
         app.startup_skybox_output_format, app.startup_skybox_face_size,
         app.startup_skybox_flip_y, app.startup_skybox_tonemap_hdr_to_ldr,
-        app.startup_skybox_hdr_exposure_ev);
+        app.startup_skybox_hdr_exposure_ev,
+        app.startup_sky_sphere_intensity);
     }
     LOG_F(INFO, "Resolved directional shadow policy = {}",
       app.directional_shadow_policy);

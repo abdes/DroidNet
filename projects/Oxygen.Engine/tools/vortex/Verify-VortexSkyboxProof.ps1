@@ -54,6 +54,8 @@ $required = @(
   '^sky_sphere_source=0$',
   '^sky_sphere_enabled=1$',
   '^sky_sphere_cubemap_slot_valid=true$',
+  '^sky_sphere_cubemap_slot_in_textures=true$',
+  '^sky_background_overall_verdict=true$',
   '^sky_sphere_valid_for_cubemap=true$'
 )
 
@@ -71,6 +73,15 @@ if ($nonBlackLine.Count -ne 1) {
 $nonBlack = [int]$nonBlackLine[0].Matches[0].Groups[1].Value
 if ($nonBlack -lt 1) {
   throw "Skybox proof expected at least one non-black top-of-frame sample"
+}
+
+$tonemapSkyLine = @(Select-String -Path $captureReportFullPath -Pattern '^stage22_tonemap_sky_nonblack_after_count=(\d+)$')
+if ($tonemapSkyLine.Count -ne 1) {
+  throw "Missing stage22_tonemap_sky_nonblack_after_count in $captureReportFullPath"
+}
+$tonemapSkyNonBlack = [int]$tonemapSkyLine[0].Matches[0].Groups[1].Value
+if ($tonemapSkyNonBlack -lt 1) {
+  throw "Skybox proof expected at least one sampled sky pixel to survive Stage 22 tonemap"
 }
 
 Write-Output "Skybox proof report: $captureReportFullPath"

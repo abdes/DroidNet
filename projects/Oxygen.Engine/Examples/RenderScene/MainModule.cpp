@@ -222,6 +222,8 @@ MainModule::MainModule(const examples::DemoAppContext& app)
     startup_skybox_tonemap_hdr_to_ldr_
       = app.startup_skybox_tonemap_hdr_to_ldr;
     startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
+    startup_sky_sphere_intensity_
+      = std::max(app.startup_sky_sphere_intensity, 0.0F);
   }
 }
 
@@ -356,9 +358,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell->SetStagedMainCamera(main_camera_);
-  if (!startup_scene_name_.has_value()) {
-    ApplyStartupSkyboxToScene(staged_scene, "fallback");
-  }
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
@@ -1081,9 +1080,6 @@ auto MainModule::StageFallbackScene() -> void
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
-  if (!startup_scene_name_.has_value()) {
-    ApplyStartupSkyboxToScene(staged_scene, "fallback");
-  }
 }
 
 auto MainModule::ApplyStartupSkyboxToScene(
@@ -1135,13 +1131,15 @@ auto MainModule::ApplyStartupSkyboxToScene(
   options.hdr_exposure_ev = startup_skybox_hdr_exposure_ev_;
 
   SkyboxService::SkyLightParams params;
+  params.sky_sphere_intensity = startup_sky_sphere_intensity_;
   LOG_F(INFO,
     "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
-    "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={})",
+    "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} "
+    "sky_intensity={})",
     startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
     startup_skybox_output_format_, options.cube_face_size,
     startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
-    startup_skybox_hdr_exposure_ev_);
+    startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity);
 
   startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
     options, params,

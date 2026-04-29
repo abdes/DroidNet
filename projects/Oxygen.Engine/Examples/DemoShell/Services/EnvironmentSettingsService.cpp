@@ -46,6 +46,7 @@ namespace {
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
   constexpr float kMetersToKm = engine::atmos::kMToSkyUnit;
   constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
+  constexpr float kMaxSkySphereIntensity = 100000.0F;
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -3727,7 +3728,7 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
 
   clamp_int(sky_sphere_source_, 0, 1);
   clamp_vec3_min(sky_sphere_solid_color_, 0.0F);
-  clamp_float(sky_intensity_, 0.0F, 1000.0F);
+  clamp_float(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
   clamp_float(sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
 
   clamp_int(skybox_layout_idx_, 0, 4);
@@ -4107,7 +4108,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   if (load_custom_state && loaded_schema_version < 2.0F) {
     // v1 stored invalid coupled intensity defaults; force safe independent
     // values on migration.
-    sky_intensity_ = std::clamp(sky_intensity_, 0.0F, 1000.0F);
+    sky_intensity_ = std::clamp(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
     sky_light_intensity_mul_
       = std::clamp(sky_light_intensity_mul_, 0.0F, 100.0F);
     any_loaded = true;

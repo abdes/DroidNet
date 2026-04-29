@@ -242,6 +242,14 @@ Directional sun lighting has three independent roles:
 Static cubemap skybox behavior:
 
 - the cubemap pixels are authored radiance/image content
+- `SkySphere::intensity` is a scene-linear radiance multiplier, not an
+  exposure-compensation bypass. `1.0` is identity: it preserves imported texel
+  values and does not mean the cubemap is physically calibrated or luminous
+  under every exposure. Normalized HDRIs, SDR/LDR cubemaps, and artist-authored
+  backgrounds commonly require authored multipliers in the hundreds or
+  thousands under daylight manual exposure. Proof scenes and demo settings must
+  author an intensity appropriate for the active exposure instead of adding
+  hidden shader-side brightening.
 - the directional sun does not illuminate, rotate, or recolor those pixels
 - if the cubemap contains a visible sun, it is just part of the texture
 - time-of-day cubemap synthesis and procedural sun-disk overlay are future work
@@ -323,7 +331,10 @@ Implementation behavior:
    - if source is solid color, output color directly
    - if source is cubemap, reconstruct world view direction, apply +Z yaw
      rotation, sample TextureCube, multiply by tint and intensity
-   - clamp or pre-exposure-handle consistently with current sky pass output
+   - output scene-linear HDR radiance consistently with the current sky pass;
+     Stage 22 applies the view exposure and tone mapper. The shader must not
+     multiply by reciprocal exposure or auto-normalize HDR sources to make
+     cubemaps look like UI images.
    - return without evaluating procedural atmosphere background
 3. Else if atmosphere is selected and valid, run current sky-atmosphere path.
 4. Else discard.

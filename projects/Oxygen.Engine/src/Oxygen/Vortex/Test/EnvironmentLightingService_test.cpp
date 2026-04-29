@@ -468,6 +468,9 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(Contains(sky, "env_data.sky_sphere.enabled"));
   EXPECT_TRUE(Contains(sky, "kSkySphereSourceSolidColor"));
   EXPECT_TRUE(Contains(sky, "TextureCube<float4> sky_cube"));
+  EXPECT_TRUE(
+    Contains(sky, "env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX"));
+  EXPECT_TRUE(Contains(sky, "BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot)"));
   EXPECT_TRUE(Contains(sky, "RotateDirectionAroundOxygenUp"));
   EXPECT_TRUE(Contains(sky, "CubemapSamplingDirFromOxygenWS"));
 
@@ -631,7 +634,7 @@ auto MakeSceneWithSolidSkySphere() -> std::shared_ptr<oxygen::scene::Scene>
   sky_sphere.SetSource(oxygen::scene::environment::SkySphereSource::kSolidColor);
   sky_sphere.SetSolidColorRgb({ 0.2F, 0.4F, 0.6F });
   sky_sphere.SetTintRgb({ 1.0F, 0.5F, 0.25F });
-  sky_sphere.SetIntensity(2.0F);
+  sky_sphere.SetIntensity(512.0F);
   sky_sphere.SetRotationRadians(0.75F);
 
   scene->SetEnvironment(std::move(environment));
@@ -1078,7 +1081,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[0], 1.0F);
   EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[1], 0.5F);
   EXPECT_FLOAT_EQ(static_data->sky_sphere.tint_rgb[2], 0.25F);
-  EXPECT_FLOAT_EQ(static_data->sky_sphere.intensity, 2.0F);
+  EXPECT_FLOAT_EQ(static_data->sky_sphere.intensity, 512.0F);
   EXPECT_FLOAT_EQ(static_data->sky_sphere.rotation_radians, 0.75F);
   EXPECT_EQ(
     static_data->sky_sphere.cubemap_slot, oxygen::kInvalidBindlessIndex);

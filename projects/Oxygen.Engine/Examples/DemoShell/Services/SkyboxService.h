@@ -83,6 +83,8 @@ public:
 
   //! Sky lighting parameters.
   struct SkyLightParams {
+    //! Scene-linear sky background radiance scale; 1.0 is imported-texel
+    //! identity, not a physically calibrated daylight brightness guarantee.
     float sky_sphere_intensity { 1.0F };
     float intensity_mul { 1.0F };
     float diffuse_intensity { 1.0F };
@@ -106,10 +108,10 @@ public:
   SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
     observer_ptr<scene::Scene> scene);
 
-  ~SkyboxService() = default;
+  ~SkyboxService();
 
   OXYGEN_MAKE_NON_COPYABLE(SkyboxService)
-  OXYGEN_DEFAULT_MOVABLE(SkyboxService)
+  OXYGEN_MAKE_NON_MOVABLE(SkyboxService)
 
   //! Begin loading a skybox and invoke `on_complete` when finished.
   auto StartLoadSkybox(const std::string& file_path, const LoadOptions& options,
@@ -135,9 +137,13 @@ public:
   }
 
 private:
+  auto PinCurrentResource(content::ResourceKey key) -> bool;
+  auto ReleasePinnedResource() noexcept -> void;
+
   observer_ptr<content::IAssetLoader> asset_loader_;
   observer_ptr<scene::Scene> scene_ { nullptr };
   content::ResourceKey current_resource_key_ { 0U };
+  content::ResourceKey pinned_resource_key_ { 0U };
 
   //! Cached RGBA8 pixel data for sun direction estimation.
   std::vector<std::byte> cached_rgba8_;
