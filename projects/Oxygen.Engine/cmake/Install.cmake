@@ -16,6 +16,37 @@ if(NOT DEFINED ${META_PROJECT_ID}_INSTALL)
   )
 endif()
 
+function(_oxygen_emit_multi_config_install_prefix_hook)
+  get_property(
+    _oxygen_is_multi_config
+    GLOBAL
+    PROPERTY GENERATOR_IS_MULTI_CONFIG
+  )
+  if(NOT _oxygen_is_multi_config OR OXYGEN_WITH_ASAN)
+    return()
+  endif()
+
+  install(
+    CODE
+      [[
+    set(_oxygen_install_base_prefix "${CMAKE_INSTALL_PREFIX}")
+    if(_oxygen_install_base_prefix MATCHES "/(Debug|Release|RelWithDebInfo|MinSizeRel)$")
+      string(
+        REGEX REPLACE
+        "/(Debug|Release|RelWithDebInfo|MinSizeRel)$"
+        ""
+        _oxygen_install_base_prefix
+        "${_oxygen_install_base_prefix}"
+      )
+    endif()
+    set(
+      CMAKE_INSTALL_PREFIX
+      "${_oxygen_install_base_prefix}/${CMAKE_INSTALL_CONFIG_NAME}"
+    )
+  ]]
+  )
+endfunction()
+
 macro(_setup_install_dirs)
   message(STATUS "Using CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
   # Check for system dir install
@@ -65,19 +96,25 @@ macro(_setup_install_dirs)
     else()
       set(OXYGEN_INSTALL_SHARED "${OXYGEN_INSTALL_LIB}") # ./lib
     endif()
-    set(
-      OXYGEN_INSTALL_CMAKE
-      "${CMAKE_INSTALL_PREFIX}/share/cmake/${META_PROJECT_NAME}"
-    ) # ./share/cmake/<project>
-    set(OXYGEN_INSTALL_PKGCONFIG "${CMAKE_INSTALL_PREFIX}/share/pkgconfig") # ./share/pkgconfig
-    set(OXYGEN_INSTALL_EXAMPLES "${CMAKE_INSTALL_PREFIX}/examples") # ./examples
-    set(OXYGEN_INSTALL_DATA "${CMAKE_INSTALL_PREFIX}") # ./
-    set(OXYGEN_INSTALL_INCLUDE "${CMAKE_INSTALL_PREFIX}/include") # ./include
-    set(OXYGEN_INSTALL_DOC "${CMAKE_INSTALL_PREFIX}/doc") # ./doc
-    set(OXYGEN_INSTALL_SHORTCUTS "${CMAKE_INSTALL_PREFIX}/shortcuts") # ./shortcuts
-    set(OXYGEN_INSTALL_ICONS "${CMAKE_INSTALL_PREFIX}/icons") # ./icons
-    set(OXYGEN_INSTALL_INIT "${CMAKE_INSTALL_PREFIX}/init") # ./init
-    set(OXYGEN_INSTALL_MISC "${CMAKE_INSTALL_PREFIX}") # ./
+    set(OXYGEN_INSTALL_CMAKE "share/cmake/${META_PROJECT_NAME}") # ./share/cmake/<project>
+    set(OXYGEN_INSTALL_PKGCONFIG "share/pkgconfig") # ./share/pkgconfig
+    set(OXYGEN_INSTALL_EXAMPLES "examples") # ./examples
+    set(OXYGEN_INSTALL_DATA ".") # ./
+    set(OXYGEN_INSTALL_INCLUDE "include") # ./include
+    set(OXYGEN_INSTALL_DOC "doc") # ./doc
+    set(OXYGEN_INSTALL_SHORTCUTS "shortcuts") # ./shortcuts
+    set(OXYGEN_INSTALL_ICONS "icons") # ./icons
+    set(OXYGEN_INSTALL_INIT "init") # ./init
+    set(OXYGEN_INSTALL_MISC ".") # ./
+  endif()
+  if(OXYGEN_INSTALL_DATA STREQUAL ".")
+    set(OXYGEN_INSTALL_SCHEMAS "schemas")
+  else()
+    cmake_path(
+      APPEND OXYGEN_INSTALL_DATA
+      "schemas"
+      OUTPUT_VARIABLE OXYGEN_INSTALL_SCHEMAS
+    )
   endif()
   # cmake-format: on
 endmacro()
@@ -157,8 +194,7 @@ function(oxygen_module_install)
     ARCHIVE
       DESTINATION ${OXYGEN_INSTALL_LIB}
       COMPONENT ${mod_dev}
-    FILE_SET
-    HEADERS
+    FILE_SET HEADERS
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
       COMPONENT ${mod_dev}
   )
@@ -168,7 +204,8 @@ function(oxygen_module_install)
     EXPORT ${META_MODULE_NAME}
     NAMESPACE ${x_EXPORT}::
     DESTINATION ${OXYGEN_INSTALL_CMAKE}
-    FILE ${META_MODULE_NAME}-targets.cmake COMPONENT ${mod_dev}
+    FILE ${META_MODULE_NAME}-targets.cmake
+    COMPONENT ${mod_dev}
   )
 
   install(
@@ -184,8 +221,7 @@ function(oxygen_module_install)
     ARCHIVE
       DESTINATION ${OXYGEN_INSTALL_LIB}
       COMPONENT ${dev}
-    FILE_SET
-    HEADERS
+    FILE_SET HEADERS
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
       COMPONENT ${dev}
   )
@@ -195,6 +231,7 @@ function(oxygen_module_install)
     EXPORT ${META_MODULE_NAME}
     NAMESPACE ${x_EXPORT}::
     DESTINATION ${OXYGEN_INSTALL_CMAKE}
-    FILE ${META_MODULE_NAME}-targets.cmake COMPONENT ${dev}
+    FILE ${META_MODULE_NAME}-targets.cmake
+    COMPONENT ${dev}
   )
 endfunction()

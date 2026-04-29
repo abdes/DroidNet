@@ -445,7 +445,7 @@ if(${META_PROJECT_ID}_INSTALL)
   install(
     FILES
       ${_oxygen_cooker_schema_files}
-    DESTINATION ${OXYGEN_INSTALL_DATA}/schemas
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT ${META_PROJECT_NAME}_data
   )
 endif()
