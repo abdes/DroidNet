@@ -30,6 +30,4 @@ public static class MaterialDiagnosticCodes
     public const string Broken = DiagnosticCodes.AssetIdentityPrefix + "MATERIAL.Broken";
 
     public const string NotCooked = DiagnosticCodes.AssetIdentityPrefix + "MATERIAL.NotCooked";
-
-    public const string LiveSyncUnsupported = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Unsupported";
 }

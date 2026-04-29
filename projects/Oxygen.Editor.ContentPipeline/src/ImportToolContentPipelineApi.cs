@@ -104,6 +104,22 @@ public sealed partial class ImportToolContentPipelineApi : IEngineContentPipelin
         try
         {
             var document = ReadLooseCookedIndex(cookedRoot);
+            var validationDiagnostics = ValidateLooseCookedDocument(
+                operationId,
+                cookedRoot,
+                document,
+                ContentPipelineDiagnosticCodes.InspectFailed);
+            if (validationDiagnostics.Count > 0)
+            {
+                return Task.FromResult(new CookInspectionResult(
+                    cookedRoot,
+                    Succeeded: false,
+                    SourceIdentity: document.SourceGuid,
+                    Assets: [],
+                    Files: [],
+                    validationDiagnostics));
+            }
+
             return Task.FromResult(new CookInspectionResult(
                 cookedRoot,
                 Succeeded: true,
@@ -156,7 +172,17 @@ public sealed partial class ImportToolContentPipelineApi : IEngineContentPipelin
         var operationId = Guid.NewGuid();
         try
         {
-            _ = ReadLooseCookedIndex(cookedRoot);
+            var document = ReadLooseCookedIndex(cookedRoot);
+            var validationDiagnostics = ValidateLooseCookedDocument(
+                operationId,
+                cookedRoot,
+                document,
+                ContentPipelineDiagnosticCodes.ValidateFailed);
+            if (validationDiagnostics.Count > 0)
+            {
+                return Task.FromResult(new CookValidationResult(cookedRoot, Succeeded: false, validationDiagnostics));
+            }
+
             return Task.FromResult(new CookValidationResult(cookedRoot, Succeeded: true, Diagnostics: []));
         }
         catch (Exception ex) when (IsLooseCookedReadFailure(ex))
@@ -210,6 +236,113 @@ public sealed partial class ImportToolContentPipelineApi : IEngineContentPipelin
         using var stream = File.OpenRead(indexPath);
         return LooseCookedIndex.Read(stream);
     }
+
+    private static IReadOnlyList<DiagnosticRecord> ValidateLooseCookedDocument(
+        Guid operationId,
+        string cookedRoot,
+        Document document,
+        string diagnosticCode)
+    {
+        var diagnostics = new List<DiagnosticRecord>();
+        foreach (var asset in document.Assets)
+        {
+            if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    "Cooked asset descriptor path is missing.",
+                    cookedRoot,
+                    asset.VirtualPath));
+                continue;
+            }
+
+            var descriptorPath = Path.Combine(
+                cookedRoot,
+                asset.DescriptorRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(descriptorPath))
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    $"Cooked asset descriptor is missing: {asset.DescriptorRelativePath}.",
+                    descriptorPath,
+                    asset.VirtualPath));
+                continue;
+            }
+
+            var actualSize = new FileInfo(descriptorPath).Length;
+            if (actualSize != (long)asset.DescriptorSize)
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    $"Cooked asset descriptor size mismatch for {asset.DescriptorRelativePath}.",
+                    descriptorPath,
+                    asset.VirtualPath,
+                    $"Expected {asset.DescriptorSize} bytes, found {actualSize} bytes."));
+            }
+        }
+
+        foreach (var file in document.Files)
+        {
+            if (string.IsNullOrWhiteSpace(file.RelativePath))
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    "Cooked file record path is missing.",
+                    cookedRoot,
+                    affectedVirtualPath: null));
+                continue;
+            }
+
+            var filePath = Path.Combine(cookedRoot, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(filePath))
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    $"Cooked file record is missing: {file.RelativePath}.",
+                    filePath,
+                    affectedVirtualPath: null));
+                continue;
+            }
+
+            var actualSize = new FileInfo(filePath).Length;
+            if (actualSize != (long)file.Size)
+            {
+                diagnostics.Add(CreateCookedValidationDiagnostic(
+                    operationId,
+                    diagnosticCode,
+                    $"Cooked file record size mismatch for {file.RelativePath}.",
+                    filePath,
+                    affectedVirtualPath: null,
+                    $"Expected {file.Size} bytes, found {actualSize} bytes."));
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static DiagnosticRecord CreateCookedValidationDiagnostic(
+        Guid operationId,
+        string code,
+        string message,
+        string affectedPath,
+        string? affectedVirtualPath,
+        string? technicalMessage = null)
+        => new()
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Error,
+            Code = code,
+            Message = message,
+            TechnicalMessage = technicalMessage,
+            AffectedPath = affectedPath,
+            AffectedVirtualPath = affectedVirtualPath,
+        };
 
     private static DiagnosticRecord CreateImportFailureDiagnostic(
         Guid operationId,

@@ -86,6 +86,38 @@ public sealed class ImportToolContentPipelineApiTests
     }
 
     [TestMethod]
+    public async Task InspectLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
+    {
+        using var workspace = new TempWorkspace();
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        WriteLooseCookedIndex(cookedRoot, descriptorSize: 128, actualDescriptorBytes: new byte[256], fileSize: 8, actualFileBytes: new byte[8]);
+        var api = CreateApi(workspace);
+
+        var result = await api.InspectLooseCookedRootAsync(cookedRoot, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle();
+        _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.InspectFailed);
+        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
+    }
+
+    [TestMethod]
+    public async Task ValidateLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
+    {
+        using var workspace = new TempWorkspace();
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        WriteLooseCookedIndex(cookedRoot, descriptorSize: 128, actualDescriptorBytes: new byte[256], fileSize: 8, actualFileBytes: new byte[8]);
+        var api = CreateApi(workspace);
+
+        var result = await api.ValidateLooseCookedRootAsync(cookedRoot, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle();
+        _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.ValidateFailed);
+        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
+    }
+
+    [TestMethod]
     public async Task InspectLooseCookedRootAsync_WhenIndexMissing_ShouldReturnSynthesizedDiagnostic()
     {
         using var workspace = new TempWorkspace();
@@ -171,9 +203,21 @@ public sealed class ImportToolContentPipelineApiTests
                     Name: "Red"),
             ]);
 
-    private static void WriteLooseCookedIndex(string cookedRoot)
+    private static void WriteLooseCookedIndex(
+        string cookedRoot,
+        ulong descriptorSize = 128,
+        byte[]? actualDescriptorBytes = null,
+        ulong fileSize = 8,
+        byte[]? actualFileBytes = null)
     {
         Directory.CreateDirectory(cookedRoot);
+        Directory.CreateDirectory(Path.Combine(cookedRoot, "Content", "Materials"));
+        File.WriteAllBytes(
+            Path.Combine(cookedRoot, "Content", "Materials", "Red.omat"),
+            actualDescriptorBytes ?? new byte[(int)descriptorSize]);
+        File.WriteAllBytes(
+            Path.Combine(cookedRoot, "materials.bin"),
+            actualFileBytes ?? new byte[(int)fileSize]);
         using var stream = File.Create(Path.Combine(cookedRoot, "container.index.bin"));
         LooseCookedIndex.Write(
             stream,
@@ -188,12 +232,12 @@ public sealed class ImportToolContentPipelineApiTests
                         "Content/Materials/Red.omat",
                         "/Content/Materials/Red.omat",
                         AssetType: 1,
-                        DescriptorSize: 128,
+                        DescriptorSize: descriptorSize,
                         DescriptorSha256: new byte[32]),
                 ],
                 Files:
                 [
-                    new FileRecord(FileKind.BuffersData, "materials.bin", Size: 8, Sha256: new byte[32]),
+                    new FileRecord(FileKind.BuffersData, "materials.bin", fileSize, Sha256: new byte[32]),
                 ]));
     }
 

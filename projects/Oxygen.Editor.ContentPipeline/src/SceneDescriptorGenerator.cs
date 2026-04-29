@@ -104,7 +104,7 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
             Renderables: renderables.Count == 0 ? null : renderables,
             Cameras: cameras.Count == 0 ? null : new NativeCameras(cameras),
             Lights: lights,
-            Environment: CreateEnvironment(scene.Environment.AtmosphereEnabled),
+            Environment: CreateEnvironment(scene.Environment),
             References: materialRefs.Count == 0 ? null : new NativeReferences(materialRefs.ToArray(), ExtraAssets: null));
 
         Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
@@ -281,17 +281,23 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
         void AddEnvironmentDiagnostics()
         {
-            if (scene.Environment.ExposureMode != ExposureMode.Auto)
+            var postProcess = scene.Environment.PostProcess ?? new PostProcessEnvironmentData();
+            if (postProcess.ExposureMode != ExposureMode.Auto)
             {
                 diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ExposureMode"));
             }
 
-            if (Math.Abs(scene.Environment.ExposureCompensation) > float.Epsilon)
+            if (Math.Abs(postProcess.ManualExposureEv - new PostProcessEnvironmentData().ManualExposureEv) > float.Epsilon)
+            {
+                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ManualExposureEv"));
+            }
+
+            if (Math.Abs(postProcess.ExposureCompensationEv) > float.Epsilon)
             {
                 diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ExposureCompensation"));
             }
 
-            if (scene.Environment.ToneMapping != ToneMappingMode.Aces)
+            if (postProcess.ToneMapper != ToneMappingMode.AcesFitted)
             {
                 diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ToneMapping"));
             }
@@ -426,33 +432,33 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
             ? light.IsSunLight && sunNodeId == node.Id
             : light.IsSunLight;
 
-    private static NativeEnvironment CreateEnvironment(bool atmosphereEnabled)
-        => new(CreateDefaultSkyAtmosphere(atmosphereEnabled));
+    private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
+        => new(CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()));
 
-    private static NativeSkyAtmosphereEnvironment CreateDefaultSkyAtmosphere(bool enabled)
+    private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)
         => new(
             Enabled: enabled,
-            PlanetRadiusMeters: 6_360_000.0f,
-            AtmosphereHeightMeters: 80_000.0f,
-            GroundAlbedoRgb: [0.4f, 0.4f, 0.4f],
+            PlanetRadiusMeters: authored.PlanetRadiusMeters,
+            AtmosphereHeightMeters: authored.AtmosphereHeightMeters,
+            GroundAlbedoRgb: ToArray(authored.GroundAlbedoRgb),
             RayleighScatteringRgb: [5.8e-6f, 13.5e-6f, 33.1e-6f],
-            RayleighScaleHeightMeters: 8_000.0f,
+            RayleighScaleHeightMeters: authored.RayleighScaleHeightMeters,
             MieScatteringRgb: [21.0e-6f, 21.0e-6f, 21.0e-6f],
             MieAbsorptionRgb: [0.0f, 0.0f, 0.0f],
-            MieScaleHeightMeters: 1_200.0f,
-            MieAnisotropy: 0.8f,
+            MieScaleHeightMeters: authored.MieScaleHeightMeters,
+            MieAnisotropy: authored.MieAnisotropy,
             OzoneAbsorptionRgb: [0.65e-6f, 1.88e-6f, 0.085e-6f],
             OzoneDensityProfile: [25_000.0f, 15_000.0f, 0.0f],
             MultiScatteringFactor: 1.0f,
-            SkyLuminanceFactorRgb: [1.0f, 1.0f, 1.0f],
-            SkyAndAerialPerspectiveLuminanceFactorRgb: [1.0f, 1.0f, 1.0f],
-            AerialPerspectiveDistanceScale: 1.0f,
-            AerialScatteringStrength: 1.0f,
-            AerialPerspectiveStartDepthMeters: 0.0f,
-            HeightFogContribution: 1.0f,
+            SkyLuminanceFactorRgb: ToArray(authored.SkyLuminanceFactorRgb),
+            SkyAndAerialPerspectiveLuminanceFactorRgb: ToArray(authored.SkyLuminanceFactorRgb),
+            AerialPerspectiveDistanceScale: authored.AerialPerspectiveDistanceScale,
+            AerialScatteringStrength: authored.AerialScatteringStrength,
+            AerialPerspectiveStartDepthMeters: authored.AerialPerspectiveStartDepthMeters,
+            HeightFogContribution: authored.HeightFogContribution,
             TraceSampleCountScale: 1.0f,
             TransmittanceMinLightElevationDegrees: -90.0f,
-            SunDiskEnabled: true,
+            SunDiskEnabled: authored.SunDiskEnabled,
             Holdout: false,
             RenderInMainPass: true);
 
