@@ -160,6 +160,9 @@ public:
   auto GetTextureMetadataJson(uint64_t hash) const -> std::string;
 
 private:
+  auto PinSyntheticTexture(oxygen::content::ResourceKey key) -> bool;
+  auto ReleasePinnedTextures() noexcept -> void;
+
   void LoadTexturesJson();
   void SaveTexturesJson();
 
@@ -189,6 +192,7 @@ private:
   std::filesystem::path textures_data_path_ {};
   std::vector<oxygen::data::pak::core::TextureResourceDesc> texture_table_ {};
   std::vector<CookedTextureEntry> cooked_entries_ {};
+  std::vector<oxygen::content::ResourceKey> pinned_texture_keys_ {};
 };
 
 } // namespace oxygen::examples::textured_cube

@@ -207,7 +207,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         }
         else if (env_data.sky_sphere.source == kSkySphereSourceCubemap
             && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX
-            && BX_IN_GLOBAL_SRV(env_data.sky_sphere.cubemap_slot))
+            && BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot))
         {
             TextureCube<float4> sky_cube =
                 ResourceDescriptorHeap[env_data.sky_sphere.cubemap_slot];

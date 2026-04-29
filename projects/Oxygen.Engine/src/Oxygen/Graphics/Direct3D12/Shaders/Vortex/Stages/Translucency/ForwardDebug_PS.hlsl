@@ -312,7 +312,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
     if (LoadEnvironmentStaticData(env_data) && env_data.sky_light.enabled) {
       uint slot = env_data.sky_light.cubemap_slot;
-      if (slot != K_INVALID_BINDLESS_INDEX && BX_IN_GLOBAL_SRV(slot)) {
+      if (slot != K_INVALID_BINDLESS_INDEX && BX_IN_TEXTURES(slot)) {
         TextureCube<float4> sky_cube = ResourceDescriptorHeap[slot];
         float3 raw = sky_cube.SampleLevel(linear_sampler, cube_R, 0.0).rgb;
         debug_out = raw * env_data.sky_light.radiance_scale;

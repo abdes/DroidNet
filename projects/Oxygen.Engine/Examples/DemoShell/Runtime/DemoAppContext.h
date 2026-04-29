@@ -63,6 +63,7 @@ public:
   bool startup_skybox_flip_y { false };
   bool startup_skybox_tonemap_hdr_to_ldr { false };
   float startup_skybox_hdr_exposure_ev { 0.0F };
+  float startup_sky_sphere_intensity { 1.0F };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
