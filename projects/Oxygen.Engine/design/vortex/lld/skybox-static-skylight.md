@@ -157,7 +157,6 @@ Existing `SkyLight` fields:
 - `lower_hemisphere_color`
 - `volumetric_scattering_intensity`
 - `affect_reflections`
-- `affect_global_illumination`
 
 Required additions for VTX-M08:
 
@@ -185,21 +184,17 @@ Required behavior:
 - `source == kCapturedScene`: publish unavailable; no capture fallback.
 - `real_time_capture_enabled == true`: publish unavailable; no real-time
   capture fallback.
-- `affect_global_illumination == false`: products may remain generated for
-  diagnostics, but `EnvironmentLightingService` publishes `sky_light.enabled =
-  0` for shading consumers. Processed-product SRVs may remain bound for
-  diagnostics such as `ibl-raw-sky`.
 - `affect_reflections == false`: no effect in VTX-M08 because specular
   reflections are deferred; preserve the authored value for future stages.
 
 ## 4. Background Selection Policy
 
-3. Else if `SkySphere` is enabled and its source is valid, select `SkySphere`.
 Per view, resolve `VisibleSkyBackground` in this order:
 
 1. If the view feature mask disables environment, select `None`.
 2. If `SkyAtmosphere` is enabled and the view opts into atmosphere rendering,
    select `SkyAtmosphere`.
+3. Else if `SkySphere` is enabled and its source is valid, select `SkySphere`.
 4. Else select `None`.
 
 Reasoning:
@@ -459,8 +454,8 @@ manifest and UI/reporting path. They must not silently render black.
 - Preserve backwards-compatible defaults.
 - Extend FramePlanBuilder sky background selection.
 - Add unit tests for selection priority, feature-mask gates, and
-  `affect_global_illumination=false` publishing `sky_light.enabled = 0` for
-  shading while keeping diagnostics eligible to inspect generated products.
+  `diffuse_intensity == 0` disabling SkyLight diffuse shading while keeping
+  diagnostics eligible to inspect generated products.
 
 ### Slice B: Cubemap Product Processing
 

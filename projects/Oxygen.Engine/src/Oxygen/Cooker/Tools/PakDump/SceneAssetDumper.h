@@ -41,7 +41,6 @@ public:
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
     using oxygen::data::pak::world::FogEnvironmentRecord;
-    using oxygen::data::pak::world::kSkyLightEnvironmentRecordLegacySize;
     using oxygen::data::pak::world::LocalFogVolumeRecord;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::OrthographicCameraRecord;
@@ -440,8 +439,7 @@ public:
 
       const auto TryReadSkyLight = [&](const std::span<const std::byte> bytes)
         -> std::optional<SkyLightEnvironmentRecord> {
-        if (bytes.size() != sizeof(SkyLightEnvironmentRecord)
-          && bytes.size() != kSkyLightEnvironmentRecordLegacySize) {
+        if (bytes.size() != sizeof(SkyLightEnvironmentRecord)) {
           return std::nullopt;
         }
         std::vector<std::byte> buffer;
@@ -450,47 +448,10 @@ public:
         oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
         auto packed = reader.ScopedAlignment(1);
         SkyLightEnvironmentRecord decoded {};
-        if (bytes.size() == sizeof(SkyLightEnvironmentRecord)) {
-          const auto res = reader.ReadInto(decoded);
-          if (!res) {
-            return std::nullopt;
-          }
-          return decoded;
-        }
-
-        auto ok = static_cast<bool>(reader.ReadInto(decoded.header));
-        ok = ok && static_cast<bool>(reader.ReadInto(decoded.enabled));
-        ok = ok && static_cast<bool>(reader.ReadInto(decoded.source));
-        ok = ok && static_cast<bool>(reader.ReadInto(decoded.cubemap_asset));
-        ok = ok && static_cast<bool>(reader.ReadInto(decoded.intensity));
-        for (auto& v : decoded.tint_rgb) {
-          ok = ok && static_cast<bool>(reader.ReadInto(v));
-        }
-        ok
-          = ok && static_cast<bool>(reader.ReadInto(decoded.diffuse_intensity));
-        ok = ok
-          && static_cast<bool>(reader.ReadInto(decoded.specular_intensity));
-        ok = ok
-          && static_cast<bool>(
-            reader.ReadInto(decoded.real_time_capture_enabled));
-        for (auto& v : decoded.lower_hemisphere_color) {
-          ok = ok && static_cast<bool>(reader.ReadInto(v));
-        }
-        ok = ok
-          && static_cast<bool>(
-            reader.ReadInto(decoded.volumetric_scattering_intensity));
-        ok = ok
-          && static_cast<bool>(reader.ReadInto(decoded.affect_reflections));
-        ok = ok
-          && static_cast<bool>(
-            reader.ReadInto(decoded.affect_global_illumination));
-        if (!ok) {
+        const auto res = reader.ReadInto(decoded);
+        if (!res) {
           return std::nullopt;
         }
-        decoded.header.record_size = sizeof(SkyLightEnvironmentRecord);
-        decoded.source_cubemap_angle_radians = 0.0F;
-        decoded.lower_hemisphere_is_solid_color = 1U;
-        decoded.lower_hemisphere_blend_alpha = 1.0F;
         return decoded;
       };
 
@@ -719,8 +680,6 @@ public:
           "Volumetric Scattering", rec->volumetric_scattering_intensity, 10);
         PrintUtils::Field(
           "Affect Reflections", rec->affect_reflections != 0U, 10);
-        PrintUtils::Field(
-          "Affect GI", rec->affect_global_illumination != 0U, 10);
         break;
       }
       case EnvironmentComponentType::kSkySphere: {

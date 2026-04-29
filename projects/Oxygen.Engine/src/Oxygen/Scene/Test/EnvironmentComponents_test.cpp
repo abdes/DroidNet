@@ -156,7 +156,6 @@ NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)
   sky_light.SetLowerHemisphereBlendAlpha(0.35F);
   sky_light.SetVolumetricScatteringIntensity(0.4F);
   sky_light.SetAffectReflections(false);
-  sky_light.SetAffectGlobalIllumination(false);
 
   EXPECT_TRUE(sky_light.GetRealTimeCaptureEnabled());
   EXPECT_FLOAT_EQ(sky_light.GetSourceCubemapAngleRadians(), 0.75F);
@@ -165,7 +164,6 @@ NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)
   EXPECT_FLOAT_EQ(sky_light.GetLowerHemisphereBlendAlpha(), 0.35F);
   EXPECT_FLOAT_EQ(sky_light.GetVolumetricScatteringIntensity(), 0.4F);
   EXPECT_FALSE(sky_light.GetAffectReflections());
-  EXPECT_FALSE(sky_light.GetAffectGlobalIllumination());
 }
 
 NOLINT_TEST(EnvironmentComponentsTest,

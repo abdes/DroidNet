@@ -174,8 +174,6 @@ public:
   auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
   [[nodiscard]] auto GetSkyLightAffectReflections() const -> bool;
   auto SetSkyLightAffectReflections(bool enabled) -> void;
-  [[nodiscard]] auto GetSkyLightAffectGlobalIllumination() const -> bool;
-  auto SetSkyLightAffectGlobalIllumination(bool enabled) -> void;
 
   // Fog
   [[nodiscard]] auto GetFogEnabled() const -> bool;

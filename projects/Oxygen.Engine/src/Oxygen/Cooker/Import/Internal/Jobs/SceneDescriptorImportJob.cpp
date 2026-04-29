@@ -559,8 +559,6 @@ namespace {
         record.volumetric_scattering_intensity);
     record.affect_reflections
       = source.value("affect_reflections", true) ? 1U : 0U;
-    record.affect_global_illumination
-      = source.value("affect_global_illumination", true) ? 1U : 0U;
 
     return SceneEnvironmentSystem {
       .system_type = static_cast<uint32_t>(

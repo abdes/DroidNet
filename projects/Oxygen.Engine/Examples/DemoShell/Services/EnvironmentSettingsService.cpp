@@ -408,7 +408,6 @@ namespace {
     target.SetVolumetricScatteringIntensity(
       source.volumetric_scattering_intensity);
     target.SetAffectReflections(source.affect_reflections != 0U);
-    target.SetAffectGlobalIllumination(source.affect_global_illumination != 0U);
   }
 
   auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
@@ -527,8 +526,6 @@ namespace {
     = "env.sky_light.volumetric_scattering_intensity";
   constexpr std::string_view kSkyLightAffectReflectionsKey
     = "env.sky_light.affect_reflections";
-  constexpr std::string_view kSkyLightAffectGlobalIlluminationKey
-    = "env.sky_light.affect_global_illumination";
 
   constexpr std::string_view kFogEnabledKey = "env.fog.enabled";
   constexpr std::string_view kFogModelKey = "env.fog.model";
@@ -974,10 +971,10 @@ auto EnvironmentSettingsService::GetSkyAtmosphereEnabled() const -> bool
 
 auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
 {
-  const bool sky_sphere_was_enabled = sky_sphere_enabled_;
   if (sky_atmo_enabled_ == enabled) {
     return;
   }
+  const bool sky_sphere_was_enabled = sky_sphere_enabled_;
   sky_atmo_enabled_ = enabled;
   NormalizeSkySystems();
   auto dirty_domains = ToMask(DirtyDomain::kAtmosphereModel);
@@ -1738,22 +1735,6 @@ auto EnvironmentSettingsService::SetSkyLightAffectReflections(
     return;
   }
   sky_light_affect_reflections_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kSkyLight));
-}
-
-auto EnvironmentSettingsService::GetSkyLightAffectGlobalIllumination() const
-  -> bool
-{
-  return sky_light_affect_global_illumination_;
-}
-
-auto EnvironmentSettingsService::SetSkyLightAffectGlobalIllumination(
-  const bool enabled) -> void
-{
-  if (sky_light_affect_global_illumination_ == enabled) {
-    return;
-  }
-  sky_light_affect_global_illumination_ = enabled;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
@@ -3233,7 +3214,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetVolumetricScatteringIntensity(
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
-    light->SetAffectGlobalIllumination(sky_light_affect_global_illumination_);
     sky_light_cubemap_resource_key_ = light->GetCubemapResource();
   }
 
@@ -3382,8 +3362,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_volumetric_scattering_intensity_
       = light->GetVolumetricScatteringIntensity();
     sky_light_affect_reflections_ = light->GetAffectReflections();
-    sky_light_affect_global_illumination_
-      = light->GetAffectGlobalIllumination();
   } else {
     sky_light_enabled_ = false;
     sky_light_cubemap_resource_key_ = content::ResourceKey { 0U };
@@ -3983,8 +3961,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
       sky_light_volumetric_scattering_intensity_);
     any_loaded |= load_bool(
       kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
-    any_loaded |= load_bool(kSkyLightAffectGlobalIlluminationKey,
-      sky_light_affect_global_illumination_);
 
     any_loaded |= load_bool(kFogEnabledKey, fog_enabled_);
     any_loaded |= load_int(kFogModelKey, fog_model_);
@@ -4247,8 +4223,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightVolumetricScatteringIntensityKey,
     sky_light_volumetric_scattering_intensity_);
   save_bool(kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
-  save_bool(kSkyLightAffectGlobalIlluminationKey,
-    sky_light_affect_global_illumination_);
 
   save_bool(kFogEnabledKey, fog_enabled_);
   save_int(kFogModelKey, fog_model_);

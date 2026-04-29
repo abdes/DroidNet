@@ -458,7 +458,6 @@ Required authored fields:
 - `lower_hemisphere_color`
 - `volumetric_scattering_intensity`
 - `affect_reflections`
-- `affect_global_illumination`
 
 Authoring file:
 
@@ -693,7 +692,6 @@ Fields must match the authored Scene types in Section 4.
 - `lower_hemisphere_color`
 - `volumetric_scattering_intensity`
 - `affect_reflections`
-- `affect_global_illumination`
 
 #### 5.2.3 Local Fog Volume Record
 

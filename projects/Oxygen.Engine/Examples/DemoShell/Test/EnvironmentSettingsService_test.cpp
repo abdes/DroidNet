@@ -915,7 +915,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSkyLightLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
   service_.SetSkyLightVolumetricScatteringIntensity(0.6F);
   service_.SetSkyLightAffectReflections(false);
-  service_.SetSkyLightAffectGlobalIllumination(false);
   service_.ApplyPendingChanges();
 
   auto env = scene->GetEnvironment();
@@ -951,7 +950,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
   EXPECT_FLOAT_EQ(sky_light->GetVolumetricScatteringIntensity(), 0.6F);
   EXPECT_FALSE(sky_light->GetAffectReflections());
-  EXPECT_FALSE(sky_light->GetAffectGlobalIllumination());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

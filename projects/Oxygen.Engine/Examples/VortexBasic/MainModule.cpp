@@ -718,7 +718,6 @@ auto MainModule::EnsureScene() -> void
     sky_light->SetVolumetricScatteringIntensity(
       app_.vortex_sky_light_volumetric_scattering_intensity);
     sky_light->SetAffectReflections(true);
-    sky_light->SetAffectGlobalIllumination(true);
 
     auto* post_process
       = environment->TryGetSystem<scene::environment::PostProcessVolume>()

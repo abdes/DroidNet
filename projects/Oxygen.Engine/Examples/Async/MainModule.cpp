@@ -1124,7 +1124,6 @@ auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
   sky_light.SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
   sky_light.SetVolumetricScatteringIntensity(1.0F);
   sky_light.SetAffectReflections(true);
-  sky_light.SetAffectGlobalIllumination(true);
 
   auto& fog = environment->AddSystem<scene::environment::Fog>();
   fog.SetEnabled(true);

@@ -296,8 +296,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
         "lower_hemisphere_is_solid_color": true,
         "lower_hemisphere_blend_alpha": 1.0,
         "volumetric_scattering_intensity": 0.5,
-        "affect_reflections": true,
-        "affect_global_illumination": true
+        "affect_reflections": true
       }
     },
     "local_fog_volumes": [

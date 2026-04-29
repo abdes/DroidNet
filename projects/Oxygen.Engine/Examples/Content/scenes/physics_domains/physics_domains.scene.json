@@ -641,8 +641,7 @@
             "real_time_capture_enabled": true,
             "lower_hemisphere_color": [0.0, 0.0, 0.0],
             "volumetric_scattering_intensity": 1.0,
-            "affect_reflections": true,
-            "affect_global_illumination": true
+            "affect_reflections": true
         }
     }
 }

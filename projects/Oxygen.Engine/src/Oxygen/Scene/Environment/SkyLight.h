@@ -175,15 +175,6 @@ public:
     return affect_reflections_;
   }
 
-  auto SetAffectGlobalIllumination(const bool value) noexcept -> void
-  {
-    affect_global_illumination_ = value;
-  }
-  [[nodiscard]] auto GetAffectGlobalIllumination() const noexcept -> bool
-  {
-    return affect_global_illumination_;
-  }
-
 private:
   SkyLightSource source_ = SkyLightSource::kCapturedScene;
   content::ResourceKey cubemap_resource_ {};
@@ -200,7 +191,6 @@ private:
   float lower_hemisphere_blend_alpha_ = 1.0F;
   float volumetric_scattering_intensity_ = 1.0F;
   bool affect_reflections_ = true;
-  bool affect_global_illumination_ = true;
 };
 
 } // namespace oxygen::scene::environment

@@ -566,7 +566,6 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.volumetric_scattering_intensity));
   CHECK_RESULT(reader.ReadInto(r.affect_reflections));
-  CHECK_RESULT(reader.ReadInto(r.affect_global_illumination));
   CHECK_RESULT(reader.ReadInto(r.source_cubemap_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_is_solid_color));
   CHECK_RESULT(reader.ReadInto(r.lower_hemisphere_blend_alpha));

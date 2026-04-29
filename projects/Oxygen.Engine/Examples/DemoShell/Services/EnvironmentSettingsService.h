@@ -278,9 +278,6 @@ public:
   virtual auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
   [[nodiscard]] virtual auto GetSkyLightAffectReflections() const -> bool;
   virtual auto SetSkyLightAffectReflections(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetSkyLightAffectGlobalIllumination() const
-    -> bool;
-  virtual auto SetSkyLightAffectGlobalIllumination(bool enabled) -> void;
 
   // Fog
   [[nodiscard]] virtual auto GetFogEnabled() const -> bool;
@@ -684,7 +681,6 @@ private:
   float sky_light_lower_hemisphere_blend_alpha_ { 1.0F };
   float sky_light_volumetric_scattering_intensity_ { 1.0F };
   bool sky_light_affect_reflections_ { true };
-  bool sky_light_affect_global_illumination_ { true };
 
   // Fog
   bool fog_enabled_ { false };

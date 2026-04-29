@@ -439,7 +439,6 @@ struct FogEnvironmentRecord {
 static_assert(sizeof(FogEnvironmentRecord) == 232);
 
 //! Packed SkyLight (IBL) environment record.
-inline constexpr size_t kSkyLightEnvironmentRecordLegacySize = 84;
 
 #pragma pack(push, 1)
 struct SkyLightEnvironmentRecord {
@@ -463,14 +462,13 @@ struct SkyLightEnvironmentRecord {
   float lower_hemisphere_color[3] = { 0.0F, 0.0F, 0.0F };
   float volumetric_scattering_intensity = 1.0F;
   uint32_t affect_reflections = 1;
-  uint32_t affect_global_illumination = 1;
 
   float source_cubemap_angle_radians = 0.0F;
   uint32_t lower_hemisphere_is_solid_color = 1;
   float lower_hemisphere_blend_alpha = 1.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 96);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 92);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
