@@ -86,7 +86,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
                 this.RootNodes.Add(node);
             }
 
-            this.Environment = data.Environment ?? new();
+            this.Environment = NormalizeEnvironment(data.Environment);
         }
     }
 
@@ -97,7 +97,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        this.Environment = environment;
+        this.Environment = NormalizeEnvironment(environment);
     }
 
     /// <summary>
@@ -110,7 +110,39 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Name = this.Name,
             Id = this.Id,
             RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
-            Environment = this.Environment,
+            Environment = NormalizeEnvironment(this.Environment),
             ExplorerLayout = this.ExplorerLayout,
         };
+
+    private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
+    {
+        environment ??= new();
+        var defaultEnvironment = new Serialization.SceneEnvironmentData();
+        var postProcess = environment.PostProcess;
+        if (postProcess is null ||
+            (postProcess == new Serialization.PostProcessEnvironmentData() &&
+             (environment.ExposureMode != defaultEnvironment.ExposureMode ||
+              Math.Abs(environment.ManualExposureEv - defaultEnvironment.ManualExposureEv) > float.Epsilon ||
+              Math.Abs(environment.ExposureCompensation - defaultEnvironment.ExposureCompensation) > float.Epsilon ||
+              environment.ToneMapping != defaultEnvironment.ToneMapping)))
+        {
+            postProcess = new Serialization.PostProcessEnvironmentData
+            {
+                ExposureMode = environment.ExposureMode,
+                ManualExposureEv = environment.ManualExposureEv,
+                ExposureCompensationEv = environment.ExposureCompensation,
+                ToneMapper = environment.ToneMapping,
+            };
+        }
+
+        return environment with
+        {
+            SkyAtmosphere = environment.SkyAtmosphere ?? new(),
+            PostProcess = postProcess,
+            ExposureMode = postProcess.ExposureMode,
+            ManualExposureEv = postProcess.ManualExposureEv,
+            ExposureCompensation = postProcess.ExposureCompensationEv,
+            ToneMapping = postProcess.ToneMapper,
+        };
+    }
 }

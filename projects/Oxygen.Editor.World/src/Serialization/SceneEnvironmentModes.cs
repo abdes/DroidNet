@@ -10,14 +10,19 @@ namespace Oxygen.Editor.World.Serialization;
 public enum ExposureMode
 {
     /// <summary>
-    /// Automatic exposure.
+    /// Manual exposure using the authored EV100 value.
     /// </summary>
-    Auto,
+    Manual = 0,
 
     /// <summary>
-    /// Manual exposure.
+    /// Manual exposure using the active camera EV when available.
     /// </summary>
-    Manual,
+    ManualCamera = 1,
+
+    /// <summary>
+    /// Automatic exposure.
+    /// </summary>
+    Auto = 2,
 }
 
 /// <summary>
@@ -28,20 +33,41 @@ public enum ToneMappingMode
     /// <summary>
     /// No tone mapping.
     /// </summary>
-    None,
+    None = 0,
 
     /// <summary>
-    /// ACES tone mapping.
+    /// ACES fitted tone mapping.
     /// </summary>
-    Aces,
-
-    /// <summary>
-    /// Reinhard tone mapping.
-    /// </summary>
-    Reinhard,
+    AcesFitted = 1,
 
     /// <summary>
     /// Filmic tone mapping.
     /// </summary>
-    Filmic,
+    Filmic = 2,
+
+    /// <summary>
+    /// Reinhard tone mapping.
+    /// </summary>
+    Reinhard = 3,
+}
+
+/// <summary>
+/// Scene auto-exposure metering mode.
+/// </summary>
+public enum MeteringMode
+{
+    /// <summary>
+    /// Average luminance metering.
+    /// </summary>
+    Average = 0,
+
+    /// <summary>
+    /// Center-weighted luminance metering.
+    /// </summary>
+    CenterWeighted = 1,
+
+    /// <summary>
+    /// Spot metering.
+    /// </summary>
+    Spot = 2,
 }
