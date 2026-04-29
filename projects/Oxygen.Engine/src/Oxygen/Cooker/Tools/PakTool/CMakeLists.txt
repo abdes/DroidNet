@@ -112,7 +112,7 @@ if(${META_PROJECT_ID}_INSTALL)
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.pak-build-report.schema.json"
-    DESTINATION ${OXYGEN_INSTALL_DATA}/schemas
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT ${META_PROJECT_NAME}_data
   )
 endif()

@@ -6,6 +6,10 @@
 
 cmake_minimum_required(VERSION 3.29)
 
+if(POLICY CMP0177)
+  cmake_policy(SET CMP0177 NEW)
+endif()
+
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # If this project is not the master project, prioritize the master project
 # cmake include dir if it exists.
@@ -219,24 +223,29 @@ if(OXYGEN_WITH_ASAN)
 else()
   get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
   if(_IS_MULTI_CONFIG)
-    # For multi-config generators, CMAKE_BUILD_TYPE is not available.
-    # Default to 'Debug' for the install prefix; users can override
-    # at install time using --prefix if needed.
-    set(_OXYGEN_INSTALL_SUBDIR "Debug")
+    # For multi-config generators, keep a shared install base here and resolve
+    # the active configuration into the install prefix at install time.
+    set(_OXYGEN_INSTALL_SUBDIR "")
   else()
     set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
   endif()
 endif()
 
+set(_OXYGEN_INSTALL_PREFIX "${OXYGEN_CONAN_DEPLOY_DIR}")
 if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
   set(
-    CMAKE_INSTALL_PREFIX
-    "${OXYGEN_CONAN_DEPLOY_DIR}/${_OXYGEN_INSTALL_SUBDIR}"
-    CACHE PATH
-    "Install path prefix, prepended onto install directories."
-    FORCE
+    _OXYGEN_INSTALL_PREFIX
+    "${_OXYGEN_INSTALL_PREFIX}/${_OXYGEN_INSTALL_SUBDIR}"
   )
 endif()
+
+set(
+  CMAKE_INSTALL_PREFIX
+  "${_OXYGEN_INSTALL_PREFIX}"
+  CACHE PATH
+  "Install path prefix, prepended onto install directories."
+  FORCE
+)
 
 # ------------------------------------------------------------------------------
 # Top level code generation
