@@ -15,6 +15,7 @@
 #include <RenderThreadContext.h>
 #include <UiThreadDispatcher.h>
 #include <Views/ViewConfigManaged.h>
+#include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
 #include <Views/ViewIdManaged.h>
 
@@ -231,6 +232,15 @@ namespace Oxygen::Interop {
     /// </summary>
     auto TrySetViewCameraPresetAsync(EngineContext^ ctx, ViewIdManaged viewId,
       CameraViewPresetManaged preset)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Set the editor camera navigation mode for an existing view.
+    /// The request is enqueued and applied on the engine thread.
+    /// </summary>
+    auto TrySetViewCameraControlModeAsync(EngineContext^ ctx,
+      ViewIdManaged viewId,
+      CameraControlModeManaged mode)
       -> System::Threading::Tasks::Task<bool>^;
 
   private:

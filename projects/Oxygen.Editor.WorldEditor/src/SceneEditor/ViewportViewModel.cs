@@ -32,6 +32,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private IMenuSource? viewMenu;
+    private IMenuSource? cameraControlMenu;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
     private ElementTheme? effectiveThemeOverride;
@@ -99,6 +100,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public partial CameraType CameraType { get; set; } = CameraType.Perspective;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CameraControlModeLabel))]
+    public partial CameraControlModeManaged CameraControlMode { get; set; } = CameraControlModeManaged.OrbitTurntable;
+
+    [ObservableProperty]
     public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
 
     [ObservableProperty]
@@ -145,6 +150,22 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// Gets the menu source for the View menu. Built lazily on first access.
     /// </summary>
     public IMenuSource ViewMenu => this.viewMenu ??= this.BuildViewMenu();
+
+    /// <summary>
+    /// Gets the menu source for editor camera control modes.
+    /// </summary>
+    public IMenuSource CameraControlMenu => this.cameraControlMenu ??= this.BuildCameraControlMenu();
+
+    /// <summary>
+    /// Gets the display label for the editor camera control mode.
+    /// </summary>
+    public string CameraControlModeLabel => this.CameraControlMode switch
+    {
+        CameraControlModeManaged.OrbitTurntable => "Orbit",
+        CameraControlModeManaged.OrbitTrackball => "Trackball",
+        CameraControlModeManaged.Fly => "Fly",
+        _ => "Camera",
+    };
 
     /// <summary>
     /// Gets the menu source for the Shading menu. Built lazily on first access.
@@ -261,6 +282,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             exception: exception,
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
+    internal async Task ApplyCurrentCameraControlModeAsync()
+        => await this.ApplyCameraControlModeAsync(this.CameraControlMode).ConfigureAwait(true);
+
     /// <summary>
     /// Protected dispose pattern implementation.
     /// </summary>
@@ -305,6 +329,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private void SetEffectiveTheme(ElementTheme theme)
     {
         var hadViewMenu = this.viewMenu is not null;
+        var hadCameraControlMenu = this.cameraControlMenu is not null;
         var hadShadingMenu = this.shadingMenu is not null;
         var hadLayoutMenu = this.layoutMenu is not null;
 
@@ -323,6 +348,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             {
                 this.shadingMenu = this.BuildShadingMenu();
                 this.OnPropertyChanged(nameof(this.ShadingMenu));
+            }
+
+            if (hadCameraControlMenu)
+            {
+                this.cameraControlMenu = this.BuildCameraControlMenu();
+                this.OnPropertyChanged(nameof(this.CameraControlMenu));
             }
 
             if (hadLayoutMenu)
@@ -448,6 +479,65 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
 
         return builder.Build();
+    }
+
+    private IMenuSource BuildCameraControlMenu()
+    {
+        var builder = new MenuBuilder(this.LoggerFactory);
+        _ = builder
+            .AddRadioMenuItem(
+                "Orbit - Turntable",
+                "CameraControlMode",
+                this.CameraControlMode == CameraControlModeManaged.OrbitTurntable,
+                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTurntable)))
+            .AddRadioMenuItem(
+                "Orbit - Trackball",
+                "CameraControlMode",
+                this.CameraControlMode == CameraControlModeManaged.OrbitTrackball,
+                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTrackball)))
+            .AddRadioMenuItem(
+                "Fly",
+                "CameraControlMode",
+                this.CameraControlMode == CameraControlModeManaged.Fly,
+                new RelayCommand(() => _ = this.ApplyCameraControlModeAsync(CameraControlModeManaged.Fly)));
+
+        return builder.Build();
+    }
+
+    private async Task ApplyCameraControlModeAsync(CameraControlModeManaged mode)
+    {
+        this.CameraControlMode = mode;
+        this.cameraControlMenu = this.BuildCameraControlMenu();
+        this.OnPropertyChanged(nameof(this.CameraControlMenu));
+
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            var accepted = await this.EngineService.SetViewCameraControlModeAsync(this.AssignedViewId, mode).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetCameraControlMode,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_CONTROL_MODE_REJECTED",
+                    "Camera mode was not applied",
+                    "The runtime rejected the camera control mode for this viewport.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetCameraControlMode,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CAMERA_CONTROL_MODE_FAILED",
+                "Camera mode failed",
+                "The runtime could not apply the camera control mode for this viewport.",
+                ex);
+        }
     }
 
     private IMenuSource BuildShadingMenu()

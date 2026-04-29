@@ -14,6 +14,8 @@
 #include "EditorModule/EditorViewportMathHelpers.h"
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <unordered_map>
 
 #include <glm/gtc/quaternion.hpp>
@@ -31,26 +33,73 @@ namespace oxygen::interop::module {
       float look_radians_per_pixel = 0.0025f;
       float base_speed_units_per_second = 5.0f;
       float fast_multiplier = 4.0f;
-      float max_up_dot = 0.99f;
       glm::vec3 up = oxygen::space::move::Up;
     };
 
     struct FlyState {
-      bool was_active = false;
+      bool initialized = false;
+      bool was_look_active = false;
       float yaw_radians = 0.0f;
       float pitch_radians = 0.0f;
     };
 
     [[nodiscard]] auto ClampPitchRadians(const FlyParams& params,
       float pitch_radians) noexcept -> float {
-      const float max_pitch = std::asin(std::clamp(params.max_up_dot, 0.0f, 1.0f));
-      return std::clamp(pitch_radians, -max_pitch, max_pitch);
+      (void)params;
+      constexpr float kMaxPitch =
+        (std::numbers::pi_v<float> * 0.5f) - 0.001f;
+      return std::clamp(pitch_radians, -kMaxPitch, kMaxPitch);
+    }
+
+    [[nodiscard]] auto BuildOrientation(
+      float yaw_radians,
+      float pitch_radians,
+      const glm::vec3& world_up) noexcept -> glm::quat {
+      const float cos_pitch = std::cos(pitch_radians);
+      const float sin_pitch = std::sin(pitch_radians);
+      const float cos_yaw = std::cos(yaw_radians);
+      const float sin_yaw = std::sin(yaw_radians);
+
+      const glm::vec3 forward_ws(
+        sin_yaw * cos_pitch,
+        -cos_yaw * cos_pitch,
+        sin_pitch);
+
+      glm::vec3 right_ws = glm::cross(forward_ws, world_up);
+      const float right_len2 = glm::dot(right_ws, right_ws);
+      if (right_len2 <= 1e-8f) {
+        right_ws = glm::vec3(std::cos(yaw_radians), std::sin(yaw_radians), 0.0f);
+      } else {
+        right_ws /= std::sqrt(right_len2);
+      }
+
+      const glm::vec3 up_ws = glm::normalize(glm::cross(right_ws, forward_ws));
+      glm::mat4 view_basis(1.0f);
+      view_basis[0] = glm::vec4(right_ws, 0.0f);
+      view_basis[1] = glm::vec4(up_ws, 0.0f);
+      view_basis[2] = glm::vec4(-glm::normalize(forward_ws), 0.0f);
+      return glm::normalize(glm::quat_cast(view_basis));
     }
 
     [[nodiscard]] auto GetOrInitFlyState(
       std::unordered_map<scene::NodeHandle, FlyState>& states,
       const scene::SceneNode& camera_node) noexcept -> FlyState& {
       return states[camera_node.GetHandle()];
+    }
+
+    auto SyncStateFromTransform(FlyState& state,
+      const auto& transform,
+      const FlyParams& params) noexcept -> void {
+      const glm::quat current_rot =
+        transform.GetLocalRotation().value_or(
+          glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
+      const glm::vec3 current_forward =
+        viewport::NormalizeSafe(current_rot * oxygen::space::look::Forward,
+          oxygen::space::look::Forward);
+      state.pitch_radians = ClampPitchRadians(params,
+        std::asin(std::clamp(current_forward.z, -1.0f, 1.0f)));
+      state.yaw_radians = std::atan2(current_forward.x, -current_forward.y);
+      state.initialized = true;
     }
 
     [[nodiscard]] auto BoolToAxis(const bool positive, const bool negative) noexcept
@@ -66,6 +115,7 @@ namespace oxygen::interop::module {
     -> void {
     using oxygen::input::Action;
     using oxygen::input::ActionTriggerDown;
+    using oxygen::input::ActionTriggerPulse;
     using oxygen::input::ActionValueType;
     using oxygen::input::InputActionMapping;
     using platform::InputSlots;
@@ -97,9 +147,16 @@ namespace oxygen::interop::module {
       return t;
     };
 
+    const auto make_pulse = [] {
+      auto t = std::make_shared<ActionTriggerPulse>();
+      t->MakeExplicit();
+      t->SetActuationThreshold(0.1F);
+      return t;
+    };
+
     const auto add_key = [&](const std::shared_ptr<Action>& act, const auto& slot) {
       auto m = std::make_shared<InputActionMapping>(act, slot);
-      m->AddTrigger(make_down());
+      m->AddTrigger(make_pulse());
       ctx->AddMapping(m);
     };
 
@@ -116,6 +173,7 @@ namespace oxygen::interop::module {
 
   auto EditorViewportFlyFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
+    EditorViewportCameraControlMode control_mode,
     glm::vec3& /*focus_point*/,
     float& /*ortho_half_height*/,
     float dt_seconds) noexcept -> void {
@@ -124,6 +182,10 @@ namespace oxygen::interop::module {
     }
 
     if (camera_node.GetCameraAs<scene::OrthographicCamera>()) {
+      return;
+    }
+
+    if (control_mode != EditorViewportCameraControlMode::kFly) {
       return;
     }
 
@@ -136,49 +198,18 @@ namespace oxygen::interop::module {
     // Fly is RMB (without Alt). Alt+RMB is reserved for dolly.
     const bool rmb_held = input_snapshot.IsActionOngoing("Editor.Mouse.RightButton");
     const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
-    const bool active = rmb_held && !alt_held;
+    const bool look_active = rmb_held && !alt_held;
 
     static std::unordered_map<scene::NodeHandle, FlyState> fly_states;
     auto& state = GetOrInitFlyState(fly_states, camera_node);
 
-    if (!active) {
-      state.was_active = false;
-      return;
+    auto transform = camera_node.GetTransform();
+    if (!state.initialized || (look_active && !state.was_look_active)) {
+      SyncStateFromTransform(state, transform, params);
     }
 
-    const bool just_activated = !state.was_active;
-
-    auto transform = camera_node.GetTransform();
-    const glm::quat current_rot =
-      transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
-
-    const glm::vec3 current_forward =
-      viewport::NormalizeSafe(current_rot * glm::vec3(0.0f, 0.0f, -1.0f),
-        glm::vec3(0.0f, 0.0f, -1.0f));
-
-    if (just_activated) {
-      const glm::vec3 pos = transform.GetLocalPosition().value_or(glm::vec3{});
-      LOG_F(WARNING, "FLY: Activated! Camera pos: ({}, {}, {}), forward: ({}, {}, {})",
-        pos.x, pos.y, pos.z, current_forward.x, current_forward.y, current_forward.z);
-
-      // Extract yaw and pitch from quaternion to match our composition order: pitch_q * yaw_q
-      // Decompose: R = pitch(around X) * yaw(around Z)
-      // Use Euler angle extraction for ZXZ order, but adapted for our axes
-      const auto& q = current_rot;
-
-      // Extract pitch (rotation around X axis)
-      const float sinp = 2.0f * (q.w * q.x + q.y * q.z);
-      const float cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
-      state.pitch_radians = ClampPitchRadians(params, std::atan2(sinp, cosp));
-
-      // Extract yaw (rotation around Z axis)
-      const float siny = 2.0f * (q.w * q.z + q.x * q.y);
-      const float cosy = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
-      state.yaw_radians = std::atan2(siny, cosy);
-
-      state.was_active = true;
-
-      LOG_F(WARNING, "FLY: Initialized - Yaw: {}, Pitch: {}", state.yaw_radians, state.pitch_radians);
+    if (!look_active) {
+      state.was_look_active = false;
     }
 
     const auto mouse_delta =
@@ -187,27 +218,16 @@ namespace oxygen::interop::module {
     const bool mouse_moved = (std::abs(mouse_delta.x) > 0.0f)
       || (std::abs(mouse_delta.y) > 0.0f);
 
-    if (mouse_moved) {
-      LOG_F(WARNING, "FLY: Mouse delta: ({}, {})",
-        mouse_delta.x, mouse_delta.y);
-
-      // Apply mouse look
+    if (look_active && mouse_moved) {
       state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
       state.pitch_radians = ClampPitchRadians(params,
         state.pitch_radians + (-mouse_delta.y * params.look_radians_per_pixel));
     }
+    state.was_look_active = look_active;
 
-    glm::quat applied_rot = current_rot;
-    if (mouse_moved) {
-      // Build rotation directly from yaw/pitch to avoid gimbal lock
-      const glm::quat yaw_q = glm::angleAxis(state.yaw_radians, params.up);
-      const glm::vec3 right = yaw_q * glm::vec3(1.0f, 0.0f, 0.0f);
-      const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
-
-      // Compose rotations: yaw first, then pitch - no forward vector reconstruction!
-      applied_rot = pitch_q * yaw_q;
-      (void)transform.SetLocalRotation(applied_rot);
-    }
+    const glm::quat applied_rot =
+      BuildOrientation(state.yaw_radians, state.pitch_radians, params.up);
+    (void)transform.SetLocalRotation(applied_rot);
 
     const bool w = input_snapshot.IsActionOngoing("Editor.Fly.W");
     const bool a = input_snapshot.IsActionOngoing("Editor.Fly.A");

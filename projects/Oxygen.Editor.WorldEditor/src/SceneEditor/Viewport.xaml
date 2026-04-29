@@ -40,6 +40,9 @@
                 <!--  Camera type menu: icon + text  -->
                 <menus:MenuButton Content="{x:Bind ViewModel.CameraType, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ViewMenu, Mode=OneWay}" />
 
+                <!--  Editor camera control mode menu  -->
+                <menus:MenuButton Content="{x:Bind ViewModel.CameraControlModeLabel, Mode=OneWay}" MenuSource="{x:Bind ViewModel.CameraControlMenu, Mode=OneWay}" />
+
                 <!--  Shading mode menu: icon + text  -->
                 <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu, Mode=OneWay}" />
             </StackPanel>

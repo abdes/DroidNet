@@ -22,6 +22,8 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+#include <EditorModule/EditorViewportCameraControlMode.h>
+
 namespace oxygen {
   class Graphics;
   namespace engine {
@@ -170,6 +172,15 @@ namespace oxygen::interop::module {
       return camera_view_preset_;
     }
 
+    //! Sets the editor camera navigation mode for this view.
+    void SetCameraControlMode(EditorViewportCameraControlMode mode) noexcept;
+
+    //! Gets the editor camera navigation mode for this view.
+    [[nodiscard]] auto GetCameraControlMode() const noexcept
+      -> EditorViewportCameraControlMode {
+      return camera_control_mode_;
+    }
+
     // Renderer registration
     void RegisterWithRenderer(vortex::Renderer& renderer);
     void UnregisterFromRenderer(vortex::Renderer& renderer);
@@ -202,6 +213,8 @@ namespace oxygen::interop::module {
     glm::vec3 focus_point_{ 0.0f, 0.0f, 0.0f };
 
     CameraViewPreset camera_view_preset_{ CameraViewPreset::kPerspective };
+    EditorViewportCameraControlMode camera_control_mode_{
+      EditorViewportCameraControlMode::kOrbitTurntable };
     float ortho_half_height_{ 10.0f };
 
     scene::SceneNode camera_node_;

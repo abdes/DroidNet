@@ -23,6 +23,7 @@ public class DiagnosticVocabularyTests
         _ = RuntimeOperationKinds.ViewCreate.Should().Be("Runtime.View.Create");
         _ = RuntimeOperationKinds.ViewDestroy.Should().Be("Runtime.View.Destroy");
         _ = RuntimeOperationKinds.ViewSetCameraPreset.Should().Be("Runtime.View.SetCameraPreset");
+        _ = RuntimeOperationKinds.ViewSetCameraControlMode.Should().Be("Runtime.View.SetCameraControlMode");
         _ = RuntimeOperationKinds.CookedRootRefresh.Should().Be("Runtime.CookedRoot.Refresh");
         _ = ViewportOperationKinds.LayoutChange.Should().Be("Viewport.Layout.Change");
     }

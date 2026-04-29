@@ -45,6 +45,11 @@ public static class RuntimeOperationKinds
     public const string ViewSetCameraPreset = "Runtime.View.SetCameraPreset";
 
     /// <summary>
+    /// Runtime engine view editor camera control-mode change.
+    /// </summary>
+    public const string ViewSetCameraControlMode = "Runtime.View.SetCameraControlMode";
+
+    /// <summary>
     /// Runtime cooked-root refresh.
     /// </summary>
     public const string CookedRootRefresh = "Runtime.CookedRoot.Refresh";

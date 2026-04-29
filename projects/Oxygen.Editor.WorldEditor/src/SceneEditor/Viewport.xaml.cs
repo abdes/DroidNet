@@ -1006,6 +1006,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                     {
                         viewModel.AssignedViewId = created;
                         this.LogViewCreated(viewModel.ViewportId, created);
+                        await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
                     }
                     else
                     {

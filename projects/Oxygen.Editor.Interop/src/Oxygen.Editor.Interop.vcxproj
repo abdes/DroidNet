@@ -32,6 +32,9 @@
     <ClCompile Include="Commands\SetMaterialOverrideCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraControlModeCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -154,6 +157,7 @@
     <ClInclude Include="Commands\SetGeometryCommand.h" />
     <ClInclude Include="Commands\SetEnvironmentCommand.h" />
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
+    <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
@@ -180,6 +184,7 @@
     <ClInclude Include="EditorModule\EditorCompositor.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />
     <ClInclude Include="EditorModule\EditorViewportNavigation.h" />
+    <ClInclude Include="EditorModule\EditorViewportCameraControlMode.h" />
     <ClInclude Include="EditorModule\EditorViewportNavigationFeature.h" />
     <ClInclude Include="EditorModule\EditorViewportPanFeature.h" />
     <ClInclude Include="EditorModule\EditorViewportDollyFeature.h" />
@@ -199,6 +204,7 @@
     <ClInclude Include="Utils\TokenHelpers.h" />
     <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="Views\ColorManaged.h" />
+    <ClInclude Include="Views\CameraControlModeManaged.h" />
     <ClInclude Include="Views\CameraViewPresetManaged.h" />
     <ClInclude Include="Views\ViewConfigManaged.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
