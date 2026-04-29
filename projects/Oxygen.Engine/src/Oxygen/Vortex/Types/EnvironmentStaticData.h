@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Core/Constants.h>
@@ -75,13 +76,44 @@ inline constexpr std::uint32_t kGpuFogFlagEnabled = 1U << 0U;
 inline constexpr std::uint32_t kGpuFogFlagHeightFogEnabled = 1U << 1U;
 inline constexpr std::uint32_t kGpuFogFlagVolumetricFogAuthored = 1U << 2U;
 inline constexpr std::uint32_t kGpuFogFlagRenderInMainPass = 1U << 3U;
-inline constexpr std::uint32_t kGpuFogFlagVisibleInReflectionCaptures = 1U << 4U;
-inline constexpr std::uint32_t kGpuFogFlagVisibleInRealTimeSkyCaptures
-  = 1U << 5U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInReflectionCaptures = 1U
+  << 4U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInRealTimeSkyCaptures = 1U
+  << 5U;
 inline constexpr std::uint32_t kGpuFogFlagHoldout = 1U << 6U;
 inline constexpr std::uint32_t kGpuFogFlagDirectionalInscattering = 1U << 7U;
 inline constexpr std::uint32_t kGpuFogFlagCubemapAuthored = 1U << 8U;
 inline constexpr std::uint32_t kGpuFogFlagCubemapUsable = 1U << 9U;
+
+inline constexpr std::uint32_t kGpuVolumetricFogFlagEnabled = 1U << 0U;
+inline constexpr std::uint32_t kGpuVolumetricFogFlagIntegratedScatteringValid
+  = 1U << 1U;
+
+struct alignas(packing::kShaderDataFieldAlignment) GpuVolumetricFogParams {
+  std::array<float, 3> albedo_rgb { 1.0F, 1.0F, 1.0F };
+  float scattering_distribution { 0.0F };
+
+  std::array<float, 3> emissive_rgb { 0.0F, 0.0F, 0.0F };
+  float extinction_scale { 1.0F };
+
+  float distance_m { 0.0F };
+  float start_distance_m { 0.0F };
+  float near_fade_in_distance_m { 0.0F };
+  float static_lighting_scattering_intensity { 1.0F };
+
+  std::uint32_t integrated_light_scattering_srv { kInvalidBindlessIndex };
+  std::uint32_t flags { 0U };
+  std::uint32_t grid_width { 0U };
+  std::uint32_t grid_height { 0U };
+
+  std::uint32_t grid_depth { 0U };
+  float depth_slice_length_m { 0.0F };
+  float inv_depth_slice_length_m { 0.0F };
+  std::uint32_t pad0 { 0U };
+
+  std::array<float, 3> grid_z_params { 0.0F, 1.0F, 1.0F };
+  std::uint32_t pad1 { 0U };
+};
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   float planet_radius_km { engine::atmos::kDefaultPlanetRadiusKm };
@@ -96,7 +128,9 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   float pad_sun_disk_luminance { 0.0F };
 
   std::array<float, 3> rayleigh_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
-  float rayleigh_scale_height_km { engine::atmos::kDefaultRayleighScaleHeightKm };
+  float rayleigh_scale_height_km {
+    engine::atmos::kDefaultRayleighScaleHeightKm
+  };
 
   std::array<float, 3> mie_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
   float mie_scale_height_km { engine::atmos::kDefaultMieScaleHeightKm };
@@ -147,7 +181,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t cubemap_max_mip { 0U };
   std::uint32_t prefilter_max_mip { 0U };
   std::uint32_t ibl_generation { 0U };
-  std::uint32_t pad1 { 0U };
+  std::uint32_t diffuse_sh_slot { kInvalidBindlessIndex };
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
@@ -159,7 +193,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
 
   std::uint32_t source { 0U };
   std::uint32_t enabled { 0U };
-  std::uint32_t cubemap_slot { 0U };
+  std::uint32_t cubemap_slot { kInvalidBindlessIndex };
   std::uint32_t cubemap_max_mip { 0U };
 };
 
@@ -205,6 +239,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuPostProcessParams {
 
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
   GpuFogParams fog {};
+  GpuVolumetricFogParams volumetric_fog {};
   GpuSkyAtmosphereParams atmosphere {};
   GpuSkyLightParams sky_light {};
   GpuSkySphereParams sky_sphere {};
@@ -215,11 +250,14 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
 static_assert(sizeof(AtmosphereDensityLayerGpu) == 16);
 static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
 static_assert(sizeof(GpuFogParams) == 128);
+static_assert(sizeof(GpuVolumetricFogParams) == 96);
 static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
 static_assert(sizeof(GpuSkyLightParams) == 64);
+static_assert(offsetof(GpuSkyLightParams, cubemap_slot) == 32);
+static_assert(offsetof(GpuSkyLightParams, diffuse_sh_slot) == 60);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
-static_assert(sizeof(EnvironmentStaticData) == 576);
+static_assert(sizeof(EnvironmentStaticData) == 672);
 
 } // namespace oxygen::vortex

@@ -1,7 +1,7 @@
 # Oxygen ImGui: Architecture, Backends, and Assets
 
 This directory provides ImGui-related UI assets and helpers used by
-`Oxygen.Renderer` and graphics/platform backends.
+Vortex and graphics/platform backends.
 
 ## Why This Exists
 
@@ -17,9 +17,9 @@ the runtime is unified. This affects how APIs must be designed and called.
 - `Oxygen.Platform`:
   owns SDL3 ImGui platform backend (`ImGuiSdl3Backend`) for input/events and
   display integration.
-- `Oxygen.Renderer`:
-  owns `ImGuiModule` and `ImGuiPass`; orchestrates frame start/end, binds
-  context, applies style/fonts, and triggers render pass execution.
+- `Oxygen.Vortex`:
+  owns `ImGuiRuntime` and `ImGuiOverlayPass`; orchestrates frame start/end,
+  binds context, applies style/fonts, and triggers overlay rendering.
 - `Oxygen.ImGui`:
   provides UI assets (fonts/icons/style constants) and reusable UI utilities.
 
@@ -59,7 +59,7 @@ the runtime is unified. This affects how APIs must be designed and called.
 
 ## API Design Rules (Cross-DLL Safe)
 
-For new code added outside `Oxygen.Renderer`, prefer context-free APIs.
+For new code added outside the Vortex ImGui runtime, prefer context-free APIs.
 
 1. New helper APIs in `Oxygen.ImGui` should accept explicit ImGui objects.
 
@@ -72,7 +72,7 @@ For new code added outside `Oxygen.Renderer`, prefer context-free APIs.
    - avoid `ImGui::GetIO()`, `ImGui::GetStyle()`, `ImGui::SetCurrentContext()`.
    - avoid `ImGui::CreateContext()/DestroyContext()`.
 
-3. `Oxygen.Renderer` should bind context before context-dependent work.
+3. The Vortex ImGui runtime should bind context before context-dependent work.
 
    - fetch context from graphics backend.
    - call `ImGui::SetCurrentContext(ctx)`.
@@ -141,17 +141,18 @@ Bundled source assets:
 
 ## Integration Pointers
 
-- Module entry: `src/Oxygen/Renderer/ImGui/ImGuiModule.h`
-- Render pass: `src/Oxygen/Renderer/ImGui/ImGuiPass.h`
+- Runtime entry: `src/Oxygen/Vortex/Internal/ImGuiRuntime.h`
+- Overlay pass: `src/Oxygen/Vortex/Passes/ImGuiOverlayPass.h`
 - Graphics backend interface:
   `src/Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h`
 - D3D12 backend impl:
   `src/Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h`
 
-## Quick Checklist for New Non-Renderer Additions
+## Quick Checklist for New Non-Vortex Additions
 
 - Is it reusable style/font/icon data? Make it context-free.
-- Does it need global ImGui context access? Keep call site in Renderer.
+- Does it need global ImGui context access? Keep call site in the Vortex ImGui
+  runtime.
 - If adding UI widgets in `Oxygen.ImGui`, document linkage/runtime assumptions.
 - For context-bound widgets, require `ImGuiContext*` in draw entry points and
   bind it in the widget implementation.

@@ -41,18 +41,17 @@ using enum ShaderType;
 //   DEBUG_DEPTH_SLICE: Depth slice visualization
 //   DEBUG_CLUSTER_INDEX: Cluster index checkerboard
 //   DEBUG_BASE_COLOR: Base color/albedo visualization
-//   DEBUG_UV0: UV0 visualization
-//   DEBUG_OPACITY: Opacity visualization
 //   DEBUG_WORLD_NORMALS: World-space normals visualization
 //   DEBUG_ROUGHNESS: Roughness visualization
 //   DEBUG_METALNESS: Metalness visualization
 //   DEBUG_DIRECT_LIGHTING_ONLY: Forward mesh direct-light term only
-//   DEBUG_IBL_ONLY: Forward mesh IBL term only
-//   DEBUG_DIRECT_PLUS_IBL: Forward mesh direct + IBL terms only
+//   DEBUG_IBL_ONLY: IBL term only
+//   DEBUG_DIRECT_PLUS_IBL: Direct + IBL terms only
 //   DEBUG_DIRECT_LIGHTING_FULL: Full forward direct-light term only
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
 //   DEBUG_VIRTUAL_SHADOW_MASK: Stage 15 VSM screen-space shadow mask
+//   DEBUG_DIRECTIONAL_SHADOW_MASK: Deferred conventional directional CSM mask
 //   DEBUG_SCENE_DEPTH_RAW: Published scene depth in reversed-Z space
 //   DEBUG_SCENE_DEPTH_LINEAR: Published scene depth reconstructed to eye depth
 //   DEBUG_SCENE_DEPTH_MISMATCH: Shading depth disagreement vs pre-pass depth
@@ -197,24 +196,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 2>
       { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: required DEBUG_UV0 plus ALPHA_TEST / HDR output
-  // permutations.
-  RequiredDefineShaderFileSpec<1, 1, 2> {
-    .path="Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .required_defines=std::array<std::string_view, 1> { "DEBUG_UV0" },
-    .permutations=std::array<std::string_view, 2>
-      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: required DEBUG_OPACITY plus ALPHA_TEST / HDR
-  // output permutations.
-  RequiredDefineShaderFileSpec<1, 1, 2> {
-    .path="Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .required_defines=std::array<std::string_view, 1> { "DEBUG_OPACITY" },
-    .permutations=std::array<std::string_view, 2>
-      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
   // Forward pass pixel shader: required DEBUG_WORLD_NORMALS plus ALPHA_TEST /
   // HDR output permutations.
   RequiredDefineShaderFileSpec<1, 1, 2> {
@@ -288,9 +269,19 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="VortexScreenHzbBuildCS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Stages/Occlusion/OcclusionTest.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexOcclusionTestCS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Stages/BasePass/BasePassWireframe.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassWireframePS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   RequiredDefineShaderFileSpec<2, 1, 1> {
     .path="Vortex/Stages/BasePass/BasePassVelocityAux.hlsl",
@@ -332,12 +323,22 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   RequiredDefineShaderFileSpec<1, 1> {
     .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECTIONAL_SHADOW_MASK" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_RAW" }
   },
   RequiredDefineShaderFileSpec<1, 1> {
     .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_LINEAR" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_MASKED_ALPHA_COVERAGE" }
   },
   // VortexShadowDepthVS / VortexShadowDepthMaskedPS
   ShaderFileSpec {
@@ -351,6 +352,36 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" }, EntryPoint { .type=kVertex, .name="DeferredLightDirectionalVS" } }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHTING_ONLY" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_ONLY" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_PLUS_IBL" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHTING_FULL" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_LIGHT_GATES" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECT_BRDF_CORE" }
   },
   // VortexDeferredLightPointVS / VortexDeferredLightPointPS
   ShaderFileSpec {
@@ -404,6 +435,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl",
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="VortexAtmosphereCameraAerialPerspectiveCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/VolumetricFog.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexVolumetricFogCS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Services/Environment/Fog.hlsl",
@@ -480,14 +516,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 4 each (required debug define
 //   x ALPHA_TEST x OXYGEN_HDR_OUTPUT)
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
-// - ForwardDebug_PS debug-required variants: 68
+// - ForwardDebug_PS debug-required variants: 60
 // - ForwardDebug_PS virtual-shadow-mask permutations: 8
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassGBuffer: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x
 // ALPHA_TEST)
 // - VortexBasePassVelocityMerge: 1
-// - VortexBasePassDebugView: 7 (VS + 6 required debug PS variants)
+// - VortexBasePassDebugView: 8 (VS + 7 required debug PS variants)
 // - VortexShadowDepth: 4 (2 entries x ALPHA_TEST)
 // - VortexDeferredLightDirectional: 2 entries
 // - VortexDeferredLightPoint: 2 entries
@@ -502,6 +538,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 116
+// Total: 109
 
 } // namespace oxygen::graphics::d3d12

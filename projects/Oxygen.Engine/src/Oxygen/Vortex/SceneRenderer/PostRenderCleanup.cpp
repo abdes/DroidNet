@@ -57,13 +57,14 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 // finalize their handoff after Stage 22 completes.
 void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
 {
+  auto& scene_textures = ActiveSceneTextures();
   const auto scene_depth_ready
     = scene_texture_extracts_.resolved_scene_depth.valid
     && scene_texture_extracts_.resolved_scene_depth.texture != nullptr;
   scene_texture_extracts_.prev_scene_depth = {
     .texture = scene_depth_ready
       ? EnsureArtifactTexture(prev_scene_depth_artifact_, "PrevSceneDepth",
-          scene_textures_.GetSceneDepth())
+          scene_textures.GetSceneDepth())
       : nullptr,
     .valid = scene_depth_ready,
   };

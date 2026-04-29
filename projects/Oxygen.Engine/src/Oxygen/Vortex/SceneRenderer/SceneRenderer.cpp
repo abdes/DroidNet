@@ -10,12 +10,17 @@
 #include <cstring>
 #include <optional>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -36,6 +41,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -44,6 +50,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
+#include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -56,8 +63,11 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace oxygen::vortex {
 
@@ -218,6 +228,133 @@ namespace {
       texture.GetName());
   }
 
+  auto ResolveFramebufferColorTexture(
+    const observer_ptr<graphics::Framebuffer> framebuffer)
+    -> std::shared_ptr<graphics::Texture>
+  {
+    if (framebuffer == nullptr) {
+      return {};
+    }
+    const auto& desc = framebuffer->GetDescriptor();
+    if (desc.color_attachments.empty()) {
+      return {};
+    }
+    return desc.color_attachments.front().texture;
+  }
+
+  auto TrackAuxiliaryColorTexture(Graphics& gfx,
+    graphics::CommandRecorder& recorder, const graphics::Texture& texture)
+    -> void
+  {
+    auto& registry = gfx.GetResourceRegistry();
+    CHECK_F(registry.Contains(texture),
+      "SceneRenderer: auxiliary texture '{}' must be registered before "
+      "same-frame consumption",
+      texture.GetDescriptor().debug_name);
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
+
+    auto initial = texture.GetDescriptor().initial_state;
+    if ((initial == graphics::ResourceStates::kUnknown
+          || initial == graphics::ResourceStates::kUndefined)
+      && texture.GetDescriptor().is_render_target) {
+      initial = graphics::ResourceStates::kRenderTarget;
+    }
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "SceneRenderer: auxiliary texture '{}' must have a known state",
+      texture.GetDescriptor().debug_name);
+    recorder.BeginTrackingResourceState(texture, initial);
+  }
+
+  auto BuildAuxiliaryConsumerViewport(const graphics::Texture& target)
+    -> ViewPort
+  {
+    const auto& desc = target.GetDescriptor();
+    const auto width = static_cast<float>(
+      std::clamp(desc.width / 3U, 1U, std::min(desc.width, 256U)));
+    const auto height = static_cast<float>(
+      std::clamp(desc.height / 3U, 1U, std::min(desc.height, 256U)));
+    return ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = width,
+      .height = height,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+  }
+
+  auto CopyAuxiliaryTextureToRegion(graphics::CommandRecorder& recorder,
+    graphics::Texture& source, graphics::Texture& target,
+    const ViewPort& viewport) -> void
+  {
+    CHECK_F(recorder.IsResourceTracked(source),
+      "SceneRenderer: auxiliary copy source '{}' must be tracked",
+      source.GetDescriptor().debug_name);
+    CHECK_F(recorder.IsResourceTracked(target),
+      "SceneRenderer: auxiliary copy target '{}' must be tracked",
+      target.GetDescriptor().debug_name);
+
+    const auto& src_desc = source.GetDescriptor();
+    const auto& dst_desc = target.GetDescriptor();
+    CHECK_F(src_desc.format == dst_desc.format,
+      "SceneRenderer: auxiliary copy requires matching formats (source '{}' "
+      "target '{}')",
+      source.GetDescriptor().debug_name, target.GetDescriptor().debug_name);
+
+    const auto dst_x = static_cast<std::uint32_t>(std::clamp(
+      viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
+    const auto dst_y = static_cast<std::uint32_t>(std::clamp(
+      viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
+    const auto max_dst_w = dst_desc.width > dst_x ? dst_desc.width - dst_x : 0U;
+    const auto max_dst_h
+      = dst_desc.height > dst_y ? dst_desc.height - dst_y : 0U;
+    const auto requested_w = static_cast<std::uint32_t>(
+      std::max(0.0F, std::min(viewport.width, static_cast<float>(max_dst_w))));
+    const auto requested_h = static_cast<std::uint32_t>(
+      std::max(0.0F, std::min(viewport.height, static_cast<float>(max_dst_h))));
+    const auto copy_width = std::min(src_desc.width, requested_w);
+    const auto copy_height = std::min(src_desc.height, requested_h);
+    if (copy_width == 0U || copy_height == 0U) {
+      return;
+    }
+
+    recorder.RequireResourceState(
+      source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(target, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+
+    const graphics::TextureSlice src_slice {
+      .x = 0,
+      .y = 0,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+    const graphics::TextureSlice dst_slice {
+      .x = dst_x,
+      .y = dst_y,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+    constexpr graphics::TextureSubResourceSet subresources {
+      .base_mip_level = 0,
+      .num_mip_levels = 1,
+      .base_array_slice = 0,
+      .num_array_slices = 1,
+    };
+    recorder.CopyTexture(
+      source, src_slice, subresources, target, dst_slice, subresources);
+  }
+
   auto RegisterBufferViewIndex(Graphics& gfx, graphics::Buffer& buffer,
     const graphics::BufferViewDescription& desc) -> ShaderVisibleIndex
   {
@@ -319,6 +456,113 @@ namespace {
     return ctx.pass_target;
   }
 
+  auto ShaderVisibleDescriptor(const ShaderVisibleIndex slot) -> std::string
+  {
+    if (slot == kInvalidShaderVisibleIndex) {
+      return "invalid";
+    }
+    return "bindless:" + std::to_string(slot.get());
+  }
+
+  auto SceneTextureDescriptor(const std::uint32_t slot) -> std::string
+  {
+    if (slot == SceneTextureBindings::kInvalidIndex) {
+      return "invalid";
+    }
+    return "bindless:" + std::to_string(slot);
+  }
+
+  auto OcclusionStatsDescriptor(const OcclusionStats& stats) -> std::string
+  {
+    return "draws=" + std::to_string(stats.draw_count)
+      + " candidates=" + std::to_string(stats.candidate_count)
+      + " submitted=" + std::to_string(stats.submitted_count)
+      + " visible=" + std::to_string(stats.visible_count)
+      + " occluded=" + std::to_string(stats.occluded_count)
+      + " overflow_visible=" + std::to_string(stats.overflow_visible_count)
+      + " fallback=" + std::string { to_string(stats.fallback_reason) }
+    + " hzb=" + (stats.current_furthest_hzb_available ? "1" : "0")
+      + " prev=" + (stats.previous_results_valid ? "1" : "0")
+      + " valid=" + (stats.results_valid ? "1" : "0");
+  }
+
+  auto BasePassDrawDescriptor(const std::uint32_t draw_count,
+    const std::uint32_t occlusion_culled_draw_count) -> std::string
+  {
+    return "draws=" + std::to_string(draw_count)
+      + " occlusion_culled=" + std::to_string(occlusion_culled_draw_count);
+  }
+
+  auto TranslucencySkipReasonName(const TranslucencySkipReason reason)
+    -> std::string_view
+  {
+    switch (reason) {
+    case TranslucencySkipReason::kNone:
+      return "none";
+    case TranslucencySkipReason::kNotRequested:
+      return "not_requested";
+    case TranslucencySkipReason::kNoDraws:
+      return "no_draws";
+    case TranslucencySkipReason::kMissingGraphics:
+      return "missing_graphics";
+    case TranslucencySkipReason::kMissingViewConstants:
+      return "missing_view_constants";
+    case TranslucencySkipReason::kRecorderUnavailable:
+      return "recorder_unavailable";
+    }
+    return "unknown";
+  }
+
+  auto TranslucencyDrawDescriptor(const TranslucencyExecutionResult& result)
+    -> std::string
+  {
+    return "draws=" + std::to_string(result.draw_count) + " skip="
+      + std::string { TranslucencySkipReasonName(result.skip_reason) };
+  }
+
+  auto TranslucencyMissingInputs(const TranslucencyExecutionResult& result,
+    const bool module_available) -> std::vector<std::string>
+  {
+    if (!module_available) {
+      return { "TranslucencyModule" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kMissingGraphics) {
+      return { "Graphics" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kMissingViewConstants) {
+      return { "ViewConstants" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kRecorderUnavailable) {
+      return { "CommandRecorder" };
+    }
+    return {};
+  }
+
+  auto RecordDiagnosticsPass(Renderer& renderer, DiagnosticsPassRecord record)
+    -> void
+  {
+    renderer.GetDiagnosticsService().RecordPass(std::move(record));
+  }
+
+  auto RecordDiagnosticsProduct(
+    Renderer& renderer, DiagnosticsProductRecord record) -> void
+  {
+    renderer.GetDiagnosticsService().RecordProduct(std::move(record));
+  }
+
+  auto RecordDiagnosticsViewProduct(Renderer& renderer, std::string name,
+    std::string producer_pass, const ShaderVisibleIndex slot) -> void
+  {
+    RecordDiagnosticsProduct(renderer,
+      DiagnosticsProductRecord {
+        .name = std::move(name),
+        .producer_pass = std::move(producer_pass),
+        .descriptor = ShaderVisibleDescriptor(slot),
+        .published = slot != kInvalidShaderVisibleIndex,
+        .valid = slot != kInvalidShaderVisibleIndex,
+      });
+  }
+
   auto ResolveWorldRotation(
     const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::quat
   {
@@ -381,11 +625,12 @@ namespace {
     const auto& atmosphere_lights = resolver.ResolveAtmosphereLights();
     if (atmosphere_lights.slots[0].has_value()) {
       const auto& primary = *atmosphere_lights.slots[0];
+      const auto csm = scene::CanonicalizeCascadedShadowSettings(
+        primary.Light().CascadedShadows());
       const auto primary_atmosphere_light
         = environment::internal::BuildAtmosphereLightModel(
           primary, 0U, atmosphere);
-      auto atmosphere_mode_flags
-        = kDirectionalLightAtmosphereModeFlagAuthority;
+      auto atmosphere_mode_flags = kDirectionalLightAtmosphereModeFlagAuthority;
       if ((primary_atmosphere_light.direct_light_authority_flags
             & environment::kAtmosphereDirectLightFlagPerPixelTransmittance)
         != 0U) {
@@ -393,7 +638,8 @@ namespace {
           |= kDirectionalLightAtmosphereModeFlagPerPixelTransmittance;
       }
       if ((primary_atmosphere_light.direct_light_authority_flags
-            & environment::kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
+            & environment::
+              kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
         != 0U) {
         atmosphere_mode_flags
           |= kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance;
@@ -409,9 +655,12 @@ namespace {
         .specular_scale = 1.0F,
         .atmosphere_light_slot = 0U,
         .atmosphere_mode_flags = atmosphere_mode_flags,
-        .shadow_flags = 0U,
+        .shadow_flags = primary.Light().Common().casts_shadows
+          ? kDirectionalLightShadowFlagCastsShadows
+          : 0U,
         .light_function_atlas_index = 0xFFFFFFFFU,
-        .cascade_count = primary.Light().CascadedShadows().cascade_count,
+        .cascade_count
+        = primary.Light().Common().casts_shadows ? csm.cascade_count : 0U,
         .light_flags = kDirectionalLightFlagAffectsWorld
           | (primary.Light().GetEnvironmentContribution()
               ? kDirectionalLightFlagEnvContribution
@@ -420,6 +669,19 @@ namespace {
           | (primary.Light().GetUsePerPixelAtmosphereTransmittance()
               ? kDirectionalLightFlagPerPixelAtmosphereTransmittance
               : 0U),
+        .cascade_split_mode
+        = csm.split_mode == scene::DirectionalCsmSplitMode::kManualDistances
+          ? FrameDirectionalCsmSplitMode::kManualDistances
+          : FrameDirectionalCsmSplitMode::kGenerated,
+        .max_shadow_distance = csm.max_shadow_distance,
+        .cascade_distances = csm.cascade_distances,
+        .distribution_exponent = csm.distribution_exponent,
+        .transition_fraction = csm.transition_fraction,
+        .distance_fadeout_fraction = csm.distance_fadeout_fraction,
+        .shadow_bias = primary.Light().Common().shadow.bias,
+        .shadow_normal_bias = primary.Light().Common().shadow.normal_bias,
+        .shadow_resolution_hint = static_cast<std::uint32_t>(
+          primary.Light().Common().shadow.resolution_hint),
       };
     }
 
@@ -454,6 +716,12 @@ namespace {
           .inner_cone_cos = 1.0F,
           .outer_cone_cos = 0.0F,
           .source_radius = light.GetSourceRadius(),
+          .flags
+          = light.Common().casts_shadows ? kLocalLightFlagCastsShadows : 0U,
+          .shadow_bias = light.Common().shadow.bias,
+          .shadow_normal_bias = light.Common().shadow.normal_bias,
+          .shadow_resolution_hint
+          = static_cast<std::uint32_t>(light.Common().shadow.resolution_hint),
         });
         return scene::VisitResult::kContinue;
       }
@@ -475,6 +743,12 @@ namespace {
           .inner_cone_cos = std::cos(light.GetInnerConeAngleRadians()),
           .outer_cone_cos = std::cos(light.GetOuterConeAngleRadians()),
           .source_radius = light.GetSourceRadius(),
+          .flags
+          = light.Common().casts_shadows ? kLocalLightFlagCastsShadows : 0U,
+          .shadow_bias = light.Common().shadow.bias,
+          .shadow_normal_bias = light.Common().shadow.normal_bias,
+          .shadow_resolution_hint
+          = static_cast<std::uint32_t>(light.Common().shadow.resolution_hint),
         });
       }
 
@@ -520,7 +794,7 @@ namespace {
     }
   }
 
-  auto CollectShadowViewInputs(const RenderContext& ctx,
+  auto CollectCurrentShadowViewInput(const RenderContext& ctx,
     const InitViewsModule* init_views,
     std::vector<PreparedViewShadowInput>& out) -> void
   {
@@ -529,27 +803,14 @@ namespace {
       return;
     }
 
-    for (const auto& view : ctx.frame_views) {
-      if (!view.is_scene_view) {
-        continue;
-      }
-      out.push_back(PreparedViewShadowInput {
-        .view_id = view.view_id,
-        .prepared_scene = observer_ptr<const PreparedSceneFrame> {
-          init_views->GetPreparedSceneFrame(view.view_id),
-        },
-        .resolved_view = view.resolved_view,
-        .view_constants = view.view_id == ctx.current_view.view_id
-          ? observer_ptr<const graphics::Buffer> { ctx.view_constants.get() }
-          : observer_ptr<const graphics::Buffer> {},
-        .composition_view = view.composition_view,
-      });
-    }
-
-    if (out.empty() && ctx.current_view.view_id != kInvalidViewId) {
+    if (ctx.current_view.view_id != kInvalidViewId) {
       out.push_back(PreparedViewShadowInput {
         .view_id = ctx.current_view.view_id,
-        .prepared_scene = ctx.current_view.prepared_frame,
+        .prepared_scene = ctx.current_view.prepared_frame != nullptr
+          ? ctx.current_view.prepared_frame
+          : observer_ptr<const PreparedSceneFrame> {
+              init_views->GetPreparedSceneFrame(ctx.current_view.view_id),
+            },
         .resolved_view = ctx.current_view.resolved_view,
         .view_constants = observer_ptr<const graphics::Buffer> {
           ctx.view_constants.get(),
@@ -704,8 +965,10 @@ namespace {
     case ShaderDebugMode::kWorldNormals:
     case ShaderDebugMode::kRoughness:
     case ShaderDebugMode::kMetalness:
+    case ShaderDebugMode::kDirectionalShadowMask:
     case ShaderDebugMode::kSceneDepthRaw:
     case ShaderDebugMode::kSceneDepthLinear:
+    case ShaderDebugMode::kMaskedAlphaCoverage:
       return true;
     default:
       return false;
@@ -724,10 +987,14 @@ namespace {
       return "Roughness";
     case ShaderDebugMode::kMetalness:
       return "Metalness";
+    case ShaderDebugMode::kDirectionalShadowMask:
+      return "DirectionalShadowMask";
     case ShaderDebugMode::kSceneDepthRaw:
       return "SceneDepthRaw";
     case ShaderDebugMode::kSceneDepthLinear:
       return "SceneDepthLinear";
+    case ShaderDebugMode::kMaskedAlphaCoverage:
+      return "MaskedAlphaCoverage";
     default:
       return "Disabled";
     }
@@ -963,8 +1230,7 @@ namespace {
     }
 
     if (desc.depth_attachment.IsValid()) {
-      const auto& texture_desc
-        = desc.depth_attachment.texture->GetDescriptor();
+      const auto& texture_desc = desc.depth_attachment.texture->GetDescriptor();
       return glm::uvec2 {
         std::max(1U, texture_desc.width),
         std::max(1U, texture_desc.height),
@@ -1183,7 +1449,8 @@ namespace {
       }
     }
 
-    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled) {
+    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+      || ctx.render_mode == RenderMode::kWireframe) {
       config.enable_auto_exposure = false;
       config.fixed_exposure = 1.0F;
       config.tone_mapper = engine::ToneMapper::kNone;
@@ -1231,6 +1498,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   : renderer_(renderer)
   , gfx_(gfx)
   , scene_textures_(gfx, config)
+  , scene_texture_pool_(gfx, config)
+  , active_scene_textures_(&scene_textures_)
+  , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
 {
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
@@ -1248,8 +1518,17 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
+    occlusion_ = std::make_unique<OcclusionModule>(renderer_);
+  }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     base_pass_ = std::make_unique<BasePassModule>(
       renderer_, scene_textures_.GetConfig());
+  }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
+    && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
+    translucency_ = std::make_unique<TranslucencyModule>(renderer_);
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
     && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
@@ -1273,10 +1552,11 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
 
 SceneRenderer::~SceneRenderer() { ResetExtractArtifacts(); }
 
-void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
+void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
+  const frame::Slot slot, const std::optional<glm::uvec2> frame_extent)
 {
-  if (const auto frame_extent = ResolveFrameViewportExtent(frame);
-    frame_extent.has_value() && *frame_extent != scene_textures_.GetExtent()) {
+  if (frame_extent.has_value()
+    && *frame_extent != scene_textures_.GetExtent()) {
     ResizeSceneTextureFamily(*frame_extent);
   }
 
@@ -1290,51 +1570,230 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   frame_lighting_views_.clear();
   frame_shadow_views_.clear();
   lighting_grid_built_sequence_ = frame::SequenceNumber {};
-  shadow_depths_built_sequence_ = frame::SequenceNumber {};
   if (lighting_ != nullptr) {
-    lighting_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    lighting_->OnFrameStart(sequence, slot);
   }
   if (shadows_ != nullptr) {
-    shadows_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    shadows_->OnFrameStart(sequence, slot);
   }
   if (environment_ != nullptr) {
-    environment_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    environment_->OnFrameStart(sequence, slot);
   }
   if (post_process_ != nullptr) {
-    post_process_->OnFrameStart(
-      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+    post_process_->OnFrameStart(sequence, slot);
   }
+  if (screen_hzb_ != nullptr) {
+    screen_hzb_->OnFrameStart();
+  }
+}
+
+void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
+{
+  BeginFrame(frame.GetFrameSequenceNumber(), frame.GetFrameSlot(),
+    ResolveFrameViewportExtent(frame));
+}
+
+void SceneRenderer::OnStandaloneFrameStart(const frame::SequenceNumber sequence,
+  const frame::Slot slot, const std::optional<glm::uvec2> frame_extent)
+{
+  BeginFrame(sequence, slot, frame_extent);
 }
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
 
-void SceneRenderer::PrimePreparedView(RenderContext& ctx)
+void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
 {
-  ctx.current_view.prepared_frame.reset(nullptr);
   if (init_views_ != nullptr) {
     init_views_->Execute(ctx, scene_textures_);
-    if (ctx.current_view.view_id != kInvalidViewId) {
-      ctx.current_view.prepared_frame = observer_ptr<const PreparedSceneFrame> {
-        init_views_->GetPreparedSceneFrame(ctx.current_view.view_id)
-      };
+  }
+}
+
+void SceneRenderer::BindPreparedView(RenderContext& ctx)
+{
+  ctx.current_view.prepared_frame.reset(nullptr);
+  if (init_views_ != nullptr && ctx.current_view.view_id != kInvalidViewId) {
+    ctx.current_view.prepared_frame = observer_ptr<const PreparedSceneFrame> {
+      init_views_->GetPreparedSceneFrame(ctx.current_view.view_id)
+    };
+  }
+}
+
+void SceneRenderer::PrimePreparedView(RenderContext& ctx)
+{
+  PrimePreparedViews(ctx);
+  BindPreparedView(ctx);
+}
+
+void SceneRenderer::RenderViewFamily(RenderContext& ctx)
+{
+  struct AuxiliaryProduct {
+    std::shared_ptr<graphics::Texture> texture {};
+  };
+
+  PrimePreparedViews(ctx);
+  const auto allocations_before_frame
+    = scene_texture_pool_.GetAllocationCount();
+  auto rendered_scene_view_count = std::size_t { 0U };
+  auto auxiliary_products
+    = std::unordered_map<CompositionView::AuxOutputId, AuxiliaryProduct> {};
+  for (std::size_t view_index = 0U; view_index < ctx.frame_views.size();
+    ++view_index) {
+    const auto& entry = ctx.frame_views[view_index];
+    if (!entry.is_scene_view) {
+      continue;
+    }
+
+    ++rendered_scene_view_count;
+    internal::PerViewScope view_scope { ctx, view_index };
+    auto scene_texture_lease
+      = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
+    auto& leased_scene_textures = scene_texture_lease.GetSceneTextures();
+    active_scene_textures_ = &leased_scene_textures;
+    inspected_scene_textures_ = &leased_scene_textures;
+    auto restore_scene_texture_family = ScopeGuard(
+      [this]() noexcept { active_scene_textures_ = &scene_textures_; });
+    BindPreparedView(ctx);
+    ResetPerViewSceneProducts();
+    renderer_.DispatchViewExtensionsOnViewSetup(ctx);
+    renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this);
+    renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx);
+    RenderCurrentView(ctx);
+    renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
+    renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
+
+    for (const auto& output : entry.produced_aux_outputs) {
+      if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
+        continue;
+      }
+      auto texture = ResolveFramebufferColorTexture(entry.primary_target);
+      CHECK_F(static_cast<bool>(texture),
+        "SceneRenderer: auxiliary output {} from view {} has no color texture",
+        output.id.get(), entry.view_id.get());
+      auxiliary_products.insert_or_assign(output.id,
+        AuxiliaryProduct {
+          .texture = texture,
+        });
+      LOG_F(INFO,
+        "Vortex.AuxView.Extract frame={} aux_id={} producer_view={} "
+        "texture='{}' debug_name='{}'",
+        ctx.frame_sequence.get(), output.id.get(), entry.view_id.get(),
+        texture->GetDescriptor().debug_name, output.debug_name);
+    }
+
+    for (const auto& input : entry.resolved_aux_inputs) {
+      if (!input.valid
+        || input.kind != CompositionView::AuxOutputKind::kColorTexture) {
+        continue;
+      }
+      const auto product_it = auxiliary_products.find(input.input.id);
+      CHECK_F(product_it != auxiliary_products.end(),
+        "SceneRenderer: resolved auxiliary input {} for view {} was not "
+        "extracted before consumption",
+        input.input.id.get(), entry.view_id.get());
+      auto target = ResolveFramebufferColorTexture(entry.primary_target);
+      CHECK_F(static_cast<bool>(target),
+        "SceneRenderer: auxiliary consumer view {} has no color target",
+        entry.view_id.get());
+      CHECK_F(product_it->second.texture.get() != target.get(),
+        "SceneRenderer: auxiliary consumer view {} cannot copy from its own "
+        "target texture",
+        entry.view_id.get());
+
+      const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
+      auto recorder = gfx_.AcquireCommandRecorder(
+        queue_key, "Vortex Auxiliary View Consumption");
+      CHECK_F(static_cast<bool>(recorder),
+        "SceneRenderer: failed to acquire auxiliary consumption recorder");
+      graphics::GpuEventScope consume_scope(*recorder, "Vortex.AuxView.Consume",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("aux_id", input.input.id.get()),
+          profiling::Var("producer_view", input.producer_view_id.get()),
+          profiling::Var("consumer_view", entry.view_id.get()),
+          profiling::Var("debug_name", input.debug_name)));
+      auto& source = *product_it->second.texture;
+      TrackAuxiliaryColorTexture(gfx_, *recorder, source);
+      TrackAuxiliaryColorTexture(gfx_, *recorder, *target);
+      CopyAuxiliaryTextureToRegion(
+        *recorder, source, *target, BuildAuxiliaryConsumerViewport(*target));
+      recorder->RequireResourceStateFinal(
+        source, graphics::ResourceStates::kRenderTarget);
+      recorder->RequireResourceStateFinal(
+        *target, graphics::ResourceStates::kRenderTarget);
+      recorder->FlushBarriers();
+      LOG_F(INFO,
+        "Vortex.AuxView.Consume frame={} aux_id={} producer_view={} "
+        "consumer_view={} texture='{}' target='{}'",
+        ctx.frame_sequence.get(), input.input.id.get(),
+        input.producer_view_id.get(), entry.view_id.get(),
+        source.GetDescriptor().debug_name, target->GetDescriptor().debug_name);
     }
   }
+
+  const auto allocations_after_frame = scene_texture_pool_.GetAllocationCount();
+  LOG_F(INFO,
+    "Vortex.SceneTextureLeasePool.Churn frame={} scene_views={} "
+    "allocations_before={} allocations_after={} allocations_delta={} "
+    "live_leases={}",
+    ctx.frame_sequence.get(), rendered_scene_view_count,
+    allocations_before_frame, allocations_after_frame,
+    allocations_after_frame - allocations_before_frame,
+    scene_texture_pool_.GetLiveLeaseCount());
 }
 
 void SceneRenderer::OnRender(RenderContext& ctx)
 {
+  if (!ctx.frame_views.empty() && ctx.current_view.view_id == kInvalidViewId
+    && !ctx.per_view_scope_active_) {
+    RenderViewFamily(ctx);
+    return;
+  }
+
+  RenderCurrentView(ctx);
+}
+
+void SceneRenderer::RenderCurrentView(RenderContext& ctx)
+{
   deferred_lighting_state_ = {};
+  auto& scene_textures = ActiveSceneTextures();
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
-    target_extent.has_value() && *target_extent != scene_textures_.GetExtent()) {
+    target_extent.has_value() && *target_extent != scene_textures.GetExtent()) {
     ResizeSceneTextureFamily(*target_extent);
   }
 
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
-  ctx.current_view.screen_hzb_request
-    = ResolveScreenHzbRequest(ctx, shading_mode);
+  const auto wireframe_only = ctx.render_mode == RenderMode::kWireframe;
+  const auto feature_spec
+    = ResolveViewFeatureProfileSpec(ctx.current_view.feature_profile);
+  const auto feature_mask = ctx.current_view.feature_mask;
+  const auto depth_only_variant = feature_spec.depth_only;
+  const auto shadow_only_variant = feature_spec.shadow_only;
+  const auto diagnostics_only_variant = feature_spec.diagnostics_only;
+  const auto wants_scene_lighting
+    = feature_mask.Has(CompositionView::ViewFeatureMask::kSceneLighting)
+    && !depth_only_variant && !shadow_only_variant && !diagnostics_only_variant;
+  const auto wants_shadow_products
+    = feature_mask.Has(CompositionView::ViewFeatureMask::kShadows)
+    || shadow_only_variant;
+  const auto wants_environment = wants_scene_lighting
+    && feature_mask.Has(CompositionView::ViewFeatureMask::kEnvironment);
+  const auto wants_translucency = wants_scene_lighting
+    && feature_mask.Has(CompositionView::ViewFeatureMask::kTranslucency);
+  const auto wants_lighting_selection
+    = wants_scene_lighting || wants_shadow_products;
+  const auto wants_depth_prepass = wants_scene_lighting || depth_only_variant;
+  const auto wants_resolve = wants_scene_lighting || depth_only_variant;
+  const auto wants_scene_texture_publication
+    = wants_scene_lighting || depth_only_variant;
+  ctx.current_view.screen_hzb_request = wireframe_only || !wants_scene_lighting
+    ? RenderContext::ScreenHzbRequest {}
+    : ResolveScreenHzbRequest(ctx, shading_mode);
+  if (depth_only_variant) {
+    ctx.current_view.depth_prepass_mode = DepthPrePassMode::kOpaqueAndMasked;
+  }
+  if (wireframe_only || !wants_depth_prepass) {
+    ctx.current_view.depth_prepass_mode = DepthPrePassMode::kDisabled;
+  }
   ctx.current_view.scene_depth_product_valid = false;
   // Renderer Core materializes the eligible views and selects the current
   // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
@@ -1344,8 +1803,35 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   if (ctx.current_view.prepared_frame == nullptr) {
     PrimePreparedView(ctx);
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage2.InitViews",
+      .kind = DiagnosticsPassKind::kCpuOnly,
+      .executed = ctx.current_view.prepared_frame != nullptr,
+      .outputs = { "Vortex.PreparedSceneFrame" },
+      .missing_inputs = ctx.current_view.prepared_frame == nullptr
+        ? std::vector<std::string> { "PreparedSceneFrame" }
+        : std::vector<std::string> {},
+    });
+  if (diagnostics_only_variant) {
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.FeatureVariant.DiagnosticsOnly",
+        .kind = DiagnosticsPassKind::kCpuOnly,
+        .executed = true,
+        .outputs = { "Vortex.DiagnosticsLedger" },
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.DiagnosticsLedger",
+        .producer_pass = "Vortex.FeatureVariant.DiagnosticsOnly",
+        .descriptor = "frame-ledger",
+        .published = true,
+        .valid = true,
+      });
+  }
 
-  if (lighting_ != nullptr
+  if ((lighting_ != nullptr || shadows_ != nullptr) && wants_lighting_selection
     && lighting_grid_built_sequence_ != ctx.frame_sequence) {
     if (auto* scene_mutable = ctx.GetSceneMutable().get();
       scene_mutable != nullptr) {
@@ -1359,27 +1845,42 @@ void SceneRenderer::OnRender(RenderContext& ctx)
         .selection_epoch = ctx.frame_sequence.get(),
       };
     }
-    CollectLightingViewInputs(ctx, init_views_.get(), frame_lighting_views_);
-    lighting_->BuildLightGrid(FrameLightingInputs {
-      .frame_light_set = &frame_light_selection_,
-      .active_views = std::span(frame_lighting_views_),
-    });
+    frame_lighting_views_.clear();
+    if (lighting_ != nullptr && wants_scene_lighting) {
+      CollectLightingViewInputs(ctx, init_views_.get(), frame_lighting_views_);
+      lighting_->BuildLightGrid(FrameLightingInputs {
+        .frame_light_set = &frame_light_selection_,
+        .active_views = std::span(frame_lighting_views_),
+      });
+    }
     lighting_grid_built_sequence_ = ctx.frame_sequence;
   }
-  if (lighting_ != nullptr) {
+  if (lighting_ != nullptr && wants_scene_lighting) {
     published_view_frame_bindings_.lighting_frame_slot
       = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_lighting_frame_slot
       = published_view_frame_bindings_.lighting_frame_slot;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage6.ForwardLightData",
+        .kind = DiagnosticsPassKind::kCpuOnly,
+        .executed = published_view_frame_bindings_.lighting_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { "FrameLightSelection" },
+        .outputs = { "Vortex.LightingFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.LightingFrameBindings",
+      "Vortex.Stage6.ForwardLightData",
+      published_view_frame_bindings_.lighting_frame_slot);
   }
 
   // Stage 3: Depth prepass + early velocity
-  if (depth_prepass_ != nullptr) {
+  if (depth_prepass_ != nullptr && wants_depth_prepass) {
     depth_prepass_->SetConfig(DepthPrepassConfig {
       .mode = ctx.current_view.depth_prepass_mode,
-      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+      .write_velocity = scene_textures.GetVelocity() != nullptr,
     });
-    depth_prepass_->Execute(ctx, scene_textures_);
+    depth_prepass_->Execute(ctx, scene_textures);
     ctx.current_view.depth_prepass_completeness
       = depth_prepass_->GetCompleteness();
     ctx.current_view.scene_depth_product_valid
@@ -1389,9 +1890,33 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = DepthPrePassCompleteness::kDisabled;
     ctx.current_view.scene_depth_product_valid = false;
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage3.DepthPrepass",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = depth_prepass_ != nullptr
+        && ctx.current_view.depth_prepass_completeness
+          != DepthPrePassCompleteness::kDisabled,
+      .outputs = wants_depth_prepass
+        ? std::vector<std::string> { "Vortex.SceneDepth",
+            "Vortex.PartialDepth" }
+        : std::vector<std::string> {},
+    });
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
     PublishDepthPrepassProducts();
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.SceneDepth",
+        .producer_pass = "Vortex.Stage3.DepthPrepass",
+        .resource_name
+        = std::string { scene_textures.GetSceneDepth().GetName() },
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.scene_depth_srv),
+        .published = scene_texture_bindings_.scene_depth_srv
+          != SceneTextureBindings::kInvalidIndex,
+        .valid = ctx.current_view.scene_depth_product_valid,
+      });
   }
 
   // Stage 4: reserved - GeometryVirtualizationService
@@ -1409,8 +1934,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   ctx.current_view.screen_hzb_mip_count = 0U;
   ctx.current_view.screen_hzb_available = false;
   ctx.current_view.screen_hzb_has_previous = false;
+  ctx.current_view.occlusion_results.reset(nullptr);
   if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
-    screen_hzb_->Execute(ctx, scene_textures_);
+    screen_hzb_->Execute(ctx, scene_textures);
     const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
     published_screen_hzb_bindings_ = screen_hzb_output.bindings;
     if (screen_hzb_output.closest_texture != nullptr) {
@@ -1449,30 +1975,86 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       PublishScreenHzbProducts(ctx);
     }
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage5.ScreenHzbBuild",
+      .kind = DiagnosticsPassKind::kCompute,
+      .executed = ctx.current_view.screen_hzb_available,
+      .inputs = { "Vortex.SceneDepth" },
+      .outputs = ctx.current_view.CanBuildScreenHzb()
+        ? std::vector<std::string> { "Vortex.ScreenHzb" }
+        : std::vector<std::string> {},
+      .missing_inputs = ctx.current_view.CanBuildScreenHzb()
+          && !ctx.current_view.scene_depth_product_valid
+        ? std::vector<std::string> { "Vortex.SceneDepth" }
+        : std::vector<std::string> {},
+    });
+  RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
+    "Vortex.Stage5.ScreenHzbBuild",
+    published_view_frame_bindings_.screen_hzb_frame_slot);
+
+  if (occlusion_ != nullptr && wants_scene_lighting) {
+    occlusion_->SetConfig(OcclusionConfig {
+      .enabled = renderer_.GetOcclusionEnabled(),
+      .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
+    });
+    occlusion_->Execute(ctx, scene_textures);
+    const auto& occlusion_stats = occlusion_->GetStats();
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage5.Occlusion",
+        .kind = DiagnosticsPassKind::kCpuOnly,
+        .executed = occlusion_stats.results_valid,
+        .inputs = { "PreparedSceneFrame", "Vortex.ScreenHzb" },
+        .outputs = { "Vortex.OcclusionFrameResults" },
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.OcclusionFrameResults",
+        .producer_pass = "Vortex.Stage5.Occlusion",
+        .descriptor = OcclusionStatsDescriptor(occlusion_stats),
+        .published = ctx.current_view.occlusion_results.get() != nullptr,
+        .valid = occlusion_stats.results_valid,
+      });
+  }
 
   // Stage 6: Forward light data / light grid
 
   // Stage 7: reserved - MaterialCompositionService::PreBasePass
 
   // Stage 8: Shadow depth
-  if (shadows_ != nullptr
-    && shadow_depths_built_sequence_ != ctx.frame_sequence) {
-    CollectShadowViewInputs(ctx, init_views_.get(), frame_shadow_views_);
+  if (shadows_ != nullptr && wants_shadow_products) {
+    CollectCurrentShadowViewInput(ctx, init_views_.get(), frame_shadow_views_);
     shadows_->RenderShadowDepths(FrameShadowInputs {
       .frame_light_set = &frame_light_selection_,
       .active_views = std::span(frame_shadow_views_),
     });
-    shadow_depths_built_sequence_ = ctx.frame_sequence;
   }
-  if (shadows_ != nullptr) {
+  if (shadows_ != nullptr && wants_shadow_products) {
     published_view_frame_bindings_.shadow_frame_slot
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_shadow_frame_slot
       = published_view_frame_bindings_.shadow_frame_slot;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage8.ShadowDepth",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = published_view_frame_bindings_.shadow_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { "FrameShadowInputs" },
+        .outputs = { "Vortex.ShadowFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.ShadowFrameBindings",
+      "Vortex.Stage8.ShadowDepth",
+      published_view_frame_bindings_.shadow_frame_slot);
   }
-  if (environment_ != nullptr) {
+  if (environment_ != nullptr && wants_environment) {
+    const auto enable_static_sky_light_ambient_bridge
+      = shading_mode == ShadingMode::kDeferred;
     published_view_frame_bindings_.environment_frame_slot
-      = environment_->PublishEnvironmentBindings(ctx);
+      = environment_->PublishEnvironmentBindings(ctx,
+        kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
+        enable_static_sky_light_ambient_bridge, &scene_textures);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1489,19 +2071,33 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       environment_lighting_state_.probe_revision
         = environment_bindings->probes.probe_revision;
     }
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.EnvironmentFrameBindings",
+      "Vortex.Environment.PublishBindings",
+      published_view_frame_bindings_.environment_frame_slot);
   }
-  if (shadows_ != nullptr || environment_ != nullptr) {
+  if ((shadows_ != nullptr && wants_shadow_products)
+    || (environment_ != nullptr && wants_environment)) {
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
   // Stage 9: Base pass
-  if (base_pass_ != nullptr) {
+  auto base_pass_published = false;
+  auto base_pass_wrote_scene_color = false;
+  auto base_pass_draw_count = std::uint32_t { 0U };
+  auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
+  if (base_pass_ != nullptr && wants_scene_lighting) {
     base_pass_->SetConfig(BasePassConfig {
-      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+      .write_velocity = scene_textures.GetVelocity() != nullptr,
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
       .shading_mode = shading_mode,
+      .render_mode = ctx.render_mode,
     });
-    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
+    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures);
+    base_pass_published = base_pass_result.published_base_pass_products;
+    base_pass_wrote_scene_color = base_pass_result.wrote_scene_color;
+    base_pass_draw_count = base_pass_result.draw_count;
+    base_pass_occlusion_culled_draw_count
+      = base_pass_result.occlusion_culled_draw_count;
     if (base_pass_result.published_base_pass_products
       && base_pass_result.completed_velocity_for_dynamic_geometry) {
       PublishBasePassVelocity();
@@ -1511,21 +2107,91 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
     }
   }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage9.BasePass",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = base_pass_wrote_scene_color,
+      .inputs = ctx.current_view.occlusion_results.get() != nullptr
+        ? std::vector<std::string> { "Vortex.PreparedSceneFrame",
+            "Vortex.OcclusionFrameResults" }
+        : std::vector<std::string> { "Vortex.PreparedSceneFrame" },
+      .outputs = base_pass_published
+        ? std::vector<std::string> { "Vortex.SceneColor", "Vortex.GBuffer" }
+        : wants_scene_lighting
+        ? std::vector<std::string> { "Vortex.SceneColor" }
+        : std::vector<std::string> {},
+    });
+  if (base_pass_wrote_scene_color) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.BasePassDrawCommands",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .descriptor = BasePassDrawDescriptor(
+          base_pass_draw_count, base_pass_occlusion_culled_draw_count),
+        .published = true,
+        .valid = true,
+      });
+  }
+  if (base_pass_published) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.SceneColor",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .resource_name
+        = std::string { scene_textures.GetSceneColor().GetName() },
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.scene_color_srv),
+        .published = scene_texture_bindings_.scene_color_srv
+          != SceneTextureBindings::kInvalidIndex,
+        .valid = scene_texture_bindings_.scene_color_srv
+          != SceneTextureBindings::kInvalidIndex,
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.GBuffer",
+        .producer_pass = "Vortex.Stage9.BasePass",
+        .descriptor
+        = SceneTextureDescriptor(scene_texture_bindings_.gbuffer_srvs[0]),
+        .published = HasPublishedGBufferBindings(scene_texture_bindings_),
+        .valid = HasPublishedGBufferBindings(scene_texture_bindings_),
+      });
+  }
 
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
 
   // Stage 12: Deferred direct lighting
-  if (!RenderDebugVisualization(ctx, scene_textures_)) {
-    RenderDeferredLighting(ctx, scene_textures_);
+  const auto rendered_debug_visualization = wants_scene_lighting
+    ? RenderDebugVisualization(ctx, scene_textures)
+    : false;
+  if (!rendered_debug_visualization) {
+    if (wants_scene_lighting) {
+      RenderDeferredLighting(ctx, scene_textures);
+    }
   }
+  const auto deferred_lighting_executed = rendered_debug_visualization
+    || deferred_lighting_state_.consumed_published_scene_textures;
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = rendered_debug_visualization ? "Vortex.Stage12.DebugVisualization"
+                                           : "Vortex.Stage12.DeferredLighting",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = deferred_lighting_executed,
+      .inputs = { "Vortex.SceneColor", "Vortex.GBuffer",
+        "Vortex.LightingFrameBindings", "Vortex.ShadowFrameBindings" },
+      .outputs = wants_scene_lighting
+        ? std::vector<std::string> { "Vortex.SceneColor" }
+        : std::vector<std::string> {},
+    });
 
   // Stage 13: reserved - IndirectLightingService
 
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
-  if (environment_ != nullptr && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
-    environment_->RenderSkyAndFog(ctx, scene_textures_);
+  if (environment_ != nullptr && wants_environment && !wireframe_only
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
+    environment_->RenderSkyAndFog(ctx, scene_textures);
     const auto& stage14_state = environment_->GetLastStage14State();
     environment_lighting_state_.stage14_requested = stage14_state.requested;
     environment_lighting_state_.stage14_local_fog_requested
@@ -1548,6 +2214,53 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = stage14_state.local_fog_dispatch_count_y;
     environment_lighting_state_.stage14_local_fog_dispatch_count_z
       = stage14_state.local_fog_dispatch_count_z;
+    environment_lighting_state_.stage14_volumetric_fog_requested
+      = stage14_state.volumetric_fog_requested;
+    environment_lighting_state_.stage14_volumetric_fog_executed
+      = stage14_state.volumetric_fog_executed;
+    environment_lighting_state_.stage14_integrated_light_scattering_valid
+      = stage14_state.integrated_light_scattering_valid;
+    environment_lighting_state_.stage14_integrated_light_scattering_srv
+      = stage14_state.integrated_light_scattering_srv;
+    environment_lighting_state_.stage14_volumetric_fog_grid_width
+      = stage14_state.volumetric_fog_grid_width;
+    environment_lighting_state_.stage14_volumetric_fog_grid_height
+      = stage14_state.volumetric_fog_grid_height;
+    environment_lighting_state_.stage14_volumetric_fog_grid_depth
+      = stage14_state.volumetric_fog_grid_depth;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_x
+      = stage14_state.volumetric_fog_dispatch_count_x;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_y
+      = stage14_state.volumetric_fog_dispatch_count_y;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_z
+      = stage14_state.volumetric_fog_dispatch_count_z;
+    environment_lighting_state_
+      .stage14_volumetric_fog_height_fog_media_requested
+      = stage14_state.volumetric_fog_height_fog_media_requested;
+    environment_lighting_state_.stage14_volumetric_fog_height_fog_media_executed
+      = stage14_state.volumetric_fog_height_fog_media_executed;
+    environment_lighting_state_
+      .stage14_volumetric_fog_sky_light_injection_requested
+      = stage14_state.volumetric_fog_sky_light_injection_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_sky_light_injection_executed
+      = stage14_state.volumetric_fog_sky_light_injection_executed;
+    environment_lighting_state_
+      .stage14_volumetric_fog_temporal_history_requested
+      = stage14_state.volumetric_fog_temporal_history_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_temporal_history_reprojection_executed
+      = stage14_state.volumetric_fog_temporal_history_reprojection_executed;
+    environment_lighting_state_.stage14_volumetric_fog_temporal_history_reset
+      = stage14_state.volumetric_fog_temporal_history_reset;
+    environment_lighting_state_
+      .stage14_volumetric_fog_local_fog_injection_requested
+      = stage14_state.volumetric_fog_local_fog_injection_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_local_fog_injection_executed
+      = stage14_state.volumetric_fog_local_fog_injection_executed;
+    environment_lighting_state_.stage14_volumetric_fog_local_fog_instance_count
+      = stage14_state.volumetric_fog_local_fog_instance_count;
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
     environment_lighting_state_.stage15_requested = stage15_state.requested;
@@ -1565,6 +2278,35 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_.fog_draw_count = stage15_state.fog_draw_count;
     environment_lighting_state_.total_draw_count
       = stage15_state.total_draw_count;
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage14.VolumetricAndLocalFog",
+        .kind = DiagnosticsPassKind::kCompute,
+        .executed = stage14_state.local_fog_executed
+          || stage14_state.volumetric_fog_executed,
+        .inputs = { "Vortex.ScreenHzb", "Vortex.EnvironmentFrameBindings",
+          "Vortex.ShadowFrameBindings" },
+        .outputs = { "Vortex.Environment.IntegratedLightScattering" },
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.Environment.IntegratedLightScattering",
+        .producer_pass = "Vortex.Stage14.VolumetricAndLocalFog",
+        .descriptor = ShaderVisibleDescriptor(
+          stage14_state.integrated_light_scattering_srv),
+        .published = stage14_state.integrated_light_scattering_srv
+          != kInvalidShaderVisibleIndex,
+        .valid = stage14_state.integrated_light_scattering_valid,
+      });
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage15.SkyAtmosphereFog",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = stage15_state.total_draw_count > 0U,
+        .inputs = { "Vortex.SceneColor",
+          "Vortex.Environment.IntegratedLightScattering" },
+        .outputs = { "Vortex.SceneColor" },
+      });
   }
 
   // Stage 16: reserved - WaterService
@@ -1572,17 +2314,91 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 17: reserved - post-opaque extensions
 
   // Stage 18: Translucency
+  auto translucency_result = TranslucencyExecutionResult {};
+  if (translucency_ != nullptr && wants_translucency && !wireframe_only
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
+    translucency_result = translucency_->Execute(ctx, scene_textures);
+  }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage18.Translucency",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = translucency_result.executed,
+      .inputs = { "Vortex.PreparedSceneFrame", "Vortex.SceneColor",
+        "Vortex.SceneDepth", "Vortex.LightingFrameBindings",
+        "Vortex.ShadowFrameBindings", "Vortex.EnvironmentFrameBindings" },
+      .outputs = wants_translucency
+        ? std::vector<std::string> { "Vortex.SceneColor" }
+        : std::vector<std::string> {},
+      .missing_inputs = TranslucencyMissingInputs(
+        translucency_result, translucency_ != nullptr),
+    });
+  RecordDiagnosticsProduct(renderer_,
+    DiagnosticsProductRecord {
+      .name = "Vortex.TranslucencyDrawCommands",
+      .producer_pass = "Vortex.Stage18.Translucency",
+      .descriptor = TranslucencyDrawDescriptor(translucency_result),
+      .published = translucency_result.draw_count > 0U,
+      .valid = !translucency_result.requested || translucency_result.executed
+        || translucency_result.skip_reason == TranslucencySkipReason::kNoDraws,
+    });
 
   // Stage 19: reserved - DistortionModule
 
+  if (base_pass_ != nullptr && wants_scene_lighting
+    && ctx.render_mode == RenderMode::kOverlayWireframe && !wireframe_only) {
+    const auto overlay_draws
+      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures);
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage20.WireframeOverlay",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = overlay_draws > 0U,
+        .inputs = { "Vortex.SceneColor", "Vortex.SceneDepth",
+          "Vortex.PreparedSceneFrame" },
+        .outputs = { "Vortex.SceneColor" },
+      });
+  }
+
   // Maintain late scene-texture publication before the output handoff stages.
-  PublishCustomDepthProducts();
+  if (wants_scene_texture_publication) {
+    PublishCustomDepthProducts();
+  }
 
   // Stage 21: Resolve scene color
-  ResolveSceneColor(ctx);
+  if (wants_resolve) {
+    ResolveSceneColor(ctx);
+  }
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage21.ResolveSceneColor",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = scene_texture_extracts_.resolved_scene_color.valid,
+      .inputs = { "Vortex.SceneColor" },
+      .outputs = wants_resolve
+        ? std::vector<std::string> { "Vortex.ResolvedSceneColor" }
+        : std::vector<std::string> {},
+      .missing_inputs
+      = wants_resolve && !scene_texture_extracts_.resolved_scene_color.valid
+        ? std::vector<std::string> { "Vortex.SceneColor" }
+        : std::vector<std::string> {},
+    });
+  if (scene_texture_extracts_.resolved_scene_color.valid
+    && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.ResolvedSceneColor",
+        .producer_pass = "Vortex.Stage21.ResolveSceneColor",
+        .resource_name = std::string {
+          scene_texture_extracts_.resolved_scene_color.texture->GetName(),
+        },
+        .published = true,
+        .valid = true,
+      });
+  }
 
   // Stage 22: Post processing
-  if (post_process_ != nullptr) {
+  if (post_process_ != nullptr && wants_scene_lighting) {
     post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));
     auto post_target = observer_ptr<const graphics::Framebuffer> {};
     if (const auto* active_view = ctx.GetActiveViewEntry();
@@ -1601,7 +2417,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       post_target = ctx.pass_target;
     }
 
-    const auto* scene_signal = scene_textures_.GetSceneColorResource().get();
+    const auto* scene_signal = scene_textures.GetSceneColorResource().get();
     auto scene_signal_kind = std::string_view { "scene_color" };
     if (scene_texture_extracts_.resolved_scene_color.valid
       && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
@@ -1614,7 +2430,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       *const_cast<graphics::Texture*>(scene_signal),
       MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
 
-    const auto* scene_depth = scene_textures_.GetSceneDepthResource().get();
+    const auto* scene_depth = scene_textures.GetSceneDepthResource().get();
     if (scene_texture_extracts_.resolved_scene_depth.valid
       && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
       scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
@@ -1638,16 +2454,37 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
     };
     post_process_->Execute(
-      ctx.current_view.view_id, ctx, scene_textures_, post_process_inputs);
+      ctx.current_view.view_id, ctx, scene_textures, post_process_inputs);
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage22.PostProcess",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = published_view_frame_bindings_.post_process_frame_slot
+          != kInvalidShaderVisibleIndex,
+        .inputs = { std::string { "Vortex." } + std::string(scene_signal_kind),
+          "Vortex.SceneDepth" },
+        .outputs = { "Vortex.PostProcessFrameBindings" },
+      });
+    RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
+      "Vortex.Stage22.PostProcess",
+      published_view_frame_bindings_.post_process_frame_slot);
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
   // Stage 20: Ground grid
-  if (ground_grid_pass_ != nullptr) {
+  if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
-      ctx, scene_textures_, ResolveLateOverlayTarget(ctx)));
+      ctx, scene_textures, ResolveLateOverlayTarget(ctx)));
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage20.GroundGrid",
+        .kind = DiagnosticsPassKind::kGraphics,
+        .executed = true,
+        .inputs = { "Vortex.SceneColor" },
+        .outputs = { "Vortex.SceneColor" },
+      });
   }
 
   // Stage 23: Post-render cleanup / extraction
@@ -1662,19 +2499,21 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
 
 void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
-void SceneRenderer::RemoveViewState(const ViewId view_id)
+void SceneRenderer::RemoveViewState(const ViewId view_id,
+  const CompositionView::ViewStateHandle view_state_handle)
 {
   InvalidatePublishedViewFrameBindings();
   if (post_process_ != nullptr) {
-    post_process_->RemoveViewState(view_id);
+    post_process_->RemoveViewState(view_id, view_state_handle);
   }
 }
 
 void SceneRenderer::PublishDepthPrepassProducts()
 {
+  auto& scene_textures = ActiveSceneTextures();
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kPartialDepth;
-  if (scene_textures_.GetVelocity() != nullptr) {
+  if (scene_textures.GetVelocity() != nullptr) {
     flags = flags | SceneTextureSetupMode::Flag::kSceneVelocity;
   }
   setup_mode_.SetFlags(flags);
@@ -1694,10 +2533,11 @@ void SceneRenderer::PublishScreenHzbProducts(RenderContext& ctx)
 
 void SceneRenderer::PublishBasePassVelocity()
 {
+  auto& scene_textures = ActiveSceneTextures();
   // Stage 9 owns the raw attachment writes, but Stage 10 remains the first
   // truthful publication boundary for SceneColor and the active GBuffers in
   // the standard SceneTextureBindings route.
-  if (scene_textures_.GetVelocity() != nullptr) {
+  if (scene_textures.GetVelocity() != nullptr) {
     setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
     RefreshSceneTextureBindings();
   }
@@ -1712,6 +2552,7 @@ void SceneRenderer::PublishBasePassVelocity()
 
 void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
 {
+  auto& scene_textures = ActiveSceneTextures();
   // SceneRenderer is the sole owner of the deferred base-pass scene-texture
   // publication seam. RebuildWithGBuffers() is only the family-local
   // readiness helper; this method performs promotion, binding refresh, and
@@ -1725,7 +2566,7 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
   CHECK_F(ctx.frame_slot != frame::kInvalidSlot,
     "SceneRenderer: PublishDeferredBasePassSceneTextures requires a valid "
     "frame slot for publication");
-  scene_textures_.RebuildWithGBuffers();
+  scene_textures.RebuildWithGBuffers();
   setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
     | SceneTextureSetupMode::Flag::kSceneColor
     | SceneTextureSetupMode::Flag::kStencil);
@@ -1738,7 +2579,8 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
 
 void SceneRenderer::PublishCustomDepthProducts()
 {
-  if (scene_textures_.GetCustomDepth() != nullptr) {
+  auto& scene_textures = ActiveSceneTextures();
+  if (scene_textures.GetCustomDepth() != nullptr) {
     setup_mode_.Set(SceneTextureSetupMode::Flag::kCustomDepth);
   }
   RefreshSceneTextureBindings();
@@ -1752,12 +2594,14 @@ void SceneRenderer::FinalizeSceneTextureExtractions()
 
 auto SceneRenderer::GetSceneTextures() const -> const SceneTextures&
 {
-  return scene_textures_;
+  return inspected_scene_textures_ != nullptr ? *inspected_scene_textures_
+                                              : scene_textures_;
 }
 
 auto SceneRenderer::GetSceneTextures() -> SceneTextures&
 {
-  return scene_textures_;
+  return inspected_scene_textures_ != nullptr ? *inspected_scene_textures_
+                                              : scene_textures_;
 }
 
 auto SceneRenderer::GetSceneTextureBindings() const
@@ -1852,48 +2696,49 @@ void SceneRenderer::RefreshSceneTextureBindings()
     return;
   }
 
+  auto& scene_textures = ActiveSceneTextures();
   scene_texture_bindings_.valid_flags = setup_mode_.GetFlags();
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneDepth)) {
     scene_texture_bindings_.scene_depth_srv
-      = RegisterSceneTextureView(scene_textures_.GetSceneDepth(),
-        MakeSrvDesc(scene_textures_.GetSceneDepth(),
+      = RegisterSceneTextureView(scene_textures.GetSceneDepth(),
+        MakeSrvDesc(scene_textures.GetSceneDepth(),
           ResolveDepthSrvFormat(
-            scene_textures_.GetSceneDepth().GetDescriptor().format)));
+            scene_textures.GetSceneDepth().GetDescriptor().format)));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kPartialDepth)) {
     scene_texture_bindings_.partial_depth_srv
-      = RegisterSceneTextureView(scene_textures_.GetPartialDepth(),
-        MakeSrvDesc(scene_textures_.GetPartialDepth(),
-          scene_textures_.GetPartialDepth().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetPartialDepth(),
+        MakeSrvDesc(scene_textures.GetPartialDepth(),
+          scene_textures.GetPartialDepth().GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity)
-    && scene_textures_.GetVelocity() != nullptr) {
+    && scene_textures.GetVelocity() != nullptr) {
     scene_texture_bindings_.velocity_srv
-      = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
-        MakeSrvDesc(*scene_textures_.GetVelocity(),
-          scene_textures_.GetVelocity()->GetDescriptor().format));
+      = RegisterSceneTextureView(*scene_textures.GetVelocity(),
+        MakeSrvDesc(*scene_textures.GetVelocity(),
+          scene_textures.GetVelocity()->GetDescriptor().format));
     scene_texture_bindings_.velocity_uav
-      = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
-        MakeUavDesc(*scene_textures_.GetVelocity(),
-          scene_textures_.GetVelocity()->GetDescriptor().format));
+      = RegisterSceneTextureView(*scene_textures.GetVelocity(),
+        MakeUavDesc(*scene_textures.GetVelocity(),
+          scene_textures.GetVelocity()->GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneColor)) {
     scene_texture_bindings_.scene_color_srv
-      = RegisterSceneTextureView(scene_textures_.GetSceneColor(),
-        MakeSrvDesc(scene_textures_.GetSceneColor(),
-          scene_textures_.GetSceneColor().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetSceneColor(),
+        MakeSrvDesc(scene_textures.GetSceneColor(),
+          scene_textures.GetSceneColor().GetDescriptor().format));
     scene_texture_bindings_.scene_color_uav
-      = RegisterSceneTextureView(scene_textures_.GetSceneColor(),
-        MakeUavDesc(scene_textures_.GetSceneColor(),
-          scene_textures_.GetSceneColor().GetDescriptor().format));
+      = RegisterSceneTextureView(scene_textures.GetSceneColor(),
+        MakeUavDesc(scene_textures.GetSceneColor(),
+          scene_textures.GetSceneColor().GetDescriptor().format));
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kStencil)) {
-    const auto stencil_view = scene_textures_.GetStencil();
+    const auto stencil_view = scene_textures.GetStencil();
     if (stencil_view.IsValid()) {
       scene_texture_bindings_.stencil_srv
         = RegisterSceneTextureView(*stencil_view.texture,
@@ -1904,14 +2749,14 @@ void SceneRenderer::RefreshSceneTextureBindings()
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kCustomDepth)
-    && scene_textures_.GetCustomDepth() != nullptr) {
+    && scene_textures.GetCustomDepth() != nullptr) {
     scene_texture_bindings_.custom_depth_srv
-      = RegisterSceneTextureView(*scene_textures_.GetCustomDepth(),
-        MakeSrvDesc(*scene_textures_.GetCustomDepth(),
+      = RegisterSceneTextureView(*scene_textures.GetCustomDepth(),
+        MakeSrvDesc(*scene_textures.GetCustomDepth(),
           ResolveDepthSrvFormat(
-            scene_textures_.GetCustomDepth()->GetDescriptor().format)));
+            scene_textures.GetCustomDepth()->GetDescriptor().format)));
 
-    const auto custom_stencil = scene_textures_.GetCustomStencil();
+    const auto custom_stencil = scene_textures.GetCustomStencil();
     if (custom_stencil.IsValid()) {
       scene_texture_bindings_.custom_stencil_srv
         = RegisterSceneTextureView(*custom_stencil.texture,
@@ -1922,9 +2767,9 @@ void SceneRenderer::RefreshSceneTextureBindings()
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kGBuffers)) {
-    for (std::uint32_t i = 0; i < scene_textures_.GetGBufferCount(); ++i) {
+    for (std::uint32_t i = 0; i < scene_textures.GetGBufferCount(); ++i) {
       const auto gbuffer_index = static_cast<GBufferIndex>(i);
-      auto& texture = scene_textures_.GetGBuffer(gbuffer_index);
+      auto& texture = scene_textures.GetGBuffer(gbuffer_index);
       scene_texture_bindings_.gbuffer_srvs[i] = RegisterSceneTextureView(
         texture, MakeSrvDesc(texture, texture.GetDescriptor().format));
     }
@@ -1933,17 +2778,52 @@ void SceneRenderer::RefreshSceneTextureBindings()
 
 void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
 {
-  if (new_extent == scene_textures_.GetExtent()) {
+  auto& scene_textures = ActiveSceneTextures();
+  if (new_extent == scene_textures.GetExtent()) {
     return;
   }
 
-  LOG_F(INFO,
-    "SceneRenderer resizing scene textures from {}x{} to {}x{}",
-    scene_textures_.GetExtent().x, scene_textures_.GetExtent().y,
-    new_extent.x, new_extent.y);
-  scene_textures_.Resize(new_extent);
+  LOG_F(INFO, "SceneRenderer resizing scene textures from {}x{} to {}x{}",
+    scene_textures.GetExtent().x, scene_textures.GetExtent().y, new_extent.x,
+    new_extent.y);
+  scene_textures.Resize(new_extent);
+  if (&scene_textures == &scene_textures_) {
+    inspected_scene_textures_ = &scene_textures_;
+  }
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
+  ResetExtractArtifacts();
+}
+
+auto SceneRenderer::ActiveSceneTextures() -> SceneTextures&
+{
+  return active_scene_textures_ != nullptr ? *active_scene_textures_
+                                           : scene_textures_;
+}
+
+auto SceneRenderer::ActiveSceneTextures() const -> const SceneTextures&
+{
+  return active_scene_textures_ != nullptr ? *active_scene_textures_
+                                           : scene_textures_;
+}
+
+auto SceneRenderer::BuildSceneTextureLeaseKey(const RenderContext& ctx) const
+  -> SceneTextureLeaseKey
+{
+  auto key = SceneTextureLeaseKey::FromConfig(scene_textures_.GetConfig());
+  if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
+    target_extent.has_value()) {
+    key.extent = *target_extent;
+  }
+  return key;
+}
+
+void SceneRenderer::ResetPerViewSceneProducts()
+{
+  setup_mode_.Reset();
+  scene_texture_bindings_.Invalidate();
+  published_screen_hzb_bindings_ = {};
+  InvalidatePublishedViewFrameBindings();
   ResetExtractArtifacts();
 }
 
@@ -2015,7 +2895,7 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
 auto SceneRenderer::ResolveVelocitySourceTexture() const
   -> const graphics::Texture*
 {
-  return scene_textures_.GetVelocity();
+  return ActiveSceneTextures().GetVelocity();
 }
 
 auto SceneRenderer::RegisterSceneTextureView(graphics::Texture& texture,
@@ -2084,9 +2964,12 @@ auto SceneRenderer::RenderDebugVisualization(
   const auto requires_gbuffer = mode == ShaderDebugMode::kBaseColor
     || mode == ShaderDebugMode::kWorldNormals
     || mode == ShaderDebugMode::kRoughness
-    || mode == ShaderDebugMode::kMetalness;
+    || mode == ShaderDebugMode::kMetalness
+    || mode == ShaderDebugMode::kDirectionalShadowMask
+    || mode == ShaderDebugMode::kMaskedAlphaCoverage;
   const auto requires_scene_depth = mode == ShaderDebugMode::kSceneDepthRaw
-    || mode == ShaderDebugMode::kSceneDepthLinear;
+    || mode == ShaderDebugMode::kSceneDepthLinear
+    || mode == ShaderDebugMode::kDirectionalShadowMask;
 
   if (requires_gbuffer
     && !HasPublishedGBufferBindings(scene_texture_bindings_)) {
@@ -2229,9 +3112,16 @@ void SceneRenderer::RenderDeferredLighting(
   const auto* shadow_surface = shadows_ != nullptr
     ? shadows_->InspectShadowSurface(ctx.current_view.view_id)
     : nullptr;
+  const auto* spot_shadow_surface = shadows_ != nullptr
+    ? shadows_->InspectSpotShadowSurface(ctx.current_view.view_id)
+    : nullptr;
+  const auto* point_shadow_surface = shadows_ != nullptr
+    ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
+    : nullptr;
   lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
     shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
-    shadow_surface);
+    shadow_surface, spot_shadow_surface, point_shadow_surface,
+    environment_lighting_state_.ambient_bridge_published);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -2255,8 +3145,12 @@ void SceneRenderer::RenderDeferredLighting(
     = lighting_state.used_camera_inside_local_lights;
   deferred_lighting_state_.used_non_perspective_local_lights
     = lighting_state.used_non_perspective_local_lights;
+  deferred_lighting_state_.consumed_static_sky_light_product
+    = lighting_state.consumed_static_sky_light_product;
   deferred_lighting_state_.accumulated_into_scene_color
     = lighting_state.accumulated_into_scene_color;
+  deferred_lighting_state_.static_sky_light_draw_count
+    = lighting_state.static_sky_light_draw_count;
   deferred_lighting_state_.consumed_directional_shadow_product
     = lighting_state.consumed_directional_shadow_product;
   deferred_lighting_state_.directional_shadow_vsm_active
@@ -2265,6 +3159,17 @@ void SceneRenderer::RenderDeferredLighting(
     = lighting_state.directional_shadow_cascade_count;
   deferred_lighting_state_.directional_shadow_surface_srv
     = lighting_state.directional_shadow_surface_srv;
+  deferred_lighting_state_.consumed_spot_shadow_product
+    = lighting_state.consumed_spot_shadow_product;
+  deferred_lighting_state_.spot_shadow_count = lighting_state.spot_shadow_count;
+  deferred_lighting_state_.spot_shadow_surface_srv
+    = lighting_state.spot_shadow_surface_srv;
+  deferred_lighting_state_.consumed_point_shadow_product
+    = lighting_state.consumed_point_shadow_product;
+  deferred_lighting_state_.point_shadow_count
+    = lighting_state.point_shadow_count;
+  deferred_lighting_state_.point_shadow_surface_srv
+    = lighting_state.point_shadow_surface_srv;
 }
 
 } // namespace oxygen::vortex

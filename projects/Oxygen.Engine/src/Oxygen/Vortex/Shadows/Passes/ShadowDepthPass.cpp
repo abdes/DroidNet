@@ -7,13 +7,12 @@
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 
 #include <algorithm>
-#include <cstring>
+#include <cstddef>
 #include <limits>
 #include <optional>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -36,13 +35,30 @@ namespace {
 
 namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
+constexpr float kUeCsmShadowSlopeScaleDepthBias = 3.0F;
+constexpr float kUeDefaultUserShadowSlopeBias = 0.5F;
+constexpr float kUeShadowMaxSlopeScaleDepthBias = 1.0F;
+
 struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
   glm::mat4 light_view_projection { 1.0F };
-  float depth_bias { 0.0006F };
-  float normal_bias { 0.02F };
-  float _padding0 { 0.0F };
-  float _padding1 { 0.0F };
+  glm::vec4 shadow_bias_parameters { 0.0F };
+  glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
+  glm::vec4 light_position_and_inv_range { 0.0F };
+  std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t _padding0 { 0U };
 };
+
+static_assert(sizeof(ShadowPassConstants) == 128U);
+static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
+static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
+static_assert(offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
+static_assert(
+  offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
+static_assert(offsetof(ShadowPassConstants, draw_metadata_slot) == 112U);
+constexpr std::uint32_t kShadowPassConstantsStride
+  = sizeof(ShadowPassConstants);
 
 auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
   -> graphics::ResourceViewType
@@ -114,28 +130,6 @@ auto AddBooleanDefine(const bool enabled, std::string_view name,
   }
 }
 
-auto RegisterBufferViewIndex(Graphics& gfx, graphics::Buffer& buffer,
-  const graphics::BufferViewDescription& desc) -> ShaderVisibleIndex
-{
-  auto& registry = gfx.GetResourceRegistry();
-  if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
-    existing.has_value()) {
-    return *existing;
-  }
-
-  auto& allocator = gfx.GetDescriptorAllocator();
-  auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
-  CHECK_F(handle.IsValid(),
-    "ShadowDepthPass: failed to allocate {} view for '{}'",
-    graphics::to_string(desc.view_type), buffer.GetName());
-  const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-  const auto view = registry.RegisterView(buffer, std::move(handle), desc);
-  CHECK_F(view->IsValid(),
-    "ShadowDepthPass: failed to register {} view for '{}'",
-    graphics::to_string(desc.view_type), buffer.GetName());
-  return shader_visible_index;
-}
-
 auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
   const graphics::Texture& texture) -> void
 {
@@ -174,7 +168,7 @@ auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
     .SetDepthStencilState(graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
       .depth_write_enable = true,
-      .depth_func = graphics::CompareOp::kLessOrEqual,
+      .depth_func = graphics::CompareOp::kGreaterOrEqual,
       .stencil_enable = false,
     })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -254,25 +248,14 @@ auto EnsureDepthStencilViewForCascade(Graphics& gfx,
 
 ShadowDepthPass::ShadowDepthPass(Renderer& renderer)
   : renderer_(renderer)
+  , pass_constants_buffer_(observer_ptr { renderer.GetGraphics().get() },
+      renderer.GetStagingProvider(), kShadowPassConstantsStride,
+      observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "ShadowService.ShadowPassConstants")
 {
 }
 
-ShadowDepthPass::~ShadowDepthPass()
-{
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    return;
-  }
-
-  auto& registry = gfx->GetResourceRegistry();
-  if (pass_constants_buffer_ != nullptr && pass_constants_mapped_ptr_ != nullptr) {
-    pass_constants_buffer_->UnMap();
-    pass_constants_mapped_ptr_ = nullptr;
-  }
-  if (pass_constants_buffer_ != nullptr && registry.Contains(*pass_constants_buffer_)) {
-    registry.UnRegisterResource(*pass_constants_buffer_);
-  }
-}
+ShadowDepthPass::~ShadowDepthPass() = default;
 
 auto ShadowDepthPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
@@ -280,6 +263,7 @@ auto ShadowDepthPass::OnFrameStart(
   current_sequence_ = sequence;
   current_slot_ = slot;
   last_render_state_ = {};
+  pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
 
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
@@ -287,10 +271,39 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const DirectionalShadowFrameData& frame_data,
   const std::span<const DrawCommand> draw_commands) -> RenderState
 {
+  auto depth_slices = std::vector<DepthSlice> {};
+  depth_slices.reserve(frame_data.bindings.cascade_count);
+  for (std::uint32_t cascade_index = 0U;
+       cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
+    depth_slices.push_back(DepthSlice {
+      .light_view_projection
+      = frame_data.bindings.cascades[cascade_index].light_view_projection,
+      .shadow_bias_parameters = glm::vec4(
+        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z,
+        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z
+          * kUeCsmShadowSlopeScaleDepthBias * kUeDefaultUserShadowSlopeBias,
+        kUeShadowMaxSlopeScaleDepthBias, 0.0F),
+      .light_direction_to_source = frame_data.bindings.light_direction_to_source,
+      .target_slice = cascade_index,
+    });
+  }
+
+  return RecordSlices(view_input, shadow_surface, std::span(depth_slices),
+    draw_commands);
+}
+
+auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
+  const std::shared_ptr<graphics::Texture>& shadow_surface,
+  const std::span<const DepthSlice> depth_slices,
+  const std::span<const DrawCommand> draw_commands) -> RenderState
+{
   last_render_state_ = {};
-  if (shadow_surface == nullptr || view_input.prepared_scene == nullptr
-    || view_input.view_constants == nullptr
-    || draw_commands.empty() || frame_data.bindings.cascade_count == 0U) {
+  if (shadow_surface == nullptr || depth_slices.empty()) {
+    return last_render_state_;
+  }
+  if (!draw_commands.empty()
+    && (view_input.prepared_scene == nullptr
+      || view_input.view_constants == nullptr)) {
     return last_render_state_;
   }
 
@@ -299,63 +312,41 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     return last_render_state_;
   }
 
-  const auto ensure_pass_constants =
-    [&](const std::uint32_t required_slots) -> void {
-    if (pass_constants_buffer_ != nullptr
-      && pass_constants_slot_count_ >= required_slots) {
-      return;
+  if (cascade_dsv_surface_ != shadow_surface.get()) {
+    cascade_dsvs_.clear();
+    cascade_dsv_surface_ = shadow_surface.get();
+  }
+
+  auto pass_constants_srvs = std::vector<ShaderVisibleIndex> {};
+  if (!draw_commands.empty()) {
+    pass_constants_srvs.resize(depth_slices.size(), kInvalidShaderVisibleIndex);
+    for (std::uint32_t slice_index = 0U;
+         slice_index < depth_slices.size(); ++slice_index) {
+      const auto& depth_slice = depth_slices[slice_index];
+      const auto constants = ShadowPassConstants {
+        .light_view_projection = depth_slice.light_view_projection,
+        .shadow_bias_parameters = depth_slice.shadow_bias_parameters,
+        .light_direction_to_source = depth_slice.light_direction_to_source,
+        .light_position_and_inv_range
+        = depth_slice.light_position_and_inv_range,
+        .draw_metadata_slot
+        = view_input.prepared_scene->bindless_draw_metadata_slot.get(),
+        .current_worlds_slot
+        = view_input.prepared_scene->bindless_worlds_slot.get(),
+        .instance_data_slot
+        = view_input.prepared_scene->bindless_instance_data_slot.get(),
+      };
+      auto allocation = pass_constants_buffer_.Allocate(1U);
+      if (!allocation.has_value() || !allocation->IsValid(current_sequence_)
+        || !allocation->TryWriteObject(constants)) {
+        LOG_F(ERROR,
+          "ShadowDepthPass: failed to allocate pass constants for shadow slice "
+          "{}",
+          slice_index);
+        return last_render_state_;
+      }
+      pass_constants_srvs[slice_index] = allocation->srv;
     }
-
-    auto& registry = gfx->GetResourceRegistry();
-    if (pass_constants_buffer_ != nullptr && pass_constants_mapped_ptr_ != nullptr) {
-      pass_constants_buffer_->UnMap();
-      pass_constants_mapped_ptr_ = nullptr;
-    }
-    if (pass_constants_buffer_ != nullptr && registry.Contains(*pass_constants_buffer_)) {
-      registry.UnRegisterResource(*pass_constants_buffer_);
-    }
-    pass_constants_buffer_.reset();
-    pass_constants_srvs_.clear();
-
-    auto desc = graphics::BufferDesc {};
-    desc.size_bytes
-      = static_cast<std::uint64_t>(required_slots) * sizeof(ShadowPassConstants);
-    desc.usage = graphics::BufferUsage::kNone;
-    desc.memory = graphics::BufferMemory::kUpload;
-    desc.debug_name = "ShadowService.DirectionPassConstants";
-    pass_constants_buffer_ = gfx->CreateBuffer(desc);
-    CHECK_NOTNULL_F(pass_constants_buffer_.get(),
-      "ShadowDepthPass: failed to create shadow pass constants buffer");
-    registry.Register(pass_constants_buffer_);
-    pass_constants_mapped_ptr_ = pass_constants_buffer_->Map(0U, desc.size_bytes);
-    CHECK_NOTNULL_F(pass_constants_mapped_ptr_,
-      "ShadowDepthPass: failed to map shadow pass constants buffer");
-
-    pass_constants_srvs_.reserve(required_slots);
-    for (std::uint32_t i = 0U; i < required_slots; ++i) {
-      pass_constants_srvs_.push_back(RegisterBufferViewIndex(*gfx,
-        *pass_constants_buffer_, graphics::BufferViewDescription {
-          .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-          .visibility = graphics::DescriptorVisibility::kShaderVisible,
-          .range = { static_cast<std::uint64_t>(i) * sizeof(ShadowPassConstants),
-            sizeof(ShadowPassConstants) },
-          .stride = static_cast<std::uint32_t>(sizeof(ShadowPassConstants)),
-        }));
-    }
-    pass_constants_slot_count_ = required_slots;
-  };
-
-  ensure_pass_constants(frame_data.bindings.cascade_count);
-
-  auto* mapped_bytes = static_cast<std::byte*>(pass_constants_mapped_ptr_);
-  for (std::uint32_t cascade_index = 0U;
-       cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
-    auto constants = ShadowPassConstants {
-      .light_view_projection
-      = frame_data.bindings.cascades[cascade_index].light_view_projection,
-    };
-    std::memcpy(mapped_bytes + cascade_index * sizeof(ShadowPassConstants),
-      &constants, sizeof(ShadowPassConstants));
   }
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
@@ -376,15 +367,16 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  for (std::uint32_t cascade_index = 0U;
-       cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
+  for (std::uint32_t slice_index = 0U;
+       slice_index < depth_slices.size(); ++slice_index) {
+    const auto target_slice = depth_slices[slice_index].target_slice;
     const auto dsv = EnsureDepthStencilViewForCascade(
-      *gfx, cascade_dsvs_, *shadow_surface, cascade_index);
+      *gfx, cascade_dsvs_, *shadow_surface, target_slice);
     const auto& shadow_desc = shadow_surface->GetDescriptor();
     recorder->FlushBarriers();
     recorder->SetRenderTargets({}, dsv);
     recorder->ClearDepthStencilView(*shadow_surface, dsv,
-      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 1.0F,
+      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 0.0F,
       0U);
     recorder->SetViewport({
       .top_left_x = 0.0F,
@@ -413,7 +405,7 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
         recorder->SetGraphicsRoot32BitConstant(
           root_constants_param, 0U, 0U);
         recorder->SetGraphicsRoot32BitConstant(
-          root_constants_param, pass_constants_srvs_[cascade_index].get(), 1U);
+          root_constants_param, pass_constants_srvs[slice_index].get(), 1U);
         current_alpha_test = alpha_test;
       }
 

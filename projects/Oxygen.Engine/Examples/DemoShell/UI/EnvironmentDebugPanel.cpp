@@ -28,6 +28,9 @@ namespace oxygen::examples::ui {
 namespace {
 
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
+  constexpr float kMaxSkySphereIntensity = 100000.0F;
+  constexpr float kMinSkySphereExposureEv = -16.0F;
+  constexpr float kMaxSkySphereExposureEv = 16.6F;
   constexpr const char* kShadowResolutionLabels[] = {
     "Low",
     "Medium",
@@ -54,6 +57,24 @@ namespace {
       cos_el * std::sin(az_rad),
       std::sin(el_rad),
     };
+  }
+
+  auto SkySphereRadianceScaleToEv(float scale) -> float
+  {
+    if (!(scale > 0.0F)) {
+      return kMinSkySphereExposureEv;
+    }
+    scale = std::clamp(scale, 0.0F, kMaxSkySphereIntensity);
+    return std::clamp(
+      std::log2(scale), kMinSkySphereExposureEv, kMaxSkySphereExposureEv);
+  }
+
+  auto SkySphereExposureEvToRadianceScale(float exposure_ev) -> float
+  {
+    exposure_ev = std::clamp(
+      exposure_ev, kMinSkySphereExposureEv, kMaxSkySphereExposureEv);
+    return std::clamp(
+      std::exp2(exposure_ev), 0.0F, kMaxSkySphereIntensity);
   }
 
   auto KelvinToLinearRgb(float kelvin) -> glm::vec3
@@ -160,8 +181,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     collapse_state_loaded_ = true;
   }
 
-  // Renderer debug section always at top for visibility
-  DrawRendererDebugSection();
+  DrawRuntimeStateSection();
 
   HandleSkyboxAutoLoad();
 
@@ -503,31 +523,59 @@ auto EnvironmentDebugPanel::OnLoaded() -> void
 
 auto EnvironmentDebugPanel::OnUnloaded() -> void { }
 
-void EnvironmentDebugPanel::DrawRendererDebugSection()
+void EnvironmentDebugPanel::DrawRuntimeStateSection()
 {
-  ImGui::SeparatorText("Renderer State");
+  ImGui::SeparatorText("Runtime State");
 
-  // LUT status
-  const auto [luts_valid, luts_dirty]
-    = environment_vm_->GetAtmosphereLutStatus();
+  const bool atmosphere_enabled = environment_vm_->GetSkyAtmosphereEnabled();
+  const bool sky_sphere_enabled = environment_vm_->GetSkySphereEnabled();
+  const int sky_sphere_source = environment_vm_->GetSkySphereSource();
+  const bool sky_sphere_has_cubemap
+    = !environment_vm_->GetSkySphereCubemapResourceKey().IsPlaceholder();
+  const bool sky_sphere_visible = sky_sphere_enabled && !atmosphere_enabled
+    && (sky_sphere_source == 1 || sky_sphere_has_cubemap);
 
-  ImGui::Text("Atmosphere LUTs:");
+  ImGui::Text("Visible sky:");
   ImGui::SameLine();
-  if (luts_valid) {
-    ImGui::TextColored(ImVec4(0.0F, 1.0F, 0.0F, 1.0F), "Generated");
+  if (atmosphere_enabled) {
+    ImGui::TextColored(ImVec4(0.4F, 0.9F, 1.0F, 1.0F), "Sky Atmosphere");
+  } else if (sky_sphere_visible) {
+    ImGui::TextColored(ImVec4(0.4F, 0.9F, 1.0F, 1.0F),
+      sky_sphere_source == 0 ? "Sky Sphere Cubemap" : "Solid Sky Color");
   } else {
-    ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F), "Not Generated");
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "None");
   }
 
-  if (luts_valid && luts_dirty) {
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0F, 1.0F, 0.0F, 1.0F), "(updating)");
+  const bool height_fog_enabled = environment_vm_->GetFogEnabled();
+  const bool height_fog_requested = environment_vm_->GetHeightFogPassRequested();
+  ImGui::Text("Height fog:");
+  ImGui::SameLine();
+  if (height_fog_enabled && height_fog_requested) {
+    ImGui::TextColored(ImVec4(0.4F, 0.9F, 0.4F, 1.0F), "Active");
+  } else if (height_fog_enabled) {
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "Enabled, not routed");
+  } else {
+    ImGui::TextDisabled("Off");
   }
 
+  const bool sky_light_enabled = environment_vm_->GetSkyLightEnabled();
+  const int sky_light_source = environment_vm_->GetSkyLightSource();
+  const bool sky_light_has_cubemap
+    = !environment_vm_->GetSkyLightCubemapResourceKey().IsPlaceholder();
+  const bool sky_light_can_light
+    = sky_light_enabled && sky_light_source == 1 && sky_light_has_cubemap
+    && environment_vm_->GetSkyLightDiffuse() > 0.0F
+    && environment_vm_->GetSkyLightIntensityMul() > 0.0F;
+
+  ImGui::Text("Static SkyLight diffuse:");
   ImGui::SameLine();
-  ImGui::Spacing();
-  ImGui::SameLine();
-  ImGui::TextDisabled("Regen is renderer-driven");
+  if (sky_light_can_light) {
+    ImGui::TextColored(ImVec4(0.4F, 0.9F, 0.4F, 1.0F), "Active");
+  } else if (sky_light_enabled) {
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "Unavailable");
+  } else {
+    ImGui::TextDisabled("Off");
+  }
 }
 
 void EnvironmentDebugPanel::DrawSunSection()
@@ -1018,36 +1066,6 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   }
   ImGui::EndDisabled();
 
-  ImGui::SeparatorText("Aerial Perspective LUT");
-  ImGui::TextDisabled("Vortex CVars, UE5.7 defaults");
-  ImGui::BeginDisabled(true);
-  int aerial_lut_width = environment_vm_->GetAerialPerspectiveLutWidth();
-  ImGui::DragInt("Width", &aerial_lut_width, 1, 4, 256);
-  int aerial_lut_depth
-    = environment_vm_->GetAerialPerspectiveLutDepthResolution();
-  ImGui::DragInt("Depth Resolution", &aerial_lut_depth, 1, 4, 256);
-  float aerial_lut_depth_km = environment_vm_->GetAerialPerspectiveLutDepthKm();
-  ImGui::DragFloat(
-    "Depth (km)", &aerial_lut_depth_km, 1.0F, 0.1F, 100000.0F, "%.1F");
-  float aerial_lut_sample_max
-    = environment_vm_->GetAerialPerspectiveLutSampleCountMaxPerSlice();
-  ImGui::DragFloat(
-    "Max Samples/Slice", &aerial_lut_sample_max, 0.1F, 1.0F, 64.0F, "%.1F");
-  ImGui::EndDisabled();
-
-  // Sky-View LUT Slicing
-  ImGui::SeparatorText("Sky-View LUT");
-
-  ImGui::TextDisabled("Renderer-owned configuration (read-only)");
-  ImGui::BeginDisabled(true);
-  int lut_slices = environment_vm_->GetSkyViewLutSlices();
-  ImGui::DragInt("Slices", &lut_slices, 1, 4, 32);
-
-  const char* mapping_modes[] = { "Linear", "Log" };
-  int mapping_mode = environment_vm_->GetSkyViewAltMappingMode();
-  ImGui::Combo("Alt Mapping", &mapping_mode, mapping_modes, 2);
-  ImGui::EndDisabled();
-
   ImGui::PopItemWidth();
 }
 
@@ -1056,7 +1074,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   const bool sky_atmo_enabled = environment_vm_->GetSkyAtmosphereEnabled();
   const bool sky_sphere_enabled = environment_vm_->GetSkySphereEnabled();
 
-  // Show warning if both sky systems are enabled
   if (sky_atmo_enabled && sky_sphere_enabled) {
     ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
       "Warning: SkySphere is disabled when SkyAtmosphere is active");
@@ -1088,7 +1105,7 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   }
 
   if (sky_sphere_source == 0) { // Cubemap
-    const auto key = environment_vm_->GetSkyboxLastResourceKey();
+    const auto key = environment_vm_->GetSkySphereCubemapResourceKey();
     ImGui::Text(
       "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
     if (key.IsPlaceholder()) {
@@ -1219,10 +1236,20 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     }
   }
 
-  float sky_intensity = environment_vm_->GetSkyIntensity();
-  if (ImGui::DragFloat(
-        "SkySphere Intensity", &sky_intensity, 0.01F, 0.0F, 20.0F, "%.2F")) {
-    environment_vm_->SetSkyIntensity(sky_intensity);
+  const float sky_intensity = environment_vm_->GetSkyIntensity();
+  float sky_exposure_ev = SkySphereRadianceScaleToEv(sky_intensity);
+  const char* exposure_label = sky_sphere_source == 0
+    ? "Skybox Exposure (EV)"
+    : "Sky Color Exposure (EV)";
+  if (ImGui::DragFloat(exposure_label, &sky_exposure_ev, 0.05F,
+        kMinSkySphereExposureEv, kMaxSkySphereExposureEv, "%+.2f")) {
+    environment_vm_->SetSkyIntensity(
+      SkySphereExposureEvToRadianceScale(sky_exposure_ev));
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Radiance scale %.6g. EV +8 = 256, EV +10 = 1024.",
+      static_cast<double>(sky_intensity));
   }
 
   float sky_sphere_rotation_deg = environment_vm_->GetSkySphereRotationDeg();
@@ -1237,11 +1264,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
 
 void EnvironmentDebugPanel::DrawSkyLightSection()
 {
-  ImGui::TextDisabled(
-    "IBL is active when SkyLight is enabled and a cubemap is available\n"
-    "(SkyLight specified cubemap, or SkySphere cubemap).");
-  ImGui::Spacing();
-
   bool enabled = environment_vm_->GetSkyLightEnabled();
   if (ImGui::Checkbox("Enabled##SkyLight", &enabled)) {
     environment_vm_->SetSkyLightEnabled(enabled);
@@ -1253,24 +1275,24 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 
   ImGui::PushItemWidth(150);
 
-  const char* sources[] = { "Captured Scene", "Specified Cubemap" };
+  const char* sources[] = { "Captured Scene (Unavailable)",
+    "Specified Cubemap" };
   int sky_light_source = environment_vm_->GetSkyLightSource();
   if (ImGui::Combo("Source##SkyLight", &sky_light_source, sources, 2)) {
     environment_vm_->SetSkyLightSource(sky_light_source);
   }
 
   if (sky_light_source == 1) {
-    const auto key = environment_vm_->GetSkyboxLastResourceKey();
+    const auto key = environment_vm_->GetSkyLightCubemapResourceKey();
     ImGui::Text(
       "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
     if (key.IsPlaceholder()) {
       ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
-        "No SkyLight cubemap bound; SkySphere cubemap may still drive IBL");
+        "No specified cubemap is bound to SkyLight.");
     }
   } else {
-    ImGui::TextDisabled(
-      "Captured-scene mode may not provide a cubemap yet; SkySphere cubemap\n"
-      "can still drive IBL if present.");
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+      "Captured-scene SkyLight is not implemented in Vortex yet.");
   }
 
   auto sky_light_tint = environment_vm_->GetSkyLightTint();
@@ -1285,20 +1307,9 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();
-  if (ImGui::DragFloat(
-        "Diffuse", &sky_light_diffuse, 0.01F, 0.0F, 2.0F, "%.2F")) {
+  if (ImGui::DragFloat("Diffuse Indirect", &sky_light_diffuse, 0.01F, 0.0F,
+        6.0F, "%.2F")) {
     environment_vm_->SetSkyLightDiffuse(sky_light_diffuse);
-  }
-
-  float sky_light_specular = environment_vm_->GetSkyLightSpecular();
-  if (ImGui::DragFloat(
-        "Specular", &sky_light_specular, 0.01F, 0.0F, 2.0F, "%.2F")) {
-    environment_vm_->SetSkyLightSpecular(sky_light_specular);
-  }
-
-  bool real_time_capture = environment_vm_->GetSkyLightRealTimeCaptureEnabled();
-  if (ImGui::Checkbox("Real-Time Capture", &real_time_capture)) {
-    environment_vm_->SetSkyLightRealTimeCaptureEnabled(real_time_capture);
   }
 
   auto lower_hemisphere = environment_vm_->GetSkyLightLowerHemisphereColor();
@@ -1310,19 +1321,14 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   float volumetric_scattering_intensity
     = environment_vm_->GetSkyLightVolumetricScatteringIntensity();
   if (ImGui::DragFloat("Volumetric Scattering",
-        &volumetric_scattering_intensity, 0.01F, 0.0F, 100.0F, "%.2F")) {
+        &volumetric_scattering_intensity, 0.01F, 0.25F, 4.0F, "%.2F")) {
     environment_vm_->SetSkyLightVolumetricScatteringIntensity(
       volumetric_scattering_intensity);
   }
 
-  bool affect_reflections = environment_vm_->GetSkyLightAffectReflections();
-  if (ImGui::Checkbox("Affect Reflections", &affect_reflections)) {
-    environment_vm_->SetSkyLightAffectReflections(affect_reflections);
-  }
-  bool affect_gi = environment_vm_->GetSkyLightAffectGlobalIllumination();
-  if (ImGui::Checkbox("Affect Global Illumination", &affect_gi)) {
-    environment_vm_->SetSkyLightAffectGlobalIllumination(affect_gi);
-  }
+  ImGui::TextDisabled(
+    "Specular/reflection IBL, captured-scene SkyLight, and real-time "
+    "capture are not active runtime paths.");
 
   ImGui::PopItemWidth();
 }

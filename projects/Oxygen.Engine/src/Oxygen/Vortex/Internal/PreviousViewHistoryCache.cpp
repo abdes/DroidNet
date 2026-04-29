@@ -6,6 +6,7 @@
 
 #include <glm/gtc/epsilon.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 
 namespace {
@@ -51,9 +52,13 @@ void PreviousViewHistoryCache::BeginFrame(const std::uint64_t frame_sequence,
 }
 
 auto PreviousViewHistoryCache::TouchCurrent(
-  const ViewId view_id, const CurrentState& current) -> Snapshot
+  const CompositionView::ViewStateHandle view_state_handle,
+  const CurrentState& current) -> Snapshot
 {
-  auto& entry = entries_[view_id];
+  CHECK_F(view_state_handle != CompositionView::kInvalidViewStateHandle,
+    "PreviousViewHistoryCache requires a valid producer-owned view state "
+    "handle");
+  auto& entry = entries_[view_state_handle];
   entry.last_seen_frame = current_frame_;
 
   constexpr float epsilon = 1.0e-5F;
@@ -75,6 +80,16 @@ auto PreviousViewHistoryCache::TouchCurrent(
     entry.previous_valid = false;
   }
   return snapshot;
+}
+
+auto PreviousViewHistoryCache::TouchStateless(
+  const CurrentState& current) const -> Snapshot
+{
+  return Snapshot {
+    .current = current,
+    .previous = current,
+    .previous_valid = false,
+  };
 }
 
 void PreviousViewHistoryCache::EndFrame()

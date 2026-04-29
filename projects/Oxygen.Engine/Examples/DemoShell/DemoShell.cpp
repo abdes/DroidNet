@@ -153,7 +153,7 @@ auto DemoShell::CompleteInitialization() -> bool
 
   const auto runtime_panel_config = ui::MakeRuntimePanelConfig(
     impl_->config.panel_config, impl_->config.enable_renderer_bound_panels);
-  if (runtime_panel_config.rendering != impl_->config.panel_config.rendering
+  if (runtime_panel_config.diagnostics != impl_->config.panel_config.diagnostics
     || runtime_panel_config.lighting != impl_->config.panel_config.lighting
     || runtime_panel_config.ground_grid
       != impl_->config.panel_config.ground_grid) {
@@ -435,7 +435,7 @@ auto DemoShell::GetCameraRig() const -> observer_ptr<ui::CameraRigController>
   return observer_ptr { impl_->camera_rig.get() };
 }
 
-auto DemoShell::GetRenderingViewMode() const -> renderer::RenderMode
+auto DemoShell::GetRenderingViewMode() const -> vortex::RenderMode
 {
   return impl_->rendering_settings_service.GetRenderMode();
 }

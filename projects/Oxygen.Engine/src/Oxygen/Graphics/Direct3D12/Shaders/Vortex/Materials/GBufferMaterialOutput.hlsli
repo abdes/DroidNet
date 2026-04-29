@@ -26,7 +26,7 @@ static inline uint ResolveVortexShadingModel(uint draw_index)
 }
 
 static inline GBufferOutput PackGBufferOutput(
-    MaterialSurface surface, uint shading_model)
+    MaterialSurface surface, uint shading_model, float2 uv0, uint draw_index)
 {
     GBufferOutput output;
     output.gbuffer_normal = EncodeGBufferNormal(surface.N);
@@ -35,6 +35,15 @@ static inline GBufferOutput PackGBufferOutput(
     output.gbuffer_base_color
         = EncodeGBufferBaseColor(surface.base_rgb, surface.ao);
     output.gbuffer_custom_data = 0.0f.xxxx;
+#if defined(ALPHA_TEST)
+    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const MaskedAlphaTestResult alpha_test
+        = EvaluateMaskedAlphaTest(uv0, draw_index, linear_sampler);
+    if (alpha_test.has_material_data && alpha_test.alpha_test_enabled) {
+        output.gbuffer_custom_data = float4(
+            1.0f, alpha_test.alpha, alpha_test.cutoff, 0.0f);
+    }
+#endif
     output.emissive_scene_color = float4(surface.emissive, surface.base_a);
 #if defined(HAS_VELOCITY)
     output.velocity = float2(0.0f, 0.0f);
@@ -50,7 +59,7 @@ static inline GBufferOutput EvaluateGBufferMaterialOutput(float3 world_pos,
         world_normal, world_tangent, world_bitangent, uv0, draw_index,
         is_front_face);
     const uint shading_model = ResolveVortexShadingModel(draw_index);
-    return PackGBufferOutput(surface, shading_model);
+    return PackGBufferOutput(surface, shading_model, uv0, draw_index);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI

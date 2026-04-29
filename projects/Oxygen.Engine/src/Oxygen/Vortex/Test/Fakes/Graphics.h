@@ -136,7 +136,7 @@ struct IndirectCommandLog {
     CommandRecorder::IndirectCommandDesc command_desc {};
     CommandRecorder::IndirectExecutionDesc execution_desc {};
   };
-  std::vector<Event> counted_draws;
+  std::vector<Event> draws;
 };
 
 //! Logs SRV view creations for bindless indices.
@@ -404,8 +404,8 @@ public:
     const IndirectCommandDesc& command_desc,
     const IndirectExecutionDesc& execution_desc) -> void override
   {
-    if (indirect_log_ != nullptr && execution_desc.count_buffer != nullptr) {
-      indirect_log_->counted_draws.push_back(IndirectCommandLog::Event {
+    if (indirect_log_ != nullptr) {
+      indirect_log_->draws.push_back(IndirectCommandLog::Event {
         .argument_buffer = &argument_buffer,
         .command_desc = command_desc,
         .execution_desc = execution_desc,

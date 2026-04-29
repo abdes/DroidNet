@@ -146,6 +146,8 @@ private:
 
   //! Scene and rendering functions.
   auto EnsureExampleScene() -> void;
+  auto EnsureExampleEnvironment(scene::Scene& scene) -> void;
+  auto EnsureSunDirectionalLight(scene::Scene& scene) -> void;
   auto EnsureMainCamera(int width, int height) -> void;
   auto ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>;
   auto ReleasePublishedRuntimeView(
@@ -207,6 +209,7 @@ private:
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode camera_spot_light_; // Child of main camera
+  scene::SceneNode sun_light_; // Primary sun directional light
 
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };

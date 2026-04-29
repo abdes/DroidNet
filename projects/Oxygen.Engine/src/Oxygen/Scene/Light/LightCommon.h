@@ -37,7 +37,7 @@ enum class AttenuationModel : std::uint8_t {
   kCustomExponent,
 };
 
-inline constexpr float kDefaultShadowBias = 0.0006F;
+inline constexpr float kDefaultShadowBias = 0.0F;
 inline constexpr float kDefaultShadowNormalBias = 0.02F;
 
 //! Common shadow tuning knobs shared by all light types.

@@ -122,6 +122,7 @@ NOLINT_TEST(ShaderBakeCatalogTest,
   EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
   EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
   EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
+  EXPECT_TRUE(has_path("Vortex/Services/Environment/VolumetricFog.hlsl"));
 
   EXPECT_FALSE(has_path("Atmosphere/TransmittanceLut_CS.hlsl"));
   EXPECT_FALSE(has_path("Atmosphere/SkyViewLut_CS.hlsl"));

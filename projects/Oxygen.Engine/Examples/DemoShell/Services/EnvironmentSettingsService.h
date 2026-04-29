@@ -115,10 +115,6 @@ public:
   virtual auto ActivateUseSceneMode() -> void;
   virtual auto ActivateCustomMode() -> void;
 
-  //! Returns whether LUTs are valid and dirty (renderer state).
-  [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
-    -> std::pair<bool, bool>;
-
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -203,23 +199,6 @@ public:
   [[nodiscard]] virtual auto GetAtmosphereRenderInMainPass() const -> bool;
   virtual auto SetAtmosphereRenderInMainPass(bool enabled) -> void;
 
-  // Sky-View LUT slicing
-  [[nodiscard]] virtual auto GetSkyViewLutSlices() const -> int;
-  virtual auto SetSkyViewLutSlices(int value) -> void;
-
-  [[nodiscard]] virtual auto GetAerialPerspectiveLutWidth() const -> int;
-  [[nodiscard]] virtual auto GetAerialPerspectiveLutDepthResolution() const
-    -> int;
-  [[nodiscard]] virtual auto GetAerialPerspectiveLutDepthKm() const -> float;
-  [[nodiscard]] virtual auto
-  GetAerialPerspectiveLutSampleCountMaxPerSlice() const -> float;
-
-  [[nodiscard]] virtual auto GetSkyViewAltMappingMode() const -> int;
-  virtual auto SetSkyViewAltMappingMode(int value) -> void;
-
-  //! Requests that the sky-view LUT be regenerated on the next frame.
-  virtual auto RequestRegenerateLut() -> void;
-
   // SkySphere
   [[nodiscard]] virtual auto GetSkySphereEnabled() const -> bool;
   virtual auto SetSkySphereEnabled(bool enabled) -> void;
@@ -235,6 +214,8 @@ public:
 
   [[nodiscard]] virtual auto GetSkySphereRotationDeg() const -> float;
   virtual auto SetSkySphereRotationDeg(float value) -> void;
+  [[nodiscard]] virtual auto GetSkySphereCubemapResourceKey() const
+    -> content::ResourceKey;
 
   // Skybox
   [[nodiscard]] virtual auto GetSkyboxPath() const -> std::string;
@@ -273,6 +254,8 @@ public:
 
   [[nodiscard]] virtual auto GetSkyLightSource() const -> int;
   virtual auto SetSkyLightSource(int source) -> void;
+  [[nodiscard]] virtual auto GetSkyLightCubemapResourceKey() const
+    -> content::ResourceKey;
 
   [[nodiscard]] virtual auto GetSkyLightTint() const -> glm::vec3;
   virtual auto SetSkyLightTint(const glm::vec3& value) -> void;
@@ -295,9 +278,6 @@ public:
   virtual auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
   [[nodiscard]] virtual auto GetSkyLightAffectReflections() const -> bool;
   virtual auto SetSkyLightAffectReflections(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetSkyLightAffectGlobalIllumination() const
-    -> bool;
-  virtual auto SetSkyLightAffectGlobalIllumination(bool enabled) -> void;
 
   // Fog
   [[nodiscard]] virtual auto GetFogEnabled() const -> bool;
@@ -505,10 +485,6 @@ public:
   [[nodiscard]] virtual auto GetSunLightAvailable() const -> bool;
   virtual auto UpdateSunLightCandidate() -> void;
 
-  // Renderer debug flags
-  [[nodiscard]] virtual auto GetUseLut() const -> bool;
-  virtual auto SetUseLut(bool enabled) -> void;
-
 private:
   struct AtmosphereCanonicalState {
     bool enabled { false };
@@ -560,8 +536,7 @@ private:
     kSkybox = 1u << 6u,
     kSkySphere = 1u << 7u,
     kSun = 1u << 8u,
-    kRendererFlags = 1u << 9u,
-    kPreset = 1u << 10u,
+    kPreset = 1u << 9u,
     kAtmosphere = kAtmosphereModel,
     kFog = kHeightFog,
     kAll = 0xFFFFFFFFu,
@@ -663,16 +638,13 @@ private:
   float transmittance_min_light_elevation_deg_ { -90.0F };
   bool atmosphere_holdout_ { false };
   bool atmosphere_render_in_main_pass_ { true };
-  int sky_view_lut_slices_ { 16 };
-  int sky_view_alt_mapping_mode_ { 1 }; // 0 = linear, 1 = log
-  bool regenerate_lut_requested_ { false };
-
   // SkySphere
   bool sky_sphere_enabled_ { false };
   int sky_sphere_source_ { 0 };
   glm::vec3 sky_sphere_solid_color_ { 0.2F, 0.3F, 0.5F };
   float sky_intensity_ { 1.0F };
   float sky_sphere_rotation_deg_ { 0.0F };
+  content::ResourceKey sky_sphere_cubemap_resource_key_ { 0U };
 
   // Skybox settings
   int skybox_layout_idx_ { 0 };
@@ -697,15 +669,18 @@ private:
   // SkyLight
   bool sky_light_enabled_ { false };
   int sky_light_source_ { 0 };
+  content::ResourceKey sky_light_cubemap_resource_key_ { 0U };
   glm::vec3 sky_light_tint_ { 1.0F, 1.0F, 1.0F };
   float sky_light_intensity_mul_ { 1.0F };
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
   bool sky_light_real_time_capture_enabled_ { false };
+  float sky_light_source_cubemap_angle_radians_ { 0.0F };
   glm::vec3 sky_light_lower_hemisphere_color_ { 0.0F, 0.0F, 0.0F };
+  bool sky_light_lower_hemisphere_is_solid_color_ { true };
+  float sky_light_lower_hemisphere_blend_alpha_ { 1.0F };
   float sky_light_volumetric_scattering_intensity_ { 1.0F };
   bool sky_light_affect_reflections_ { true };
-  bool sky_light_affect_global_illumination_ { true };
 
   // Fog
   bool fog_enabled_ { false };
@@ -788,9 +763,6 @@ private:
   };
   scene::SceneNode sun_light_node_;
   bool sun_light_available_ { false };
-
-  // Atmosphere debug flags
-  bool use_lut_ { true };
 
   std::atomic_uint64_t epoch_ { 0 };
 

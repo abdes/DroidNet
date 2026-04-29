@@ -12,6 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -86,7 +87,9 @@ public:
   OXGN_VRTX_API auto Execute(
     ViewId view_id, RenderContext& ctx, const SceneTextures& scene_textures,
     const Inputs& inputs) -> void;
-  OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
+  OXGN_VRTX_API auto RemoveViewState(ViewId view_id,
+    CompositionView::ViewStateHandle view_state_handle
+    = CompositionView::kInvalidViewStateHandle) -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const PostProcessFrameBindings*;

@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED CONFIG)
 
 # ==============================================================================
 # Build instructions
@@ -54,6 +55,36 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DiagnosticsService
+  SOURCES
+    "Fakes/Graphics.h"
+    "DiagnosticsService_test.cpp"
+)
+
+m_gtest_program(
+  DiagnosticsFrameLedger
+  SOURCES
+    "DiagnosticsFrameLedger_test.cpp"
+)
+
+m_gtest_program(
+  DiagnosticsCaptureManifest
+  SOURCES
+    "DiagnosticsCaptureManifest_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Vortex.DiagnosticsCaptureManifest.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+m_gtest_program(
+  ShaderDebugModeRegistry
+  SOURCES
+    "ShaderDebugModeRegistry_test.cpp"
+)
+
+m_gtest_program(
   RenderContext
   SOURCES
     "RenderContext_test.cpp"
@@ -75,6 +106,12 @@ m_gtest_program(
   SceneTextures
   SOURCES
     "SceneTextures_test.cpp"
+)
+
+m_gtest_program(
+  SceneTextureLeasePool
+  SOURCES
+    "SceneTextureLeasePool_test.cpp"
 )
 
 m_gtest_program(
@@ -100,6 +137,11 @@ m_gtest_program(
   SOURCES
     "EnvironmentLightingService_test.cpp"
 )
+target_compile_definitions(
+  Oxygen.Vortex.EnvironmentLightingService.Tests
+  PRIVATE
+    OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders/Vortex"
+)
 
 m_gtest_program(
   SceneRendererPublication
@@ -111,6 +153,13 @@ m_gtest_program(
   SceneRendererDeferredCore
   SOURCES
     "SceneRendererDeferredCore_test.cpp"
+)
+
+m_gtest_program(
+  OcclusionModule
+  SOURCES
+    "Fakes/Graphics.h"
+    "OcclusionModule_test.cpp"
 )
 
 add_custom_target(
@@ -126,6 +175,12 @@ add_custom_target(
 )
 
 add_custom_target(
+  Oxygen.Vortex.SceneTextureLeasePool
+  DEPENDS
+    Oxygen.Vortex.SceneTextureLeasePool.Tests
+)
+
+add_custom_target(
   Oxygen.Vortex.LightingService
   DEPENDS
     Oxygen.Vortex.LightingService.Tests
@@ -135,6 +190,30 @@ add_custom_target(
   Oxygen.Vortex.PostProcessService
   DEPENDS
     Oxygen.Vortex.PostProcessService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsService
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsFrameLedger
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsFrameLedger.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.DiagnosticsCaptureManifest
+  DEPENDS
+    Oxygen.Vortex.DiagnosticsCaptureManifest.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.ShaderDebugModeRegistry
+  DEPENDS
+    Oxygen.Vortex.ShaderDebugModeRegistry.Tests
 )
 
 add_custom_target(
@@ -161,6 +240,12 @@ add_custom_target(
     Oxygen.Vortex.SceneRendererDeferredCore.Tests
 )
 
+add_custom_target(
+  Oxygen.Vortex.OcclusionModule
+  DEPENDS
+    Oxygen.Vortex.OcclusionModule.Tests
+)
+
 m_gtest_program(
   SceneCameraViewResolver
   SOURCES
@@ -172,6 +257,13 @@ m_gtest_program(
   SOURCES
     "Fakes/Graphics.h"
     "Internal/RenderContextMaterializer_test.cpp"
+)
+
+m_gtest_program(
+  AuxiliaryDependencyGraph
+  SOURCES
+    "Fakes/Graphics.h"
+    "Internal/AuxiliaryDependencyGraph_test.cpp"
 )
 
 m_gtest_program(
@@ -208,6 +300,13 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  OffscreenSceneFacade
+  SOURCES
+    "Fakes/Graphics.h"
+    "Harness/OffscreenSceneFacade_test.cpp"
+)
+
+m_gtest_program(
   RendererPublicationSplit
   SOURCES
     "Fakes/Graphics.h"
@@ -225,6 +324,12 @@ m_gtest_program(
   DeformationHistoryCache
   SOURCES
     "Internal/DeformationHistoryCache_test.cpp"
+)
+
+m_gtest_program(
+  PreviousViewHistoryCache
+  SOURCES
+    "Internal/PreviousViewHistoryCache_test.cpp"
 )
 
 m_gtest_program(

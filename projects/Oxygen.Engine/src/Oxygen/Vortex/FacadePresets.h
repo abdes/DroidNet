@@ -17,7 +17,7 @@
 namespace oxygen::vortex::detail {
 
 [[nodiscard]] inline auto MakeFramebufferSizedView(
-  const observer_ptr<const graphics::Framebuffer> framebuffer) -> View
+  const observer_ptr<graphics::Framebuffer> framebuffer) -> View
 {
   CHECK_NOTNULL_F(
     framebuffer.get(), "Facade preset requires a valid output framebuffer");
@@ -45,7 +45,7 @@ namespace oxygen::vortex::harness::single_pass::presets {
 
 [[nodiscard]] inline auto ForResolvedViewGraphicsPass(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view)
   -> Renderer::SinglePassHarnessFacade
 {
@@ -59,7 +59,7 @@ namespace oxygen::vortex::harness::single_pass::presets {
 
 [[nodiscard]] inline auto ForFullscreenGraphicsPass(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   const ViewId view_id = ViewId { 1U }) -> Renderer::SinglePassHarnessFacade
 {
   auto facade = renderer.ForSinglePassHarness();
@@ -75,7 +75,7 @@ namespace oxygen::vortex::harness::single_pass::presets {
 
 [[nodiscard]] inline auto ForPreparedSceneGraphicsPass(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view,
   Renderer::PreparedFrameInput prepared_frame)
   -> Renderer::SinglePassHarnessFacade
@@ -91,7 +91,7 @@ namespace oxygen::vortex::harness::single_pass::presets {
 
 [[nodiscard]] inline auto ForPreparedSceneGraphicsPass(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view,
   Renderer::PreparedFrameInput prepared_frame,
   Renderer::CoreShaderInputsInput core_shader_inputs)
@@ -110,7 +110,7 @@ namespace oxygen::vortex::harness::render_graph::presets {
 
 [[nodiscard]] inline auto ForSingleViewGraph(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view,
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
 {
@@ -125,7 +125,7 @@ namespace oxygen::vortex::harness::render_graph::presets {
 
 [[nodiscard]] inline auto ForSingleViewGraph(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view,
   Renderer::PreparedFrameInput prepared_frame,
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
@@ -139,7 +139,7 @@ namespace oxygen::vortex::harness::render_graph::presets {
 
 [[nodiscard]] inline auto ForSingleViewGraph(Renderer& renderer,
   Renderer::FrameSessionInput frame_session,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   Renderer::ResolvedViewInput resolved_view,
   Renderer::PreparedFrameInput prepared_frame,
   Renderer::CoreShaderInputsInput core_shader_inputs,
@@ -159,7 +159,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   Renderer::FrameSessionInput frame_session,
   const observer_ptr<oxygen::scene::Scene> scene_source,
   const oxygen::scene::SceneNode& camera,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   std::optional<Renderer::OffscreenPipelineInput> pipeline = std::nullopt)
   -> Renderer::OffscreenSceneFacade
 {
@@ -167,7 +167,8 @@ namespace oxygen::vortex::offscreen::scene::presets {
   facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(Renderer::SceneSourceInput { .scene = scene_source });
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Preview",
-    kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
+    ViewId { 0x060B0001ULL }, detail::MakeFramebufferSizedView(framebuffer),
+    camera)
       .SetWithAtmosphere(true));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
@@ -181,7 +182,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   Renderer::FrameSessionInput frame_session,
   const observer_ptr<oxygen::scene::Scene> scene_source,
   const oxygen::scene::SceneNode& camera,
-  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  const observer_ptr<graphics::Framebuffer> framebuffer,
   std::optional<Renderer::OffscreenPipelineInput> pipeline = std::nullopt)
   -> Renderer::OffscreenSceneFacade
 {
@@ -189,7 +190,8 @@ namespace oxygen::vortex::offscreen::scene::presets {
   facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(Renderer::SceneSourceInput { .scene = scene_source });
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Capture",
-    kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
+    ViewId { 0x060B0002ULL }, detail::MakeFramebufferSizedView(framebuffer),
+    camera)
       .SetWithAtmosphere(false));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });

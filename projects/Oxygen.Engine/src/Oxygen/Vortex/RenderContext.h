@@ -10,7 +10,10 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -18,6 +21,9 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -39,8 +45,14 @@ class Scene;
 namespace oxygen::vortex {
 
 struct CompositionView;
+struct OcclusionFrameResults;
 class Renderer;
 class RenderPass;
+class SceneRenderer;
+
+namespace internal {
+class PerViewScope;
+} // namespace internal
 
 template <typename... Ts> struct PassTypeList {
   static constexpr std::size_t size = sizeof...(Ts);
@@ -81,11 +93,42 @@ struct RenderContext {
     }
   };
 
+  struct AuxiliaryResolvedInput {
+    CompositionView::AuxInputDesc input {};
+    CompositionView::AuxOutputKind kind {
+      CompositionView::AuxOutputKind::kColorTexture
+    };
+    oxygen::ViewId producer_view_id { kInvalidViewId };
+    bool valid { false };
+    std::string debug_name {};
+  };
+
   struct ViewExecutionEntry {
     oxygen::ViewId view_id { kInvalidViewId };
+    oxygen::ViewId exposure_view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    CompositionView::ViewStateHandle exposure_view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     bool is_scene_view { false };
+    bool is_reflection_capture { false };
+    bool with_atmosphere { false };
+    bool with_height_fog { false };
+    bool with_local_fog { false };
+    std::string debug_name {};
+    CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
+    std::vector<AuxiliaryResolvedInput> resolved_aux_inputs {};
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
+    std::optional<RenderMode> render_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<graphics::Framebuffer> render_target;
     observer_ptr<graphics::Framebuffer> composite_source;
@@ -97,11 +140,23 @@ struct RenderContext {
   std::shared_ptr<const graphics::Buffer> view_constants;
   std::shared_ptr<const graphics::Buffer> material_constants;
   ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
+  RenderMode render_mode { RenderMode::kSolid };
+  graphics::Color wireframe_color { 1.0F, 1.0F, 1.0F, 1.0F };
 
   struct ViewSpecific {
     oxygen::ViewId view_id { kInvalidViewId };
     oxygen::ViewId exposure_view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    CompositionView::ViewStateHandle exposure_view_state_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     observer_ptr<const CompositionView> composition_view;
+    CompositionView::ViewFeatureProfile feature_profile {
+      CompositionView::ViewFeatureProfile::kDefault
+    };
+    CompositionView::ViewFeatureMask feature_mask {};
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
@@ -125,10 +180,13 @@ struct RenderContext {
     std::uint32_t screen_hzb_mip_count { 0U };
     bool screen_hzb_available { false };
     bool screen_hzb_has_previous { false };
+    observer_ptr<const OcclusionFrameResults> occlusion_results;
     bool is_reflection_capture { false };
     bool with_atmosphere { false };
     bool with_height_fog { false };
     bool with_local_fog { false };
+
+    auto Reset() noexcept -> void { *this = ViewSpecific {}; }
 
     [[nodiscard]] auto HasPlannedDepthPrePass() const noexcept -> bool
     {
@@ -230,10 +288,13 @@ struct RenderContext {
     view_constants.reset();
     material_constants.reset();
     shader_debug_mode = ShaderDebugMode::kDisabled;
+    render_mode = RenderMode::kSolid;
+    wireframe_color = graphics::Color { 1.0F, 1.0F, 1.0F, 1.0F };
     pass_target.reset(nullptr);
-    current_view = ViewSpecific {};
+    current_view.Reset();
     frame_views.clear();
-    active_view_index = std::numeric_limits<std::size_t>::max();
+    std::exchange(active_view_index, std::numeric_limits<std::size_t>::max());
+    per_view_scope_active_ = false;
     view_outputs.clear();
     scene.reset(nullptr);
     frame_slot = frame::kInvalidSlot;
@@ -244,6 +305,8 @@ struct RenderContext {
 
 private:
   friend class Renderer;
+  friend class SceneRenderer;
+  friend class internal::PerViewScope;
 
   auto SetRenderer(Renderer* renderer, oxygen::Graphics* graphics) const -> void
   {
@@ -254,6 +317,7 @@ private:
   mutable observer_ptr<Renderer> renderer_;
   mutable observer_ptr<oxygen::Graphics> graphics_;
   mutable std::array<observer_ptr<RenderPass>, kNumPassTypes> known_passes_ {};
+  bool per_view_scope_active_ { false };
 };
 
 } // namespace oxygen::vortex

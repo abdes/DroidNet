@@ -8,39 +8,16 @@ This small C++ example demonstrates asynchronous programming patterns used by th
 - Demonstrate the interplay between the example’s runtime loop and asynchronous work
 - Provide a compact, standalone area to prototype async patterns without opening the full engine/editor
 
-## Phase 4 Migration Gate
+## Vortex Runtime Proof
 
-`Examples/Async` is the Phase 4 first-success integration gate for the Vortex
-migration program. The Phase 4 artifact roots for this example are:
+`Examples/Async` is a compact Vortex integration gate for the engine runtime,
+DemoShell/AppWindow UI, frame pacing, RenderDoc capture, ImGui overlay, and
+composition/presentation path. The current proof artifacts are written under:
 
-- `build/artifacts/vortex/phase-4/async/reference/` — legacy/reference baseline
-  captured by `Capture-AsyncLegacyReference.ps1`
-- `build/artifacts/vortex/phase-4/async/current/` — current Vortex capture
-  produced by `Run-AsyncRuntimeValidation.ps1`
+- `build/artifacts/vortex/phase-4/async/current/` by
+  `tools/vortex/Run-AsyncRuntimeValidation.ps1`
 
-This `04-05` seam-migration lane replaces only the initial runtime seams:
-
-- legacy renderer target linkage
-- Async-owned renderer bootstrap ownership
-- example-local view-registration assumptions that now move behind a
-  Vortex-owned renderer seam
-
-This README preserves the original `04-05` seam boundary truthfully:
-DemoShell/AppWindow runtime-UI migration plus the parity/composition proof-pack
-closeout were completed later by `04-11`, `04-09`, and `04-06` on the same
-artifact root.
-
-`Examples/Async` remains the integration gate, while `VortexBasic` remains the
-continuing systems-and-passes validation surface for Phase 4.
-
-## Phase 4 Proof Pack
-
-`04-09` owns the migrated Async parity and harness baseline under
-`build/artifacts/vortex/phase-4/async/`. `04-06` reuses that same artifact pack
-for composition/presentation closeout; it does not create a second capture
-lane.
-
-Composition-specific retained boundaries on the migrated path:
+Composition-specific retained boundaries on the Vortex path:
 
 - `ResolveSceneColor` remains the Stage 21 owner when the main scene view needs
   a retained resolved handoff. It snapshots `ResolvedSceneColor` and
@@ -52,27 +29,18 @@ Composition-specific retained boundaries on the migrated path:
   The Async proof pack inspects that path through the capture and products
   reports in the `current/` artifact root.
 
-To capture the legacy/reference baseline:
-
-```powershell
-powershell -NoProfile -File tools/vortex/Capture-AsyncLegacyReference.ps1 `
-  -Output build/artifacts/vortex/phase-4/async/reference
-```
-
-To re-run the current Vortex validation against the reference:
+To run the current Vortex validation:
 
 ```powershell
 powershell -NoProfile -File tools/vortex/Run-AsyncRuntimeValidation.ps1 `
-  -Output build/artifacts/vortex/phase-4/async/current `
-  -ReferenceRoot build/artifacts/vortex/phase-4/async/reference
+  -Output build/artifacts/vortex/phase-4/async/current
 ```
 
-To re-run just the composition closeout proof on an existing capture:
+To re-run just the proof analysis on an existing capture:
 
 ```powershell
 powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 `
-  -CapturePath build/artifacts/vortex/phase-4/async/current/current_renderdoc.rdc `
-  -ReferenceRoot build/artifacts/vortex/phase-4/async/reference
+  -CapturePath build/artifacts/vortex/phase-4/async/current/current_renderdoc.rdc
 ```
 
 Successful composition/presentation closeout keeps these checks green in the
@@ -95,7 +63,7 @@ same runtime path. The clean closeout expectation is:
   `DXGI WARNING: Live IDXGIFactory ...` line
 
 ImGui / DemoShell overlay correctness is tracked in
-`build/artifacts/vortex/phase-4/async/baseline_behaviors.md`. The required
+`build/artifacts/vortex/phase-4/async/current/async_behaviors.md`. The required
 source-audit lines are:
 
 - `imgui_runtime_registered: pass`

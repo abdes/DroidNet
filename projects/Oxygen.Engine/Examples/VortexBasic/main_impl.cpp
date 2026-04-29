@@ -23,6 +23,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -35,6 +36,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -59,23 +61,13 @@ auto ParseVortexShaderDebugMode(std::string_view text)
   if (text.empty() || text == "disabled") {
     return ShaderDebugMode::kDisabled;
   }
-  if (text == "base-color") {
-    return ShaderDebugMode::kBaseColor;
+  if (text == "normal") {
+    return ShaderDebugMode::kDisabled;
   }
-  if (text == "world-normals") {
-    return ShaderDebugMode::kWorldNormals;
-  }
-  if (text == "roughness") {
-    return ShaderDebugMode::kRoughness;
-  }
-  if (text == "metalness") {
-    return ShaderDebugMode::kMetalness;
-  }
-  if (text == "scene-depth-raw") {
-    return ShaderDebugMode::kSceneDepthRaw;
-  }
-  if (text == "scene-depth-linear") {
-    return ShaderDebugMode::kSceneDepthLinear;
+
+  if (const auto* info = oxygen::vortex::FindShaderDebugModeInfo(text);
+    info != nullptr && info->supported) {
+    return info->mode;
   }
 
   throw std::runtime_error(
@@ -226,8 +218,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     auto vortex_options = std::make_shared<clap::Options>("Vortex options");
     vortex_options->Add(clap::Option::WithKey("shader-debug-mode")
         .About("Deferred debug visualization mode: disabled, base-color, "
-               "world-normals, roughness, metalness, scene-depth-raw, or "
-               "scene-depth-linear")
+               "world-normals, roughness, metalness, scene-depth-raw, "
+               "scene-depth-linear, or directional-shadow-mask")
         .Long("shader-debug-mode")
         .WithValue<std::string>()
         .DefaultValue(std::string("disabled"))
@@ -257,6 +249,106 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(false)
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_local_fog)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("with-volumetric-fog")
+        .About("Enable volumetric fog authoring and integrated scattering")
+        .Long("with-volumetric-fog")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_volumetric_fog)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("with-occlusion")
+        .About("Enable Screen HZB occlusion proof geometry and runtime culling")
+        .Long("with-occlusion")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_occlusion)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("with-translucency")
+        .About("Enable translucent validation meshes for Stage 18 proof")
+        .Long("with-translucency")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_translucency)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("volumetric-local-fog")
+        .About("Inject local fog into volumetric fog when both are enabled")
+        .Long("volumetric-local-fog")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_local_fog_into_volumetric)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("volumetric-directional-shadows")
+        .About("Apply directional shadow-map visibility inside volumetric fog")
+        .Long("volumetric-directional-shadows")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_volumetric_directional_shadows)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("volumetric-temporal-reprojection")
+        .About("Enable temporal reprojection in volumetric fog")
+        .Long("volumetric-temporal-reprojection")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_volumetric_temporal_reprojection)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("sky-light-volumetric-scattering")
+        .About("SkyLight volumetric scattering intensity")
+        .Long("sky-light-volumetric-scattering")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("intensity")
+        .StoreTo(&app.vortex_sky_light_volumetric_scattering_intensity)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("aerial-scattering-strength")
+        .About("Aerial perspective apply-time scattering strength")
+        .Long("aerial-scattering-strength")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("strength")
+        .StoreTo(&app.vortex_aerial_scattering_strength)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("aerial-start-depth")
+        .About("Aerial perspective start depth in meters")
+        .Long("aerial-start-depth")
+        .WithValue<float>()
+        .DefaultValue(100.0F)
+        .UserFriendlyName("meters")
+        .StoreTo(&app.vortex_aerial_start_depth_m)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("local-fog-volumetric-max-density")
+        .About("Clamp used when injecting local fog into volumetric fog")
+        .Long("local-fog-volumetric-max-density")
+        .WithValue<float>()
+        .DefaultValue(0.01F)
+        .UserFriendlyName("density")
+        .StoreTo(&app.vortex_local_fog_volumetric_max_density)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("local-fog-emissive-scale")
+        .About("Scale the VortexBasic local-fog emissive proof volume")
+        .Long("local-fog-emissive-scale")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("scale")
+        .StoreTo(&app.vortex_local_fog_emissive_scale)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("volumetric-fog-emissive-scale")
+        .About("Scale the base volumetric-fog emissive term")
+        .Long("volumetric-fog-emissive-scale")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("scale")
+        .StoreTo(&app.vortex_volumetric_fog_emissive_scale)
         .Build());
 
     const Command::Ptr default_command
@@ -294,6 +386,29 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed with-atmosphere option = {}", app.with_atmosphere);
     LOG_F(INFO, "Parsed with-height-fog option = {}", app.with_height_fog);
     LOG_F(INFO, "Parsed with-local-fog option = {}", app.with_local_fog);
+    LOG_F(
+      INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
+    LOG_F(INFO, "Parsed with-occlusion option = {}", app.with_occlusion);
+    LOG_F(INFO, "Parsed with-translucency option = {}",
+      app.with_translucency);
+    LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
+      app.vortex_local_fog_into_volumetric);
+    LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
+      app.vortex_volumetric_directional_shadows);
+    LOG_F(INFO, "Parsed volumetric-temporal-reprojection option = {}",
+      app.vortex_volumetric_temporal_reprojection);
+    LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
+      app.vortex_sky_light_volumetric_scattering_intensity);
+    LOG_F(INFO, "Parsed aerial-scattering-strength option = {}",
+      app.vortex_aerial_scattering_strength);
+    LOG_F(INFO, "Parsed aerial-start-depth option = {}",
+      app.vortex_aerial_start_depth_m);
+    LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
+      app.vortex_local_fog_volumetric_max_density);
+    LOG_F(INFO, "Parsed local-fog-emissive-scale option = {}",
+      app.vortex_local_fog_emissive_scale);
+    LOG_F(INFO, "Parsed volumetric-fog-emissive-scale option = {}",
+      app.vortex_volumetric_fog_emissive_scale);
     const auto shader_debug_mode
       = ParseVortexShaderDebugMode(shader_debug_mode_name);
     LOG_F(INFO, "Parsed Vortex shader debug mode = {}",
@@ -364,6 +479,28 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         gfx->SetVSyncEnabled(enable_vsync);
       }
     }
+    auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
+    startup_cvars.Set("vtx.volumetric_fog.directional_shadows",
+      oxygen::console::CVarValue {
+        app.vortex_volumetric_directional_shadows });
+    startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection",
+      oxygen::console::CVarValue {
+        app.vortex_volumetric_temporal_reprojection });
+    if (app.with_occlusion) {
+      startup_cvars.Set(
+        "vtx.occlusion.enable", oxygen::console::CVarValue { true });
+    }
+    if (app.with_local_fog) {
+      startup_cvars.Set(
+        "vtx.local_fog.enable", oxygen::console::CVarValue { true });
+      startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
+        oxygen::console::CVarValue {
+          app.vortex_local_fog_into_volumetric });
+      startup_cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
+        oxygen::console::CVarValue {
+          app.vortex_local_fog_volumetric_max_density });
+    }
+    app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
 
     const auto rc = co::Run(app, AsyncMain(app, frames, shader_debug_mode));
 

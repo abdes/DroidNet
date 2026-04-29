@@ -42,6 +42,7 @@ public:
   auto operator=(ScreenHzbModule&&) -> ScreenHzbModule& = delete;
 
   OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  OXGN_VRTX_API void OnFrameStart();
   [[nodiscard]] OXGN_VRTX_API auto GetCurrentOutput() const -> const Output&;
   [[nodiscard]] OXGN_VRTX_API auto GetPreviousOutput() const -> const Output&;
 

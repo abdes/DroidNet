@@ -51,8 +51,6 @@ public:
   [[nodiscard]] auto HasPendingChanges() const -> bool;
   auto ApplyPendingChanges() -> void;
 
-  [[nodiscard]] auto GetAtmosphereLutStatus() const -> std::pair<bool, bool>;
-
   [[nodiscard]] auto GetPresetCount() const -> int;
   [[nodiscard]] auto GetPresetName(int index) const -> std::string_view;
   [[nodiscard]] auto GetPresetLabel() const -> std::string_view;
@@ -114,18 +112,6 @@ public:
   auto SetOzoneDensityProfile(const engine::atmos::DensityProfile& profile)
     -> void;
 
-  // Sky-View LUT slicing
-  [[nodiscard]] auto GetSkyViewLutSlices() const -> int;
-  auto SetSkyViewLutSlices(int value) -> void;
-  [[nodiscard]] auto GetAerialPerspectiveLutWidth() const -> int;
-  [[nodiscard]] auto GetAerialPerspectiveLutDepthResolution() const -> int;
-  [[nodiscard]] auto GetAerialPerspectiveLutDepthKm() const -> float;
-  [[nodiscard]] auto GetAerialPerspectiveLutSampleCountMaxPerSlice() const
-    -> float;
-  [[nodiscard]] auto GetSkyViewAltMappingMode() const -> int;
-  auto SetSkyViewAltMappingMode(int value) -> void;
-  auto RequestRegenerateLut() -> void;
-
   // SkySphere
   [[nodiscard]] auto GetSkySphereEnabled() const -> bool;
   auto SetSkySphereEnabled(bool enabled) -> void;
@@ -137,6 +123,8 @@ public:
   auto SetSkyIntensity(float value) -> void;
   [[nodiscard]] auto GetSkySphereRotationDeg() const -> float;
   auto SetSkySphereRotationDeg(float value) -> void;
+  [[nodiscard]] auto GetSkySphereCubemapResourceKey() const
+    -> content::ResourceKey;
 
   // Skybox
   [[nodiscard]] auto GetSkyboxPath() const -> std::string;
@@ -168,6 +156,8 @@ public:
   auto SetSkyLightEnabled(bool enabled) -> void;
   [[nodiscard]] auto GetSkyLightSource() const -> int;
   auto SetSkyLightSource(int source) -> void;
+  [[nodiscard]] auto GetSkyLightCubemapResourceKey() const
+    -> content::ResourceKey;
   [[nodiscard]] auto GetSkyLightTint() const -> glm::vec3;
   auto SetSkyLightTint(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSkyLightIntensityMul() const -> float;
@@ -184,8 +174,6 @@ public:
   auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
   [[nodiscard]] auto GetSkyLightAffectReflections() const -> bool;
   auto SetSkyLightAffectReflections(bool enabled) -> void;
-  [[nodiscard]] auto GetSkyLightAffectGlobalIllumination() const -> bool;
-  auto SetSkyLightAffectGlobalIllumination(bool enabled) -> void;
 
   // Fog
   [[nodiscard]] auto GetFogEnabled() const -> bool;
@@ -339,10 +327,6 @@ public:
   auto SetSunShadowCascadeDistance(int index, float value) -> void;
   [[nodiscard]] auto GetSunLightAvailable() const -> bool;
   auto UpdateSunLightCandidate() -> void;
-
-  // Renderer debug flags
-  [[nodiscard]] auto GetUseLut() const -> bool;
-  auto SetUseLut(bool enabled) -> void;
 
 private:
   auto MaybeApplyStartupPreset(const EnvironmentRuntimeConfig& config) -> void;

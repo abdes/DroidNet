@@ -52,12 +52,12 @@ struct LocalFogTiledCullingPassConstants
     uint tile_data_texture_slot;
     uint occupied_tile_buffer_slot;
     uint indirect_args_buffer_slot;
-    uint indirect_count_buffer_slot;
     uint instance_count;
     uint tile_resolution_x;
     uint tile_resolution_y;
     uint max_instances_per_tile;
     uint use_hzb;
+    uint _pad0;
     uint _pad1;
     float4 left_plane;
     float4 right_plane;
@@ -521,16 +521,14 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
     if (LoadEnvironmentStaticData(env_data)
         && env_data.sky_light.enabled != 0u
-        && env_data.sky_light.irradiance_map_slot != K_INVALID_BINDLESS_INDEX)
+        && env_data.sky_light.diffuse_sh_slot != K_INVALID_BINDLESS_INDEX)
     {
-        TextureCube<float4> irradiance_map
-            = ResourceDescriptorHeap[env_data.sky_light.irradiance_map_slot];
         const float3 sky_direction = normalize(lerp(
             float3(0.0f, 0.0f, 1.0f),
             -ray_dir_world,
             saturate(abs(instance.phase_g))));
-        const float3 sky_lighting = irradiance_map.SampleLevel(
-            linear_sampler, CubemapSamplingDirFromOxygenWS(sky_direction), 0.0f).rgb;
+        const float3 sky_lighting = EvaluateStaticSkyLightDiffuseSh(
+            env_data, sky_direction);
         in_scattering += sky_lighting
             * env_data.sky_light.tint_rgb
             * env_data.sky_light.radiance_scale

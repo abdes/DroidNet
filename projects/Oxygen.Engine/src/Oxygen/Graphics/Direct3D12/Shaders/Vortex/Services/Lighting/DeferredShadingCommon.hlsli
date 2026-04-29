@@ -11,6 +11,7 @@
 
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
@@ -150,6 +151,23 @@ static inline float3 EvaluateDeferredLightAtWorldPosition(
     return EvaluateCookTorranceLighting(
                surface, light_direction_to_source, light_radiance)
         * light_attenuation;
+}
+
+static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
+    DeferredLightingSurfaceData surface)
+{
+    EnvironmentStaticData env_data = (EnvironmentStaticData)0;
+    if (!LoadEnvironmentStaticData(env_data)
+        || env_data.sky_light.enabled == 0u) {
+        return 0.0f.xxx;
+    }
+
+    const float3 sky_diffuse = EvaluateStaticSkyLightDiffuseSh(
+                                   env_data, surface.world_normal)
+        * env_data.sky_light.tint_rgb
+        * env_data.sky_light.radiance_scale
+        * env_data.sky_light.diffuse_intensity;
+    return sky_diffuse * surface.base_color * (1.0f - surface.metallic);
 }
 
 static inline float3 EvaluateDeferredLight(

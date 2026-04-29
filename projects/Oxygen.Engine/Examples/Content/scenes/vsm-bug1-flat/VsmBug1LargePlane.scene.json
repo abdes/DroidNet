@@ -76,7 +76,7 @@
           "mobility": 0,
           "exposure_compensation_ev": 0.0,
           "shadow": {
-            "bias": 0.0006,
+            "bias": 0.0,
             "normal_bias": 0.02,
             "resolution_hint": 1
           }

@@ -1,57 +1,41 @@
 {
   "camera": {
-    "fly_move_speed": 2.200000047683716
+    "fly_move_speed": 9.9399995803833
   },
   "camera_rig": {
-    "Camera": {
-      "position": {
-        "x": -41.40798568725586,
-        "y": 7.06563663482666,
-        "z": 8.315412521362305
-      },
-      "rotation": {
-        "w": -0.49832743406295776,
-        "x": -0.40935075283050537,
-        "y": 0.48511677980422974,
-        "z": 0.5905619859695435
-      }
-    },
     "CameraRig": {
-      "mode": "fly",
-      "orbit": {
-        "distance": 50.599998474121094,
-        "mode": "turntable",
-        "target": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
       "position": {
-        "x": -1.4011930227279663,
-        "y": -13.063375473022461,
-        "z": 13.200704574584961
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
       },
       "rotation": {
-        "w": 0.9211650490760803,
-        "x": 0.15857580304145813,
-        "y": -0.06029404327273369,
-        "z": -0.35024741291999817
+        "w": 0.03479399532079697,
+        "x": 0.04185214266180992,
+        "y": 0.7678291201591492,
+        "z": 0.6383386850357056
       }
     },
     "MainCamera": {
       "camera": {
+        "exposure": {
+          "aperture_f": 11.0,
+          "enabled": true,
+          "iso": 100.0,
+          "shutter_rate": 125.0
+        },
+        "has_orthographic": false,
         "has_perspective": true,
         "perspective": {
-          "far": 2000.0,
-          "fov": 1.3648474216461182,
+          "far": 200.0,
+          "fov": 1.0,
           "near": 0.10000000149011612
         }
       },
       "fly": {
         "boost_multiplier": 4.0,
         "look_sensitivity": 0.001500000013038516,
-        "move_speed": 2.200000047683716,
+        "move_speed": 9.9399995803833,
         "plane_lock": false
       },
       "mode": "fly",
@@ -65,48 +49,55 @@
         }
       },
       "position": {
-        "x": 20.039539337158203,
-        "y": -46.32676315307617,
-        "z": 11.495424270629883
+        "x": 9.520689010620117,
+        "y": 11.710914611816406,
+        "z": 3.997236490249634
       },
       "rotation": {
-        "w": 0.11533822119235992,
-        "x": 0.09478605538606644,
-        "y": 0.6277999877929688,
-        "z": 0.7639240026473999
+        "w": 0.19015292823314667,
+        "x": 0.19920721650123596,
+        "y": 0.6953834891319275,
+        "z": 0.6637771725654602
       }
     },
-    "Node_23": {
+    "New Entity 2": {
       "position": {
-        "x": -20.709604263305664,
-        "y": -0.8519012928009033,
-        "z": 5.29805850982666
+        "x": 8.0,
+        "y": 19.0,
+        "z": -7.0
       },
       "rotation": {
-        "w": 0.5698524117469788,
-        "x": 0.4425140917301178,
-        "y": -0.4246852993965149,
-        "z": -0.5468931198120117
+        "w": 0.45785799622535706,
+        "x": 0.8865357041358948,
+        "y": 0.059074077755212784,
+        "z": 0.03050924651324749
       }
     },
-    "PhysCamera001": {
+    "camera_node": {
       "camera": {
+        "exposure": {
+          "aperture_f": 11.0,
+          "enabled": true,
+          "iso": 100.0,
+          "shutter_rate": 125.0
+        },
+        "has_orthographic": false,
         "has_perspective": true,
         "perspective": {
-          "far": 10000.0,
-          "fov": 0.9459684491157532,
+          "far": 200.0,
+          "fov": 0.7853999733924866,
           "near": 0.10000000149011612
         }
       },
       "fly": {
         "boost_multiplier": 4.0,
         "look_sensitivity": 0.001500000013038516,
-        "move_speed": 4.440000057220459,
+        "move_speed": 9.9399995803833,
         "plane_lock": false
       },
       "mode": "fly",
       "orbit": {
-        "distance": 8.991250991821289,
+        "distance": 21.124629974365234,
         "mode": "turntable",
         "target": {
           "x": 0.0,
@@ -115,90 +106,24 @@
         }
       },
       "position": {
-        "x": 1.2269577980041504,
-        "y": 0.5870475769042969,
-        "z": 16.227149963378906
+        "x": 7.337153434753418,
+        "y": -2.4476988315582275,
+        "z": 2.1918580532073975
       },
       "rotation": {
-        "w": -0.11965897679328918,
-        "x": -0.10002882033586502,
-        "y": 0.63351970911026,
-        "z": 0.7578448057174683
-      }
-    },
-    "cam": {
-      "mode": "orbit",
-      "position": {
-        "x": -1.214525818824768,
-        "y": -0.5475285053253174,
-        "z": 0.11394467949867249
-      },
-      "rotation": {
-        "w": 0.6187132596969604,
-        "x": 0.5680543780326843,
-        "y": -0.3670223653316498,
-        "z": -0.39975330233573914
-      }
-    },
-    "cam_001": {
-      "mode": "fly",
-      "orbit": {
-        "distance": 0.10000000149011612,
-        "mode": "turntable",
-        "target": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      "position": {
-        "x": 25.279335021972656,
-        "y": -3.6773407459259033,
-        "z": 15.000630378723145
-      },
-      "rotation": {
-        "w": 0.0795573741197586,
-        "x": 0.9926333427429199,
-        "y": -0.09108565002679825,
-        "z": -0.00730031356215477
-      }
-    },
-    "camera_node": {
-      "fly": {
-        "boost_multiplier": 4.0,
-        "look_sensitivity": 0.001500000013038516,
-        "move_speed": 2.359999895095825,
-        "plane_lock": false
-      },
-      "mode": "fly",
-      "orbit": {
-        "distance": 16.10000228881836,
-        "mode": "turntable",
-        "target": {
-          "x": 0.0,
-          "y": 0.0,
-          "z": 0.0
-        }
-      },
-      "position": {
-        "x": -1.9704217910766602,
-        "y": 8.237449645996094,
-        "z": 1.7058014869689941
-      },
-      "rotation": {
-        "w": -0.1308821141719818,
-        "x": -0.11266795545816422,
-        "y": 0.6426008343696594,
-        "z": 0.74648517370224
+        "w": 0.609340250492096,
+        "x": 0.4150855243206024,
+        "y": 0.38034531474113464,
+        "z": 0.5583421587944031
       }
     }
   },
   "content": {
     "active_scene": {
-      "key": "e74ea312-0b6f-928f-8864-e3f44af2a8b7",
-      "name": "/.cooked/Scenes/NewSponza_Main_glTF_003.oscene",
+      "key": "fb81c5db-a51c-c94f-d9e8-ce98dadac6a7",
+      "name": "/.cooked/Scenes/VsmTwoCubes.oscene",
       "source_is_pak": false,
-      "source_path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\container.index.bin"
+      "source_path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\.cooked\\container.index.bin"
     },
     "explorer": {
       "auto_dump_delay": 180.0,
@@ -208,69 +133,59 @@
       "include_fbx": true,
       "include_glb": true,
       "include_gltf": true,
-      "model_root": "C:\\Users\\abdes\\Downloads\\full-gameready-city-buildings\\source"
+      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content"
     },
     "library": {
-      "mounted_indices": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\container.index.bin\nH:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\.cooked\\container.index.bin",
+      "mounted_indices": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\.cooked\\container.index.bin",
       "mounted_paks": ""
     },
     "paths": {
-      "last_cooked_output": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked"
+      "last_cooked_output": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked"
     }
   },
   "demo_shell": {
-    "active_panel": "",
-    "console": {
-      "window": {
-        "height": 1057.0,
-        "width": 900.0,
-        "x": 806.0,
-        "y": 50.0
-      }
-    },
-    "palette": {
-      "window": {
-        "height": 460.0,
-        "width": 720.0,
-        "x": 920.0,
-        "y": 470.0
-      }
-    },
+    "active_panel": "Post Process",
     "panels": {
-      "camera_controls": {
-        "width": 477.0
+      "diagnostics": {
+        "width": 567.0
       },
       "environment": {
         "sky_atmo": {
           "open": true
         },
         "sky_light": {
-          "open": true
+          "open": false
         },
         "sky_sphere": {
           "open": false
         },
-        "width": 552.0
-      },
-      "ground_grid": {
-        "width": 529.0
+        "sun": {
+          "open": true
+        },
+        "width": 543.0
       },
       "post_process": {
-        "width": 544.0
+        "width": 495.0
       }
     }
+  },
+  "diagnostics": {
+    "shader_debug_mode": "0"
   },
   "env": {
     "atmo": {
       "aerial_perspective_scale": 1.0,
+      "aerial_perspective_start_depth_m": 40.0,
       "aerial_scattering_strength": 1.0,
-      "atmosphere_height_km": 100.0,
+      "atmosphere_height_km": 100.00001525878906,
       "enabled": true,
       "ground_albedo": {
-        "x": 0.05999999865889549,
-        "y": 0.05000000074505806,
-        "z": 0.03999999910593033
+        "x": 0.1599999964237213,
+        "y": 0.15000000596046448,
+        "z": 0.14000000059604645
       },
+      "height_fog_contribution": 1.0,
+      "holdout": false,
       "mie_absorption_scale": 1.0,
       "mie_anisotropy": 0.800000011920929,
       "mie_scale_height_km": 1.2000000476837158,
@@ -291,48 +206,104 @@
         "y": 1.8810000028679497e-06,
         "z": 8.500000348021786e-08
       },
-      "planet_radius_km": 6360.0,
+      "planet_radius_km": 6360.0009765625,
       "rayleigh_scale_height_km": 8.0,
-      "sun_disk_enabled": true
-    },
-    "fog": {
-      "enabled": false,
-      "extinction_sigma_t_per_m": 0.009999999776482582,
-      "height_falloff_per_m": 0.20000000298023224,
-      "height_offset_m": 0.0,
-      "max_opacity": 1.0,
-      "model": 0.0,
-      "single_scattering_albedo_rgb": {
+      "render_in_main_pass": true,
+      "sky_and_aerial_luminance_factor": {
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
       },
-      "start_distance_m": 0.0
-    },
-    "settings": {
-      "custom_state_present": true,
-      "schema_version": 2.0
-    },
-    "sky_light": {
-      "diffuse": 1.0,
-      "enabled": true,
-      "intensity_mul": 1.0,
-      "source": 0.0,
-      "specular": 1.0,
-      "tint": {
+      "sky_luminance_factor": {
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
-      }
+      },
+      "sun_disk_enabled": true,
+      "trace_sample_count_scale": 1.0,
+      "transform_mode": 0.0,
+      "transmittance_min_light_elevation_deg": -90.0
+    },
+    "fog": {
+      "cutoff_distance_m": 5800.0,
+      "directional_inscattering_exponent": 6.0,
+      "directional_inscattering_luminance": {
+        "x": 1.0,
+        "y": 0.8199999928474426,
+        "z": 0.5799999833106995
+      },
+      "directional_inscattering_start_distance": 120.0,
+      "enabled": true,
+      "end_distance_m": 5600.0,
+      "extinction_sigma_t_per_m": 0.0002800000074785203,
+      "fully_directional_color_distance": 1800.0,
+      "height_falloff_per_m": 0.019999999552965164,
+      "height_offset_m": -20.0,
+      "holdout": false,
+      "inscattering_cubemap_angle": 0.0,
+      "inscattering_luminance": {
+        "x": 0.30000001192092896,
+        "y": 0.36000001430511475,
+        "z": 0.46000000834465027
+      },
+      "inscattering_texture_tint": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      "max_opacity": 0.7200000286102295,
+      "model": 1.0,
+      "non_directional_color_distance": 600.0,
+      "render_in_main_pass": true,
+      "second_density": 7.999999797903001e-05,
+      "second_height_falloff": 0.006000000052154064,
+      "second_height_offset": 180.0,
+      "single_scattering_albedo_rgb": {
+        "x": 0.8199999928474426,
+        "y": 0.8799999952316284,
+        "z": 0.949999988079071
+      },
+      "sky_atmo_ambient_contribution": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      "start_distance_m": 80.0,
+      "visible_in_real_time_sky_captures": true,
+      "visible_in_reflection_captures": true
+    },
+    "settings": {
+      "custom_state_present": true,
+      "schema_version": 5.0
+    },
+    "sky_light": {
+      "affect_reflections": true,
+      "diffuse": 0.800000011920929,
+      "enabled": true,
+      "intensity_mul": 0.8500000238418579,
+      "lower_hemisphere_color": {
+        "x": 0.017999999225139618,
+        "y": 0.019999999552965164,
+        "z": 0.024000000208616257
+      },
+      "real_time_capture_enabled": true,
+      "source": 0.0,
+      "specular": 0.44999998807907104,
+      "tint": {
+        "x": 0.8600000143051147,
+        "y": 0.9200000166893005,
+        "z": 1.0
+      },
+      "volumetric_scattering_intensity": 1.0
     },
     "sky_sphere": {
       "enabled": false,
       "intensity": 1.0,
       "rotation_deg": 0.0,
       "solid_color": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": 0.20000000298023224,
+        "y": 0.30000001192092896,
+        "z": 0.5
       },
       "source": 0.0
     },
@@ -345,61 +316,69 @@
       "tonemap_hdr_to_ldr": false
     },
     "sun": {
-      "azimuth_deg": 135.0,
-      "color": {
+      "atmosphere_disk_luminance_scale": {
+        "w": 1.0,
         "x": 1.0,
         "y": 1.0,
         "z": 1.0
       },
-      "source_angle_deg": 0.5450000166893005,
-      "elevation_deg": 55.0,
+      "atmosphere_light_slot": 0.0,
+      "azimuth_deg": 232.81533813476563,
+      "color": {
+        "x": 1.0,
+        "y": 0.9300000071525574,
+        "z": 0.8199999928474426
+      },
+      "elevation_deg": 14.627060890197754,
       "enabled": true,
-      "illuminance_lx": 120000.0,
+      "illuminance_lx": 95000.0,
+      "per_pixel_atmosphere_transmittance": false,
       "source": 1.0,
-      "temperature_kelvin": 5600.0,
-      "use_temperature": true
+      "shadow": {
+        "bias": 0.001,
+        "csm": {
+          "cascade_count": 4.0,
+          "cascade_distance": {
+            "0": 8.0,
+            "1": 24.0,
+            "2": 64.0,
+            "3": 160.0
+          },
+          "distance_fadeout_fraction": 0.10000000149011612,
+          "distribution_exponent": 3.0,
+          "max_shadow_distance": 160.0,
+          "split_mode": 1.0,
+          "transition_fraction": 0.1
+        },
+        "normal_bias": 0.03,
+        "resolution_hint": 3.0
+      },
+      "source_angle_deg": 0.5448827743530273,
+      "temperature_kelvin": 6500.0,
+      "use_temperature": false
     }
   },
   "environment_preset_index": -1.0,
   "file_browser": {
     "select_loose_cooked_index": {
       "window_size": [
-        1156,
-        579
-      ]
-    },
-    "select_model_directory": {
-      "window_size": [
-        700,
+        888,
         450
-      ]
-    },
-    "select_pak_file": {
-      "window_size": [
-        1116,
-        576
       ]
     }
   },
   "ground_grid": {
-    "enabled": false,
-    "smooth_motion": true,
-    "smooth_time": 0.050999999046325684
-  },
-  "light_culling": {
-    "visualization_mode": "0"
+    "enabled": false
   },
   "post_process": {
     "auto_exposure": {
-      "high_percentile": 0.8999999761581421,
-      "log_lum_range": 25.0,
-      "low_percentile": 0.10000000149011612,
-      "metering": 0.0,
-      "min_log_lum": -12.0,
-      "speed_down": 3.0,
-      "speed_up": 3.0,
-      "spot_radius": 0.20000000298023224,
-      "target_lum": 0.18000000715255737
+      "high_percentile": 0.8259999752044678,
+      "low_percentile": 0.20499999821186066,
+      "max_ev": 13.199999809265137,
+      "metering": 1.0,
+      "min_ev": -6.0,
+      "speed_down": 0.6000000238418579,
+      "speed_up": 0.800000011920929
     },
     "exposure": {
       "compensation": 0.0,
@@ -410,20 +389,17 @@
     },
     "tonemapping": {
       "enabled": true,
-      "gamma": 1.75,
-      "mode": 1.0
+      "gamma": 1.7000000476837158,
+      "mode": 2.0
     }
   },
   "rendering": {
-    "debug_gpu_pass": false,
-    "debug_mode": "0",
-    "view_mode": "solid"
-  },
-  "ui": {
-    "stats": {
-      "show_engine_timing": false,
-      "show_fps": true,
-      "show_frame_timing_detail": false
+    "shadow_quality_tier": "ultra",
+    "view_mode": "solid",
+    "wire_color": {
+      "b": 1.0,
+      "g": 0.0,
+      "r": 0.6390242576599121
     }
   }
 }

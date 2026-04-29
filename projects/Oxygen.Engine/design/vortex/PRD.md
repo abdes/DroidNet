@@ -113,6 +113,26 @@ not staged replacement of parallel renderer products.
     passes for local lights first; tiled or clustered deferred are later
     optimization paths justified by profiling, not day-one architectural
     commitments.
+15. **Cubemap skybox and static SkyLight capability.** Vortex must support a
+    non-procedural cubemap sky background and a static specified-cubemap
+    SkyLight as distinct capabilities. A shared source cubemap is allowed, but
+    visual sky rendering and scene lighting are separate user-visible
+    behaviors: changing the skybox changes the background, while enabling or
+    changing the SkyLight changes ambient environment lighting on scene
+    surfaces.
+16. **Explicit sky-background selection.** Vortex must define which authored
+    environment source provides the visible sky for a view. A procedural sky
+    and a cubemap skybox must not both draw competing full-background sky
+    color in the same view unless a later milestone explicitly adds a blend or
+    layering mode. The selected visible sky may coexist with atmosphere, fog,
+    aerial-perspective, and environment-lighting features, but those effects
+    must have explicit participation controls.
+17. **Directional sun interaction.** A directional sun light must continue to
+    light scene geometry and drive procedural atmosphere behavior where that
+    mode is active. A static cubemap skybox must not be illuminated by the
+    directional sun, and its visible sun or clouds are treated as authored
+    image content unless a later milestone explicitly adds procedural sun-disk
+    overlay or time-of-day skybox synthesis.
 
 ## 4. Non-Goals
 
@@ -265,6 +285,18 @@ The Vortex renderer must deliver these architectural outcomes:
     path uses a fullscreen deferred pass for directional lights and one-pass
     bounded-volume deferred lighting for point and spot lights; tiled or
     clustered deferred remain explicitly later optimization paths.
+19. **Static cubemap environment baseline.** The first post-baseline
+    environment milestone must deliver a production-clean static cubemap
+    workflow: authored/imported cubemap assets, skybox background rendering,
+    and static specified-cubemap SkyLight diffuse lighting. It must not replace
+    SkyLight behavior with a constant ambient color, direct background-color
+    tinting, or any approximation that cannot visibly and measurably respond to
+    the authored SkyLight cubemap and controls.
+20. **Skybox/SkyLight coupling without hidden side effects.** Vortex must allow
+    a coherent HDRI workflow where the same cubemap can be used for the visible
+    skybox and for static SkyLight lighting. That coupling must be explicit:
+    enabling or changing the visual skybox alone must not secretly enable
+    SkyLight, and disabling SkyLight must not remove the visible skybox.
 
 ## 8. Constraints and Assumptions
 
@@ -308,6 +340,15 @@ The Vortex renderer must deliver these architectural outcomes:
     and integration safety over first-pass optimization complexity.
 20. Tiled or clustered deferred are optimization candidates only after the
     baseline deferred path is proven and profiled.
+21. Static specified-cubemap SkyLight parity is part of the production desktop
+    target. Captured-scene SkyLight, real-time sky capture, cubemap blend
+    transitions, distance-field ambient occlusion / SkyLight occlusion,
+    baked/static-lightmap SkyLight integration, and reflection-capture
+    recapture are later features unless a milestone explicitly scopes them in.
+22. Procedural-sky and skybox behavior must be deterministic per view. If a
+    scene authors both a procedural sky and a cubemap skybox, Vortex must choose
+    the visible background through documented view/environment policy rather
+    than relying on traversal order or accidental pass ordering.
 
 ## 9. Success Criteria
 
@@ -345,6 +386,14 @@ The Vortex renderer is successful when:
 19. The first deferred-lighting implementation is a correctness-first
     fullscreen-plus-bounded-volume path rather than a tiled or clustered deferred
     optimization path.
+20. A cubemap skybox can be validated visually as background rendering without
+    claiming SkyLight parity. SkyLight parity requires proof that scene
+    surfaces receive environment lighting from the authored SkyLight state, not
+    merely from direct lights, fog, exposure, or the visual skybox background.
+21. A validation scene that authors both a procedural sky and a cubemap skybox
+    must show the selected visual-background policy clearly and must prove that
+    directional sun lighting affects scene geometry without modifying the
+    static cubemap skybox image.
 
 ## 10. Deferred to Later Phases
 
@@ -353,6 +402,12 @@ The following are intentionally deferred:
 - volumetric clouds
 - geometry virtualization (Nanite-equivalent)
 - GI / reflections (Lumen-equivalent)
+- captured-scene SkyLight and real-time SkyLight capture
+- cubemap blend transitions and dynamic SkyLight recapture
+- SkyLight occlusion through distance fields, baked static-lightmap SkyLight
+  integration, and cloud ambient occlusion
+- full specular reflection-capture ecosystem beyond the static cubemap
+  products explicitly scoped by a milestone
 - hair strands
 - heterogeneous volumes
 - MegaLights-class lighting extensions

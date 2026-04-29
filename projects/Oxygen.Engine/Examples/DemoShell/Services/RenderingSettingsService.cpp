@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <optional>
+#include <exception>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
@@ -18,97 +19,35 @@ namespace oxygen::examples {
 
 namespace {
 
-  auto ParseShadowQualityTierString(std::string_view value)
-    -> std::optional<ShadowQualityTier>
-  {
-    if (value == "low") {
-      return ShadowQualityTier::kLow;
-    }
-    if (value == "medium") {
-      return ShadowQualityTier::kMedium;
-    }
-    if (value == "high") {
-      return ShadowQualityTier::kHigh;
-    }
-    if (value == "ultra") {
-      return ShadowQualityTier::kUltra;
-    }
-    return std::nullopt;
-  }
-
-  auto ShadowQualityTierToString(const ShadowQualityTier tier)
-    -> std::string_view
-  {
-    switch (tier) {
-    case ShadowQualityTier::kLow:
-      return "low";
-    case ShadowQualityTier::kMedium:
-      return "medium";
-    case ShadowQualityTier::kHigh:
-      return "high";
-    case ShadowQualityTier::kUltra:
-      return "ultra";
-    default:
-      return "ultra";
-    }
-  }
-
-  auto ClampShadowQualityTierIndex(const float value) -> ShadowQualityTier
-  {
-    const auto clamped = static_cast<int>(std::clamp(value, 0.0F, 3.0F) + 0.5F);
-    return static_cast<ShadowQualityTier>(clamped);
-  }
-
   auto ToVortexDebugMode(const engine::ShaderDebugMode mode)
     -> vortex::ShaderDebugMode
   {
     return static_cast<vortex::ShaderDebugMode>(mode);
   }
 
-  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode) -> bool
+  auto ParseShaderDebugModeOrDisabled(std::string_view value)
+    -> engine::ShaderDebugMode
   {
-    using engine::ShaderDebugMode;
-    switch (mode) {
-    case ShaderDebugMode::kDisabled:
-    case ShaderDebugMode::kLightCullingHeatMap:
-    case ShaderDebugMode::kDepthSlice:
-    case ShaderDebugMode::kClusterIndex:
-    case ShaderDebugMode::kIblSpecular:
-    case ShaderDebugMode::kIblRawSky:
-    case ShaderDebugMode::kIblIrradiance:
-    case ShaderDebugMode::kBaseColor:
-    case ShaderDebugMode::kUv0:
-    case ShaderDebugMode::kOpacity:
-    case ShaderDebugMode::kWorldNormals:
-    case ShaderDebugMode::kRoughness:
-    case ShaderDebugMode::kMetalness:
-    case ShaderDebugMode::kIblFaceIndex:
-    case ShaderDebugMode::kIblNoBrdfLut:
-    case ShaderDebugMode::kDirectLightingOnly:
-    case ShaderDebugMode::kIblOnly:
-    case ShaderDebugMode::kDirectPlusIbl:
-    case ShaderDebugMode::kDirectLightingFull:
-    case ShaderDebugMode::kDirectLightGates:
-    case ShaderDebugMode::kDirectBrdfCore:
-    case ShaderDebugMode::kVirtualShadowMask:
-    case ShaderDebugMode::kSceneDepthRaw:
-    case ShaderDebugMode::kSceneDepthLinear:
-    case ShaderDebugMode::kSceneDepthMismatch:
-    case ShaderDebugMode::kMaskedAlphaCoverage:
-      return true;
-    default:
-      return false;
+    try {
+      return static_cast<engine::ShaderDebugMode>(
+        std::stoi(std::string(value)));
+    } catch (const std::exception&) {
+      return engine::ShaderDebugMode::kDisabled;
     }
   }
 
-} // namespace
+  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode,
+    const vortex::CapabilitySet capabilities) -> bool
+  {
+    const auto* info = vortex::FindShaderDebugModeInfo(ToVortexDebugMode(mode));
+    if (info == nullptr || !info->supported) {
+      return false;
+    }
+    return vortex::HasAllCapabilities(
+      capabilities, info->required_capabilities);
+  }
 
-auto RenderingSettingsService::Initialize(
-  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
-{
-  DCHECK_NOTNULL_F(pipeline);
-  pipeline_ = pipeline;
-}
+} // namespace
 
 auto RenderingSettingsService::BindVortexRenderer(
   observer_ptr<vortex::Renderer> renderer) -> void
@@ -118,9 +57,9 @@ auto RenderingSettingsService::BindVortexRenderer(
   ApplyVortexSettings();
 }
 
-auto RenderingSettingsService::GetRenderMode() const -> renderer::RenderMode
+auto RenderingSettingsService::GetRenderMode() const -> vortex::RenderMode
 {
-  using renderer::RenderMode;
+  using vortex::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
@@ -134,9 +73,9 @@ auto RenderingSettingsService::GetRenderMode() const -> renderer::RenderMode
   return RenderMode::kSolid;
 }
 
-auto RenderingSettingsService::SetRenderMode(renderer::RenderMode mode) -> void
+auto RenderingSettingsService::SetRenderMode(vortex::RenderMode mode) -> void
 {
-  using renderer::RenderMode;
+  using vortex::RenderMode;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const char* value = "solid";
@@ -154,6 +93,7 @@ auto RenderingSettingsService::SetRenderMode(renderer::RenderMode mode) -> void
   }
   settings->SetString(kViewModeKey, value);
   epoch_++;
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetWireframeColor() const -> graphics::Color
@@ -177,6 +117,7 @@ auto RenderingSettingsService::SetWireframeColor(const graphics::Color& color)
   settings->SetFloat(kWireColorGKey, color.g);
   settings->SetFloat(kWireColorBKey, color.b);
   epoch_++;
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
@@ -184,12 +125,20 @@ auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   auto val = settings->GetString(kDebugModeKey).value_or("0");
-  const auto mode = static_cast<engine::ShaderDebugMode>(std::stoi(val));
-  if ((pipeline_ == nullptr) && (vortex_renderer_ != nullptr)
-    && !SupportsDebugMode(mode)) {
+  return ParseShaderDebugModeOrDisabled(val);
+}
+
+auto RenderingSettingsService::GetEffectiveDebugMode() const
+  -> engine::ShaderDebugMode
+{
+  const auto requested = GetDebugMode();
+  if (requested == engine::ShaderDebugMode::kDisabled) {
+    return requested;
+  }
+  if ((vortex_renderer_ == nullptr) || !SupportsDebugMode(requested)) {
     return engine::ShaderDebugMode::kDisabled;
   }
-  return mode;
+  return requested;
 }
 
 auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
@@ -202,11 +151,6 @@ auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
 auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
   -> void
 {
-  if ((pipeline_ == nullptr) && (vortex_renderer_ != nullptr)
-    && !SupportsDebugMode(mode)) {
-    mode = engine::ShaderDebugMode::kDisabled;
-  }
-
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
@@ -237,32 +181,6 @@ auto RenderingSettingsService::SetAtmosphereBlueNoiseEnabled(bool enabled)
   epoch_++;
 }
 
-auto RenderingSettingsService::GetShadowQualityTier() const -> ShadowQualityTier
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  if (const auto value = settings->GetString(kShadowQualityTierKey)) {
-    if (const auto parsed = ParseShadowQualityTierString(*value)) {
-      return *parsed;
-    }
-  }
-  if (const auto value = settings->GetFloat(kShadowQualityTierKey)) {
-    return ClampShadowQualityTierIndex(*value);
-  }
-  // Keep RenderScene's current startup behavior unless the user overrides it.
-  return ShadowQualityTier::kUltra;
-}
-
-auto RenderingSettingsService::SetShadowQualityTier(
-  const ShadowQualityTier tier) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(
-    kShadowQualityTierKey, std::string(ShadowQualityTierToString(tier)));
-  epoch_++;
-}
-
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
   return epoch_.load(std::memory_order_acquire);
@@ -287,12 +205,12 @@ auto RenderingSettingsService::OnMainViewReady(
 
 auto RenderingSettingsService::SupportsRenderModeControls() const -> bool
 {
-  return false;
+  return IsVortexRuntimeBound();
 }
 
 auto RenderingSettingsService::SupportsWireframeColorControl() const -> bool
 {
-  return false;
+  return IsVortexRuntimeBound();
 }
 
 auto RenderingSettingsService::SupportsGpuDebugPassControl() const -> bool
@@ -309,24 +227,34 @@ auto RenderingSettingsService::SupportsAtmosphereBlueNoiseControl() const
 auto RenderingSettingsService::SupportsDebugMode(
   const engine::ShaderDebugMode mode) const -> bool
 {
-  if (pipeline_ != nullptr) {
-    return true;
-  }
-  return (vortex_renderer_ != nullptr) && SupportsVortexDebugMode(mode);
+  return (vortex_renderer_ != nullptr)
+    && SupportsVortexDebugMode(mode, vortex_renderer_->GetCapabilityFamilies());
 }
 
 auto RenderingSettingsService::IsVortexRuntimeBound() const -> bool
 {
-  return (pipeline_ == nullptr) && (vortex_renderer_ != nullptr);
+  return vortex_renderer_ != nullptr;
+}
+
+auto RenderingSettingsService::GetRendererCapabilities() const
+  -> vortex::CapabilitySet
+{
+  if (vortex_renderer_ == nullptr) {
+    return vortex::RendererCapabilityFamily::kNone;
+  }
+  return vortex_renderer_->GetCapabilityFamilies();
 }
 
 auto RenderingSettingsService::ApplyVortexSettings() -> void
 {
-  if ((pipeline_ != nullptr) || (vortex_renderer_ == nullptr)) {
+  if (vortex_renderer_ == nullptr) {
     return;
   }
 
-  vortex_renderer_->SetShaderDebugMode(ToVortexDebugMode(GetDebugMode()));
+  vortex_renderer_->SetShaderDebugMode(
+    ToVortexDebugMode(GetEffectiveDebugMode()));
+  vortex_renderer_->SetRenderMode(GetRenderMode());
+  vortex_renderer_->SetWireframeColor(GetWireframeColor());
 }
 
 } // namespace oxygen::examples

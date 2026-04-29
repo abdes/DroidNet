@@ -37,10 +37,6 @@ namespace oxygen::physics {
 class PhysicsModule;
 }
 
-namespace oxygen::renderer {
-struct CompositionView;
-} // namespace oxygen::renderer
-
 namespace oxygen::examples::ui {
 class CameraRigController;
 }
@@ -148,6 +144,7 @@ private:
 
   ActiveScene active_scene_;
   scene::SceneNode main_camera_ {};
+  scene::SceneNode sun_light_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
 
@@ -161,6 +158,7 @@ private:
 
   observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
   std::shared_ptr<data::GeometryAsset> cube_geometry_;
+  std::shared_ptr<data::GeometryAsset> floor_geometry_;
   std::shared_ptr<data::GeometryAsset> sphere_geometry_;
   std::shared_ptr<data::GeometryAsset> player_sphere_geometry_;
 

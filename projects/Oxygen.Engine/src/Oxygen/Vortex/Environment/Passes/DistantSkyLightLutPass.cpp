@@ -168,6 +168,9 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
   if (gfx == nullptr || cache.GetDistantSkyLightBuffer() == nullptr) {
     return state;
   }
+  if (ctx.view_constants == nullptr) {
+    return state;
+  }
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   const auto& lights = stable_state.view_products.atmosphere_lights;
@@ -200,6 +203,9 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
       atmosphere.mie_scale_height_m),
     .mie_anisotropy = atmosphere.mie_anisotropy,
     ._pad0 = 0.0F,
+    ._pad1 = 0.0F,
+    ._pad2 = 0.0F,
+    ._pad3 = 0.0F,
     .light0_direction_ws = { light0_dir.x, light0_dir.y, light0_dir.z, 0.0F },
     .light1_direction_ws = { light1_dir.x, light1_dir.y, light1_dir.z, 0.0F },
     .light0_illuminance_rgb = {
@@ -285,6 +291,9 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
+  recorder->SetComputeRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants->GetGPUVirtualAddress());
   recorder->SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     0U, 0U);

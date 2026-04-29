@@ -121,6 +121,15 @@ public:
     return real_time_capture_enabled_;
   }
 
+  auto SetSourceCubemapAngleRadians(const float radians) noexcept -> void
+  {
+    source_cubemap_angle_radians_ = radians;
+  }
+  [[nodiscard]] auto GetSourceCubemapAngleRadians() const noexcept -> float
+  {
+    return source_cubemap_angle_radians_;
+  }
+
   auto SetLowerHemisphereColor(const Vec3& rgb) noexcept -> void
   {
     lower_hemisphere_color_ = rgb;
@@ -128,6 +137,24 @@ public:
   [[nodiscard]] auto GetLowerHemisphereColor() const noexcept -> const Vec3&
   {
     return lower_hemisphere_color_;
+  }
+
+  auto SetLowerHemisphereIsSolidColor(const bool enabled) noexcept -> void
+  {
+    lower_hemisphere_is_solid_color_ = enabled;
+  }
+  [[nodiscard]] auto GetLowerHemisphereIsSolidColor() const noexcept -> bool
+  {
+    return lower_hemisphere_is_solid_color_;
+  }
+
+  auto SetLowerHemisphereBlendAlpha(const float alpha) noexcept -> void
+  {
+    lower_hemisphere_blend_alpha_ = alpha;
+  }
+  [[nodiscard]] auto GetLowerHemisphereBlendAlpha() const noexcept -> float
+  {
+    return lower_hemisphere_blend_alpha_;
   }
 
   auto SetVolumetricScatteringIntensity(const float intensity) noexcept -> void
@@ -148,15 +175,6 @@ public:
     return affect_reflections_;
   }
 
-  auto SetAffectGlobalIllumination(const bool value) noexcept -> void
-  {
-    affect_global_illumination_ = value;
-  }
-  [[nodiscard]] auto GetAffectGlobalIllumination() const noexcept -> bool
-  {
-    return affect_global_illumination_;
-  }
-
 private:
   SkyLightSource source_ = SkyLightSource::kCapturedScene;
   content::ResourceKey cubemap_resource_ {};
@@ -167,10 +185,12 @@ private:
   float diffuse_intensity_ = 1.0F;
   float specular_intensity_ = 1.0F;
   bool real_time_capture_enabled_ = false;
+  float source_cubemap_angle_radians_ = 0.0F;
   Vec3 lower_hemisphere_color_ { 0.0F, 0.0F, 0.0F };
+  bool lower_hemisphere_is_solid_color_ = true;
+  float lower_hemisphere_blend_alpha_ = 1.0F;
   float volumetric_scattering_intensity_ = 1.0F;
   bool affect_reflections_ = true;
-  bool affect_global_illumination_ = true;
 };
 
 } // namespace oxygen::scene::environment

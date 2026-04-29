@@ -10,6 +10,9 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <string>
+#include <unordered_map>
 #include <utility>
 
 #include <fmt/format.h>
@@ -107,6 +110,13 @@ namespace {
   constexpr auto kCVarVortexLocalFogUseHzb = "vtx.local_fog.use_hzb";
   constexpr auto kCVarVortexLocalFogHalfResolution
     = "vtx.local_fog.half_resolution";
+  constexpr auto kCVarVortexVolumetricFogDirectionalShadows
+    = "vtx.volumetric_fog.directional_shadows";
+  constexpr auto kCVarVortexVolumetricFogTemporalReprojection
+    = "vtx.volumetric_fog.temporal_reprojection";
+  constexpr auto kCVarVortexVolumetricFogJitter = "vtx.volumetric_fog.jitter";
+  constexpr auto kCVarVortexVolumetricFogHistoryMissSupersampleCount
+    = "vtx.volumetric_fog.history_miss_supersample_count";
   constexpr auto kCVarVortexAerialPerspectiveLutWidth
     = "vtx.sky_atmosphere.aerial_perspective_lut.width";
   constexpr auto kCVarVortexAerialPerspectiveLutDepthResolution
@@ -115,6 +125,9 @@ namespace {
     = "vtx.sky_atmosphere.aerial_perspective_lut.depth_km";
   constexpr auto kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice
     = "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice";
+  constexpr auto kCVarVortexOcclusionEnabled = "vtx.occlusion.enable";
+  constexpr auto kCVarVortexOcclusionMaxCandidateCount
+    = "vtx.occlusion.max_candidate_count";
 
   constexpr auto kRendererStagingAlignment
     = packing::kStructuredBufferAlignment;
@@ -143,12 +156,32 @@ namespace {
     return { 1U, 1U };
   }
 
+  auto ResolveFramebufferExtent(const graphics::Framebuffer& framebuffer)
+    -> std::optional<glm::uvec2>
+  {
+    const auto& desc = framebuffer.GetDescriptor();
+    if (!desc.color_attachments.empty()
+      && desc.color_attachments.front().texture != nullptr) {
+      const auto& texture_desc
+        = desc.color_attachments.front().texture->GetDescriptor();
+      return glm::uvec2 { texture_desc.width, texture_desc.height };
+    }
+    if (desc.depth_attachment.texture != nullptr) {
+      const auto& texture_desc = desc.depth_attachment.texture->GetDescriptor();
+      return glm::uvec2 { texture_desc.width, texture_desc.height };
+    }
+    return std::nullopt;
+  }
+
   auto BuildViewColorData(const RenderContext& render_context) -> ViewColorData
   {
     auto data = ViewColorData {};
     if (render_context.current_view.prepared_frame != nullptr) {
       data.exposure = std::max(
         render_context.current_view.prepared_frame->exposure, 1.0e-6F);
+    }
+    if (render_context.render_mode == RenderMode::kWireframe) {
+      data.exposure = 1.0F;
     }
     return data;
   }
@@ -236,6 +269,47 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial);
   }
 
+  auto ResolveFramebufferColorTexture(graphics::Framebuffer& framebuffer)
+    -> std::shared_ptr<graphics::Texture>
+  {
+    const auto& desc = framebuffer.GetDescriptor();
+    if (desc.color_attachments.empty()) {
+      return {};
+    }
+    return desc.color_attachments.front().texture;
+  }
+
+  auto FinalizeOffscreenOutputProduct(
+    Renderer& renderer, graphics::Framebuffer& framebuffer) -> void
+  {
+    auto gfx = renderer.GetGraphics();
+    CHECK_NOTNULL_F(gfx.get(),
+      "Vortex offscreen output finalization requires a live Graphics backend");
+
+    auto output_texture = ResolveFramebufferColorTexture(framebuffer);
+    CHECK_F(static_cast<bool>(output_texture),
+      "Vortex offscreen output finalization requires a color attachment");
+
+    auto& registry = gfx->GetResourceRegistry();
+    CHECK_F(registry.Contains(*output_texture),
+      "Vortex offscreen output texture '{}' must be registered before "
+      "product finalization",
+      output_texture->GetDescriptor().debug_name);
+
+    const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+    auto recorder
+      = gfx->AcquireCommandRecorder(queue_key, "Vortex Offscreen Finalize");
+    CHECK_F(static_cast<bool>(recorder),
+      "Vortex offscreen output finalization failed to acquire a recorder");
+
+    TrackCompositionSourceTexture(registry, *recorder, *output_texture);
+    recorder->RequireResourceState(
+      *output_texture, graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceStateFinal(
+      *output_texture, graphics::ResourceStates::kShaderResource);
+    recorder->FlushBarriers();
+  }
+
   auto CopyTextureToRegion(graphics::CommandRecorder& recorder,
     graphics::Texture& source, graphics::Texture& backbuffer,
     const ViewPort& viewport) -> void
@@ -306,6 +380,9 @@ namespace {
   auto FormatCompositingTaskScopeLabel(const CompositingTask& task)
     -> std::string
   {
+    if (!task.debug_name.empty()) {
+      return task.debug_name;
+    }
     switch (task.type) {
     case CompositingTaskType::kCopy:
       return fmt::format(
@@ -330,6 +407,157 @@ namespace {
     default:
       return "Composite Task";
     }
+  }
+
+  auto AuxiliaryOutputKindName(
+    const CompositionView::AuxOutputKind kind) noexcept -> std::string_view
+  {
+    switch (kind) {
+    case CompositionView::AuxOutputKind::kColorTexture:
+      return "ColorTexture";
+    case CompositionView::AuxOutputKind::kDepthTexture:
+      return "DepthTexture";
+    case CompositionView::AuxOutputKind::kSceneTextureBinding:
+      return "SceneTextureBinding";
+    case CompositionView::AuxOutputKind::kCustomPassProduct:
+      return "CustomPassProduct";
+    }
+    return "Unknown";
+  }
+
+  auto ResolveRuntimeAuxiliaryDependencies(
+    std::vector<RenderContext::ViewExecutionEntry>& entries,
+    const frame::SequenceNumber frame_sequence) -> void
+  {
+    using AuxOutputId = CompositionView::AuxOutputId;
+
+    auto has_aux_descriptors = false;
+    std::unordered_map<AuxOutputId, std::size_t> producers;
+    for (std::size_t index = 0U; index < entries.size(); ++index) {
+      auto& entry = entries[index];
+      entry.resolved_aux_inputs.clear();
+      has_aux_descriptors = has_aux_descriptors
+        || !entry.produced_aux_outputs.empty()
+        || !entry.consumed_aux_outputs.empty();
+      for (const auto& output : entry.produced_aux_outputs) {
+        CHECK_F(output.id.get() != 0U,
+          "Runtime auxiliary output from view '{}' uses invalid AuxOutputId 0",
+          entry.debug_name);
+        const auto [_, inserted] = producers.emplace(output.id, index);
+        CHECK_F(inserted,
+          "Runtime auxiliary output {} has more than one producer",
+          output.id.get());
+      }
+    }
+
+    if (!has_aux_descriptors) {
+      return;
+    }
+
+    auto edges = std::vector<std::vector<std::size_t>>(entries.size());
+    auto indegree = std::vector<std::size_t>(entries.size(), 0U);
+    for (std::size_t consumer_index = 0U; consumer_index < entries.size();
+         ++consumer_index) {
+      auto& consumer = entries[consumer_index];
+      for (const auto& input : consumer.consumed_aux_outputs) {
+        CHECK_F(input.id.get() != 0U,
+          "Runtime auxiliary input from view '{}' uses invalid AuxOutputId 0",
+          consumer.debug_name);
+
+        const auto producer_it = producers.find(input.id);
+        if (producer_it == producers.end()) {
+          if (input.required) {
+            CHECK_F(false,
+              "Runtime auxiliary input {} for view '{}' is required but has "
+              "no producer",
+              input.id.get(), consumer.debug_name);
+          }
+          consumer.resolved_aux_inputs.push_back(
+            RenderContext::AuxiliaryResolvedInput {
+              .input = input,
+              .kind = input.kind,
+              .producer_view_id = kInvalidViewId,
+              .valid = false,
+              .debug_name = {},
+            });
+          continue;
+        }
+
+        const auto producer_index = producer_it->second;
+        CHECK_F(producer_index != consumer_index,
+          "Runtime auxiliary view '{}' cannot consume its own same-frame "
+          "output {}",
+          consumer.debug_name, input.id.get());
+
+        const auto& producer = entries[producer_index];
+        const auto output_it = std::ranges::find_if(
+          producer.produced_aux_outputs,
+          [&input](const CompositionView::AuxOutputDesc& output) {
+            return output.id == input.id;
+          });
+        CHECK_F(output_it != producer.produced_aux_outputs.end());
+        CHECK_F(output_it->kind == input.kind,
+          "Runtime auxiliary input {} for view '{}' expects kind {} but "
+          "producer '{}' publishes kind {}",
+          input.id.get(), consumer.debug_name,
+          AuxiliaryOutputKindName(input.kind), producer.debug_name,
+          AuxiliaryOutputKindName(output_it->kind));
+
+        consumer.resolved_aux_inputs.push_back(
+          RenderContext::AuxiliaryResolvedInput {
+            .input = input,
+            .kind = output_it->kind,
+            .producer_view_id = producer.view_id,
+            .valid = true,
+            .debug_name = std::string(output_it->debug_name),
+          });
+
+        edges[producer_index].push_back(consumer_index);
+        ++indegree[consumer_index];
+        LOG_F(INFO,
+          "Vortex.AuxView.Dependency frame={} aux_id={} producer_view={} "
+          "consumer_view={} kind={} valid=true",
+          frame_sequence.get(), input.id.get(), producer.view_id.get(),
+          consumer.view_id.get(), AuxiliaryOutputKindName(output_it->kind));
+      }
+    }
+
+    auto ordered_indices = std::vector<std::size_t> {};
+    ordered_indices.reserve(entries.size());
+    auto emitted = std::vector<bool>(entries.size(), false);
+    while (ordered_indices.size() < entries.size()) {
+      auto made_progress = false;
+      for (std::size_t index = 0U; index < entries.size(); ++index) {
+        if (emitted[index] || indegree[index] != 0U) {
+          continue;
+        }
+        emitted[index] = true;
+        ordered_indices.push_back(index);
+        for (const auto consumer_index : edges[index]) {
+          CHECK_GT_F(indegree[consumer_index], 0U);
+          --indegree[consumer_index];
+        }
+        made_progress = true;
+      }
+      CHECK_F(made_progress,
+        "Runtime auxiliary dependencies contain a cycle");
+    }
+
+    auto ordered_entries = std::vector<RenderContext::ViewExecutionEntry> {};
+    ordered_entries.reserve(entries.size());
+    auto order_stream = std::ostringstream {};
+    auto first = true;
+    for (const auto index : ordered_indices) {
+      if (!first) {
+        order_stream << ",";
+      }
+      first = false;
+      order_stream << entries[index].view_id.get();
+      ordered_entries.push_back(std::move(entries[index]));
+    }
+    entries = std::move(ordered_entries);
+    LOG_F(INFO, "Vortex.AuxView.Order frame={} view_ids={}",
+      frame_sequence.get(), order_stream.str());
   }
 
 } // namespace
@@ -362,8 +590,12 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
+  diagnostics_service_
+    = std::make_unique<DiagnosticsService>(capability_families_);
   gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
     observer_ptr { gfx.get() });
+  diagnostics_service_->SetGpuTimelineProfiler(
+    observer_ptr { gpu_timeline_profiler_.get() });
   render_context_pool_
     = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
 }
@@ -498,6 +730,43 @@ auto Renderer::RegisterConsoleBindings(
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogDirectionalShadows),
+    .help = "Enable directional shadow-map visibility in volumetric fog",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogTemporalReprojection),
+    .help = "Enable volumetric fog temporal reprojection",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogJitter),
+    .help = "Enable UE-style volumetric fog Halton jitter when temporal "
+            "reprojection is enabled",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogHistoryMissSupersampleCount),
+    .help = "Volumetric fog sample count used when temporal history is missing",
+    .default_value = int64_t { 4 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1,
+    .max_value = 16,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutWidth),
     .help = "Sky atmosphere aerial perspective LUT screen resolution",
     .default_value = int64_t { 64 },
@@ -531,6 +800,24 @@ auto Renderer::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
     .min_value = 1.0,
     .max_value = 64.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexOcclusionEnabled),
+    .help = "Enable Screen HZB occlusion testing and consumer culling",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexOcclusionMaxCandidateCount),
+    .help = "Maximum prepared draws submitted to the HZB occlusion tester",
+    .default_value = int64_t { 256 * 256 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1,
+    .max_value = 256 * 256,
   });
 }
 
@@ -603,6 +890,7 @@ auto Renderer::OnShutdown() noexcept -> void
   view_const_manager_.reset();
   render_context_pool_.reset();
   gpu_timeline_profiler_.reset();
+  diagnostics_service_.reset();
   compositing_pass_.reset();
   compositing_pass_config_.reset();
   inline_transfers_.reset();
@@ -687,48 +975,25 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   state.prepared_frame_slot = slot;
 }
 
-auto Renderer::RefreshCurrentViewFrameBindings(
-  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+auto Renderer::PublishCurrentViewHistoryFrameBindings(
+  RenderContext& render_context, RendererPublicationState& publication_state)
+  -> ShaderVisibleIndex
 {
-  if (render_context.current_view.view_id == kInvalidViewId) {
-    return;
-  }
-  auto gfx = GetGraphics();
-  if (gfx == nullptr) {
-    return;
+  if (render_context.current_view.resolved_view == nullptr) {
+    return kInvalidShaderVisibleIndex;
   }
 
-  BeginPublicationFrame(
-    *gfx, render_context.frame_sequence, render_context.frame_slot);
-  auto& publication_state = EnsurePublicationState(*gfx);
+  return publication_state.view_history_frame_bindings_publisher->Publish(
+    render_context.current_view.view_id,
+    BuildViewHistoryFrameBindings(render_context.current_view.view_state_handle,
+      *render_context.current_view.resolved_view,
+      observer_ptr<const scene::Scene> { render_context.scene.get() }));
+}
 
-  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
-  if (render_context.current_view.resolved_view != nullptr) {
-    view_bindings.history_frame_slot
-      = EnsurePublicationState(*gfx)
-          .view_history_frame_bindings_publisher->Publish(
-            render_context.current_view.view_id,
-            BuildViewHistoryFrameBindings(render_context.current_view.view_id,
-              *render_context.current_view.resolved_view,
-              observer_ptr<const scene::Scene> { render_context.scene.get() }));
-  }
-  const auto scene_texture_frame_slot
-    = publication_state.scene_texture_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetSceneTextureBindings());
-  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
-  view_bindings.screen_hzb_frame_slot
-    = publication_state.screen_hzb_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetPublishedScreenHzbBindings());
-
-  const auto view_frame_bindings_slot
-    = publication_state.view_frame_bindings_publisher->Publish(
-      render_context.current_view.view_id, view_bindings);
-  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-    view_bindings, view_frame_bindings_slot);
-
-  EnsureViewConstantsManager(*gfx);
+auto Renderer::WriteCurrentViewConstants(RenderContext& render_context,
+  Graphics& gfx, const ShaderVisibleIndex view_frame_bindings_slot) -> void
+{
+  EnsureViewConstantsManager(gfx);
   view_const_manager_->OnFrameStart(render_context.frame_slot);
   if (render_context.current_view.resolved_view != nullptr) {
     UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
@@ -748,12 +1013,214 @@ auto Renderer::RefreshCurrentViewFrameBindings(
   render_context.view_constants = buffer_info.buffer;
 }
 
+auto Renderer::RefreshCurrentViewFrameBindings(
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+{
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    return;
+  }
+  auto gfx = GetGraphics();
+  if (gfx == nullptr) {
+    return;
+  }
+
+  BeginPublicationFrame(
+    *gfx, render_context.frame_sequence, render_context.frame_slot);
+  auto& publication_state = EnsurePublicationState(*gfx);
+
+  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
+  view_bindings.history_frame_slot
+    = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
+  const auto scene_texture_frame_slot
+    = publication_state.scene_texture_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetSceneTextureBindings());
+  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+  view_bindings.screen_hzb_frame_slot
+    = publication_state.screen_hzb_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetPublishedScreenHzbBindings());
+
+  const auto view_frame_bindings_slot
+    = publication_state.view_frame_bindings_publisher->Publish(
+      render_context.current_view.view_id, view_bindings);
+  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+    view_bindings, view_frame_bindings_slot);
+
+  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+}
+
+auto Renderer::PublishCurrentViewPreSceneFrameBindings(
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+{
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    return;
+  }
+  auto gfx = GetGraphics();
+  if (gfx == nullptr) {
+    return;
+  }
+
+  BeginPublicationFrame(
+    *gfx, render_context.frame_sequence, render_context.frame_slot);
+  auto& publication_state = EnsurePublicationState(*gfx);
+
+  auto view_bindings = ViewFrameBindings {};
+  if (const auto prepared_frame = render_context.current_view.prepared_frame;
+    prepared_frame != nullptr) {
+    auto draw_bindings = DrawFrameBindings {
+      .draw_metadata_slot
+      = BindlessDrawMetadataSlot { prepared_frame->bindless_draw_metadata_slot },
+      .current_worlds_slot
+      = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
+      .previous_worlds_slot
+      = BindlessWorldsSlot { prepared_frame->bindless_previous_worlds_slot },
+      .normal_matrices_slot
+      = BindlessNormalsSlot { prepared_frame->bindless_normals_slot },
+      .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot {
+        prepared_frame->bindless_material_shading_slot,
+      },
+      .instance_data_slot
+      = BindlessInstanceDataSlot { prepared_frame->bindless_instance_data_slot },
+      .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+        prepared_frame->bindless_current_skinned_pose_slot,
+      },
+      .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+        prepared_frame->bindless_previous_skinned_pose_slot,
+      },
+      .current_morph_slot = BindlessMorphPublicationsSlot {
+        prepared_frame->bindless_current_morph_slot,
+      },
+      .previous_morph_slot = BindlessMorphPublicationsSlot {
+        prepared_frame->bindless_previous_morph_slot,
+      },
+      .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+        prepared_frame->bindless_current_material_wpo_slot,
+      },
+      .previous_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+        prepared_frame->bindless_previous_material_wpo_slot,
+      },
+      .current_motion_vector_status_slot
+      = BindlessMotionVectorStatusPublicationsSlot {
+        prepared_frame->bindless_current_motion_vector_status_slot,
+      },
+      .previous_motion_vector_status_slot
+      = BindlessMotionVectorStatusPublicationsSlot {
+        prepared_frame->bindless_previous_motion_vector_status_slot,
+      },
+      .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
+        prepared_frame->bindless_velocity_draw_metadata_slot,
+      },
+    };
+    view_bindings.draw_frame_slot
+      = publication_state.draw_frame_bindings_publisher->Publish(
+        render_context.current_view.view_id, draw_bindings);
+  }
+  view_bindings.view_color_frame_slot
+    = publication_state.view_color_data_publisher->Publish(
+      render_context.current_view.view_id, BuildViewColorData(render_context));
+  view_bindings.history_frame_slot
+    = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
+
+  const auto view_frame_bindings_slot
+    = publication_state.view_frame_bindings_publisher->Publish(
+      render_context.current_view.view_id, view_bindings);
+  LOG_F(INFO,
+    "view_frame_cpu_pre_scene view={} draw_slot={} color_slot={} "
+    "history_slot={} frame_slot={}",
+    render_context.current_view.view_id.get(),
+    view_bindings.draw_frame_slot.get(),
+    view_bindings.view_color_frame_slot.get(),
+    view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
+  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+    view_bindings, view_frame_bindings_slot);
+
+  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+}
+
+auto Renderer::PublishCurrentViewPostSceneFrameBindings(
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+{
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    scene_renderer.InvalidatePublishedViewFrameBindings();
+    view_const_cpu_.SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
+    return;
+  }
+  auto gfx = GetGraphics();
+  if (gfx == nullptr) {
+    return;
+  }
+
+  BeginPublicationFrame(
+    *gfx, render_context.frame_sequence, render_context.frame_slot);
+  auto& publication_state = EnsurePublicationState(*gfx);
+
+  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
+  const auto scene_texture_frame_slot
+    = publication_state.scene_texture_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetSceneTextureBindings());
+  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+  const auto view_color_data = BuildViewColorData(render_context);
+  view_bindings.view_color_frame_slot
+    = publication_state.view_color_data_publisher->Publish(
+      render_context.current_view.view_id, view_color_data);
+  LOG_F(INFO, "view_color_cpu_post_scene view={} exposure={} slot={}",
+    render_context.current_view.view_id.get(), view_color_data.exposure,
+    view_bindings.view_color_frame_slot.get());
+  view_bindings.screen_hzb_frame_slot
+    = publication_state.screen_hzb_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetPublishedScreenHzbBindings());
+  view_bindings.history_frame_slot
+    = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
+
+  const auto view_frame_bindings_slot
+    = publication_state.view_frame_bindings_publisher->Publish(
+      render_context.current_view.view_id, view_bindings);
+  LOG_F(INFO,
+    "view_frame_cpu_post_scene view={} lighting_slot={} env_slot={} "
+    "scene_tex_slot={} color_slot={} hzb_slot={} history_slot={} "
+    "frame_slot={}",
+    render_context.current_view.view_id.get(),
+    view_bindings.lighting_frame_slot.get(),
+    view_bindings.environment_frame_slot.get(),
+    view_bindings.scene_texture_frame_slot.get(),
+    view_bindings.view_color_frame_slot.get(),
+    view_bindings.screen_hzb_frame_slot.get(),
+    view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
+  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+    view_bindings, view_frame_bindings_slot);
+
+  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+}
+
 auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
 
 auto Renderer::SetShaderDebugMode(const ShaderDebugMode mode) noexcept -> void
 {
-  shader_debug_mode_.store(
-    static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
+  diagnostics_service_->SetShaderDebugMode(mode);
+}
+
+auto Renderer::SetRenderMode(const RenderMode mode) noexcept -> void
+{
+  render_mode_ = mode;
+}
+
+auto Renderer::GetRenderMode() const noexcept -> RenderMode
+{
+  return render_mode_;
+}
+
+auto Renderer::SetWireframeColor(const graphics::Color& color) noexcept -> void
+{
+  wireframe_color_ = color;
+}
+
+auto Renderer::GetWireframeColor() const noexcept -> const graphics::Color&
+{
+  return wireframe_color_;
 }
 
 auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
@@ -764,8 +1231,18 @@ auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
 
 auto Renderer::GetShaderDebugMode() const noexcept -> ShaderDebugMode
 {
-  return static_cast<ShaderDebugMode>(
-    shader_debug_mode_.load(std::memory_order_relaxed));
+  return diagnostics_service_->GetShaderDebugMode();
+}
+
+auto Renderer::GetDiagnosticsService() noexcept -> DiagnosticsService&
+{
+  return *diagnostics_service_;
+}
+
+auto Renderer::GetDiagnosticsService() const noexcept
+  -> const DiagnosticsService&
+{
+  return *diagnostics_service_;
 }
 
 auto Renderer::GetLastEnvironmentLightingState() const noexcept
@@ -815,6 +1292,10 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   last_frame_dt_seconds_ = dt_seconds;
   if (gpu_timeline_profiler_) {
     gpu_timeline_profiler_->OnFrameStart(context->GetFrameSequenceNumber());
+  }
+  if (diagnostics_service_) {
+    diagnostics_service_->BeginFrame(context->GetFrameSequenceNumber());
+    diagnostics_service_->SyncGpuTimelineDiagnostics();
   }
 
   const auto tag = internal::RendererTagFactory::Get();
@@ -938,7 +1419,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   for (const auto& pending : submissions) {
     const auto& payload = pending.submission;
-    if (payload.tasks.empty()) {
+    if (payload.tasks.empty() && payload.surface_overlays.empty()) {
       continue;
     }
 
@@ -1004,11 +1485,20 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         }
         auto fallback = ResolveViewOutputTexture(*context, view_id);
         if (fallback) {
-          LOG_F(WARNING,
-            "Vortex compositing source for published view {} is missing the "
-            "resolved scene-color artifact; falling back to published "
-            "composite source '{}'",
-            view_id.get(), fallback->GetDescriptor().debug_name);
+          const auto feature_spec = ResolveViewFeatureProfileSpec(
+            ResolvePublishedRuntimeFeatureProfile(view_id));
+          if (feature_spec.requires_color_output) {
+            LOG_F(WARNING,
+              "Vortex compositing source for published view {} is missing the "
+              "resolved scene-color artifact; falling back to published "
+              "composite source '{}'",
+              view_id.get(), fallback->GetDescriptor().debug_name);
+          } else {
+            DLOG_F(1,
+              "Vortex compositing source for reduced published view {}: '{}' "
+              "(published composite source)",
+              view_id.get(), fallback->GetDescriptor().debug_name);
+          }
           return fallback;
         }
         LOG_F(ERROR,
@@ -1094,6 +1584,20 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       }
     }
 
+    for (const auto& overlay : payload.surface_overlays) {
+      if (!overlay.record) {
+        continue;
+      }
+      graphics::GpuEventScope overlay_scope(recorder, "Vortex.SurfaceOverlay",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("label", overlay.debug_name)));
+      overlay.record(recorder);
+    }
+
+    DispatchViewExtensionsOnPostComposition(
+      *context, payload.surface_id, target_fb, recorder);
+
     recorder.RequireResourceStateFinal(
       backbuffer, graphics::ResourceStates::kPresent);
     recorder.FlushBarriers();
@@ -1121,6 +1625,9 @@ auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
     && scene_renderer_started_frame_ == context->GetFrameSequenceNumber()) {
     scene_renderer_->OnFrameEnd(*context);
     scene_renderer_started_frame_ = frame::SequenceNumber {};
+  }
+  if (diagnostics_service_ != nullptr) {
+    diagnostics_service_->EndFrame();
   }
   rigid_transform_history_cache_.EndFrame();
   deformation_history_cache_.EndFrame();
@@ -1201,8 +1708,12 @@ auto Renderer::PublishRuntimeCompositionView(
   view_context.view = composition_view.view;
   view_context.metadata = {
     .name = std::string(composition_view.name),
-    .purpose = composition_view.camera.has_value() ? "scene" : "overlay",
-    .is_scene_view = composition_view.camera.has_value(),
+    .purpose = composition_view.view_kind
+        == CompositionView::ViewKind::kCompositionOnly
+      ? "overlay"
+      : "scene",
+    .is_scene_view = composition_view.view_kind
+      != CompositionView::ViewKind::kCompositionOnly,
     .with_atmosphere = composition_view.with_atmosphere,
     .with_height_fog = composition_view.with_height_fog,
     .with_local_fog = composition_view.with_local_fog,
@@ -1214,7 +1725,14 @@ auto Renderer::PublishRuntimeCompositionView(
   const auto published_view_id = UpsertPublishedRuntimeView(frame_context,
     composition_view.id, std::move(view_context),
     shading_mode_override.has_value() ? shading_mode_override
-                                      : composition_view.shading_mode);
+                                      : composition_view.shading_mode,
+    composition_view.force_wireframe
+      ? std::optional<RenderMode> { RenderMode::kWireframe }
+      : composition_view.render_settings.render_mode,
+    composition_view.view_state_handle, composition_view.view_kind,
+    composition_view.feature_profile, composition_view.feature_mask,
+    composition_view.produced_aux_outputs, composition_view.consumed_aux_outputs,
+    std::string(composition_view.name));
 
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
@@ -1230,7 +1748,15 @@ auto Renderer::PublishRuntimeCompositionView(
 
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
-  const std::optional<ShadingMode> shading_mode_override) -> ViewId
+  const std::optional<ShadingMode> shading_mode_override,
+  const std::optional<RenderMode> render_mode_override,
+  const CompositionView::ViewStateHandle view_state_handle,
+  const CompositionView::ViewKind view_kind,
+  const CompositionView::ViewFeatureProfile feature_profile,
+  const CompositionView::ViewFeatureMask feature_mask,
+  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs,
+  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs,
+  std::string debug_name) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
@@ -1241,6 +1767,14 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     frame_context.UpdateView(it->second.published_view_id, std::move(view));
     it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
     it->second.shading_mode_override = shading_mode_override;
+    it->second.render_mode_override = render_mode_override;
+    it->second.view_state_handle = view_state_handle;
+    it->second.view_kind = view_kind;
+    it->second.feature_profile = feature_profile;
+    it->second.feature_mask = feature_mask;
+    it->second.produced_aux_outputs = std::move(produced_aux_outputs);
+    it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
+    it->second.debug_name = std::move(debug_name);
     return it->second.published_view_id;
   }
 
@@ -1250,6 +1784,14 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .published_view_id = published_view_id,
         .last_seen_frame = frame_context.GetFrameSequenceNumber(),
         .shading_mode_override = shading_mode_override,
+        .render_mode_override = render_mode_override,
+        .view_state_handle = view_state_handle,
+        .view_kind = view_kind,
+        .feature_profile = feature_profile,
+        .feature_mask = feature_mask,
+        .produced_aux_outputs = std::move(produced_aux_outputs),
+        .consumed_aux_outputs = std::move(consumed_aux_outputs),
+        .debug_name = std::move(debug_name),
       };
   return published_view_id;
 }
@@ -1270,57 +1812,62 @@ auto Renderer::ResolvePublishedRuntimeViewId(
 }
 
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
-  -> ViewId
+  -> DetachedPublishedRuntimeViewState
 {
   if (intent_view_id == kInvalidViewId) {
-    return kInvalidViewId;
+    return {};
   }
 
   std::unique_lock state_lock(view_state_mutex_);
   if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
     it != published_runtime_views_by_intent_.end()) {
-    const auto published_view_id = it->second.published_view_id;
+    const auto detached = DetachedPublishedRuntimeViewState {
+      .published_view_id = it->second.published_view_id,
+      .view_state_handle = it->second.view_state_handle,
+    };
     published_runtime_views_by_intent_.erase(it);
-    return published_view_id;
+    return detached;
   }
 
-  return kInvalidViewId;
+  return {};
 }
 
 auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 {
-  const auto published_view_id
+  const auto detached
     = DetachPublishedRuntimeViewState(intent_view_id);
-  if (published_view_id == kInvalidViewId) {
+  if (detached.published_view_id == kInvalidViewId) {
     return;
   }
 
   if (scene_renderer_) {
-    scene_renderer_->RemoveViewState(published_view_id);
+    scene_renderer_->RemoveViewState(
+      detached.published_view_id, detached.view_state_handle);
   }
-  UnregisterViewRenderGraph(published_view_id);
+  UnregisterViewRenderGraph(detached.published_view_id);
   if (view_const_manager_) {
-    view_const_manager_->RemoveView(published_view_id);
+    view_const_manager_->RemoveView(detached.published_view_id);
   }
 }
 
 auto Renderer::RemovePublishedRuntimeView(
   engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
 {
-  const auto published_view_id
+  const auto detached
     = DetachPublishedRuntimeViewState(intent_view_id);
 
-  if (published_view_id == kInvalidViewId) {
+  if (detached.published_view_id == kInvalidViewId) {
     return;
   }
 
-  frame_context.RemoveView(published_view_id);
+  frame_context.RemoveView(detached.published_view_id);
   if (scene_renderer_) {
-    scene_renderer_->RemoveViewState(published_view_id);
+    scene_renderer_->RemoveViewState(
+      detached.published_view_id, detached.view_state_handle);
   }
-  UnregisterViewRenderGraph(published_view_id);
+  UnregisterViewRenderGraph(detached.published_view_id);
   if (view_const_manager_) {
-    view_const_manager_->RemoveView(published_view_id);
+    view_const_manager_->RemoveView(detached.published_view_id);
   }
 }
 
@@ -1329,7 +1876,7 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 {
   const auto current_frame = frame_context.GetFrameSequenceNumber();
   auto stale_intent_ids = std::vector<ViewId> {};
-  auto stale_published_ids = std::vector<ViewId> {};
+  auto stale_published_states = std::vector<DetachedPublishedRuntimeViewState> {};
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -1338,7 +1885,10 @@ auto Renderer::PruneStalePublishedRuntimeViews(
       if (current_frame - it->second.last_seen_frame
         > kPublishedRuntimeViewMaxIdleFrames) {
         stale_intent_ids.push_back(it->first);
-        stale_published_ids.push_back(it->second.published_view_id);
+        stale_published_states.push_back(DetachedPublishedRuntimeViewState {
+          .published_view_id = it->second.published_view_id,
+          .view_state_handle = it->second.view_state_handle,
+        });
         it = published_runtime_views_by_intent_.erase(it);
       } else {
         ++it;
@@ -1346,14 +1896,15 @@ auto Renderer::PruneStalePublishedRuntimeViews(
     }
   }
 
-  for (const auto published_view_id : stale_published_ids) {
-    frame_context.RemoveView(published_view_id);
+  for (const auto& stale : stale_published_states) {
+    frame_context.RemoveView(stale.published_view_id);
     if (scene_renderer_) {
-      scene_renderer_->RemoveViewState(published_view_id);
+      scene_renderer_->RemoveViewState(
+        stale.published_view_id, stale.view_state_handle);
     }
-    UnregisterViewRenderGraph(published_view_id);
+    UnregisterViewRenderGraph(stale.published_view_id);
     if (view_const_manager_) {
-      view_const_manager_->RemoveView(published_view_id);
+      view_const_manager_->RemoveView(stale.published_view_id);
     }
   }
 
@@ -1371,13 +1922,13 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
   -> void
 {
   if (input.composite_target == nullptr || input.target_surface == nullptr
-    || input.layers.empty()) {
+    || (input.layers.empty() && input.texture_layers.empty())) {
     return;
   }
 
   auto submission = CompositionSubmission {};
   submission.composite_target = input.composite_target;
-  submission.tasks.reserve(input.layers.size());
+  submission.tasks.reserve(input.layers.size() + input.texture_layers.size());
 
   for (const auto& layer : input.layers) {
     if (layer.intent_view_id == kInvalidViewId || layer.opacity <= 0.0F) {
@@ -1400,6 +1951,15 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
     }
   }
 
+  for (const auto& layer : input.texture_layers) {
+    if (!layer.source_texture || layer.opacity <= 0.0F) {
+      continue;
+    }
+
+    submission.tasks.push_back(CompositingTask::MakeTextureBlend(
+      layer.source_texture, layer.viewport, layer.opacity, layer.debug_name));
+  }
+
   if (submission.tasks.empty()) {
     return;
   }
@@ -1416,6 +1976,13 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
     .target_surface = std::move(target_surface),
     .sequence_in_frame = next_composition_sequence_in_frame_++,
   });
+}
+
+auto Renderer::RegisterViewExtension(ViewExtensionPtr extension) -> void
+{
+  CHECK_NOTNULL_F(extension.get(), "RegisterViewExtension requires extension");
+  std::scoped_lock lock(view_extension_mutex_);
+  view_extensions_.push_back(std::move(extension));
 }
 
 auto Renderer::ForSinglePassHarness() -> SinglePassHarnessFacade
@@ -1492,6 +2059,18 @@ auto Renderer::GetLocalFogGlobalStartDistanceMeters() const noexcept -> float
   return 20.0F;
 }
 
+auto Renderer::GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexLocalFogRenderIntoVolumetricFog, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
 auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
 {
   if (console_ != nullptr) {
@@ -1502,6 +2081,57 @@ auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
     }
   }
   return 0.01F;
+}
+
+auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept
+  -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogDirectionalShadows, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetVolumetricFogTemporalReprojectionEnabled() const noexcept
+  -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogTemporalReprojection, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetVolumetricFogJitterEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogJitter, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetVolumetricFogHistoryMissSupersampleCount() const noexcept
+  -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 4 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexVolumetricFogHistoryMissSupersampleCount, value)) {
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 1, 16));
+    }
+  }
+  return 4U;
 }
 
 auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t
@@ -1524,7 +2154,7 @@ auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTileMaxInstanceCount, value)) {
       return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 4, 256));
+        std::clamp<std::int64_t>(value, 1, 256));
     }
   }
   return 32U;
@@ -1593,6 +2223,30 @@ auto Renderer::GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept
   return 2.0F;
 }
 
+auto Renderer::GetOcclusionEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    bool value = false;
+    if (console_->TryGetCVarValue<bool>(kCVarVortexOcclusionEnabled, value)) {
+      return value;
+    }
+  }
+  return false;
+}
+
+auto Renderer::GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 256 * 256 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexOcclusionMaxCandidateCount, value)) {
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 1, 256 * 256));
+    }
+  }
+  return 256U * 256U;
+}
+
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&
 {
   CHECK_NOTNULL_F(
@@ -1634,16 +2288,10 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
   engine::FrameContext& context, const bool prefer_composite_source) const
   -> void
 {
-  // Renderer Core owns the canonical published-view set and the current
-  // scene-view cursor selection. SceneRenderer consumes the selected current
-  // view; it does not own the outer view-selection loop.
-  render_context.current_view = {};
+  // Renderer Core owns the canonical published-view set. SceneRenderer enters
+  // PerViewScope for each scene-view entry before touching the current cursor.
   render_context.frame_views.clear();
-  render_context.active_view_index = std::numeric_limits<std::size_t>::max();
   render_context.pass_target.reset(nullptr);
-
-  auto fallback_index = std::optional<std::size_t> {};
-  auto selected_scene_index = std::optional<std::size_t> {};
 
   for (const auto& view_ref : context.GetViews()) {
     const auto& view = view_ref.get();
@@ -1669,9 +2317,30 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
 
     auto entry = RenderContext::ViewExecutionEntry {
       .view_id = view.id,
+      .exposure_view_id = view.metadata.exposure_view_id != kInvalidViewId
+        ? view.metadata.exposure_view_id
+        : view.id,
+      .view_state_handle = ResolvePublishedRuntimeViewStateHandle(view.id),
+      .exposure_view_state_handle = {},
       .is_scene_view = view.metadata.is_scene_view,
+      .is_reflection_capture = view.metadata.purpose.find("reflection")
+          != std::string::npos
+        || view.metadata.purpose.find("capture") != std::string::npos,
+      .with_atmosphere = view.metadata.with_atmosphere,
+      .with_height_fog = view.metadata.with_height_fog,
+      .with_local_fog = view.metadata.with_local_fog,
+      .debug_name = view.metadata.name,
+      .view_kind = view.metadata.is_scene_view
+        ? CompositionView::ViewKind::kPrimary
+        : CompositionView::ViewKind::kCompositionOnly,
+      .feature_profile = CompositionView::ViewFeatureProfile::kDefault,
+      .feature_mask = {},
+      .produced_aux_outputs = {},
+      .consumed_aux_outputs = {},
+      .resolved_aux_inputs = {},
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
+      .render_mode_override = ResolvePublishedRuntimeRenderMode(view.id),
       .resolved_view = {},
       .render_target = view.render_target,
       .composite_source = view.composite_source,
@@ -1681,47 +2350,41 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       it != resolved_views_.end()) {
       entry.resolved_view = observer_ptr<const ResolvedView> { &it->second };
     }
+    {
+      std::shared_lock state_lock(view_state_mutex_);
+      for (const auto& [_, state] : published_runtime_views_by_intent_) {
+        if (state.published_view_id != view.id) {
+          continue;
+        }
+        entry.debug_name = state.debug_name.empty() ? entry.debug_name
+                                                    : state.debug_name;
+        entry.view_kind = state.view_kind;
+        entry.feature_profile = state.feature_profile;
+        entry.feature_mask = state.feature_mask;
+        entry.produced_aux_outputs = state.produced_aux_outputs;
+        entry.consumed_aux_outputs = state.consumed_aux_outputs;
+        break;
+      }
+    }
+    entry.exposure_view_state_handle
+      = ResolvePublishedRuntimeViewStateHandle(entry.exposure_view_id);
+    if (entry.exposure_view_state_handle
+      == CompositionView::kInvalidViewStateHandle) {
+      entry.exposure_view_state_handle = entry.view_state_handle;
+    }
 
     render_context.frame_views.push_back(entry);
-    const auto entry_index = render_context.frame_views.size() - 1;
-    if (!fallback_index.has_value()) {
-      fallback_index = entry_index;
-    }
-    if (!selected_scene_index.has_value() && view.metadata.is_scene_view) {
-      selected_scene_index = entry_index;
+    if (render_context.pass_target == nullptr) {
+      render_context.pass_target = primary_target;
     }
   }
 
-  const auto active_index
-    = selected_scene_index.has_value() ? selected_scene_index : fallback_index;
-  if (!active_index.has_value()) {
-    return;
+  ResolveRuntimeAuxiliaryDependencies(
+    render_context.frame_views, context.GetFrameSequenceNumber());
+  if (!render_context.frame_views.empty()) {
+    render_context.pass_target
+      = render_context.frame_views.front().primary_target;
   }
-
-  render_context.active_view_index = *active_index;
-  const auto& selection = render_context.frame_views[*active_index];
-  const auto& selected_view = context.GetViewContext(selection.view_id);
-  render_context.current_view.view_id = selection.view_id;
-  render_context.current_view.exposure_view_id
-    = selected_view.metadata.exposure_view_id != kInvalidViewId
-    ? selected_view.metadata.exposure_view_id
-    : selection.view_id;
-  const auto is_reflection_capture_view
-    = selected_view.metadata.purpose.find("reflection") != std::string::npos
-    || selected_view.metadata.purpose.find("capture") != std::string::npos;
-  render_context.current_view.is_reflection_capture
-    = is_reflection_capture_view;
-  render_context.current_view.with_atmosphere
-    = selected_view.metadata.with_atmosphere;
-  render_context.current_view.with_height_fog
-    = selected_view.metadata.with_height_fog;
-  render_context.current_view.with_local_fog
-    = selected_view.metadata.with_local_fog;
-  render_context.current_view.composition_view = selection.composition_view;
-  render_context.current_view.shading_mode_override
-    = selection.shading_mode_override;
-  render_context.current_view.resolved_view = selection.resolved_view;
-  render_context.pass_target = selection.primary_target;
 }
 
 auto Renderer::ResolvePublishedRuntimeShadingMode(
@@ -1738,6 +2401,56 @@ auto Renderer::ResolvePublishedRuntimeShadingMode(
     }
   }
   return std::nullopt;
+}
+
+auto Renderer::ResolvePublishedRuntimeRenderMode(
+  const ViewId published_view_id) const noexcept -> std::optional<RenderMode>
+{
+  if (published_view_id == kInvalidViewId) {
+    return std::nullopt;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.render_mode_override;
+    }
+  }
+  return std::nullopt;
+}
+
+auto Renderer::ResolvePublishedRuntimeFeatureProfile(
+  const ViewId published_view_id) const noexcept
+  -> CompositionView::ViewFeatureProfile
+{
+  if (published_view_id == kInvalidViewId) {
+    return CompositionView::ViewFeatureProfile::kDefault;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.feature_profile;
+    }
+  }
+  return CompositionView::ViewFeatureProfile::kDefault;
+}
+
+auto Renderer::ResolvePublishedRuntimeViewStateHandle(
+  const ViewId published_view_id) const noexcept
+  -> CompositionView::ViewStateHandle
+{
+  if (published_view_id == kInvalidViewId) {
+    return CompositionView::kInvalidViewStateHandle;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.view_state_handle;
+    }
+  }
+  return CompositionView::kInvalidViewStateHandle;
 }
 
 auto Renderer::EnsureSceneRenderer(const CompositionView* composition_view)
@@ -1789,20 +2502,24 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
     .SetOrthographic(!IsPerspectiveProjection(view), ViewConstants::kRenderer);
 }
 
-auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,
+auto Renderer::BuildViewHistoryFrameBindings(
+  const CompositionView::ViewStateHandle view_state_handle,
   const ResolvedView& view, const observer_ptr<const scene::Scene> scene)
   -> ViewHistoryFrameBindings
 {
   static_cast<void>(scene);
-  const auto snapshot = previous_view_history_cache_.TouchCurrent(view_id,
-    internal::PreviousViewHistoryCache::CurrentState {
+  const auto current = internal::PreviousViewHistoryCache::CurrentState {
       .view_matrix = view.ViewMatrix(),
       .projection_matrix = view.ProjectionMatrix(),
       .stable_projection_matrix = view.StableProjectionMatrix(),
       .inverse_view_projection_matrix = view.InverseViewProjection(),
       .pixel_jitter = view.PixelJitter(),
       .viewport = view.Viewport(),
-    });
+    };
+  const auto snapshot
+    = view_state_handle == CompositionView::kInvalidViewStateHandle
+    ? previous_view_history_cache_.TouchStateless(current)
+    : previous_view_history_cache_.TouchCurrent(view_state_handle, current);
 
   auto history = ViewHistoryFrameBindings {
     .current_view_matrix = snapshot.current.view_matrix,
@@ -1850,6 +2567,8 @@ auto Renderer::WireContext(RenderContext& context,
   context.delta_time = last_frame_dt_seconds_;
   context.view_constants = view_constants;
   context.shader_debug_mode = GetShaderDebugMode();
+  context.render_mode = GetRenderMode();
+  context.wireframe_color = GetWireframeColor();
 }
 
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
@@ -1917,6 +2636,74 @@ auto Renderer::EndOffscreenFrame() noexcept -> void
   previous_view_history_cache_.EndFrame();
 }
 
+auto Renderer::SnapshotViewExtensions() const -> std::vector<ViewExtensionPtr>
+{
+  std::scoped_lock lock(view_extension_mutex_);
+  return view_extensions_;
+}
+
+auto Renderer::DispatchViewExtensionsOnFamilyAssembled(
+  engine::FrameContext& frame_context, RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = ViewFamilyAssembledContext {
+    .frame_context = frame_context,
+    .render_context = render_context,
+  };
+  for (const auto& extension : extensions) {
+    extension->OnFamilyAssembled(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnViewSetup(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = ViewSetupContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnViewSetup(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPreRenderViewGpu(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context
+    = ViewRenderGpuContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnPreRenderViewGpu(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPostRenderViewGpu(
+  RenderContext& render_context) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context
+    = ViewRenderGpuContext { .render_context = render_context };
+  for (const auto& extension : extensions) {
+    extension->OnPostRenderViewGpu(hook_context);
+  }
+}
+
+auto Renderer::DispatchViewExtensionsOnPostComposition(
+  engine::FrameContext& frame_context,
+  const CompositionView::SurfaceRouteId surface_id,
+  graphics::Framebuffer& target, graphics::CommandRecorder& recorder) -> void
+{
+  const auto extensions = SnapshotViewExtensions();
+  const auto hook_context = PostCompositionContext {
+    .frame_context = frame_context,
+    .surface_id = surface_id,
+    .target = target,
+    .recorder = recorder,
+  };
+  for (const auto& extension : extensions) {
+    extension->OnPostComposition(hook_context);
+  }
+}
+
 auto Renderer::DispatchSceneRendererPreRender(
   const observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
@@ -1947,116 +2734,13 @@ auto Renderer::DispatchSceneRendererRender(
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, false);
+  DispatchViewExtensionsOnFamilyAssembled(*context, render_context);
 
-  if (render_context.current_view.view_id == kInvalidViewId) {
-    scene_renderer.InvalidatePublishedViewFrameBindings();
-    view_const_cpu_.SetBindlessViewFrameBindingsSlot(
-      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
-    co_return;
-  }
-
-  scene_renderer.PrimePreparedView(render_context);
-
-  auto view_bindings = ViewFrameBindings {};
-  if (auto gfx = GetGraphics(); gfx != nullptr) {
-    BeginPublicationFrame(
-      *gfx, context->GetFrameSequenceNumber(), context->GetFrameSlot());
-    auto& publication_state = EnsurePublicationState(*gfx);
-
-    if (const auto prepared_frame = render_context.current_view.prepared_frame;
-      prepared_frame != nullptr) {
-      auto draw_bindings = DrawFrameBindings {
-        .draw_metadata_slot = BindlessDrawMetadataSlot { prepared_frame
-            ->bindless_draw_metadata_slot },
-        .current_worlds_slot
-        = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
-        .previous_worlds_slot
-        = BindlessWorldsSlot { prepared_frame->bindless_previous_worlds_slot },
-        .normal_matrices_slot
-        = BindlessNormalsSlot { prepared_frame->bindless_normals_slot },
-        .material_shading_constants_slot
-        = BindlessMaterialShadingConstantsSlot { prepared_frame
-            ->bindless_material_shading_slot },
-        .instance_data_slot = BindlessInstanceDataSlot { prepared_frame
-            ->bindless_instance_data_slot },
-        .current_skinned_pose_slot
-        = BindlessSkinnedPosePublicationsSlot { prepared_frame
-            ->bindless_current_skinned_pose_slot },
-        .previous_skinned_pose_slot
-        = BindlessSkinnedPosePublicationsSlot { prepared_frame
-            ->bindless_previous_skinned_pose_slot },
-        .current_morph_slot = BindlessMorphPublicationsSlot { prepared_frame
-            ->bindless_current_morph_slot },
-        .previous_morph_slot = BindlessMorphPublicationsSlot { prepared_frame
-            ->bindless_previous_morph_slot },
-        .current_material_wpo_slot
-        = BindlessMaterialWpoPublicationsSlot { prepared_frame
-            ->bindless_current_material_wpo_slot },
-        .previous_material_wpo_slot
-        = BindlessMaterialWpoPublicationsSlot { prepared_frame
-            ->bindless_previous_material_wpo_slot },
-        .current_motion_vector_status_slot
-        = BindlessMotionVectorStatusPublicationsSlot { prepared_frame
-            ->bindless_current_motion_vector_status_slot },
-        .previous_motion_vector_status_slot
-        = BindlessMotionVectorStatusPublicationsSlot { prepared_frame
-            ->bindless_previous_motion_vector_status_slot },
-        .velocity_draw_metadata_slot
-        = BindlessVelocityDrawMetadataSlot { prepared_frame
-            ->bindless_velocity_draw_metadata_slot },
-      };
-      view_bindings.draw_frame_slot
-        = publication_state.draw_frame_bindings_publisher->Publish(
-          render_context.current_view.view_id, draw_bindings);
-    }
-    view_bindings.view_color_frame_slot
-      = publication_state.view_color_data_publisher->Publish(
-        render_context.current_view.view_id,
-        BuildViewColorData(render_context));
-    if (render_context.current_view.resolved_view != nullptr) {
-      view_bindings.history_frame_slot
-        = publication_state.view_history_frame_bindings_publisher->Publish(
-          render_context.current_view.view_id,
-          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
-            *render_context.current_view.resolved_view,
-            observer_ptr<const scene::Scene> { render_context.scene.get() }));
-    }
-
-    const auto view_frame_bindings_slot
-      = publication_state.view_frame_bindings_publisher->Publish(
-        render_context.current_view.view_id, view_bindings);
-    LOG_F(INFO,
-      "view_frame_cpu_pre_scene view={} draw_slot={} color_slot={} "
-      "history_slot={} "
-      "frame_slot={}",
-      render_context.current_view.view_id.get(),
-      view_bindings.draw_frame_slot.get(),
-      view_bindings.view_color_frame_slot.get(),
-      view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
-    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-      view_bindings, view_frame_bindings_slot);
-
-    EnsureViewConstantsManager(*gfx);
-    view_const_manager_->OnFrameStart(frame_slot_);
-    if (render_context.current_view.resolved_view != nullptr) {
-      UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
-    }
-    view_const_cpu_
-      .SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
-      .SetFrameSlot(frame_slot_, ViewConstants::kRenderer)
-      .SetFrameSequenceNumber(
-        frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer)
-      .SetBindlessViewFrameBindingsSlot(
-        BindlessViewFrameBindingsSlot { view_frame_bindings_slot },
-        ViewConstants::kRenderer);
-
-    const auto snapshot = view_const_cpu_.GetSnapshot();
-    const auto buffer_info = view_const_manager_->WriteViewConstants(
-      render_context.current_view.view_id, &snapshot, sizeof(snapshot));
-    render_context.view_constants = buffer_info.buffer;
-  }
-
-  if (render_context.current_view.view_id == kInvalidViewId) {
+  const auto has_scene_view = std::ranges::any_of(render_context.frame_views,
+    [](const RenderContext::ViewExecutionEntry& entry) {
+      return entry.is_scene_view;
+    });
+  if (!has_scene_view) {
     scene_renderer.InvalidatePublishedViewFrameBindings();
     view_const_cpu_.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
@@ -2064,77 +2748,6 @@ auto Renderer::DispatchSceneRendererRender(
   }
 
   scene_renderer.OnRender(render_context);
-
-  if (render_context.current_view.view_id == kInvalidViewId) {
-    scene_renderer.InvalidatePublishedViewFrameBindings();
-    view_const_cpu_.SetBindlessViewFrameBindingsSlot(
-      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
-  } else if (auto gfx = GetGraphics(); gfx != nullptr) {
-    auto& publication_state = EnsurePublicationState(*gfx);
-    view_bindings = scene_renderer.GetPublishedViewFrameBindings();
-
-    const auto scene_texture_frame_slot
-      = publication_state.scene_texture_bindings_publisher->Publish(
-        render_context.current_view.view_id,
-        scene_renderer.GetSceneTextureBindings());
-    view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
-    view_bindings.view_color_frame_slot
-      = publication_state.view_color_data_publisher->Publish(
-        render_context.current_view.view_id,
-        BuildViewColorData(render_context));
-    LOG_F(INFO, "view_color_cpu_post_scene view={} exposure={} slot={}",
-      render_context.current_view.view_id.get(),
-      BuildViewColorData(render_context).exposure,
-      view_bindings.view_color_frame_slot.get());
-    view_bindings.screen_hzb_frame_slot
-      = publication_state.screen_hzb_bindings_publisher->Publish(
-        render_context.current_view.view_id,
-        scene_renderer.GetPublishedScreenHzbBindings());
-    if (render_context.current_view.resolved_view != nullptr) {
-      view_bindings.history_frame_slot
-        = publication_state.view_history_frame_bindings_publisher->Publish(
-          render_context.current_view.view_id,
-          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
-            *render_context.current_view.resolved_view,
-            observer_ptr<const scene::Scene> { render_context.scene.get() }));
-    }
-
-    const auto view_frame_bindings_slot
-      = publication_state.view_frame_bindings_publisher->Publish(
-        render_context.current_view.view_id, view_bindings);
-    LOG_F(INFO,
-      "view_frame_cpu_post_scene view={} lighting_slot={} env_slot={} "
-      "scene_tex_slot={} "
-      "color_slot={} hzb_slot={} history_slot={} frame_slot={}",
-      render_context.current_view.view_id.get(),
-      view_bindings.lighting_frame_slot.get(),
-      view_bindings.environment_frame_slot.get(),
-      view_bindings.scene_texture_frame_slot.get(),
-      view_bindings.view_color_frame_slot.get(),
-      view_bindings.screen_hzb_frame_slot.get(),
-      view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
-    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-      view_bindings, view_frame_bindings_slot);
-
-    EnsureViewConstantsManager(*gfx);
-    view_const_manager_->OnFrameStart(frame_slot_);
-    if (render_context.current_view.resolved_view != nullptr) {
-      UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
-    }
-    view_const_cpu_
-      .SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
-      .SetFrameSlot(frame_slot_, ViewConstants::kRenderer)
-      .SetFrameSequenceNumber(
-        frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer)
-      .SetBindlessViewFrameBindingsSlot(
-        BindlessViewFrameBindingsSlot { view_frame_bindings_slot },
-        ViewConstants::kRenderer);
-
-    const auto snapshot = view_const_cpu_.GetSnapshot();
-    const auto buffer_info = view_const_manager_->WriteViewConstants(
-      render_context.current_view.view_id, &snapshot, sizeof(snapshot));
-    render_context.view_constants = buffer_info.buffer;
-  }
 
   co_return;
 }
@@ -2243,7 +2856,7 @@ auto Renderer::ValidatedSinglePassHarnessContext::Release() noexcept -> void
   if (renderer_ != nullptr) {
     renderer_->EndOffscreenFrame();
   }
-  render_context_->current_view = {};
+  render_context_->Reset();
   current_resolved_view_.reset();
   current_prepared_frame_.reset();
   renderer_.reset();
@@ -2500,7 +3113,7 @@ Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
 {
 }
 
-auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
 {
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
@@ -2508,7 +3121,163 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
     "ValidatedOffscreenSceneSession requires a live scene");
   CHECK_NOTNULL_F(output_target_.framebuffer.get(),
     "ValidatedOffscreenSceneSession requires an output target");
-  static_cast<void>(renderer_->EnsureSceneRenderer(&view_intent_.ViewIntent()));
+
+  auto effective_view_intent = view_intent_.ViewIntent();
+  effective_view_intent.shading_mode = pipeline_.shading_mode;
+  effective_view_intent.feature_profile = pipeline_.feature_profile;
+  effective_view_intent.feature_mask
+    = ResolveViewFeatureProfileSpec(pipeline_.feature_profile).feature_mask;
+  const auto& view_intent = effective_view_intent;
+  CHECK_F(view_intent.id != kInvalidViewId,
+    "ValidatedOffscreenSceneSession requires a valid offscreen view id");
+  CHECK_F(view_intent.camera.has_value(),
+    "ValidatedOffscreenSceneSession requires a camera-backed view intent");
+
+  auto frame_session = frame_session_;
+  frame_session.scene = scene_source_.scene;
+  renderer_->BeginStandaloneFrameExecution(frame_session);
+  const auto frame_guard = ScopeGuard(
+    [renderer = renderer_.get()]() noexcept { renderer->EndOffscreenFrame(); });
+
+  auto& scene = *scene_source_.scene;
+  scene.Update();
+
+  auto camera_node = view_intent.camera.value();
+  auto resolver = SceneCameraViewResolver {
+    [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+    view_intent.view.viewport,
+  };
+  auto resolved_view = resolver(view_intent.id);
+
+  auto& scene_renderer = renderer_->EnsureSceneRenderer(&view_intent);
+  scene_renderer.OnStandaloneFrameStart(frame_session.frame_sequence,
+    frame_session.frame_slot,
+    ResolveFramebufferExtent(*output_target_.framebuffer));
+
+  auto render_context = RenderContext {};
+  renderer_->WireContext(render_context, {});
+  render_context.scene = scene_source_.scene;
+  render_context.pass_target = output_target_.framebuffer;
+  render_context.view_outputs.insert_or_assign(
+    view_intent.id, output_target_.framebuffer);
+
+  const auto exposure_view_id
+    = view_intent.exposure_source_view_id != kInvalidViewId
+    ? view_intent.exposure_source_view_id
+    : view_intent.id;
+  render_context.frame_views.push_back(RenderContext::ViewExecutionEntry {
+    .view_id = view_intent.id,
+    .exposure_view_id = exposure_view_id,
+    .view_state_handle = view_intent.view_state_handle,
+    .exposure_view_state_handle = view_intent.view_state_handle,
+    .is_scene_view = true,
+    .is_reflection_capture = false,
+    .with_atmosphere = view_intent.with_atmosphere,
+    .with_height_fog = view_intent.with_height_fog,
+    .with_local_fog = view_intent.with_local_fog,
+    .debug_name = std::string(view_intent.name),
+    .view_kind = view_intent.view_kind,
+    .feature_profile = view_intent.feature_profile,
+    .feature_mask = view_intent.feature_mask,
+    .composition_view = observer_ptr<const CompositionView> { &view_intent },
+    .shading_mode_override = view_intent.shading_mode,
+    .render_mode_override = view_intent.force_wireframe
+      ? std::optional<RenderMode> { RenderMode::kWireframe }
+      : view_intent.render_settings.render_mode,
+    .resolved_view = observer_ptr<const ResolvedView> { &resolved_view },
+    .render_target = output_target_.framebuffer,
+    .composite_source = output_target_.framebuffer,
+    .primary_target = output_target_.framebuffer,
+  });
+
+  scene_renderer.OnRender(render_context);
+  FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
+  engine::FrameContext& frame_context) -> void
+{
+  CHECK_NOTNULL_F(
+    renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
+  CHECK_NOTNULL_F(scene_source_.scene.get(),
+    "ValidatedOffscreenSceneSession requires a live scene");
+  CHECK_NOTNULL_F(output_target_.framebuffer.get(),
+    "ValidatedOffscreenSceneSession requires an output target");
+
+  auto effective_view_intent = view_intent_.ViewIntent();
+  effective_view_intent.shading_mode = pipeline_.shading_mode;
+  effective_view_intent.feature_profile = pipeline_.feature_profile;
+  effective_view_intent.feature_mask
+    = ResolveViewFeatureProfileSpec(pipeline_.feature_profile).feature_mask;
+  const auto& view_intent = effective_view_intent;
+  CHECK_F(view_intent.id != kInvalidViewId,
+    "ValidatedOffscreenSceneSession requires a valid offscreen view id");
+  CHECK_F(view_intent.camera.has_value(),
+    "ValidatedOffscreenSceneSession requires a camera-backed view intent");
+
+  auto& scene = *scene_source_.scene;
+  scene.Update();
+
+  auto camera_node = view_intent.camera.value();
+  auto resolver = SceneCameraViewResolver {
+    [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+    view_intent.view.viewport,
+  };
+  auto resolved_view = resolver(view_intent.id);
+
+  auto& scene_renderer = renderer_->EnsureSceneRenderer(&view_intent);
+  scene_renderer.OnStandaloneFrameStart(frame_context.GetFrameSequenceNumber(),
+    frame_context.GetFrameSlot(), std::nullopt);
+
+  auto render_context = RenderContext {};
+  renderer_->WireContext(render_context, {});
+  render_context.frame_slot = frame_context.GetFrameSlot();
+  render_context.frame_sequence = frame_context.GetFrameSequenceNumber();
+  render_context.scene = scene_source_.scene;
+  render_context.pass_target = output_target_.framebuffer;
+  render_context.view_outputs.insert_or_assign(
+    view_intent.id, output_target_.framebuffer);
+
+  const auto exposure_view_id
+    = view_intent.exposure_source_view_id != kInvalidViewId
+    ? view_intent.exposure_source_view_id
+    : view_intent.id;
+  render_context.frame_views.push_back(RenderContext::ViewExecutionEntry {
+    .view_id = view_intent.id,
+    .exposure_view_id = exposure_view_id,
+    .view_state_handle = view_intent.view_state_handle,
+    .exposure_view_state_handle = view_intent.view_state_handle,
+    .is_scene_view = true,
+    .is_reflection_capture = false,
+    .with_atmosphere = view_intent.with_atmosphere,
+    .with_height_fog = view_intent.with_height_fog,
+    .with_local_fog = view_intent.with_local_fog,
+    .debug_name = std::string(view_intent.name),
+    .view_kind = view_intent.view_kind,
+    .feature_profile = view_intent.feature_profile,
+    .feature_mask = view_intent.feature_mask,
+    .composition_view = observer_ptr<const CompositionView> { &view_intent },
+    .shading_mode_override = view_intent.shading_mode,
+    .render_mode_override = view_intent.force_wireframe
+      ? std::optional<RenderMode> { RenderMode::kWireframe }
+      : view_intent.render_settings.render_mode,
+    .resolved_view = observer_ptr<const ResolvedView> { &resolved_view },
+    .render_target = output_target_.framebuffer,
+    .composite_source = output_target_.framebuffer,
+    .primary_target = output_target_.framebuffer,
+  });
+
+  scene_renderer.OnRender(render_context);
+  FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+
+  scene_renderer.OnFrameStart(frame_context);
+  renderer_->scene_renderer_started_frame_
+    = frame_context.GetFrameSequenceNumber();
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+{
+  ExecuteNow();
   co_return;
 }
 
@@ -2595,6 +3364,12 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
     });
   } else {
     const auto& view_intent = view_intent_->ViewIntent();
+    if (view_intent.id == kInvalidViewId) {
+      report.issues.push_back(ValidationIssue {
+        .code = "view_intent.invalid_id",
+        .message = "Offscreen scene requires a valid view id",
+      });
+    }
     auto camera = view_intent.camera.value_or(scene::SceneNode {});
     if (!camera.IsAlive() || !camera.HasCamera()) {
       report.issues.push_back(ValidationIssue {
@@ -2608,6 +3383,30 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
     report.issues.push_back(ValidationIssue {
       .code = "output_target.missing",
       .message = "Offscreen scene requires an output target framebuffer",
+    });
+  } else if (ResolveFramebufferColorTexture(*output_target_->framebuffer)
+    == nullptr) {
+    report.issues.push_back(ValidationIssue {
+      .code = "output_target.invalid_framebuffer",
+      .message
+      = "Offscreen scene requires an output framebuffer with a color target",
+    });
+  }
+
+  const auto pipeline_input
+    = pipeline_.has_value() ? *pipeline_ : OffscreenPipelineInput {};
+  const auto profile_spec
+    = ResolveViewFeatureProfileSpec(pipeline_input.feature_profile);
+  const auto capability_validation
+    = renderer_->ValidateCapabilityRequirements(
+      profile_spec.capability_requirements);
+  if (!capability_validation.Ok()) {
+    report.issues.push_back(ValidationIssue {
+      .code = "pipeline.missing_required_capabilities",
+      .message = fmt::format(
+        "Offscreen scene profile '{}' is missing required capabilities: {}",
+        ToString(pipeline_input.feature_profile),
+        to_string(capability_validation.missing_required)),
     });
   }
 

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
@@ -78,15 +79,6 @@ public:
   {
     return frame_want_auto_exposure_;
   }
-  [[nodiscard]] auto GetRenderMode() const -> RenderMode
-  {
-    return frame_render_mode_;
-  }
-  [[nodiscard]] auto ShaderDebugMode() const
-    -> ::oxygen::vortex::ShaderDebugMode
-  {
-    return frame_shader_debug_mode_;
-  }
   [[nodiscard]] auto WireColor() const -> const graphics::Color&
   {
     return frame_wire_color_;
@@ -104,6 +96,8 @@ private:
   struct SkyState {
     bool sky_atmo_enabled { false };
     bool sky_sphere_enabled { false };
+    std::uint32_t sky_sphere_source { 0U };
+    bool sky_sphere_cubemap_authored { false };
   };
 
   [[nodiscard]] auto EvaluateSkyState(observer_ptr<scene::Scene> scene) const
@@ -117,10 +111,6 @@ private:
   std::optional<float> frame_auto_exposure_reset_;
   bool frame_gpu_debug_pass_enabled_ { true };
   bool frame_want_auto_exposure_ { false };
-  RenderMode frame_render_mode_ { RenderMode::kSolid };
-  ::oxygen::vortex::ShaderDebugMode frame_shader_debug_mode_ {
-    ::oxygen::vortex::ShaderDebugMode::kDisabled
-  };
   graphics::Color frame_wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   std::optional<SubPixelPosition> frame_gpu_debug_mouse_down_position_;
 };

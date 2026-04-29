@@ -12,14 +12,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 #include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/Services/DomainService.h"
-
-namespace oxygen::renderer {
-class RenderingPipeline;
-} // namespace oxygen::renderer
 
 namespace oxygen::vortex {
 class Renderer;
@@ -29,7 +26,7 @@ namespace oxygen::examples {
 
 class SettingsService;
 
-//! Settings persistence for rendering panel options.
+//! Settings persistence for Vortex diagnostics and rendering options.
 /*!
  Owns UI-facing settings for view mode (solid/wireframe) and debug mode,
  delegating persistence to `SettingsService` and exposing an epoch for cache
@@ -51,20 +48,15 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(RenderingSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(RenderingSettingsService)
 
-  //! Associates the service with a rendering pipeline.
-  virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
-    -> void;
-
-  //! Binds the service to the Vortex runtime seam when no legacy pipeline is
-  //! present.
+  //! Binds the service to the Vortex runtime.
   virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
 
   //! Returns the persisted render mode.
-  [[nodiscard]] virtual auto GetRenderMode() const -> renderer::RenderMode;
+  [[nodiscard]] virtual auto GetRenderMode() const -> vortex::RenderMode;
 
   //! Sets the render mode.
-  virtual auto SetRenderMode(renderer::RenderMode mode) -> void;
+  virtual auto SetRenderMode(vortex::RenderMode mode) -> void;
 
   //! Returns the persisted wireframe color.
   [[nodiscard]] virtual auto GetWireframeColor() const -> graphics::Color;
@@ -74,6 +66,10 @@ public:
 
   //! Returns the persisted debug mode.
   [[nodiscard]] virtual auto GetDebugMode() const -> engine::ShaderDebugMode;
+
+  //! Returns the debug mode that the renderer will actually execute.
+  [[nodiscard]] virtual auto GetEffectiveDebugMode() const
+    -> engine::ShaderDebugMode;
 
   //! Sets the debug mode.
   virtual auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
@@ -90,12 +86,6 @@ public:
   //! Sets whether atmosphere blue-noise jitter is enabled.
   virtual auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
 
-  //! Returns the persisted directional shadow quality tier.
-  [[nodiscard]] virtual auto GetShadowQualityTier() const -> ShadowQualityTier;
-
-  //! Persists the directional shadow quality tier for the next renderer init.
-  virtual auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
-
   [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
   [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
   [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
@@ -103,6 +93,8 @@ public:
   [[nodiscard]] virtual auto SupportsDebugMode(
     engine::ShaderDebugMode mode) const -> bool;
   [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
+  [[nodiscard]] virtual auto GetRendererCapabilities() const
+    -> vortex::CapabilitySet;
 
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
@@ -117,13 +109,11 @@ private:
   static constexpr auto kWireColorRKey = "rendering.wire_color.r";
   static constexpr auto kWireColorGKey = "rendering.wire_color.g";
   static constexpr auto kWireColorBKey = "rendering.wire_color.b";
-  static constexpr auto kDebugModeKey = "rendering.debug_mode";
+  static constexpr auto kDebugModeKey = "diagnostics.shader_debug_mode";
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
-  static constexpr auto kShadowQualityTierKey = "rendering.shadow_quality_tier";
 
-  observer_ptr<renderer::RenderingPipeline> pipeline_;
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   mutable std::atomic_uint64_t epoch_ { 0 };
 

@@ -7,21 +7,22 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 
 namespace oxygen::scene::testing {
 
-NOLINT_TEST(EnvironmentComponentsTest, SkyAtmosphereExposesWidenedAuthoredFields)
+NOLINT_TEST(
+  EnvironmentComponentsTest, SkyAtmosphereExposesWidenedAuthoredFields)
 {
   auto atmosphere = environment::SkyAtmosphere {};
   atmosphere.SetTransformMode(
     environment::SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
   atmosphere.SetPlanetAnchorWorldPosition({ 12.0F, -3.0F, 48.0F });
   atmosphere.SetSkyLuminanceFactorRgb({ 1.1F, 1.2F, 1.3F });
-  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
-    { 0.9F, 0.8F, 0.7F });
+  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb({ 0.9F, 0.8F, 0.7F });
   atmosphere.SetAerialPerspectiveStartDepthMeters(250.0F);
   atmosphere.SetHeightFogContribution(0.35F);
   atmosphere.SetTraceSampleCountScale(2.5F);
@@ -116,20 +117,53 @@ NOLINT_TEST(EnvironmentComponentsTest,
   EXPECT_FALSE(fog.GetVisibleInRealTimeSkyCaptures());
 }
 
+NOLINT_TEST(
+  EnvironmentComponentsTest, LocalFogVolumeSanitizesUeShapedAuthoringRanges)
+{
+  auto local_fog = environment::LocalFogVolume {};
+  local_fog.SetRadialFogExtinction(-1.0F);
+  local_fog.SetHeightFogExtinction(-2.0F);
+  local_fog.SetHeightFogFalloff(-3.0F);
+  local_fog.SetHeightFogOffset(-1.25F);
+  local_fog.SetFogPhaseG(2.0F);
+  local_fog.SetFogAlbedo({ -0.5F, 0.5F, 1.5F });
+  local_fog.SetFogEmissive({ -1.0F, 2.0F, 3.0F });
+  local_fog.SetSortPriority(500);
+
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), -1.25F);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.999F);
+  EXPECT_EQ(local_fog.GetFogAlbedo(), Vec3(0.0F, 0.5F, 1.0F));
+  EXPECT_EQ(local_fog.GetFogEmissive(), Vec3(0.0F, 2.0F, 3.0F));
+  EXPECT_EQ(local_fog.GetSortPriority(), 127);
+
+  local_fog.SetFogPhaseG(-0.25F);
+  local_fog.SetSortPriority(-500);
+
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.0F);
+  EXPECT_EQ(local_fog.GetSortPriority(), -127);
+}
+
 NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)
 {
   auto sky_light = environment::SkyLight {};
   sky_light.SetRealTimeCaptureEnabled(true);
+  sky_light.SetSourceCubemapAngleRadians(0.75F);
   sky_light.SetLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
+  sky_light.SetLowerHemisphereIsSolidColor(false);
+  sky_light.SetLowerHemisphereBlendAlpha(0.35F);
   sky_light.SetVolumetricScatteringIntensity(0.4F);
   sky_light.SetAffectReflections(false);
-  sky_light.SetAffectGlobalIllumination(false);
 
   EXPECT_TRUE(sky_light.GetRealTimeCaptureEnabled());
+  EXPECT_FLOAT_EQ(sky_light.GetSourceCubemapAngleRadians(), 0.75F);
   EXPECT_EQ(sky_light.GetLowerHemisphereColor(), Vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_FALSE(sky_light.GetLowerHemisphereIsSolidColor());
+  EXPECT_FLOAT_EQ(sky_light.GetLowerHemisphereBlendAlpha(), 0.35F);
   EXPECT_FLOAT_EQ(sky_light.GetVolumetricScatteringIntensity(), 0.4F);
   EXPECT_FALSE(sky_light.GetAffectReflections());
-  EXPECT_FALSE(sky_light.GetAffectGlobalIllumination());
 }
 
 NOLINT_TEST(EnvironmentComponentsTest,
@@ -142,8 +176,8 @@ NOLINT_TEST(EnvironmentComponentsTest,
 
   EXPECT_EQ(light.GetAtmosphereLightSlot(), AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light.GetUsePerPixelAtmosphereTransmittance());
-  EXPECT_EQ(light.GetAtmosphereDiskLuminanceScale(),
-    Vec4(1.2F, 0.9F, 0.8F, 0.5F));
+  EXPECT_EQ(
+    light.GetAtmosphereDiskLuminanceScale(), Vec4(1.2F, 0.9F, 0.8F, 0.5F));
 }
 
 } // namespace oxygen::scene::testing

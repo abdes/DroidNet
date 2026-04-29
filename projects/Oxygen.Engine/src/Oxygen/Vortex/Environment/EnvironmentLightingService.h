@@ -12,6 +12,9 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
+#include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
@@ -44,6 +47,7 @@ namespace environment {
   class DistantSkyLightLutPass;
   class AtmosphereSkyViewLutPass;
   class AtmosphereCameraAerialPerspectivePass;
+  class VolumetricFogPass;
   namespace internal {
     struct StableAtmosphereState;
     struct ResolvedAtmosphereLightState;
@@ -54,6 +58,10 @@ namespace environment {
     class LocalFogVolumeState;
   }
 } // namespace environment
+
+namespace resources {
+class TextureBinder;
+} // namespace resources
 
 class EnvironmentLightingService {
 public:
@@ -78,6 +86,13 @@ public:
     bool sky_light_ibl_valid { false };
     bool sky_light_ibl_unavailable { false };
     bool sky_light_ibl_stale { false };
+    environment::StaticSkyLightProductStatus sky_light_ibl_status {
+      environment::StaticSkyLightProductStatus::kDisabled
+    };
+    environment::StaticSkyLightUnavailableReason
+      sky_light_ibl_unavailable_reason {
+        environment::StaticSkyLightUnavailableReason::kNone
+      };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
     bool integrated_light_scattering_unavailable { false };
@@ -140,9 +155,29 @@ public:
     bool sky_light_authored_enabled { false };
     bool sky_light_ibl_valid { false };
     bool sky_light_ibl_unavailable { false };
+    environment::StaticSkyLightProductStatus sky_light_ibl_status {
+      environment::StaticSkyLightProductStatus::kDisabled
+    };
+    environment::StaticSkyLightUnavailableReason
+      sky_light_ibl_unavailable_reason {
+        environment::StaticSkyLightUnavailableReason::kNone
+      };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
     bool integrated_light_scattering_unavailable { false };
+    bool volumetric_fog_view_constants_bound { false };
+    bool volumetric_fog_ue_log_depth_distribution { false };
+    bool volumetric_fog_directional_shadowed_light_requested { false };
+    bool volumetric_fog_height_fog_media_requested { false };
+    bool volumetric_fog_height_fog_media_executed { false };
+    bool volumetric_fog_sky_light_injection_requested { false };
+    bool volumetric_fog_sky_light_injection_executed { false };
+    bool volumetric_fog_temporal_history_requested { false };
+    bool volumetric_fog_temporal_history_reprojection_executed { false };
+    bool volumetric_fog_temporal_history_reset { false };
+    bool volumetric_fog_local_fog_injection_requested { false };
+    bool volumetric_fog_local_fog_injection_executed { false };
+    std::uint32_t volumetric_fog_local_fog_instance_count { 0U };
   };
 
   struct Stage15State {
@@ -176,6 +211,31 @@ public:
     std::uint32_t local_fog_dispatch_count_x { 0U };
     std::uint32_t local_fog_dispatch_count_y { 0U };
     std::uint32_t local_fog_dispatch_count_z { 0U };
+    bool volumetric_fog_requested { false };
+    bool volumetric_fog_executed { false };
+    bool integrated_light_scattering_valid { false };
+    ShaderVisibleIndex integrated_light_scattering_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t volumetric_fog_grid_width { 0U };
+    std::uint32_t volumetric_fog_grid_height { 0U };
+    std::uint32_t volumetric_fog_grid_depth { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_x { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_y { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_z { 0U };
+    bool volumetric_fog_view_constants_bound { false };
+    bool volumetric_fog_ue_log_depth_distribution { false };
+    bool volumetric_fog_directional_shadowed_light_requested { false };
+    bool volumetric_fog_height_fog_media_requested { false };
+    bool volumetric_fog_height_fog_media_executed { false };
+    bool volumetric_fog_sky_light_injection_requested { false };
+    bool volumetric_fog_sky_light_injection_executed { false };
+    bool volumetric_fog_temporal_history_requested { false };
+    bool volumetric_fog_temporal_history_reprojection_executed { false };
+    bool volumetric_fog_temporal_history_reset { false };
+    bool volumetric_fog_local_fog_injection_requested { false };
+    bool volumetric_fog_local_fog_injection_executed { false };
+    std::uint32_t volumetric_fog_local_fog_instance_count { 0U };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);
@@ -201,7 +261,8 @@ public:
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
     ShaderVisibleIndex environment_view_slot = kInvalidShaderVisibleIndex,
-    bool enable_ambient_bridge = false) -> ShaderVisibleIndex;
+    bool enable_ambient_bridge = false,
+    const SceneTextures* scene_textures = nullptr) -> ShaderVisibleIndex;
   OXGN_VRTX_API auto RenderSkyAndFog(
     RenderContext& ctx, const SceneTextures& scene_textures) -> void;
 
@@ -261,8 +322,12 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
-  [[nodiscard]] auto BuildEnvironmentStaticData(
-    const environment::EnvironmentViewProducts& view_products) const
+  auto EnsureSkyTextureBinder() -> resources::TextureBinder*;
+  auto PrepareLocalFogForStage14(RenderContext& ctx,
+    const SceneTextures& scene_textures)
+    -> const environment::internal::LocalFogVolumeState::ViewProducts&;
+  [[nodiscard]] auto BuildEnvironmentStaticData(const RenderContext& ctx,
+    const environment::EnvironmentViewProducts& view_products)
     -> EnvironmentStaticData;
   [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const
     -> EnvironmentViewData;
@@ -310,6 +375,13 @@ private:
   std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_ {};
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
     camera_aerial_perspective_pass_ {};
+  std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_ {};
+  std::unique_ptr<resources::TextureBinder> sky_texture_binder_ {};
+  environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
+  environment::LocalFogVolumeTiledCullingPass::RecordState
+    pending_local_fog_culling_state_ {};
+  ViewId pending_local_fog_view_id_ { kInvalidViewId };
+  frame::SequenceNumber pending_local_fog_sequence_ { 0U };
   std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
 };
 

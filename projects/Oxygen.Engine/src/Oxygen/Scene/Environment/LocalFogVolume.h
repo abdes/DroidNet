@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -31,7 +33,7 @@ public:
 
   auto SetRadialFogExtinction(const float value) noexcept -> void
   {
-    radial_fog_extinction_ = value;
+    radial_fog_extinction_ = ClampNonNegative(value);
   }
   [[nodiscard]] auto GetRadialFogExtinction() const noexcept -> float
   {
@@ -40,7 +42,7 @@ public:
 
   auto SetHeightFogExtinction(const float value) noexcept -> void
   {
-    height_fog_extinction_ = value;
+    height_fog_extinction_ = ClampNonNegative(value);
   }
   [[nodiscard]] auto GetHeightFogExtinction() const noexcept -> float
   {
@@ -49,7 +51,7 @@ public:
 
   auto SetHeightFogFalloff(const float value) noexcept -> void
   {
-    height_fog_falloff_ = value;
+    height_fog_falloff_ = ClampNonNegative(value);
   }
   [[nodiscard]] auto GetHeightFogFalloff() const noexcept -> float
   {
@@ -65,13 +67,19 @@ public:
     return height_fog_offset_;
   }
 
-  auto SetFogPhaseG(const float value) noexcept -> void { fog_phase_g_ = value; }
+  auto SetFogPhaseG(const float value) noexcept -> void
+  {
+    fog_phase_g_ = std::clamp(value, 0.0F, kMaxFogPhaseG);
+  }
   [[nodiscard]] auto GetFogPhaseG() const noexcept -> float
   {
     return fog_phase_g_;
   }
 
-  auto SetFogAlbedo(const Vec3& value) noexcept -> void { fog_albedo_ = value; }
+  auto SetFogAlbedo(const Vec3& value) noexcept -> void
+  {
+    fog_albedo_ = Clamp01(value);
+  }
   [[nodiscard]] auto GetFogAlbedo() const noexcept -> const Vec3&
   {
     return fog_albedo_;
@@ -79,20 +87,50 @@ public:
 
   auto SetFogEmissive(const Vec3& value) noexcept -> void
   {
-    fog_emissive_ = value;
+    fog_emissive_ = ClampNonNegative(value);
   }
   [[nodiscard]] auto GetFogEmissive() const noexcept -> const Vec3&
   {
     return fog_emissive_;
   }
 
-  auto SetSortPriority(const int value) noexcept -> void { sort_priority_ = value; }
+  auto SetSortPriority(const int value) noexcept -> void
+  {
+    sort_priority_ = std::clamp(value, kMinSortPriority, kMaxSortPriority);
+  }
   [[nodiscard]] auto GetSortPriority() const noexcept -> int
   {
     return sort_priority_;
   }
 
 private:
+  static constexpr float kMaxFogPhaseG = 0.999F;
+  static constexpr int kMinSortPriority = -127;
+  static constexpr int kMaxSortPriority = 127;
+
+  [[nodiscard]] static auto ClampNonNegative(const float value) noexcept -> float
+  {
+    return std::max(value, 0.0F);
+  }
+
+  [[nodiscard]] static auto ClampNonNegative(const Vec3& value) noexcept -> Vec3
+  {
+    return {
+      std::max(value.x, 0.0F),
+      std::max(value.y, 0.0F),
+      std::max(value.z, 0.0F),
+    };
+  }
+
+  [[nodiscard]] static auto Clamp01(const Vec3& value) noexcept -> Vec3
+  {
+    return {
+      std::clamp(value.x, 0.0F, 1.0F),
+      std::clamp(value.y, 0.0F, 1.0F),
+      std::clamp(value.z, 0.0F, 1.0F),
+    };
+  }
+
   bool enabled_ { true };
   float radial_fog_extinction_ { 1.0F };
   float height_fog_extinction_ { 1.0F };

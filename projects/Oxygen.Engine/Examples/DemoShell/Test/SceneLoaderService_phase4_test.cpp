@@ -41,6 +41,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::examples::testing {
@@ -151,6 +152,82 @@ namespace {
     std::memcpy(cursor, &table_desc, sizeof(table_desc));
     cursor += sizeof(table_desc);
     std::memcpy(cursor, &local_fog, sizeof(local_fog));
+    return bytes;
+  }
+
+  auto BuildSceneDescriptorBytesWithDirectionalLight()
+    -> std::vector<std::byte>
+  {
+    auto desc = pakw::SceneAssetDesc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+    desc.header.version = pakw::kSceneAssetVersion;
+    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
+    desc.nodes.count = 2U;
+    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
+
+    auto root = pakw::NodeRecord {};
+    root.parent_index = 0U;
+    root.scene_name_offset = 1U;
+
+    auto sun_node = pakw::NodeRecord {};
+    sun_node.parent_index = 0U;
+    sun_node.scene_name_offset = 6U;
+
+    const auto strings = std::string("\0Root\0SunNode\0", 14);
+    const auto nodes_bytes = sizeof(root) + sizeof(sun_node);
+    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
+      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.size
+      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
+    desc.component_table_directory_offset
+      = desc.scene_strings.offset + desc.scene_strings.size;
+    desc.component_table_count = 1U;
+
+    auto table_desc = pakw::SceneComponentTableDesc {};
+    table_desc.component_type
+      = static_cast<uint32_t>(data::ComponentType::kDirectionalLight);
+    table_desc.table.offset = desc.component_table_directory_offset
+      + static_cast<data::pak::core::OffsetT>(sizeof(table_desc));
+    table_desc.table.count = 1U;
+    table_desc.table.entry_size = sizeof(pakw::DirectionalLightRecord);
+
+    auto directional = pakw::DirectionalLightRecord {};
+    directional.node_index = 1U;
+    directional.common.casts_shadows = 1U;
+    directional.common.shadow.bias = 0.0007F;
+    directional.common.shadow.normal_bias = 0.03F;
+    directional.angular_size_radians = 0.00951F;
+    directional.environment_contribution = 1U;
+    directional.is_sun_light = 1U;
+    directional.cascade_count = 4U;
+    directional.cascade_distances[0] = 250.0F;
+    directional.cascade_distances[1] = 900.0F;
+    directional.cascade_distances[2] = 2200.0F;
+    directional.cascade_distances[3] = 4200.0F;
+    directional.distribution_exponent = 2.5F;
+    directional.split_mode = static_cast<uint8_t>(
+      scene::DirectionalCsmSplitMode::kManualDistances);
+    directional.max_shadow_distance = 4200.0F;
+    directional.transition_fraction = 0.12F;
+    directional.distance_fadeout_fraction = 0.18F;
+    directional.intensity_lux = 95000.0F;
+
+    auto bytes = std::vector<std::byte> {};
+    bytes.resize(sizeof(desc) + nodes_bytes + strings.size()
+      + sizeof(table_desc) + sizeof(directional));
+
+    auto* cursor = bytes.data();
+    std::memcpy(cursor, &desc, sizeof(desc));
+    cursor += sizeof(desc);
+    std::memcpy(cursor, &root, sizeof(root));
+    cursor += sizeof(root);
+    std::memcpy(cursor, &sun_node, sizeof(sun_node));
+    cursor += sizeof(sun_node);
+    std::memcpy(cursor, strings.data(), strings.size());
+    cursor += strings.size();
+    std::memcpy(cursor, &table_desc, sizeof(table_desc));
+    cursor += sizeof(table_desc);
+    std::memcpy(cursor, &directional, sizeof(directional));
     return bytes;
   }
 
@@ -857,6 +934,54 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_EQ(result.scene_key, scene_key);
   EXPECT_THAT(result.asset, ::testing::NotNull());
   EXPECT_THAT(result.physics_asset, ::testing::NotNull());
+}
+
+NOLINT_TEST(SceneLoaderServicePhase4Test,
+  BuildSceneAsyncHydratesDirectionalLightCsmSettings)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+  const auto scene_key
+    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/sun_csm.oscene");
+  auto scene_asset = std::make_shared<data::SceneAsset>(
+    scene_key, BuildSceneDescriptorBytesWithDirectionalLight());
+  loader.PutScene(scene_key, scene_asset);
+
+  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
+    std::filesystem::current_path());
+  auto service = std::make_shared<SceneLoaderService>(loader,
+    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
+    nullptr, nullptr, std::move(path_finder));
+
+  auto runtime_scene
+    = std::make_shared<scene::Scene>("DemoShell.DirectionalCsmHydration", 64U);
+  oxygen::co::testing::TestEventLoop loop;
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
+  });
+
+  auto sun_node = FindNodeByName(*runtime_scene, "SunNode");
+  ASSERT_TRUE(sun_node.has_value());
+  auto light = sun_node->GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+
+  EXPECT_TRUE(light->get().Common().casts_shadows);
+  EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, 0.0007F);
+  EXPECT_FLOAT_EQ(light->get().Common().shadow.normal_bias, 0.03F);
+  EXPECT_TRUE(light->get().GetEnvironmentContribution());
+  EXPECT_TRUE(light->get().IsSunLight());
+  EXPECT_FLOAT_EQ(light->get().GetIntensityLux(), 95000.0F);
+
+  const auto& csm = light->get().CascadedShadows();
+  EXPECT_EQ(csm.cascade_count, 4U);
+  EXPECT_EQ(csm.split_mode, scene::DirectionalCsmSplitMode::kManualDistances);
+  EXPECT_FLOAT_EQ(csm.max_shadow_distance, 4200.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[0], 250.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[1], 900.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[2], 2200.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[3], 4200.0F);
+  EXPECT_FLOAT_EQ(csm.distribution_exponent, 2.5F);
+  EXPECT_FLOAT_EQ(csm.transition_fraction, 0.12F);
+  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.18F);
 }
 
 NOLINT_TEST(SceneLoaderServicePhase4Test,

@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,7 @@ namespace {
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
   constexpr float kMetersToKm = engine::atmos::kMToSkyUnit;
   constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
+  constexpr float kMaxSkySphereIntensity = 100000.0F;
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -141,6 +143,43 @@ namespace {
     auto transform = node.GetTransform();
     transform.SetLocalRotation(
       ComputeLocalRotationForWorldDirection(node, direction_ws));
+  }
+
+  auto FindTaggedSunLightNodeIncludingDisabled(scene::Scene& scene_ref)
+    -> std::optional<scene::SceneNode>
+  {
+    std::optional<scene::SceneNode> candidate;
+    auto candidate_count = 0U;
+    auto stack = scene_ref.GetRootNodes();
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      if (const auto light = node.GetLightAs<scene::DirectionalLight>();
+        light.has_value() && light->get().IsSunLight()
+        && light->get().GetEnvironmentContribution()) {
+        candidate = candidate.value_or(node);
+        ++candidate_count;
+      }
+
+      auto child = node.GetFirstChild();
+      while (child.has_value()) {
+        stack.push_back(*child);
+        child = child->GetNextSibling();
+      }
+    }
+
+    if (candidate_count > 1U) {
+      throw scene::DirectionalLightContractError(
+        "scene has more than one directional light with is_sun_light=true "
+        "and environment_contribution=true");
+    }
+
+    return candidate;
   }
 
   template <typename Record>
@@ -357,15 +396,18 @@ namespace {
     target.SetDiffuseIntensity(source.diffuse_intensity);
     target.SetSpecularIntensity(source.specular_intensity);
     target.SetRealTimeCaptureEnabled(source.real_time_capture_enabled != 0U);
+    target.SetSourceCubemapAngleRadians(source.source_cubemap_angle_radians);
     target.SetLowerHemisphereColor({
       source.lower_hemisphere_color[0],
       source.lower_hemisphere_color[1],
       source.lower_hemisphere_color[2],
     });
+    target.SetLowerHemisphereIsSolidColor(
+      source.lower_hemisphere_is_solid_color != 0U);
+    target.SetLowerHemisphereBlendAlpha(source.lower_hemisphere_blend_alpha);
     target.SetVolumetricScatteringIntensity(
       source.volumetric_scattering_intensity);
     target.SetAffectReflections(source.affect_reflections != 0U);
-    target.SetAffectGlobalIllumination(source.affect_global_illumination != 0U);
   }
 
   auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
@@ -484,8 +526,6 @@ namespace {
     = "env.sky_light.volumetric_scattering_intensity";
   constexpr std::string_view kSkyLightAffectReflectionsKey
     = "env.sky_light.affect_reflections";
-  constexpr std::string_view kSkyLightAffectGlobalIlluminationKey
-    = "env.sky_light.affect_global_illumination";
 
   constexpr std::string_view kFogEnabledKey = "env.fog.enabled";
   constexpr std::string_view kFogModelKey = "env.fog.model";
@@ -767,33 +807,15 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       return;
     }
 
-    if (preset_index_ == kPresetUseScene) {
-      pending_changes_ = false;
-      dirty_domains_ = ToMask(DirtyDomain::kNone);
-      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
-      needs_sync_ = true;
-      SyncFromSceneIfNeeded();
-    } else if (preset_index_ == kPresetCustom) {
-      // Custom mode applies persisted settings when available; otherwise it
-      // mirrors the scene as source-of-truth until user edits.
-      if (has_persisted_settings_) {
-        pending_changes_ = true;
-        dirty_domains_ = ToMask(DirtyDomain::kAll);
-        needs_sync_ = false;
-        skybox_dirty_ = true;
-      } else {
-        pending_changes_ = false;
-        dirty_domains_ = ToMask(DirtyDomain::kNone);
-        needs_sync_ = true;
-        SyncFromSceneIfNeeded();
-      }
-    } else {
-      // Built-in presets are applied by EnvironmentVm, not synced from scene.
-      pending_changes_ = false;
-      dirty_domains_ = ToMask(DirtyDomain::kNone);
-      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
-      needs_sync_ = false;
-    }
+    // Scene-authored demos must start from the scene every time. Persisted
+    // custom state is only re-applied after the user explicitly edits the
+    // environment panel, which switches the service back to Custom mode.
+    preset_index_ = kPresetUseScene;
+    pending_changes_ = false;
+    dirty_domains_ = ToMask(DirtyDomain::kNone);
+    batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+    needs_sync_ = true;
+    SyncFromSceneIfNeeded();
   }
 }
 
@@ -942,22 +964,6 @@ auto EnvironmentSettingsService::HasPendingChanges() const -> bool
   return pending_changes_;
 }
 
-auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
-  -> std::pair<bool, bool>
-{
-  bool luts_valid = false;
-  bool luts_dirty = true;
-
-  if (config_.renderer && main_view_id_.has_value()) {
-    const auto state = config_.renderer->GetLastEnvironmentLightingState();
-    luts_valid = state.published_bindings && state.sky_executed
-      && state.atmosphere_executed;
-    luts_dirty = !luts_valid;
-  }
-
-  return { luts_valid, luts_dirty };
-}
-
 auto EnvironmentSettingsService::GetSkyAtmosphereEnabled() const -> bool
 {
   return sky_atmo_enabled_;
@@ -968,9 +974,16 @@ auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
   if (sky_atmo_enabled_ == enabled) {
     return;
   }
+  const bool sky_sphere_was_enabled = sky_sphere_enabled_;
   sky_atmo_enabled_ = enabled;
   NormalizeSkySystems();
-  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+  auto dirty_domains = ToMask(DirtyDomain::kAtmosphereModel);
+  if (sky_sphere_enabled_ != sky_sphere_was_enabled) {
+    skybox_dirty_ = true;
+    dirty_domains |= ToMask(DirtyDomain::kSkySphere)
+      | ToMask(DirtyDomain::kSkybox);
+  }
+  MarkDirty(dirty_domains);
 }
 
 auto EnvironmentSettingsService::GetSkyAtmosphereTransformMode() const -> int
@@ -1311,80 +1324,6 @@ auto EnvironmentSettingsService::SetAtmosphereRenderInMainPass(
   MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
-auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
-{
-  return sky_view_lut_slices_;
-}
-
-auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
-{
-  value = std::clamp(value, 1, 128);
-  if (sky_view_lut_slices_ == value) {
-    return;
-  }
-  DLOG_F(1,
-    "SkyView LUT slices are renderer-owned; ignoring UI write {} "
-    "(current={})",
-    value, sky_view_lut_slices_);
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutWidth() const -> int
-{
-  if (config_.renderer != nullptr) {
-    return static_cast<int>(config_.renderer->GetAerialPerspectiveLutWidth());
-  }
-  return 32;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthResolution() const
-  -> int
-{
-  if (config_.renderer != nullptr) {
-    return static_cast<int>(
-      config_.renderer->GetAerialPerspectiveLutDepthResolution());
-  }
-  return 16;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthKm() const -> float
-{
-  if (config_.renderer != nullptr) {
-    return config_.renderer->GetAerialPerspectiveLutDepthKm();
-  }
-  return 96.0F;
-}
-
-auto EnvironmentSettingsService::GetAerialPerspectiveLutSampleCountMaxPerSlice()
-  const -> float
-{
-  if (config_.renderer != nullptr) {
-    return config_.renderer->GetAerialPerspectiveLutSampleCountMaxPerSlice();
-  }
-  return 2.0F;
-}
-
-auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
-{
-  return sky_view_alt_mapping_mode_;
-}
-
-auto EnvironmentSettingsService::SetSkyViewAltMappingMode(int value) -> void
-{
-  value = std::clamp(value, 0, 1);
-  if (sky_view_alt_mapping_mode_ == value) {
-    return;
-  }
-  DLOG_F(1,
-    "SkyView mapping mode is renderer-owned; ignoring UI write {} "
-    "(current={})",
-    value, sky_view_alt_mapping_mode_);
-}
-
-auto EnvironmentSettingsService::RequestRegenerateLut() -> void
-{
-  DLOG_F(1, "RequestRegenerateLut ignored; renderer owns LUT regeneration");
-}
-
 auto EnvironmentSettingsService::GetSkySphereEnabled() const -> bool
 {
   return sky_sphere_enabled_;
@@ -1457,6 +1396,12 @@ auto EnvironmentSettingsService::SetSkySphereRotationDeg(float value) -> void
   }
   sky_sphere_rotation_deg_ = value;
   MarkDirty(ToMask(DirtyDomain::kSkySphere));
+}
+
+auto EnvironmentSettingsService::GetSkySphereCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return sky_sphere_cubemap_resource_key_;
 }
 
 auto EnvironmentSettingsService::GetSkyboxPath() const -> std::string
@@ -1606,7 +1551,14 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
   options.hdr_exposure_ev = hdr_exposure_ev;
 
   config_.skybox_service->LoadAndEquip(std::string(path), options,
-    { .sky_sphere_intensity = sky_intensity_,
+    { .enable_sky_sphere = sky_sphere_enabled_
+        && sky_sphere_source_
+          == static_cast<int>(scene::environment::SkySphereSource::kCubemap),
+      .enable_sky_light = sky_light_enabled_
+        && sky_light_source_
+          == static_cast<int>(
+            scene::environment::SkyLightSource::kSpecifiedCubemap),
+      .sky_sphere_intensity = sky_intensity_,
       .intensity_mul = sky_light_intensity_mul_,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
@@ -1616,6 +1568,8 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
       skybox_last_face_size_ = result.face_size;
       skybox_last_resource_key_ = result.resource_key;
       if (result.success) {
+        sky_sphere_cubemap_resource_key_ = result.resource_key;
+        sky_light_cubemap_resource_key_ = result.resource_key;
         RequestResync();
       }
     });
@@ -1656,6 +1610,12 @@ auto EnvironmentSettingsService::SetSkyLightSource(int source) -> void
   }
   sky_light_source_ = source;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightCubemapResourceKey() const
+  -> content::ResourceKey
+{
+  return sky_light_cubemap_resource_key_;
 }
 
 auto EnvironmentSettingsService::GetSkyLightTint() const -> glm::vec3
@@ -1775,22 +1735,6 @@ auto EnvironmentSettingsService::SetSkyLightAffectReflections(
     return;
   }
   sky_light_affect_reflections_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kSkyLight));
-}
-
-auto EnvironmentSettingsService::GetSkyLightAffectGlobalIllumination() const
-  -> bool
-{
-  return sky_light_affect_global_illumination_;
-}
-
-auto EnvironmentSettingsService::SetSkyLightAffectGlobalIllumination(
-  const bool enabled) -> void
-{
-  if (sky_light_affect_global_illumination_ == enabled) {
-    return;
-  }
-  sky_light_affect_global_illumination_ = enabled;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
@@ -2986,17 +2930,6 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   light.CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
 }
 
-auto EnvironmentSettingsService::GetUseLut() const -> bool { return use_lut_; }
-
-auto EnvironmentSettingsService::SetUseLut(bool enabled) -> void
-{
-  if (use_lut_ == enabled) {
-    return;
-  }
-  use_lut_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kRendererFlags));
-}
-
 auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 {
   if (!pending_changes_ || !config_.scene) {
@@ -3253,6 +3186,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     sky->SetSolidColorRgb(sky_sphere_solid_color_);
     sky->SetIntensity(sky_intensity_);
     sky->SetRotationRadians(sky_sphere_rotation_deg_ * kDegToRad);
+    sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
   }
 
   auto light = env->TryGetSystem<scene::environment::SkyLight>();
@@ -3270,14 +3204,20 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
     light->SetRealTimeCaptureEnabled(sky_light_real_time_capture_enabled_);
+    light->SetSourceCubemapAngleRadians(
+      sky_light_source_cubemap_angle_radians_);
     light->SetLowerHemisphereColor(sky_light_lower_hemisphere_color_);
+    light->SetLowerHemisphereIsSolidColor(
+      sky_light_lower_hemisphere_is_solid_color_);
+    light->SetLowerHemisphereBlendAlpha(
+      sky_light_lower_hemisphere_blend_alpha_);
     light->SetVolumetricScatteringIntensity(
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
-    light->SetAffectGlobalIllumination(sky_light_affect_global_illumination_);
+    sky_light_cubemap_resource_key_ = light->GetCubemapResource();
   }
 
-  if (apply_skybox || apply_sky_sphere) {
+  if (apply_skybox || apply_sky_sphere || apply_sky_light) {
     MaybeAutoLoadSkybox();
   }
 
@@ -3391,36 +3331,40 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
 
   SyncLocalFogVolumesFromScene();
 
-  // DemoShell currently owns the user-facing slice/mapping controls; keep the
-  // persisted values as the source of truth until the Vortex runtime surfaces
-  // per-view LUT parameter introspection directly.
-
   if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
     sky_sphere_enabled_ = sky->IsEnabled();
     sky_sphere_source_ = static_cast<int>(sky->GetSource());
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
     sky_intensity_ = sky->GetIntensity();
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
+    sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
   } else {
     sky_sphere_enabled_ = false;
+    sky_sphere_cubemap_resource_key_ = content::ResourceKey { 0U };
   }
 
   if (auto light = env->TryGetSystem<scene::environment::SkyLight>()) {
     sky_light_enabled_ = light->IsEnabled();
     sky_light_source_ = static_cast<int>(light->GetSource());
+    sky_light_cubemap_resource_key_ = light->GetCubemapResource();
     sky_light_tint_ = light->GetTintRgb();
     sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
     sky_light_real_time_capture_enabled_ = light->GetRealTimeCaptureEnabled();
+    sky_light_source_cubemap_angle_radians_
+      = light->GetSourceCubemapAngleRadians();
     sky_light_lower_hemisphere_color_ = light->GetLowerHemisphereColor();
+    sky_light_lower_hemisphere_is_solid_color_
+      = light->GetLowerHemisphereIsSolidColor();
+    sky_light_lower_hemisphere_blend_alpha_
+      = light->GetLowerHemisphereBlendAlpha();
     sky_light_volumetric_scattering_intensity_
       = light->GetVolumetricScatteringIntensity();
     sky_light_affect_reflections_ = light->GetAffectReflections();
-    sky_light_affect_global_illumination_
-      = light->GetAffectGlobalIllumination();
   } else {
     sky_light_enabled_ = false;
+    sky_light_cubemap_resource_key_ = content::ResourceKey { 0U };
   }
 
   UpdateSunLightCandidate();
@@ -3509,7 +3453,14 @@ auto EnvironmentSettingsService::MaybeAutoLoadSkybox() -> void
   if (!config_.skybox_service) {
     return;
   }
-  if (!sky_sphere_enabled_ || sky_sphere_source_ != 0) {
+  const bool sky_sphere_needs_cubemap = sky_sphere_enabled_
+    && sky_sphere_source_
+      == static_cast<int>(scene::environment::SkySphereSource::kCubemap);
+  const bool sky_light_needs_cubemap = sky_light_enabled_
+    && sky_light_source_
+      == static_cast<int>(
+        scene::environment::SkyLightSource::kSpecifiedCubemap);
+  if (!sky_sphere_needs_cubemap && !sky_light_needs_cubemap) {
     return;
   }
   if (skybox_path_.empty()) {
@@ -3724,12 +3675,9 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
   clamp_float(ozone_profile_.layers[1].constant_term, -8.0F, 8.0F);
 
-  clamp_int(sky_view_lut_slices_, 1, 128);
-  clamp_int(sky_view_alt_mapping_mode_, 0, 1);
-
   clamp_int(sky_sphere_source_, 0, 1);
   clamp_vec3_min(sky_sphere_solid_color_, 0.0F);
-  clamp_float(sky_intensity_, 0.0F, 1000.0F);
+  clamp_float(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
   clamp_float(sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
 
   clamp_int(skybox_layout_idx_, 0, 4);
@@ -4013,8 +3961,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
       sky_light_volumetric_scattering_intensity_);
     any_loaded |= load_bool(
       kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
-    any_loaded |= load_bool(kSkyLightAffectGlobalIlluminationKey,
-      sky_light_affect_global_illumination_);
 
     any_loaded |= load_bool(kFogEnabledKey, fog_enabled_);
     any_loaded |= load_int(kFogModelKey, fog_model_);
@@ -4109,7 +4055,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   if (load_custom_state && loaded_schema_version < 2.0F) {
     // v1 stored invalid coupled intensity defaults; force safe independent
     // values on migration.
-    sky_intensity_ = std::clamp(sky_intensity_, 0.0F, 1000.0F);
+    sky_intensity_ = std::clamp(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
     sky_light_intensity_mul_
       = std::clamp(sky_light_intensity_mul_, 0.0F, 100.0F);
     any_loaded = true;
@@ -4120,6 +4066,14 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
+    if (!config_.force_environment_override) {
+      needs_sync_ = true;
+      pending_changes_ = false;
+      dirty_domains_ = ToMask(DirtyDomain::kNone);
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      return;
+    }
+
     if (config_.force_environment_override) {
       needs_sync_ = false;
       pending_changes_ = true;
@@ -4269,8 +4223,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightVolumetricScatteringIntensityKey,
     sky_light_volumetric_scattering_intensity_);
   save_bool(kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
-  save_bool(kSkyLightAffectGlobalIlluminationKey,
-    sky_light_affect_global_illumination_);
 
   save_bool(kFogEnabledKey, fog_enabled_);
   save_int(kFogModelKey, fog_model_);
@@ -4442,6 +4394,16 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
     DLOG_F(1, "resolved scene sun candidate '{}' in scene '{}'",
       primary->Node().GetName(), config_.scene->GetName());
     return config_.scene->GetNode(primary->NodeHandle());
+  }
+
+  if (const auto disabled_candidate
+    = FindTaggedSunLightNodeIncludingDisabled(*config_.scene);
+    disabled_candidate.has_value()) {
+    DLOG_F(1,
+      "resolved disabled scene sun candidate '{}' in scene '{}' for "
+      "environment-panel lifecycle control",
+      disabled_candidate->GetName(), config_.scene->GetName());
+    return disabled_candidate;
   }
 
   DLOG_F(1, "resolved no scene sun candidate in scene '{}'",

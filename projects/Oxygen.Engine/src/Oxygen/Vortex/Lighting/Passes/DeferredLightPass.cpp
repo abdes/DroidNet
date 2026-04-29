@@ -5,10 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstring>
-#include <numbers>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -27,10 +27,12 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -45,6 +47,7 @@ namespace {
     kDirectional = 0U,
     kPoint = 1U,
     kSpot = 2U,
+    kStaticSkyLight = 3U,
   };
 
   enum class DeferredLocalLightDrawMode : std::uint8_t {
@@ -295,6 +298,7 @@ namespace {
         ? DeferredLocalLightDrawMode::kCameraInsideVolume
         : DeferredLocalLightDrawMode::kOutsideVolume;
     case DeferredLightKind::kDirectional:
+    case DeferredLightKind::kStaticSkyLight:
       break;
     }
     return DeferredLocalLightDrawMode::kOutsideVolume;
@@ -312,6 +316,67 @@ namespace {
       .blend_op_alpha = graphics::BlendOp::kAdd,
       .write_mask = graphics::ColorWriteMask::kAll,
     };
+  }
+
+  auto AddBooleanDefine(const bool enabled, std::string_view name,
+    std::vector<graphics::ShaderDefine>& defines) -> void
+  {
+    if (enabled) {
+      defines.push_back(graphics::ShaderDefine {
+        .name = std::string(name),
+        .value = std::string("1"),
+      });
+    }
+  }
+
+  [[nodiscard]] auto IsDirectionalDebugMode(const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDirectLightingOnly:
+    case kIblOnly:
+    case kDirectPlusIbl:
+    case kDirectLightingFull:
+    case kDirectLightGates:
+    case kDirectBrdfCore:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  [[nodiscard]] auto ShouldSkipLocalLightsForDirectionalDebug(
+    const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDirectLightingOnly:
+    case kDirectLightGates:
+    case kDirectBrdfCore:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  [[nodiscard]] auto ShouldSkipDirectLightingForIblDebug(
+    const ShaderDebugMode mode) -> bool
+  {
+    return mode == ShaderDebugMode::kIblOnly;
+  }
+
+  [[nodiscard]] auto ShouldDrawStaticSkyLightDiffuse(
+    const ShaderDebugMode mode) -> bool
+  {
+    using enum ShaderDebugMode;
+    switch (mode) {
+    case kDisabled:
+    case kIblOnly:
+    case kDirectPlusIbl:
+      return true;
+    default:
+      return false;
+    }
   }
 
   auto BuildDirectionalFramebuffer(const SceneTextures& scene_textures)
@@ -369,10 +434,13 @@ namespace {
       || !desc.depth_attachment.is_read_only;
   }
 
-  auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures)
-    -> graphics::GraphicsPipelineDesc
+  auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures,
+    const ShaderDebugMode debug_mode) -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
+    auto pixel_defines = std::vector<graphics::ShaderDefine> {};
+    AddBooleanDefine(IsDirectionalDebugMode(debug_mode),
+      GetShaderDebugDefineName(debug_mode), pixel_defines);
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -383,6 +451,7 @@ namespace {
       .stage = ShaderType::kPixel,
       .source_path = "Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
       .entry_point = "DeferredLightDirectionalPS",
+      .defines = std::move(pixel_defines),
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
@@ -476,83 +545,6 @@ namespace {
     .Build();
   }
 
-  auto GenerateSphereVertices() -> std::vector<glm::vec4>
-  {
-    constexpr auto kSlices = 16U;
-    constexpr auto kStacks = 8U;
-    constexpr auto kTwoPi = std::numbers::pi_v<float> * 2.0F;
-
-    const auto ring_vertex
-      = [](const std::uint32_t ring, const std::uint32_t slice) -> glm::vec4 {
-      const auto phi = std::numbers::pi_v<float>
-        * static_cast<float>(ring) / static_cast<float>(kStacks);
-      const auto theta
-        = kTwoPi * static_cast<float>(slice) / static_cast<float>(kSlices);
-      const auto sin_phi = std::sin(phi);
-      return glm::vec4(sin_phi * std::cos(theta), std::cos(phi),
-        sin_phi * std::sin(theta), 1.0F);
-    };
-
-    auto vertices = std::vector<glm::vec4> {};
-    vertices.reserve(6U * kSlices * (kStacks - 1U));
-    const auto north = glm::vec4(0.0F, 1.0F, 0.0F, 1.0F);
-    const auto south = glm::vec4(0.0F, -1.0F, 0.0F, 1.0F);
-
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.push_back(north);
-      vertices.push_back(ring_vertex(1U, next_slice));
-      vertices.push_back(ring_vertex(1U, slice));
-    }
-
-    for (std::uint32_t ring = 1U; ring < kStacks - 1U; ++ring) {
-      for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-        const auto next_slice = (slice + 1U) % kSlices;
-        const auto v00 = ring_vertex(ring, slice);
-        const auto v01 = ring_vertex(ring, next_slice);
-        const auto v10 = ring_vertex(ring + 1U, slice);
-        const auto v11 = ring_vertex(ring + 1U, next_slice);
-        vertices.insert(vertices.end(), { v00, v10, v01, v10, v11, v01 });
-      }
-    }
-
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.push_back(south);
-      vertices.push_back(ring_vertex(kStacks - 1U, slice));
-      vertices.push_back(ring_vertex(kStacks - 1U, next_slice));
-    }
-
-    return vertices;
-  }
-
-  auto GenerateConeVertices() -> std::vector<glm::vec4>
-  {
-    constexpr auto kSlices = 24U;
-    constexpr auto kTwoPi = std::numbers::pi_v<float> * 2.0F;
-    const auto ring_vertex = [](const std::uint32_t slice) -> glm::vec4 {
-      const auto theta
-        = kTwoPi * static_cast<float>(slice) / static_cast<float>(kSlices);
-      return glm::vec4(std::cos(theta), -1.0F, std::sin(theta), 1.0F);
-    };
-
-    auto vertices = std::vector<glm::vec4> {};
-    vertices.reserve(6U * kSlices);
-    const auto apex = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
-    const auto base_center = glm::vec4(0.0F, -1.0F, 0.0F, 1.0F);
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.insert(
-        vertices.end(), { apex, ring_vertex(next_slice), ring_vertex(slice) });
-    }
-    for (std::uint32_t slice = 0U; slice < kSlices; ++slice) {
-      const auto next_slice = (slice + 1U) % kSlices;
-      vertices.insert(vertices.end(),
-        { base_center, ring_vertex(slice), ring_vertex(next_slice) });
-    }
-    return vertices;
-  }
-
 } // namespace
 
 DeferredLightPass::DeferredLightPass(Renderer& renderer)
@@ -585,13 +577,20 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const SceneTextures& scene_textures,
   const internal::DeferredLightPacketSet& packets,
   const ShadowFrameBindings* directional_shadow_bindings,
-  const graphics::Texture* directional_shadow_surface) -> ExecutionState
+  const graphics::Texture* directional_shadow_surface,
+  const graphics::Texture* spot_shadow_surface,
+  const graphics::Texture* point_shadow_surface,
+  const bool static_sky_light_available) -> ExecutionState
 {
   auto state = ExecutionState {};
   if (ctx.view_constants == nullptr) {
     return state;
   }
-  if (!packets.directional.has_value() && packets.local_lights.empty()) {
+  const auto wants_static_sky_light
+    = static_sky_light_available
+    && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
+  if (!packets.directional.has_value() && packets.local_lights.empty()
+    && !wants_static_sky_light) {
     return state;
   }
   if (directional_shadow_bindings != nullptr
@@ -601,6 +600,20 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       = directional_shadow_bindings->cascade_count;
     state.directional_shadow_surface_srv
       = directional_shadow_bindings->conventional_shadow_surface_handle;
+  }
+  if (directional_shadow_bindings != nullptr
+    && directional_shadow_bindings->HasSpotConventionalShadow()) {
+    state.consumed_spot_shadow_product = true;
+    state.spot_shadow_count = directional_shadow_bindings->spot_shadow_count;
+    state.spot_shadow_surface_srv
+      = directional_shadow_bindings->spot_shadow_surface_handle;
+  }
+  if (directional_shadow_bindings != nullptr
+    && directional_shadow_bindings->HasPointConventionalShadow()) {
+    state.consumed_point_shadow_product = true;
+    state.point_shadow_count = directional_shadow_bindings->point_shadow_count;
+    state.point_shadow_surface_srv
+      = directional_shadow_bindings->point_shadow_surface_handle;
   }
 
   auto gfx = renderer_.GetGraphics();
@@ -636,52 +649,74 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     }
   };
 
-  if (point_geometry_buffer_ == nullptr) {
-    const auto point_vertices = GenerateSphereVertices();
-    ensure_geometry_buffer(point_geometry_buffer_, point_geometry_srv_,
-      point_geometry_vertex_count_, "LightingService.PointProxyGeometry",
-      std::span(point_vertices));
-  }
-  if (spot_geometry_buffer_ == nullptr) {
-    const auto spot_vertices = GenerateConeVertices();
-    ensure_geometry_buffer(spot_geometry_buffer_, spot_geometry_srv_,
-      spot_geometry_vertex_count_, "LightingService.SpotProxyGeometry",
-      std::span(spot_vertices));
+  const auto skip_direct_lighting
+    = ShouldSkipDirectLightingForIblDebug(ctx.shader_debug_mode);
+  if (!skip_direct_lighting && !packets.local_lights.empty()) {
+    if (point_geometry_buffer_ == nullptr) {
+      const auto point_vertices
+        = internal::GeneratePointLightProxySphereVertices();
+      ensure_geometry_buffer(point_geometry_buffer_, point_geometry_srv_,
+        point_geometry_vertex_count_, "LightingService.PointProxyGeometry",
+        std::span(point_vertices));
+    }
+    if (spot_geometry_buffer_ == nullptr) {
+      const auto spot_vertices = internal::GenerateSpotLightProxyConeVertices();
+      ensure_geometry_buffer(spot_geometry_buffer_, spot_geometry_srv_,
+        spot_geometry_vertex_count_, "LightingService.SpotProxyGeometry",
+        std::span(spot_vertices));
+    }
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
-  if (packets.directional.has_value()) {
+  if (!skip_direct_lighting && packets.directional.has_value()) {
     draws.push_back(DeferredLightDraw {
       .kind = DeferredLightKind::kDirectional,
       .geometry_vertex_count = 3U,
     });
     ++state.directional_draw_count;
   }
-  for (const auto& packet : packets.local_lights) {
-    const auto kind = packet.kind == LocalLightKind::kPoint
-      ? DeferredLightKind::kPoint
-      : DeferredLightKind::kSpot;
-    draws.push_back(DeferredLightDraw {
-      .packet = packet,
-      .kind = kind,
-      .geometry_srv = kind == DeferredLightKind::kPoint ? point_geometry_srv_
-                                                        : spot_geometry_srv_,
-      .geometry_vertex_count = kind == DeferredLightKind::kPoint
-        ? point_geometry_vertex_count_
-        : spot_geometry_vertex_count_,
-    });
-    if (kind == DeferredLightKind::kPoint) {
-      ++state.point_light_count;
-    } else {
-      ++state.spot_light_count;
+  const auto skip_local_lights
+    = skip_direct_lighting
+    || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
+  if (!skip_local_lights) {
+    for (const auto& packet : packets.local_lights) {
+      const auto kind = packet.kind == LocalLightKind::kPoint
+        ? DeferredLightKind::kPoint
+        : DeferredLightKind::kSpot;
+      draws.push_back(DeferredLightDraw {
+        .packet = packet,
+        .kind = kind,
+        .geometry_srv = kind == DeferredLightKind::kPoint ? point_geometry_srv_
+                                                          : spot_geometry_srv_,
+        .geometry_vertex_count = kind == DeferredLightKind::kPoint
+          ? point_geometry_vertex_count_
+          : spot_geometry_vertex_count_,
+      });
+      if (kind == DeferredLightKind::kPoint) {
+        ++state.point_light_count;
+      } else {
+        ++state.spot_light_count;
+      }
     }
+  }
+  if (wants_static_sky_light) {
+    draws.push_back(DeferredLightDraw {
+      .kind = DeferredLightKind::kStaticSkyLight,
+      .geometry_vertex_count = 3U,
+    });
+    ++state.static_sky_light_draw_count;
+    state.consumed_static_sky_light_product = true;
   }
   state.local_light_count = state.point_light_count + state.spot_light_count;
   state.consumed_packets = !draws.empty();
   state.used_service_owned_geometry = state.local_light_count > 0U;
+  if (draws.empty()) {
+    return state;
+  }
 
   for (auto& draw : draws) {
-    if (draw.kind == DeferredLightKind::kDirectional) {
+    if (draw.kind == DeferredLightKind::kDirectional
+      || draw.kind == DeferredLightKind::kStaticSkyLight) {
       continue;
     }
     draw.draw_mode = ResolveLocalLightDrawMode(ctx, draw);
@@ -771,8 +806,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       constants.shadow_info.y = packets.directional->light_flags;
       constants.shadow_info.z = packets.directional->atmosphere_light_slot;
       constants.shadow_info.w = packets.directional->atmosphere_mode_flags;
-      constants.atmosphere_transmittance_and_padding = glm::vec4(
-        packets.directional->transmittance_toward_sun_rgb, 0.0F);
+      constants.atmosphere_transmittance_and_padding
+        = glm::vec4(packets.directional->transmittance_toward_sun_rgb, 0.0F);
       constants.light_type
         = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
     } else {
@@ -787,6 +822,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       constants.light_type = static_cast<std::uint32_t>(draw.kind);
       constants.light_geometry_vertices_srv = draw.geometry_srv.get();
       constants.light_geometry_vertex_count = draw.geometry_vertex_count;
+      constants.shadow_info.x = draw.packet.shadow_index;
+      constants.shadow_info.y = draw.packet.shadow_flags;
     }
     std::memcpy(mapped_bytes + i * kDeferredLightConstantsStride, &constants,
       sizeof(DeferredLightConstants));
@@ -822,6 +859,26 @@ auto DeferredLightPass::Record(RenderContext& ctx,
         *directional_shadow_surface, initial);
     }
   }
+  if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
+    if (!recorder->AdoptKnownResourceState(*spot_shadow_surface)) {
+      auto initial = spot_shadow_surface->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kShaderResource;
+      }
+      recorder->BeginTrackingResourceState(*spot_shadow_surface, initial);
+    }
+  }
+  if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
+    if (!recorder->AdoptKnownResourceState(*point_shadow_surface)) {
+      auto initial = point_shadow_surface->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kShaderResource;
+      }
+      recorder->BeginTrackingResourceState(*point_shadow_surface, initial);
+    }
+  }
 
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
@@ -840,12 +897,16 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     const auto& draw = draws[i];
     const auto pass_index = pass_constants_indices[i];
 
-    if (draw.kind == DeferredLightKind::kDirectional) {
+    if (draw.kind == DeferredLightKind::kDirectional
+      || draw.kind == DeferredLightKind::kStaticSkyLight) {
       graphics::GpuEventScope light_scope(*recorder,
-        "Vortex.Stage12.DirectionalLight",
+        draw.kind == DeferredLightKind::kDirectional
+          ? "Vortex.Stage12.DirectionalLight"
+          : "Vortex.Stage12.StaticSkyLight",
         profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
-      if (directional_shadow_surface != nullptr
+      if (draw.kind == DeferredLightKind::kDirectional
+        && directional_shadow_surface != nullptr
         && state.consumed_directional_shadow_product) {
         recorder->RequireResourceState(*directional_shadow_surface,
           graphics::ResourceStates::kShaderResource);
@@ -855,8 +916,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       recorder->FlushBarriers();
       recorder->BindFrameBuffer(*directional_framebuffer_);
       SetViewportAndScissor(*recorder, ctx, scene_textures);
-      recorder->SetPipelineState(
-        BuildDeferredDirectionalPipelineDesc(scene_textures));
+      recorder->SetPipelineState(BuildDeferredDirectionalPipelineDesc(
+        scene_textures, ctx.shader_debug_mode));
       bind_common_root_parameters(pass_index);
       recorder->Draw(3U, 1U, 0U, 0U);
       state.accumulated_into_scene_color = true;
@@ -875,6 +936,16 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
     recorder->RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+    if (draw.kind == DeferredLightKind::kSpot && spot_shadow_surface != nullptr
+      && state.consumed_spot_shadow_product) {
+      recorder->RequireResourceState(
+        *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
+    }
+    if (draw.kind == DeferredLightKind::kPoint && point_shadow_surface != nullptr
+      && state.consumed_point_shadow_product) {
+      recorder->RequireResourceState(
+        *point_shadow_surface, graphics::ResourceStates::kShaderResource);
+    }
     recorder->FlushBarriers();
     recorder->BindFrameBuffer(*local_framebuffer_);
     SetViewportAndScissor(*recorder, ctx, scene_textures);
@@ -912,6 +983,14 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     && state.consumed_directional_shadow_product) {
     recorder->RequireResourceStateFinal(
       *directional_shadow_surface, graphics::ResourceStates::kShaderResource);
+  }
+  if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
+    recorder->RequireResourceStateFinal(
+      *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
+  }
+  if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
+    recorder->RequireResourceStateFinal(
+      *point_shadow_surface, graphics::ResourceStates::kShaderResource);
   }
 
   return state;

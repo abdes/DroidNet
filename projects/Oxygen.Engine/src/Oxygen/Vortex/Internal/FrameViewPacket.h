@@ -7,12 +7,14 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h>
 
 namespace oxygen::graphics {
@@ -23,18 +25,22 @@ namespace oxygen::vortex::internal {
 
 class CompositionViewImpl;
 
+struct AuxiliaryResolvedInput {
+  CompositionView::AuxInputDesc input {};
+  CompositionView::AuxOutputKind kind {
+    CompositionView::AuxOutputKind::kColorTexture
+  };
+  ViewId producer_view_id { kInvalidViewId };
+  std::uint32_t producer_packet_index { 0U };
+  bool valid { false };
+  std::string debug_name {};
+};
+
 class FrameViewPacket {
 public:
   FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
-    ViewId published_view_id, ViewRenderPlan plan)
-    : view_(view)
-    , published_view_id_(published_view_id)
-    , plan_(plan)
-  {
-    CHECK_NOTNULL_F(view_.get(), "FrameViewPacket requires non-null view");
-    CHECK_F(published_view_id_ != kInvalidViewId,
-      "FrameViewPacket requires a published runtime view id");
-  }
+    ViewId published_view_id, CompositionView::ViewStateHandle view_state_handle,
+    ViewRenderPlan plan);
   ~FrameViewPacket() = default;
   OXYGEN_DEFAULT_COPYABLE(FrameViewPacket)
   OXYGEN_DEFAULT_MOVABLE(FrameViewPacket)
@@ -52,6 +58,60 @@ public:
   {
     return published_view_id_;
   }
+  [[nodiscard]] auto ViewStateHandle() const noexcept
+    -> CompositionView::ViewStateHandle
+  {
+    return view_state_handle_;
+  }
+  [[nodiscard]] auto Kind() const noexcept -> CompositionView::ViewKind
+  {
+    return view_kind_;
+  }
+  [[nodiscard]] auto FeatureProfile() const noexcept
+    -> CompositionView::ViewFeatureProfile
+  {
+    return feature_profile_;
+  }
+  [[nodiscard]] auto FeatureMask() const noexcept
+    -> const CompositionView::ViewFeatureMask&
+  {
+    return feature_mask_;
+  }
+  [[nodiscard]] auto SurfaceRoutes() const noexcept
+    -> const std::vector<CompositionView::ViewSurfaceRoute>&
+  {
+    return surface_routes_;
+  }
+  [[nodiscard]] auto GetOverlayPolicy() const noexcept
+    -> const CompositionView::OverlayPolicy&
+  {
+    return overlay_policy_;
+  }
+  [[nodiscard]] auto OverlayBatches() const noexcept
+    -> const std::vector<CompositionView::OverlayBatch>&
+  {
+    return overlay_batches_;
+  }
+  [[nodiscard]] auto ProducedAuxOutputs() const noexcept
+    -> const std::vector<CompositionView::AuxOutputDesc>&
+  {
+    return produced_aux_outputs_;
+  }
+  [[nodiscard]] auto ConsumedAuxOutputs() const noexcept
+    -> const std::vector<CompositionView::AuxInputDesc>&
+  {
+    return consumed_aux_outputs_;
+  }
+  [[nodiscard]] auto ResolvedAuxInputs() const noexcept
+    -> const std::vector<AuxiliaryResolvedInput>&
+  {
+    return resolved_aux_inputs_;
+  }
+  auto SetResolvedAuxInputs(
+    std::vector<AuxiliaryResolvedInput> resolved_inputs) noexcept -> void
+  {
+    resolved_aux_inputs_ = std::move(resolved_inputs);
+  }
 
   [[nodiscard]] auto HasCompositeTexture() const noexcept -> bool;
   [[nodiscard]] auto GetCompositeTexture() const
@@ -62,6 +122,20 @@ public:
 private:
   observer_ptr<const CompositionViewImpl> view_;
   ViewId published_view_id_ { kInvalidViewId };
+  CompositionView::ViewStateHandle view_state_handle_ {
+    CompositionView::kInvalidViewStateHandle
+  };
+  CompositionView::ViewKind view_kind_ { CompositionView::ViewKind::kPrimary };
+  CompositionView::ViewFeatureProfile feature_profile_ {
+    CompositionView::ViewFeatureProfile::kDefault
+  };
+  CompositionView::ViewFeatureMask feature_mask_ {};
+  std::vector<CompositionView::ViewSurfaceRoute> surface_routes_ {};
+  CompositionView::OverlayPolicy overlay_policy_ {};
+  std::vector<CompositionView::OverlayBatch> overlay_batches_ {};
+  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_ {};
+  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_ {};
+  std::vector<AuxiliaryResolvedInput> resolved_aux_inputs_ {};
   ViewRenderPlan plan_;
 };
 

@@ -26,8 +26,8 @@ inline constexpr std::uint32_t kEnvironmentContractFlagShadowAuthoritySlot0Only
   = 1U << 2U;
 inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightAuthoredEnabled
   = 1U << 3U;
-inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblValid
-  = 1U << 4U;
+inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblValid = 1U
+  << 4U;
 inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblUnavailable
   = 1U << 5U;
 inline constexpr std::uint32_t
@@ -36,6 +36,9 @@ inline constexpr std::uint32_t
 inline constexpr std::uint32_t
   kEnvironmentContractFlagIntegratedLightScatteringUnavailable
   = 1U << 7U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagIntegratedLightScatteringValid
+  = 1U << 8U;
 
 //! Bindless environment-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
@@ -69,15 +72,19 @@ static_assert(offsetof(EnvironmentFrameBindings, environment_view_slot) == 4);
 static_assert(offsetof(EnvironmentFrameBindings, atmosphere_model_slot) == 8);
 static_assert(offsetof(EnvironmentFrameBindings, height_fog_model_slot) == 12);
 static_assert(offsetof(EnvironmentFrameBindings, sky_light_model_slot) == 16);
-static_assert(offsetof(EnvironmentFrameBindings, volumetric_fog_model_slot) == 20);
-static_assert(offsetof(EnvironmentFrameBindings, environment_view_products_slot) == 24);
+static_assert(
+  offsetof(EnvironmentFrameBindings, volumetric_fog_model_slot) == 20);
+static_assert(
+  offsetof(EnvironmentFrameBindings, environment_view_products_slot) == 24);
 static_assert(offsetof(EnvironmentFrameBindings, contract_flags) == 28);
 static_assert(offsetof(EnvironmentFrameBindings, transmittance_lut_srv) == 32);
-static_assert(offsetof(EnvironmentFrameBindings, multi_scattering_lut_srv) == 36);
+static_assert(
+  offsetof(EnvironmentFrameBindings, multi_scattering_lut_srv) == 36);
 static_assert(offsetof(EnvironmentFrameBindings, sky_view_lut_srv) == 40);
-static_assert(offsetof(EnvironmentFrameBindings, camera_aerial_perspective_srv) == 44);
+static_assert(
+  offsetof(EnvironmentFrameBindings, camera_aerial_perspective_srv) == 44);
 static_assert(offsetof(EnvironmentFrameBindings, probes) == 48);
-static_assert(offsetof(EnvironmentFrameBindings, evaluation) == 68);
-static_assert(offsetof(EnvironmentFrameBindings, ambient_bridge) == 84);
+static_assert(offsetof(EnvironmentFrameBindings, evaluation) == 72);
+static_assert(offsetof(EnvironmentFrameBindings, ambient_bridge) == 88);
 
 } // namespace oxygen::vortex

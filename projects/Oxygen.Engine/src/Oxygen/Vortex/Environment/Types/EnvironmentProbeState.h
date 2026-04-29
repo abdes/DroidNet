@@ -9,16 +9,18 @@
 #include <cstdint>
 
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t kEnvironmentProbeStateFlagResourcesValid
-  = 1U << 0U;
+inline constexpr std::uint32_t kEnvironmentProbeStateFlagResourcesValid = 1U
+  << 0U;
 inline constexpr std::uint32_t kEnvironmentProbeStateFlagUnavailable = 1U << 1U;
 inline constexpr std::uint32_t kEnvironmentProbeStateFlagStale = 1U << 2U;
 
 struct EnvironmentProbeState {
   EnvironmentProbeBindings probes {};
+  environment::StaticSkyLightProducts static_sky_light {};
   std::uint32_t flags { 0U };
   bool valid { false };
 };

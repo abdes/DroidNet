@@ -38,6 +38,10 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -68,6 +72,12 @@ namespace {
 
 constexpr uint32_t kDefaultOffscreenWidth = 1280U;
 constexpr uint32_t kDefaultOffscreenHeight = 720U;
+constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 0.5F };
+constexpr glm::vec3 kSunPosition { 0.0F, -16.0F, 18.0F };
+constexpr float kGroundPlaneZ = -0.12F;
+constexpr float kSphereOrbitHeight = 6.0F;
+constexpr float kTwoSubmeshTrianglesHeight = 1.25F;
+constexpr double kSphereMaxOrbitInclination = 0.35;
 
 struct LocalTimeOfDay {
   int hour = 0;
@@ -86,6 +96,43 @@ auto SetShadowParticipation(oxygen::scene::SceneNode& node,
     flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
       oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
   }
+}
+
+auto NormalizeOrFallback(const glm::vec3& direction, const glm::vec3& fallback)
+  -> glm::vec3
+{
+  const auto length_sq = glm::dot(direction, direction);
+  if (length_sq <= oxygen::math::Epsilon) {
+    return fallback;
+  }
+  return direction / std::sqrt(length_sq);
+}
+
+auto RotationFromDirToDir(const glm::vec3& from_dir,
+  const glm::vec3& fallback_dir, const glm::vec3& up_axis,
+  const glm::vec3& direction) -> glm::quat
+{
+  const auto to_dir = NormalizeOrFallback(direction, fallback_dir);
+  const auto cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+
+  if (cos_theta >= 0.9999F) {
+    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  }
+
+  if (cos_theta <= -0.9999F) {
+    return glm::angleAxis(oxygen::math::Pi, up_axis);
+  }
+
+  const auto axis = glm::normalize(glm::cross(from_dir, to_dir));
+  const auto angle = std::acos(cos_theta);
+  return glm::angleAxis(angle, axis);
+}
+
+auto LookRotation(const glm::vec3& position, const glm::vec3& target)
+  -> glm::quat
+{
+  return RotationFromDirToDir(oxygen::space::move::Forward,
+    oxygen::space::move::Forward, oxygen::space::move::Up, target - position);
 }
 
 // Helper: make a solid-color material asset snapshot
@@ -109,7 +156,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u;
+  desc.flags = pak::render::kMaterialFlag_NoTextureSampling
+    | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u);
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -294,6 +342,74 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   // NOLINTEND(*-magic-numbers)
 }
 
+auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
+
+  std::vector<Vertex> vertices;
+  vertices.reserve(4);
+  vertices.push_back(Vertex { .position = { -1, -1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 0, 1 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(Vertex { .position = { -1, 1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 0, 0 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(Vertex { .position = { 1, -1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 1, 1 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+  vertices.push_back(Vertex { .position = { 1, 1, 0 },
+    .normal = { 0, 0, 1 },
+    .texcoord = { 1, 0 },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 } });
+
+  std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
+  const auto material = MakeSolidColorMaterial(
+    "GroundMat", { 0.48F, 0.50F, 0.46F, 1.0F },
+    oxygen::data::MaterialDomain::kOpaque, true, 0.0F, 0.92F);
+
+  auto mesh = MeshBuilder(0, "GroundPlane")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("surface", material)
+                .WithMeshView(MeshViewDesc {
+                  .first_index = 0,
+                  .index_count = static_cast<uint32_t>(indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
+                .EndSubMesh()
+                .Build();
+
+  GeometryAssetDesc geo_desc {};
+  geo_desc.lod_count = 1;
+  const auto bb_min = mesh->BoundingBoxMin();
+  const auto bb_max = mesh->BoundingBoxMax();
+  geo_desc.bounding_box_min[0] = bb_min.x;
+  geo_desc.bounding_box_min[1] = bb_min.y;
+  geo_desc.bounding_box_min[2] = bb_min.z;
+  geo_desc.bounding_box_max[0] = bb_max.x;
+  geo_desc.bounding_box_max[1] = bb_max.y;
+  geo_desc.bounding_box_max[2] = bb_max.z;
+
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/Async/Geometry/GroundPlane.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
+}
+
 // Convert hue [0,1] to an RGB color (simple H->RGB approx)
 auto ColorFromHue(double h) -> glm::vec3
 {
@@ -325,7 +441,8 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
     (pos_local.y * ci) - (pos_local.z * si),
     (pos_local.y * si) + (pos_local.z * ci));
   const glm::vec3 pos(static_cast<float>(pos_tilted.x),
-    static_cast<float>(pos_tilted.y), static_cast<float>(pos_tilted.z));
+    static_cast<float>(pos_tilted.y),
+    static_cast<float>(pos_tilted.z) + kSphereOrbitHeight);
 
   if (!sphere_node.IsAlive()) {
     return;
@@ -373,12 +490,13 @@ auto MainModule::OnAttachedImpl(
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { app_.engine.get() };
   shell_config.enable_renderer_bound_panels = false;
+  shell_config.force_environment_override = false;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
     .camera_controls = true,
     .environment = true,
     .lighting = true,
-    .rendering = true,
+    .diagnostics = true,
     .post_process = true,
     .ground_grid = true,
   };
@@ -701,6 +819,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
   view_ctx.metadata.with_atmosphere = true;
+  view_ctx.metadata.with_height_fog = true;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
   shell.OnRuntimeMainViewReady(main_view_id_, main_camera_, main_viewport);
@@ -832,10 +951,12 @@ auto MainModule::EnsureExampleScene() -> void
   const auto staged_scene = shell.GetStagedScene();
   CHECK_NOTNULL_F(staged_scene, "Async: staged scene not available");
   auto* scene_raw = staged_scene.get();
+  EnsureExampleEnvironment(*scene_raw);
 
   // Create a LOD sphere and a multi-submesh quad
   auto sphere_geo = BuildSphereLodAsset();
   auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
+  auto ground_geo = BuildGroundPlaneAsset();
 
   // Create multiple spheres; initial positions will be set by orbit.
   // Diagnostic toggles:
@@ -850,7 +971,8 @@ auto MainModule::EnsureExampleScene() -> void
   std::uniform_real_distribution<double> radius_dist(2.0, 8.0);
   std::uniform_real_distribution<double> phase_jitter(-0.25, 0.25);
   std::uniform_real_distribution<double> hue_dist(0.0, 1.0);
-  std::uniform_real_distribution<double> incl_dist(-0.9, 0.9); // ~-51..51 deg
+  std::uniform_real_distribution<double> incl_dist(
+    -kSphereMaxOrbitInclination, kSphereMaxOrbitInclination);
   std::uniform_real_distribution<double> spin_dist(-2.0, 2.0); // rad/s
   std::uniform_real_distribution<double> transp_dist(0.0, 1.0);
 
@@ -925,8 +1047,15 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_ = scene_raw->CreateNode("MultiSubmesh");
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   SetShadowParticipation(multisubmesh_, false, true);
-  multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
+  multisubmesh_.GetTransform().SetLocalPosition(
+    glm::vec3(0.0F, 0.0F, kTwoSubmeshTrianglesHeight));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
+
+  auto ground = scene_raw->CreateNode("AsyncGroundPlane");
+  ground.GetRenderable().SetGeometry(ground_geo);
+  SetShadowParticipation(ground, false, true);
+  ground.GetTransform().SetLocalPosition(glm::vec3(0.0F, 0.0F, kGroundPlaneZ));
+  ground.GetTransform().SetLocalScale(glm::vec3(28.0F, 28.0F, 1.0F));
 
   // Create and register staged main camera so publish can hand it to DemoShell.
   main_camera_ = scene_raw->CreateNode("MainCamera");
@@ -940,6 +1069,104 @@ auto MainModule::EnsureExampleScene() -> void
   }
 
   shell.SetStagedMainCamera(main_camera_);
+
+  EnsureSunDirectionalLight(*scene_raw);
+}
+
+auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
+{
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+
+  const auto environment = scene.GetEnvironment();
+  if (environment == nullptr) {
+    return;
+  }
+
+  auto& atmosphere = environment->AddSystem<scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  atmosphere.SetTransformMode(scene::environment::
+      SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+  atmosphere.SetRenderInMainPass(true);
+  atmosphere.SetPlanetRadiusMeters(engine::atmos::kDefaultPlanetRadiusM);
+  atmosphere.SetAtmosphereHeightMeters(
+    engine::atmos::kDefaultAtmosphereHeightM);
+  atmosphere.SetGroundAlbedoRgb({ 0.4F, 0.4F, 0.4F });
+  atmosphere.SetRayleighScatteringRgb(
+    engine::atmos::kDefaultRayleighScatteringRgb);
+  atmosphere.SetRayleighScaleHeightMeters(
+    engine::atmos::kDefaultRayleighScaleHeightM);
+  atmosphere.SetMieScatteringRgb(engine::atmos::kDefaultMieScatteringRgb);
+  atmosphere.SetMieAbsorptionRgb(engine::atmos::kDefaultMieAbsorptionRgb);
+  atmosphere.SetMieScaleHeightMeters(engine::atmos::kDefaultMieScaleHeightM);
+  atmosphere.SetMieAnisotropy(engine::atmos::kDefaultMieAnisotropyG);
+  atmosphere.SetOzoneAbsorptionRgb(engine::atmos::kDefaultOzoneAbsorptionRgb);
+  atmosphere.SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
+  atmosphere.SetMultiScatteringFactor(1.0F);
+  atmosphere.SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
+  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+    { 1.0F, 1.0F, 1.0F });
+  atmosphere.SetSunDiskEnabled(true);
+  atmosphere.SetAerialPerspectiveDistanceScale(1.0F);
+  atmosphere.SetAerialPerspectiveStartDepthMeters(30.0F);
+  atmosphere.SetAerialScatteringStrength(0.45F);
+  atmosphere.SetHeightFogContribution(1.0F);
+  atmosphere.SetTraceSampleCountScale(1.0F);
+  atmosphere.SetTransmittanceMinLightElevationDeg(-90.0F);
+
+  auto& sky_light = environment->AddSystem<scene::environment::SkyLight>();
+  sky_light.SetEnabled(true);
+  sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
+  sky_light.SetIntensityMul(1.0F);
+  sky_light.SetTintRgb({ 1.0F, 1.0F, 1.0F });
+  sky_light.SetDiffuseIntensity(1.0F);
+  sky_light.SetSpecularIntensity(1.0F);
+  sky_light.SetRealTimeCaptureEnabled(true);
+  sky_light.SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
+  sky_light.SetVolumetricScatteringIntensity(1.0F);
+  sky_light.SetAffectReflections(true);
+
+  auto& fog = environment->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(false);
+  fog.SetRenderInMainPass(true);
+  fog.SetVisibleInReflectionCaptures(true);
+  fog.SetVisibleInRealTimeSkyCaptures(true);
+  fog.SetExtinctionSigmaTPerMeter(0.0007F);
+  fog.SetHeightFalloffPerMeter(0.08F);
+  fog.SetHeightOffsetMeters(0.0F);
+  fog.SetStartDistanceMeters(0.0F);
+  fog.SetMaxOpacity(0.65F);
+  fog.SetFogInscatteringLuminance({ 0.24F, 0.30F, 0.38F });
+  fog.SetSkyAtmosphereAmbientContributionColorScale({ 1.0F, 1.0F, 1.0F });
+  fog.SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.88F });
+  fog.SetDirectionalInscatteringExponent(8.0F);
+  fog.SetDirectionalInscatteringStartDistance(0.0F);
+}
+
+auto MainModule::EnsureSunDirectionalLight(scene::Scene& scene) -> void
+{
+  if (!sun_light_.IsAlive()) {
+    sun_light_ = scene.CreateNode("SunLight");
+    auto light = std::make_unique<scene::DirectionalLight>();
+    light->Common().affects_world = true;
+    light->Common().casts_shadows = true;
+    light->Common().mobility = scene::LightMobility::kRealtime;
+    light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
+    light->SetAngularSizeRadians(glm::radians(0.53F));
+    light->SetIntensityLux(100000.0F);
+    light->SetEnvironmentContribution(true);
+    light->SetIsSunLight(true);
+    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+    light->SetUsePerPixelAtmosphereTransmittance(true);
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F, 1.0F });
+    CHECK_F(
+      sun_light_.AttachLight(std::move(light)), "Failed to attach SunLight");
+  }
+
+  sun_light_.GetTransform().SetLocalPosition(kSunPosition);
+  sun_light_.GetTransform().SetLocalRotation(
+    LookRotation(kSunPosition, kSceneFocusPoint));
 }
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void

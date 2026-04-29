@@ -1,0 +1,9 @@
+{
+  "accepted_warnings": [
+    {
+      "id": "dxgi_live_factory_shutdown",
+      "pattern": "^DXGI WARNING: Live IDXGIFactory at .* \\[ STATE_CREATION WARNING #0: \\]$",
+      "reason": "Accepted normal shutdown artifact for the debugger-backed Vortex runtime audit."
+    }
+  ]
+}

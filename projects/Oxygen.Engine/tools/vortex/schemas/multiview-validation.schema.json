@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxygen.local/schemas/vortex/multiview-validation.schema.json",
+  "title": "Vortex Multi-View Validation Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["views", "routes", "overlays"],
+  "properties": {
+    "views": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "view_kind", "render_mode"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "view_kind": {
+            "type": "string",
+            "enum": ["primary", "auxiliary", "composition_only"]
+          },
+          "render_mode": {
+            "type": "string",
+            "enum": ["solid", "wireframe", "overlay_wireframe"]
+          },
+          "shader_debug_mode": { "type": "string" },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "scene_lighting",
+                "shadows",
+                "environment",
+                "translucency",
+                "diagnostics"
+              ]
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["view", "surface", "blend_mode"],
+        "properties": {
+          "view": { "type": "string", "minLength": 1 },
+          "surface": { "type": "integer", "minimum": 0 },
+          "blend_mode": { "type": "string", "enum": ["copy", "alpha_blend"] }
+        }
+      }
+    },
+    "overlays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lane", "target"],
+        "properties": {
+          "lane": {
+            "type": "string",
+            "enum": [
+              "world_depth_aware",
+              "world_foreground",
+              "view_screen",
+              "surface_screen"
+            ]
+          },
+          "target": { "type": "string", "enum": ["view", "surface"] }
+        }
+      }
+    },
+    "auxiliary_io": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "direction"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "color_texture",
+              "depth_texture",
+              "scene_texture_binding",
+              "custom_pass_product"
+            ]
+          },
+          "direction": { "type": "string", "enum": ["produce", "consume"] },
+          "required": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

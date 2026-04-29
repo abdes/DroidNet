@@ -38,7 +38,7 @@ class ViewLifecycleService {
 public:
   using UpsertPublishedViewCallback
     = std::function<ViewId(engine::FrameContext&, ViewId, engine::ViewContext,
-      std::optional<ShadingMode>)>;
+      std::optional<ShadingMode>, CompositionView::ViewStateHandle)>;
   using ResolvePublishedViewCallback = std::function<ViewId(ViewId)>;
   using PruneStalePublishedViewsCallback
     = std::function<std::vector<ViewId>(engine::FrameContext&)>;

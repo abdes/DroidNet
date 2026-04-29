@@ -439,9 +439,9 @@ Where to obtain a recorder and queue:
 - `Graphics::AcquireCommandRecorder(queue_key, command_list_name,
   immediate_submission)` is the canonical recorder entry point. Source of truth:
   `src/Oxygen/Graphics/Common/Graphics.h`, `src/Oxygen/Graphics/Common/Graphics.cpp`.
-- Renderer helpers delegate to Graphics (example:
-  `Renderer::AcquireRecorderForView(...)` in
-  `src/Oxygen/Renderer/Renderer.cpp`).
+- Renderer integrations delegate to Graphics. Vortex call sites acquire
+  recorders through the current `oxygen::Graphics` facade and stage
+  orchestration in `src/Oxygen/Vortex/`.
 - `CommandRecorder::GetTargetQueue()` returns `graphics::CommandQueue*` (raw
   observer). Source of truth:
   `src/Oxygen/Graphics/Common/CommandRecorder.h`.

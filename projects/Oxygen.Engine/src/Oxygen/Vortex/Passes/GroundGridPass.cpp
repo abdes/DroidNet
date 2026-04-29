@@ -496,12 +496,13 @@ auto GroundGridPass::ComputeGridOffset(
     wrap(snap_to_spacing(camera_pos.y - origin.y)),
   };
   glm::dvec2 effective_grid_offset = snapped_grid_offset;
+  auto& smooth_state = smooth_states_by_view_[ctx.current_view.view_id];
 
   if (config.smooth_motion) {
-    if (first_frame_) {
-      smooth_grid_offset_ = snapped_grid_offset;
-      smooth_grid_velocity_ = glm::dvec2(0.0);
-      first_frame_ = false;
+    if (smooth_state.first_frame) {
+      smooth_state.grid_offset = snapped_grid_offset;
+      smooth_state.velocity = glm::dvec2(0.0);
+      smooth_state.first_frame = false;
     } else {
       const auto dt = static_cast<double>(ctx.delta_time);
       const double smooth_time
@@ -512,31 +513,31 @@ auto GroundGridPass::ComputeGridOffset(
         / (1.0 + x + kCritDampCoeff1 * x * x + kCritDampCoeff2 * x * x * x);
 
       glm::dvec2 target = snapped_grid_offset;
-      target.x = smooth_grid_offset_.x
+      target.x = smooth_state.grid_offset.x
         + shortest_wrapped_delta(
-          smooth_grid_offset_.x, snapped_grid_offset.x);
-      target.y = smooth_grid_offset_.y
+          smooth_state.grid_offset.x, snapped_grid_offset.x);
+      target.y = smooth_state.grid_offset.y
         + shortest_wrapped_delta(
-          smooth_grid_offset_.y, snapped_grid_offset.y);
+          smooth_state.grid_offset.y, snapped_grid_offset.y);
 
-      const glm::dvec2 change = smooth_grid_offset_ - target;
-      const glm::dvec2 temp = (smooth_grid_velocity_ + omega * change) * dt;
-      smooth_grid_velocity_ = (smooth_grid_velocity_ - omega * temp) * exp;
-      smooth_grid_offset_ = target + (change + temp) * exp;
+      const glm::dvec2 change = smooth_state.grid_offset - target;
+      const glm::dvec2 temp = (smooth_state.velocity + omega * change) * dt;
+      smooth_state.velocity = (smooth_state.velocity - omega * temp) * exp;
+      smooth_state.grid_offset = target + (change + temp) * exp;
 
       if (glm::length(change) > kTeleportThreshold) {
-        smooth_grid_offset_ = snapped_grid_offset;
-        smooth_grid_velocity_ = glm::dvec2(0.0);
+        smooth_state.grid_offset = snapped_grid_offset;
+        smooth_state.velocity = glm::dvec2(0.0);
       }
 
-      smooth_grid_offset_.x = wrap(smooth_grid_offset_.x);
-      smooth_grid_offset_.y = wrap(smooth_grid_offset_.y);
+      smooth_state.grid_offset.x = wrap(smooth_state.grid_offset.x);
+      smooth_state.grid_offset.y = wrap(smooth_state.grid_offset.y);
     }
-    effective_grid_offset = smooth_grid_offset_;
+    effective_grid_offset = smooth_state.grid_offset;
   } else {
-    smooth_grid_offset_ = snapped_grid_offset;
-    smooth_grid_velocity_ = glm::dvec2(0.0);
-    first_frame_ = true;
+    smooth_state.grid_offset = snapped_grid_offset;
+    smooth_state.velocity = glm::dvec2(0.0);
+    smooth_state.first_frame = true;
   }
 
   constants.grid_offset_x = static_cast<float>(effective_grid_offset.x);

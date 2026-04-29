@@ -135,7 +135,7 @@ protected:
                       = oxygen::time::SimulationClock::kMinDeltaTimeSeconds,
                     })
                     .SetOutputTarget(Renderer::OutputTargetInput {
-                      .framebuffer = oxygen::observer_ptr<const Framebuffer>(
+                      .framebuffer = oxygen::observer_ptr<Framebuffer>(
                         framebuffer_.get()),
                     })
                     .SetResolvedView(Renderer::ResolvedViewInput {

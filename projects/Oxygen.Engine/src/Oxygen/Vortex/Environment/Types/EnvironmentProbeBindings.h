@@ -16,6 +16,7 @@ namespace oxygen::vortex {
 
 struct EnvironmentProbeBindings {
   ShaderVisibleIndex environment_map_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex diffuse_sh_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex irradiance_map_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex prefiltered_map_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex brdf_lut_srv { kInvalidShaderVisibleIndex };
@@ -25,12 +26,13 @@ struct EnvironmentProbeBindings {
 static_assert(std::is_standard_layout_v<EnvironmentProbeBindings>);
 static_assert(sizeof(ShaderVisibleIndex) == 4);
 static_assert(alignof(ShaderVisibleIndex) == 4);
-static_assert(sizeof(EnvironmentProbeBindings) == 20);
+static_assert(sizeof(EnvironmentProbeBindings) == 24);
 static_assert(alignof(EnvironmentProbeBindings) == 4);
 static_assert(offsetof(EnvironmentProbeBindings, environment_map_srv) == 0);
-static_assert(offsetof(EnvironmentProbeBindings, irradiance_map_srv) == 4);
-static_assert(offsetof(EnvironmentProbeBindings, prefiltered_map_srv) == 8);
-static_assert(offsetof(EnvironmentProbeBindings, brdf_lut_srv) == 12);
-static_assert(offsetof(EnvironmentProbeBindings, probe_revision) == 16);
+static_assert(offsetof(EnvironmentProbeBindings, diffuse_sh_srv) == 4);
+static_assert(offsetof(EnvironmentProbeBindings, irradiance_map_srv) == 8);
+static_assert(offsetof(EnvironmentProbeBindings, prefiltered_map_srv) == 12);
+static_assert(offsetof(EnvironmentProbeBindings, brdf_lut_srv) == 16);
+static_assert(offsetof(EnvironmentProbeBindings, probe_revision) == 20);
 
 } // namespace oxygen::vortex

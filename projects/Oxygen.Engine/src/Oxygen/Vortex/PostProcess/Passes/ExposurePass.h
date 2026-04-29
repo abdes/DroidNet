@@ -14,6 +14,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -59,7 +60,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto Execute(
     RenderContext& ctx, const PostProcessConfig& config, const Inputs& inputs)
     -> Result;
-  OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
+  OXGN_VRTX_API auto RemoveViewState(
+    CompositionView::ViewStateHandle view_state_handle) -> void;
 
 private:
   struct PerViewExposureState {
@@ -78,7 +80,8 @@ private:
     graphics::CommandRecorder& recorder, const PostProcessConfig& config)
     -> void;
   auto EnsureExposureStateForView(
-    RenderContext& ctx, graphics::CommandRecorder& recorder, ViewId view_id,
+    RenderContext& ctx, graphics::CommandRecorder& recorder,
+    CompositionView::ViewStateHandle view_state_handle,
     const PostProcessConfig& config) -> PerViewExposureState&;
   auto UpdateHistogramConstants(graphics::CommandRecorder& recorder,
     const Inputs& inputs, const PostProcessConfig& config,
@@ -100,7 +103,8 @@ private:
   std::size_t pass_constants_slot_ { 0U };
   std::shared_ptr<graphics::Buffer> init_upload_buffer_ {};
   void* exposure_init_upload_mapped_ptr_ { nullptr };
-  std::unordered_map<ViewId, PerViewExposureState> exposure_states_ {};
+  std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
+    exposure_states_ {};
 };
 
 } // namespace postprocess

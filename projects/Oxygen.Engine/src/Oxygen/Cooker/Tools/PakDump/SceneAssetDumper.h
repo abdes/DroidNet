@@ -317,10 +317,8 @@ public:
         const auto& rec = volumes[i];
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Enabled", rec.enabled != 0U, 10);
-        PrintUtils::Field(
-          "Radial Extinction", rec.radial_fog_extinction, 10);
-        PrintUtils::Field(
-          "Height Extinction", rec.height_fog_extinction, 10);
+        PrintUtils::Field("Radial Extinction", rec.radial_fog_extinction, 10);
+        PrintUtils::Field("Height Extinction", rec.height_fog_extinction, 10);
         PrintUtils::Field("Height Falloff", rec.height_fog_falloff, 10);
         PrintUtils::Field("Height Offset", rec.height_fog_offset, 10);
         PrintUtils::Field("Phase g", rec.fog_phase_g, 10);
@@ -535,8 +533,8 @@ public:
           rec->aerial_perspective_distance_scale, 10);
         PrintUtils::Field(
           "Aerial Scattering Strength", rec->aerial_scattering_strength, 10);
-        PrintUtils::Field("Aerial Start Depth (m)",
-          rec->aerial_perspective_start_depth_m, 10);
+        PrintUtils::Field(
+          "Aerial Start Depth (m)", rec->aerial_perspective_start_depth_m, 10);
         PrintUtils::Field(
           "Height Fog Contribution", rec->height_fog_contribution, 10);
         PrintUtils::Field(
@@ -595,10 +593,10 @@ public:
         PrintUtils::Field(
           "Enable Volumetric Fog", rec->enable_volumetric_fog != 0U, 10);
         PrintUtils::Field("Second Fog Density", rec->second_fog_density, 10);
-        PrintUtils::Field("Second Fog Falloff",
-          rec->second_fog_height_falloff, 10);
-        PrintUtils::Field("Second Fog Offset",
-          rec->second_fog_height_offset, 10);
+        PrintUtils::Field(
+          "Second Fog Falloff", rec->second_fog_height_falloff, 10);
+        PrintUtils::Field(
+          "Second Fog Offset", rec->second_fog_height_offset, 10);
         PrintUtils::Field("Inscattering Luminance",
           asset_dump_helpers::FormatVec3(rec->fog_inscattering_luminance), 10);
         PrintUtils::Field("Ambient Contribution",
@@ -607,8 +605,8 @@ public:
           10);
         PrintUtils::Field("Inscattering Cubemap",
           oxygen::data::to_string(rec->inscattering_color_cubemap_asset), 10);
-        PrintUtils::Field("Cubemap Angle",
-          rec->inscattering_color_cubemap_angle, 10);
+        PrintUtils::Field(
+          "Cubemap Angle", rec->inscattering_color_cubemap_angle, 10);
         PrintUtils::Field("Texture Tint",
           asset_dump_helpers::FormatVec3(rec->inscattering_texture_tint), 10);
         PrintUtils::Field("Full Directional Distance",
@@ -619,8 +617,8 @@ public:
           asset_dump_helpers::FormatVec3(
             rec->directional_inscattering_luminance),
           10);
-        PrintUtils::Field("Directional Exponent",
-          rec->directional_inscattering_exponent, 10);
+        PrintUtils::Field(
+          "Directional Exponent", rec->directional_inscattering_exponent, 10);
         PrintUtils::Field("Directional Start Distance",
           rec->directional_inscattering_start_distance, 10);
         PrintUtils::Field("End Distance (m)", rec->end_distance_m, 10);
@@ -636,8 +634,8 @@ public:
           rec->volumetric_fog_extinction_scale, 10);
         PrintUtils::Field(
           "Volumetric Distance", rec->volumetric_fog_distance, 10);
-        PrintUtils::Field("Volumetric Start Distance",
-          rec->volumetric_fog_start_distance, 10);
+        PrintUtils::Field(
+          "Volumetric Start Distance", rec->volumetric_fog_start_distance, 10);
         PrintUtils::Field("Volumetric Near Fade",
           rec->volumetric_fog_near_fade_in_distance, 10);
         PrintUtils::Field("Volumetric Static Lighting",
@@ -668,16 +666,20 @@ public:
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
         PrintUtils::Field("Diffuse Intensity", rec->diffuse_intensity, 10);
         PrintUtils::Field("Specular Intensity", rec->specular_intensity, 10);
-        PrintUtils::Field("Real-Time Capture",
-          rec->real_time_capture_enabled != 0U, 10);
+        PrintUtils::Field(
+          "Real-Time Capture", rec->real_time_capture_enabled != 0U, 10);
+        PrintUtils::Field(
+          "Source Cubemap Angle", rec->source_cubemap_angle_radians, 10);
         PrintUtils::Field("Lower Hemisphere Color",
           asset_dump_helpers::FormatVec3(rec->lower_hemisphere_color), 10);
-        PrintUtils::Field("Volumetric Scattering",
-          rec->volumetric_scattering_intensity, 10);
+        PrintUtils::Field("Lower Hemisphere Solid",
+          rec->lower_hemisphere_is_solid_color != 0U, 10);
+        PrintUtils::Field(
+          "Lower Hemisphere Blend", rec->lower_hemisphere_blend_alpha, 10);
+        PrintUtils::Field(
+          "Volumetric Scattering", rec->volumetric_scattering_intensity, 10);
         PrintUtils::Field(
           "Affect Reflections", rec->affect_reflections != 0U, 10);
-        PrintUtils::Field("Affect GI",
-          rec->affect_global_illumination != 0U, 10);
         break;
       }
       case EnvironmentComponentType::kSkySphere: {

@@ -52,7 +52,6 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
       .light_flags = selection.light_flags,
       .atmosphere_light_slot = selection.atmosphere_light_slot,
       .atmosphere_mode_flags = selection.atmosphere_mode_flags,
-      .reserved0 = selection.reserved0,
     };
   }
 };

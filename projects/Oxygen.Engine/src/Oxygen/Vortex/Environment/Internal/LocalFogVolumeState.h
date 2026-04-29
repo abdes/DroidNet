@@ -56,9 +56,6 @@ public:
     observer_ptr<const graphics::Buffer> occupied_tile_draw_args_buffer {
       nullptr
     };
-    observer_ptr<const graphics::Buffer> occupied_tile_draw_count_buffer {
-      nullptr
-    };
   };
 
   OXGN_VRTX_API explicit LocalFogVolumeState(Renderer& renderer);

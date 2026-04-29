@@ -48,8 +48,8 @@
 #include "DemoShell/UI/PanelSideBar.h"
 #include "DemoShell/UI/PostProcessPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
-#include "DemoShell/UI/RenderingPanel.h"
-#include "DemoShell/UI/RenderingVm.h"
+#include "DemoShell/UI/DiagnosticsPanel.h"
+#include "DemoShell/UI/DiagnosticsVm.h"
 #include "DemoShell/UI/SidePanel.h"
 #include "DemoShell/UI/StatsOverlay.h"
 #include "DemoShell/UI/UiSettingsPanel.h"
@@ -65,7 +65,6 @@ auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
   }
 
   panel_config.lighting = false;
-  panel_config.ground_grid = false;
   return panel_config;
 }
 
@@ -204,9 +203,9 @@ struct DemoShellUi::Impl {
   bool last_saved_auto_scroll { true };
   std::array<bool, 3> last_saved_severity_filters { true, true, true };
 
-  // Rendering panel (created lazily when pass config is available)
-  std::unique_ptr<RenderingVm> rendering_vm;
-  std::shared_ptr<RenderingPanel> rendering_panel;
+  // Diagnostics panel (created lazily when the Vortex runtime is available)
+  std::unique_ptr<DiagnosticsVm> diagnostics_vm;
+  std::shared_ptr<DiagnosticsPanel> diagnostics_panel;
 
   // Lighting panel (created lazily when pass configs are available)
   std::unique_ptr<LightCullingVm> light_culling_vm;
@@ -466,7 +465,7 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   }
 
   auto& renderer = renderer_ref->get();
-  if (impl_->panel_config.rendering && !impl_->rendering_panel
+  if (impl_->panel_config.diagnostics && !impl_->diagnostics_panel
     && impl_->rendering_settings_service) {
     impl_->rendering_settings_service->BindVortexRenderer(
       observer_ptr { &renderer });
@@ -474,17 +473,17 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
       impl_->light_culling_settings_service->BindVortexRenderer(
         observer_ptr { &renderer });
     }
-    impl_->rendering_vm
-      = std::make_unique<RenderingVm>(impl_->rendering_settings_service);
-    impl_->rendering_panel = std::make_shared<RenderingPanel>(
-      observer_ptr { impl_->rendering_vm.get() });
-    if (impl_->panel_registry->RegisterPanel(impl_->rendering_panel)) {
-      LOG_F(INFO, "Registered Rendering panel for the Vortex runtime seam");
+    impl_->diagnostics_vm
+      = std::make_unique<DiagnosticsVm>(impl_->rendering_settings_service);
+    impl_->diagnostics_panel = std::make_shared<DiagnosticsPanel>(
+      observer_ptr { impl_->diagnostics_vm.get() });
+    if (impl_->panel_registry->RegisterPanel(impl_->diagnostics_panel)) {
+      LOG_F(INFO, "Registered Diagnostics panel for the Vortex runtime");
     } else {
       LOG_F(WARNING,
-        "Failed to register Rendering panel for the Vortex runtime seam");
-      impl_->rendering_panel.reset();
-      impl_->rendering_vm.reset();
+        "Failed to register Diagnostics panel for the Vortex runtime");
+      impl_->diagnostics_panel.reset();
+      impl_->diagnostics_vm.reset();
     }
   }
   if (impl_->panel_config.ground_grid && impl_->grid_settings_service) {
@@ -561,9 +560,9 @@ auto DemoShellUi::RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool
   return true;
 }
 
-auto DemoShellUi::GetRenderingVm() const -> observer_ptr<RenderingVm>
+auto DemoShellUi::GetDiagnosticsVm() const -> observer_ptr<DiagnosticsVm>
 {
-  return observer_ptr { impl_->rendering_vm.get() };
+  return observer_ptr { impl_->diagnostics_vm.get() };
 }
 
 auto DemoShellUi::GetLightCullingVm() const -> observer_ptr<LightCullingVm>

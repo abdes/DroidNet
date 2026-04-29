@@ -545,7 +545,7 @@
                     "mobility": 0,
                     "exposure_compensation_ev": 0.0,
                     "shadow": {
-                        "bias": 0.0006,
+                        "bias": 0.0,
                         "normal_bias": 0.02,
                         "resolution_hint": 1
                     }
@@ -641,8 +641,7 @@
             "real_time_capture_enabled": true,
             "lower_hemisphere_color": [0.0, 0.0, 0.0],
             "volumetric_scattering_intensity": 1.0,
-            "affect_reflections": true,
-            "affect_global_illumination": true
+            "affect_reflections": true
         }
     }
 }

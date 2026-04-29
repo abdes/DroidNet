@@ -57,6 +57,7 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 // consumption and the downstream Stage 23 handoff.
 void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
 {
+  auto& scene_textures = ActiveSceneTextures();
   const auto scene_color_ready
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneColor)
     && scene_texture_bindings_.scene_color_srv
@@ -64,7 +65,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
   scene_texture_extracts_.resolved_scene_color = {
     .texture = scene_color_ready
       ? EnsureArtifactTexture(resolved_scene_color_artifact_,
-          "ResolvedSceneColor", scene_textures_.GetSceneColor())
+          "ResolvedSceneColor", scene_textures.GetSceneColor())
       : nullptr,
     .valid = scene_color_ready,
   };
@@ -76,7 +77,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
   scene_texture_extracts_.resolved_scene_depth = {
     .texture = scene_depth_ready
       ? EnsureArtifactTexture(resolved_scene_depth_artifact_,
-          "ResolvedSceneDepth", scene_textures_.GetSceneDepth())
+          "ResolvedSceneDepth", scene_textures.GetSceneDepth())
       : nullptr,
     .valid = scene_depth_ready,
   };
@@ -97,13 +98,13 @@ void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
 
   if (scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
-    CopyTextureIntoArtifact(recorder, scene_textures_.GetSceneColor(),
+    CopyTextureIntoArtifact(recorder, scene_textures.GetSceneColor(),
       *scene_texture_extracts_.resolved_scene_color.texture,
       graphics::ResourceStates::kRenderTarget);
   }
   if (scene_texture_extracts_.resolved_scene_depth.valid
     && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
-    CopyTextureIntoArtifact(recorder, scene_textures_.GetSceneDepth(),
+    CopyTextureIntoArtifact(recorder, scene_textures.GetSceneDepth(),
       *scene_texture_extracts_.resolved_scene_depth.texture,
       graphics::ResourceStates::kDepthRead);
   }

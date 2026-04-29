@@ -60,12 +60,12 @@ private:
     std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t occupied_tile_buffer_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t indirect_args_buffer_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t indirect_count_buffer_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t instance_count { 0U };
     std::uint32_t tile_resolution_x { 0U };
     std::uint32_t tile_resolution_y { 0U };
     std::uint32_t max_instances_per_tile { 0U };
     std::uint32_t use_hzb { 1U };
+    std::uint32_t _pad0 { 0U };
     std::uint32_t _pad1 { 0U };
     std::array<float, 4> left_plane { 0.0F, 0.0F, 0.0F, 0.0F };
     std::array<float, 4> right_plane { 0.0F, 0.0F, 0.0F, 0.0F };
@@ -88,14 +88,12 @@ private:
   std::shared_ptr<graphics::Texture> tile_data_texture_ {};
   std::shared_ptr<graphics::Buffer> occupied_tile_buffer_ {};
   std::shared_ptr<graphics::Buffer> indirect_args_buffer_ {};
-  std::shared_ptr<graphics::Buffer> indirect_count_buffer_ {};
   std::shared_ptr<graphics::Buffer> indirect_count_clear_buffer_ {};
   ShaderVisibleIndex tile_data_texture_uav_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex tile_data_texture_srv_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex occupied_tile_buffer_uav_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex occupied_tile_buffer_srv_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex indirect_args_buffer_uav_ { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex indirect_count_buffer_uav_ { kInvalidShaderVisibleIndex };
   std::uint32_t tile_data_resolution_x_ { 0U };
   std::uint32_t tile_data_resolution_y_ { 0U };
   std::uint32_t tile_data_slice_count_ { 0U };

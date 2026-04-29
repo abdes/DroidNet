@@ -163,7 +163,8 @@ namespace {
 
     auto layout = LooseCookedLayout {};
     const auto expected_relpath = layout.SceneDescriptorRelPath("DemoScene");
-    const auto scene_path = cooked_root / std::filesystem::path(expected_relpath);
+    const auto scene_path
+      = cooked_root / std::filesystem::path(expected_relpath);
     EXPECT_TRUE(std::filesystem::exists(scene_path));
 
     const auto scene_bytes = ReadBinaryFile(scene_path);
@@ -175,8 +176,7 @@ namespace {
       = scene.GetComponents<oxygen::data::pak::world::RenderableRecord>();
     ASSERT_EQ(renderables.size(), 1U);
     EXPECT_EQ(renderables[0].material_key,
-      oxygen::data::AssetKey::FromVirtualPath(
-        "/.cooked/Materials/cube.omat"));
+      oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
 
     service.Stop();
   }
@@ -284,14 +284,14 @@ namespace {
     })"));
 
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "scene.descriptor.recook_required"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.recook_required"));
 
     service.Stop();
   }
 
-  NOLINT_TEST_F(SceneDescriptorImportJobTest,
-    SerializesV3EnvironmentAndLocalFogRecords)
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, SerializesV3EnvironmentAndLocalFogRecords)
   {
     const auto cooked_root = MakeTempCookedRoot("environment_and_local_fog");
     WriteTextFile(cooked_root / "Textures" / "sky_probe.otex", "otex");
@@ -359,10 +359,12 @@ namespace {
           "diffuse_intensity": 1.1,
           "specular_intensity": 1.2,
           "real_time_capture_enabled": true,
+          "source_cubemap_angle_radians": 0.75,
           "lower_hemisphere_color": [0.1, 0.2, 0.3],
+          "lower_hemisphere_is_solid_color": false,
+          "lower_hemisphere_blend_alpha": 0.35,
           "volumetric_scattering_intensity": 0.4,
-          "affect_reflections": true,
-          "affect_global_illumination": false
+          "affect_reflections": true
         }
       },
       "local_fog_volumes": [
@@ -408,8 +410,10 @@ namespace {
     const auto sky_light = scene.TryGetSkyLightEnvironment();
     ASSERT_TRUE(sky_light.has_value());
     EXPECT_EQ(sky_light->real_time_capture_enabled, 1U);
+    EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 0.75F);
+    EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
+    EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
     EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.4F);
-    EXPECT_EQ(sky_light->affect_global_illumination, 0U);
 
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();

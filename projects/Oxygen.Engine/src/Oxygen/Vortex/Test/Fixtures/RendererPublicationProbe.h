@@ -10,6 +10,7 @@
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::testing {
@@ -50,6 +51,17 @@ struct RendererPublicationProbe {
     -> const LightingService*
   {
     return scene_renderer.lighting_.get();
+  }
+
+  static auto GetShadowService(SceneRenderer& scene_renderer) -> ShadowService*
+  {
+    return scene_renderer.shadows_.get();
+  }
+
+  static auto GetShadowService(const SceneRenderer& scene_renderer)
+    -> const ShadowService*
+  {
+    return scene_renderer.shadows_.get();
   }
 
   static auto GetFrameLightSelection(SceneRenderer& scene_renderer)

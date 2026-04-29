@@ -1,6 +1,7 @@
 """RenderDoc UI analyzer for VortexBasic stage products."""
 
 import builtins
+import struct
 import sys
 from pathlib import Path
 
@@ -266,6 +267,15 @@ def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
     return matches
 
 
+def read_u32_buffer(controller, resource_id, max_words):
+    raw = controller.GetBufferData(resource_id, 0, max_words * 4)
+    blob = bytes(raw)
+    if not blob:
+        return []
+    word_count = len(blob) // 4
+    return list(struct.unpack("<{}I".format(word_count), blob[: word_count * 4]))
+
+
 def find_screen_hzb_resource(
     controller,
     resource_records,
@@ -411,6 +421,32 @@ def max_sample_delta(a_sample, b_sample):
     return max(deltas) if deltas else 0.0
 
 
+def far_depth_probe_delta(depth_sample, a_sample, b_sample, far_depth=0.0, epsilon=1.0e-6):
+    if depth_sample is None or a_sample is None or b_sample is None:
+        return 0.0, 0
+
+    max_delta = 0.0
+    sample_count = 0
+    for probe_name, depth_values in depth_sample["probes"].items():
+        if abs(depth_values[0] - far_depth) > epsilon:
+            continue
+        if probe_name not in a_sample["probes"] or probe_name not in b_sample["probes"]:
+            continue
+        sample_count += 1
+        max_delta = max(
+            max_delta,
+            max(
+                abs(value)
+                for value in vec_diff(
+                    a_sample["probes"][probe_name],
+                    b_sample["probes"][probe_name],
+                )
+            ),
+        )
+
+    return max_delta, sample_count
+
+
 def make_sample_subresource(rd, sample):
     sub = rd.Subresource()
     sub.mip = int(sample["mip"])
@@ -484,6 +520,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     atmosphere_camera_aerial_name = "Vortex.Environment.AtmosphereCameraAerialPerspective"
     distant_sky_light_lut_name = "Vortex.Environment.DistantSkyLightLut"
     stage14_local_fog_name = "Vortex.Stage14.LocalFogTiledCulling"
+    stage14_volumetric_fog_name = "Vortex.Stage14.VolumetricFog"
     stage15_sky_name = "Vortex.Stage15.Sky"
     stage15_atmosphere_name = "Vortex.Stage15.Atmosphere"
     stage15_fog_name = "Vortex.Stage15.Fog"
@@ -516,6 +553,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     distant_sky_light_lut_scope = records_with_name(action_records, distant_sky_light_lut_name)
     distant_sky_light_lut_records = records_under_prefix(action_records, distant_sky_light_lut_name)
     stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_name)
+    stage14_volumetric_fog_scope = records_with_name(
+        action_records, stage14_volumetric_fog_name
+    )
+    stage14_volumetric_fog_records = records_under_prefix(
+        action_records, stage14_volumetric_fog_name
+    )
     stage15_sky_records = records_under_prefix(action_records, stage15_sky_name)
     stage15_atmosphere_records = records_under_prefix(action_records, stage15_atmosphere_name)
     stage15_fog_records = records_under_prefix(action_records, stage15_fog_name)
@@ -525,8 +568,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage14_event_ids = collect_event_ids(
         records_with_name(action_records, stage14_local_fog_name), stage14_local_fog_records
     )
+    stage14_volumetric_fog_event_ids = collect_event_ids(
+        stage14_volumetric_fog_scope, stage14_volumetric_fog_records
+    )
     stage15_atmosphere_event_ids = collect_event_ids(
         records_with_name(action_records, stage15_atmosphere_name), stage15_atmosphere_records
+    )
+    stage15_fog_event_ids = collect_event_ids(
+        records_with_name(action_records, stage15_fog_name), stage15_fog_records
     )
     stage15_local_fog_event_ids = collect_event_ids(
         records_with_name(action_records, stage15_local_fog_name), stage15_local_fog_records
@@ -555,10 +604,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         or stage15_sky_last_draw is None
         or stage15_atmosphere_last_draw is None
         or stage15_fog_last_draw is None
-        or stage15_local_fog_last_draw is None
         or compositing_draw is None
     ):
         raise RuntimeError("Required VortexBasic stage events were not found in the capture.")
+    stage15_local_fog_composed_in_volumetric = stage15_local_fog_last_draw is None
 
     stage3 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage3_last_draw.event_id)
     stage9 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage9_last_draw.event_id)
@@ -570,8 +619,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         controller, rd, resource_names, texture_descs, stage15_atmosphere_last_draw.event_id
     )
     stage15_fog = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id)
-    stage15_local_fog = analyze_draw_event(
-        controller, rd, resource_names, texture_descs, stage15_local_fog_last_draw.event_id
+    stage15_local_fog = (
+        analyze_draw_event(
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            stage15_local_fog_last_draw.event_id,
+        )
+        if stage15_local_fog_last_draw is not None
+        else {"outputs": [], "depth": None}
     )
 
     compositing = analyze_draw_event(controller, rd, resource_names, texture_descs, compositing_draw.event_id)
@@ -657,13 +714,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_fog_last_draw.event_id,
         stage15_fog_scene_color,
     )
-    stage15_local_fog_scene_color_dense_delta = dense_grid_delta(
-        controller,
-        rd,
-        stage15_fog_last_draw.event_id,
-        stage15_fog_scene_color,
-        stage15_local_fog_last_draw.event_id,
-        stage15_local_fog_scene_color,
+    stage15_local_fog_scene_color_dense_delta = (
+        dense_grid_delta(
+            controller,
+            rd,
+            stage15_fog_last_draw.event_id,
+            stage15_fog_scene_color,
+            stage15_local_fog_last_draw.event_id,
+            stage15_local_fog_scene_color,
+        )
+        if stage15_local_fog_last_draw is not None
+        else 0.0
     )
     stage15_sky_scene_color_delta = max(
         stage15_sky_scene_color_delta, stage15_sky_scene_color_dense_delta
@@ -679,12 +740,27 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_local_fog_scene_color_delta,
         stage15_local_fog_scene_color_dense_delta,
     )
+    if stage15_local_fog_last_draw is not None:
+        stage15_local_fog_far_depth_delta, stage15_local_fog_far_depth_sample_count = (
+            far_depth_probe_delta(
+                stage3["depth"],
+                stage15_fog_scene_color,
+                stage15_local_fog_scene_color,
+            )
+        )
+    else:
+        stage15_local_fog_far_depth_delta = 0.0
+        stage15_local_fog_far_depth_sample_count = 0
     stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
     stage15_atmosphere_scene_color_changed = (
         stage15_atmosphere_scene_color_delta > 1.0e-5
     )
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
     stage15_local_fog_scene_color_changed = stage15_local_fog_scene_color_delta > 1.0e-5
+    stage15_local_fog_far_depth_unchanged = (
+        stage15_local_fog_far_depth_sample_count > 0
+        and stage15_local_fog_far_depth_delta <= 1.0e-5
+    )
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     stage3_depth_width = stage3["depth"]["width"] if stage3["depth"] is not None else 0
     stage3_depth_height = stage3["depth"]["height"] if stage3["depth"] is not None else 0
@@ -741,14 +817,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_local_fog_event_ids,
         "vortex.environment.localfogtiledrawargs",
     )
-    indirect_count_usage = find_named_resource_usage(
-        controller,
-        resource_records,
-        stage15_local_fog_event_ids,
-        "vortex.environment.localfogtiledrawcount",
+    local_fog_indirect_draw_args_values = []
+    if indirect_args_usage:
+        local_fog_indirect_draw_args_values = read_u32_buffer(
+            controller, indirect_args_usage[0]["resource_id"], 4
+        )
+    local_fog_indirect_draw_instance_count = (
+        local_fog_indirect_draw_args_values[1]
+        if len(local_fog_indirect_draw_args_values) > 1
+        else 0
     )
     local_fog_indirect_draw_valid = (
-        len(indirect_args_usage) > 0 and len(indirect_count_usage) > 0
+        len(indirect_args_usage) > 0
+        and len(local_fog_indirect_draw_args_values) >= 4
+        and local_fog_indirect_draw_args_values[0] == 6
+        and local_fog_indirect_draw_instance_count > 0
     )
 
     atmosphere_transmittance_lut_scope_count_match = len(atmosphere_transmittance_lut_scope) == 1
@@ -778,6 +861,30 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     distant_sky_light_lut_dispatch_count_match = (
         len(records_with_name(distant_sky_light_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
     )
+    stage14_volumetric_fog_scope_count_match = len(stage14_volumetric_fog_scope) == 1
+    stage14_volumetric_fog_dispatch_count_match = (
+        len(records_with_name(stage14_volumetric_fog_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    integrated_light_scattering_written = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage14_volumetric_fog_event_ids,
+        "vortex.environment.integratedlightscattering",
+    )
+    integrated_light_scattering_consumed = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage15_fog_event_ids,
+        "vortex.environment.integratedlightscattering",
+    )
+    integrated_light_scattering_published = (
+        stage14_volumetric_fog_scope_count_match
+        and stage14_volumetric_fog_dispatch_count_match
+        and len(integrated_light_scattering_written) > 0
+    )
+    integrated_light_scattering_consumed_by_fog = (
+        len(integrated_light_scattering_consumed) > 0
+    )
 
     report.append("analysis_profile=vortexbasic_stage_products")
     report.append("capture_path={}".format(capture_path))
@@ -795,7 +902,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     report.append("stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id))
     report.append(
-        "stage15_local_fog_last_draw_event={}".format(stage15_local_fog_last_draw.event_id)
+        "stage15_local_fog_last_draw_event={}".format(
+            stage15_local_fog_last_draw.event_id
+            if stage15_local_fog_last_draw is not None
+            else ""
+        )
+    )
+    report.append(
+        "stage15_local_fog_composed_in_volumetric={}".format(
+            str(stage15_local_fog_composed_in_volumetric).lower()
+        )
     )
     report.append("compositing_draw_event={}".format(compositing_draw.event_id))
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
@@ -859,6 +975,40 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             str(distant_sky_light_lut_dispatch_count_match).lower()
         )
     )
+    report.append(
+        "stage14_volumetric_fog_scope_count_match={}".format(
+            str(stage14_volumetric_fog_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "stage14_volumetric_fog_dispatch_count_match={}".format(
+            str(stage14_volumetric_fog_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "integrated_light_scattering_published={}".format(
+            str(integrated_light_scattering_published).lower()
+        )
+    )
+    report.append(
+        "integrated_light_scattering_consumed_by_fog={}".format(
+            str(integrated_light_scattering_consumed_by_fog).lower()
+        )
+    )
+    report.append(
+        "integrated_light_scattering_written_resource_name={}".format(
+            integrated_light_scattering_written[0]["name"]
+            if integrated_light_scattering_written
+            else ""
+        )
+    )
+    report.append(
+        "integrated_light_scattering_consumed_resource_name={}".format(
+            integrated_light_scattering_consumed[0]["name"]
+            if integrated_light_scattering_consumed
+            else ""
+        )
+    )
     report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
     report.append("stage9_gbuffer_base_color_nonzero={}".format(str(stage9_gbuffer_nonzero).lower()))
     report.append("stage9_velocity_nonzero={}".format(str(stage9_velocity_nonzero).lower()))
@@ -902,6 +1052,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append(
+        "stage15_local_fog_far_depth_delta_max={:.6f}".format(
+            stage15_local_fog_far_depth_delta
+        )
+    )
+    report.append(
+        "stage15_local_fog_far_depth_sample_count={}".format(
+            stage15_local_fog_far_depth_sample_count
+        )
+    )
+    report.append(
         "stage15_sky_scene_color_changed={}".format(
             str(stage15_sky_scene_color_changed).lower()
         )
@@ -919,6 +1079,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "stage15_local_fog_scene_color_changed={}".format(
             str(stage15_local_fog_scene_color_changed).lower()
+        )
+    )
+    report.append(
+        "stage15_local_fog_far_depth_unchanged={}".format(
+            str(stage15_local_fog_far_depth_unchanged).lower()
         )
     )
     report.append("screen_hzb_expected_width={}".format(expected_screen_hzb_width))
@@ -939,6 +1104,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             str(local_fog_indirect_draw_valid).lower()
         )
     )
+    report.append(
+        "local_fog_indirect_draw_args={}".format(
+            ",".join(str(value) for value in local_fog_indirect_draw_args_values)
+        )
+    )
+    report.append(
+        "local_fog_indirect_draw_instance_count={}".format(
+            local_fog_indirect_draw_instance_count
+        )
+    )
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     overall = (
         stage3_depth_ok
@@ -953,6 +1128,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and atmosphere_camera_aerial_consumed
         and distant_sky_light_lut_scope_count_match
         and distant_sky_light_lut_dispatch_count_match
+        and stage14_volumetric_fog_scope_count_match
+        and stage14_volumetric_fog_dispatch_count_match
+        and integrated_light_scattering_published
         and stage9_has_expected_targets
         and stage9_gbuffer_nonzero
         and stage9_velocity_nonzero
@@ -962,7 +1140,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_sky_scene_color_changed
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
-        and stage15_local_fog_scene_color_changed
+        and (
+            stage15_local_fog_composed_in_volumetric
+            or (
+                stage15_local_fog_scene_color_changed
+                and stage15_local_fog_far_depth_unchanged
+            )
+        )
         and screen_hzb_published
         and local_fog_hzb_consumed
         and local_fog_indirect_draw_valid

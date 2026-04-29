@@ -185,10 +185,11 @@ try {
     $benchmarkWindowStart = $sceneBuilds[-1].LineNumber
   }
 
-  $positiveSelection = @(Select-String -Path $stderrPath -Pattern 'activated scene .* selected scene directional .* as sun via ' |
+  $positiveSelection = @(Select-String -Path $stderrPath -Pattern 'activated scene .* selected scene directional .* as resolved primary sun' |
     Where-Object { $_.LineNumber -gt $benchmarkWindowStart })
-  $negativeSynthetic = @(Select-String -Path $stderrPath -Pattern 'activation rejected synthetic sun for scene ' |
+  $activeSceneSun = @(Select-String -Path $stderrPath -Pattern 'using scene directional .* as sun \(source=scene, casts_shadows=true, environment_contribution=true\)' |
     Where-Object { $_.LineNumber -gt $benchmarkWindowStart })
+  $sceneSummary = @(Select-String -Path $stderrPath -Pattern 'SceneLoader: Scene summary: .*directional_lights=1')
   $syntheticFallback = @(Select-String -Path $stderrPath -Pattern 'selected synthetic sun fallback' |
     Where-Object { $_.LineNumber -gt $benchmarkWindowStart })
   $syntheticOverride = @(Select-String -Path $stderrPath -Pattern 'using synthetic sun node ' |
@@ -197,8 +198,11 @@ try {
   if ($positiveSelection.Count -eq 0) {
     throw "Benchmark run did not log a positive scene-sun selection. See log: $benchmarkLogPath"
   }
-  if ($negativeSynthetic.Count -eq 0) {
-    throw "Benchmark run did not log synthetic rejection for the authoritative scene sun. See log: $benchmarkLogPath"
+  if ($activeSceneSun.Count -eq 0) {
+    throw "Benchmark run did not log an active scene sun with shadow casting enabled. See log: $benchmarkLogPath"
+  }
+  if ($sceneSummary.Count -eq 0) {
+    throw "Benchmark run did not log a scene summary with one directional light. See log: $benchmarkLogPath"
   }
   if ($syntheticFallback.Count -ne 0) {
     throw "Benchmark run unexpectedly activated a synthetic sun fallback. See log: $benchmarkLogPath"
@@ -208,21 +212,27 @@ try {
   }
 
   $summary = Get-LastDirectionalSummary -Path $stderrPath
-  if ($null -eq $summary) {
-    throw "Benchmark run did not emit a directional light summary. See log: $benchmarkLogPath"
-  }
-  if ($summary.Total -ne 1 -or $summary.ShadowedTotal -ne 1 -or $summary.ShadowedSun -ne 1) {
+  $hasDirectionalSummary = $null -ne $summary `
+    -and $summary.PSObject.Properties.Match('Line').Count -gt 0
+  if ($hasDirectionalSummary -and ($summary.Total -ne 1 -or $summary.ShadowedTotal -ne 1 -or $summary.ShadowedSun -ne 1)) {
     throw "Benchmark run ended with invalid directional light summary: $($summary.Line)"
   }
 
   "Validated scene-sun selection log: $($positiveSelection[-1].Line.Trim())" |
     Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
-  "Validated synthetic rejection log: $($negativeSynthetic[-1].Line.Trim())" |
+  "Validated active scene-sun log: $($activeSceneSun[-1].Line.Trim())" |
     Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
-  "Validated directional summary: $($summary.Line)" |
+  "Validated scene light summary: $($sceneSummary[-1].Line.Trim())" |
     Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
+  if ($hasDirectionalSummary) {
+    "Validated directional summary: $($summary.Line)" |
+      Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
+  }
   $lastSceneBuild = Get-LastSceneBuild -Path $stderrPath
-  if ($null -ne $lastSceneBuild) {
+  $hasLastSceneBuild = $null -ne $lastSceneBuild `
+    -and $lastSceneBuild.PSObject.Properties.Match('Line').Count -gt 0 `
+    -and $lastSceneBuild.PSObject.Properties.Match('LineNumber').Count -gt 0
+  if ($hasLastSceneBuild) {
     "Benchmark scene build: $($lastSceneBuild.Line)" |
       Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
   }
@@ -231,16 +241,22 @@ try {
       Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
   }
   $lastRepoint = Get-LastTextureRepoint -Path $stderrPath
-  if ($null -ne $lastRepoint) {
+  $hasLastRepoint = $null -ne $lastRepoint `
+    -and $lastRepoint.PSObject.Properties.Match('Line').Count -gt 0 `
+    -and $lastRepoint.PSObject.Properties.Match('LineNumber').Count -gt 0
+  if ($hasLastRepoint) {
     "Last texture repoint observed: $($lastRepoint.Line)" |
       Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
   }
   $captureRequest = Get-CaptureRequest -Path $stderrPath -Frame $Frame
-  if ($null -ne $captureRequest) {
+  $hasCaptureRequest = $null -ne $captureRequest `
+    -and $captureRequest.PSObject.Properties.Match('Line').Count -gt 0 `
+    -and $captureRequest.PSObject.Properties.Match('LineNumber').Count -gt 0
+  if ($hasCaptureRequest) {
     "Capture request observed: $($captureRequest.Line)" |
       Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
   }
-  if ($null -ne $lastSceneBuild -and $null -ne $lastRepoint) {
+  if ($hasLastSceneBuild -and $hasLastRepoint) {
     $sceneBuildFrame = Get-FrameMarkerAfterLine -Path $stderrPath -LineNumber $lastSceneBuild.LineNumber
     $lastRepointFrame = Get-FrameMarkerAfterLine -Path $stderrPath -LineNumber $lastRepoint.LineNumber
     if ($null -ne $sceneBuildFrame) {
@@ -260,7 +276,7 @@ try {
         Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
     }
   }
-  if ($null -ne $lastSceneBuild -and $null -ne $captureRequest) {
+  if ($hasLastSceneBuild -and $hasCaptureRequest) {
     $sceneBuildTime = Get-LogTimeOfDay -Line $lastSceneBuild.Line
     $captureRequestTime = Get-LogTimeOfDay -Line $captureRequest.Line
     if ($null -ne $sceneBuildTime -and $null -ne $captureRequestTime) {
@@ -269,7 +285,7 @@ try {
         Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
     }
   }
-  if ($null -ne $lastRepoint -and $null -ne $captureRequest) {
+  if ($hasLastRepoint -and $hasCaptureRequest) {
     $lastRepointTime = Get-LogTimeOfDay -Line $lastRepoint.Line
     $captureRequestTime = Get-LogTimeOfDay -Line $captureRequest.Line
     if ($null -ne $lastRepointTime -and $null -ne $captureRequestTime) {
@@ -307,7 +323,9 @@ try {
   Write-Host "Frames requested: start=$Frame count=$Count total_run_frames=$RunFrames"
   Write-Host "Settings restore file: $settingsBackupPath"
   Write-Host "Benchmark log: $benchmarkLogPath"
-  Write-Host "Directional summary: $($summary.Line)"
+  if ($hasDirectionalSummary) {
+    Write-Host "Directional summary: $($summary.Line)"
+  }
   Write-Host "Capture files:"
   foreach ($capture in $captures) {
     Write-Host "  $($capture.FullName)"

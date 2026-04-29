@@ -18,6 +18,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Vortex/FacadePresets.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 
 #include "Fakes/Graphics.h"
 
@@ -38,6 +39,9 @@ using oxygen::graphics::Surface;
 using oxygen::graphics::Texture;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::ShadingMode;
+using oxygen::vortex::CompositionView;
+using oxygen::vortex::IViewExtension;
+using oxygen::vortex::PostCompositionContext;
 using oxygen::vortex::testing::FakeGraphics;
 
 class FakeSurface final : public Surface {
@@ -187,7 +191,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -209,7 +213,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 }
 
 NOLINT_TEST_F(RendererCompositionQueueTest,
-  RegisterCompositionRejectsMixedTargetsWithinFrame)
+  RegisterCompositionQueuesMultipleTargetsWithinFrame)
 {
   auto surface_a_texture = MakeColorTexture("Queue.SurfaceA");
   auto surface_b_texture = MakeColorTexture("Queue.SurfaceB");
@@ -218,6 +222,9 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto target_a = MakeFramebuffer(surface_a_texture);
   auto target_b = MakeFramebuffer(surface_b_texture);
 
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_a.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_b.get() });
+
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
@@ -225,16 +232,24 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target_a.get() });
+      oxygen::observer_ptr<Framebuffer> { target_a.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.SourceA", target_a), surface_a);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.SourceB", target_b), surface_b);
 
-  NOLINT_EXPECT_DEATH(renderer_->RegisterComposition(
-                        MakeSubmission("Queue.SourceB", target_b), surface_b),
-    ".*single target per frame.*");
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(1));
 }
 
 NOLINT_TEST_F(
@@ -253,7 +268,7 @@ NOLINT_TEST_F(
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -293,7 +308,7 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
       },
-      oxygen::observer_ptr<const Framebuffer> { present_target.get() });
+      oxygen::observer_ptr<Framebuffer> { present_target.get() });
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
@@ -340,6 +355,174 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   EXPECT_EQ(graphics_->texture_copy_log_.copies[0].src, scene_texture.get());
   EXPECT_EQ(graphics_->texture_copy_log_.copies[0].dst, surface_texture.get());
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  RegisterRuntimeCompositionBlendsTextureLayerToPresentationTarget)
+{
+  auto surface_texture = MakeColorTexture("Queue.RuntimeTextureSurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto present_target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<Framebuffer> { present_target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
+
+  auto source_texture = MakeColorTexture("Queue.RuntimeTextureLayer");
+  graphics_->GetResourceRegistry().Register(source_texture);
+
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->draw_log_.draws.clear();
+
+  renderer_->RegisterRuntimeComposition(Renderer::RuntimeCompositionInput {
+    .texture_layers = {
+      Renderer::RuntimeTextureCompositionLayer {
+        .source_texture = source_texture,
+        .viewport = {
+          .top_left_x = 4.0F,
+          .top_left_y = 6.0F,
+          .width = 48.0F,
+          .height = 40.0F,
+          .min_depth = 0.0F,
+          .max_depth = 1.0F,
+        },
+        .opacity = 1.0F,
+        .debug_name = "Queue.RuntimeTextureLayer.Composite",
+      },
+    },
+    .composite_target = present_target,
+    .target_surface = surface,
+  });
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  EXPECT_TRUE(graphics_->texture_copy_log_.copies.empty());
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  SurfaceOverlayBatchesRunAfterCompositionBeforePresentable)
+{
+  auto surface_texture = MakeColorTexture("Queue.SurfaceOverlaySurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<Framebuffer> { target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
+
+  auto overlay_ran = false;
+  auto submission = MakeSubmission("Queue.SurfaceOverlaySource", target);
+  submission.surface_overlays.push_back(CompositionView::OverlayBatch {
+    .lane = CompositionView::OverlayLane::kSurfaceScreen,
+    .target = CompositionView::OverlayTarget::kSurface,
+    .view_id = ViewId { 0U },
+    .surface_id = CompositionView::kDefaultSurfaceRoute,
+    .priority = 0,
+    .debug_name = "Queue.SurfaceOverlay",
+    .record = [&](oxygen::graphics::CommandRecorder& recorder) {
+      EXPECT_FALSE(frame_context_->IsSurfacePresentable(0));
+      overlay_ran = true;
+      recorder.Draw(77U, 1U, 0U, 0U);
+    },
+  });
+
+  renderer_->RegisterComposition(std::move(submission), surface);
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  ASSERT_TRUE(overlay_ran);
+  ASSERT_GE(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_EQ(graphics_->draw_log_.draws.back().vertex_num, 77U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  ViewExtensionPostCompositionRunsBeforePresentable)
+{
+  class RecordingExtension final : public IViewExtension {
+  public:
+    explicit RecordingExtension(bool& called)
+      : called_(called)
+    {
+    }
+
+    auto OnPostComposition(const PostCompositionContext& context)
+      -> void override
+    {
+      EXPECT_EQ(
+        context.surface_id, CompositionView::SurfaceRouteId { 12U });
+      EXPECT_FALSE(context.frame_context.IsSurfacePresentable(0));
+      called_ = true;
+      context.recorder.Draw(88U, 1U, 0U, 0U);
+    }
+
+  private:
+    bool& called_;
+  };
+
+  auto surface_texture = MakeColorTexture("Queue.ExtensionSurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<Framebuffer> { target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
+
+  auto extension_called = false;
+  renderer_->RegisterViewExtension(
+    std::make_shared<RecordingExtension>(extension_called));
+
+  auto submission = MakeSubmission("Queue.ExtensionSource", target);
+  submission.surface_id = CompositionView::SurfaceRouteId { 12U };
+  renderer_->RegisterComposition(std::move(submission), surface);
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  ASSERT_TRUE(extension_called);
+  ASSERT_GE(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_EQ(graphics_->draw_log_.draws.back().vertex_num, 88U);
   EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
 }
 
