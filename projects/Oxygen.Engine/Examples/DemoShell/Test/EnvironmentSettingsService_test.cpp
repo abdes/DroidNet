@@ -415,6 +415,40 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  EnablingSkyAtmosphereDisablesSceneSkySphere)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.AtmosphereDisablesSkySphere");
+  auto environment = std::make_unique<scene::SceneEnvironment>();
+  auto& sky = environment->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+  sky.SetSolidColorRgb({ 0.1F, 0.2F, 0.3F });
+  sky.SetIntensity(100.0F);
+  scene->SetEnvironment(std::move(environment));
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+  ASSERT_TRUE(service_.GetSkySphereEnabled());
+
+  service_.SetSkyAtmosphereEnabled(true);
+  service_.ApplyPendingChanges();
+
+  auto env = scene->GetEnvironment();
+  ASSERT_NE(env.get(), nullptr);
+  auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+  ASSERT_NE(atmo.get(), nullptr);
+  EXPECT_TRUE(atmo->IsEnabled());
+
+  auto updated_sky = env->TryGetSystem<scene::environment::SkySphere>();
+  ASSERT_NE(updated_sky.get(), nullptr);
+  EXPECT_FALSE(updated_sky->IsEnabled());
+  EXPECT_FALSE(service_.GetSkySphereEnabled());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   AppliesDirectionalShadowSettingsToAuthoredSceneSunLight)
 {
   auto scene = MakeScene("DemoShell.SceneSunShadowSettings");

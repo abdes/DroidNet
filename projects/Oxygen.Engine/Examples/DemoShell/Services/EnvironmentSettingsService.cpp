@@ -974,12 +974,19 @@ auto EnvironmentSettingsService::GetSkyAtmosphereEnabled() const -> bool
 
 auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
 {
+  const bool sky_sphere_was_enabled = sky_sphere_enabled_;
   if (sky_atmo_enabled_ == enabled) {
     return;
   }
   sky_atmo_enabled_ = enabled;
   NormalizeSkySystems();
-  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+  auto dirty_domains = ToMask(DirtyDomain::kAtmosphereModel);
+  if (sky_sphere_enabled_ != sky_sphere_was_enabled) {
+    skybox_dirty_ = true;
+    dirty_domains |= ToMask(DirtyDomain::kSkySphere)
+      | ToMask(DirtyDomain::kSkybox);
+  }
+  MarkDirty(dirty_domains);
 }
 
 auto EnvironmentSettingsService::GetSkyAtmosphereTransformMode() const -> int

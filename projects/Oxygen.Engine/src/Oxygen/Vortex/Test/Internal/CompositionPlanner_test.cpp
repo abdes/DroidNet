@@ -456,7 +456,7 @@ TEST(CompositionPlannerTest, DepthPrepassDebugModesForceNeutralToneMapping)
   EXPECT_EQ(plan.GetToneMapPolicy(), ToneMapPolicy::kNeutral);
 }
 
-TEST(CompositionPlannerTest, SkySphereBackgroundWinsOverAtmospherePerPlan)
+TEST(CompositionPlannerTest, SkyAtmosphereBackgroundWinsOverSkySpherePerPlan)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   auto scene = MakeSceneWithAtmosphereAndSkySphere(
@@ -482,7 +482,8 @@ TEST(CompositionPlannerTest, SkySphereBackgroundWinsOverAtmospherePerPlan)
     static_cast<std::uint32_t>(
       oxygen::scene::environment::SkySphereSource::kCubemap));
   EXPECT_TRUE(plan.SkySphereCubemapAuthored());
-  EXPECT_EQ(plan.GetVisibleSkyBackground(), VisibleSkyBackground::kSkySphere);
+  EXPECT_EQ(
+    plan.GetVisibleSkyBackground(), VisibleSkyBackground::kSkyAtmosphere);
   EXPECT_TRUE(plan.RunSkyPass());
   EXPECT_TRUE(plan.RunSkyLutUpdate());
 }

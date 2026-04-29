@@ -17,6 +17,7 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
@@ -91,6 +92,25 @@ namespace {
   {
     return ctx.current_view.feature_mask.Has(
       CompositionView::ViewFeatureMask::kVolumetrics);
+  }
+
+  auto CurrentViewSelectsSkySphereBackground(const RenderContext& ctx,
+    const scene::SceneEnvironment* env) -> bool
+  {
+    if (env == nullptr
+      || !ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kEnvironment)) {
+      return false;
+    }
+    if (const auto atmosphere
+      = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+      atmosphere != nullptr && atmosphere->IsEnabled()
+      && ctx.current_view.with_atmosphere) {
+      return false;
+    }
+    const auto sky_sphere
+      = env->TryGetSystem<scene::environment::SkySphere>();
+    return sky_sphere != nullptr && sky_sphere->IsEnabled();
   }
 
   auto StaticSkyLightProductStatusName(
@@ -884,12 +904,10 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.atmosphere.sky_view_lut_slices = 1U;
   data.atmosphere.sky_view_alt_mapping_mode = 0U;
 
-  if (ctx.current_view.feature_mask.Has(
-        CompositionView::ViewFeatureMask::kEnvironment)) {
-    const auto scene_ptr = ctx.GetScene();
-    const auto* env = scene_ptr != nullptr
-      ? scene_ptr->GetEnvironment().get()
-      : nullptr;
+  const auto scene_ptr = ctx.GetScene();
+  const auto* env
+    = scene_ptr != nullptr ? scene_ptr->GetEnvironment().get() : nullptr;
+  if (CurrentViewSelectsSkySphereBackground(ctx, env)) {
     const auto sky_sphere = env != nullptr
       ? env->TryGetSystem<oxygen::scene::environment::SkySphere>()
       : oxygen::observer_ptr<const oxygen::scene::environment::SkySphere> {};

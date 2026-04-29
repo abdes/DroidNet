@@ -175,10 +175,10 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   const bool environment_enabled = descriptor.feature_mask.Has(
     CompositionView::ViewFeatureMask::kEnvironment);
   if (run_scene_passes && environment_enabled) {
-    if (sky_state.sky_sphere_enabled) {
-      plan_spec.visible_sky_background = VisibleSkyBackground::kSkySphere;
-    } else if (sky_state.sky_atmo_enabled) {
+    if (sky_state.sky_atmo_enabled) {
       plan_spec.visible_sky_background = VisibleSkyBackground::kSkyAtmosphere;
+    } else if (sky_state.sky_sphere_enabled) {
+      plan_spec.visible_sky_background = VisibleSkyBackground::kSkySphere;
     }
   }
   plan_spec.depth_prepass_mode = run_scene_passes
