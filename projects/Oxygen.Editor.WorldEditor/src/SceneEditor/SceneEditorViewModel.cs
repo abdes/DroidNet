@@ -115,7 +115,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.RegisterMessages();
 
         // Track mutations via the undo stack
-        ((INotifyCollectionChanged)UndoRedo.Default[metadata.DocumentId].UndoStack).CollectionChanged += this.OnUndoStackChanged;
+        ((INotifyCollectionChanged)UndoRedo.GetHistory(metadata.DocumentId).UndoStack).CollectionChanged += this.OnUndoStackChanged;
 
         // RunAtFps is sourced directly from the engine service at runtime
         // (see property implementation). No constructor seeding required.
@@ -138,7 +138,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
-            ((INotifyCollectionChanged)UndoRedo.Default[this.Metadata.DocumentId].UndoStack).CollectionChanged -= this.OnUndoStackChanged;
+            ((INotifyCollectionChanged)UndoRedo.GetHistory(this.Metadata.DocumentId).UndoStack).CollectionChanged -= this.OnUndoStackChanged;
             this.messenger.UnregisterAll(this);
 
             foreach (var viewport in this.Viewports)
@@ -732,7 +732,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.Metadata.DocumentId,
             this.Metadata,
             this.scene ?? throw new InvalidOperationException("Scene is not loaded."),
-            UndoRedo.Default[this.Metadata.DocumentId]);
+            UndoRedo.GetHistory(this.Metadata.DocumentId));
 
     private void PublishRuntimeSettingsFailure(
         string code,

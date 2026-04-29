@@ -309,7 +309,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             .FirstOrDefault(document => document.DocumentId == scene.Id);
         return metadata is null
             ? null
-            : new SceneDocumentCommandContext(metadata.DocumentId, metadata, scene, UndoRedo.Default[metadata.DocumentId]);
+            : new SceneDocumentCommandContext(metadata.DocumentId, metadata, scene, UndoRedo.GetHistory(metadata.DocumentId));
     }
 
     private void OnComponentAddRequested(Messages.ComponentAddRequestedMessage message)

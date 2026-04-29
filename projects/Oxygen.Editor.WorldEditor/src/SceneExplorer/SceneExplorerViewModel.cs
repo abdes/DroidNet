@@ -47,7 +47,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Dictionary<ITreeItem, string> trackedItemLabels = [];
     private readonly HashSet<ITreeItem> trackedTreeItems = [];
 
-    private HistoryKeeper History => this.Scene != null ? UndoRedo.Default[this.Scene.AttachedObject.Id] : UndoRedo.Default[this];
+    private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
 
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
     private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = [];
