@@ -9,7 +9,7 @@ current `SceneNodeEditorViewModel` / `TransformViewModel` / `GeometryViewModel`
 baseline into a command-backed, undoable, dirty-aware, multi-selection-aware
 inspector for the V0.1 component set: `TransformComponent`,
 `GeometryComponent` (with `MaterialsSlot` reference only), `PerspectiveCamera`,
-`DirectionalLightComponent`, and the scene-level Environment section.
+`DirectionalLightComponent`, and scene-level settings sections.
 
 Out of scope here: Project Browser, asset import/cook, the real Material Editor
 (see [material-editor.md](./material-editor.md)), Content Browser picker
@@ -205,7 +205,7 @@ Static metadata per component-editor type, registered with the inspector host:
 | `SingleOnly` | Editor visible iff `selection.Count == 1`. |
 | `CommonComponent` | Editor visible iff every selected node has the component. |
 | `OptionalCommon` | Editor visible always for the type; offers Add when missing. |
-| `SceneOnly` | Editor visible regardless of node selection (Environment). |
+| `SceneOnly` | Scene-level editor visible only when the scene/no-node selection is active. |
 
 Resolved against `ISceneSelectionService.GetSelectedNodes(documentId, scene)`.
 
@@ -264,11 +264,35 @@ Sun exclusivity rule: setting `IsSunLight = true` clears the flag on every
 other `DirectionalLightComponent` in the scene as part of the same command
 (single undo entry). See [environment-authoring.md](./environment-authoring.md).
 
-#### Environment (scene-level, `SelectionPolicy.SceneOnly`)
+#### Scene Settings (scene-level, `SelectionPolicy.SceneOnly`)
 
 Field set is owned by [environment-authoring.md](./environment-authoring.md).
-The inspector reserves a "Scene → Environment" section that is reachable when
-no node is selected and via a "Scene" entry in the breadcrumb.
+The inspector shows scene-level sections only when the scene itself is selected
+/ no node is selected. They are not shown while any scene node is selected.
+The scene panel is top-aligned and uses the same DroidNet property-section
+controls as Transform and Geometry: collapsible property sections, `NumberBox`
+for scalar fields, `VectorBox` for fixed RGB/vector fields, and compact
+selectors/toggles for enum/bool fields.
+
+The sections are split by domain:
+
+- `Sky Atmosphere`: atmosphere enable, sun disk, planet/atmosphere lengths,
+  scattering, luminance, and aerial perspective values.
+- `Sun Binding`: directional-light node binding and stale-reference warning.
+- `Exposure`: exposure enabled, exposure mode, exposure key, manual EV,
+  compensation EV, and auto-exposure range/speeds/metering/histogram/window/
+  target/spot radius. Manual EV is visible only for `Manual` /
+  `ManualCamera`; auto-exposure rows are visible only for `Auto`.
+- `Tone Mapping`: tone mapper and display gamma. Display gamma is hidden when
+  the mapper is `None`.
+- `Bloom`: bloom intensity and threshold.
+- `Color Grading`: saturation, contrast, and vignette. Hidden when the mapper
+  is `None`.
+- `Background`: fallback scene background color.
+
+Rows edit one primary property each. Dense multi-property rows are avoided
+except for fixed vector controls where DroidNet `VectorBox` intentionally owns
+the grouped axis layout.
 
 #### Best-effort, non-gating editors
 
@@ -492,7 +516,9 @@ UI rules:
   short message, focusable for keyboard nav.
 - Section-level `LiveSync` warnings render at the top of the section, do not
   obscure fields, and do not block editing.
-- Empty-selection state shows "Scene" with the Environment section visible.
+- Empty-selection state shows "Scene" with the scene-level Sky Atmosphere, Sun
+  Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background
+  sections visible.
 
 ## 10. Persistence And Round Trip
 
@@ -529,12 +555,12 @@ Mapping (consumed by [live-engine-sync.md](./live-engine-sync.md)):
 | --- | --- | --- | --- |
 | `EditTransform` | `UpdateNodeTransformAsync` | `SkippedNotRunning` | n/a |
 | `EditGeometry` | `Attach/DetachGeometryAsync` | `SkippedNotRunning` | n/a |
-| `EditMaterialSlot` | none in V0.1 | n/a | `Unsupported` warning |
+| `EditMaterialSlot` | `UpdateMaterialSlotAsync` | `SkippedNotRunning` | n/a |
 | `EditPerspectiveCamera` | `AttachCameraAsync` (re-apply) | `SkippedNotRunning` | n/a |
 | `EditDirectionalLight` | `AttachLightAsync` (re-apply) | `SkippedNotRunning` | n/a |
 | `AddComponent` | matching attach | `SkippedNotRunning` | `Unsupported` for unmapped types |
 | `RemoveComponent` | matching detach | `SkippedNotRunning` | `Unsupported` for unmapped types |
-| `EditEnvironment` | env adapter (see env LLD) | `SkippedNotRunning` | `Unsupported` per field |
+| `EditEnvironment` | scene settings adapter (see env LLD) | `SkippedNotRunning` | `Unsupported` per field without native API |
 
 Cook behavior is out of ED-M04. Inspector edits must produce persisted
 authoring state that ED-M07 can cook unchanged.
@@ -604,11 +630,13 @@ ED-M04 inspector closure requires:
 6. `RemoveComponent` against `TransformComponent` is denied with
    `OXE.SCENE.COMPONENT.RemoveDenied`.
 7. Setting `MaterialUri` to a URI not present in `IAssetCatalog` persists the
-   URI; UI shows missing badge; no exception is thrown; no live sync attempt.
+   URI; UI shows missing badge; no exception is thrown; live sync attempts a
+   best-effort override when the engine is running.
 8. With engine not `Running`, every primary edit succeeds in authoring and
    surfaces a `LiveSync` `SkippedNotRunning` warning at the section.
-9. A material-slot edit produces no exception even if `EditMaterialSlot` sync
-   is `Unsupported`; authoring value persists; warning appears.
+9. A material-slot edit produces no exception, persists the authoring value,
+   and maps descriptor URIs to cooked `.omat` paths for live runtime override
+   sync.
 10. Inspector references no `Oxygen.Editor.Runtime` / `Interop` types
     (verified via project references / static check).
 
@@ -618,9 +646,7 @@ ED-M04 inspector closure requires:
   registry (replacing `AllPropertyEditorFactories`) or remain composed inside
   `SceneNodeEditorViewModel` for ED-M04? Default: keep inside the host;
   re-evaluate when ED-M05/ED-M06 add editors.
-- Where to render the Scene/Environment section when a node is selected: an
-  always-visible "Scene" tab in the inspector header vs. a breadcrumb-driven
-  switch. Default: breadcrumb switch + dedicated "Edit Scene" affordance in
-  the empty-selection state.
+- Whether to add a dedicated Scene tab later. Default ED-M04: scene settings
+  remain visible only in the empty/no-node selection state.
 - Mouse-wheel coalescing window (default 250 ms) — confirm during
   implementation against actual UX feel.

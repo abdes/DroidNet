@@ -49,6 +49,9 @@ Planning rules:
 4. Milestone validation is recorded once in `IMPLEMENTATION_STATUS.md`.
 5. If scope changes, update PRD/ARCHITECTURE/DESIGN before reshaping milestone
    work.
+6. V0.1 scope is the accepted LLD set. All V0.1 LLD gates must be implemented
+   and validated unless the user explicitly defers them. The only currently
+   deferred V0.1 feature is multi-viewport engine stability/support.
 
 ## 3. Milestone Sequence
 
@@ -219,6 +222,9 @@ Exit gate:
   wires real material asset creation, picking, and assignment.
 - Component edits use commands/services, not direct interop.
 - Edits persist, request sync, and report failures visibly.
+- Every non-deferred `property-inspector.md` and `environment-authoring.md`
+  validation gate is implemented and validated. Do not narrow this to a subset
+  of fields or examples.
 
 ### ED-M05 - Scalar Material Authoring
 
@@ -332,6 +338,13 @@ Purpose: prove the minimum runtime parity slice before full V0.1 acceptance.
 The minimum slice is one geometry node, one scalar material, one camera, one
 directional light, and scene environment settings.
 
+ED-M08 cannot start as a standalone-only validation exercise. It first requires
+all accepted non-deferred V0.1 LLD gates to be closed, especially reopened
+`property-inspector.md` and `environment-authoring.md` gates. Material
+assignment must affect the embedded runtime path, and scene environment systems
+must be editable through the UI. Multi-viewport remains the only deferred
+feature.
+
 LLD work:
 
 - `standalone-runtime-validation.md` is reviewed in detail.
@@ -343,6 +356,8 @@ LLD work:
 
 Exit gate:
 
+- All non-deferred V0.1 LLD gates needed by the minimum slice are implemented;
+  no requirement is silently dropped or treated as optional.
 - Embedded preview renders the minimum authored content slice.
 - Cooked output for the minimum slice loads in standalone runtime.
 - Expected geometry, material, camera, directional light, atmosphere, exposure,

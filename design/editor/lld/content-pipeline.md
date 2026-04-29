@@ -255,9 +255,9 @@ Mapping requirements:
 | `PerspectiveCamera` | `cameras.perspective[]` |
 | `DirectionalLightComponent` | `lights.directional[]` including `intensity_lux`, `angular_size_radians`, `environment_contribution`, `is_sun_light` |
 | point/spot lights | best-effort descriptor output when component data exists; unsupported fields produce warnings, not silent drops |
-| `SceneEnvironmentData.AtmosphereEnabled` | full native default `environment` payload with `sky_atmosphere.enabled` overlaid, when native defaults are available |
+| `SceneEnvironmentData.AtmosphereEnabled` + `SkyAtmosphere` | full native `environment.sky_atmosphere` payload with authored V0.1 scalar/vector values overlaid onto fixed native defaults for fields not exposed by the editor |
 | `SceneEnvironmentData.SunNodeId` | encoded through the selected directional light's `is_sun_light` / `environment_contribution` fields, not through a separate editor-only environment field |
-| exposure, tone, and background editor fields | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warnings in ED-M07; do not encode invented native environment fields |
+| `SceneEnvironmentData.PostProcess` native `PostProcessVolume` fields and `BackgroundColor` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warnings in ED-M07 unless the native scene descriptor schema accepts the exact field; do not encode invented native environment/post-process fields |
 | unmapped editor fields | one `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warning per field; never silently dropped |
 
 The adapter must reject an empty scene descriptor because the native schema
@@ -266,7 +266,15 @@ requires at least one node. The user-facing message must name the scene.
 Native environment emission rule:
 
 - ED-M07 may emit an `environment` block only as a complete engine-default
-  payload with supported editor overrides applied.
+  payload with supported editor overrides applied. Supported editor overrides
+  are `AtmosphereEnabled` plus `SkyAtmosphere.{PlanetRadiusMeters,
+  AtmosphereHeightMeters, GroundAlbedoRgb, RayleighScaleHeightMeters,
+  MieScaleHeightMeters, MieAnisotropy, SkyLuminanceFactorRgb,
+  AerialPerspectiveDistanceScale, AerialScatteringStrength,
+  AerialPerspectiveStartDepthMeters, HeightFogContribution, SunDiskEnabled}`.
+- Post-process authoring is fully persisted and live-synced by ED-M04, but
+  ED-M07 descriptor generation emits warnings for post-process fields until the
+  descriptor schema has exact native fields for them.
 - ED-M07 must not emit partial native environment subobjects to satisfy schema
   shape by guesswork.
 - If a complete default payload is not available, omit `environment` and emit
@@ -696,9 +704,9 @@ ED-M07 is complete when:
     and cooked-index virtual paths round-trip to `asset:///Content/...`.
 13. scene descriptor name tests prove display/file names with spaces normalize
     to native schema identifiers without changing authored display names.
-14. environment mapping tests cover atmosphere enabled/disabled and unsupported
-    exposure/tone/background warnings without partial native environment
-    payloads.
+14. environment mapping tests cover authored sky-atmosphere scalar/vector
+    values, atmosphere enabled/disabled, and unsupported exposure/tone/background
+    warnings without partial native environment payloads.
 15. standalone parity remains deferred to ED-M08.
 
 ## 15. Open Issues
