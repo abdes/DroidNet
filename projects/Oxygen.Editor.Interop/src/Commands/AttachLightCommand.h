@@ -73,11 +73,6 @@ namespace oxygen::interop::module {
         light->SetAngularSizeRadians(angular_size_);
         light->SetEnvironmentContribution(environment_contribution_);
         light->SetIsSunLight(is_sun_light_);
-        if (environment_contribution_ && is_sun_light_) {
-          light->SetAtmosphereLightSlot(
-            oxygen::scene::AtmosphereLightSlot::kPrimary);
-          light->SetUsePerPixelAtmosphereTransmittance(true);
-        }
         (void)scene_node.ReplaceLight(std::move(light));
         break;
       }

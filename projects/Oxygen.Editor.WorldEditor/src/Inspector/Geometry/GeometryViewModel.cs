@@ -432,7 +432,9 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         }
 
         this.SelectedMaterialUriString = firstMaterial;
-        this.SelectedMaterialName = firstMaterial is null ? "None" : ExtractNameFromUriString(firstMaterial);
+        this.SelectedMaterialName = firstMaterial is null
+            ? "None"
+            : this.ResolveMaterialDisplayName(new Uri(firstMaterial, UriKind.Absolute));
     }
 
     private static string ExtractNameFromUriString(string uriString)
@@ -444,6 +446,23 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 
         var lastSegment = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
         return string.IsNullOrWhiteSpace(lastSegment) ? uriString : lastSegment;
+    }
+
+    /// <summary>
+    /// Extracts the user-facing material name from a material descriptor or cooked material URI.
+    /// </summary>
+    internal static string ExtractMaterialNameFromUriString(string uriString)
+    {
+        var name = ExtractNameFromUriString(uriString);
+        foreach (var suffix in new[] { ".omat.json", ".omat" })
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return name[..^suffix.Length];
+            }
+        }
+
+        return name;
     }
 
     private static AssetPickerItem CreateEngineItem(string name, string uriString, string displayPath)
@@ -617,9 +636,14 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
     private void UpdateMaterialDisplay(Uri? uri)
     {
         this.SelectedMaterialUriString = uri?.ToString();
-        this.SelectedMaterialName = uri is null ? "None" : ExtractNameFromUriString(uri.ToString());
+        this.SelectedMaterialName = uri is null ? "None" : this.ResolveMaterialDisplayName(uri);
         this.IsMaterialMixed = false;
     }
+
+    private string ResolveMaterialDisplayName(Uri uri)
+        => this.contentMaterialItemsByKey.TryGetValue(uri.ToString(), out var item)
+            ? item.Name
+            : ExtractMaterialNameFromUriString(uri.ToString());
 
     private static bool UriValuesEqual(Uri? left, Uri? right)
         => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);

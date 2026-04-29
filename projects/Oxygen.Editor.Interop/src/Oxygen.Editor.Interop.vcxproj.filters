@@ -105,6 +105,12 @@
     <ClCompile Include="Commands\SetGeometryCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\SetEnvironmentCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\SetMaterialOverrideCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h">
@@ -256,6 +262,12 @@
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetGeometryCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetEnvironmentCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetMaterialOverrideCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\AttachCameraCommand.h">

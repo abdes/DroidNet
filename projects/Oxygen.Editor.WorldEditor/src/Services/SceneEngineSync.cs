@@ -397,12 +397,19 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             return Task.FromResult(readinessOutcome);
         }
 
-        return Task.FromResult(
-            Unsupported(
-                SceneOperationKinds.EditMaterialSlot,
-                scope,
-                LiveSyncDiagnosticCodes.MaterialUnsupported,
-                $"Live material slot sync is not supported by the V0.1 editor policy. Slot {slotIndex} remains authored only."));
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditMaterialSlot,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.MaterialRejected,
+            LiveSyncDiagnosticCodes.MaterialFailed,
+            cancellationToken,
+            world => world.SetMaterialOverride(
+                node.Id,
+                slotIndex,
+                MaterialOverridePathMapper.ToEnginePath(materialUri)));
     }
 
     /// <inheritdoc/>
@@ -426,14 +433,17 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         }
 
         var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken).ConfigureAwait(false);
+        var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken).ConfigureAwait(false);
         var perField = new Dictionary<string, SyncStatus>
         {
-            [nameof(SceneEnvironmentData.AtmosphereEnabled)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.AtmosphereEnabled)] = environmentOutcome.Status,
             [nameof(SceneEnvironmentData.SunNodeId)] = sunOutcome.Status,
-            [nameof(SceneEnvironmentData.ExposureMode)] = SyncStatus.Unsupported,
-            [nameof(SceneEnvironmentData.ExposureCompensation)] = SyncStatus.Unsupported,
-            [nameof(SceneEnvironmentData.ToneMapping)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.ExposureMode)] = environmentOutcome.Status,
+            [nameof(SceneEnvironmentData.ManualExposureEv)] = environmentOutcome.Status,
+            [nameof(SceneEnvironmentData.ExposureCompensation)] = environmentOutcome.Status,
+            [nameof(SceneEnvironmentData.ToneMapping)] = environmentOutcome.Status,
             [nameof(SceneEnvironmentData.BackgroundColor)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.SkyAtmosphere)] = environmentOutcome.Status,
         };
 
         return new EnvironmentSyncResult(Worst(perField.Values), perField);
@@ -858,6 +868,69 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         return await this.AttachLightAsync(scene, sunNode, cancellationToken).ConfigureAwait(false);
     }
 
+    private Task<SyncOutcome> SyncEnvironmentSystemsAsync(
+        Scene scene,
+        SceneEnvironmentData environment,
+        CancellationToken cancellationToken)
+    {
+        var scope = Scope(scene);
+        if (TryClassifyReadiness(
+                this.engineService,
+                SceneOperationKinds.EditEnvironment,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
+        var post = environment.PostProcess ?? new PostProcessEnvironmentData();
+        return this.ExecuteSceneSyncAsync(
+            scene,
+            SceneOperationKinds.EditEnvironment,
+            LiveSyncDiagnosticCodes.EnvironmentRejected,
+            LiveSyncDiagnosticCodes.EnvironmentFailed,
+            cancellationToken,
+            world => world.SetEnvironment(
+                environment.AtmosphereEnabled,
+                sky.SunDiskEnabled,
+                sky.PlanetRadiusMeters,
+                sky.AtmosphereHeightMeters,
+                sky.GroundAlbedoRgb,
+                sky.RayleighScaleHeightMeters,
+                sky.MieScaleHeightMeters,
+                sky.MieAnisotropy,
+                sky.SkyLuminanceFactorRgb,
+                sky.AerialPerspectiveDistanceScale,
+                sky.AerialScatteringStrength,
+                sky.AerialPerspectiveStartDepthMeters,
+                sky.HeightFogContribution,
+                (int)post.ExposureMode,
+                post.ExposureEnabled,
+                post.ExposureKey,
+                post.ManualExposureEv,
+                post.ExposureCompensationEv,
+                (int)post.ToneMapper,
+                (int)post.AutoExposureMeteringMode,
+                post.AutoExposureMinEv,
+                post.AutoExposureMaxEv,
+                post.AutoExposureSpeedUp,
+                post.AutoExposureSpeedDown,
+                post.AutoExposureLowPercentile,
+                post.AutoExposureHighPercentile,
+                post.AutoExposureMinLogLuminance,
+                post.AutoExposureLogLuminanceRange,
+                post.AutoExposureTargetLuminance,
+                post.AutoExposureSpotMeterRadius,
+                post.BloomIntensity,
+                post.BloomThreshold,
+                post.Saturation,
+                post.Contrast,
+                post.VignetteIntensity,
+                post.DisplayGamma));
+    }
+
     private static bool TryClassifyUnresolvedImportedGeometry(
         Scene scene,
         SceneNode node,
@@ -930,6 +1003,58 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         Action<Oxygen.Interop.World.OxygenWorld> apply)
     {
         var scope = Scope(scene, node, nodeId, componentType);
+        if (TryGetReadyWorld(
+                this.engineService,
+                operationKind,
+                scope,
+                cancellationToken,
+                out var world,
+                out var readinessOutcome))
+        {
+            return Task.FromResult(readinessOutcome);
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            apply(world!);
+            return Task.FromResult(Accepted(operationKind, scope));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Cancelled(operationKind, scope));
+        }
+        catch (NotImplementedException ex)
+        {
+            return Task.FromResult(Unsupported(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (NotSupportedException ex)
+        {
+            return Task.FromResult(Unsupported(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (ArgumentException ex)
+        {
+            return Task.FromResult(Rejected(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Task.FromResult(Rejected(operationKind, scope, rejectedCode, ex.Message, ex));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(Failed(operationKind, scope, failedCode, ex.Message, ex));
+        }
+    }
+
+    private Task<SyncOutcome> ExecuteSceneSyncAsync(
+        Scene scene,
+        string operationKind,
+        string rejectedCode,
+        string failedCode,
+        CancellationToken cancellationToken,
+        Action<Oxygen.Interop.World.OxygenWorld> apply)
+    {
+        var scope = Scope(scene);
         if (TryGetReadyWorld(
                 this.engineService,
                 operationKind,
@@ -1224,10 +1349,21 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         {
             var enginePath = AssetUriHelper.GetEnginePath(geometry.Geometry.Uri);
             world.SetGeometry(node.Id, enginePath);
+            ApplyMaterialOverrides(world, node, geometry);
         }
         else
         {
             world.DetachGeometry(node.Id);
+        }
+    }
+
+    private static void ApplyMaterialOverrides(Oxygen.Interop.World.OxygenWorld world, SceneNode node, GeometryComponent geometry)
+    {
+        var slots = geometry.OverrideSlots.OfType<MaterialsSlot>().ToList();
+        for (var index = 0; index < slots.Count; index++)
+        {
+            var materialUri = slots[index].Material.Uri;
+            world.SetMaterialOverride(node.Id, index, MaterialOverridePathMapper.ToEnginePath(materialUri));
         }
     }
 
