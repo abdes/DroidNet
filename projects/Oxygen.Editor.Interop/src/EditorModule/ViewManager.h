@@ -78,6 +78,11 @@ namespace oxygen::interop::module {
 
     //! Applies a camera view preset to a specific view.
     void SetCameraViewPreset(ViewId engine_id, CameraViewPreset preset);
+
+    //! Applies an editor camera navigation mode to a specific view.
+    void SetCameraControlMode(
+      ViewId engine_id,
+      EditorViewportCameraControlMode mode);
     // Returns true if a transient frame context is currently set (OnFrameStart
     // has been called but FinalizeViews has not yet been called). Non-owning.
     bool HasActiveFrameContext() const;

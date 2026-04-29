@@ -162,6 +162,11 @@ namespace oxygen::interop::module {
     //! Set the camera view preset for a specific view.
     void SetViewCameraPreset(ViewId view_id, CameraViewPreset preset);
 
+    //! Set the editor camera navigation mode for a specific view.
+    void SetViewCameraControlMode(
+      ViewId view_id,
+      EditorViewportCameraControlMode mode);
+
     //! Adds a loose cooked root to the virtual path resolver.
     void AddLooseCookedRoot(std::string_view path);
 

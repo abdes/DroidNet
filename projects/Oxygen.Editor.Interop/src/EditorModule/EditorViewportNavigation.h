@@ -39,18 +39,21 @@ namespace oxygen::interop::module {
 
     auto Apply(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
+      EditorViewportCameraControlMode control_mode,
       glm::vec3& focus_point,
       float& ortho_half_height,
       float dt_seconds) noexcept -> void;
 
     auto ApplyNonWheel(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
+      EditorViewportCameraControlMode control_mode,
       glm::vec3& focus_point,
       float& ortho_half_height,
       float dt_seconds) noexcept -> void;
 
     auto ApplyWheelOnly(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
+      EditorViewportCameraControlMode control_mode,
       glm::vec3& focus_point,
       float& ortho_half_height,
       float dt_seconds) noexcept -> void;

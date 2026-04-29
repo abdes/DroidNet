@@ -356,4 +356,15 @@ public interface IEngineService : IAsyncDisposable
     ///     <see langword="false"/> on failure.
     /// </returns>
     public Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset);
+
+    /// <summary>
+    /// Set the editor camera navigation mode for an existing view.
+    /// </summary>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="mode">The editor camera control mode to apply.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode);
 }

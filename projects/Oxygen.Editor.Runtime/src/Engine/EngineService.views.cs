@@ -51,4 +51,12 @@ public sealed partial class EngineService
         this.LogSetViewCameraPreset(viewId, preset);
         return await runner.TrySetViewCameraPresetAsync(this.engineContext, viewId, preset).ConfigureAwait(true);
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode)
+    {
+        var runner = this.EnsureIsRunning();
+        this.LogSetViewCameraControlMode(viewId, mode);
+        return await runner.TrySetViewCameraControlModeAsync(this.engineContext, viewId, mode).ConfigureAwait(true);
+    }
 }

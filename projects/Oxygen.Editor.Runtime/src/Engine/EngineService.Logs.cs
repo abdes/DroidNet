@@ -323,4 +323,13 @@ public sealed partial class EngineService
 
     private void LogSetViewCameraPreset(ViewIdManaged viewId, CameraViewPresetManaged preset)
         => LogSetViewCameraPreset(this.logger, viewId.Value, preset);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to set camera control mode to '{Mode}'.")]
+    private static partial void LogSetViewCameraControlMode(ILogger logger, ulong viewId, CameraControlModeManaged mode);
+
+    private void LogSetViewCameraControlMode(ViewIdManaged viewId, CameraControlModeManaged mode)
+        => LogSetViewCameraControlMode(this.logger, viewId.Value, mode);
 }

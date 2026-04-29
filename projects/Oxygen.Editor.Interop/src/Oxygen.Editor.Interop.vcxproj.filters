@@ -99,6 +99,9 @@
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraControlModeCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
@@ -237,6 +240,9 @@
     <ClInclude Include="EditorModule\EditorViewportNavigation.h">
       <Filter>EditorModule\Viewport</Filter>
     </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportCameraControlMode.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
     <ClInclude Include="EditorModule\EditorViewportNavigationFeature.h">
       <Filter>EditorModule\Viewport</Filter>
     </ClInclude>
@@ -252,7 +258,13 @@
     <ClInclude Include="Views\CameraViewPresetManaged.h">
       <Filter>EditorModule\Viewport</Filter>
     </ClInclude>
+    <ClInclude Include="Views\CameraControlModeManaged.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetViewCameraControlModeCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\CommandFactory.h">
