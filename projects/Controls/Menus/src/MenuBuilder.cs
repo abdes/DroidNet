@@ -154,10 +154,11 @@ public class MenuBuilder(ILoggerFactory? loggerFactory = default)
     /// <summary>
     ///     Fluent API: Adds a separator.
     /// </summary>
+    /// <param name="label">Optional label displayed over the separator line.</param>
     /// <returns>The current <see cref="MenuBuilder"/> instance.</returns>
-    public MenuBuilder AddSeparator()
+    public MenuBuilder AddSeparator(string? label = null)
     {
-        var item = new MenuItemData { IsSeparator = true };
+        var item = new MenuItemData { IsSeparator = true, SeparatorLabel = label };
         return this.AddMenuItem(item);
     }
 

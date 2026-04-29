@@ -65,6 +65,17 @@ public partial class MenuBuilderTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public void AddSeparator_WithLabel_ShouldConfigureLabeledSeparator()
+    {
+        _ = this.builder.AddSeparator("VIEW");
+
+        var item = this.builder.MenuItems.Should().ContainSingle().Subject;
+        _ = item.IsSeparator.Should().BeTrue();
+        _ = item.SeparatorLabel.Should().Be("VIEW");
+        _ = item.HasSeparatorLabel.Should().BeTrue();
+    }
+
+    [TestMethod]
     public void AddSubmenu_ShouldMaterializeChildItems()
     {
         // Act

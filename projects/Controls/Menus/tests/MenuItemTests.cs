@@ -209,6 +209,114 @@ public class MenuItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task ShowsOptionalSeparatorLabel_Async() => EnqueueAsync(async () =>
+    {
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            IsSeparator = true,
+            SeparatorLabel = "VIEW",
+        }).ConfigureAwait(true);
+
+        var label = menuItem.FindDescendant<TextBlock>(e => string.Equals(e.Name, MenuItem.SeparatorLabelTextBlockPart, StringComparison.Ordinal));
+
+        _ = label.Should().NotBeNull("a labeled separator should render its label presenter");
+        _ = label!.Text.Should().Be("VIEW");
+        _ = label.Visibility.Should().Be(Visibility.Visible);
+    });
+
+    [TestMethod]
+    public Task HidesSeparatorLabelWhenLabelIsCleared_Async() => EnqueueAsync(async () =>
+    {
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            IsSeparator = true,
+            SeparatorLabel = "MOVEMENT",
+        }).ConfigureAwait(true);
+
+        menuItem.ItemData!.SeparatorLabel = string.Empty;
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        CheckPartIsAbsentOrCollapsed(menuItem, MenuItem.SeparatorLabelTextBlockPart);
+    });
+
+    [TestMethod]
+    public Task ShowsInteractiveContent_Async() => EnqueueAsync(async () =>
+    {
+        var slider = new Slider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = 40,
+            Width = 120,
+        };
+
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Opacity",
+            InteractiveContent = slider,
+        }).ConfigureAwait(true);
+
+        var presenter = menuItem.FindDescendant<ContentControl>(e => string.Equals(e.Name, MenuItem.InteractiveContentPresenterPart, StringComparison.Ordinal));
+
+        _ = presenter.Should().NotBeNull();
+        _ = presenter!.Visibility.Should().Be(Visibility.Visible);
+        _ = presenter.Content.Should().BeSameAs(slider);
+    });
+
+    [TestMethod]
+    public Task InteractiveContentFactoryCreatesContentPerMenuItem_Async() => EnqueueAsync(async () =>
+    {
+        var createdCount = 0;
+        var itemData = new MenuItemData
+        {
+            Text = "Opacity",
+            InteractiveContentFactory = () =>
+            {
+                createdCount++;
+                return new Slider { Width = 120 };
+            },
+        };
+        var first = new TestableMenuItem { ItemData = itemData };
+        var second = new TestableMenuItem { ItemData = itemData };
+        var panel = new StackPanel();
+        panel.Children.Add(first);
+        panel.Children.Add(second);
+
+        await LoadTestContentAsync(panel).ConfigureAwait(true);
+
+        var firstPresenter = first.FindDescendant<ContentControl>(e => string.Equals(e.Name, MenuItem.InteractiveContentPresenterPart, StringComparison.Ordinal));
+        var secondPresenter = second.FindDescendant<ContentControl>(e => string.Equals(e.Name, MenuItem.InteractiveContentPresenterPart, StringComparison.Ordinal));
+
+        _ = createdCount.Should().Be(2);
+        _ = firstPresenter.Should().NotBeNull();
+        _ = secondPresenter.Should().NotBeNull();
+        _ = firstPresenter!.Content.Should().BeOfType<Slider>();
+        _ = secondPresenter!.Content.Should().BeOfType<Slider>();
+        _ = firstPresenter.Content.Should().NotBeSameAs(secondPresenter.Content);
+    });
+
+    [TestMethod]
+    public Task DoesNotInvokeInteractiveContentHost_Async() => EnqueueAsync(async () =>
+    {
+        var commandExecuted = false;
+        var invokedRaised = false;
+        var (menuItem, _) = await SetupMenuItemWithData(new MenuItemData
+        {
+            Text = "Opacity",
+            InteractiveContent = new Slider { Width = 120 },
+            Command = new RelayCommand<MenuItemData>(_ => commandExecuted = true),
+        }).ConfigureAwait(true);
+
+        menuItem.Invoked += (_, _) => invokedRaised = true;
+
+        menuItem.InvokeTapped();
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = commandExecuted.Should().BeFalse("embedded controls use their own binding or event path rather than menu invocation");
+        _ = invokedRaised.Should().BeFalse("interactive content hosts should not signal menu dismissal through Invoked");
+    });
+
+    [TestMethod]
     public Task ShowsIconWhenIconIsSet_Async() => EnqueueAsync(async () =>
     {
         // Arrange - Start without icon
