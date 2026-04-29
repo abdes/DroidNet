@@ -1,0 +1,370 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.EnvironmentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+
+    <UserControl.Resources>
+        <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <StackPanel Spacing="8">
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Atmospheric sky and aerial perspective authored on the scene."
+            Header="Sky Atmosphere"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE753;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Enabled">
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.AtmosphereEnabled, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Disk">
+                    <CheckBox
+                        VerticalAlignment="Center"
+                        Content="Visible"
+                        IsChecked="{x:Bind ViewModel.SunDiskEnabled, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Planet Radius">
+                    <controls:NumberBox
+                        Label="km"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.PlanetRadiusKm, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Atmosphere Height">
+                    <controls:NumberBox
+                        Label="km"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AtmosphereHeightKm, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Ground Albedo">
+                    <controls:VectorBox
+                        ComponentLabelPosition="Left"
+                        Dimension="3"
+                        XValue="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Rayleigh Height">
+                    <controls:NumberBox
+                        Label="km"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.RayleighScaleHeightKm, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mie Height">
+                    <controls:NumberBox
+                        Label="km"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.MieScaleHeightKm, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mie Anisotropy">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.MieAnisotropy, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sky Luminance">
+                    <controls:VectorBox
+                        ComponentLabelPosition="Left"
+                        Dimension="3"
+                        XValue="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Aerial Distance">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AerialPerspectiveDistanceScale, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Aerial Strength">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AerialScatteringStrength, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Aerial Start">
+                    <controls:NumberBox
+                        Label="m"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Height Fog">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.HeightFogContribution, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Directional light used as the scene sun."
+            Header="Sun Binding"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Light">
+                    <Grid ColumnSpacing="8" RowSpacing="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox
+                            DisplayMemberPath="DisplayName"
+                            ItemsSource="{x:Bind ViewModel.SunOptions, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedSun, Mode=TwoWay}" />
+                        <Button
+                            Grid.Column="1"
+                            Command="{x:Bind ViewModel.ClearSunCommand}"
+                            ToolTipService.ToolTip="Clear sun binding">
+                            <FontIcon Glyph="&#xE711;" />
+                        </Button>
+                        <InfoBar
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            IsOpen="{x:Bind ViewModel.HasStaleSun, Mode=OneWay}"
+                            Message="{x:Bind ViewModel.StaleSunText, Mode=OneWay}"
+                            Severity="Warning" />
+                    </Grid>
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Exposure pipeline values from Oxygen's native PostProcessVolume."
+            Header="Exposure"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE9CA;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Enabled">
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.ExposureEnabled, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mode">
+                    <ComboBox ItemsSource="{x:Bind ViewModel.ExposureModes}" SelectedItem="{x:Bind ViewModel.ExposureMode, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Manual EV"
+                    Visibility="{x:Bind ViewModel.IsManualExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox
+                        Label="EV100"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.ManualExposureEv, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Compensation">
+                    <controls:NumberBox
+                        Label="EV"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Key">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.ExposureKey, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Metering"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ComboBox ItemsSource="{x:Bind ViewModel.MeteringModes}" SelectedItem="{x:Bind ViewModel.AutoExposureMeteringMode, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Auto Min EV"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox
+                        Label="EV100"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AutoExposureMinEv, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Auto Max EV"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox
+                        Label="EV100"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AutoExposureMaxEv, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Adapt Up"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox
+                        Label="EV/s"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AutoExposureSpeedUp, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Adapt Down"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox
+                        Label="EV/s"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AutoExposureSpeedDown, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Low Percentile"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureLowPercentile, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="High Percentile"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureHighPercentile, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Min Log Luminance"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureMinLogLuminance, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Log Luminance Range"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureLogLuminanceRange, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Target Luminance"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureTargetLuminance, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Spot Radius"
+                    Visibility="{x:Bind ViewModel.IsAutoExposureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.AutoExposureSpotMeterRadius, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Tone mapper selection and display transfer."
+            Header="Tone Mapping"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE9A6;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mapper">
+                    <ComboBox ItemsSource="{x:Bind ViewModel.ToneMappingModes}" SelectedItem="{x:Bind ViewModel.ToneMapping, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Display Gamma"
+                    Visibility="{x:Bind ViewModel.IsToneMappingControlsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.DisplayGamma, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Bloom thresholding and contribution."
+            Header="Bloom"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE950;'}"
+            IsExpanded="False">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Intensity">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.BloomIntensity, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Threshold">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.BloomThreshold, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Color and lens-style post-process adjustments."
+            Header="Color Grading"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+            IsExpanded="False"
+            Visibility="{x:Bind ViewModel.IsToneMappingControlsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Saturation">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.Saturation, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Contrast">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.Contrast, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Vignette">
+                    <controls:NumberBox Mask="~.###" NumberValue="{x:Bind ViewModel.VignetteIntensity, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Fallback scene background color."
+            Header="Background"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Color">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            MinWidth="44"
+                            Padding="4"
+                            ToolTipService.ToolTip="Pick background color">
+                            <Button.Flyout>
+                                <Flyout>
+                                    <ColorPicker
+                                        ColorChanged="BackgroundPicker_ColorChanged"
+                                        IsAlphaEnabled="False"
+                                        IsColorChannelTextInputVisible="True"
+                                        IsHexInputVisible="True"
+                                        Color="{x:Bind ViewModel.BackgroundColor, Mode=OneWay}" />
+                                </Flyout>
+                            </Button.Flyout>
+                            <Border
+                                Width="32"
+                                Height="24"
+                                Background="{x:Bind ViewModel.BackgroundBrush, Mode=OneWay}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="2" />
+                        </Button>
+                        <controls:VectorBox
+                            Grid.Column="1"
+                            ComponentLabelPosition="Left"
+                            Dimension="3"
+                            XValue="{x:Bind ViewModel.BackgroundR, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.BackgroundG, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.BackgroundB, Mode=TwoWay}" />
+                    </Grid>
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+    </StackPanel>
+</UserControl>

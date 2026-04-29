@@ -12,6 +12,13 @@
       <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
     </ItemGroup>
 
+    <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
+      <Content Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Link>%(Filename)%(Extension)</Link>
+      </Content>
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="Moq" />
     </ItemGroup>

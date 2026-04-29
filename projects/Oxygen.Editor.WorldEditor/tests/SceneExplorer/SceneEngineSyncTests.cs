@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 
@@ -143,6 +144,37 @@ public sealed class SceneEngineSyncTests
     }
 
     [TestMethod]
+    public async Task UpdateEnvironment_WhenRunningWorldIsMissing_ReturnsSkippedNotRunning()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        engine.SetupGet(s => s.State).Returns(EngineServiceState.Running);
+        engine.SetupGet(s => s.World).Returns((Oxygen.Interop.World.OxygenWorld)null!);
+        var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
+        var scene = CreateScene();
+
+        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment);
+
+        _ = result.Overall.Should().Be(SyncStatus.SkippedNotRunning);
+        _ = result.PerField.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task UpdateEnvironment_WhenCancelled_ReturnsCancelledWithoutReadingEngineState()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
+        var scene = CreateScene();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cts.Token);
+
+        _ = result.Overall.Should().Be(SyncStatus.Cancelled);
+        _ = result.PerField.Should().BeEmpty();
+        engine.VerifyNoOtherCalls();
+    }
+
+    [TestMethod]
     public async Task MaterialOverrideLegacyMethods_DoNotThrowWhenEngineApiIsUnsupported()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
@@ -152,6 +184,30 @@ public sealed class SceneEngineSyncTests
         await sut.UpdateTargetedMaterialOverrideAsync(Guid.NewGuid(), lodIndex: 0, submeshIndex: 0, new MaterialsSlot());
         await sut.RemoveMaterialOverrideAsync(Guid.NewGuid(), typeof(MaterialsSlot));
         await sut.RemoveTargetedMaterialOverrideAsync(Guid.NewGuid(), lodIndex: 0, submeshIndex: 0, typeof(MaterialsSlot));
+    }
+
+    [TestMethod]
+    public void MaterialOverridePathMapper_MapsDescriptorUriToCookedEnginePath()
+    {
+        var path = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///Content/Materials/Red.omat.json"));
+
+        _ = path.Should().Be("/Content/Materials/Red.omat");
+    }
+
+    [TestMethod]
+    public void MaterialOverridePathMapper_MapsNullAndEmptySentinelToClearOverride()
+    {
+        _ = MaterialOverridePathMapper.ToEnginePath(null).Should().BeNull();
+        _ = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///__uninitialized__")).Should().BeNull();
+    }
+
+    [TestMethod]
+    public void GeometryMaterialDisplayName_StripsDescriptorAndCookedExtensions()
+    {
+        _ = GeometryViewModel.ExtractMaterialNameFromUriString("asset:///Content/Materials/Red.omat.json")
+            .Should().Be("Red");
+        _ = GeometryViewModel.ExtractMaterialNameFromUriString("asset:///Content/Materials/Blue.omat")
+            .Should().Be("Blue");
     }
 
     [TestMethod]

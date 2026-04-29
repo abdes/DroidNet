@@ -862,9 +862,12 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
         => edit.AtmosphereEnabled.HasValue ||
            edit.SunNodeId.HasValue ||
            edit.ExposureMode.HasValue ||
+           edit.ManualExposureEv.HasValue ||
            edit.ExposureCompensation.HasValue ||
            edit.ToneMapping.HasValue ||
-           edit.BackgroundColor.HasValue;
+           edit.BackgroundColor.HasValue ||
+           edit.SkyAtmosphere.HasValue ||
+           edit.PostProcess.HasValue;
 
     private static T Get<T>(Optional<T> optional) => optional.Value!;
 
@@ -975,6 +978,11 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
             return new(SceneDiagnosticCodes.EnvironmentToneMappingInvalid, "Environment was not edited", "Tone mapping mode is not valid.", IsFailure: true);
         }
 
+        if (edit.ManualExposureEv.HasValue && !float.IsFinite(Get(edit.ManualExposureEv)))
+        {
+            return new(SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Environment was not edited", "Manual exposure must be finite.", IsFailure: true);
+        }
+
         if (edit.ExposureCompensation.HasValue && !float.IsFinite(Get(edit.ExposureCompensation)))
         {
             return new(SceneDiagnosticCodes.EnvironmentExposureCompensationInvalid, "Environment was not edited", "Exposure compensation must be finite.", IsFailure: true);
@@ -983,6 +991,16 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
         if (edit.BackgroundColor.HasValue && !IsFinite(Get(edit.BackgroundColor)))
         {
             return new(SceneDiagnosticCodes.EnvironmentBackgroundColorInvalid, "Environment was not edited", "Background color values must be finite.", IsFailure: true);
+        }
+
+        if (edit.SkyAtmosphere.HasValue && !IsFinite(Get(edit.SkyAtmosphere)))
+        {
+            return new(SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid, "Environment was not edited", "Sky atmosphere values must be finite.", IsFailure: true);
+        }
+
+        if (edit.PostProcess.HasValue && !IsFinite(Get(edit.PostProcess)))
+        {
+            return new(SceneDiagnosticCodes.EnvironmentManualExposureInvalid, "Environment was not edited", "Post-process values must be finite.", IsFailure: true);
         }
 
         if (edit.SunNodeId.HasValue && Get(edit.SunNodeId) is { } sunNodeId)
@@ -999,6 +1017,40 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
 
     private static bool IsFinite(Vector3 value)
         => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+
+    private static bool IsFinite(SkyAtmosphereEnvironmentData value)
+        => float.IsFinite(value.PlanetRadiusMeters) &&
+           float.IsFinite(value.AtmosphereHeightMeters) &&
+           IsFinite(value.GroundAlbedoRgb) &&
+           float.IsFinite(value.RayleighScaleHeightMeters) &&
+           float.IsFinite(value.MieScaleHeightMeters) &&
+           float.IsFinite(value.MieAnisotropy) &&
+           IsFinite(value.SkyLuminanceFactorRgb) &&
+           float.IsFinite(value.AerialPerspectiveDistanceScale) &&
+           float.IsFinite(value.AerialScatteringStrength) &&
+           float.IsFinite(value.AerialPerspectiveStartDepthMeters) &&
+           float.IsFinite(value.HeightFogContribution);
+
+    private static bool IsFinite(PostProcessEnvironmentData value)
+        => float.IsFinite(value.ExposureCompensationEv) &&
+           float.IsFinite(value.ExposureKey) &&
+           float.IsFinite(value.ManualExposureEv) &&
+           float.IsFinite(value.AutoExposureMinEv) &&
+           float.IsFinite(value.AutoExposureMaxEv) &&
+           float.IsFinite(value.AutoExposureSpeedUp) &&
+           float.IsFinite(value.AutoExposureSpeedDown) &&
+           float.IsFinite(value.AutoExposureLowPercentile) &&
+           float.IsFinite(value.AutoExposureHighPercentile) &&
+           float.IsFinite(value.AutoExposureMinLogLuminance) &&
+           float.IsFinite(value.AutoExposureLogLuminanceRange) &&
+           float.IsFinite(value.AutoExposureTargetLuminance) &&
+           float.IsFinite(value.AutoExposureSpotMeterRadius) &&
+           float.IsFinite(value.BloomIntensity) &&
+           float.IsFinite(value.BloomThreshold) &&
+           float.IsFinite(value.Saturation) &&
+           float.IsFinite(value.Contrast) &&
+           float.IsFinite(value.VignetteIntensity) &&
+           float.IsFinite(value.DisplayGamma);
 
     private static void ApplyTransformEdit(TransformComponent transform, TransformEdit edit)
     {
@@ -1148,14 +1200,81 @@ public sealed class SceneDocumentCommandService : ISceneDocumentCommandService
     }
 
     private static SceneEnvironmentData ApplyEnvironmentEdit(SceneEnvironmentData current, SceneEnvironmentEdit edit)
-        => current with
+    {
+        var postProcess = edit.PostProcess.HasValue
+            ? SanitizePostProcess(Get(edit.PostProcess))
+            : current.PostProcess ?? new();
+
+        if (edit.ExposureMode.HasValue)
+        {
+            postProcess = postProcess with { ExposureMode = Get(edit.ExposureMode) };
+        }
+
+        if (edit.ManualExposureEv.HasValue)
+        {
+            postProcess = postProcess with { ManualExposureEv = Math.Clamp(Get(edit.ManualExposureEv), -24f, 24f) };
+        }
+
+        if (edit.ExposureCompensation.HasValue)
+        {
+            postProcess = postProcess with { ExposureCompensationEv = Get(edit.ExposureCompensation) };
+        }
+
+        if (edit.ToneMapping.HasValue)
+        {
+            postProcess = postProcess with { ToneMapper = Get(edit.ToneMapping) };
+        }
+
+        return current with
         {
             AtmosphereEnabled = edit.AtmosphereEnabled.HasValue ? Get(edit.AtmosphereEnabled) : current.AtmosphereEnabled,
             SunNodeId = edit.SunNodeId.HasValue ? Get(edit.SunNodeId) : current.SunNodeId,
-            ExposureMode = edit.ExposureMode.HasValue ? Get(edit.ExposureMode) : current.ExposureMode,
-            ExposureCompensation = edit.ExposureCompensation.HasValue ? Get(edit.ExposureCompensation) : current.ExposureCompensation,
-            ToneMapping = edit.ToneMapping.HasValue ? Get(edit.ToneMapping) : current.ToneMapping,
+            ExposureMode = postProcess.ExposureMode,
+            ManualExposureEv = postProcess.ManualExposureEv,
+            ExposureCompensation = postProcess.ExposureCompensationEv,
+            ToneMapping = postProcess.ToneMapper,
+            PostProcess = postProcess,
             BackgroundColor = edit.BackgroundColor.HasValue ? Get(edit.BackgroundColor) : current.BackgroundColor,
+            SkyAtmosphere = edit.SkyAtmosphere.HasValue ? SanitizeSkyAtmosphere(Get(edit.SkyAtmosphere)) : current.SkyAtmosphere ?? new(),
+        };
+    }
+
+    private static SkyAtmosphereEnvironmentData SanitizeSkyAtmosphere(SkyAtmosphereEnvironmentData value)
+        => value with
+        {
+            PlanetRadiusMeters = Math.Max(1.0f, value.PlanetRadiusMeters),
+            AtmosphereHeightMeters = Math.Max(1.0f, value.AtmosphereHeightMeters),
+            GroundAlbedoRgb = Vector3.Clamp(value.GroundAlbedoRgb, Vector3.Zero, Vector3.One),
+            RayleighScaleHeightMeters = Math.Max(1.0f, value.RayleighScaleHeightMeters),
+            MieScaleHeightMeters = Math.Max(1.0f, value.MieScaleHeightMeters),
+            MieAnisotropy = Math.Clamp(value.MieAnisotropy, -0.999f, 0.999f),
+            SkyLuminanceFactorRgb = Vector3.Max(value.SkyLuminanceFactorRgb, Vector3.Zero),
+            AerialPerspectiveDistanceScale = Math.Max(0.0f, value.AerialPerspectiveDistanceScale),
+            AerialScatteringStrength = Math.Max(0.0f, value.AerialScatteringStrength),
+            AerialPerspectiveStartDepthMeters = Math.Max(0.0f, value.AerialPerspectiveStartDepthMeters),
+            HeightFogContribution = Math.Max(0.0f, value.HeightFogContribution),
+        };
+
+    private static PostProcessEnvironmentData SanitizePostProcess(PostProcessEnvironmentData value)
+        => value with
+        {
+            ExposureKey = Math.Max(0.001f, value.ExposureKey),
+            ManualExposureEv = Math.Clamp(value.ManualExposureEv, -24f, 24f),
+            AutoExposureMinEv = Math.Min(value.AutoExposureMinEv, value.AutoExposureMaxEv),
+            AutoExposureMaxEv = Math.Max(value.AutoExposureMaxEv, value.AutoExposureMinEv),
+            AutoExposureSpeedUp = Math.Max(0.0f, value.AutoExposureSpeedUp),
+            AutoExposureSpeedDown = Math.Max(0.0f, value.AutoExposureSpeedDown),
+            AutoExposureLowPercentile = Math.Clamp(value.AutoExposureLowPercentile, 0.0f, 1.0f),
+            AutoExposureHighPercentile = Math.Clamp(value.AutoExposureHighPercentile, 0.0f, 1.0f),
+            AutoExposureLogLuminanceRange = Math.Max(0.001f, value.AutoExposureLogLuminanceRange),
+            AutoExposureTargetLuminance = Math.Max(0.0f, value.AutoExposureTargetLuminance),
+            AutoExposureSpotMeterRadius = Math.Max(0.0f, value.AutoExposureSpotMeterRadius),
+            BloomIntensity = Math.Max(0.0f, value.BloomIntensity),
+            BloomThreshold = Math.Max(0.0f, value.BloomThreshold),
+            Saturation = Math.Max(0.0f, value.Saturation),
+            Contrast = Math.Max(0.0f, value.Contrast),
+            VignetteIntensity = Math.Clamp(value.VignetteIntensity, 0.0f, 1.0f),
+            DisplayGamma = Math.Max(0.001f, value.DisplayGamma),
         };
 
     private static void ApplyMaterialSlotEdit(GeometryComponent geometry, Uri? materialUri)

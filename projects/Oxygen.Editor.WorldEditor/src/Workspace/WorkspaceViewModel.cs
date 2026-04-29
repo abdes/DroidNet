@@ -208,6 +208,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
+        childContainer.Register<PerspectiveCameraViewModel>(Reuse.Transient);
+        childContainer.Register<PerspectiveCameraView>(Reuse.Transient);
+        childContainer.Register<DirectionalLightViewModel>(Reuse.Transient);
+        childContainer.Register<DirectionalLightView>(Reuse.Transient);
+        childContainer.Register<EnvironmentViewModel>(Reuse.Transient);
+        childContainer.Register<EnvironmentView>(Reuse.Transient);
 
         childContainer.Register<GeometryViewModel>(Reuse.Transient);
         childContainer.Register<GeometryView>(Reuse.Transient);
@@ -650,11 +656,60 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         try
         {
             using var stream = System.IO.File.OpenRead(indexPath);
-            _ = LooseCookedIndex.Read(stream);
+            var document = LooseCookedIndex.Read(stream);
+            var cookedRoot = System.IO.Path.GetDirectoryName(indexPath)
+                ?? throw new InvalidDataException("Cooked index path has no parent directory.");
+            foreach (var asset in document.Assets)
+            {
+                if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
+                {
+                    throw new InvalidDataException("Cooked index contains an asset without a descriptor path.");
+                }
+
+                var descriptorPath = System.IO.Path.Combine(
+                    cookedRoot,
+                    asset.DescriptorRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                if (!System.IO.File.Exists(descriptorPath))
+                {
+                    throw new FileNotFoundException("Cooked asset descriptor is missing.", descriptorPath);
+                }
+
+                var actualSize = new System.IO.FileInfo(descriptorPath).Length;
+                if (actualSize != (long)asset.DescriptorSize)
+                {
+                    throw new InvalidDataException(
+                        $"Cooked descriptor size mismatch for '{asset.DescriptorRelativePath}': expected {asset.DescriptorSize}, found {actualSize}.");
+                }
+            }
+
+            foreach (var file in document.Files)
+            {
+                if (string.IsNullOrWhiteSpace(file.RelativePath))
+                {
+                    throw new InvalidDataException("Cooked index contains a file record without a path.");
+                }
+
+                var filePath = System.IO.Path.Combine(
+                    cookedRoot,
+                    file.RelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                if (!System.IO.File.Exists(filePath))
+                {
+                    throw new FileNotFoundException("Cooked file record is missing.", filePath);
+                }
+
+                var actualSize = new System.IO.FileInfo(filePath).Length;
+                if (actualSize != (long)file.Size)
+                {
+                    throw new InvalidDataException(
+                        $"Cooked file size mismatch for '{file.RelativePath}': expected {file.Size}, found {actualSize}.");
+                }
+            }
+
             return true;
         }
         catch (Exception ex) when (ex is InvalidDataException
             or NotSupportedException
+            or FileNotFoundException
             or IOException
             or UnauthorizedAccessException
             or ArgumentException
