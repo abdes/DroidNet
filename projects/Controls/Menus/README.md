@@ -15,7 +15,9 @@ A sophisticated, high-performance menu system for WinUI 3 applications featuring
 - **🔌 Pluggable Hosting** – Abstract `ICascadedMenuHost` with `PopupMenuHost` implementation
 - **🪟 Surface Switchers** – Built-in `MenuButton` root surface and `ContextMenu` attached surface share the same menu definition
 - **🪟 Space-Swapping Expandable Bar** – `ExpandableMenuBar` toggles between a compact hamburger and full menu bar in place
-- **🎨 Consistent Visual Language** – Four-column layout (Icon | Text | Accelerator | State) via custom `MenuItem` control
+- **🎨 Consistent Visual Language** – Structured layout (Icon | Text | Interactive Content | Accelerator | State) via custom `MenuItem` control
+- **🏷️ Labeled Separators** – Optional separator labels render over the divider line for grouped menu sections
+- **🎛️ Interactive Menu Content** – Host sliders, toggles, number boxes, and other controls through MVVM-friendly templates
 - **⌨️ Complete Keyboard Support** – Arrow navigation, mnemonics, accelerators, Enter/Space activation, Escape dismissal
 - **🔘 Radio Groups & Toggle Items** – Automatic coordination via `MenuServices` with single-selection semantics
 - **♿ Accessibility First** – Full automation peer support and screen reader compatibility
@@ -127,12 +129,12 @@ public partial class ShellViewModel : ObservableObject
                     command: this.OpenCommand,
                     icon: new SymbolIconSource { Symbol = Symbol.OpenFile },
                     acceleratorText: "Ctrl+O")
-                .AddSeparator()
+                .AddSeparator("Document")
                 .AddMenuItem("&Save",
                     command: this.SaveCommand,
                     icon: new SymbolIconSource { Symbol = Symbol.Save },
                     acceleratorText: "Ctrl+S")
-                .AddSeparator()
+                .AddSeparator("Automation")
                 .AddCheckableMenuItem("Auto Save",
                     isChecked: true,
                     icon: new FontIconSource { Glyph = "\uE74E" })
@@ -156,7 +158,7 @@ public partial class ShellViewModel : ObservableObject
                     .AddRadioMenuItem("&Light", "AppTheme", isChecked: true)
                     .AddRadioMenuItem("&Dark", "AppTheme")
                     .AddRadioMenuItem("&System Default", "AppTheme"))
-                .AddSeparator()
+                .AddSeparator("Zoom")
                 .AddMenuItem("Zoom &In",
                     command: this.ZoomInCommand,
                     acceleratorText: "Ctrl+Plus")
@@ -332,7 +334,258 @@ Observable data model representing a menu item with full property support.
 - `RadioGroupId` – Mutual exclusion group membership
 - `SubItems` – Child menu items for hierarchy
 - `IsSeparator` – Visual separator flag
+- `SeparatorLabel` – Optional label rendered over a separator line
+- `InteractiveContent` – Data object or simple content hosted inside a menu item
+- `InteractiveContentTemplate` – Template used to render interactive content, preferred for MVVM
+- `InteractiveContentFactory` – Imperative factory for per-realization code-created content
 - `HasChildren` – Computed property for expansion eligibility
+
+### Labeled Separators
+
+Separators can carry a label that is rendered over the divider line. Use this when a menu has dense sections that need visible grouping.
+
+```csharp
+var menu = new MenuBuilder()
+    .AddSubmenu("View", view => view
+        .AddSeparator("Perspective")
+        .AddMenuItem("Perspective", command: PerspectiveCommand)
+        .AddSeparator("Orthographic")
+        .AddMenuItem("Top", command: TopCommand)
+        .AddMenuItem("Bottom", command: BottomCommand))
+    .Build();
+```
+
+The no-argument `AddSeparator()` overload still creates an unlabeled separator.
+
+### Interactive Menu Item Content
+
+Menu items can host embedded controls such as sliders, toggle switches, and number boxes. The menu system keeps these controls integrated with focus and dismissal behavior:
+
+- Pointer and keyboard input originating inside the embedded control is not treated as a menu item invocation.
+- Moving focus into the embedded control still counts as focus within the owning menu item.
+- Items with interactive content do not raise `Invoked` when clicked, so the menu is not dismissed just because the hosted control receives input.
+
+#### Preferred MVVM Pattern: Data + Template
+
+The MVVM-friendly API is `InteractiveContent` plus `InteractiveContentTemplate`. Store state in a view-model object and declare the actual WinUI controls in XAML.
+
+```csharp
+public sealed partial class SliderMenuItemModel : ObservableObject
+{
+    public double Minimum { get; init; }
+    public double Maximum { get; init; }
+    public double StepFrequency { get; init; }
+
+    [ObservableProperty]
+    public partial double Value { get; set; }
+}
+```
+
+```xml
+<DataTemplate x:Key="MenuSliderItemTemplate">
+    <Slider
+        Width="140"
+        Minimum="{Binding Minimum}"
+        Maximum="{Binding Maximum}"
+        StepFrequency="{Binding StepFrequency}"
+        Value="{Binding Value, Mode=TwoWay}" />
+</DataTemplate>
+```
+
+```csharp
+var zoomModel = new SliderMenuItemModel
+{
+    Minimum = 50,
+    Maximum = 200,
+    StepFrequency = 5,
+    Value = 100,
+};
+
+zoomModel.PropertyChanged += (_, e) =>
+{
+    if (e.PropertyName == nameof(SliderMenuItemModel.Value))
+    {
+        ApplyZoom(zoomModel.Value);
+    }
+};
+
+var zoomItem = new MenuItemData
+{
+    Text = "Zoom Level",
+    InteractiveContent = zoomModel,
+    InteractiveContentTemplate = menuSliderItemTemplate,
+};
+```
+
+This keeps the view model free of `UIElement` instances. The view owns the controls, bindings carry value changes, and the menu data remains reusable across `MenuBar`, `MenuButton`, `ContextMenu`, and `ExpandableMenuBar`.
+
+#### DroidNet NumberBox Example
+
+```xml
+<DataTemplate x:Key="MenuNumberBoxItemTemplate">
+    <controls:NumberBox
+        Width="{Binding Width}"
+        Mask="{Binding Mask}"
+        Multiplier="{Binding Multiplier}"
+        NumberValue="{Binding NumberValue, Mode=TwoWay}" />
+</DataTemplate>
+```
+
+```csharp
+var tabSizeItem = new MenuItemData
+{
+    Text = "Tab Size",
+    InteractiveContent = new NumberBoxMenuItemModel
+    {
+        NumberValue = 4,
+        Width = 88,
+        Mask = "~.#",
+        Multiplier = 1,
+    },
+    InteractiveContentTemplate = menuNumberBoxItemTemplate,
+};
+```
+
+#### Imperative Escape Hatch: InteractiveContentFactory
+
+`InteractiveContentFactory` exists for code-created controls and advanced runtime setup. It is not the preferred MVVM path.
+
+```csharp
+var item = new MenuItemData
+{
+    Text = "Preview",
+    InteractiveContentFactory = () =>
+    {
+        var toggle = new ToggleSwitch
+        {
+            IsOn = true,
+            OnContent = "On",
+            OffContent = "Off",
+        };
+
+        toggle.Toggled += (_, _) => ApplyPreview(toggle.IsOn);
+        return toggle;
+    },
+};
+```
+
+Use the factory instead of storing a shared `UIElement` in `InteractiveContent` when menu data can be shown by multiple presenters. WinUI elements can only have one visual parent; a factory creates a fresh element for each realized `MenuItem`.
+
+#### Testable Factory Injection
+
+When a code-created control is necessary, keep the factory as an injected view concern instead of constructing WinUI controls directly in the view model. The view model owns the menu state and depends on a small abstraction; production code supplies the WinUI implementation, while tests can supply a dummy implementation.
+
+```csharp
+public interface IMenuInteractiveContentFactory
+{
+    object? CreateZoomEditor(ZoomMenuItemModel model);
+}
+
+public sealed partial class ZoomMenuItemModel : ObservableObject
+{
+    [ObservableProperty]
+    public partial double Value { get; set; } = 100;
+}
+```
+
+```csharp
+public sealed class EditorMenuViewModel
+{
+    public EditorMenuViewModel(IMenuInteractiveContentFactory interactiveContentFactory)
+    {
+        var zoomModel = new ZoomMenuItemModel();
+        zoomModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ZoomMenuItemModel.Value))
+            {
+                this.ApplyZoom(zoomModel.Value);
+            }
+        };
+
+        this.Menu = new MenuBuilder()
+            .AddSubmenu("View", view => view
+                .AddMenuItem(new MenuItemData
+                {
+                    Text = "Zoom Level",
+                    InteractiveContentFactory = () => interactiveContentFactory.CreateZoomEditor(zoomModel),
+                }))
+            .Build();
+    }
+
+    public IMenuSource Menu { get; }
+
+    private void ApplyZoom(double value)
+    {
+        // Testable view-model behavior.
+    }
+}
+```
+
+The WinUI adapter creates the actual control and binds it to the model:
+
+```csharp
+public sealed class WinUiMenuInteractiveContentFactory : IMenuInteractiveContentFactory
+{
+    public object CreateZoomEditor(ZoomMenuItemModel model)
+    {
+        var slider = new Slider
+        {
+            Minimum = 50,
+            Maximum = 200,
+            StepFrequency = 5,
+            Width = 140,
+        };
+
+        slider.SetBinding(
+            RangeBase.ValueProperty,
+            new Binding
+            {
+                Source = model,
+                Path = new PropertyPath(nameof(ZoomMenuItemModel.Value)),
+                Mode = BindingMode.TwoWay,
+            });
+
+        return slider;
+    }
+}
+```
+
+Tests can avoid WinUI entirely:
+
+```csharp
+public sealed class TestMenuInteractiveContentFactory : IMenuInteractiveContentFactory
+{
+    public int CreateZoomEditorCallCount { get; private set; }
+
+    public object? CreateZoomEditor(ZoomMenuItemModel model)
+    {
+        this.CreateZoomEditorCallCount++;
+        return new object();
+    }
+}
+```
+
+This pattern is not as pure as `InteractiveContentTemplate`, but it keeps the view model testable:
+
+- no direct `new Slider()` or other WinUI control construction in the view model,
+- interactive state remains in observable model objects,
+- tests can pass a dummy factory or return `null` if they do not realize UI,
+- production views can provide specialized runtime-only controls when a template is not practical.
+
+#### Avoid Shared UIElement Instances
+
+This is fragile and should be avoided for reusable menu data:
+
+```csharp
+var slider = new Slider();
+var item = new MenuItemData
+{
+    Text = "Opacity",
+    InteractiveContent = slider, // Avoid when the menu can be realized more than once.
+};
+```
+
+If the same `MenuItemData` appears in both a context menu and a menu button, assigning that same `Slider` to a second visual parent can throw a WinRT exception. Prefer a template-backed model or `InteractiveContentFactory`.
 
 #### `IMenuSource`
 
@@ -871,7 +1124,7 @@ host.MenuSource = submenuView;
 | `AddMenuItem` | `(string, ICommand?, IconSource?, string?)` | Add command item |
 | `AddMenuItem` | `(MenuItemData)` | Add pre-configured item |
 | `AddSubmenu` | `(string, Action<MenuBuilder>, IconSource?)` | Add submenu with children |
-| `AddSeparator` | `()` | Add visual separator |
+| `AddSeparator` | `(string? label = null)` | Add visual separator with optional label |
 | `AddCheckableMenuItem` | `(string, bool, ICommand?, IconSource?, string?)` | Add toggle item |
 | `AddRadioMenuItem` | `(string, string, bool, ICommand?, IconSource?, string?)` | Add radio group item |
 | `Build` | `()` | Finalize and return `IMenuSource` |
@@ -893,6 +1146,12 @@ host.MenuSource = submenuView;
 | `RadioGroupId` | `string?` | Radio group membership |
 | `SubItems` | `IEnumerable<MenuItemData>` | Child items |
 | `IsSeparator` | `bool` | Separator flag |
+| `SeparatorLabel` | `string?` | Optional label rendered over a separator line |
+| `HasSeparatorLabel` | `bool` | Computed: separator label is not null or whitespace |
+| `InteractiveContent` | `object?` | Data/content hosted inside the item; use model objects for MVVM |
+| `InteractiveContentTemplate` | `DataTemplate?` | Template used to render `InteractiveContent` |
+| `InteractiveContentFactory` | `Func<object?>?` | Imperative per-realization content factory for code-created controls |
+| `HasInteractiveContent` | `bool` | Computed: content or content factory exists |
 | `HasChildren` | `bool` | Computed: `SubItems.Any()` |
 
 ### MenuServices API
