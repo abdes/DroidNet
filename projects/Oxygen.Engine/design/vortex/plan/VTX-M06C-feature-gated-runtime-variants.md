@@ -123,7 +123,8 @@ Required work:
 
 - Create this detailed plan.
 - Update `PLAN.md`, `IMPLEMENTATION_STATUS.md`, and the plan package README.
-- Keep VTX-M06C `in_progress` until implementation and closure proof exist.
+- During execution, keep VTX-M06C unvalidated until implementation and closure
+  proof exist; the final status ledger now records that closure proof.
 
 Validation:
 
@@ -131,8 +132,8 @@ Validation:
 
 Evidence:
 
-- `git diff --check` passed for the planning/status patch. VTX-M06C remains
-  `in_progress`; runtime implementation and proof are still open.
+- `git diff --check` passed for the planning/status patch. Later slices closed
+  runtime implementation and proof.
 
 ### B. Variant Vocabulary and Validation
 
@@ -212,9 +213,8 @@ Evidence:
   and
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|CompositionPlanner)" --output-on-failure`
   with 4/4 test executables passing.
-- Residual gap: D3D12 CDB/debug-layer and RenderDoc proof for these variant
-  gates are not yet available because the runtime proof layout is slice F.
-  VTX-M06C remains `in_progress`.
+- No open Slice C closure gap. Later Slice F proof closed D3D12 CDB/debug-layer
+  and RenderDoc proof for these variant gates.
 
 ### D. Environment, Shadowing, and Volumetric Disable Gates
 
@@ -249,9 +249,9 @@ Evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(EnvironmentLightingService|SceneRendererDeferredCore)" --output-on-failure`
   with 2/2 test executables passing.
 - ShaderBake/catalog validation was not run for this slice because no shader
-  source, shader ABI, root-binding, or catalog files changed. Runtime
-  CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain open
-  until the Slice F proof layout exists. VTX-M06C remains `in_progress`.
+  source, shader ABI, root-binding, or catalog files changed. Later Slice F
+  proof closed the runtime CDB/debug-layer, RenderDoc, allocation-churn, visual
+  proof, and final VTX-M06C closure gates.
 
 ### E. Diagnostics-Only and Overlay Variant
 
@@ -280,9 +280,9 @@ Evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(SceneRendererDeferredCore|DiagnosticsService|CompositionPlanner)" --output-on-failure`
   with 3/3 test executables passing.
 - ShaderBake/catalog validation was not run for this slice because no shader
-  source, shader ABI, root-binding, or catalog files changed. Runtime
-  CDB/debug-layer, RenderDoc, allocation-churn, and visual proof remain open
-  until the Slice F proof layout exists. VTX-M06C remains `in_progress`.
+  source, shader ABI, root-binding, or catalog files changed. Later Slice F
+  proof closed the runtime CDB/debug-layer, RenderDoc, allocation-churn, visual
+  proof, and final VTX-M06C closure gates.
 
 ### F. Runtime Proof Layout and Analyzer
 

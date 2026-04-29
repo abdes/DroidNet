@@ -67,7 +67,7 @@ Out of scope:
 
 | Area | Current state | M06A action |
 | --- | --- | --- |
-| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` list `VTX-M06A` as the active `in_progress` milestone after B1-C landed. | Keep status `in_progress` until the full exit gate is proven; update evidence in place after each verified slice. |
+| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` listed `VTX-M06A` as active after B1-C landed. | During execution, keep status unvalidated until the full exit gate is proven; update evidence in place after each verified slice. |
 | LLD | `multi-view-composition.md` is review-addressed and implementation is in progress. | Treat as the implementation contract; update it first if implementation discovers scope drift. |
 | Runtime view intent | `CompositionView` has `ViewId`, name, view, z-order, opacity, camera, HDR, environment toggles, exposure source id, force-wireframe, shading override, and overlay callback. | Extend without breaking existing single-view clients; add typed settings instead of more ad hoc booleans. |
 | View lifecycle | `ViewLifecycleService` materializes and sorts active `CompositionViewImpl` instances and currently validates exposure with same-frame ordering. | Move exposure sharing to previous-frame `ViewStateHandle` semantics and retain deterministic active-view ordering. |
@@ -415,10 +415,10 @@ Current evidence:
   existing shutdown-time `Vortex.PointShadowCubeSurface` resource-registry note
   remains recorded as outside slice C closure proof; `git diff --check` passed
   with line-ending warnings only.
-- Remaining VTX-M06A gap: D-I are not implemented; scene-texture lease pool,
-  data-driven surface composition, auxiliary graph, overlays, runtime proof
-  scripts, CDB/debug-layer audit, RenderDoc scripted proof, allocation-churn
-  proof, and final closure remain open.
+- No open Slice C closure gap. Later slices validated the scene-texture lease
+  pool, data-driven surface composition, auxiliary graph, overlays, runtime
+  proof scripts, CDB/debug-layer audit, RenderDoc scripted proof,
+  allocation-churn proof, and final closure.
 
 Validation:
 
@@ -510,10 +510,10 @@ Current evidence:
   writes outside `PerViewScope`; RenderScene Debug build passed; RenderScene
   4-frame smoke exited 0; and `git diff --check` passed with line-ending
   warnings only.
-- Remaining VTX-M06A gap: E-I are not implemented; data-driven surface
+- No open Slice D closure gap. Later slices validated data-driven surface
   composition, auxiliary graph, overlays, runtime proof scripts,
   CDB/debug-layer audit, RenderDoc scripted proof, 60-frame allocation-churn
-  proof, and final closure remain open.
+  proof, and final closure.
 
 Rollback/replan trigger:
 
@@ -587,10 +587,9 @@ Current evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(CompositionPlanner|RendererCompositionQueue|SceneTextureLeasePool)" --output-on-failure`
   with 3/3 matched targets passing; and `git diff --check` passed with
   line-ending warnings only.
-- Remaining VTX-M06A gap: F-I are not implemented; auxiliary dependency graph,
-  overlay lanes/extensions, runtime proof scripts, CDB/debug-layer audit,
-  RenderDoc scripted proof, 60-frame allocation-churn proof, and final closure
-  remain open.
+- No open Slice E closure gap. Later slices validated the auxiliary dependency
+  graph, overlay lanes/extensions, runtime proof scripts, CDB/debug-layer audit,
+  RenderDoc scripted proof, 60-frame allocation-churn proof, and final closure.
 
 Rollback/replan trigger:
 
@@ -679,9 +678,9 @@ Current evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(AuxiliaryDependencyGraph|CompositionPlanner|SceneRendererDeferredCore)" --output-on-failure`
   with 3/3 matched targets passing; and `git diff --check` passed with
   line-ending warnings only.
-- Remaining VTX-M06A gap: H-I are not implemented; runtime proof scripts,
+- No open Slice F closure gap. Later slices validated runtime proof scripts,
   CDB/debug-layer audit, RenderDoc scripted proof, 60-frame allocation-churn
-  proof, and final closure remain open.
+  proof, and final closure.
 
 Rollback/replan trigger:
 
@@ -754,9 +753,9 @@ Current evidence:
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(CompositionPlanner|RendererCompositionQueue)" --output-on-failure`
   with 2/2 matched targets passing; and `git diff --check` passed with
   line-ending warnings only.
-- Remaining VTX-M06A gap: H-I are not implemented; runtime validation scripts,
-  CDB/debug-layer audit, RenderDoc scripted analysis, 60-frame allocation-churn
-  proof, and final ledger closure remain open.
+- No open Slice G closure gap. Later slices validated runtime validation
+  scripts, CDB/debug-layer audit, RenderDoc scripted analysis,
+  60-frame allocation-churn proof, and final ledger closure.
 
 Rollback/replan trigger:
 
@@ -1041,8 +1040,7 @@ VTX-M06A can move to `validated` only when all of the following are true:
 - Residual gaps are listed as blockers or explicitly accepted/deferred by the
   human reviewer.
 
-If any item lacks evidence, VTX-M06A remains `in_progress` or `planned`; no
-completion claim is allowed.
+During execution, if any item lacks evidence, no completion claim is allowed.
 
 ## 12. Replan Triggers
 

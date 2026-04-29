@@ -160,7 +160,7 @@ This blocker is validated because all of the following are recorded in
   affect receiver pixels
 - user visual confirmation of projected shadows in the target scene
 
-This is a prerequisite closure only. VTX-M04D.4 remains `in_progress` for
-depth-aware froxel distribution, shadowed/local/sky light injection, local-fog
-participating-media injection, temporal history/reprojection, and artifact
-quality proof.
+This was a prerequisite closure only. The remaining VTX-M04D.4 volumetric-fog
+work later validated depth-aware froxel distribution, shadowed/local/sky light
+injection, local-fog participating-media injection, temporal
+history/reprojection, and artifact quality proof.

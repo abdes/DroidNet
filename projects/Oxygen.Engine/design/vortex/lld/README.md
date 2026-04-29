@@ -92,8 +92,8 @@ reviewed.
 | [multi-view-composition.md](multi-view-composition.md) | D.17 | Multi-view dispatch, per-view ShadingMode, multi-surface output, PiP, editor viewport |
 | [offscreen-rendering.md](offscreen-rendering.md) | D.18 | ForOffscreenScene facade, deferred/forward mode selection, thumbnail/preview |
 | [shadow-local-lights.md](shadow-local-lights.md) | VTX-M05D | ShadowService expansion for spot-light and point-light conventional shadows after the M05D directional CSM parity/stability gate |
-| [cubemap-processing.md](cubemap-processing.md) | VTX-M08 active | Cubemap asset resolution, static SkyLight product processing, diffuse SH publication, product validity states, shader contracts, and proof gates |
-| [skybox-static-skylight.md](skybox-static-skylight.md) | VTX-M08 active | Visual skybox rendering, procedural-sky selection, directional-sun interaction, static specified-cubemap SkyLight consumption, feature gates, and proof gates |
+| [cubemap-processing.md](cubemap-processing.md) | VTX-M08 validated reference | Cubemap asset resolution, static SkyLight product processing, diffuse SH publication, product validity states, shader contracts, and proof gates |
+| [skybox-static-skylight.md](skybox-static-skylight.md) | VTX-M08 validated reference | Visual skybox rendering, procedural-sky selection, directional-sun interaction, static specified-cubemap SkyLight consumption, feature gates, and proof gates |
 
 ### Phase 7 — Reserved Future Families
 
