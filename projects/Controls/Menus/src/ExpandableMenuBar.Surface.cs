@@ -110,9 +110,9 @@ public sealed partial class ExpandableMenuBar
 
     private void DetachRootObservers()
     {
-        if (this.rootItemsCollection is not null)
+        if (this.rootItemsCollection is { } collection)
         {
-            this.rootItemsCollection.CollectionChanged -= this.OnRootItemsCollectionChanged;
+            collection.CollectionChanged -= this.OnRootItemsCollectionChanged;
             this.rootItemsCollection = null;
         }
 

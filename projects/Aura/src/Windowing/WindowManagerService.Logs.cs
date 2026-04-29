@@ -121,7 +121,13 @@ public sealed partial class WindowManagerService
     private static partial void LogWindowRegistered(ILogger logger, ulong windowId, string windowType);
 
     private void LogWindowRegistered(WindowId windowId, WindowCategory category)
-        => LogWindowRegistered(this.logger, windowId.Value, category.ToString());
+    {
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+            var categoryName = category.ToString();
+            LogWindowRegistered(this.logger, windowId.Value, categoryName);
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -198,7 +204,13 @@ public sealed partial class WindowManagerService
 
     [Conditional("DEBUG")]
     private void LogDecorationResolvedFromSettings(WindowId windowId, WindowCategory category)
-        => LogDecorationResolvedFromSettings(this.logger, windowId.Value, category.ToString());
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var categoryName = category.ToString();
+            LogDecorationResolvedFromSettings(this.logger, windowId.Value, categoryName);
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,

@@ -93,13 +93,11 @@ public partial class DragVisualService
             return;
         }
 
-        LogPositionUpdated(
-            this.logger,
-            this.activeToken?.Id ?? Guid.Empty,
-            (int)Math.Round(pointerPosition.X),
-            (int)Math.Round(pointerPosition.Y),
-            (int)Math.Round(windowPosition.X),
-            (int)Math.Round(windowPosition.Y));
+        var pointerX = (int)Math.Round(pointerPosition.X);
+        var pointerY = (int)Math.Round(pointerPosition.Y);
+        var windowX = (int)Math.Round(windowPosition.X);
+        var windowY = (int)Math.Round(windowPosition.Y);
+        LogPositionUpdated(this.logger, this.activeToken?.Id ?? Guid.Empty, pointerX, pointerY, windowX, windowY);
     }
 
     [LoggerMessage(

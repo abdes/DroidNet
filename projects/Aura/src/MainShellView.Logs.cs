@@ -133,19 +133,25 @@ public partial class MainShellView
     private void LogComputedPassthroughRegions(int requestedCount, List<RectInt32> clamped)
     {
         Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
         LogPassthroughRegionsComputed(this.logger, requestedCount, clamped.Count);
 
         for (var idx = 0; idx < clamped.Count; idx++)
         {
             var rr = clamped[idx];
-            LogClampedRegion(this.logger, idx, string.Format(
+            var region = string.Format(
                 CultureInfo.InvariantCulture,
                 "{{ X={1}, Y={2}, W={3}, H={4} }}",
                 idx,
                 rr.X,
                 rr.Y,
                 rr.Width,
-                rr.Height));
+                rr.Height);
+            LogClampedRegion(this.logger, idx, region);
         }
     }
 

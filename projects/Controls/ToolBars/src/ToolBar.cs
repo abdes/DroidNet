@@ -87,9 +87,9 @@ public partial class ToolBar : Control
         this.overflowMenuFlyout = this.GetTemplateChild(OverflowMenuFlyoutPartName) as MenuFlyout;
         this.rootGrid = this.GetTemplateChild(RootGridPartName) as Grid;
 
-        if (this.primaryItemsControl != null)
+        if (this.primaryItemsControl is { } primaryControl)
         {
-            this.primaryItemsControl.Loaded += (s, e) => this.UpdateOverflow();
+            primaryControl.Loaded += (s, e) => this.UpdateOverflow();
         }
 
         this.UpdateOverflow();

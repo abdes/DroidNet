@@ -36,7 +36,14 @@ public partial class AppThemeModeService
         Message = "Applying theme to all open windows (theme: {Theme})")]
     static partial void LogApplyingThemeToAllWindows(ILogger logger, string theme);
 
-    private void LogApplyingThemeToAllWindows(ElementTheme theme) => LogApplyingThemeToAllWindows(this.logger, theme.ToString());
+    private void LogApplyingThemeToAllWindows(ElementTheme theme)
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var themeName = theme.ToString();
+            LogApplyingThemeToAllWindows(this.logger, themeName);
+        }
+    }
 
     [LoggerMessage(
         EventId = 4,
@@ -45,7 +52,13 @@ public partial class AppThemeModeService
     static partial void LogApplyingThemeToWindow(ILogger logger, ulong windowId, string theme);
 
     private void LogApplyingThemeToWindow(Window window, ElementTheme theme)
-        => LogApplyingThemeToWindow(this.logger, window.AppWindow.Id.Value, theme.ToString());
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var themeName = theme.ToString();
+            LogApplyingThemeToWindow(this.logger, window.AppWindow.Id.Value, themeName);
+        }
+    }
 
     [LoggerMessage(
         EventId = 5,
@@ -54,8 +67,12 @@ public partial class AppThemeModeService
     static partial void LogSystemThemeChanged(ILogger logger, string currentTheme, string newTheme);
 
     private void LogSystemThemeChanged(ElementTheme theme)
-        => LogSystemThemeChanged(
-            this.logger,
-            this.appearanceSettings.Settings.AppThemeMode.ToString(),
-            theme.ToString());
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
+            var currentTheme = this.appearanceSettings.Settings.AppThemeMode.ToString();
+            var newTheme = theme.ToString();
+            LogSystemThemeChanged(this.logger, currentTheme, newTheme);
+        }
+    }
 }

@@ -112,9 +112,10 @@ internal sealed partial class PopupMenuHost
     [Conditional("DEBUG")]
     private void LogDismissDeferred(MenuDismissKind kind, FrameworkElement anchor)
     {
-        if (this.MenuSource?.Services.MiscLogger is ILogger logger)
+        if (this.MenuSource?.Services.MiscLogger is ILogger logger && logger.IsEnabled(LogLevel.Debug))
         {
-            LogDismissDeferred(logger, kind, GetAnchorId(anchor));
+            var anchorId = GetAnchorId(anchor);
+            LogDismissDeferred(logger, kind, anchorId);
         }
     }
 
@@ -174,9 +175,10 @@ internal sealed partial class PopupMenuHost
     [Conditional("DEBUG")]
     private void LogPendingOpenCancelled(MenuDismissKind kind, FrameworkElement anchor)
     {
-        if (this.MenuSource?.Services.MiscLogger is ILogger logger)
+        if (this.MenuSource?.Services.MiscLogger is ILogger logger && logger.IsEnabled(LogLevel.Debug))
         {
-            LogPendingOpenCancelled(logger, kind, GetAnchorId(anchor));
+            var anchorId = GetAnchorId(anchor);
+            LogPendingOpenCancelled(logger, kind, anchorId);
         }
     }
 

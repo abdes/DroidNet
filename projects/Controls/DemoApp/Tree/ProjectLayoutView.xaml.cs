@@ -42,9 +42,9 @@ public sealed partial class ProjectLayoutView
 
     private void ProjectLayoutView_Unloaded(object? sender, RoutedEventArgs e)
     {
-        if (this.ViewModel is not null)
+        if (this.ViewModel is { } viewModel)
         {
-            this.ViewModel.RenameRequested -= this.ViewModel_RenameRequested;
+            viewModel.RenameRequested -= this.ViewModel_RenameRequested;
         }
     }
 

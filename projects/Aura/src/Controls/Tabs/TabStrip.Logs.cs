@@ -913,9 +913,11 @@ public partial class TabStrip
     [Conditional("DEBUG")]
     private void LogCoordinatorDragEnded(Point screenPoint, TabStrip? destination, int? newIndex)
     {
-        if (this.logger is ILogger logger)
+        if (this.logger is ILogger logger && logger.IsEnabled(LogLevel.Debug))
         {
-            LogCoordinatorDragEndedImpl(logger, screenPoint.X, screenPoint.Y, destination?.GetHashCode() ?? 0, newIndex ?? -1);
+            var destinationHash = destination?.GetHashCode() ?? 0;
+            var resolvedIndex = newIndex ?? -1;
+            LogCoordinatorDragEndedImpl(logger, screenPoint.X, screenPoint.Y, destinationHash, resolvedIndex);
         }
     }
 

@@ -46,9 +46,9 @@ public sealed class DispatcherCollectionProxy<T> : IReadOnlyList<T>, INotifyColl
         this.sourceNotifier = sourceNotifier;
         this.tryEnqueue = tryEnqueue;
 
-        if (this.sourceNotifier is not null)
+        if (this.sourceNotifier is { } notifier)
         {
-            this.sourceNotifier.CollectionChanged += this.OnSourceCollectionChanged;
+            notifier.CollectionChanged += this.OnSourceCollectionChanged;
         }
     }
 
@@ -120,9 +120,9 @@ public sealed class DispatcherCollectionProxy<T> : IReadOnlyList<T>, INotifyColl
             return;
         }
 
-        if (this.sourceNotifier is not null)
+        if (this.sourceNotifier is { } notifier)
         {
-            this.sourceNotifier.CollectionChanged -= this.OnSourceCollectionChanged;
+            notifier.CollectionChanged -= this.OnSourceCollectionChanged;
         }
 
         this.disposed = true;
