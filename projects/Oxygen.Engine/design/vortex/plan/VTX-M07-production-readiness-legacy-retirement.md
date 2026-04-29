@@ -123,10 +123,10 @@ Known retirement seams discovered during the planning inventory:
   `src/Oxygen/Content/Docs/overview.md`. M07 must classify historical docs as
   archive/history and route current docs/readers to Vortex plans so stale paths
   are not mistaken for implementation instructions.
-- Older VTX-M01-M03 ledger rows still use `landed_needs_validation` even
-  though later milestones validated many concrete surfaces. M07 should
-  reconcile those rows only where current production-readiness evidence
-  supports a stronger claim.
+- M07 identified that older VTX-M01-M03 ledger rows needed fresh
+  milestone-level proof before stronger status claims. Post-M08 closeout
+  resolved that validation debt with focused build/test, shader-catalog, CDB,
+  and RenderDoc evidence recorded in `IMPLEMENTATION_STATUS.md`.
 
 ## 5. Existing Behavior To Preserve
 

@@ -49,8 +49,8 @@ Use these values in this plan and in `IMPLEMENTATION_STATUS.md`.
 
 The current repo is not a blank slate. Vortex already contains substantial
 Renderer Core, SceneRenderer, deferred-core, service, and proof-tooling work.
-The status ledger records this as `landed_needs_validation` unless there is
-fresh milestone-level validation evidence tied to the current status file.
+The status ledger records the desktop deferred baseline through VTX-M08 as
+validated, with only explicitly approved future families remaining.
 
 Important baseline facts:
 
@@ -66,11 +66,9 @@ Important baseline facts:
   volumetric fog, and one consolidated runtime proof are validated. Real
   SkyLight capture/filtering remains open resource work before usable IBL can
   be claimed.
-- `DiagnosticsService`, `TranslucencyModule`, and the full `OcclusionModule`
-  are not concrete runtime closures yet, even though supporting substrate and
-  some placeholder directories exist.
-- Multi-view and offscreen substrates exist, but their runtime proof gates are
-  separate late milestones.
+- `DiagnosticsService`, `OcclusionModule`, `TranslucencyModule`, multi-view,
+  offscreen, feature-gated runtime variants, production-readiness cleanup, and
+  the static cubemap skybox/SkyLight family are validated milestones.
 
 ## 4. Next Milestone
 
@@ -90,9 +88,9 @@ static specified-cubemap SkyLight diffuse lighting. No narrower implementation
 milestone is selected yet; the next future family must be promoted with its own
 detailed plan and LLD updates before implementation starts.
 
-**Prerequisite work packages:** `VTX-M03` is landed with downstream validated
-surfaces; `VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`,
-`VTX-M06A`, `VTX-M06B`, `VTX-M06C`, `VTX-M07`, and `VTX-M08` are validated.
+**Prerequisite work packages:** `VTX-M01`, `VTX-M02`, `VTX-M03`,
+`VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`, `VTX-M06A`,
+`VTX-M06B`, `VTX-M06C`, `VTX-M07`, and `VTX-M08` are validated.
 
 **Active work packages:** None selected. VTX-M08 is validated and retained as
 the latest closed post-baseline milestone. The next work item must be selected
@@ -144,9 +142,9 @@ planning handles; do not renumber them when scopes are refined.
 | ID | Milestone | Status | Depends On | Primary Outcome |
 | --- | --- | --- | --- | --- |
 | VTX-M00 | Planning and status truth surface | `validated` | current docs/source | `PLAN.md` and `IMPLEMENTATION_STATUS.md` are the canonical planning/status pair. |
-| VTX-M01 | Renderer Core and SceneRenderer baseline | `landed_needs_validation` | none | Vortex module, Renderer Core substrate, SceneRenderer shell, SceneTextures, core facades, resolve/cleanup. |
-| VTX-M02 | Deferred core visual path | `landed_needs_validation` | VTX-M01 | InitViews, depth prepass, generic HZB, base pass/GBuffer/velocity, Stage 10 publication, deferred lighting, debug views. |
-| VTX-M03 | Migration-critical non-environment services | `landed_needs_validation` | VTX-M02 | LightingService, ShadowService directional baseline, PostProcessService, and their publication seams. |
+| VTX-M01 | Renderer Core and SceneRenderer baseline | `validated` | none | Vortex module, Renderer Core substrate, SceneRenderer shell, SceneTextures, core facades, upload/resource substrate, publication seams, resolve/cleanup, and non-runtime facades validated through focused build/tests plus VortexBasic CDB/RenderDoc runtime proof. |
+| VTX-M02 | Deferred core visual path | `validated` | VTX-M01 | InitViews, depth prepass, generic HZB, base pass/GBuffer/velocity, Stage 10 publication, deferred lighting/debug routes, shader catalog validation, and VortexBasic stage-product/runtime proof are validated. |
+| VTX-M03 | Migration-critical non-environment services | `validated` | VTX-M02 | LightingService, ShadowService baseline, PostProcessService, Stage 8/12/22 routing, publication seams, focused service tests, ShaderBake/catalog validation, and VortexBasic runtime proof are validated. Later milestones validate expanded shadow/environment/translucency/diagnostics behavior. |
 | VTX-M04D | Environment / fog parity closure | `validated` | VTX-M02, VTX-M03 validation context | Parent milestone for environment publication truth, main-view aerial perspective, height fog, local fog, volumetric fog, and consolidated VortexBasic runtime proof. Real SkyLight cubemap capture/filtering remains a later IBL/indirect-lighting resource milestone. |
 | VTX-M04D.1 | Environment publication and sky/fog contract truth | `validated` | VTX-M02, current environment code | Truthful environment binding/publication state, SkyLight/IBL truth, Stage 14 observability. |
 | VTX-M04D.2 | UE5.7 exponential height fog parity | `validated` | VTX-M04D.1 | UE5.7-informed authored parameters, CPU/HLSL publication, analytic Stage-15 application, disabled fast path, focused runtime/capture proof, and city-scale capture proof. Cubemap inscattering resource binding/sampling remains explicitly deferred. |
@@ -531,18 +529,18 @@ Parallelism rules:
 
 | Feature Family | Activation / Milestone | Current Status | Target |
 | --- | --- | --- | --- |
-| Renderer Core substrate | VTX-M01 | `landed_needs_validation` | Engine-integrated frame loop, publication, upload, view lifecycle, composition substrate. |
-| Non-runtime facades | VTX-M01, VTX-M06B | `landed_needs_validation` | Single-pass and render-graph harnesses plus offscreen scene facade with proof. |
-| SceneTextures | VTX-M01 | `landed_needs_validation` | SceneColor, SceneDepth, PartialDepth, GBufferA-D, Stencil, Velocity, CustomDepth; future GBufferE/F. |
-| SceneRenderer shell | VTX-M01 | `landed_needs_validation` | 23-stage dispatch with active and reserved owners. |
-| InitViews | VTX-M02 | `landed_needs_validation` | Prepared-scene publication and visibility/culling inputs. |
-| Depth prepass | VTX-M02 | `landed_needs_validation` | Stage 3 depth products and completeness tracking. |
-| Generic Screen HZB | VTX-M02 | `landed_needs_validation` | Stage 5 current/previous HZB products for consumers. |
-| Base pass and velocity | VTX-M02 | `landed_needs_validation` | GBuffer MRT, masked/deformed/skinned/WPO-capable velocity policy. |
-| Deferred lighting | VTX-M02 / VTX-M03 | `landed_needs_validation` | Directional fullscreen plus bounded point/spot deferred lighting owned by LightingService. |
-| LightingService | VTX-M03 | `landed_needs_validation` | Light selection, forward light publication, light grid, Stage 12 service ownership. |
-| ShadowService directional baseline | VTX-M03 / VTX-M04D.4 prerequisite / VTX-M05D | `validated_for_static_projection_reaudit_required` | Directional conventional shadow data publication and projected receiver shadows were validated enough for M04D.4 volumetric consumption, and the city-scale loader preserves cooked manual CSM settings. M05D now owns full UE5.7 CSM parity and camera-stability remediation because `CityEnvironmentValidation` projected shadows are unstable under camera movement. |
-| PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
+| Renderer Core substrate | VTX-M01 | `validated` | Engine-integrated frame loop, publication, upload, view lifecycle, and composition substrate validated by focused Vortex tests and VortexBasic runtime proof. |
+| Non-runtime facades | VTX-M01, VTX-M06B | `validated` | Single-pass and render-graph harnesses plus offscreen scene facade with proof. |
+| SceneTextures | VTX-M01 | `validated` | SceneColor, SceneDepth, PartialDepth, GBufferA-D, Stencil, Velocity, CustomDepth; future GBufferE/F. |
+| SceneRenderer shell | VTX-M01 | `validated` | 23-stage dispatch with active and reserved owners. |
+| InitViews | VTX-M02 | `validated` | Prepared-scene publication and visibility/culling inputs. |
+| Depth prepass | VTX-M02 | `validated` | Stage 3 depth products and completeness tracking. |
+| Generic Screen HZB | VTX-M02 | `validated` | Stage 5 current/previous HZB products for consumers. |
+| Base pass and velocity | VTX-M02 | `validated` | GBuffer MRT, masked/deformed/skinned/WPO-capable velocity policy. |
+| Deferred lighting | VTX-M02 / VTX-M03 | `validated` | Directional fullscreen plus bounded point/spot deferred lighting owned by LightingService. |
+| LightingService | VTX-M03 | `validated` | Light selection, forward light publication, light grid, Stage 12 service ownership. |
+| ShadowService directional baseline | VTX-M03 / VTX-M04D.4 prerequisite / VTX-M05D | `validated` | Directional conventional shadow data publication and projected receiver shadows are validated; M05D validates full conventional directional/spot/point shadow parity and records future VSM/local-light caching gaps. |
+| PostProcessService | VTX-M03 | `validated` | Exposure, bloom, tonemap, Stage 22 service. |
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `validated` for main-view AP | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; main-view aerial perspective has focused VortexBasic enabled/disabled proof and city-scale `CityEnvironmentValidation` capture proof. Reflection/360-view AP remains explicitly deferred. |
 | SkyLight publication truth | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. |
 | Cubemap skybox / static specified-cubemap SkyLight | VTX-M08 | `validated` | Visual cubemap skybox rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, focused tests, ShaderBake/catalog validation where required, CDB/debug-layer proof, RenderDoc scripted analysis, allocation-churn proof, user visual confirmation, and residual-gap recording are closed in the M08 detailed plan/status ledger. Captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, static-cubemap specular reflections, broader reflection probes, volumetric-cloud capture, and static-cubemap sun-disk overlay remain approved future gaps. |
