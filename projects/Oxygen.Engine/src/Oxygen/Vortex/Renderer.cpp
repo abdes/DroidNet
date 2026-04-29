@@ -40,11 +40,14 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
+#include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/Internal/ImGuiRuntime.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
 #include <Oxygen/Vortex/Internal/RenderContextPool.h>
+#include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
@@ -598,6 +601,12 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     observer_ptr { gpu_timeline_profiler_.get() });
   render_context_pool_
     = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
+  rigid_transform_history_cache_
+    = std::make_unique<internal::RigidTransformHistoryCache>();
+  deformation_history_cache_
+    = std::make_unique<internal::DeformationHistoryCache>();
+  previous_view_history_cache_
+    = std::make_unique<internal::PreviousViewHistoryCache>();
 }
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
@@ -1279,10 +1288,10 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 
   frame_slot_ = context->GetFrameSlot();
   frame_seq_num_ = context->GetFrameSequenceNumber().get();
-  rigid_transform_history_cache_.BeginFrame(frame_seq_num_);
-  deformation_history_cache_.BeginFrame(frame_seq_num_,
+  rigid_transform_history_cache_->BeginFrame(frame_seq_num_);
+  deformation_history_cache_->BeginFrame(frame_seq_num_,
     observer_ptr<const scene::Scene> { context->GetScene().get() });
-  previous_view_history_cache_.BeginFrame(frame_seq_num_,
+  previous_view_history_cache_->BeginFrame(frame_seq_num_,
     observer_ptr<const scene::Scene> { context->GetScene().get() });
   const auto dt = context->GetModuleTimingData().game_delta_time;
   const auto dt_seconds
@@ -1629,9 +1638,9 @@ auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
   if (diagnostics_service_ != nullptr) {
     diagnostics_service_->EndFrame();
   }
-  rigid_transform_history_cache_.EndFrame();
-  deformation_history_cache_.EndFrame();
-  previous_view_history_cache_.EndFrame();
+  rigid_transform_history_cache_->EndFrame();
+  deformation_history_cache_->EndFrame();
+  previous_view_history_cache_->EndFrame();
   resolved_views_.clear();
 }
 
@@ -2518,8 +2527,8 @@ auto Renderer::BuildViewHistoryFrameBindings(
     };
   const auto snapshot
     = view_state_handle == CompositionView::kInvalidViewStateHandle
-    ? previous_view_history_cache_.TouchStateless(current)
-    : previous_view_history_cache_.TouchCurrent(view_state_handle, current);
+    ? previous_view_history_cache_->TouchStateless(current)
+    : previous_view_history_cache_->TouchCurrent(view_state_handle, current);
 
   auto history = ViewHistoryFrameBindings {
     .current_view_matrix = snapshot.current.view_matrix,
@@ -2578,7 +2587,7 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
   last_frame_dt_seconds_ = session.delta_time_seconds;
-  previous_view_history_cache_.BeginFrame(
+  previous_view_history_cache_->BeginFrame(
     frame_seq_num_, observer_ptr<const scene::Scene> { session.scene.get() });
 
   const auto tag = internal::RendererTagFactory::Get();
@@ -2633,7 +2642,7 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
 
 auto Renderer::EndOffscreenFrame() noexcept -> void
 {
-  previous_view_history_cache_.EndFrame();
+  previous_view_history_cache_->EndFrame();
 }
 
 auto Renderer::SnapshotViewExtensions() const -> std::vector<ViewExtensionPtr>

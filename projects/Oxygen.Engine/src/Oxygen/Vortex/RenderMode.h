@@ -20,12 +20,11 @@ enum class RenderMode : std::uint8_t {
 
 [[nodiscard]] inline auto to_string(RenderMode mode) -> std::string_view
 {
-  using enum RenderMode;
   switch (mode) {
     // clang-format off
-  case kSolid: return "Solid";
-  case kWireframe: return "Wireframe";
-  case kOverlayWireframe: return "OverlayWireframe";
+  case RenderMode::kSolid: return "Solid";
+  case RenderMode::kWireframe: return "Wireframe";
+  case RenderMode::kOverlayWireframe: return "OverlayWireframe";
   default: return "__Unknown__";
     // clang-format on
   }

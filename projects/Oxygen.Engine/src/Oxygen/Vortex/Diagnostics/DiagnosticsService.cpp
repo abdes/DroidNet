@@ -10,6 +10,8 @@
 #include <string>
 #include <utility>
 
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
+
 namespace oxygen::vortex {
 
 auto DiagnosticsConfig::Default() noexcept -> DiagnosticsConfig
@@ -144,15 +146,6 @@ auto DiagnosticsService::SetGpuTimelineRetainLatestFrame(
   }
 }
 
-auto DiagnosticsService::AddGpuTimelineSink(
-  std::shared_ptr<internal::GpuTimelineSink> sink) -> void
-{
-  std::scoped_lock lock(mutex_);
-  if (gpu_timeline_profiler_ != nullptr) {
-    gpu_timeline_profiler_->AddSink(std::move(sink));
-  }
-}
-
 auto DiagnosticsService::RequestGpuTimelineExport(
   const std::filesystem::path& path) -> void
 {
@@ -160,16 +153,6 @@ auto DiagnosticsService::RequestGpuTimelineExport(
   if (gpu_timeline_profiler_ != nullptr) {
     gpu_timeline_profiler_->RequestOneShotExport(path);
   }
-}
-
-auto DiagnosticsService::GetLatestGpuTimelineFrame() const
-  -> std::optional<internal::GpuTimelineFrame>
-{
-  std::scoped_lock lock(mutex_);
-  if (gpu_timeline_profiler_ == nullptr) {
-    return std::nullopt;
-  }
-  return gpu_timeline_profiler_->GetLastPublishedFrame();
 }
 
 auto DiagnosticsService::SyncGpuTimelineDiagnostics() -> void

@@ -31,9 +31,6 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-#include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
-#include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
-#include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -82,8 +79,11 @@ namespace oxygen::vortex::internal {
 template <typename RenderContextT> class BasicRenderContextPool;
 class CompositingPass;
 struct CompositingPassConfig;
+class DeformationHistoryCache;
 class GpuTimelineProfiler;
 class ImGuiRuntime;
+class PreviousViewHistoryCache;
+class RigidTransformHistoryCache;
 class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
@@ -564,12 +564,12 @@ public:
   auto GetRigidTransformHistoryCache() noexcept
     -> internal::RigidTransformHistoryCache&
   {
-    return rigid_transform_history_cache_;
+    return *rigid_transform_history_cache_;
   }
   auto GetDeformationHistoryCache() noexcept
     -> internal::DeformationHistoryCache&
   {
-    return deformation_history_cache_;
+    return *deformation_history_cache_;
   }
   OXGN_VRTX_NDAPI auto GetRuntimeMotionProducerModule() const noexcept
     -> observer_ptr<scenesync::RuntimeMotionProducerModule>;
@@ -810,9 +810,11 @@ private:
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
-  internal::RigidTransformHistoryCache rigid_transform_history_cache_ {};
-  internal::DeformationHistoryCache deformation_history_cache_ {};
-  internal::PreviousViewHistoryCache previous_view_history_cache_ {};
+  std::unique_ptr<internal::RigidTransformHistoryCache>
+    rigid_transform_history_cache_;
+  std::unique_ptr<internal::DeformationHistoryCache> deformation_history_cache_;
+  std::unique_ptr<internal::PreviousViewHistoryCache>
+    previous_view_history_cache_;
   frame::SequenceNumber scene_renderer_started_frame_ { 0U };
 
   mutable std::shared_mutex view_registration_mutex_;

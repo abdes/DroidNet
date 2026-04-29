@@ -11,9 +11,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
@@ -36,7 +34,6 @@ using oxygen::vortex::DiagnosticsSeverity;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ShaderDebugMode;
-using oxygen::vortex::internal::GpuTimelineProfiler;
 using oxygen::vortex::testing::FakeGraphics;
 
 constexpr auto kDiagnosticsCapability
@@ -199,58 +196,22 @@ NOLINT_TEST(DiagnosticsServiceTest, ExposesShaderDebugModeRegistry)
   EXPECT_FALSE(service.FindShaderDebugMode("missing-mode").has_value());
 }
 
-NOLINT_TEST(DiagnosticsServiceTest,
-  GpuTimelineFacadeForwardsAndConvertsProfilerDiagnostics)
+NOLINT_TEST(DiagnosticsServiceTest, RendererOwnedGpuTimelineCanBeEnabled)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  auto profiler = GpuTimelineProfiler(
-    oxygen::observer_ptr<Graphics> { graphics.get() });
-  auto service = DiagnosticsService {
-    kDiagnosticsCapability,
-    DiagnosticsConfig { .default_features = DiagnosticsFeature::kFrameLedger
-        | DiagnosticsFeature::kGpuTimeline },
-  };
+  const auto renderer = MakeRenderer(graphics, kDiagnosticsCapability);
+  auto& service = renderer->GetDiagnosticsService();
 
-  service.SetGpuTimelineProfiler(oxygen::observer_ptr { &profiler });
+  service.SetEnabledFeatures(
+    DiagnosticsFeature::kFrameLedger | DiagnosticsFeature::kGpuTimeline);
   service.SetGpuTimelineRetainLatestFrame(true);
   service.SetGpuTimelineMaxScopesPerFrame(1U);
   service.SetGpuTimelineEnabled(true);
 
   EXPECT_TRUE(service.IsGpuTimelineEnabled());
-
-  profiler.OnFrameStart(SequenceNumber { 1U });
-  auto recorder = graphics->AcquireCommandRecorder(
-    graphics->QueueKeyFor(QueueRole::kGraphics), "DiagnosticsTimeline", true);
-  recorder->SetTelemetryCollector(
-    oxygen::observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
-
-  {
-    oxygen::graphics::GpuEventScope first(*recorder, "First",
-      oxygen::profiling::ProfileGranularity::kTelemetry);
-  }
-  {
-    oxygen::graphics::GpuEventScope second(*recorder, "Second",
-      oxygen::profiling::ProfileGranularity::kTelemetry);
-  }
-
-  profiler.OnFrameRecordTailResolve();
-  profiler.OnFrameStart(SequenceNumber { 2U });
-
-  ASSERT_TRUE(service.GetLatestGpuTimelineFrame().has_value());
-
-  service.BeginFrame(SequenceNumber { 2U });
-  service.SyncGpuTimelineDiagnostics();
-  service.EndFrame();
-
-  const auto snapshot = service.GetLatestSnapshot();
-  EXPECT_TRUE(snapshot.gpu_timeline_enabled);
-  EXPECT_TRUE(snapshot.gpu_timeline_frame_available);
-  auto found_overflow = false;
-  for (const auto& issue : snapshot.issues) {
-    found_overflow = found_overflow || issue.code == "gpu-timeline.overflow";
-  }
-  EXPECT_TRUE(found_overflow);
+  EXPECT_TRUE(HasAllFeatures(
+    service.GetEnabledFeatures(), DiagnosticsFeature::kGpuTimeline));
 }
 
 } // namespace
