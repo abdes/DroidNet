@@ -62,6 +62,29 @@ public class SceneTests
     }
 
     [TestMethod]
+    public async Task Deserialize_NullSkyAtmosphere_LoadsDefaults()
+    {
+        const string json = """
+            {
+              "Id": "11111111-1111-1111-1111-111111111111",
+              "Name": "Scene With Null Sky",
+              "RootNodes": [],
+              "Environment": {
+                "AtmosphereEnabled": true,
+                "SkyAtmosphere": null
+              }
+            }
+            """;
+
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var serializer = new SceneSerializer(this.ExampleProject);
+
+        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = scene.Environment.SkyAtmosphere.Should().Be(new SkyAtmosphereEnvironmentData());
+    }
+
+    [TestMethod]
     public async Task Environment_AllFields_RoundTripThroughJson()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Environment Scene" };
@@ -70,11 +93,29 @@ public class SceneTests
             AtmosphereEnabled = false,
             SunNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             ExposureMode = ExposureMode.Manual,
+            ManualExposureEv = 4.5f,
             ExposureCompensation = 1.5f,
             ToneMapping = ToneMappingMode.Filmic,
             BackgroundColor = new Vector3(0.2f, 0.3f, 0.4f),
+            SkyAtmosphere = new SkyAtmosphereEnvironmentData
+            {
+                PlanetRadiusMeters = 6_400_000.0f,
+                AtmosphereHeightMeters = 90_000.0f,
+                GroundAlbedoRgb = new Vector3(0.1f, 0.2f, 0.3f),
+                RayleighScaleHeightMeters = 7_000.0f,
+                MieScaleHeightMeters = 1_400.0f,
+                MieAnisotropy = 0.7f,
+                SkyLuminanceFactorRgb = new Vector3(1.1f, 1.0f, 0.9f),
+                AerialPerspectiveDistanceScale = 1.2f,
+                AerialScatteringStrength = 0.8f,
+                AerialPerspectiveStartDepthMeters = 40.0f,
+                HeightFogContribution = 0.6f,
+                SunDiskEnabled = false,
+            },
+            PostProcess = CreateAuthoredPostProcess(),
         };
         scene.SetEnvironment(expected);
+        expected = scene.Environment;
 
         var serializer = new SceneSerializer(this.ExampleProject);
         await using var stream = new MemoryStream();
@@ -509,4 +550,32 @@ public class SceneTests
         _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
         _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Gold");
     }
+
+    private static PostProcessEnvironmentData CreateAuthoredPostProcess()
+        => new()
+        {
+            ToneMapper = ToneMappingMode.Reinhard,
+            ExposureMode = ExposureMode.ManualCamera,
+            ExposureEnabled = false,
+            ExposureCompensationEv = 1.25f,
+            ExposureKey = 11.0f,
+            ManualExposureEv = 5.5f,
+            AutoExposureMinEv = -3.0f,
+            AutoExposureMaxEv = 14.0f,
+            AutoExposureSpeedUp = 4.0f,
+            AutoExposureSpeedDown = 2.0f,
+            AutoExposureMeteringMode = MeteringMode.Spot,
+            AutoExposureLowPercentile = 0.2f,
+            AutoExposureHighPercentile = 0.8f,
+            AutoExposureMinLogLuminance = -10.0f,
+            AutoExposureLogLuminanceRange = 20.0f,
+            AutoExposureTargetLuminance = 0.25f,
+            AutoExposureSpotMeterRadius = 0.4f,
+            BloomIntensity = 0.7f,
+            BloomThreshold = 1.5f,
+            Saturation = 0.9f,
+            Contrast = 1.1f,
+            VignetteIntensity = 0.3f,
+            DisplayGamma = 2.4f,
+        };
 }

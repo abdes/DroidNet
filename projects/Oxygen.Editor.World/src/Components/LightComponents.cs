@@ -10,13 +10,34 @@ namespace Oxygen.Editor.World;
 
 public abstract partial class LightComponent : GameComponent
 {
-    public bool AffectsWorld { get; set; } = true;
+    private bool affectsWorld = true;
+    private Vector3 color = Vector3.One;
+    private bool castsShadows;
+    private float exposureCompensation;
 
-    public Vector3 Color { get; set; } = Vector3.One;
+    public bool AffectsWorld
+    {
+        get => this.affectsWorld;
+        set => _ = this.SetProperty(ref this.affectsWorld, value);
+    }
 
-    public bool CastsShadows { get; set; }
+    public Vector3 Color
+    {
+        get => this.color;
+        set => _ = this.SetProperty(ref this.color, value);
+    }
 
-    public float ExposureCompensation { get; set; }
+    public bool CastsShadows
+    {
+        get => this.castsShadows;
+        set => _ = this.SetProperty(ref this.castsShadows, value);
+    }
+
+    public float ExposureCompensation
+    {
+        get => this.exposureCompensation;
+        set => _ = this.SetProperty(ref this.exposureCompensation, value);
+    }
 
     public override void Hydrate(ComponentData data)
     {
@@ -40,6 +61,11 @@ public abstract partial class LightComponent : GameComponent
 
 public sealed partial class DirectionalLightComponent : LightComponent
 {
+    private float intensityLux = DefaultIntensityLux;
+    private float angularSizeRadians = DefaultAngularSizeRadians;
+    private bool environmentContribution = true;
+    private bool isSunLight = true;
+
     public const float DefaultIntensityLux = 100_000f;
 
     public const float DefaultAngularSizeRadians = 0.00935f;
@@ -56,13 +82,29 @@ public sealed partial class DirectionalLightComponent : LightComponent
         });
     }
 
-    public float IntensityLux { get; set; } = DefaultIntensityLux;
+    public float IntensityLux
+    {
+        get => this.intensityLux;
+        set => _ = this.SetProperty(ref this.intensityLux, value);
+    }
 
-    public float AngularSizeRadians { get; set; } = DefaultAngularSizeRadians;
+    public float AngularSizeRadians
+    {
+        get => this.angularSizeRadians;
+        set => _ = this.SetProperty(ref this.angularSizeRadians, value);
+    }
 
-    public bool EnvironmentContribution { get; set; } = true;
+    public bool EnvironmentContribution
+    {
+        get => this.environmentContribution;
+        set => _ = this.SetProperty(ref this.environmentContribution, value);
+    }
 
-    public bool IsSunLight { get; set; } = true;
+    public bool IsSunLight
+    {
+        get => this.isSunLight;
+        set => _ = this.SetProperty(ref this.isSunLight, value);
+    }
 
     public override void Hydrate(ComponentData data)
     {
@@ -99,6 +141,11 @@ public sealed partial class DirectionalLightComponent : LightComponent
 
 public sealed partial class PointLightComponent : LightComponent
 {
+    private float luminousFluxLumens = 800f;
+    private float range = 10f;
+    private float sourceRadius;
+    private float decayExponent = 2f;
+
     static PointLightComponent()
     {
         Register<PointLightData>(d =>
@@ -109,13 +156,29 @@ public sealed partial class PointLightComponent : LightComponent
         });
     }
 
-    public float LuminousFluxLumens { get; set; } = 800f;
+    public float LuminousFluxLumens
+    {
+        get => this.luminousFluxLumens;
+        set => _ = this.SetProperty(ref this.luminousFluxLumens, value);
+    }
 
-    public float Range { get; set; } = 10f;
+    public float Range
+    {
+        get => this.range;
+        set => _ = this.SetProperty(ref this.range, value);
+    }
 
-    public float SourceRadius { get; set; }
+    public float SourceRadius
+    {
+        get => this.sourceRadius;
+        set => _ = this.SetProperty(ref this.sourceRadius, value);
+    }
 
-    public float DecayExponent { get; set; } = 2f;
+    public float DecayExponent
+    {
+        get => this.decayExponent;
+        set => _ = this.SetProperty(ref this.decayExponent, value);
+    }
 
     public override void Hydrate(ComponentData data)
     {
@@ -152,6 +215,13 @@ public sealed partial class PointLightComponent : LightComponent
 
 public sealed partial class SpotLightComponent : LightComponent
 {
+    private float luminousFluxLumens = 800f;
+    private float range = 10f;
+    private float sourceRadius;
+    private float decayExponent = 2f;
+    private float innerConeAngleRadians = 0.4f;
+    private float outerConeAngleRadians = 0.6f;
+
     static SpotLightComponent()
     {
         Register<SpotLightData>(d =>
@@ -162,17 +232,41 @@ public sealed partial class SpotLightComponent : LightComponent
         });
     }
 
-    public float LuminousFluxLumens { get; set; } = 800f;
+    public float LuminousFluxLumens
+    {
+        get => this.luminousFluxLumens;
+        set => _ = this.SetProperty(ref this.luminousFluxLumens, value);
+    }
 
-    public float Range { get; set; } = 10f;
+    public float Range
+    {
+        get => this.range;
+        set => _ = this.SetProperty(ref this.range, value);
+    }
 
-    public float SourceRadius { get; set; }
+    public float SourceRadius
+    {
+        get => this.sourceRadius;
+        set => _ = this.SetProperty(ref this.sourceRadius, value);
+    }
 
-    public float DecayExponent { get; set; } = 2f;
+    public float DecayExponent
+    {
+        get => this.decayExponent;
+        set => _ = this.SetProperty(ref this.decayExponent, value);
+    }
 
-    public float InnerConeAngleRadians { get; set; } = 0.4f;
+    public float InnerConeAngleRadians
+    {
+        get => this.innerConeAngleRadians;
+        set => _ = this.SetProperty(ref this.innerConeAngleRadians, value);
+    }
 
-    public float OuterConeAngleRadians { get; set; } = 0.6f;
+    public float OuterConeAngleRadians
+    {
+        get => this.outerConeAngleRadians;
+        set => _ = this.SetProperty(ref this.outerConeAngleRadians, value);
+    }
 
     public override void Hydrate(ComponentData data)
     {
