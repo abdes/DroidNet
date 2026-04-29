@@ -40,15 +40,16 @@ public partial class TabDragCoordinator
     [Conditional("DEBUG")]
     private void LogDragStarted()
     {
-        if (this.dragContext is not { TabStrip: { } strip } context)
+        if (this.dragContext is not { TabStrip: { } strip } context || !this.logger.IsEnabled(LogLevel.Debug))
         {
             return;
         }
 
         var sourceStripName = strip.GetType().Name;
+        var itemContent = context.DraggedItemData.ToString() ?? "Unknown";
         LogDragStarted(
             this.logger,
-            context.DraggedItemData.ToString() ?? "Unknown",
+            itemContent,
             sourceStripName,
             (int)this.lastCursorPosition.Point.X,
             (int)this.lastCursorPosition.Point.Y,
@@ -191,7 +192,8 @@ public partial class TabDragCoordinator
         }
 
         var stripName = hitStrip?.GetType().Name ?? "None";
-        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, GetDraggedItemIndex(context));
+        var contextIndex = GetDraggedItemIndex(context);
+        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, contextIndex);
     }
 
     [LoggerMessage(

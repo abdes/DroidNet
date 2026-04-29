@@ -467,16 +467,16 @@ public sealed partial class MenuBar : Control
             return;
         }
 
-        if (this.rootItemsCollection is not null)
+        if (this.rootItemsCollection is { } currentCollection)
         {
-            this.rootItemsCollection.CollectionChanged -= this.OnRootItemsCollectionChanged;
+            currentCollection.CollectionChanged -= this.OnRootItemsCollectionChanged;
         }
 
         this.rootItemsCollection = newCollection;
 
-        if (this.rootItemsCollection is not null)
+        if (this.rootItemsCollection is { } updatedCollection)
         {
-            this.rootItemsCollection.CollectionChanged += this.OnRootItemsCollectionChanged;
+            updatedCollection.CollectionChanged += this.OnRootItemsCollectionChanged;
         }
     }
 
