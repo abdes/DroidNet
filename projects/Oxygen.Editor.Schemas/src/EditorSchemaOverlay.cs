@@ -69,6 +69,43 @@ public static class EditorSchemaOverlay
         return violations;
     }
 
+    /// <summary>
+    /// Finds engine-schema authoring paths that are not covered by an editor
+    /// overlay annotation.
+    /// </summary>
+    /// <param name="engineSchema">The engine schema document.</param>
+    /// <param name="overlay">The editor overlay document.</param>
+    /// <param name="hiddenPaths">Paths intentionally hidden from the editor.</param>
+    /// <returns>Paths that have neither a complete annotation nor a hidden-path entry.</returns>
+    /// <remarks>
+    /// The coverage unit is the editor widget boundary. Object nodes rendered
+    /// as <c>section</c> recurse into their child properties; object nodes
+    /// rendered by any other widget, such as an asset picker, are considered
+    /// covered at the parent path. Local <c>#/definitions/...</c> references are
+    /// followed so overlays can cover fields declared through reusable engine
+    /// schema definitions.
+    /// </remarks>
+    public static IReadOnlyList<string> FindMissingAnnotationCoverage(
+        JsonObject engineSchema,
+        JsonObject overlay,
+        IEnumerable<string>? hiddenPaths = null)
+    {
+        ArgumentNullException.ThrowIfNull(engineSchema);
+        ArgumentNullException.ThrowIfNull(overlay);
+
+        var annotations = ExtractAnnotations(overlay);
+        var hidden = new HashSet<string>(hiddenPaths ?? Array.Empty<string>(), StringComparer.Ordinal);
+        var coveragePaths = new List<string>();
+        CollectCoveragePaths(engineSchema, engineSchema, string.Empty, annotations, coveragePaths, []);
+
+        return coveragePaths
+            .Where(path => !hidden.Contains(path))
+            .Where(path => !HasCompleteAnnotation(annotations, path))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static void Walk(JsonObject node, string pointer, Dictionary<string, EditorAnnotation> result)
     {
         var annotation = ParseAnnotation(node);
@@ -222,6 +259,90 @@ public static class EditorSchemaOverlay
     {
         // RFC 6901: ~ -> ~0, / -> ~1
         return segment.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+    }
+
+    private static bool HasCompleteAnnotation(
+        IReadOnlyDictionary<string, EditorAnnotation> annotations,
+        string pointer)
+        => annotations.TryGetValue(pointer, out var annotation)
+           && !string.IsNullOrWhiteSpace(annotation.Label)
+           && !string.IsNullOrWhiteSpace(annotation.Renderer);
+
+    private static void CollectCoveragePaths(
+        JsonObject root,
+        JsonObject node,
+        string pointer,
+        IReadOnlyDictionary<string, EditorAnnotation> annotations,
+        List<string> result,
+        HashSet<string> refStack)
+    {
+        var resolved = ResolveLocalReference(root, node, refStack);
+        if (resolved["properties"] is not JsonObject properties)
+        {
+            if (pointer.Length > 0)
+            {
+                result.Add(pointer);
+            }
+
+            return;
+        }
+
+        foreach (var (propertyName, child) in properties)
+        {
+            if (child is not JsonObject childObject)
+            {
+                continue;
+            }
+
+            var childPointer = $"{pointer}/{EncodePointerSegment(propertyName)}";
+            var childResolved = ResolveLocalReference(root, childObject, refStack);
+            var childHasObjectProperties = childResolved["properties"] is JsonObject;
+
+            if (!childHasObjectProperties || IsCoveredWidgetBoundary(annotations, childPointer))
+            {
+                result.Add(childPointer);
+                continue;
+            }
+
+            CollectCoveragePaths(root, childResolved, childPointer, annotations, result, refStack);
+        }
+    }
+
+    private static bool IsCoveredWidgetBoundary(
+        IReadOnlyDictionary<string, EditorAnnotation> annotations,
+        string pointer)
+        => annotations.TryGetValue(pointer, out var annotation)
+           && !string.IsNullOrWhiteSpace(annotation.Renderer)
+           && !string.Equals(annotation.Renderer, "section", StringComparison.OrdinalIgnoreCase);
+
+    private static JsonObject ResolveLocalReference(JsonObject root, JsonObject node, HashSet<string> refStack)
+    {
+        if (node["$ref"]?.GetValue<string>() is not { } reference
+            || !reference.StartsWith("#/definitions/", StringComparison.Ordinal))
+        {
+            return node;
+        }
+
+        if (!refStack.Add(reference))
+        {
+            return node;
+        }
+
+        try
+        {
+            var definitionName = reference["#/definitions/".Length..].Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
+            if (root["definitions"] is JsonObject definitions
+                && definitions[definitionName] is JsonObject definition)
+            {
+                return ResolveLocalReference(root, definition, refStack);
+            }
+
+            return node;
+        }
+        finally
+        {
+            _ = refStack.Remove(reference);
+        }
     }
 
     private static void LintWalk(JsonObject node, string pointer, List<(string, string)> violations)

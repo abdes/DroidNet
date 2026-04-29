@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Core.Diagnostics;
@@ -285,6 +286,27 @@ public sealed class MaterialDocumentServiceTests
     }
 
     [TestMethod]
+    public void MaterialDescriptors_ShouldMapToOverlayAnnotatedEngineSchemaPaths()
+    {
+        var schemaRoot = FindSchemaRoot();
+        var engine = LoadSchema(schemaRoot, MaterialSchemaValidator.EngineSchemaFileName);
+        var overlay = LoadSchema(schemaRoot, MaterialSchemaValidator.EditorOverlayFileName);
+        var annotations = EditorSchemaOverlay.ExtractAnnotations(overlay);
+
+        foreach (var descriptor in MaterialDescriptors.Catalog.ById.Values)
+        {
+            var schemaPath = ResolveSchemaCoveragePath(engine, descriptor.Id.Pointer);
+            _ = schemaPath.Should().NotBeNull($"descriptor {descriptor.Id} must point at the engine material schema");
+
+            var annotationPath = ResolveAnnotationPath(annotations, descriptor.Id.Pointer);
+            _ = annotationPath.Should().NotBeNull($"descriptor {descriptor.Id} must be backed by the material editor overlay");
+            var annotation = annotations[annotationPath!];
+            _ = annotation.Renderer.Should().Be(descriptor.Annotation.Renderer, $"descriptor {descriptor.Id} should use the overlay renderer");
+            _ = annotation.Label.Should().NotBeNullOrWhiteSpace($"descriptor {descriptor.Id} should inherit a visible overlay label");
+        }
+    }
+
+    [TestMethod]
     public async Task EditScalarAsync_WhenNameIsEdited_ShouldRejectBecauseAssetFileStemIsCanonical()
     {
         using var workspace = new TempWorkspace();
@@ -353,6 +375,81 @@ public sealed class MaterialDocumentServiceTests
         }
 
         throw new DirectoryNotFoundException("Could not find Oxygen.Engine cooker schema directory.");
+    }
+
+    private static JsonObject LoadSchema(string schemaRoot, string fileName)
+        => JsonNode.Parse(File.ReadAllText(Path.Combine(schemaRoot, fileName)))!.AsObject();
+
+    private static string? ResolveSchemaCoveragePath(JsonObject root, string pointer)
+    {
+        var node = root;
+        var coveredPointer = string.Empty;
+        foreach (var segment in DecodePointer(pointer))
+        {
+            node = ResolveLocalReference(root, node);
+            if (node["properties"] is JsonObject properties
+                && properties[segment] is JsonObject propertyNode)
+            {
+                coveredPointer += "/" + EncodePointerSegment(segment);
+                node = propertyNode;
+                continue;
+            }
+
+            node = ResolveLocalReference(root, node);
+            if (segment.All(static ch => ch is >= '0' and <= '9') && node["items"] is JsonObject)
+            {
+                return coveredPointer;
+            }
+
+            return null;
+        }
+
+        return coveredPointer;
+    }
+
+    private static string? ResolveAnnotationPath(
+        IReadOnlyDictionary<string, EditorAnnotation> annotations,
+        string pointer)
+    {
+        var current = pointer;
+        while (current.Length > 0)
+        {
+            if (annotations.ContainsKey(current))
+            {
+                return current;
+            }
+
+            var slash = current.LastIndexOf('/');
+            if (slash <= 0)
+            {
+                break;
+            }
+
+            current = current[..slash];
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> DecodePointer(string pointer)
+        => pointer.TrimStart('/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(static segment => segment.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal));
+
+    private static string EncodePointerSegment(string segment)
+        => segment.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+
+    private static JsonObject ResolveLocalReference(JsonObject root, JsonObject node)
+    {
+        if (node["$ref"]?.GetValue<string>() is not { } reference
+            || !reference.StartsWith("#/definitions/", StringComparison.Ordinal)
+            || root["definitions"] is not JsonObject definitions)
+        {
+            return node;
+        }
+
+        var definitionName = reference["#/definitions/".Length..].Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
+        return definitions[definitionName] is JsonObject definition ? definition : node;
     }
 
     private static MaterialSource ReadMaterial(TempWorkspace workspace, string relativePath)
