@@ -33,6 +33,7 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
@@ -235,6 +236,22 @@ MainModule::MainModule(const examples::DemoAppContext& app)
       = app.startup_sky_light_real_time_capture_enabled;
     startup_sky_light_tint_
       = glm::max(app.startup_sky_light_tint, glm::vec3 { 0.0F });
+    startup_sky_light_lifecycle_proof_enabled_
+      = app.startup_sky_light_lifecycle_proof_enabled;
+    startup_sky_light_lifecycle_disable_frame_
+      = app.startup_sky_light_lifecycle_disable_frame;
+    startup_sky_light_lifecycle_enable_frame_
+      = app.startup_sky_light_lifecycle_enable_frame;
+    if (startup_sky_light_lifecycle_proof_enabled_
+      && startup_sky_light_lifecycle_enable_frame_
+        <= startup_sky_light_lifecycle_disable_frame_) {
+      startup_sky_light_lifecycle_proof_enabled_ = false;
+      LOG_F(WARNING,
+        "RenderScene: disabled static SkyLight lifecycle proof because "
+        "enable_frame ({}) must be greater than disable_frame ({})",
+        startup_sky_light_lifecycle_enable_frame_,
+        startup_sky_light_lifecycle_disable_frame_);
+    }
   }
 }
 
@@ -449,6 +466,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 
   const auto scene_ptr = shell.TryGetScene();
+  if (scene_ptr != nullptr) {
+    ApplySkyLightLifecycleProofToggle(
+      *scene_ptr, frame_context.GetFrameSequenceNumber().get());
+  }
   frame_context.SetScene(observer_ptr { scene_ptr.get() });
 }
 
@@ -1177,6 +1198,48 @@ auto MainModule::ApplyStartupSkyboxToScene(
       }
     });
   scene->Update(false);
+}
+
+auto MainModule::ApplySkyLightLifecycleProofToggle(
+  scene::Scene& scene, const std::uint64_t frame_index) -> void
+{
+  if (!startup_sky_light_lifecycle_proof_enabled_) {
+    return;
+  }
+
+  const auto toggle_sky_light
+    = [&](const bool enabled, const char* action) -> void {
+    auto env = scene.GetEnvironment();
+    auto sky_light = env != nullptr
+      ? env->TryGetSystem<scene::environment::SkyLight>()
+      : observer_ptr<scene::environment::SkyLight> {};
+    if (sky_light == nullptr) {
+      LOG_F(WARNING,
+        "RenderScene: Static SkyLight lifecycle proof could not {} SkyLight "
+        "at frame {} because the active scene has no SkyLight",
+        action, frame_index);
+      return;
+    }
+
+    sky_light->SetEnabled(enabled);
+    scene.Update(false);
+    LOG_F(INFO,
+      "RenderScene: Static SkyLight lifecycle proof {} SkyLight at frame {}",
+      action, frame_index);
+  };
+
+  if (!startup_sky_light_lifecycle_disable_applied_
+    && frame_index >= startup_sky_light_lifecycle_disable_frame_) {
+    startup_sky_light_lifecycle_disable_applied_ = true;
+    toggle_sky_light(false, "disabled");
+  }
+
+  if (startup_sky_light_lifecycle_disable_applied_
+    && !startup_sky_light_lifecycle_enable_applied_
+    && frame_index >= startup_sky_light_lifecycle_enable_frame_) {
+    startup_sky_light_lifecycle_enable_applied_ = true;
+    toggle_sky_light(true, "re-enabled");
+  }
 }
 
 auto MainModule::ClearBackbufferReferences() -> void { }

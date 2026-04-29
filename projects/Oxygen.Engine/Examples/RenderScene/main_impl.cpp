@@ -378,6 +378,19 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             .value_or(false);
       app.startup_sky_light_tint
         = read_vec3("env.sky_light.tint", glm::vec3 { 1.0F });
+      app.startup_sky_light_lifecycle_proof_enabled
+        = settings->GetBool("env.sky_light.lifecycle_proof.enabled")
+            .value_or(false);
+      app.startup_sky_light_lifecycle_disable_frame
+        = static_cast<std::uint32_t>(std::max(
+          settings->GetFloat("env.sky_light.lifecycle_proof.disable_frame")
+            .value_or(0.0F),
+          0.0F));
+      app.startup_sky_light_lifecycle_enable_frame
+        = static_cast<std::uint32_t>(std::max(
+          settings->GetFloat("env.sky_light.lifecycle_proof.enable_frame")
+            .value_or(0.0F),
+          0.0F));
     }
     app.startup_skybox_path = startup_skybox_path;
     if (!app.startup_skybox_path.empty()) {

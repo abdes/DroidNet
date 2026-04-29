@@ -277,9 +277,39 @@ Validation evidence:
 
 Remaining gaps:
 
-- Combined direct-plus-IBL/directional sun interaction proof remains open for
-  the M08 closeout gate.
-- Allocation-churn proof for static SkyLight product off/on lifecycle remains
-  open.
 - User visual confirmation and residual-gap recording remain open for full
   VTX-M08 closure.
+
+### Slice E: Interaction And Lifecycle Proof
+
+Status: `validated`
+
+Implementation evidence:
+
+- Extended `tools/vortex/Verify-VortexStaticSkyLightProof.ps1` and
+  `AnalyzeRenderDocVortexStaticSkyLight.py` with a `direct-plus-ibl` proof mode.
+  The default remains IBL-only; the new mode requires one directional draw, one
+  static SkyLight draw, no local-light scopes, no visual sky scope, and sampled
+  pixel histories touched by both the directional and static SkyLight draws.
+- Added a RenderScene-only static SkyLight lifecycle proof toggle sourced from
+  local demo settings. The toggle mutates the scene-authored `SkyLight` at
+  frame boundaries without adding renderer runtime test hooks.
+- Added `tools/vortex/Assert-VortexStaticSkyLightLifecycle.ps1` to prove
+  disabled -> regenerating -> valid-current-key state recovery and post-toggle
+  steady-frame churn.
+
+Validation evidence:
+
+- Direct-plus-IBL RenderDoc capture
+  `out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps_capture.rdc`
+  was produced with `RenderScene --frames 60 --fps 10 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps --capture-from-frame 45 --capture-frame-count 1`.
+- `tools\vortex\Verify-VortexStaticSkyLightProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps_capture.rdc -ProofMode direct-plus-ibl -AnalysisTimeoutSeconds 240` passed. The report proves one static SkyLight draw, one directional draw, zero point/spot/Stage15 sky scopes, valid processed cubemap and diffuse SH bindings, invalid prefilter slot, `scene_color_max_luminance=6292.476`, 31 non-black scanned pixels, 16/16 static SkyLight histories passed, 16/16 directional histories passed, `direct_plus_ibl_both_history_count=16`, and `static_skylight_pixel_history_verdict=true`.
+- Lifecycle runtime proof `RenderScene --frames 115 --fps 10 --capture-provider off` passed with local proof settings toggling SkyLight off at frame 30 and back on at frame 45.
+- `tools\vortex\Assert-VortexStaticSkyLightLifecycle.ps1 -RuntimeLogPath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.log -ToggleOffFrame 30 -ToggleOnFrame 45 -WarmupFramesAfterOn 10 -MinimumStableFrames 60 -ReportPath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.lifecycle.txt` passed. The report proves `disabled_status_after_off_count=15`, `regenerating_after_on_count=1`, `valid_current_key_after_on_count=70`, `unexpected_unavailable_reason_after_on_count=0`, `stable_churn_frame_count=61`, and `stable_churn_nonzero_delta_count=0`.
+- CDB/debug-layer audit of the lifecycle path
+  `cdb -logo out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.cdb.log -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --frames 115 --fps 10 --capture-provider off` exited 0 and the D3D12/DXGI/device-removal scan found 0 blocking hits; the known live `IDXGIFactory` shutdown warning remains non-blocking for this gate.
+
+Remaining gaps:
+
+- User visual confirmation remains open for full VTX-M08 closure.
+- Residual-gap recording and final closeout status update remain open.

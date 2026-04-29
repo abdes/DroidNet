@@ -1,6 +1,7 @@
 """RenderDoc UI analyzer for VTX-M08 deferred static SkyLight diffuse captures."""
 
 import builtins
+import os
 import struct
 import sys
 from pathlib import Path
@@ -63,6 +64,9 @@ from renderdoc_ui_analysis import (  # noqa: E402
 
 
 REPORT_SUFFIX = "_vortex_static_skylight_report.txt"
+PROOF_MODE = os.environ.get(
+    "VORTEX_STATIC_SKYLIGHT_PROOF_MODE", "ibl-only"
+).strip().lower()
 
 ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
 INVALID_BINDLESS_INDEX = 0xFFFFFFFF
@@ -164,7 +168,9 @@ def append_output_samples(controller, report, rd, output_descriptor):
     )
 
 
-def append_pixel_history_samples(controller, report, rd, event_id, output_descriptor):
+def append_pixel_history_samples(
+    controller, report, rd, static_event_id, output_descriptor, directional_event_ids
+):
     resource = safe_getattr(output_descriptor, "resource")
     width, height = output_texture_size(controller, resource)
     if width <= 0 or height <= 0:
@@ -196,15 +202,21 @@ def append_pixel_history_samples(controller, report, rd, event_id, output_descri
 
     history_count = 0
     passed_count = 0
+    directional_history_count = 0
+    directional_passed_count = 0
+    both_history_count = 0
     for x, y, pixel_rgba, pixel_luma in nonblack_candidates[:max_history_samples]:
         history = controller.PixelHistory(
             resource, x, y, sub, rd.CompType.Typeless
         )
         static_mod = None
+        directional_mod = None
         for mod in history:
-            if int(safe_getattr(mod, "eventId", -1) or -1) == event_id:
+            event_id = int(safe_getattr(mod, "eventId", -1) or -1)
+            if event_id == static_event_id:
                 static_mod = mod
-                break
+            elif event_id in directional_event_ids:
+                directional_mod = mod
         if static_mod is None:
             report.append(
                 "static_skylight_sample_{:04d}_{:04d}=history:false;"
@@ -218,10 +230,28 @@ def append_pixel_history_samples(controller, report, rd, event_id, output_descri
         passed = bool(static_mod.Passed()) if hasattr(static_mod, "Passed") else False
         if passed:
             passed_count += 1
+        directional_passed = False
+        if directional_mod is not None:
+            directional_history_count += 1
+            directional_passed = (
+                bool(directional_mod.Passed())
+                if hasattr(directional_mod, "Passed")
+                else False
+            )
+            if directional_passed:
+                directional_passed_count += 1
+            both_history_count += 1
         report.append(
             "static_skylight_sample_{:04d}_{:04d}=history:true;"
-            "passed:{};after={};after_luma:{:.9g}".format(
-                x, y, str(passed).lower(), pixel_rgba, pixel_luma
+            "passed:{};directional_history:{};directional_passed:{};"
+            "after={};after_luma:{:.9g}".format(
+                x,
+                y,
+                str(passed).lower(),
+                str(directional_mod is not None).lower(),
+                str(directional_passed).lower(),
+                pixel_rgba,
+                pixel_luma,
             )
         )
 
@@ -229,9 +259,19 @@ def append_pixel_history_samples(controller, report, rd, event_id, output_descri
     report.append(f"static_skylight_history_sample_limit={max_history_samples}")
     report.append(f"static_skylight_history_count={history_count}")
     report.append(f"static_skylight_passed_count={passed_count}")
+    report.append(f"directional_history_count={directional_history_count}")
+    report.append(f"directional_passed_count={directional_passed_count}")
+    report.append(f"direct_plus_ibl_both_history_count={both_history_count}")
     nonblack_after_count = len(nonblack_candidates)
     report.append(f"static_skylight_nonblack_after_count={nonblack_after_count}")
     verdict = history_count > 0 and passed_count > 0 and nonblack_after_count > 0
+    if directional_event_ids:
+        verdict = (
+            verdict
+            and directional_history_count > 0
+            and directional_passed_count > 0
+            and both_history_count > 0
+        )
     report.append(f"static_skylight_pixel_history_verdict={str(verdict).lower()}")
     report.append(
         "static_skylight_pixel_history_error={}".format(
@@ -256,23 +296,34 @@ def build_report(controller, report, loaded_capture_path, report_path):
 
     static_scopes = records_with_name(action_records, static_scope_name)
     static_draws = draw_records_under(action_records, static_scope_name)
+    directional_scopes = records_with_name(action_records, directional_scope_name)
+    directional_draws = draw_records_under(action_records, directional_scope_name)
+    point_scopes = records_with_name(action_records, point_scope_name)
+    spot_scopes = records_with_name(action_records, spot_scope_name)
+    sky_scopes = records_with_name(action_records, sky_scope_name)
+    report.append(f"static_skylight_proof_mode={PROOF_MODE}")
     report.append(f"stage12_static_skylight_scope_count={len(static_scopes)}")
     report.append(f"stage12_static_skylight_draw_count={len(static_draws)}")
-    report.append(
-        f"stage12_directional_scope_count={len(records_with_name(action_records, directional_scope_name))}"
-    )
-    report.append(f"stage12_point_scope_count={len(records_with_name(action_records, point_scope_name))}")
-    report.append(f"stage12_spot_scope_count={len(records_with_name(action_records, spot_scope_name))}")
-    report.append(f"stage15_sky_scope_count={len(records_with_name(action_records, sky_scope_name))}")
+    report.append(f"stage12_directional_scope_count={len(directional_scopes)}")
+    report.append(f"stage12_directional_draw_count={len(directional_draws)}")
+    report.append(f"stage12_point_scope_count={len(point_scopes)}")
+    report.append(f"stage12_spot_scope_count={len(spot_scopes)}")
+    report.append(f"stage15_sky_scope_count={len(sky_scopes)}")
 
     if len(static_scopes) != 1 or len(static_draws) != 1:
         raise RuntimeError("Expected exactly one static SkyLight Stage 12 draw")
-    if records_with_name(action_records, directional_scope_name):
+    if PROOF_MODE not in ("ibl-only", "direct-plus-ibl"):
+        raise RuntimeError(f"Unsupported static SkyLight proof mode: {PROOF_MODE}")
+    if PROOF_MODE == "ibl-only" and directional_scopes:
         raise RuntimeError("IBL-only proof unexpectedly executed directional lighting")
-    if records_with_name(action_records, point_scope_name) or records_with_name(action_records, spot_scope_name):
-        raise RuntimeError("IBL-only proof unexpectedly executed local lighting")
-    if records_with_name(action_records, sky_scope_name):
-        raise RuntimeError("IBL-only proof unexpectedly executed visual sky background")
+    if PROOF_MODE == "direct-plus-ibl" and (
+        not directional_scopes or not directional_draws
+    ):
+        raise RuntimeError("Direct-plus-IBL proof did not execute directional lighting")
+    if point_scopes or spot_scopes:
+        raise RuntimeError("Static SkyLight proof unexpectedly executed local lighting")
+    if sky_scopes:
+        raise RuntimeError("Static SkyLight proof unexpectedly executed visual sky background")
 
     static_draw = static_draws[0]
     controller.SetFrameEvent(static_draw.event_id, True)
@@ -346,7 +397,14 @@ def build_report(controller, report, loaded_capture_path, report_path):
         f"static_skylight_output_resource={resources.get(str(output_resource), str(output_resource))}"
     )
     append_output_samples(controller, report, rd, outputs[0])
-    append_pixel_history_samples(controller, report, rd, static_draw.event_id, outputs[0])
+    append_pixel_history_samples(
+        controller,
+        report,
+        rd,
+        static_draw.event_id,
+        outputs[0],
+        {draw.event_id for draw in directional_draws},
+    )
 
 
 def main():

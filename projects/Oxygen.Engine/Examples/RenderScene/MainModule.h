@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -114,6 +115,8 @@ private:
   auto ApplyStartupSkyboxToScene(
     oxygen::observer_ptr<oxygen::scene::Scene> scene,
     std::string_view scene_label) -> void;
+  auto ApplySkyLightLifecycleProofToggle(oxygen::scene::Scene& scene,
+    std::uint64_t frame_index) -> void;
 
   struct SceneLoadRequest {
     data::AssetKey key {};
@@ -171,6 +174,11 @@ private:
   float startup_sky_light_specular_ { 1.0F };
   bool startup_sky_light_real_time_capture_enabled_ { false };
   glm::vec3 startup_sky_light_tint_ { 1.0F, 1.0F, 1.0F };
+  bool startup_sky_light_lifecycle_proof_enabled_ { false };
+  std::uint32_t startup_sky_light_lifecycle_disable_frame_ { 0U };
+  std::uint32_t startup_sky_light_lifecycle_enable_frame_ { 0U };
+  bool startup_sky_light_lifecycle_disable_applied_ { false };
+  bool startup_sky_light_lifecycle_enable_applied_ { false };
   std::unique_ptr<SkyboxService> startup_skybox_service_;
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };

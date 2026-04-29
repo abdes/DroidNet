@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -71,6 +72,9 @@ public:
   float startup_sky_light_specular { 1.0F };
   bool startup_sky_light_real_time_capture_enabled { false };
   glm::vec3 startup_sky_light_tint { 1.0F, 1.0F, 1.0F };
+  bool startup_sky_light_lifecycle_proof_enabled { false };
+  std::uint32_t startup_sky_light_lifecycle_disable_frame { 0U };
+  std::uint32_t startup_sky_light_lifecycle_enable_frame { 0U };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
