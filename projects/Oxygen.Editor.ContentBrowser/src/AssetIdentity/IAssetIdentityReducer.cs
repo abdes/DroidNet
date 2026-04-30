@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;

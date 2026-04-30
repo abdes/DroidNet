@@ -5,7 +5,7 @@
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Services;

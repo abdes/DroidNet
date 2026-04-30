@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.CompilerServices;
-using Oxygen.Storage;
-using Oxygen.Storage.Native;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 

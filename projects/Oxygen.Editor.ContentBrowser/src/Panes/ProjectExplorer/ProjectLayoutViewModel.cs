@@ -15,13 +15,13 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Oxygen.Assets.Filesystem;
+using Oxygen.Managed.Assets.Filesystem;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Storage;
+using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

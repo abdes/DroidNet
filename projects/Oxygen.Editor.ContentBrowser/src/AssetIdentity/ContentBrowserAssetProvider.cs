@@ -4,7 +4,7 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using Oxygen.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.Projects;
 

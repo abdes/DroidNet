@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
-using Oxygen.Core;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 

@@ -181,7 +181,7 @@ Tasks:
 - Confirm test targets:
   - `Oxygen.Editor.ContentBrowser.Tests`;
   - `Oxygen.Editor.Projects.Tests` for content-root/cook-scope policy only;
-  - `Oxygen.Core.Tests` for diagnostic vocabulary constants.
+  - `Oxygen.Managed.Core.Tests` for diagnostic vocabulary constants.
 - Do not start source changes until this plan has been reviewed.
 
 Exit:
@@ -248,7 +248,7 @@ Tasks:
   asset-identity namespace established in `ED-M06.2`.
 - Implement `IAssetIdentityReducer`.
 - Reducer input must accept primitive catalog facts without mutating
-  `Oxygen.Assets.AssetRecord`.
+  `Oxygen.Managed.Assets.AssetRecord`.
 - Define merge precedence:
   - `Broken > Missing > Stale > Cooked > Descriptor > Source > Generated`.
 - For merged descriptor+cooked rows:
@@ -281,7 +281,7 @@ Goal: make error states visible without doing expensive UI-thread reads.
 Tasks:
 
 - Add a descriptor-validation component in Content Browser, not
-  `Oxygen.Assets`.
+  `Oxygen.Managed.Assets`.
 - For V0.1 material descriptors:
   - validate through `MaterialSourceReader`;
   - run validation off the UI thread;
@@ -471,8 +471,8 @@ Likely source touch points:
 - `projects/Oxygen.Editor.Projects/src/IProjectCookScopeProvider.cs`
 - `projects/Oxygen.Editor.Projects/src/ProjectCookScope.cs`
 - `projects/Oxygen.Editor.Projects/src/ProjectCookScopeProvider.cs`
-- `projects/Oxygen.Core/src/Diagnostics/DiagnosticCodes.cs`
-- `projects/Oxygen.Core/src/Diagnostics/MaterialDiagnosticCodes.cs`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/DiagnosticCodes.cs`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/MaterialDiagnosticCodes.cs`
 
 Likely test touch points:
 
@@ -486,10 +486,10 @@ Likely test touch points:
 - `projects/Oxygen.Editor.WorldEditor/tests/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
   only if the Geometry inspector consumer migration needs a focused test.
 - `projects/Oxygen.Editor.Projects/tests/Oxygen.Editor.Projects.Tests.csproj`
-- `projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj`
+- `projects/Oxygen.Managed.Core/tests/Oxygen.Managed.Core.Tests.csproj`
 
-`Oxygen.Assets` may be read for primitive catalog contracts. ED-M06 must not
-add browser UI state to `Oxygen.Assets`.
+`Oxygen.Managed.Assets` may be read for primitive catalog contracts. ED-M06 must not
+add browser UI state to `Oxygen.Managed.Assets`.
 
 ## 8. Dependency And Migration Risks
 

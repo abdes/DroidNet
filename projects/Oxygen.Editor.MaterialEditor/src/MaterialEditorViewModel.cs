@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
 using Windows.ApplicationModel.DataTransfer;

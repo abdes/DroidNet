@@ -4,8 +4,8 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Oxygen.Assets.Model;
-using Oxygen.Core;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;

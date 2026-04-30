@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Oxygen.Assets.Import;
-using Oxygen.Assets.Persistence.LooseCooked.V1;
-using Oxygen.Core;
+using Oxygen.Managed.Assets.Import;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline;

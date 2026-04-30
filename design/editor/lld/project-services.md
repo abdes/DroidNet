@@ -32,7 +32,7 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 - `DESIGN.md` sections 3, 4.1, 4.5, 5.4.
 - `PROJECT-LAYOUT.md` ownership for `Oxygen.Editor.Projects`,
   `Oxygen.Editor.ProjectBrowser`, `Oxygen.Editor.ContentPipeline`,
-  `Oxygen.Editor.Data`, `Oxygen.Editor.World`, and `Oxygen.Assets`.
+  `Oxygen.Editor.Data`, `Oxygen.Editor.World`, and `Oxygen.Managed.Assets`.
 - `project-workspace-shell.md` for activation workflow.
 - `content-pipeline.md` for import/cook execution.
 - `diagnostics-operation-results.md` for result and diagnostic contracts.

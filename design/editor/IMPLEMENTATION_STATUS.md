@@ -165,7 +165,7 @@ product behavior.
 - [x] `ED-M01.7` dependency cleanup and targeted tests are landed:
       Project Browser has no direct WorldEditor/runtime/project-manager
       activation dependency, Content Browser uses project context for project
-      metadata, and targeted `Oxygen.Core` / `Oxygen.Editor.Projects` tests
+      metadata, and targeted `Oxygen.Managed.Core` / `Oxygen.Editor.Projects` tests
       pass.
 - [x] Editor starts at Project Browser.
 - [x] Recent project, create project, open project, and invalid project states
@@ -613,7 +613,7 @@ checklist or detailed plan tracker instead.
 | `ED-M00` | `validated` | 2026-04-26 | Design package approved: README, RULES, PROJECT-LAYOUT, PRD, ARCHITECTURE, DESIGN, PLAN, LLD index/scaffolds, plan index, and status ledger are accepted as the V0.1 planning baseline. |
 | `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
 | `ED-M02` | `pending` | - | Not validated; pending scope is the supported single live viewport only. Multi-viewport stability remains deferred. |
-| `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
+| `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Managed.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
 | `ED-M04` | `landed` | 2026-04-28 | Reopened after ED-M07 because accepted `property-inspector.md` and `environment-authoring.md` gates were overclaimed. All non-deferred gates from those LLDs must be implemented and validated before ED-M08 runtime parity; the only deferred feature is multi-viewport. Earlier manual validation remains partial evidence for Transform, Geometry asset switching, material slot persistence UI, camera/light/default inspector behavior, Geometry deletion, and save/reopen behavior. |
 | `ED-M05` | `validated` | 2026-04-28 | User manually validated scalar material authoring against the corrected ED-M06A project layout: material creation under `Content/Materials`, editor scalar/color editing with shared controls, save/reopen behavior, material picker refresh/filtering, geometry assignment by asset identity, asset URI/GUID identity display and copy affordances, and minimum cook/catalog behavior. |
 | `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |

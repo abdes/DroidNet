@@ -7,9 +7,9 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Oxygen.Assets.Catalog;
-using Oxygen.Assets.Persistence.LooseCooked.V1;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
@@ -258,7 +258,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         var projectLocation = activeProject.ProjectRoot;
 
-        // Source of Truth: Oxygen.Assets.AssetPipelineConstants
+        // Source of Truth: Oxygen.Managed.Assets.AssetPipelineConstants
         const string cookedFolderName = ".cooked";
         const string indexFileName = "container.index.bin";
 

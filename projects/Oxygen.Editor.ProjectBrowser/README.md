@@ -331,7 +331,7 @@ Contributions to the Oxygen.Editor.ProjectBrowser are welcome! When contributing
 ## Related Projects
 
 - [Oxygen.Editor](../Oxygen.Editor/) - Main editor application
-- [Oxygen.Core](../Oxygen.Core/) - Core editor services
+- [Oxygen.Managed.Core](../Oxygen.Managed.Core/) - Core editor services
 - [Oxygen.Editor.ProjectBrowser](../Oxygen.Editor.ProjectBrowser/) - Project browsing interface (this module)
 - [Mvvm.Generators](../Mvvm.Generators/) - Source generators for MVVM wiring
 

@@ -49,10 +49,10 @@ The WorldEditor integrates with multiple framework modules:
 - **Converters** – Data conversion helpers
 - **Resources** – Resource management system
 - **TimeMachine** – Undo/redo functionality
-- **Oxygen.Core** – Core editor services
+- **Oxygen.Managed.Core** – Core editor services
 - **Oxygen.Editor.Data** – Data management and persistence
 - **Oxygen.Editor.Projects** – Project file handling
-- **Oxygen.Storage** – Storage abstraction layer
+- **DroidNet.Storage** – Storage abstraction layer
 
 ## Project Architecture
 

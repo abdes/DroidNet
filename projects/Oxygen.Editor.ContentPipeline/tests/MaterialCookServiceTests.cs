@@ -5,10 +5,10 @@
 using System.Buffers.Binary;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Assets.Import;
-using Oxygen.Assets.Import.Materials;
-using Oxygen.Assets.Model;
-using Oxygen.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Import;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 

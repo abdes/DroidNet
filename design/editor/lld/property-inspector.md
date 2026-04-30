@@ -162,7 +162,7 @@ Disclosure tiers per section:
 | `Oxygen.Editor.WorldEditor` Services | `ISceneEngineSync` adapter calls, runtime readiness checks. |
 | `Oxygen.Editor.World` | Component data shape, defaults, `Hydrate/Dehydrate` round trip via `SceneJsonContext`. |
 | `Oxygen.Editor.UI` | Reusable controls (vector edit, asset field) when extracted. |
-| `Oxygen.Assets` | `AssetReference<T>`, `IAssetCatalog`, `AssetRecord` consumed by asset fields. |
+| `Oxygen.Managed.Assets` | `AssetReference<T>`, `IAssetCatalog`, `AssetRecord` consumed by asset fields. |
 
 ## 7. Data Contracts
 
@@ -342,7 +342,7 @@ to a generated default.
 slot does not embed material data. ED-M04 introduces no new editor-side schema:
 the authored material identity is the persisted contract. Material descriptor
 schema (`oxygen.material.v1`) remains the authoring source of truth and is
-owned by ED-M05 / `Oxygen.Assets`. Decision: **no editor schema; reuse engine
+owned by ED-M05 / `Oxygen.Managed.Assets`. Decision: **no editor schema; reuse engine
 descriptor**.
 
 ### 7.7 Metadata Visibility Rule
@@ -598,8 +598,8 @@ Allowed:
 
 - `Inspector.*` → `Documents.Commands.ISceneDocumentCommandService`,
   `Documents.Selection.ISceneSelectionService`, `Oxygen.Editor.World`,
-  `Oxygen.Editor.UI`, `Oxygen.Assets` (catalog/identity only),
-  `Oxygen.Core.Diagnostics`.
+  `Oxygen.Editor.UI`, `Oxygen.Managed.Assets` (catalog/identity only),
+  `Oxygen.Managed.Core.Diagnostics`.
 - `Documents.Commands.*` → `ISceneEngineSync`.
 
 Forbidden:

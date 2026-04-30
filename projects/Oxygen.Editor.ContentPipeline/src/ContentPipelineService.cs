@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Assets.Import.Materials;
-using Oxygen.Core;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
