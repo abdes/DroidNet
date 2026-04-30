@@ -72,6 +72,7 @@ public interface ISceneEngineSync
     /// <param name="nodeId">Node id to reparent.</param>
     /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make a root node.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
+    /// <returns>A task that completes when the node is reparented.</returns>
     public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     /// <summary>
@@ -80,6 +81,7 @@ public interface ISceneEngineSync
     /// <param name="nodeIds">Hierarchy roots to move.</param>
     /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make roots.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
+    /// <returns>A task that completes when the hierarchies are reparented.</returns>
     public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     // ============================================================================
@@ -89,6 +91,10 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Updates the transform of an existing scene node in the engine and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose transform should be synchronized.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> UpdateNodeTransformAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -114,6 +120,13 @@ public interface ISceneEngineSync
         IReadOnlyList<EnginePropertyValueEntry> entries,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Gets the number of buffered property sync requests waiting for the next full scene sync.
+    /// </summary>
+    /// <param name="sceneId">The scene id.</param>
+    /// <returns>The pending property sync request count.</returns>
+    public int GetPendingPropertySyncCount(Guid sceneId);
+
     // ============================================================================
     // Geometry Operations - Coarse-Grained
     // ============================================================================
@@ -121,11 +134,19 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Attaches or replaces the geometry component on a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose geometry should be synchronized.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> AttachGeometryAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Detaches all geometry from a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="nodeId">The node id whose geometry should be detached.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> DetachGeometryAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -154,11 +175,19 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Attaches or replaces the light component on a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose light should be synchronized.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> AttachLightAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Detaches the light component from a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="nodeId">The node id whose light should be detached.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> DetachLightAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -183,11 +212,19 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Attaches or replaces the camera component on a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose camera should be synchronized.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> AttachCameraAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Detaches the camera component from a scene node and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="nodeId">The node id whose camera should be detached.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> DetachCameraAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -212,6 +249,12 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Updates a material slot for a geometry component and returns a classified sync outcome.
     /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose material slot should be synchronized.</param>
+    /// <param name="slotIndex">The material slot index.</param>
+    /// <param name="materialUri">The authored material URI, or <see langword="null"/> to clear the slot.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> UpdateMaterialSlotAsync(
         Scene scene,
         SceneNode node,
@@ -309,6 +352,10 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Updates live environment settings and returns per-field sync support.
     /// </summary>
+    /// <param name="scene">The scene whose environment should be synchronized.</param>
+    /// <param name="environment">The authored environment data.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>The environment sync result.</returns>
     public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,
         SceneEnvironmentData environment,
@@ -317,11 +364,21 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Returns true when an open edit session should issue a throttled preview sync for a node.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
+    /// <param name="observedAt">The timestamp for the observed edit value.</param>
+    /// <returns><see langword="true"/> when preview sync should run.</returns>
     public bool ShouldIssuePreviewSync(Guid sceneId, Guid nodeId, DateTimeOffset observedAt);
 
     /// <summary>
     ///     Runs a preview sync for the latest in-flight edit value only when the preview throttle allows it.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
+    /// <param name="observedAt">The timestamp for the observed edit value.</param>
+    /// <param name="sync">The live-sync callback.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>The preview sync outcome, or <see langword="null"/> when throttled.</returns>
     public Task<SyncOutcome?> TryPreviewSyncAsync(
         Guid sceneId,
         Guid nodeId,
@@ -332,11 +389,19 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Completes an edit session's terminal sync and clears preview throttle state for a node.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
+    /// <returns><see langword="true"/> after clearing the preview state.</returns>
     public bool CompleteTerminalSync(Guid sceneId, Guid nodeId);
 
     /// <summary>
     ///     Clears preview throttle state and runs the edit session's one terminal sync.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
+    /// <param name="sync">The terminal live-sync callback.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>The terminal live-sync outcome.</returns>
     public Task<SyncOutcome> CompleteTerminalSyncAsync(
         Guid sceneId,
         Guid nodeId,
@@ -346,11 +411,18 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Cancels an edit session's preview sync state for a node.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
     public void CancelPreviewSync(Guid sceneId, Guid nodeId);
 
     /// <summary>
     ///     Clears preview throttle state and runs the edit session's revert sync.
     /// </summary>
+    /// <param name="sceneId">The edited scene id.</param>
+    /// <param name="nodeId">The edited node id.</param>
+    /// <param name="revertSync">The revert live-sync callback.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>The revert live-sync outcome.</returns>
     public Task<SyncOutcome> CancelPreviewSyncAsync(
         Guid sceneId,
         Guid nodeId,

@@ -30,7 +30,7 @@ public interface IMaterialPropertyEditService
     /// <param name="edit">The property edit map.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The edit result.</returns>
-    Task<MaterialEditResult> EditPropertiesAsync(
+    public Task<MaterialEditResult> EditPropertiesAsync(
         Guid documentId,
         PropertyEdit edit,
         CancellationToken cancellationToken = default);
