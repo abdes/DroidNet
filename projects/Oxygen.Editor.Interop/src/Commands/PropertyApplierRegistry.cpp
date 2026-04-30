@@ -9,6 +9,8 @@
 #include <memory>
 #include <mutex>
 
+#include <Commands/DirectionalLightPropertyApplier.h>
+#include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/TransformPropertyApplier.h>
 
@@ -26,7 +28,8 @@ namespace oxygen::interop::module {
     std::call_once(flag, [] {
       auto& reg = Instance();
       reg.Register(std::make_unique<TransformPropertyApplier>());
-      // Future: reg.Register(std::make_unique<MaterialPropertyApplier>());
+      reg.Register(std::make_unique<PerspectiveCameraPropertyApplier>());
+      reg.Register(std::make_unique<DirectionalLightPropertyApplier>());
     });
   }
 

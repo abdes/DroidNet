@@ -12,13 +12,27 @@
 
 #include <Commands/SetEnvironmentCommand.h>
 
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
+
+template <typename T>
+auto EnsureSystem(oxygen::scene::SceneEnvironment& environment) -> T*
+{
+  auto system = environment.TryGetSystem<T>();
+  if (!system) {
+    system = oxygen::observer_ptr { &environment.AddSystem<T>() };
+  }
+
+  return system.get();
+}
 
 auto MapExposureMode(const int value) noexcept -> oxygen::engine::ExposureMode
 {
@@ -64,6 +78,140 @@ auto EnsureEnvironment(oxygen::scene::Scene& scene)
   return scene.GetEnvironment().get();
 }
 
+auto EnsureSkyAtmosphereWhenEnabled(
+  oxygen::scene::SceneEnvironment& environment, const bool enabled)
+  -> oxygen::scene::environment::SkyAtmosphere*
+{
+  auto atmosphere
+    = environment.TryGetSystem<oxygen::scene::environment::SkyAtmosphere>();
+  if (enabled && !atmosphere) {
+    atmosphere = oxygen::observer_ptr {
+      &environment.AddSystem<oxygen::scene::environment::SkyAtmosphere>()
+    };
+  }
+
+  return atmosphere.get();
+}
+
+auto ApplySkyAtmosphere(
+  oxygen::scene::environment::SkyAtmosphere& atmosphere,
+  const oxygen::interop::module::SkyAtmosphereParams& params) -> void
+{
+  namespace atmos = oxygen::engine::atmos;
+  namespace env = oxygen::scene::environment;
+
+  atmosphere.SetEnabled(params.enabled);
+  if (!params.enabled) {
+    return;
+  }
+
+  atmosphere.SetTransformMode(
+    env::SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+  atmosphere.SetRenderInMainPass(true);
+  atmosphere.SetPlanetRadiusMeters(params.planet_radius_m);
+  atmosphere.SetAtmosphereHeightMeters(params.atmosphere_height_m);
+  atmosphere.SetGroundAlbedoRgb(params.ground_albedo_rgb);
+  atmosphere.SetRayleighScatteringRgb(atmos::kDefaultRayleighScatteringRgb);
+  atmosphere.SetRayleighScaleHeightMeters(params.rayleigh_scale_height_m);
+  atmosphere.SetMieScatteringRgb(atmos::kDefaultMieScatteringRgb);
+  atmosphere.SetMieAbsorptionRgb(atmos::kDefaultMieAbsorptionRgb);
+  atmosphere.SetMieScaleHeightMeters(params.mie_scale_height_m);
+  atmosphere.SetMieAnisotropy(params.mie_anisotropy);
+  atmosphere.SetOzoneAbsorptionRgb(atmos::kDefaultOzoneAbsorptionRgb);
+  atmosphere.SetOzoneDensityProfile(atmos::kDefaultOzoneDensityProfile);
+  atmosphere.SetMultiScatteringFactor(1.0F);
+  atmosphere.SetSkyLuminanceFactorRgb(params.sky_luminance_factor_rgb);
+  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+    params.sky_luminance_factor_rgb);
+  atmosphere.SetSunDiskEnabled(params.sun_disk_enabled);
+  atmosphere.SetAerialPerspectiveDistanceScale(
+    params.aerial_perspective_distance_scale);
+  atmosphere.SetAerialScatteringStrength(params.aerial_scattering_strength);
+  atmosphere.SetAerialPerspectiveStartDepthMeters(
+    params.aerial_perspective_start_depth_m);
+  atmosphere.SetHeightFogContribution(params.height_fog_contribution);
+  atmosphere.SetTraceSampleCountScale(1.0F);
+  atmosphere.SetTransmittanceMinLightElevationDeg(-90.0F);
+  atmosphere.SetHoldout(false);
+}
+
+auto ApplySkyLight(oxygen::scene::SceneEnvironment& environment) -> void
+{
+  namespace env = oxygen::scene::environment;
+
+  auto* const sky_light = EnsureSystem<env::SkyLight>(environment);
+  if (sky_light == nullptr) {
+    return;
+  }
+
+  sky_light->SetEnabled(true);
+  sky_light->SetSource(env::SkyLightSource::kCapturedScene);
+  sky_light->SetIntensityMul(1.0F);
+  sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
+  sky_light->SetDiffuseIntensity(1.0F);
+  sky_light->SetSpecularIntensity(1.0F);
+  sky_light->SetRealTimeCaptureEnabled(true);
+  sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
+  sky_light->SetVolumetricScatteringIntensity(1.0F);
+  sky_light->SetAffectReflections(true);
+}
+
+auto ApplyPostProcess(oxygen::scene::SceneEnvironment& environment,
+  const oxygen::interop::module::PostProcessParams& params) -> void
+{
+  namespace env = oxygen::scene::environment;
+
+  auto* const post_process = EnsureSystem<env::PostProcessVolume>(environment);
+  if (post_process == nullptr) {
+    return;
+  }
+
+  post_process->SetToneMapper(MapToneMapper(params.tone_mapper));
+  post_process->SetExposureMode(MapExposureMode(params.exposure_mode));
+  post_process->SetExposureEnabled(params.exposure_enabled);
+  post_process->SetExposureCompensationEv(params.exposure_compensation_ev);
+  post_process->SetExposureKey(params.exposure_key);
+  post_process->SetManualExposureEv(params.manual_exposure_ev);
+  post_process->SetAutoExposureRangeEv(
+    params.auto_exposure_min_ev, params.auto_exposure_max_ev);
+  post_process->SetAutoExposureAdaptationSpeeds(
+    params.auto_exposure_speed_up, params.auto_exposure_speed_down);
+  post_process->SetAutoExposureMeteringMode(
+    MapMeteringMode(params.auto_exposure_metering_mode));
+  post_process->SetAutoExposureHistogramPercentiles(
+    params.auto_exposure_low_percentile, params.auto_exposure_high_percentile);
+  post_process->SetAutoExposureHistogramWindow(
+    params.auto_exposure_min_log_luminance,
+    params.auto_exposure_log_luminance_range);
+  post_process->SetAutoExposureTargetLuminance(
+    params.auto_exposure_target_luminance);
+  post_process->SetAutoExposureSpotMeterRadius(
+    params.auto_exposure_spot_meter_radius);
+  post_process->SetBloomIntensity(params.bloom_intensity);
+  post_process->SetBloomThreshold(params.bloom_threshold);
+  post_process->SetSaturation(params.saturation);
+  post_process->SetContrast(params.contrast);
+  post_process->SetVignetteIntensity(params.vignette_intensity);
+  post_process->SetDisplayGamma(params.display_gamma);
+}
+
+auto EnsureDisabledFog(oxygen::scene::SceneEnvironment& environment) -> void
+{
+  namespace env = oxygen::scene::environment;
+
+  auto* const fog = EnsureSystem<env::Fog>(environment);
+  if (fog == nullptr) {
+    return;
+  }
+
+  fog->SetEnabled(false);
+  fog->SetEnableHeightFog(false);
+  fog->SetEnableVolumetricFog(false);
+  fog->SetRenderInMainPass(true);
+  fog->SetVisibleInReflectionCaptures(true);
+  fog->SetVisibleInRealTimeSkyCaptures(true);
+}
+
 } // namespace
 
 namespace oxygen::interop::module {
@@ -79,81 +227,17 @@ namespace oxygen::interop::module {
       return;
     }
 
-    auto atmosphere
-      = environment->TryGetSystem<scene::environment::SkyAtmosphere>();
-    if (!atmosphere) {
-      (void)environment->AddSystem<scene::environment::SkyAtmosphere>();
-      atmosphere
-        = environment->TryGetSystem<scene::environment::SkyAtmosphere>();
+    auto* const atmosphere
+      = EnsureSkyAtmosphereWhenEnabled(*environment, atmosphere_.enabled);
+    if (atmosphere != nullptr) {
+      ApplySkyAtmosphere(*atmosphere, atmosphere_);
     }
 
-    if (!atmosphere) {
-      return;
-    }
+    ApplySkyLight(*environment);
+    ApplyPostProcess(*environment, post_process_);
+    EnsureDisabledFog(*environment);
 
-    atmosphere->SetEnabled(atmosphere_.enabled);
-    atmosphere->SetSunDiskEnabled(atmosphere_.sun_disk_enabled);
-    atmosphere->SetPlanetRadiusMeters(atmosphere_.planet_radius_m);
-    atmosphere->SetAtmosphereHeightMeters(atmosphere_.atmosphere_height_m);
-    atmosphere->SetGroundAlbedoRgb(atmosphere_.ground_albedo_rgb);
-    atmosphere->SetRayleighScaleHeightMeters(
-      atmosphere_.rayleigh_scale_height_m);
-    atmosphere->SetMieScaleHeightMeters(atmosphere_.mie_scale_height_m);
-    atmosphere->SetMieAnisotropy(atmosphere_.mie_anisotropy);
-    atmosphere->SetSkyLuminanceFactorRgb(
-      atmosphere_.sky_luminance_factor_rgb);
-    atmosphere->SetSkyAndAerialPerspectiveLuminanceFactorRgb(
-      atmosphere_.sky_luminance_factor_rgb);
-    atmosphere->SetAerialPerspectiveDistanceScale(
-      atmosphere_.aerial_perspective_distance_scale);
-    atmosphere->SetAerialScatteringStrength(
-      atmosphere_.aerial_scattering_strength);
-    atmosphere->SetAerialPerspectiveStartDepthMeters(
-      atmosphere_.aerial_perspective_start_depth_m);
-    atmosphere->SetHeightFogContribution(atmosphere_.height_fog_contribution);
-
-    auto post_process
-      = environment->TryGetSystem<scene::environment::PostProcessVolume>();
-    if (!post_process) {
-      (void)environment->AddSystem<scene::environment::PostProcessVolume>();
-      post_process
-        = environment->TryGetSystem<scene::environment::PostProcessVolume>();
-    }
-
-    if (!post_process) {
-      return;
-    }
-
-    post_process->SetToneMapper(MapToneMapper(post_process_.tone_mapper));
-    post_process->SetExposureMode(MapExposureMode(post_process_.exposure_mode));
-    post_process->SetExposureEnabled(post_process_.exposure_enabled);
-    post_process->SetExposureCompensationEv(
-      post_process_.exposure_compensation_ev);
-    post_process->SetExposureKey(post_process_.exposure_key);
-    post_process->SetManualExposureEv(post_process_.manual_exposure_ev);
-    post_process->SetAutoExposureRangeEv(post_process_.auto_exposure_min_ev,
-      post_process_.auto_exposure_max_ev);
-    post_process->SetAutoExposureAdaptationSpeeds(
-      post_process_.auto_exposure_speed_up,
-      post_process_.auto_exposure_speed_down);
-    post_process->SetAutoExposureMeteringMode(
-      MapMeteringMode(post_process_.auto_exposure_metering_mode));
-    post_process->SetAutoExposureHistogramPercentiles(
-      post_process_.auto_exposure_low_percentile,
-      post_process_.auto_exposure_high_percentile);
-    post_process->SetAutoExposureHistogramWindow(
-      post_process_.auto_exposure_min_log_luminance,
-      post_process_.auto_exposure_log_luminance_range);
-    post_process->SetAutoExposureTargetLuminance(
-      post_process_.auto_exposure_target_luminance);
-    post_process->SetAutoExposureSpotMeterRadius(
-      post_process_.auto_exposure_spot_meter_radius);
-    post_process->SetBloomIntensity(post_process_.bloom_intensity);
-    post_process->SetBloomThreshold(post_process_.bloom_threshold);
-    post_process->SetSaturation(post_process_.saturation);
-    post_process->SetContrast(post_process_.contrast);
-    post_process->SetVignetteIntensity(post_process_.vignette_intensity);
-    post_process->SetDisplayGamma(post_process_.display_gamma);
+    context.Scene->Update(false);
   }
 
 } // namespace oxygen::interop::module

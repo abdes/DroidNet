@@ -36,7 +36,11 @@ namespace oxygen::interop::module {
     //! oxygen::scene::TransformComponent (per-node local transform).
     kTransform = 1,
 
-    // Future: lights, cameras, scene environment, ...
+    //! oxygen::scene::PerspectiveCamera.
+    kPerspectiveCamera = 2,
+
+    //! oxygen::scene::DirectionalLight.
+    kDirectionalLight = 3,
   };
 
   //! One scalar entry on the property-pipeline wire.

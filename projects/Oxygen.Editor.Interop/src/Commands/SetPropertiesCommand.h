@@ -18,6 +18,8 @@
 #include <Commands/PropertyKeys.h>
 #include <EditorModule/EditorCommand.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::interop::module {
@@ -78,6 +80,8 @@ namespace oxygen::interop::module {
       });
 
     auto& registry = PropertyApplierRegistry::Instance();
+    bool applied = false;
+    bool touched_directional_light = false;
     auto begin = entries_.begin();
     while (begin != entries_.end()) {
       const auto component = begin->component;
@@ -90,6 +94,8 @@ namespace oxygen::interop::module {
         const std::span<const PropertyEntry> run(&*begin,
           static_cast<std::size_t>(end - begin));
         applier->Apply(*sceneNode, run);
+        applied = true;
+        touched_directional_light |= component == ComponentId::kDirectionalLight;
       } else {
         LOG_F(WARNING,
           "SetPropertiesCommand skipped {} entries: no applier registered "
@@ -100,6 +106,17 @@ namespace oxygen::interop::module {
 
       begin = end;
     }
+
+    if (!applied) {
+      return;
+    }
+
+    if (touched_directional_light) {
+      context.Scene->GetDirectionalLightResolver().OnLightChanged(node_);
+    }
+
+    context.Scene->Update(false);
+    context.Scene->SyncObservers();
   }
 
 } // namespace oxygen::interop::module

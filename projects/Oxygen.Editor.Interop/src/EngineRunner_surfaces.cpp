@@ -319,10 +319,6 @@ namespace Oxygen::Interop {
     if (ctx == nullptr) {
       throw gcnew ArgumentNullException("ctx");
     }
-    if (swapChainPanel == IntPtr::Zero) {
-      throw gcnew ArgumentException("SwapChainPanel pointer must not be zero.",
-        "swapChainPanel");
-    }
     if (disposed_) {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
@@ -334,6 +330,14 @@ namespace Oxygen::Interop {
     auto& shared = ctx->NativeShared();
     if (!shared) {
       return Task::FromResult<bool>(false);
+    }
+
+    const auto engine_config =
+      oxygen::engine::interop::GetEngineConfig(shared);
+    const auto allow_headless_surface = engine_config.graphics.headless;
+    if (swapChainPanel == IntPtr::Zero && !allow_headless_surface) {
+      throw gcnew ArgumentException("SwapChainPanel pointer must not be zero.",
+        "swapChainPanel");
     }
 
     EnsureSurfaceRegistry();
@@ -435,7 +439,7 @@ namespace Oxygen::Interop {
       return tcs->Task;
     }
 
-    if (swap_chain_ptr != nullptr) {
+    if (swapChainPanel != IntPtr::Zero && swap_chain_ptr != nullptr) {
       auto surface_ptr = new std::shared_ptr<oxygen::graphics::Surface>(surface);
       AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr), IntPtr(surface_ptr),
         compositionScale);

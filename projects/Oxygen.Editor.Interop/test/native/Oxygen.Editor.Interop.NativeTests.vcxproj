@@ -40,6 +40,11 @@
     <ProjectName>Oxygen.Editor.Interop.NativeTests</ProjectName>
     <WindowsTargetPlatformMinVersion>7.0</WindowsTargetPlatformMinVersion>
   </PropertyGroup>
+  <PropertyGroup>
+    <_NativeTestsArtifactsPath Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::EnsureTrailingSlash($(ArtifactsPath)))</_NativeTestsArtifactsPath>
+    <_NativeTestsArtifactsPath Condition="'$(_NativeTestsArtifactsPath)' == ''">$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)..\..\..\..\artifacts))</_NativeTestsArtifactsPath>
+    <BaseIntermediateOutputPath>$(_NativeTestsArtifactsPath)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <!-- Debug -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -58,76 +63,99 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <_NativeTestsArtifactsPivot Condition="'$(ArtifactsPivots)' != ''">$(ArtifactsPivots)</_NativeTestsArtifactsPivot>
+    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</_NativeTestsArtifactsPivot>
+    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</_NativeTestsArtifactsPivot>
+    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == ''">$(Configuration)_$(Platform)</_NativeTestsArtifactsPivot>
+    <_NativeTestsOutDir>$(_NativeTestsArtifactsPath)bin\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsOutDir>
+    <_NativeTestsIntDir>$(_NativeTestsArtifactsPath)obj\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsIntDir>
+    <InteropBinaryDir>$(_NativeTestsArtifactsPath)bin\Oxygen.Editor.Interop\$(Configuration)_$(TargetFramework)\</InteropBinaryDir>
+  </PropertyGroup>
   <!-- Source Files -->
   <ItemGroup>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetEnvironmentCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="src\EnvironmentCommand_native_test.cpp" />
     <ClCompile Include="src\InputAccumulator_native_test.cpp" />
   </ItemGroup>
   <!-- Intermediate Output -->
   <PropertyGroup>
-    <BaseIntermediateOutputPath>$(SolutionDir)artifacts\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <OutputType>Library</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <OxygenEngineInstallDir>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</OxygenEngineInstallDir>
   </PropertyGroup>
   <!-- Debug Settings -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(_NativeTestsOutDir)</OutDir>
+    <IntDir>$(_NativeTestsIntDir)</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(_NativeTestsOutDir)</OutDir>
+    <IntDir>$(_NativeTestsIntDir)</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include;$(ProjectsRoot)\Oxygen.Engine\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(OxygenEngineInstallDir)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OxygenEngineInstallDir)\lib\Oxygen.Engine.EditorInterface-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Base-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Composition-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Platform-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Input-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Content-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Engine-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Common-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Core-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Scene-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.SceneSync-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Data-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Vortex-d.lib;$(InteropBinaryDir)\DroidNet.Oxygen.Editor.Interop.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;$(MSBuildProjectDirectory)\..\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0\DroidNet.Oxygen.Editor.Interop.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OxygenEngineInstallDir)\lib;$(InteropBinaryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <!-- Release Settings -->
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>
         $(ProjectsRoot)\Oxygen.Editor.Interop\src;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\include;
-        $(ProjectsRoot)\Oxygen.Engine\src;
+        $(OxygenEngineInstallDir)\include;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <DisableSpecificWarnings>4793;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;
-        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Engine.EditorInterface.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Base.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Composition.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Platform.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Input.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Content.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Engine.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Common.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Direct3D12.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Core.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Scene.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.SceneSync.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Data.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Vortex.lib;
+        $(InteropBinaryDir)\DroidNet.Oxygen.Editor.Interop.lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>
-        $(ProjectsRoot)\Oxygen\Engine\out\lib;
-        $(MSBuildProjectDirectory)\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0;
+        $(OxygenEngineInstallDir)\lib;
+        $(InteropBinaryDir);
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>
-        $(MSBuildProjectDirectory)\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0\DroidNet.Oxygen.Editor.Interop.lib;
-        %(AdditionalDependencies)
-      </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <!-- Reference to your interop project -->
@@ -138,17 +166,23 @@
       <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
     </ProjectReference>
   </ItemGroup>
-  <!-- Use MSTest v4 via package references (Microsoft.NET.Test.Sdk + MSTest v4). We keep _EnablePackageReferencesInVCProjects=true so VC++ projects handle PackageReference correctly. -->
+  <!-- Use package references for MSTest. We keep _EnablePackageReferencesInVCProjects=true so VC++ projects handle PackageReference correctly. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="MSTest.TestAdapter" />
-    <PackageReference Include="MSTest.TestFramework" />
+    <PackageReference Include="MSTest.TestAdapter" VersionOverride="3.11.0" />
+    <PackageReference Include="MSTest.TestFramework" VersionOverride="3.11.0" />
   </ItemGroup>
   <!-- Ensure consistent System.Diagnostics.DiagnosticSource version across projects to avoid MSB3277 warnings -->
   <ItemGroup>
     <PackageReference Include="System.Diagnostics.DiagnosticSource" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup Condition="Exists('$(OxygenEngineInstallDir)\bin')">
+    <OxygenEngineRuntimeDependency Include="$(OxygenEngineInstallDir)\bin\*.dll" />
+  </ItemGroup>
+  <Target Name="CopyOxygenEngineRuntimeDependencies" AfterTargets="Build" Condition="'@(OxygenEngineRuntimeDependency)' != ''">
+    <Copy SourceFiles="@(OxygenEngineRuntimeDependency)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
   <!-- Debug target to display evaluated properties -->
   <Target Name="ShowProps">
     <Message Text="ConfigurationType=$(ConfigurationType)" Importance="High" />

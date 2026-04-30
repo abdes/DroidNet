@@ -116,29 +116,35 @@ public sealed class EngineTests
         var token = this.TestContext.CancellationToken;
 
         // Target a modest FPS so frames advance without excess CPU usage.
-        var cfg = new EngineConfig { TargetFps = 30 };
+        var cfg = CreateHeadlessRunnableEngineConfig();
         var ctx = this.CreateEngineUnderTest(cfg);
         _ = ctx.IsValid.Should().BeTrue();
 
         // Run the engine loop using the interop-provided background thread helper.
         var runTask = this.runner.RunEngineAsync(ctx);
-        await using var registration = token.Register(() => this.runner.StopEngine(ctx)).ConfigureAwait(false);
 
-        // Let the engine run for some time (cancellable).
-        await Task.Delay(TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
+        try
+        {
+            // Let the engine run for some time (cancellable).
+            await Task.Delay(TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
+        }
+        finally
+        {
+            this.runner.StopEngine(ctx);
+        }
 
         // Request shutdown and wait for completion (short grace window), all with ConfigureAwait(false).
-        this.runner.StopEngine(ctx);
         var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), token)).ConfigureAwait(false);
 
         _ = runTask.Should().BeSameAs(completed, "Engine did not stop within expected timeout after StopEngine");
         _ = runTask.IsCompleted.Should().BeTrue("Engine run task should be completed");
+        await runTask.ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task RunEngineAsync_ReturnsNonBlockingTask()
     {
-        var cfg = new EngineConfig { TargetFps = 30 };
+        var cfg = CreateRunnableEngineConfig();
         var ctx = this.CreateEngineUnderTest(cfg);
 
         var sw = Stopwatch.StartNew();
@@ -152,18 +158,19 @@ public sealed class EngineTests
         this.runner.StopEngine(ctx);
         var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
         _ = runTask.Should().BeSameAs(completed, "Engine did not stop within expected timeout.");
+        await runTask.ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task RunEngineAsync_DispatchesCleanupViaSynchronizationContext()
     {
-        using var syncContext = new TestSynchronizationContext(this.TestContext.CancellationToken);
+        var syncContext = new TestSynchronizationContext(this.TestContext.CancellationToken);
         var localOriginalContext = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(syncContext);
 
         try
         {
-            var cfg = new EngineConfig { TargetFps = 30 };
+            var cfg = CreateRunnableEngineConfig();
             var ctx = this.runner.CreateEngine(cfg);
             _ = ctx.Should().NotBeNull();
 
@@ -175,6 +182,7 @@ public sealed class EngineTests
             this.runner.StopEngine(ctx);
             var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
             _ = runTask.Should().BeSameAs(completed, "Engine did not stop within timeout.");
+            await runTask.ConfigureAwait(false);
 
             var dispatched = syncContext.TryRunOne(TimeSpan.FromSeconds(1));
             _ = dispatched.Should().BeTrue("Expected cleanup to be posted to synchronization context.");
@@ -184,6 +192,7 @@ public sealed class EngineTests
         finally
         {
             SynchronizationContext.SetSynchronizationContext(localOriginalContext);
+            syncContext.Dispose();
         }
 
         _ = syncContext.PostCount.Should().BePositive("Engine cleanup should post back to the captured synchronization context.");
@@ -192,19 +201,20 @@ public sealed class EngineTests
     [TestMethod]
     public async Task RunEngineAsync_SubsequentCallWhileRunningThrows()
     {
-        var cfg = new EngineConfig { TargetFps = 30 };
+        var cfg = CreateRunnableEngineConfig();
         var ctx = this.CreateEngineUnderTest(cfg);
 
         var runTask = this.runner.RunEngineAsync(ctx);
 
         var act3 = () => this.runner.RunEngineAsync(ctx);
-        _ = act3.Should().ThrowAsync<InvalidOperationException>();
+        _ = await act3.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
         await Task.Delay(TimeSpan.FromMilliseconds(100), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         this.runner.StopEngine(ctx);
         var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
         _ = runTask.Should().BeSameAs(completed, "Engine should stop after StopEngine.");
+        await runTask.ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -321,7 +331,7 @@ public sealed class EngineTests
     [TestMethod]
     public async Task RegisterSurfaceAsync_StagedAndResolved_ReturnsTrue()
     {
-        var cfg = new EngineConfig { TargetFps = 30 };
+        var cfg = CreateHeadlessRunnableEngineConfig();
         var ctx = this.CreateEngineUnderTest(cfg);
 
         // Start the engine loop so the engine module will process pending
@@ -331,17 +341,38 @@ public sealed class EngineTests
         var documentId = Guid.NewGuid();
         var viewportId = Guid.NewGuid();
 
-        var regTask = this.runner.TryRegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1), 0u, 0u, 1.0f);
-
-        var completed = await Task.WhenAny(regTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
-
-        _ = regTask.Should().BeSameAs(completed, "RegisterSurfaceAsync did not complete within the expected timeout.");
-        _ = (await regTask.ConfigureAwait(false)).Should().BeTrue("RegisterSurfaceAsync should resolve to true when staged and processed by the engine.");
+        try
+        {
+            var registered = await this.runner
+                .TryRegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", IntPtr.Zero, 0u, 0u, 1.0f)
+                .WaitAsync(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            _ = registered.Should().BeTrue("RegisterSurfaceAsync should resolve to true when staged and processed by the engine.");
+        }
+        finally
+        {
+            this.uiContext?.RunAll();
+        }
 
         // Stop the engine loop and wait for complete cleanup.
         this.runner.StopEngine(ctx);
         var stopped = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
         _ = runTask.Should().BeSameAs(stopped, "Engine loop didn't stop within timeout.");
+        await runTask.ConfigureAwait(false);
+    }
+
+    private static EngineConfig CreateRunnableEngineConfig()
+        => new()
+        {
+            TargetFps = 30,
+            EnableAssetLoader = true,
+        };
+
+    private static EngineConfig CreateHeadlessRunnableEngineConfig()
+    {
+        var config = CreateRunnableEngineConfig();
+        config.Graphics = new GraphicsConfigManaged { Headless = true };
+        return config;
     }
 
     private void EnsureUiContext()

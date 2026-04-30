@@ -40,6 +40,46 @@ namespace oxygen::interop::module {
   using namespace oxygen;
 
   namespace {
+    using SurfaceOperation = std::pair<
+      SurfaceRegistry::GuidKey,
+      std::pair<std::shared_ptr<graphics::Surface>, std::function<void(bool)>>>;
+
+    void ReleaseSurfacesForShutdown(
+      std::vector<SurfaceOperation>& surfaces,
+      const std::shared_ptr<Graphics>& graphics,
+      const bool callback_result)
+    {
+      for (auto& entry : surfaces) {
+        auto& surface = entry.second.first;
+        auto& callback = entry.second.second;
+
+        if (surface) {
+          try {
+            if (graphics) {
+              graphics->RegisterDeferredRelease(std::move(surface));
+            }
+            else {
+              surface.reset();
+            }
+          }
+          catch (...) {
+            surface.reset();
+          }
+        }
+
+        if (callback) {
+          try {
+            callback(callback_result);
+          }
+          catch (...) {
+            /* swallow shutdown callback failures */
+          }
+        }
+      }
+
+      surfaces.clear();
+    }
+
     class EditorInputWriter final : public IInputWriter {
     public:
       explicit EditorInputWriter(
@@ -117,7 +157,22 @@ namespace oxygen::interop::module {
     viewport_navigation_ = std::make_unique<EditorViewportNavigation>();
   }
 
-  EditorModule::~EditorModule() { LOG_F(INFO, "EditorModule destroyed."); }
+  EditorModule::~EditorModule() {
+    LOG_F(INFO, "EditorModule destroying; releasing registered surfaces.");
+
+    if (registry_) {
+      auto graphics = graphics_.lock();
+
+      auto pending_registrations = registry_->DrainPendingRegistrations();
+      ReleaseSurfacesForShutdown(pending_registrations, graphics, false);
+
+      registry_->Clear();
+      auto pending_destructions = registry_->DrainPendingDestructions();
+      ReleaseSurfacesForShutdown(pending_destructions, graphics, true);
+    }
+
+    LOG_F(INFO, "EditorModule destroyed.");
+  }
 
   auto EditorModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool {
