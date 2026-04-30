@@ -50,11 +50,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
-    /// Gets or sets editor-only explorer layout persisted alongside the scene file.
+    /// Gets editor-only explorer layout persisted alongside the scene file.
     /// This is ignored by the runtime scene graph but included in scene DTOs.
     /// </summary>
     [JsonIgnore]
-    public IList<Serialization.ExplorerEntryData>? ExplorerLayout { get; set; }
+    public IList<Serialization.ExplorerEntryData>? ExplorerLayout { get; private set; }
 
     /// <summary>
     ///     Creates and hydrates a <see cref="Scene"/> instance from the specified DTO.
@@ -91,16 +91,6 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     }
 
     /// <summary>
-    /// Replaces scene-level environment authoring data.
-    /// </summary>
-    /// <param name="environment">The new environment data.</param>
-    internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
-    {
-        ArgumentNullException.ThrowIfNull(environment);
-        this.Environment = NormalizeEnvironment(environment);
-    }
-
-    /// <summary>
     ///     Dehydrates this scene to a data transfer object.
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene.</returns>
@@ -113,6 +103,23 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Environment = NormalizeEnvironment(this.Environment),
             ExplorerLayout = this.ExplorerLayout,
         };
+
+    /// <summary>
+    /// Replaces editor-only Scene Explorer layout data.
+    /// </summary>
+    /// <param name="explorerLayout">The new explorer layout, or <see langword="null"/> to clear it.</param>
+    public void SetExplorerLayout(IList<Serialization.ExplorerEntryData>? explorerLayout)
+        => this.ExplorerLayout = explorerLayout;
+
+    /// <summary>
+    /// Replaces scene-level environment authoring data.
+    /// </summary>
+    /// <param name="environment">The new environment data.</param>
+    internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        this.Environment = NormalizeEnvironment(environment);
+    }
 
     private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
     {
@@ -135,6 +142,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             };
         }
 
+        if (IsLegacyEditorPostProcessDefault(postProcess))
+        {
+            postProcess = new Serialization.PostProcessEnvironmentData();
+        }
+
         return environment with
         {
             SkyAtmosphere = environment.SkyAtmosphere ?? new(),
@@ -145,4 +157,12 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             ToneMapping = postProcess.ToneMapper,
         };
     }
+
+    private static bool IsLegacyEditorPostProcessDefault(Serialization.PostProcessEnvironmentData value)
+        => value == new Serialization.PostProcessEnvironmentData
+        {
+            ExposureMode = Serialization.ExposureMode.Auto,
+            ExposureKey = 10.0f,
+            ManualExposureEv = 9.7f,
+        };
 }

@@ -61,22 +61,22 @@ public interface IProjectInfo
     public string? Thumbnail { get; set; }
 
     /// <summary>
-    ///     Gets or sets the project authoring mount points.
+    ///     Gets the project authoring mount points.
     /// </summary>
     /// <remarks>
     ///     Mount points are persisted in the project manifest (<c>Project.oxy</c>) and provide the authoritative mapping
     ///     from a mount point name (virtual root segment) to a project-relative authoring folder.
     /// </remarks>
-    public IList<ProjectMountPoint> AuthoringMounts { get; set; }
+    public IList<ProjectMountPoint> AuthoringMounts { get; }
 
     /// <summary>
-    ///     Gets or sets the local folder mount points.
+    ///     Gets the local folder mount points.
     /// </summary>
     /// <remarks>
     ///     Local folder mounts are persisted in the project manifest (<c>Project.oxy</c>) and provide a mapping
     ///     from a mount point name (virtual root segment) to an absolute path on the local file system.
     /// </remarks>
-    public IList<LocalFolderMount> LocalFolderMounts { get; set; }
+    public IList<LocalFolderMount> LocalFolderMounts { get; }
 
     /// <summary>
     ///     Gets or sets the last used date of the project.
