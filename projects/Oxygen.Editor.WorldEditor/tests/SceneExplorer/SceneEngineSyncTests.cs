@@ -78,6 +78,8 @@ public sealed class SceneEngineSyncTests
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         var entries = new[] { CreateTransformEntry(42.0f) };
+        var countChanges = new List<PendingPropertySyncCountChangedEventArgs>();
+        sut.PendingPropertySyncCountChanged += (_, args) => countChanges.Add(args);
 
         var outcome = await sut.UpdatePropertiesAsync(scene, node, entries).ConfigureAwait(false);
 
@@ -85,6 +87,9 @@ public sealed class SceneEngineSyncTests
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
         _ = outcome.Message.Should().Contain("1 pending property edit");
         _ = sut.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
+        _ = countChanges.Should().ContainSingle()
+            .Which.Should().Match<PendingPropertySyncCountChangedEventArgs>(
+                args => args.SceneId == scene.Id && args.PendingCount == 1);
         engine.VerifyGet(s => s.World, Times.Never);
     }
 
