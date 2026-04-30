@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Assets.Catalog;
-using Oxygen.Storage;
+using Oxygen.Managed.Assets.Catalog;
+using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 

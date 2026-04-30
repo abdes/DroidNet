@@ -9,7 +9,7 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Templates;
 

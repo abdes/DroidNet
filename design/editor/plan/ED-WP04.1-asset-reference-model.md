@@ -31,7 +31,7 @@ scene components, the content browser, cooking, validation, and live sync.
 - `Oxygen.Editor.ContentBrowser`
 - `GeometryViewModel`
 - explicit content-pipeline cook orchestration
-- `Oxygen.Assets`
+- `Oxygen.Managed.Assets`
 
 ## 5. Acceptance Criteria
 

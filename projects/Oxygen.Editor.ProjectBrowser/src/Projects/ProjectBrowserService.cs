@@ -7,13 +7,13 @@ using System.Runtime.CompilerServices;
 using DroidNet.Resources.Generator.Localized_a870a544;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Core.Services;
+using Oxygen.Managed.Core.Services;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Storage;
-using Oxygen.Storage.Native;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 

@@ -1,0 +1,58 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace Oxygen.Managed.Core;
+
+/// <summary>
+/// Provides centralized constants and helpers for building asset URIs.
+/// </summary>
+public static class AssetUris
+{
+    /// <summary>
+    /// The URI scheme for assets.
+    /// </summary>
+    public const string Scheme = "asset";
+
+    /// <summary>
+    /// The mount point for engine-provided assets.
+    /// </summary>
+    /// <remarks>
+    /// Results in URIs like <c>asset:///Engine/...</c>.
+    /// </remarks>
+    public const string EngineMountPoint = "Engine";
+
+    /// <summary>
+    /// The mount point for project-specific content assets.
+    /// </summary>
+    /// <remarks>
+    /// Results in URIs like <c>asset:///Content/...</c>.
+    /// </remarks>
+    public const string ContentMountPoint = "Content";
+
+    /// <summary>
+    /// The path prefix for generated assets.
+    /// </summary>
+    public const string GeneratedPath = "Generated";
+
+    /// <summary>
+    /// Builds an engine asset URI.
+    /// </summary>
+    /// <param name="path">The path within the engine mount point.</param>
+    /// <returns>The full asset URI.</returns>
+    public static Uri BuildEngineUri(string path) => new($"{Scheme}:///{EngineMountPoint}/{path.TrimStart('/')}");
+
+    /// <summary>
+    /// Builds a content asset URI.
+    /// </summary>
+    /// <param name="path">The path within the content mount point.</param>
+    /// <returns>The full asset URI.</returns>
+    public static Uri BuildContentUri(string path) => new($"{Scheme}:///{ContentMountPoint}/{path.TrimStart('/')}");
+
+    /// <summary>
+    /// Builds a URI for a generated asset.
+    /// </summary>
+    /// <param name="assetPath">The path of the asset relative to the generated root (e.g., "BasicShapes/Cube").</param>
+    /// <returns>The full asset URI.</returns>
+    public static Uri BuildGeneratedUri(string assetPath) => BuildEngineUri($"{GeneratedPath}/{assetPath}");
+}

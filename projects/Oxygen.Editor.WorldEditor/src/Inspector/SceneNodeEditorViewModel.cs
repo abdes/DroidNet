@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Oxygen.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;

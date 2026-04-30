@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Assets.Model;
-using Oxygen.Core;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Slots;

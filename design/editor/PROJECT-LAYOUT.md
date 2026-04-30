@@ -156,14 +156,14 @@ feature project.
 | `projects/Oxygen.Editor.Runtime` | Managed engine lifecycle, effective runtime settings application, surface leases, view service, cooked-root mount service, runtime diagnostics. | Authoring defaults, project policy, UI workflow, scene serialization. |
 | `projects/Oxygen.Editor.Interop` | C++/CLI bridge to stable Oxygen Engine APIs. | Authoring policy, UI behavior, project layout policy, cooker policy, fallback behavior. |
 | `projects/Oxygen.Editor.Data` | Durable editor data, settings infrastructure, persistent state DB, settings descriptors/generators. | Feature-specific settings ownership or UI. |
-| `projects/Oxygen.Core` | Shared non-UI editor contracts and utilities needed across multiple editor modules, including operation-result and diagnostic contract types. | Feature UI, workflow orchestration, persistence, runtime services, native interop. |
-| `projects/Oxygen.Assets` | Managed asset identities, references, catalogs, import/cook primitives, loose cooked index utilities. | Editor UI, project workflow policy, live engine mounting. |
-| `projects/Oxygen.Storage` | Storage abstractions and native filesystem implementation. | Asset semantics, editor settings, project policy. |
+| `projects/Oxygen.Managed.Core` | Shared non-UI editor contracts and utilities needed across multiple editor modules, including operation-result and diagnostic contract types. | Feature UI, workflow orchestration, persistence, runtime services, native interop. |
+| `projects/Oxygen.Managed.Assets` | Managed asset identities, references, catalogs, import/cook primitives, loose cooked index utilities. | Editor UI, project workflow policy, live engine mounting. |
+| `projects/DroidNet.Storage` | Storage abstractions and native filesystem implementation. | Asset semantics, editor settings, project policy. |
 
 ## 6. Dependency Rules
 
 1. Domain projects must not depend on UI projects.
-   `Oxygen.Editor.World`, `Oxygen.Assets`, and `Oxygen.Storage` stay free of
+   `Oxygen.Editor.World`, `Oxygen.Managed.Assets`, and `DroidNet.Storage` stay free of
    WinUI, routing, docking, runtime, and interop.
 2. Feature UI may depend on domain, tooling, and service projects, but feature
    UI must not depend on another feature UI's internals. Reusable
@@ -177,10 +177,10 @@ feature project.
    contracts. It exposes capabilities, not policy.
 6. `Oxygen.Editor.Projects` owns project policy. UI projects ask it for
    project/cook decisions instead of duplicating path conventions.
-7. `Oxygen.Assets` owns reusable asset/cook mechanics. It does not know which
+7. `Oxygen.Managed.Assets` owns reusable asset/cook mechanics. It does not know which
    editor command or panel triggered them.
 8. `Oxygen.Editor.ContentPipeline` owns editor workflow orchestration over
-   import/cook/pak/inspect operations. It uses `Oxygen.Assets`,
+   import/cook/pak/inspect operations. It uses `Oxygen.Managed.Assets`,
    `Oxygen.Editor.Projects`, and native capabilities, but it does not own UI
    panels.
 9. `Oxygen.Editor.Data` owns settings infrastructure. The owning feature still
@@ -203,7 +203,7 @@ Use this before adding a file:
    it to the appropriate DroidNet controls project instead.
 2. **Is it material authoring?**
    Put material editor documents and UI in `Oxygen.Editor.MaterialEditor`.
-   Put reusable material asset/import/cook primitives in `Oxygen.Assets`.
+   Put reusable material asset/import/cook primitives in `Oxygen.Managed.Assets`.
 3. **Is it physics authoring data used by both physics scenes and scene
    objects?**
    Put shared physics domain objects in `Oxygen.Editor.Physics`. Put the
@@ -220,7 +220,7 @@ Use this before adding a file:
    `Oxygen.Editor.WorldEditor/src/Services/Validation`.
 7. **Is it a reusable asset identity, catalog, import, cook, or loose-index
    primitive?**
-   Put it in `Oxygen.Assets`.
+   Put it in `Oxygen.Managed.Assets`.
 8. **Is it editor tooling orchestration for import, cook, pak, inspect, asset
    jobs, or pipeline diagnostics?**
    Put it in `Oxygen.Editor.ContentPipeline`.
@@ -325,7 +325,7 @@ projects/Oxygen.Editor.Runtime/src/
 ```
 
 ```text
-projects/Oxygen.Assets/src/
+projects/Oxygen.Managed.Assets/src/
 +-- Model/                  # asset records, references, typed assets
 +-- Catalog/                # catalog/query implementations
 +-- Import/                 # import model and import plugins
@@ -347,7 +347,7 @@ Most editor features touch several projects. Split them by product:
 | Reusable Oxygen editor widget | `Oxygen.Editor.UI` |
 | User-facing editor | owning feature UI project |
 | Command/dirty/undo integration | owning feature UI project command services |
-| Reusable asset/cook primitive | `Oxygen.Assets` |
+| Reusable asset/cook primitive | `Oxygen.Managed.Assets` |
 | Import/cook/pak/inspect tooling workflow | `Oxygen.Editor.ContentPipeline` |
 | Project policy or cook orchestration | `Oxygen.Editor.Projects` |
 | Live runtime application | `Oxygen.Editor.Runtime` |
@@ -366,8 +366,8 @@ These examples are normative:
 | Scenario | Placement |
 | --- | --- |
 | Widget reused by multiple Oxygen editor features | `Oxygen.Editor.UI`, unless it is generic enough for DroidNet controls. |
-| Asset pipeline operations: import, cook, pak, inspect | `Oxygen.Editor.ContentPipeline` for tooling services; `Oxygen.Assets` for reusable primitives; `ContentBrowser` or owning editor for panels; `Projects` for project policy; `Interop` only for native engine capabilities. |
-| Material editor | `Oxygen.Editor.MaterialEditor` for material documents/UI/tools; reusable material source/asset/cook primitives in `Oxygen.Assets`; preview/runtime work through `Runtime` and `Interop`. |
+| Asset pipeline operations: import, cook, pak, inspect | `Oxygen.Editor.ContentPipeline` for tooling services; `Oxygen.Managed.Assets` for reusable primitives; `ContentBrowser` or owning editor for panels; `Projects` for project policy; `Interop` only for native engine capabilities. |
+| Material editor | `Oxygen.Editor.MaterialEditor` for material documents/UI/tools; reusable material source/asset/cook primitives in `Oxygen.Managed.Assets`; preview/runtime work through `Runtime` and `Interop`. |
 | Physics scene sidecar editor | `Oxygen.Editor.PhysicsEditor` for physics scene UI/documents/tools; shared physics authoring model in `Oxygen.Editor.Physics`; sidecar generation through `ContentPipeline`; project policy through `Projects`. |
 | Scene component editor | Domain component in `World`; inspector in `WorldEditor`; reusable fields in `Oxygen.Editor.UI`; live operation through `Runtime`; native operation through `Interop`. |
 
@@ -395,7 +395,7 @@ Tests live with the owner they validate:
 
 - domain and serialization tests in the domain project tests
 - UI/view-model tests in the owning feature editor tests
-- asset/cook primitive tests in `Oxygen.Assets` tests
+- asset/cook primitive tests in `Oxygen.Managed.Assets` tests
 - project policy tests in `Oxygen.Editor.Projects` tests
 - runtime service tests in `Oxygen.Editor.Runtime` tests
 - end-to-end editor workflow tests at the highest feature/workflow owner

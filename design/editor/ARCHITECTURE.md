@@ -398,8 +398,8 @@ template payload mechanics belong in LLDs that implement this contract.
 | `Oxygen.Editor.Runtime` | managed engine runtime boundary | engine lifecycle, effective runtime settings, surface leases, view service, cooked-root mount service, runtime diagnostics | authoring defaults, project policy, UI workflow, scene serialization |
 | `Oxygen.Editor.Interop` | C++/CLI/native bridge | managed/native translation, bridge to stable Oxygen Engine APIs, native editor runtime adapter | authoring policy, UI behavior, project layout policy, cook policy, fallback behavior |
 | `Oxygen.Editor.Data` | durable editor state/settings substrate | persistent state database, settings infrastructure, settings descriptors/generators | feature-specific settings meaning or UI |
-| `Oxygen.Assets` | shared asset/cook data library | asset identities, references, catalogs, import/cook primitives, loose cooked index utilities | editor UI, project workflow policy, live engine mounting |
-| `Oxygen.Storage` | storage abstraction | storage providers and filesystem access | asset semantics, editor settings, project policy |
+| `Oxygen.Managed.Assets` | shared asset/cook data library | asset identities, references, catalogs, import/cook primitives, loose cooked index utilities | editor UI, project workflow policy, live engine mounting |
+| `DroidNet.Storage` | storage abstraction | storage providers and filesystem access | asset semantics, editor settings, project policy |
 
 ## 7. Ownership Boundary Constraints
 
@@ -872,7 +872,7 @@ manifest, cook, pak, inspect, and pipeline diagnostics orchestration.
 `Oxygen.Editor.Projects` owns project metadata, content roots, and project
 cook scope/policy. It does not own cook execution internals.
 
-`Oxygen.Assets` owns reusable asset identity, catalog, import/cook primitives,
+`Oxygen.Managed.Assets` owns reusable asset identity, catalog, import/cook primitives,
 and loose cooked index utilities.
 
 Native engine tooling is accessed through adapter boundaries, not from editor
@@ -995,8 +995,8 @@ flowchart TB
     World[Oxygen.Editor.World]
     Physics[Oxygen.Editor.Physics]
     Data[Oxygen.Editor.Data]
-    Assets[Oxygen.Assets]
-    Storage[Oxygen.Storage]
+    Assets[Oxygen.Managed.Assets]
+    Storage[DroidNet.Storage]
     Engine[Oxygen Engine editor interface]
 
     App --> PB

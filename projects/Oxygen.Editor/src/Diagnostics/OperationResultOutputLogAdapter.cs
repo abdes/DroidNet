@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls.OutputConsole.Model;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Serilog.Events;
 
 namespace Oxygen.Editor.Diagnostics;

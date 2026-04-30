@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using Oxygen.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.World.Serialization;
 using Testably.Abstractions;

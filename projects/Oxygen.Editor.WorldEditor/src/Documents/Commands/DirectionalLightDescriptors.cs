@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;

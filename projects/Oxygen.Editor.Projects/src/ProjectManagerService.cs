@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.World;
-using Oxygen.Storage;
+using DroidNet.Storage;
 
 namespace Oxygen.Editor.Projects;
 
@@ -295,7 +295,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
     }
 
-    private static async Task<Oxygen.Storage.IFolder> GetScenesFolderAsync(Oxygen.Storage.IFolder projectFolder)
+    private static async Task<DroidNet.Storage.IFolder> GetScenesFolderAsync(DroidNet.Storage.IFolder projectFolder)
     {
         var contentFolder = await projectFolder.GetFolderAsync(Constants.ContentFolderName).ConfigureAwait(true);
         if (!await contentFolder.ExistsAsync().ConfigureAwait(true))

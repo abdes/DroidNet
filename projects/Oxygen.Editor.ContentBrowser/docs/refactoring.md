@@ -2,12 +2,12 @@
 
 This document captures a refactoring direction for `Oxygen.Editor.ContentBrowser` so it can evolve into the UI side of the Oxygen asset/content pipeline.
 
-This document is the detailed, trackable source of truth for Content Browser implementation tasks. The pipeline-level milestone is tracked in `projects/Oxygen.Assets/docs/content-pipeline-design.md`.
+This document is the detailed, trackable source of truth for Content Browser implementation tasks. The pipeline-level milestone is tracked in `projects/Oxygen.Managed.Assets/docs/content-pipeline-design.md`.
 
 ## Goals
 
 - Align project structure with architecture (shell/panes/application/infrastructure), not with file types.
-- Prepare for `Oxygen.Assets` integration (VirtualPath/AssetKey, catalog queries, cook/validate/diagnostics) without forcing the UI to know pipeline mechanics.
+- Prepare for `Oxygen.Managed.Assets` integration (VirtualPath/AssetKey, catalog queries, cook/validate/diagnostics) without forcing the UI to know pipeline mechanics.
 - Reduce stringly-typed coupling (paths, selection, routing query params) to a small boundary.
 - Improve correctness and scalability for large projects (moves/renames, incremental updates, virtualization readiness).
 
@@ -23,7 +23,7 @@ This document is the detailed, trackable source of truth for Content Browser imp
   - This will become a hotspot as query/filter/sort/diagnostics and pipeline status are added.
   - See [projects/Oxygen.Editor.ContentBrowser/src/Panes/Assets/Layouts/AssetsLayoutViewModel.cs](../src/Panes/Assets/Layouts/AssetsLayoutViewModel.cs).
 - Shared state is currently `ContentBrowserState` with `SelectedFolders: ISet<string>`.
-  - This is convenient now, but it will conflict with `Oxygen.Assets.Model.VirtualPath` / `AssetKey` once those exist.
+  - This is convenient now, but it will conflict with `Oxygen.Managed.Assets.Model.VirtualPath` / `AssetKey` once those exist.
   - See [projects/Oxygen.Editor.ContentBrowser/src/State/ContentBrowserState.cs](../src/State/ContentBrowserState.cs).
 
 ## Refactoring direction (architecture)
@@ -54,7 +54,7 @@ These rules are the main reason for the proposed folder structure.
 - `Shell/*` may depend on `State/*`, and on `Application/*`. Avoid `Infrastructure/*` references from the Shell.
 - `Panes/*` may depend on `State/*` and `Application/*`.
 - `Application/*` should not depend on WinUI/XAML types; keep it testable.
-- `Infrastructure/*` may depend on storage/filesystem and (later) `Oxygen.Assets.*`, but should not depend on views.
+- `Infrastructure/*` may depend on storage/filesystem and (later) `Oxygen.Managed.Assets.*`, but should not depend on views.
 - Cross-feature types should be rare; prefer feature-local types unless they are truly shared.
 
 Note: after the Phase A folder moves, some code still crosses these boundaries (e.g., shell and pane viewmodels directly referencing indexing infrastructure). The intent is to enforce these rules after introducing the Application layer and the catalog abstraction.
@@ -80,13 +80,13 @@ Target (once the layering is enforced):
 - `Oxygen.Editor.ContentBrowser.Application.*`
 - `Oxygen.Editor.ContentBrowser.Infrastructure.*`
 
-### 3) Treat asset indexing/query as Infrastructure and consume `Oxygen.Assets` Catalog
+### 3) Treat asset indexing/query as Infrastructure and consume `Oxygen.Managed.Assets` Catalog
 
 **Intent:** The UI should depend on a stable concept like “catalog/query service”, not on “indexing mechanics”.
 
-**Important:** Do not introduce a second catalog contract in Content Browser. The catalog/query interface belongs in `Oxygen.Assets`.
+**Important:** Do not introduce a second catalog contract in Content Browser. The catalog/query interface belongs in `Oxygen.Managed.Assets`.
 
-- Consume `Oxygen.Assets.IAssetCatalog` with:
+- Consume `Oxygen.Managed.Assets.IAssetCatalog` with:
   - Snapshot query: `QueryAsync(query, ct)`
   - Change stream: `IObservable<AssetChange>` / event stream
   - Client-controlled query scope (folder-recursive, mountpoint, content-only, all)
@@ -94,7 +94,7 @@ Target (once the layering is enforced):
 
 ### 4) Adopt pipeline identity early (VirtualPath / AssetKey)
 
-**Intent:** Once `Oxygen.Assets.Model.VirtualPath` and `AssetKey` exist, the content browser should use them internally and keep strings only at the routing boundary.
+**Intent:** Once `Oxygen.Managed.Assets.Model.VirtualPath` and `AssetKey` exist, the content browser should use them internally and keep strings only at the routing boundary.
 
 - `ContentBrowserState` evolves to:
   - `SelectedFolders: ISet<VirtualPath>`
@@ -107,7 +107,7 @@ Target (once the layering is enforced):
 
 **Intent:** The asset pipeline model will grow (source/imported/intermediate/cooked/containerized). The UI needs display fields (thumbnail, badges, states) that should not pollute pipeline DTOs.
 
-- Keep pipeline identity and metadata in `Oxygen.Assets.*`.
+- Keep pipeline identity and metadata in `Oxygen.Managed.Assets.*`.
 - Add UI-specific `AssetListItem` / `AssetItemViewModel` for presentation.
 
 ### 6) Centralize asset result subscription; keep layouts presentation-only
@@ -172,7 +172,7 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 ## Integration priorities for the Oxygen asset pipeline
 
-1) **Catalog & identity:** move UI to `AssetKey`/`VirtualPath` as soon as `Oxygen.Assets.Model` has them.
+1) **Catalog & identity:** move UI to `AssetKey`/`VirtualPath` as soon as `Oxygen.Managed.Assets.Model` has them.
 2) **Operations:** add action entry points for import/reimport/cook/validate; UI wires to those commands.
 3) **Diagnostics-first:** surface validation/cook errors as first-class badges + a details panel/log stream.
 4) **Scalability:** virtualized asset lists, throttled change streams, incremental queries.
@@ -182,7 +182,7 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 - Phase A: Folder moves + namespaces, no behavioral changes.
 - Phase B: Introduce Application layer services, move commands out of viewmodels.
 - Phase C: Replace indexer interface with catalog interface, keep adapter to existing implementation.
-- Phase D: Switch state from strings to `VirtualPath`/`AssetKey` once `Oxygen.Assets` types exist.
+- Phase D: Switch state from strings to `VirtualPath`/`AssetKey` once `Oxygen.Managed.Assets` types exist.
 - Phase E: Add pipeline operations (cook/validate/import) and diagnostics UX.
 
 ## Trackable tasks
@@ -195,12 +195,12 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 6. [ ] Add pipeline operation stubs: import, reimport, cook selection, validate selection (application services first).
 7. [ ] Implement `ImportAssetAction` calling `IImportService.ImportAsync` with cancellation + `ImportOptions.Progress` wiring (no pipeline logic in ViewModels).
 8. [ ] Add an editor-friendly diagnostics surface for import/build (summary + details; best-effort; non-fatal on common errors).
-9. [ ] Update assets VMs to depend on `Oxygen.Assets.IAssetCatalog` (snapshot query + change stream; client-controlled scope).
-10. [ ] Create `Infrastructure/Assets/IndexerBackedAssetCatalog` implementing `Oxygen.Assets.IAssetCatalog` by wrapping the current `IAssetIndexingService` (temporary bridge; avoid leaking indexer semantics into UI).
+9. [ ] Update assets VMs to depend on `Oxygen.Managed.Assets.IAssetCatalog` (snapshot query + change stream; client-controlled scope).
+10. [ ] Create `Infrastructure/Assets/IndexerBackedAssetCatalog` implementing `Oxygen.Managed.Assets.IAssetCatalog` by wrapping the current `IAssetIndexingService` (temporary bridge; avoid leaking indexer semantics into UI).
 11. [ ] Centralize snapshot+stream merging in an `AssetResultsController` so layouts remain presentation-only.
 12. [ ] Introduce `AssetQuery` (folder scope/search/filter/sort) and drive results from query state.
 13. [ ] Extend `ContentBrowserState` to include selected assets (in addition to selected folders).
-14. [ ] When `Oxygen.Assets.Model.VirtualPath` and `AssetKey` exist, replace string-based paths/identity in state and UI models.
+14. [ ] When `Oxygen.Managed.Assets.Model.VirtualPath` and `AssetKey` exist, replace string-based paths/identity in state and UI models.
 15. [ ] Replace `ConcurrentBag<GameAsset>` in the indexing implementation with a key-indexed store that supports remove/move/rename deterministically (only if the indexer remains a long-lived provider after catalog migration).
 16. [ ] Add diagnostics surfacing: per-asset badges (errors/warnings) + a details view/log stream.
 17. [ ] Add thumbnail pipeline abstraction (async + caching + cancellation) and update layouts to use it.

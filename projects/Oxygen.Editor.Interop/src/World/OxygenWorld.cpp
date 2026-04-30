@@ -192,7 +192,7 @@ namespace Oxygen::Interop::World {
       : guid_(guid), onCreated_(onCreated) {
     }
 
-    void OnCreated(Oxygen::Core::NodeHandle) {
+    void OnCreated(Oxygen::Managed::Core::NodeHandle) {
       try {
         if (onCreated_ != nullptr)
           onCreated_->Invoke(guid_);
@@ -348,7 +348,7 @@ namespace Oxygen::Interop::World {
     // Create managed invoker that will be called on engine thread after
     // registration
     auto invoker = gcnew CallbackInvoker(nodeId, onCreated);
-    auto managedCallback = gcnew System::Action<Oxygen::Core::NodeHandle>(
+    auto managedCallback = gcnew System::Action<Oxygen::Managed::Core::NodeHandle>(
       invoker, &CallbackInvoker::OnCreated);
 
     // Enqueue command that will create native node, register native handle under

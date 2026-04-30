@@ -30,7 +30,7 @@ the reusable content browser identity workflow.
 
 - `ARCHITECTURE.md`: asset identity, content browser, content pipeline,
   diagnostics, and project content roots.
-- `PROJECT-LAYOUT.md`: `Oxygen.Editor.ContentBrowser`, `Oxygen.Assets`,
+- `PROJECT-LAYOUT.md`: `Oxygen.Editor.ContentBrowser`, `Oxygen.Managed.Assets`,
   `Oxygen.Editor.ContentPipeline`, `Oxygen.Editor.Projects`.
 - `asset-primitives.md`: catalog, URI, reference, and change primitives.
 - `project-services.md`: project root, authoring roots, local roots, and
@@ -46,7 +46,7 @@ The repository already has these useful pieces:
 
 - `IAssetCatalog`, `AssetRecord`, `AssetQuery`, `AssetQueryScope`,
   `AssetQueryTraversal`, `AssetChange`, and `AssetChangeKind` in
-  `Oxygen.Assets`.
+  `Oxygen.Managed.Assets`.
 - `ProjectAssetCatalog` in `Oxygen.Editor.ContentBrowser`, composing generated,
   filesystem, and loose-cooked catalog providers from the active
   `IProjectContextService`.
@@ -83,7 +83,7 @@ project-root policy. It never presents raw cooked filesystem paths as authored
 identity.
 
 ```text
-------------------------- Oxygen.Assets -------------------------+
+------------------------- Oxygen.Managed.Assets -------------------------+
 | AssetRecord(Uri) + AssetChange                                  |
 +---------------------------- query ------------------------------+
                              |
@@ -130,7 +130,7 @@ availability input.
 | Owner | Responsibility |
 | --- | --- |
 | `Oxygen.Editor.ContentBrowser` | browser row model, state reducer, list/tile UX, typed picker UX, content-root display policy. |
-| `Oxygen.Assets` | asset URI, references, catalog query/change primitives, generated/filesystem/cooked index providers. |
+| `Oxygen.Managed.Assets` | asset URI, references, catalog query/change primitives, generated/filesystem/cooked index providers. |
 | `Oxygen.Editor.Projects` | active project context, authoring roots, local roots, cooked-root policy. |
 | `Oxygen.Editor.ContentPipeline` | import/cook/index operations and later full state production. |
 | `Oxygen.Editor.MaterialEditor` | material create/open/edit/cook UI. |
@@ -331,7 +331,7 @@ Reducer responsibilities:
 - use `AssetChange.PreviousUri` on relocate to invalidate old logical keys.
 
 Broken-state detection is Content Browser adapter work, not an
-`Oxygen.Assets` catalog responsibility:
+`Oxygen.Managed.Assets` catalog responsibility:
 
 - catalog providers enumerate identities only.
 - the provider schedules descriptor validation off the UI thread when material,
@@ -580,8 +580,8 @@ also carry `AffectedPath` for source/cooked filesystem paths.
 
 Allowed:
 
-- Content Browser depends on `Oxygen.Assets`, `Oxygen.Editor.Projects`,
-  `Oxygen.Core.Diagnostics`, and editor messaging.
+- Content Browser depends on `Oxygen.Managed.Assets`, `Oxygen.Editor.Projects`,
+  `Oxygen.Managed.Core.Diagnostics`, and editor messaging.
 - Material Editor opens material identities supplied by Content Browser.
 - WorldEditor consumes picker contracts and persists asset URIs.
 
@@ -592,7 +592,7 @@ Forbidden:
 - Content Browser must not own import/cook primitive implementations.
 - picker/browser rows must not persist descriptor/cooked paths into authoring
   data.
-- `Oxygen.Assets` primitives must not depend on Content Browser row types.
+- `Oxygen.Managed.Assets` primitives must not depend on Content Browser row types.
 
 ## 14. Validation Gates
 

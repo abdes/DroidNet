@@ -5,7 +5,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 using DroidNet.TimeMachine;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;

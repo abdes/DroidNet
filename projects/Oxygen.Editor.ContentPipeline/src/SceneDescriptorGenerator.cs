@@ -4,8 +4,8 @@
 
 using System.Numerics;
 using System.Text.Json;
-using Oxygen.Core;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;

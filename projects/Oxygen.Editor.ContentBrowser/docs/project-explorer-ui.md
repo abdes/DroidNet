@@ -1,7 +1,7 @@
 
 # Project Explorer UI (Mount Points)
 
-This document specifies the **Project Explorer** (left pane) UI and the refactoring tasks needed to support **mount points** consistent with [projects/Oxygen.Assets/docs/virtual-paths.md](../../Oxygen.Assets/docs/virtual-paths.md).
+This document specifies the **Project Explorer** (left pane) UI and the refactoring tasks needed to support **mount points** consistent with [projects/Oxygen.Managed.Assets/docs/virtual-paths.md](../../Oxygen.Managed.Assets/docs/virtual-paths.md).
 
 ## Scope
 
@@ -180,7 +180,7 @@ This applies to **authoring mount points** (and their descendants). Project fold
 
 ### Canonical virtual path rules
 
-All virtual paths must follow the rules in [projects/Oxygen.Assets/docs/virtual-paths.md](../../Oxygen.Assets/docs/virtual-paths.md):
+All virtual paths must follow the rules in [projects/Oxygen.Managed.Assets/docs/virtual-paths.md](../../Oxygen.Managed.Assets/docs/virtual-paths.md):
 
 - Must start with `/`
 - Uses `/` separators
@@ -296,14 +296,14 @@ Naming rule:
 
 - [x] Change Project Explorer selection emission so it produces canonical virtual paths (strings at first), not project-relative filesystem paths.
   - Near-term: keep `string` but ensure it always conforms to the canonical virtual-path rules.
-  - Mid-term: migrate to a typed `VirtualPath` when it exists in `Oxygen.Assets.Model`.
+  - Mid-term: migrate to a typed `VirtualPath` when it exists in `Oxygen.Managed.Assets.Model`.
 
 - [x] Remove case-insensitive comparisons used for matching selected items.
   - Example: any `StringComparison.OrdinalIgnoreCase` comparisons for selection matching should become `StringComparison.Ordinal`.
 
-- [x] Centralize virtual path creation by using the existing `Oxygen.Assets.Filesystem.VirtualPath` type.
+- [x] Centralize virtual path creation by using the existing `Oxygen.Managed.Assets.Filesystem.VirtualPath` type.
   - Do not introduce a new “VirtualPath-like” abstraction in the editor.
-  - Enhance `VirtualPath` (in Oxygen.Assets) if needed with a canonical virtual-path builder/validator appropriate for `/{MountPoint}/{RelativePath}`.
+  - Enhance `VirtualPath` (in Oxygen.Managed.Assets) if needed with a canonical virtual-path builder/validator appropriate for `/{MountPoint}/{RelativePath}`.
 
 - [x] For “Local Folder” mounts: should the user be able to **rename** the mount point name, or is deriving it from the folder name sufficient for now? USER CAN RENAME MOUNT POINT (logical name not physical folder)
 - [x] Should Local Folder mounts be allowed to point outside the project root (expected: yes)? YES
@@ -320,7 +320,7 @@ Naming rule:
 
 - [x] Rename the project build output folder from `Build` to `.build` for consistent hidden-folder semantics.
   - [x] Update Project Explorer built-in mount mapping: `Build` → `.build`.
-  - [x] Update `Oxygen.Assets` to write/read `.build` wherever it currently uses `Build` for packaged/platform outputs.
+  - [x] Update `Oxygen.Managed.Assets` to write/read `.build` wherever it currently uses `Build` for packaged/platform outputs.
   - [x] Update any docs/scripts/tests that reference `Build/` to `.build/`.
 
 ### F) Tests (MUST)

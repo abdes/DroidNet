@@ -11,7 +11,7 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;

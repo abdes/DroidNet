@@ -390,7 +390,7 @@ or target folders outside the project layout policy.
 | `Oxygen.Editor.WorldEditor` | scene document create/open/save under `Content/Scenes`. |
 | `Oxygen.Editor.MaterialEditor` | material descriptor create/open/save under `Content/Materials` or selected material target. |
 | `Oxygen.Editor.ContentPipeline` | import/cook outputs under derived roots and cooked indexes. |
-| `Oxygen.Assets` | reusable asset URI, catalog, import, and cook primitives. |
+| `Oxygen.Managed.Assets` | reusable asset URI, catalog, import, and cook primitives. |
 
 ## 7. Data Contracts
 
@@ -631,7 +631,7 @@ Layout-related failures use existing project/content domains:
 - `Oxygen.Editor.Runtime` consumes cooked-root mount policy; it must not own
   authoring layout.
 - `Oxygen.Editor.Interop` must not know project layout policy.
-- `Oxygen.Assets` owns reusable URI/catalog primitives but must not own editor
+- `Oxygen.Managed.Assets` owns reusable URI/catalog primitives but must not own editor
   project-template workflow.
 
 ## 14. Validation Gates

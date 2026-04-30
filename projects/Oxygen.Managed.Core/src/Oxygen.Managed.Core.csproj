@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net9.0;net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Managed.Core</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen Managed Core</Title>
+        <Description>Oxygen managed core services and utilities, including extensions to framework classes.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;gameengine</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Testably.Abstractions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
+    </ItemGroup>
+
+</Project>
