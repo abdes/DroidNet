@@ -20,6 +20,11 @@ namespace Oxygen.Editor.World.Services;
 public interface ISceneEngineSync
 {
     /// <summary>
+    ///     Occurs when the number of buffered property sync requests changes for a scene.
+    /// </summary>
+    public event EventHandler<PendingPropertySyncCountChangedEventArgs>? PendingPropertySyncCountChanged;
+
+    /// <summary>
     ///     Synchronizes an entire scene with the engine, creating all nodes and establishing the hierarchy.
     /// </summary>
     /// <param name="scene">The scene to synchronize.</param>
