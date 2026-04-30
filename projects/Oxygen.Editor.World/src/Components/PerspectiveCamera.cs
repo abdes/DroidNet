@@ -12,9 +12,6 @@ namespace Oxygen.Editor.World;
 /// </summary>
 public partial class PerspectiveCamera : CameraComponent
 {
-    private float fieldOfView = DefaultFieldOfViewDegrees;
-    private float aspectRatio = DefaultAspectRatio;
-
     /// <summary>
     /// Default vertical field of view stored by the editor, in degrees.
     /// </summary>
@@ -24,6 +21,9 @@ public partial class PerspectiveCamera : CameraComponent
     /// Default camera aspect ratio (width / height).
     /// </summary>
     public const float DefaultAspectRatio = 16f / 9f;
+
+    private float fieldOfView = DefaultFieldOfViewDegrees;
+    private float aspectRatio = DefaultAspectRatio;
 
     static PerspectiveCamera()
     {

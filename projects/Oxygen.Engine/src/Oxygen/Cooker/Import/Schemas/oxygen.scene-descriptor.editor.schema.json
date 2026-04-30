@@ -1,0 +1,351 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://oxygen.editor/schemas/oxygen.scene-descriptor.editor.schema.json",
+    "$ref": "oxygen.scene-descriptor.schema.json",
+    "title": "Oxygen Scene Descriptor (editor overlay)",
+    "description": "Editor metadata layered on top of the engine scene schema. Adds x-editor-* annotations only; introduces no constraints.",
+    "properties": {
+        "$schema": {
+            "x-editor-label": "Schema",
+            "x-editor-group": "Document",
+            "x-editor-order": 0,
+            "x-editor-renderer": "readonly"
+        },
+        "version": {
+            "x-editor-label": "Version",
+            "x-editor-group": "Document",
+            "x-editor-order": 1,
+            "x-editor-renderer": "readonly"
+        },
+        "name": {
+            "x-editor-label": "Name",
+            "x-editor-group": "Document",
+            "x-editor-order": 2,
+            "x-editor-renderer": "text"
+        },
+        "content_hashing": {
+            "x-editor-label": "Content Hashing",
+            "x-editor-group": "Document",
+            "x-editor-order": 3,
+            "x-editor-renderer": "toggle"
+        },
+        "nodes": {
+            "x-editor-label": "Scene Nodes",
+            "x-editor-group": "Scene",
+            "x-editor-order": 10,
+            "x-editor-renderer": "scene-tree"
+        },
+        "renderables": {
+            "x-editor-label": "Renderables",
+            "x-editor-group": "Scene",
+            "x-editor-order": 20,
+            "x-editor-renderer": "component-list"
+        },
+        "cameras": {
+            "x-editor-label": "Cameras",
+            "x-editor-group": "Scene",
+            "x-editor-order": 30,
+            "x-editor-renderer": "component-list"
+        },
+        "lights": {
+            "x-editor-label": "Lights",
+            "x-editor-group": "Scene",
+            "x-editor-order": 40,
+            "x-editor-renderer": "component-list"
+        },
+        "environment": {
+            "x-editor-label": "Environment",
+            "x-editor-group": "Scene",
+            "x-editor-order": 50,
+            "x-editor-renderer": "environment-editor"
+        },
+        "local_fog_volumes": {
+            "x-editor-label": "Local Fog Volumes",
+            "x-editor-group": "Scene",
+            "x-editor-order": 60,
+            "x-editor-renderer": "component-list"
+        },
+        "references": {
+            "x-editor-label": "References",
+            "x-editor-group": "Scene",
+            "x-editor-order": 70,
+            "x-editor-renderer": "asset-reference-list"
+        }
+    },
+    "definitions": {
+        "renderable": {
+            "properties": {
+                "geometry_ref": {
+                    "x-editor-label": "Geometry",
+                    "x-editor-group": "Geometry",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "asset-picker"
+                },
+                "material_ref": {
+                    "x-editor-label": "Material",
+                    "x-editor-group": "Geometry",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "asset-picker"
+                }
+            }
+        },
+        "perspective_camera": {
+            "properties": {
+                "fov_y": {
+                    "x-editor-label": "Field of View",
+                    "x-editor-group": "Projection",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.1,
+                    "x-editor-unit": "deg"
+                },
+                "aspect_ratio": {
+                    "x-editor-label": "Aspect Ratio",
+                    "x-editor-group": "Projection",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.01
+                },
+                "near_plane": {
+                    "x-editor-label": "Near Plane",
+                    "x-editor-group": "Projection",
+                    "x-editor-order": 20,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.01,
+                    "x-editor-unit": "m"
+                },
+                "far_plane": {
+                    "x-editor-label": "Far Plane",
+                    "x-editor-group": "Projection",
+                    "x-editor-order": 30,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 1.0,
+                    "x-editor-unit": "m"
+                }
+            }
+        },
+        "light_shadow": {
+            "properties": {
+                "bias": {
+                    "x-editor-label": "Shadow Bias",
+                    "x-editor-group": "Shadows",
+                    "x-editor-order": 30,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.0001
+                },
+                "normal_bias": {
+                    "x-editor-label": "Normal Bias",
+                    "x-editor-group": "Shadows",
+                    "x-editor-order": 40,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.0001
+                },
+                "contact_shadows": {
+                    "x-editor-label": "Contact Shadows",
+                    "x-editor-group": "Shadows",
+                    "x-editor-order": 20,
+                    "x-editor-renderer": "toggle"
+                },
+                "resolution_hint": {
+                    "x-editor-label": "Resolution",
+                    "x-editor-group": "Shadows",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "combo"
+                }
+            }
+        },
+        "light_common": {
+            "properties": {
+                "affects_world": {
+                    "x-editor-label": "Affects World",
+                    "x-editor-group": "Common",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "toggle"
+                },
+                "color_rgb": {
+                    "x-editor-label": "Color",
+                    "x-editor-group": "Light",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "color-rgb"
+                },
+                "mobility": {
+                    "x-editor-label": "Mobility",
+                    "x-editor-group": "Common",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "combo"
+                },
+                "casts_shadows": {
+                    "x-editor-label": "Cast Shadows",
+                    "x-editor-group": "Shadows",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "toggle"
+                },
+                "exposure_compensation_ev": {
+                    "x-editor-label": "Exposure Compensation",
+                    "x-editor-group": "Exposure",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.1,
+                    "x-editor-unit": "EV"
+                },
+                "shadow": {
+                    "x-editor-label": "Shadows",
+                    "x-editor-group": "Light",
+                    "x-editor-order": 40,
+                    "x-editor-renderer": "section"
+                }
+            }
+        },
+        "directional_light": {
+            "properties": {
+                "intensity_lux": {
+                    "x-editor-label": "Intensity",
+                    "x-editor-group": "Emission",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 100.0,
+                    "x-editor-unit": "lux"
+                },
+                "angular_size_radians": {
+                    "x-editor-label": "Angular Size",
+                    "x-editor-group": "Emission",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.001,
+                    "x-editor-unit": "rad"
+                },
+                "environment_contribution": {
+                    "x-editor-label": "Contributes",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "toggle"
+                },
+                "is_sun_light": {
+                    "x-editor-label": "Sun",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "toggle"
+                },
+                "cascade_count": {
+                    "x-editor-label": "Cascade Count",
+                    "x-editor-group": "Cascades",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 1.0
+                },
+                "split_mode": {
+                    "x-editor-label": "Split Mode",
+                    "x-editor-group": "Cascades",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "combo"
+                },
+                "max_shadow_distance": {
+                    "x-editor-label": "Max Distance",
+                    "x-editor-group": "Cascades",
+                    "x-editor-order": 20,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 1.0,
+                    "x-editor-unit": "m"
+                },
+                "cascade_distances": {
+                    "x-editor-label": "Cascade Distances",
+                    "x-editor-group": "Cascades",
+                    "x-editor-order": 30,
+                    "x-editor-renderer": "vector4-box",
+                    "x-editor-step": 1.0,
+                    "x-editor-unit": "m"
+                },
+                "distribution_exponent": {
+                    "x-editor-label": "Distribution",
+                    "x-editor-group": "Cascades",
+                    "x-editor-order": 40,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.1
+                },
+                "transition_fraction": {
+                    "x-editor-label": "Transition",
+                    "x-editor-group": "Cascade Blend",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.01
+                },
+                "distance_fadeout_fraction": {
+                    "x-editor-label": "Fadeout",
+                    "x-editor-group": "Cascade Blend",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "numberbox",
+                    "x-editor-step": 0.01
+                }
+            }
+        },
+        "editor_scene_environment": {
+            "properties": {
+                "atmosphere_enabled": {
+                    "x-editor-label": "Enabled",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 0,
+                    "x-editor-renderer": "toggle"
+                },
+                "sun_node_id": {
+                    "x-editor-label": "Sun Light",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 10,
+                    "x-editor-renderer": "combo"
+                },
+                "background_color": {
+                    "x-editor-label": "Background",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 20,
+                    "x-editor-renderer": "color-rgb"
+                },
+                "post_process": {
+                    "x-editor-label": "Post Process",
+                    "x-editor-group": "Environment",
+                    "x-editor-order": 30,
+                    "x-editor-renderer": "section",
+                    "properties": {
+                        "tone_mapper": { "x-editor-label": "Mapper", "x-editor-group": "Tone Mapping", "x-editor-renderer": "combo" },
+                        "exposure_mode": { "x-editor-label": "Mode", "x-editor-group": "Exposure", "x-editor-renderer": "combo" },
+                        "exposure_enabled": { "x-editor-label": "Enabled", "x-editor-group": "Exposure", "x-editor-renderer": "toggle" },
+                        "manual_exposure_ev": { "x-editor-label": "Manual EV", "x-editor-group": "Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1, "x-editor-unit": "EV" },
+                        "exposure_compensation_ev": { "x-editor-label": "Compensation", "x-editor-group": "Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1, "x-editor-unit": "EV" },
+                        "exposure_key": { "x-editor-label": "Key", "x-editor-group": "Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1 },
+                        "auto_exposure_metering_mode": { "x-editor-label": "Metering", "x-editor-group": "Auto Exposure", "x-editor-renderer": "combo" },
+                        "auto_exposure_min_ev": { "x-editor-label": "Auto Min EV", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1, "x-editor-unit": "EV" },
+                        "auto_exposure_max_ev": { "x-editor-label": "Auto Max EV", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1, "x-editor-unit": "EV" },
+                        "auto_exposure_speed_up": { "x-editor-label": "Adapt Up", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1 },
+                        "auto_exposure_speed_down": { "x-editor-label": "Adapt Down", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1 },
+                        "auto_exposure_low_percentile": { "x-editor-label": "Low Percentile", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "auto_exposure_high_percentile": { "x-editor-label": "High Percentile", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "auto_exposure_min_log_luminance": { "x-editor-label": "Min Log Luminance", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1 },
+                        "auto_exposure_log_luminance_range": { "x-editor-label": "Log Luminance Range", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.1 },
+                        "auto_exposure_target_luminance": { "x-editor-label": "Target Luminance", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "auto_exposure_spot_meter_radius": { "x-editor-label": "Spot Radius", "x-editor-group": "Auto Exposure", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "bloom_intensity": { "x-editor-label": "Intensity", "x-editor-group": "Bloom", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "bloom_threshold": { "x-editor-label": "Threshold", "x-editor-group": "Bloom", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "saturation": { "x-editor-label": "Saturation", "x-editor-group": "Color Grading", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "contrast": { "x-editor-label": "Contrast", "x-editor-group": "Color Grading", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "vignette_intensity": { "x-editor-label": "Vignette", "x-editor-group": "Color Grading", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                        "display_gamma": { "x-editor-label": "Display Gamma", "x-editor-group": "Color Grading", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 }
+                    }
+                }
+            }
+        },
+        "sky_atmosphere_environment": {
+            "properties": {
+                "planet_radius_m": { "x-editor-label": "Planet Radius", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "numberbox", "x-editor-step": 1000.0, "x-editor-unit": "m" },
+                "atmosphere_height_m": { "x-editor-label": "Atmosphere Height", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "numberbox", "x-editor-step": 1000.0, "x-editor-unit": "m" },
+                "ground_albedo_rgb": { "x-editor-label": "Ground Albedo", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "color-rgb" },
+                "rayleigh_scale_height_m": { "x-editor-label": "Rayleigh Height", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "numberbox", "x-editor-step": 100.0, "x-editor-unit": "m" },
+                "mie_scale_height_m": { "x-editor-label": "Mie Height", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "numberbox", "x-editor-step": 100.0, "x-editor-unit": "m" },
+                "mie_anisotropy": { "x-editor-label": "Mie Anisotropy", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                "sky_luminance_factor_rgb": { "x-editor-label": "Sky Luminance", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "color-rgb" },
+                "aerial_perspective_distance_scale": { "x-editor-label": "Aerial Distance", "x-editor-group": "Aerial Perspective", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                "aerial_scattering_strength": { "x-editor-label": "Aerial Strength", "x-editor-group": "Aerial Perspective", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                "aerial_perspective_start_depth_m": { "x-editor-label": "Aerial Start", "x-editor-group": "Aerial Perspective", "x-editor-renderer": "numberbox", "x-editor-step": 1.0, "x-editor-unit": "m" },
+                "height_fog_contribution": { "x-editor-label": "Height Fog", "x-editor-group": "Aerial Perspective", "x-editor-renderer": "numberbox", "x-editor-step": 0.01 },
+                "sun_disk_enabled": { "x-editor-label": "Sun Disk", "x-editor-group": "Sky Atmosphere", "x-editor-renderer": "toggle" }
+            }
+        }
+    }
+}

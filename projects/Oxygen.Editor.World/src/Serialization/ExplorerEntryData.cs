@@ -13,6 +13,8 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 public record ExplorerEntryData
 {
+    private IList<ExplorerEntryData>? children;
+
     /// <summary>
     /// Gets one of: "Node" or "Folder". Kept as a string for forward-compatibility.
     /// </summary>
@@ -37,14 +39,25 @@ public record ExplorerEntryData
     public string? Name { get; set; }
 
     /// <summary>
-    /// Gets or sets child entries for folder nodes.
+    /// Gets child entries for folder nodes.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<ExplorerEntryData>? Children { get; set; } = null;
+    public IList<ExplorerEntryData>? Children
+    {
+        get => this.children;
+        init => this.children = value;
+    }
 
     /// <summary>
     /// Gets or sets or initializes a value indicating whether the item is expanded in the explorer view.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsExpanded { get; set; }
+
+    /// <summary>
+    /// Gets the mutable child collection, creating it when needed.
+    /// </summary>
+    /// <returns>The mutable child collection.</returns>
+    public IList<ExplorerEntryData> EnsureChildren()
+        => this.children ??= [];
 }

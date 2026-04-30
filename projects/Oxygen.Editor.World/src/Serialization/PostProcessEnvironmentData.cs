@@ -17,7 +17,7 @@ public sealed record PostProcessEnvironmentData
     /// <summary>
     /// Gets the exposure mode.
     /// </summary>
-    public ExposureMode ExposureMode { get; init; } = ExposureMode.Auto;
+    public ExposureMode ExposureMode { get; init; } = ExposureMode.Manual;
 
     /// <summary>
     /// Gets a value indicating whether exposure is applied.
@@ -32,12 +32,12 @@ public sealed record PostProcessEnvironmentData
     /// <summary>
     /// Gets the display key scale applied after EV-to-linear calibration.
     /// </summary>
-    public float ExposureKey { get; init; } = 10.0f;
+    public float ExposureKey { get; init; } = 12.5f;
 
     /// <summary>
     /// Gets manual exposure in EV100.
     /// </summary>
-    public float ManualExposureEv { get; init; } = 9.7f;
+    public float ManualExposureEv { get; init; } = 13.0f;
 
     /// <summary>
     /// Gets the minimum auto-exposure EV.
