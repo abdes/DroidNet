@@ -4,7 +4,7 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 

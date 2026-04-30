@@ -5,9 +5,9 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Assets.Catalog;
-using Oxygen.Assets.Import.Materials;
-using Oxygen.Core;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
 

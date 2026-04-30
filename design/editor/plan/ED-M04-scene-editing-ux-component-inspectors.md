@@ -143,7 +143,7 @@ Tasks:
 - Confirm exact test host:
   - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj`
   - `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
-  - `projects/Oxygen.Core/tests` for diagnostics vocabulary only if new
+  - `projects/Oxygen.Managed.Core/tests` for diagnostics vocabulary only if new
     constants are added.
 - Record any remaining direct inspector mutation paths in this plan before
   implementation continues.
@@ -162,7 +162,7 @@ Audit result:
 - Confirmed test hosts:
   - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj`
   - `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
-  - `projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj`
+  - `projects/Oxygen.Managed.Core/tests/Oxygen.Managed.Core.Tests.csproj`
 - Current direct inspector mutation paths to migrate:
   - `TransformViewModel.OnPosition*/OnRotation*/OnScale*Changed` mutates
     `TransformComponent` directly, then sends
@@ -244,7 +244,7 @@ Tasks:
   - `Scene.Component.Add`
   - `Scene.Component.Remove`
   - `Scene.Environment.Edit`
-- Add or verify diagnostic code prefixes in `Oxygen.Core.Diagnostics`:
+- Add or verify diagnostic code prefixes in `Oxygen.Managed.Core.Diagnostics`:
   - `OXE.SCENE.*`
   - `OXE.DOCUMENT.*`
   - `OXE.LIVESYNC.*`
@@ -417,7 +417,7 @@ Tasks:
 - Publish `OperationResult` for validation failures and sync warnings.
 - Mark dirty only after successful authoring mutation.
 - Register the validation diagnostic codes consumed by the inspector and
-  asserted by tests in `Oxygen.Core/src/Diagnostics/DiagnosticCodes.cs` (or
+  asserted by tests in `Oxygen.Managed.Core/src/Diagnostics/DiagnosticCodes.cs` (or
   the existing scene-codes file). At minimum:
   - `OXE.SCENE.TransformComponent.Scale.ZeroAxis`
   - `OXE.SCENE.TransformComponent.Field.NotFinite`
@@ -665,9 +665,9 @@ Likely inspector files:
 
 Likely diagnostics files:
 
-- `projects/Oxygen.Core/src/Diagnostics/SceneOperationKinds.cs`
-- `projects/Oxygen.Core/src/Diagnostics/DiagnosticCodes.cs`
-- `projects/Oxygen.Core/src/Diagnostics/FailureDomain.cs` only if the ED-M05
+- `projects/Oxygen.Managed.Core/src/Diagnostics/SceneOperationKinds.cs`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/DiagnosticCodes.cs`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/FailureDomain.cs` only if the ED-M05
   domains already added in docs need code alignment before ED-M04 tests touch
   them.
 
@@ -675,7 +675,7 @@ Likely test files:
 
 - `projects/Oxygen.Editor.World/tests/*`
 - `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/*`
-- `projects/Oxygen.Core/tests/*` for diagnostics vocabulary constants.
+- `projects/Oxygen.Managed.Core/tests/*` for diagnostics vocabulary constants.
 
 ## 9. Dependency And Migration Risks
 

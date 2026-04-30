@@ -6,12 +6,12 @@ using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using Oxygen.Assets.Catalog;
-using Oxygen.Assets.Catalog.FileSystem;
-using Oxygen.Assets.Catalog.LooseCooked;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog.FileSystem;
+using Oxygen.Managed.Assets.Catalog.LooseCooked;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Storage;
+using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
@@ -167,7 +167,7 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
         }
     }
 
-    public async Task AddFolderAsync(Oxygen.Storage.IFolder folder, string mountPoint)
+    public async Task AddFolderAsync(DroidNet.Storage.IFolder folder, string mountPoint)
     {
         var options = new FileSystemAssetCatalogOptions
         {

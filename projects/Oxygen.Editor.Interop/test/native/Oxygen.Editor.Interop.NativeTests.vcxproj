@@ -71,6 +71,7 @@
     <_NativeTestsOutDir>$(_NativeTestsArtifactsPath)bin\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsOutDir>
     <_NativeTestsIntDir>$(_NativeTestsArtifactsPath)obj\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsIntDir>
     <InteropBinaryDir>$(_NativeTestsArtifactsPath)bin\Oxygen.Editor.Interop\$(Configuration)_$(TargetFramework)\</InteropBinaryDir>
+    <RunSettingsFilePath>$(_NativeTestsIntDir)$(MSBuildProjectName).runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <!-- Source Files -->
   <ItemGroup>
@@ -177,11 +178,24 @@
     <PackageReference Include="System.Diagnostics.DiagnosticSource" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ItemGroup Condition="Exists('$(OxygenEngineInstallDir)\bin')">
-    <OxygenEngineRuntimeDependency Include="$(OxygenEngineInstallDir)\bin\*.dll" />
-  </ItemGroup>
-  <Target Name="CopyOxygenEngineRuntimeDependencies" AfterTargets="Build" Condition="'@(OxygenEngineRuntimeDependency)' != ''">
-    <Copy SourceFiles="@(OxygenEngineRuntimeDependency)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  <Target Name="GenerateInteropNativeTestRunSettings" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <_InteropNativeRunSettingsLine Include='&lt;?xml version="1.0" encoding="utf-8"?&gt;' />
+      <_InteropNativeRunSettingsLine Include='&lt;RunSettings&gt;' />
+      <_InteropNativeRunSettingsLine Include='  &lt;RunConfiguration&gt;' />
+      <_InteropNativeRunSettingsLine Include='    &lt;EnvironmentVariables&gt;' />
+      <_InteropNativeRunSettingsLine Include='      &lt;PATH&gt;$(OxygenEngineInstallDir)\bin%3B%PATH%&lt;/PATH&gt;' />
+      <_InteropNativeRunSettingsLine Include='    &lt;/EnvironmentVariables&gt;' />
+      <_InteropNativeRunSettingsLine Include='  &lt;/RunConfiguration&gt;' />
+      <_InteropNativeRunSettingsLine Include='&lt;/RunSettings&gt;' />
+    </ItemGroup>
+
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(RunSettingsFilePath)'))" />
+    <WriteLinesToFile
+      File="$(RunSettingsFilePath)"
+      Lines="@(_InteropNativeRunSettingsLine)"
+      Overwrite="true"
+      Encoding="UTF-8" />
   </Target>
   <!-- Debug target to display evaluated properties -->
   <Target Name="ShowProps">

@@ -43,7 +43,7 @@ editor-only JSON schemas for runtime content.
 - `project-services.md`: active project context, authoring mounts, local
   mounts, and `ProjectCookScope`.
 - `asset-primitives.md`: reusable asset identity/catalog/import/cook
-  primitives in `Oxygen.Assets`.
+  primitives in `Oxygen.Managed.Assets`.
 - `runtime-integration.md`: runtime cooked-root mount refresh.
 - `diagnostics-operation-results.md`: pipeline operation kinds, failure
   domains, and diagnostic code prefixes.
@@ -52,9 +52,9 @@ editor-only JSON schemas for runtime content.
 
 Reusable managed primitives already exist:
 
-- `Oxygen.Assets.Import.IImportService` accepts `ImportRequest` with
+- `Oxygen.Managed.Assets.Import.IImportService` accepts `ImportRequest` with
   `ImportInput` rows and runs importer selection plus build.
-- `Oxygen.Assets.Cook.LooseCookedBuildService` is invoked by
+- `Oxygen.Managed.Assets.Cook.LooseCookedBuildService` is invoked by
   `ImportService.ImportAsync`; callers must not call it again after import.
 - `MaterialSourceReader` / `MaterialSourceWriter` own
   `oxygen.material.v1` material descriptors.
@@ -111,7 +111,7 @@ User action
   -> resolve project cook scope and selected authored inputs
   -> generate/update engine descriptors where needed
   -> generate an import manifest or equivalent import request set
-  -> execute cook through Oxygen.Assets or native Oxygen.Cooker APIs
+  -> execute cook through Oxygen.Managed.Assets or native Oxygen.Cooker APIs
   -> inspect cooked output
   -> validate loose cooked root
   -> refresh asset catalog rows
@@ -158,7 +158,7 @@ There is no save-time cook side effect.
 | Owner | Responsibility |
 | --- | --- |
 | `Oxygen.Editor.ContentPipeline` | Editor orchestration service, descriptor adapter coordination, import/cook requests, inspect/validate adapters, catalog refresh, operation results. |
-| `Oxygen.Assets` | Managed reusable import/cook/index primitives and editor-side readers/writers. |
+| `Oxygen.Managed.Assets` | Managed reusable import/cook/index primitives and editor-side readers/writers. |
 | `Oxygen.Cooker` / engine content API | Native schemas, manifest batch import, scene descriptor import, loose cooked inspection/validation, runtime-compatible descriptors. |
 | `Oxygen.Editor.Interop` | Narrow managed wrappers for native cooker inspection/validation/import APIs when ED-M07 needs native behavior that is not exposed in managed code. |
 | `Oxygen.Editor.Projects` | Project root, authoring mount facts, local mount facts, default cooked output root, and validation policy. |
@@ -528,7 +528,7 @@ Implementation options:
 - invoke `Oxygen.Cooker.ImportTool` only as a bounded fallback when an in-proc
   Interop wrapper is not yet available; the fallback implementation owns any
   temporary manifest-file serialization internally.
-- keep ED-M05 `MaterialCookService` on managed `Oxygen.Assets` if it already
+- keep ED-M05 `MaterialCookService` on managed `Oxygen.Managed.Assets` if it already
   produces the same loose cooked output and validation result.
 
 ED-M07.1 records which option is used for each ED-M07 operation before
@@ -656,7 +656,7 @@ and adapted to the nearest editor diagnostic code.
 
 Allowed:
 
-- ContentPipeline depends on `Oxygen.Assets`.
+- ContentPipeline depends on `Oxygen.Managed.Assets`.
 - ContentPipeline depends on project services for project/cook scope facts.
 - ContentPipeline may depend on `Oxygen.Editor.Interop` through
   `IEngineContentPipelineApi` for native cooker APIs.

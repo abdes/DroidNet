@@ -89,7 +89,7 @@ ED-M05 includes:
   - `Material.Pick`
 - Add `FailureDomain.MaterialAuthoring` and `FailureDomain.AssetIdentity` if
   missing in code, plus ED-M05 diagnostic code prefixes.
-- Implement a material document service over existing `Oxygen.Assets`
+- Implement a material document service over existing `Oxygen.Managed.Assets`
   material primitives.
 - Implement scalar material editor UI:
   - asset identity/status header;
@@ -185,7 +185,7 @@ Tasks:
 
 - Confirm the corrected ED-M05 LLDs are accepted.
 - Inventory current material-related code:
-  - `Oxygen.Assets` material source, importer, cooked writer, import service,
+  - `Oxygen.Managed.Assets` material source, importer, cooked writer, import service,
     loose cooked build service.
   - `ProjectAssetCatalog`, generated/default material catalog entries, and
     current Content Browser asset panes.
@@ -482,15 +482,15 @@ Likely new projects:
 
 Likely existing files/projects:
 
-- `projects/Oxygen.Core/src/Diagnostics/FailureDomain.cs`
-- `projects/Oxygen.Core/src/Diagnostics/DiagnosticCodes.cs`
-- new `projects/Oxygen.Core/src/Diagnostics/MaterialOperationKinds.cs` or
+- `projects/Oxygen.Managed.Core/src/Diagnostics/FailureDomain.cs`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/DiagnosticCodes.cs`
+- new `projects/Oxygen.Managed.Core/src/Diagnostics/MaterialOperationKinds.cs` or
   equivalent operation-kind constants.
-- `projects/Oxygen.Assets/src/Import/Materials/*`
-- `projects/Oxygen.Assets/src/Import/ImportService.cs`
-- `projects/Oxygen.Assets/src/Cook/LooseCookedBuildService.cs`
-- `projects/Oxygen.Assets/src/Cook/CookedMaterialWriter.cs`
-- `projects/Oxygen.Assets/tests/*Material*`
+- `projects/Oxygen.Managed.Assets/src/Import/Materials/*`
+- `projects/Oxygen.Managed.Assets/src/Import/ImportService.cs`
+- `projects/Oxygen.Managed.Assets/src/Cook/LooseCookedBuildService.cs`
+- `projects/Oxygen.Managed.Assets/src/Cook/CookedMaterialWriter.cs`
+- `projects/Oxygen.Managed.Assets/tests/*Material*`
 - `projects/Oxygen.Editor.Projects/src/*` active project/context/content-root
   service surfaces, consumed read-only for project root and content roots.
 - `projects/Oxygen.Editor.ContentBrowser/src/Infrastructure/Assets/ProjectAssetCatalog.cs`

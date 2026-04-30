@@ -125,7 +125,7 @@ Tasks:
 - Reuse `SceneMutator`, `SceneOrganizer`, `HistoryKeeper`, and
   `ISceneEngineSync`; do not create a parallel mutator.
 - Add operation kinds and diagnostic codes for ED-M03 command/save failures.
-  Prefixes are allocated in `Oxygen.Core` before producer code uses them:
+  Prefixes are allocated in `Oxygen.Managed.Core` before producer code uses them:
   `OXE.SCENE.*`, `OXE.DOCUMENT.*`, and `OXE.LIVESYNC.*`.
 - Publish `OperationResult` for user-triggered command failures.
 
@@ -260,7 +260,7 @@ Likely implementation files:
 - `projects/Oxygen.Editor.World/src/Scene.cs`
 - `projects/Oxygen.Editor.World/src/SceneNode.cs`
 - `projects/Oxygen.Editor.World/src/Components/*`
-- `projects/Oxygen.Core/src/Diagnostics/*`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/*`
 - WorldEditor and World test projects.
 
 New files should live under existing WorldEditor ownership, for example:

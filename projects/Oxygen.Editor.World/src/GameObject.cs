@@ -4,7 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using Oxygen.Core;
+using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World;

@@ -1,0 +1,15 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace Oxygen.Managed.Assets.Import.Textures;
+
+public sealed record TextureSourceData(
+    string Schema,
+    string? Name,
+    string SourceImage,
+    string ColorSpace,
+    string TextureType,
+    TextureMipPolicyData MipPolicy,
+    TextureRuntimeFormatData RuntimeFormat,
+    TextureImportedData? Imported);

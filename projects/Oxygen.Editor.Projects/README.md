@@ -46,7 +46,7 @@ graph TB
         NODE[SceneNode]
     end
 
-    subgraph Storage["Oxygen.Storage"]
+    subgraph Storage["DroidNet.Storage"]
         FS[File System<br/>Abstractions]
     end
 
@@ -246,7 +246,7 @@ All I/O operations are async for UI responsiveness
 ### Project References
 
 - **`Oxygen.Editor.World`** - Domain models (Scene, SceneNode, etc.)
-- **`Oxygen.Storage`** - File system abstractions (`IStorageProvider`, `IFolder`, `IDocument`)
+- **`DroidNet.Storage`** - File system abstractions (`IStorageProvider`, `IFolder`, `IDocument`)
 
 ### NuGet Packages
 
@@ -317,7 +317,7 @@ Unit tests should cover:
 - **Error handling** - Missing files, invalid JSON
 - **Path resolution** - Relative path handling
 
-Unit tests in this module use mocks around `Oxygen.Storage` abstractions.
+Unit tests in this module use mocks around `DroidNet.Storage` abstractions.
 
 ## Design Principles
 
@@ -331,7 +331,7 @@ Unit tests in this module use mocks around `Oxygen.Storage` abstractions.
 
 - [Oxygen.Editor.World](../Oxygen.Editor.World/README.md) - Domain models for scenes
 - [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Engine integration
-- [Oxygen.Storage](../Oxygen.Storage/) - File system abstractions
+- [DroidNet.Storage](../DroidNet.Storage/) - File system abstractions
 
 ## License
 

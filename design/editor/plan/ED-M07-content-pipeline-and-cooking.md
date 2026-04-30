@@ -91,8 +91,8 @@ Out of scope:
 
 - Audit managed pipeline code:
   - `Oxygen.Editor.ContentPipeline`
-  - `Oxygen.Assets.Import`
-  - `Oxygen.Assets.Cook`
+  - `Oxygen.Managed.Assets.Import`
+  - `Oxygen.Managed.Assets.Cook`
   - `Oxygen.Editor.ContentBrowser` catalog refresh paths
   - `WorkspaceViewModel` cooked-root refresh
 - Audit native engine APIs:
@@ -126,7 +126,7 @@ Out of scope:
 
 ### ED-M07.2 - Operation Vocabulary And Contracts
 
-- Add constants to `Oxygen.Core.Diagnostics`:
+- Add constants to `Oxygen.Managed.Core.Diagnostics`:
   - `Content.Descriptor.Generate`
   - `Content.Manifest.Generate`
   - `Content.Import`
@@ -342,7 +342,7 @@ Likely touched:
 
 - `projects/Oxygen.Editor.ContentPipeline/src/...`
 - `projects/Oxygen.Editor.ContentPipeline/tests/...`
-- `projects/Oxygen.Core/src/Diagnostics/...`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/...`
 - `projects/Oxygen.Editor.Interop/src/...` only for narrow engine content API
   wrappers if ED-M07.1 chooses that route.
 - `projects/Oxygen.Editor.ContentBrowser/src/...`
@@ -350,7 +350,7 @@ Likely touched:
 - `projects/Oxygen.Editor.Runtime/src/Engine/...`
 - `projects/Oxygen.Editor.Projects/src/...` read-only service consumption;
   no cook execution moves here.
-- `projects/Oxygen.Assets/src/...` only if a reusable primitive is missing and
+- `projects/Oxygen.Managed.Assets/src/...` only if a reusable primitive is missing and
   belongs below editor workflows.
 - native `projects/Oxygen.Engine/src/Oxygen/Cooker/...` only if audit finds an
   engine API gap that must be closed at the source.

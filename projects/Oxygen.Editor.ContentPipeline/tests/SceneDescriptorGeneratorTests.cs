@@ -5,9 +5,9 @@
 using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Assets.Model;
-using Oxygen.Core;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;

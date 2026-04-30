@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Assets.Catalog;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;

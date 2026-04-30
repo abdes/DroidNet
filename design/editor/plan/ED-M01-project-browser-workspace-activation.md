@@ -100,12 +100,12 @@ service can return typed results from the start.
 
 Tasks:
 
-- Add operation-result and diagnostic contract types in `Oxygen.Core`.
+- Add operation-result and diagnostic contract types in `Oxygen.Managed.Core`.
 - Add `OperationResult`, `DiagnosticRecord`, `FailureDomain`,
   `AffectedScope`, `PrimaryAction`, status/severity enums, and stable
   diagnostic-code conventions.
 - Add the ED-M01 diagnostic code prefix table, including `OXE.PROJECT.*` and
-  `OXE.WORKSPACE.*`, in `Oxygen.Core`.
+  `OXE.WORKSPACE.*`, in `Oxygen.Managed.Core`.
 - Add `IStatusReducer` and exception-adapter behavior, including
   `OperationCanceledException -> Cancelled`.
 - Add `IOperationResultPublisher` with `IObservable<OperationResult>`
@@ -334,7 +334,7 @@ Tasks:
 - Keep legacy scene persistence/cook APIs only where needed by later milestones,
   not as the ED-M01 active-project contract.
 - Add or update tests in:
-  - `Oxygen.Core.Tests` for result contracts/reducers where needed.
+  - `Oxygen.Managed.Core.Tests` for result contracts/reducers where needed.
   - `Oxygen.Editor.Projects.Tests` for validation/context/cook-scope policy.
   - `Oxygen.Editor.Tests` for host activation coordinator behavior. If creating
     a host test project proves impractical, keep the coordinator service-shaped
@@ -354,9 +354,9 @@ Validation:
 
 Expected primary touch points:
 
-- `projects/Oxygen.Core/src/`
+- `projects/Oxygen.Managed.Core/src/`
   - operation-result and diagnostic contract types.
-- `projects/Oxygen.Core/tests/`
+- `projects/Oxygen.Managed.Core/tests/`
   - status reducer and exception adapter tests, if contracts include behavior.
 - `projects/Oxygen.Editor/src/App.xaml.cs`
   - remove `IEngineService` injection and `EnsureEngineIsReady()` launch call.
@@ -385,7 +385,7 @@ Expected primary touch points:
 Expected project/reference changes:
 
 - `Oxygen.Editor.ProjectBrowser` must not reference `Oxygen.Editor.WorldEditor`.
-- Shared diagnostics contracts belong to `Oxygen.Core`.
+- Shared diagnostics contracts belong to `Oxygen.Managed.Core`.
 - Host diagnostics services are composed in `Oxygen.Editor`.
 - Feature projects consume diagnostics contracts without depending on host UI
   implementation.

@@ -32,11 +32,4 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </ProjectReference>
     </ItemGroup>
-
-    <ItemGroup Condition="Exists('$(OxygenEngineInstallDir)\bin')">
-        <Content Include="$(OxygenEngineInstallDir)\bin\*.dll">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <Link>%(Filename)%(Extension)</Link>
-        </Content>
-    </ItemGroup>
 </Project>

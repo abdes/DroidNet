@@ -36,7 +36,7 @@ material assignment slot and leaves a clean handoff into this ED-M05 workflow.
 - `ARCHITECTURE.md`: material editor module, content-pipeline boundary, runtime
   preview, diagnostics.
 - `DESIGN.md`: material LLD owner and material assignment workflow.
-- `PROJECT-LAYOUT.md`: `Oxygen.Editor.MaterialEditor`, `Oxygen.Assets`,
+- `PROJECT-LAYOUT.md`: `Oxygen.Editor.MaterialEditor`, `Oxygen.Managed.Assets`,
   `Oxygen.Editor.ContentPipeline`, `Oxygen.Editor.ContentBrowser`.
 - `property-inspector.md`: Geometry material assignment slot.
 - `content-browser-asset-identity.md`: material picker and asset identity.
@@ -46,10 +46,10 @@ material assignment slot and leaves a clean handoff into this ED-M05 workflow.
 
 The repo already has material primitives:
 
-- `projects/Oxygen.Assets/docs/material-json.md` defines authoring
+- `projects/Oxygen.Managed.Assets/docs/material-json.md` defines authoring
   `*.omat.json` with `Schema = oxygen.material.v1`.
 - `MaterialSource`, `MaterialPbrMetallicRoughness`, texture refs, alpha mode,
-  and material source reader/writer exist in `Oxygen.Assets`.
+  and material source reader/writer exist in `Oxygen.Managed.Assets`.
 - `MaterialSourceImporter` imports `*.omat.json`.
 - `CookedMaterialWriter` writes cooked `.omat` descriptors.
 - `MaterialAsset` carries optional `MaterialSource`.
@@ -143,7 +143,7 @@ one-off number boxes or one-off section chrome for this editor.
 | Owner | Responsibility |
 | --- | --- |
 | `Oxygen.Editor.MaterialEditor` | material document UI, scalar property editor, preview surface composition. |
-| `Oxygen.Assets` | `MaterialSource`, material asset identity, import primitives, cooked material writer. |
+| `Oxygen.Managed.Assets` | `MaterialSource`, material asset identity, import primitives, cooked material writer. |
 | `Oxygen.Editor.ContentBrowser` | material create/open entry point and picker UX. |
 | `Oxygen.Editor.ContentPipeline` | import/cook orchestration and descriptor/cooked state. |
 | `Oxygen.Editor.WorldEditor` | geometry assignment command consumes material asset identity. |
@@ -177,7 +177,7 @@ public sealed class MaterialDocument
 public enum DescriptorState { Saved, Dirty, Missing, Invalid }
 ```
 
-`MaterialSource` and nested PBR records are immutable in `Oxygen.Assets`.
+`MaterialSource` and nested PBR records are immutable in `Oxygen.Managed.Assets`.
 Material edits replace the affected record branch and publish a new document
 snapshot; they do not rely on hidden mutable editor-only state.
 
@@ -346,7 +346,7 @@ dirty.
 ### 11.2 Cook
 
 `CookAsync` delegates to the public content-pipeline orchestration service.
-That service uses `Oxygen.Assets` primitives (`MaterialSourceImporter` and
+That service uses `Oxygen.Managed.Assets` primitives (`MaterialSourceImporter` and
 `CookedMaterialWriter`) to produce the cooked `.omat`; `Oxygen.Editor.MaterialEditor`
 does not own cook primitive execution. If the descriptor is dirty, cook is
 **rejected** with `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty` (user must
@@ -408,7 +408,7 @@ material-scoped diagnostic.
 
 Allowed:
 
-- MaterialEditor depends on `Oxygen.Assets` material contracts.
+- MaterialEditor depends on `Oxygen.Managed.Assets` material contracts.
 - MaterialEditor depends on ContentBrowser picker contracts.
 - MaterialEditor invokes ContentPipeline through public orchestration services.
 

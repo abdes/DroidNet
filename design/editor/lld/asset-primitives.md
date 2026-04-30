@@ -4,7 +4,7 @@ Status: `ED-M07 review-ready`
 
 ## 1. Purpose
 
-Define the reusable `Oxygen.Assets` primitives used by the editor for asset
+Define the reusable `Oxygen.Managed.Assets` primitives used by the editor for asset
 identity, references, catalogs, material descriptors, import, cooked outputs,
 and loose cooked indexes.
 
@@ -33,7 +33,7 @@ defines the reusable data/model/tooling layer those editor features consume.
 
 - `ARCHITECTURE.md`: asset identity, content pipeline, diagnostics, and data
   contract rules.
-- `PROJECT-LAYOUT.md`: `Oxygen.Assets` owns reusable asset/cook primitives;
+- `PROJECT-LAYOUT.md`: `Oxygen.Managed.Assets` owns reusable asset/cook primitives;
   editor projects own workflows and UI.
 - `material-editor.md`: consumes material source, material cook, and material
   identity primitives.
@@ -46,9 +46,9 @@ defines the reusable data/model/tooling layer those editor features consume.
 The repo already contains the ED-M05 material slice primitives:
 
 - `Asset`, `GeometryAsset`, `MaterialAsset`, and
-  `AssetReference<TAsset>` in `Oxygen.Assets.Model`.
-- canonical asset URI helpers in `Oxygen.Core.AssetUris` and
-  `Oxygen.Assets.Catalog.AssetUriHelper`.
+  `AssetReference<TAsset>` in `Oxygen.Managed.Assets.Model`.
+- canonical asset URI helpers in `Oxygen.Managed.Core.AssetUris` and
+  `Oxygen.Managed.Assets.Catalog.AssetUriHelper`.
 - `IAssetCatalog`, `AssetRecord`, `AssetQuery`, `AssetQueryScope`,
   `AssetQueryTraversal`, `AssetChange`, and `AssetChangeKind`.
 - `GeneratedAssetCatalog` and `BuiltInAssets`, including the generated default
@@ -81,21 +81,21 @@ Brownfield gaps:
 - `AssetRecord` is intentionally minimal and does not carry asset type or
   state. Editor adapters must enrich records without mutating the primitive.
 - source, generated, descriptor, cooked, stale, mounted, missing, and broken
-  states are not primitive enums in `Oxygen.Assets`; the content-browser LLD
+  states are not primitive enums in `Oxygen.Managed.Assets`; the content-browser LLD
   owns UI state and runtime-availability overlays.
 - full descriptor/manifest orchestration is not a primitive; it belongs to
   `Oxygen.Editor.ContentPipeline`.
 
 ## 5. Target Design
 
-`Oxygen.Assets` is the reusable layer:
+`Oxygen.Managed.Assets` is the reusable layer:
 
 ```text
 -------------------------------------------------------------+
 | Editor workflows                                            |
 | MaterialEditor | ContentBrowser | ContentPipeline | World   |
 +-------------------------- consume --------------------------+
-| Oxygen.Assets primitives                                    |
+| Oxygen.Managed.Assets primitives                                    |
 | Asset identity | references | catalogs | material source     |
 | import outputs | cooked writers | loose cooked index         |
 +-------------------------------------------------------------+
@@ -122,8 +122,8 @@ schema or introduce a separate editor schema before implementation.
 
 | Owner | Responsibility |
 | --- | --- |
-| `Oxygen.Assets` | reusable asset identity, references, catalog primitives, material source model, import/cook writers, loose index utilities. |
-| `Oxygen.Core` | shared URI and diagnostics constants used by asset workflows. |
+| `Oxygen.Managed.Assets` | reusable asset identity, references, catalog primitives, material source model, import/cook writers, loose index utilities. |
+| `Oxygen.Managed.Core` | shared URI and diagnostics constants used by asset workflows. |
 | `Oxygen.Editor.ContentBrowser` | asset state enrichment, browsing, picker UX, thumbnails/swatches. |
 | `Oxygen.Editor.MaterialEditor` | material document UI and user commands over material descriptors. |
 | `Oxygen.Editor.ContentPipeline` | editor orchestration over import/cook/index primitives. |
@@ -238,7 +238,7 @@ record may represent:
 Consumers that need file paths, timestamps, asset type, diagnostics, or mount
 availability resolve those facts in editor-owned adapters using
 `ProjectContext`, catalog provider type, and storage services. This keeps
-`Oxygen.Assets` usable by tools and tests without pulling in editor UI policy.
+`Oxygen.Managed.Assets` usable by tools and tests without pulling in editor UI policy.
 
 ### 7.5 Material Source Contract
 
@@ -281,7 +281,7 @@ the edited immutable record branch and leave unedited descriptor data intact.
 
 - writes the runtime `.omat` descriptor from `MaterialSource`.
 - emits scalar material values and V0.1 texture indices according to the
-  current `Oxygen.Assets` writer behavior.
+  current `Oxygen.Managed.Assets` writer behavior.
 
 `LooseCookedBuildService`:
 
@@ -293,7 +293,7 @@ the edited immutable record branch and leave unedited descriptor data intact.
 
 ## 8. Commands, Services, Or Adapters
 
-`Oxygen.Assets` primitives are not user commands. They are called by editor
+`Oxygen.Managed.Assets` primitives are not user commands. They are called by editor
 services:
 
 | Consumer | Primitive used |
@@ -305,7 +305,7 @@ services:
 | Geometry material slot command | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution. |
 
 Adapters may be introduced in editor projects, but the underlying primitive
-contracts stay in `Oxygen.Assets`.
+contracts stay in `Oxygen.Managed.Assets`.
 
 ## 9. UI Surfaces
 
@@ -322,7 +322,7 @@ display raw cooked filesystem paths as the authored identity.
 
 ED-M06 Content Browser UI consumes primitive records through an editor-owned
 `ContentBrowserAssetItem` projection. That projection must not move into
-`Oxygen.Assets`.
+`Oxygen.Managed.Assets`.
 
 ## 10. Persistence And Round Trip
 
@@ -337,7 +337,7 @@ Required ED-M05 persistence behavior:
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
-`Oxygen.Assets` does not start runtime, mount roots, or call native interop.
+`Oxygen.Managed.Assets` does not start runtime, mount roots, or call native interop.
 
 Runtime-relevant behavior:
 
@@ -364,20 +364,20 @@ results are emitted by consuming editor workflows:
 | loose cooked index invalid | `AssetMount` in ED-M02/ED-M07 mount flows, `ContentPipeline` in cook validation flows. |
 
 Concrete ED-M05 diagnostic codes are allocated in
-`diagnostics-operation-results.md` and implemented in `Oxygen.Core`.
+`diagnostics-operation-results.md` and implemented in `Oxygen.Managed.Core`.
 
 ## 13. Dependency Rules
 
 Allowed:
 
-- `Oxygen.Assets` may depend on `Oxygen.Core` and storage/import/cook support.
-- editor projects may depend on `Oxygen.Assets` primitives.
+- `Oxygen.Managed.Assets` may depend on `Oxygen.Managed.Core` and storage/import/cook support.
+- editor projects may depend on `Oxygen.Managed.Assets` primitives.
 
 Forbidden:
 
-- `Oxygen.Assets` must not depend on WinUI.
-- `Oxygen.Assets` must not depend on `Oxygen.Editor.*`.
-- `Oxygen.Assets` must not call `Oxygen.Editor.Interop` or engine runtime
+- `Oxygen.Managed.Assets` must not depend on WinUI.
+- `Oxygen.Managed.Assets` must not depend on `Oxygen.Editor.*`.
+- `Oxygen.Managed.Assets` must not call `Oxygen.Editor.Interop` or engine runtime
   services.
 - primitives must not persist editor UI state, picker state, or operation
   result history.
@@ -408,7 +408,7 @@ ED-M06/ED-M07 gates:
 - ED-M06: `AssetChangeKind.Relocated` is consumed using `PreviousUri` so cached
   browser rows do not keep stale identities.
 - ED-M06: generated, source, descriptor, cooked, stale, missing, and broken
-  browser states are derived outside `Oxygen.Assets`.
+  browser states are derived outside `Oxygen.Managed.Assets`.
 - ED-M06: runtime mounted availability is represented as an editor overlay, not
   as a primitive catalog fact.
 - ED-M07: full scene cook uses engine-compatible descriptor schemas and does
@@ -419,7 +419,7 @@ ED-M06/ED-M07 gates:
   through managed or native APIs without Content Browser parsing binary index
   details itself.
 - ED-M07: runtime mount refresh consumes validated cooked roots; mount state is
-  still an editor/runtime overlay, not an `Oxygen.Assets` primitive fact.
+  still an editor/runtime overlay, not an `Oxygen.Managed.Assets` primitive fact.
 
 ## 15. Open Issues
 

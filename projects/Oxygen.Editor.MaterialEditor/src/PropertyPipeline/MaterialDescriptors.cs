@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Generic;
-using Oxygen.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Editor.Schemas;
 
 namespace Oxygen.Editor.MaterialEditor;

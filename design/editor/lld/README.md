@@ -20,7 +20,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [material-editor.md](./material-editor.md) | Scalar material documents, property editing, assignment, save/cook/preview baseline. |
 | [environment-authoring.md](./environment-authoring.md) | Atmosphere, lights, exposure, tone mapping, renderer settings. |
 | [content-browser-asset-identity.md](./content-browser-asset-identity.md) | Content browser states, asset identity, asset picker, missing/broken references. |
-| [asset-primitives.md](./asset-primitives.md) | `Oxygen.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
+| [asset-primitives.md](./asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
 | [content-pipeline.md](./content-pipeline.md) | Import, descriptors, manifests, cooking, pak, inspect, mount refresh requests. |
 | [live-engine-sync.md](./live-engine-sync.md) | Managed-to-native live scene synchronization. |
 | [runtime-integration.md](./runtime-integration.md) | Embedded engine lifecycle, runtime settings, surface leases, views, cooked-root mounts, input bridge, threading/frame phases. |

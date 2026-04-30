@@ -78,7 +78,7 @@ owner.
 | Material editor | [material-editor.md](lld/material-editor.md) | Scalar material documents, property UI, previews, assignment, save/cook/preview contract. |
 | Environment authoring | [environment-authoring.md](lld/environment-authoring.md) | Atmosphere, sun, exposure, tone mapping, scene render intent. |
 | Content browser and asset identity | [content-browser-asset-identity.md](lld/content-browser-asset-identity.md) | Source/generated/cooked browsing, asset identity, asset picker, missing references. |
-| Asset primitives | [asset-primitives.md](lld/asset-primitives.md) | `Oxygen.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
+| Asset primitives | [asset-primitives.md](lld/asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
 | Content pipeline | [content-pipeline.md](lld/content-pipeline.md) | Import, descriptor generation, manifest generation, cook, pak, inspect, mount refresh requests. |
 | Live engine sync | [live-engine-sync.md](lld/live-engine-sync.md) | Authoring-to-runtime projection, sync adapters, ordering, sync diagnostics. |
 | Runtime integration | [runtime-integration.md](lld/runtime-integration.md) | Embedded engine lifecycle, settings application, surface leases, views, mounts, input bridge, threading/frame phases. |

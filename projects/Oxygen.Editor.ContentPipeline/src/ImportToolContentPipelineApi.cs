@@ -5,8 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Oxygen.Assets.Persistence.LooseCooked.V1;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
 

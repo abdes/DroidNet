@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <Title>DroidNet Storage</Title>
+        <Description>Abstracts document and entity storage and includes implementations for storage providers, including the native filesystem.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>droidnet;storage;filesystem</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <RootNamespace>$(RootNamespace).Storage</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DroidNet.Storage.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Testably.Abstractions" />
+    </ItemGroup>
+
+</Project>

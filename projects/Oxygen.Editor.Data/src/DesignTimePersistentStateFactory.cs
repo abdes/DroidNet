@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Oxygen.Core;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Data;

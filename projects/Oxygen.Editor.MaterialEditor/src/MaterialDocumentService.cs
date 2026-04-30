@@ -7,9 +7,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Assets.Import.Materials;
-using Oxygen.Assets.Model;
-using Oxygen.Core.Diagnostics;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.MaterialEditor;

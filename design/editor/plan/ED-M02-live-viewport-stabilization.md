@@ -97,7 +97,7 @@ Tasks:
   recommended shape is static string constants, not a new enum: runtime
   operation kinds in the runtime-producing project, viewport operation kinds in
   the viewport-producing project, and shared diagnostic code prefixes in
-  `Oxygen.Core` only when multiple producers consume them. Strings must match
+  `Oxygen.Managed.Core` only when multiple producers consume them. Strings must match
   [diagnostics-operation-results.md](../lld/diagnostics-operation-results.md)
   exactly:
   - `Runtime.Start`
@@ -324,11 +324,11 @@ Validation:
 
 Expected primary touch points:
 
-- `projects/Oxygen.Core/src/Diagnostics/`
+- `projects/Oxygen.Managed.Core/src/Diagnostics/`
   - operation-kind constants or diagnostic-code additions if not already
     present.
   - failure-domain mapper/status helpers if ED-M02 needs new behavior.
-- `projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj`
+- `projects/Oxygen.Managed.Core/tests/Oxygen.Managed.Core.Tests.csproj`
   - operation-kind/domain/status mapping tests where behavior is added.
 - `projects/Oxygen.Editor.Runtime/src/Engine/`
   - `EngineService.cs`

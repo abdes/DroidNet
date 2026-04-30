@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Assets.Import.Materials;
-using Oxygen.Assets.Model;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Model;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
 using Windows.UI;

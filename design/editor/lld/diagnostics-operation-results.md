@@ -42,7 +42,7 @@ The current codebase has useful pieces that should be reused:
   the workspace output panel.
 - WinUI first-chance and unhandled exception diagnostics are written to debug
   output.
-- `Oxygen.Assets.Import` has import diagnostics and import results.
+- `Oxygen.Managed.Assets.Import` has import diagnostics and import results.
 - Project and runtime services log failures in many code paths.
 
 These are infrastructure assets, not the final user-facing result model. V0.1
@@ -105,7 +105,7 @@ Target invariants:
 | Owner | Responsibility |
 | --- | --- |
 | owning subsystem | creates result and diagnostics for its own workflow |
-| `Oxygen.Core` | shared operation-result and diagnostic contracts |
+| `Oxygen.Managed.Core` | shared operation-result and diagnostic contracts |
 | `Oxygen.Editor` | host-level result store, publisher, DI composition, and log-correlation setup |
 | feature UI | presents workflow-local results near the triggering surface |
 | WorldEditor workspace shell | owns V0.1 output/log panel composition and global result affordances |
@@ -116,7 +116,7 @@ This LLD owns common vocabulary and contracts. It does not own every feature's
 presentation layout.
 
 Target placement: ED-M01 puts operation-result and diagnostic contracts in
-`Oxygen.Core` because Project Browser, WorldEditor, Runtime, Content Browser,
+`Oxygen.Managed.Core` because Project Browser, WorldEditor, Runtime, Content Browser,
 and later pipeline code already need a shared non-UI contract layer. The
 host-level store, publisher, and output-log wiring are composed by
 `Oxygen.Editor`. Neither the contracts nor host services may depend on feature
@@ -536,7 +536,7 @@ ED-M05 producers and operation kinds:
 | material picker/content browser | `Material.Pick` | `AssetIdentity` |
 
 ED-M05 implementation adds the corresponding `FailureDomain` values and
-diagnostic-code constants to `Oxygen.Core` before material workflows publish
+diagnostic-code constants to `Oxygen.Managed.Core` before material workflows publish
 results.
 
 ED-M06 producers and operation kinds:
@@ -649,7 +649,7 @@ Forbidden:
 
 - diagnostics contracts must not depend on WinUI controls.
 - diagnostics contracts must not depend on WorldEditor-specific types.
-- diagnostics contracts in `Oxygen.Core` must not depend on feature projects
+- diagnostics contracts in `Oxygen.Managed.Core` must not depend on feature projects
   such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectBrowser`, or
   `Oxygen.Editor.ContentBrowser`.
 - host diagnostics services in `Oxygen.Editor` must not depend on feature UI
