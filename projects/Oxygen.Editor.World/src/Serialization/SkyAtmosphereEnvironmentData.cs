@@ -19,7 +19,7 @@ public sealed record SkyAtmosphereEnvironmentData
     /// <summary>
     /// Gets atmosphere height in meters.
     /// </summary>
-    public float AtmosphereHeightMeters { get; init; } = 80_000.0f;
+    public float AtmosphereHeightMeters { get; init; } = 100_000.0f;
 
     /// <summary>
     /// Gets linear RGB ground albedo.
@@ -59,7 +59,7 @@ public sealed record SkyAtmosphereEnvironmentData
     /// <summary>
     /// Gets aerial perspective start depth in meters.
     /// </summary>
-    public float AerialPerspectiveStartDepthMeters { get; init; }
+    public float AerialPerspectiveStartDepthMeters { get; init; } = 100.0f;
 
     /// <summary>
     /// Gets height fog contribution.

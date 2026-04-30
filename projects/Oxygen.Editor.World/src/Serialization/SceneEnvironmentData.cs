@@ -29,12 +29,12 @@ public sealed record SceneEnvironmentData
     /// <summary>
     /// Gets the exposure mode.
     /// </summary>
-    public ExposureMode ExposureMode { get; init; } = ExposureMode.Auto;
+    public ExposureMode ExposureMode { get; init; } = ExposureMode.Manual;
 
     /// <summary>
     /// Gets manual exposure in EV100, used when <see cref="ExposureMode"/> is <see cref="ExposureMode.Manual"/>.
     /// </summary>
-    public float ManualExposureEv { get; init; } = 9.7f;
+    public float ManualExposureEv { get; init; } = 13.0f;
 
     /// <summary>
     /// Gets exposure compensation in EV stops.

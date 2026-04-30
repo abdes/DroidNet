@@ -53,7 +53,7 @@ public class SceneTests
             }
             """;
 
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -76,7 +76,7 @@ public class SceneTests
             }
             """;
 
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         var serializer = new SceneSerializer(this.ExampleProject);
 
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -118,7 +118,7 @@ public class SceneTests
         expected = scene.Environment;
 
         var serializer = new SceneSerializer(this.ExampleProject);
-        await using var stream = new MemoryStream();
+        using var stream = new MemoryStream();
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
 
@@ -145,7 +145,7 @@ public class SceneTests
         scene.RootNodes.Add(node);
 
         var serializer = new SceneSerializer(this.ExampleProject);
-        await using var stream = new MemoryStream();
+        using var stream = new MemoryStream();
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         var json = Encoding.UTF8.GetString(stream.ToArray());
 
@@ -167,7 +167,7 @@ public class SceneTests
         scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = staleSunNodeId });
 
         var serializer = new SceneSerializer(this.ExampleProject);
-        await using var stream = new MemoryStream();
+        using var stream = new MemoryStream();
         await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
         stream.Position = 0;
 

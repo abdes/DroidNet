@@ -7,53 +7,41 @@ using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.World.Serialization;
 
+/// <summary>
+/// DTO for common authored light component values.
+/// </summary>
 [JsonDerivedType(typeof(DirectionalLightData), "DirectionalLight")]
 [JsonDerivedType(typeof(PointLightData), "PointLight")]
 [JsonDerivedType(typeof(SpotLightData), "SpotLight")]
 public abstract record LightComponentData : ComponentData
 {
+    /// <summary>
+    /// Gets a value indicating whether the light contributes to world lighting.
+    /// </summary>
     public bool AffectsWorld { get; init; } = true;
 
+    /// <summary>
+    /// Gets the light color multiplier in linear RGB.
+    /// </summary>
     public Vector3 Color { get; init; } = Vector3.One;
 
+    /// <summary>
+    /// Gets the runtime participation mode for this light.
+    /// </summary>
+    public LightMobility Mobility { get; init; } = LightMobility.Realtime;
+
+    /// <summary>
+    /// Gets a value indicating whether the light casts shadows.
+    /// </summary>
     public bool CastsShadows { get; init; }
 
+    /// <summary>
+    /// Gets the authored shadow settings.
+    /// </summary>
+    public LightShadowSettingsData? Shadow { get; init; } = new();
+
+    /// <summary>
+    /// Gets exposure compensation in EV stops.
+    /// </summary>
     public float ExposureCompensation { get; init; }
-}
-
-public sealed record DirectionalLightData : LightComponentData
-{
-    public float IntensityLux { get; init; } = 100_000f;
-
-    public float AngularSizeRadians { get; init; } = 0.00935f;
-
-    public bool EnvironmentContribution { get; init; } = true;
-
-    public bool IsSunLight { get; init; } = true;
-}
-
-public sealed record PointLightData : LightComponentData
-{
-    public float LuminousFluxLumens { get; init; } = 800f;
-
-    public float Range { get; init; } = 10f;
-
-    public float SourceRadius { get; init; }
-
-    public float DecayExponent { get; init; } = 2f;
-}
-
-public sealed record SpotLightData : LightComponentData
-{
-    public float LuminousFluxLumens { get; init; } = 800f;
-
-    public float Range { get; init; } = 10f;
-
-    public float SourceRadius { get; init; }
-
-    public float DecayExponent { get; init; } = 2f;
-
-    public float InnerConeAngleRadians { get; init; } = 0.4f;
-
-    public float OuterConeAngleRadians { get; init; } = 0.6f;
 }
