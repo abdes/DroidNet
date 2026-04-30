@@ -8,11 +8,17 @@ using AwesomeAssertions;
 
 namespace Oxygen.Editor.Schemas.Tests;
 
+/// <summary>
+/// Tests editor schema overlay loading, linting, and coverage behavior.
+/// </summary>
 [TestClass]
 public sealed class EditorSchemaOverlayTests
 {
+    /// <summary>
+    /// Verifies that overlay files cannot add validation keywords outside the editor annotation namespace.
+    /// </summary>
     [TestMethod]
-    public void LintAnnotationNamespace_WhenOverlayAddsValidationKeyword_ShouldReportViolation()
+    public void LintAnnotationNamespaceReportsValidationKeywordViolations()
     {
         var overlay = JsonNode.Parse(
             """
@@ -39,8 +45,11 @@ public sealed class EditorSchemaOverlayTests
             .Which.Should().Be(("/parameters/metalness", "minimum"));
     }
 
+    /// <summary>
+    /// Verifies that x-editor annotations are extracted into JSON-pointer keyed metadata.
+    /// </summary>
     [TestMethod]
-    public void ExtractAnnotations_ShouldIndexAnnotationsByJsonPointer()
+    public void ExtractAnnotationsIndexesAnnotationsByJsonPointer()
     {
         var overlay = JsonNode.Parse(
             """
@@ -80,8 +89,11 @@ public sealed class EditorSchemaOverlayTests
         _ = metalness.Extra.Should().Contain("x-editor-color-space", "linear");
     }
 
+    /// <summary>
+    /// Verifies that authorable engine-schema leaves missing overlay widgets are reported.
+    /// </summary>
     [TestMethod]
-    public void FindMissingAnnotationCoverage_WhenOverlayOmitsLeafWidget_ShouldReportPath()
+    public void FindMissingAnnotationCoverageReportsOmittedLeafWidgets()
     {
         var engine = JsonNode.Parse(
             """
@@ -129,8 +141,11 @@ public sealed class EditorSchemaOverlayTests
         _ = missing.Should().Equal("/parameters/roughness");
     }
 
+    /// <summary>
+    /// Verifies transform overlay coverage against the engine transform schema.
+    /// </summary>
     [TestMethod]
-    public void TransformOverlay_ShouldCoverAllAuthorableEngineFields()
+    public void TransformOverlayCoversAllAuthorableEngineFields()
     {
         var schemaRoot = FindSchemaRoot();
         var engine = LoadSchema(schemaRoot, "oxygen.transform-component.schema.json");
@@ -144,8 +159,11 @@ public sealed class EditorSchemaOverlayTests
         _ = missing.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies material overlay coverage against the engine material schema.
+    /// </summary>
     [TestMethod]
-    public void MaterialOverlay_ShouldCoverAllAuthorableEngineFields()
+    public void MaterialOverlayCoversAllAuthorableEngineFields()
     {
         var schemaRoot = FindSchemaRoot();
         var engine = LoadSchema(schemaRoot, "oxygen.material-descriptor.schema.json");
@@ -159,8 +177,11 @@ public sealed class EditorSchemaOverlayTests
         _ = missing.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies editor overlay files are not embedded into cooker or PakTool schema resources.
+    /// </summary>
     [TestMethod]
-    public void CookerEmbeddedSchemas_ShouldNotIncludeEditorOverlays()
+    public void CookerEmbeddedSchemasDoNotIncludeEditorOverlays()
     {
         var repoRoot = FindRepoRoot();
         var cmakeFiles = new[]
@@ -188,8 +209,11 @@ public sealed class EditorSchemaOverlayTests
         }
     }
 
+    /// <summary>
+    /// Verifies every editor overlay uses only x-editor annotation keywords plus schema structure.
+    /// </summary>
     [TestMethod]
-    public void AllEditorOverlays_ShouldUseOnlyEditorAnnotationNamespace()
+    public void AllEditorOverlaysUseOnlyEditorAnnotationNamespace()
     {
         var schemaRoot = FindSchemaRoot();
         foreach (var overlayPath in Directory.GetFiles(schemaRoot, "*.editor.schema.json", SearchOption.TopDirectoryOnly))
@@ -202,8 +226,11 @@ public sealed class EditorSchemaOverlayTests
         }
     }
 
+    /// <summary>
+    /// Verifies every editor overlay composes with its sibling engine schema.
+    /// </summary>
     [TestMethod]
-    public void AllEditorOverlays_ShouldReferenceTheirSiblingEngineSchema()
+    public void AllEditorOverlaysReferenceTheirSiblingEngineSchema()
     {
         var schemaRoot = FindSchemaRoot();
         foreach (var overlayPath in Directory.GetFiles(schemaRoot, "*.editor.schema.json", SearchOption.TopDirectoryOnly))
@@ -217,8 +244,11 @@ public sealed class EditorSchemaOverlayTests
         }
     }
 
+    /// <summary>
+    /// Verifies every visible authoring path in every engine schema has editor overlay metadata.
+    /// </summary>
     [TestMethod]
-    public void AllEditorOverlays_ShouldCoverAuthorableEngineFields()
+    public void AllEditorOverlaysCoverAuthorableEngineFields()
     {
         var schemaRoot = FindSchemaRoot();
         foreach (var overlayPath in Directory.GetFiles(schemaRoot, "*.editor.schema.json", SearchOption.TopDirectoryOnly))

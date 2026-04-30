@@ -119,7 +119,7 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookInput CreateGeometryInput(TempWorkspace workspace, string sourceRelativePath)
         => new(
-            new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
             ContentCookAssetKind.Geometry,
             "Content",
             sourceRelativePath,

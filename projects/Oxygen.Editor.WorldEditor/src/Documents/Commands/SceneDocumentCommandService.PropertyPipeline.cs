@@ -10,6 +10,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Utils;
 
@@ -44,9 +45,51 @@ public sealed partial class SceneDocumentCommandService
     public const string TransformKind = "transform";
 
     /// <summary>
+    /// Component kind id used by geometry property identities.
+    /// </summary>
+    public const string GeometryKind = "geometry";
+
+    /// <summary>
+    /// Component kind id used by perspective camera property identities.
+    /// </summary>
+    public const string PerspectiveCameraKind = "perspective-camera";
+
+    /// <summary>
+    /// Component kind id used by directional light property identities.
+    /// </summary>
+    public const string DirectionalLightKind = "directional-light";
+
+    /// <summary>
+    /// Property kind id used by scene environment property identities.
+    /// </summary>
+    public const string SceneEnvironmentKind = "scene-environment";
+
+    private const int DirectionalLightPropertyEntryCapacity = 25;
+
+    /// <summary>
     /// Gets the canonical descriptor catalog for transform.
     /// </summary>
     public static TransformDescriptors Transform { get; } = TransformDescriptors.Build();
+
+    /// <summary>
+    /// Gets the canonical descriptor catalog for geometry.
+    /// </summary>
+    internal static GeometryDescriptors Geometry { get; } = GeometryDescriptors.Build();
+
+    /// <summary>
+    /// Gets the canonical descriptor catalog for perspective cameras.
+    /// </summary>
+    internal static PerspectiveCameraDescriptors PerspectiveCamera { get; } = PerspectiveCameraDescriptors.Build();
+
+    /// <summary>
+    /// Gets the canonical descriptor catalog for directional lights.
+    /// </summary>
+    internal static DirectionalLightDescriptors DirectionalLight { get; } = DirectionalLightDescriptors.Build();
+
+    /// <summary>
+    /// Gets the canonical descriptor catalog for scene environment authoring data.
+    /// </summary>
+    internal static SceneEnvironmentDescriptors SceneEnvironment { get; } = SceneEnvironmentDescriptors.Build();
 
     /// <summary>
     /// Schema-driven property edit entry point.
@@ -85,27 +128,113 @@ public sealed partial class SceneDocumentCommandService
         IReadOnlyList<Guid> nodeIds,
         PropertyEdit edit,
         string label)
+        => await this.EditPropertiesAsync(context, nodeIds, edit, label, EditSessionToken.OneShot).ConfigureAwait(true);
+
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> EditPropertiesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        PropertyEdit edit,
+        string label,
+        EditSessionToken session)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(edit);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ArgumentNullException.ThrowIfNull(session);
 
         if (edit.Count == 0)
         {
             return SceneCommandResult.Success;
         }
 
-        // 1. Resolve nodes & their relevant component model targets. The
-        //    schema layer never sees the scene types directly; it only
-        //    sees IPropertyTarget.
-        var nodes = ResolveNodes(context.Scene, nodeIds);
+        var kind = GetSingleComponentKind(edit);
+        if (kind is null)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.EditTransform,
+                "PROPERTY_MIXED_COMPONENTS",
+                "Property edit rejected",
+                "A single property edit can target only one component kind.",
+                context);
+        }
+
+        if (!string.Equals(kind, TransformKind, StringComparison.Ordinal))
+        {
+            return await this.EditComponentPropertiesThroughExistingCommandAsync(
+                context,
+                nodeIds,
+                edit,
+                kind,
+                session).ConfigureAwait(true);
+        }
+
+        if (this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult)
+        {
+            return validationResult;
+        }
+
+        if (!session.IsOneShot)
+        {
+            return await this.EditTransformSessionAsync(
+                context,
+                session,
+                ResolveNodes(context.Scene, nodeIds),
+                BuildTransformEditFromPropertyEdit(edit)).ConfigureAwait(true);
+        }
+
+        return await this.EditTransformPropertiesOneShotAsync(context, nodeIds, edit, label).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> EditSceneEnvironmentPropertiesAsync(
+        SceneDocumentCommandContext context,
+        PropertyEdit edit,
+        string label,
+        EditSessionToken session)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(edit);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ArgumentNullException.ThrowIfNull(session);
+
+        _ = label;
+
+        if (SkipUncommittedSession(session) is { } sessionResult)
+        {
+            return sessionResult;
+        }
+
+        if (edit.Count == 0)
+        {
+            return SceneCommandResult.Success;
+        }
+
+        var kind = GetSingleComponentKind(edit);
+        if (!string.Equals(kind, SceneEnvironmentKind, StringComparison.Ordinal))
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.EditEnvironment,
+                "PROPERTY_UNKNOWN",
+                "Environment edit rejected",
+                "The supplied property edit does not target the scene environment.",
+                context);
+        }
+
+        var (environmentEdit, result) = this.TryBuildSceneEnvironmentEdit(context, edit);
+        return result is null
+            ? await this.EditSceneEnvironmentAsync(context, environmentEdit, session).ConfigureAwait(true)
+            : result;
+    }
+
+    private static (Dictionary<Guid, object> nodeTargets, Dictionary<Guid, SceneNode> sceneNodes) ResolveTransformPropertyTargets(
+        IReadOnlyList<SceneNode> nodes)
+    {
         var nodeTargets = new Dictionary<Guid, object>();
         var sceneNodes = new Dictionary<Guid, SceneNode>();
         foreach (var node in nodes)
         {
-            // For transform we know the target is the transform
-            // component. Future kinds dispatch on edit.Ids[0].ComponentKind.
             var target = node.Components.OfType<TransformComponent>().FirstOrDefault();
             if (target is null)
             {
@@ -116,84 +245,40 @@ public sealed partial class SceneDocumentCommandService
             sceneNodes[node.Id] = node;
         }
 
-        if (nodeTargets.Count == 0)
-        {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditTransform,
-                SceneDiagnosticCodes.ComponentRemoveDenied,
-                "Property edit ignored",
-                "No selected node has a component matching the requested property ids.",
-                context);
-        }
+        return (nodeTargets, sceneNodes);
+    }
 
-        // 2. Validate each entry.
-        var descriptors = Transform.ById;
-        foreach (var (id, value) in edit)
-        {
-            if (!descriptors.TryGetValue(id, out var descriptor))
-            {
-                return this.ValidationFailure(
-                    SceneOperationKinds.EditTransform,
-                    "PROPERTY_UNKNOWN",
-                    "Property edit rejected",
-                    $"Unknown property id: {id.Qualified()}.",
-                    context);
-            }
-
-            var result = descriptor.ValidateBoxed(value);
-            if (!result.IsValid)
-            {
-                return this.ValidationFailure(
-                    SceneOperationKinds.EditTransform,
-                    result.Code,
-                    "Property edit rejected",
-                    result.Message,
-                    context);
-            }
-        }
-
-        // 3. Capture Before snapshot (only for the touched property ids).
+    private static List<PropertyDescriptor> GetTouchedDescriptors(
+        PropertyEdit edit,
+        IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors)
+    {
         var touchedDescriptors = new List<PropertyDescriptor>(edit.Count);
         foreach (var id in edit.Ids)
         {
             touchedDescriptors.Add(descriptors[id]);
         }
 
-        var before = PropertySnapshot.Capture(nodeTargets, touchedDescriptors);
+        return touchedDescriptors;
+    }
 
-        // 4. Build the per-node After edit map (every node receives the
-        //    same edit in this initial slice; future iterations may
-        //    project per-node).
+    private static PropertyOp BuildPropertyOp(
+        PropertyEdit edit,
+        string label,
+        IReadOnlyDictionary<Guid, object> nodeTargets,
+        IReadOnlyList<PropertyDescriptor> touchedDescriptors)
+    {
+        var before = PropertySnapshot.Capture(nodeTargets, touchedDescriptors);
         var afterPerNode = new Dictionary<Guid, PropertyEdit>();
         foreach (var nodeId in nodeTargets.Keys)
         {
             afterPerNode[nodeId] = edit.Clone();
         }
 
-        var after = new PropertySnapshot(afterPerNode);
-
-        var op = new PropertyOp(
+        return new PropertyOp(
             Nodes: [.. nodeTargets.Keys],
             Before: before,
-            After: after,
+            After: new PropertySnapshot(afterPerNode),
             Label: label);
-
-        if (op.EffectiveEdit().Count == 0)
-        {
-            return SceneCommandResult.Success;
-        }
-
-        // 5. Apply After (model + engine) via the schema-layer apply
-        //    function. Same function will be called for undo with
-        //    ApplySide.Before.
-        var resolver = new TransformPropertyTarget(this, context, sceneNodes);
-        await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(true);
-
-        // 6. Register undo / redo as a single coalesced TimeMachine entry.
-        RegisterPropertyOpHistory(context, op, resolver, descriptors);
-
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return SceneCommandResult.Success;
     }
 
     /// <summary>
@@ -203,83 +288,51 @@ public sealed partial class SceneDocumentCommandService
     /// </summary>
     /// <param name="edit">The legacy edit record.</param>
     /// <returns>The translated property edit. Empty fields are omitted.</returns>
-    internal static PropertyEdit BuildPropertyEditFromTransformEdit(TransformEdit edit)
+    private static PropertyEdit BuildPropertyEditFromTransformEdit(TransformEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
         var result = new PropertyEdit();
 
-        // Per-axis entries take precedence over the vector composites
-        // because that's the contract callers already rely on.
-        if (edit.PositionX.HasValue)
-        {
-            result.Set(Transform.PositionX, edit.PositionX.Value);
-        }
-
-        if (edit.PositionY.HasValue)
-        {
-            result.Set(Transform.PositionY, edit.PositionY.Value);
-        }
-
-        if (edit.PositionZ.HasValue)
-        {
-            result.Set(Transform.PositionZ, edit.PositionZ.Value);
-        }
-
-        if (edit.RotationXDegrees.HasValue)
-        {
-            result.Set(Transform.RotationX, edit.RotationXDegrees.Value);
-        }
-
-        if (edit.RotationYDegrees.HasValue)
-        {
-            result.Set(Transform.RotationY, edit.RotationYDegrees.Value);
-        }
-
-        if (edit.RotationZDegrees.HasValue)
-        {
-            result.Set(Transform.RotationZ, edit.RotationZDegrees.Value);
-        }
-
-        if (edit.ScaleX.HasValue)
-        {
-            result.Set(Transform.ScaleX, edit.ScaleX.Value);
-        }
-
-        if (edit.ScaleY.HasValue)
-        {
-            result.Set(Transform.ScaleY, edit.ScaleY.Value);
-        }
-
-        if (edit.ScaleZ.HasValue)
-        {
-            result.Set(Transform.ScaleZ, edit.ScaleZ.Value);
-        }
-
-        if (edit.Position.HasValue)
-        {
-            var v = edit.Position.Value;
-            result.Set(Transform.PositionX, v.X);
-            result.Set(Transform.PositionY, v.Y);
-            result.Set(Transform.PositionZ, v.Z);
-        }
-
-        if (edit.RotationEulerDegrees.HasValue)
-        {
-            var v = edit.RotationEulerDegrees.Value;
-            result.Set(Transform.RotationX, v.X);
-            result.Set(Transform.RotationY, v.Y);
-            result.Set(Transform.RotationZ, v.Z);
-        }
-
-        if (edit.Scale.HasValue)
-        {
-            var v = edit.Scale.Value;
-            result.Set(Transform.ScaleX, v.X);
-            result.Set(Transform.ScaleY, v.Y);
-            result.Set(Transform.ScaleZ, v.Z);
-        }
+        SetOptional(result, Transform.PositionX, edit.PositionX);
+        SetOptional(result, Transform.PositionY, edit.PositionY);
+        SetOptional(result, Transform.PositionZ, edit.PositionZ);
+        SetOptional(result, Transform.RotationX, edit.RotationXDegrees);
+        SetOptional(result, Transform.RotationY, edit.RotationYDegrees);
+        SetOptional(result, Transform.RotationZ, edit.RotationZDegrees);
+        SetOptional(result, Transform.ScaleX, edit.ScaleX);
+        SetOptional(result, Transform.ScaleY, edit.ScaleY);
+        SetOptional(result, Transform.ScaleZ, edit.ScaleZ);
+        SetVector(result, edit.Position, Transform.PositionX, Transform.PositionY, Transform.PositionZ);
+        SetVector(result, edit.RotationEulerDegrees, Transform.RotationX, Transform.RotationY, Transform.RotationZ);
+        SetVector(result, edit.Scale, Transform.ScaleX, Transform.ScaleY, Transform.ScaleZ);
 
         return result;
+    }
+
+    private static void SetOptional(PropertyEdit result, PropertyId<float> id, OptionalEditValue<float> value)
+    {
+        if (value.HasValue)
+        {
+            result.Set(id, value.Value);
+        }
+    }
+
+    private static void SetVector(
+        PropertyEdit result,
+        OptionalEditValue<Vector3> value,
+        PropertyId<float> xId,
+        PropertyId<float> yId,
+        PropertyId<float> zId)
+    {
+        if (!value.HasValue)
+        {
+            return;
+        }
+
+        var vector = value.Value;
+        result.Set(xId, vector.X);
+        result.Set(yId, vector.Y);
+        result.Set(zId, vector.Z);
     }
 
     /// <summary>
@@ -287,7 +340,7 @@ public sealed partial class SceneDocumentCommandService
     /// </summary>
     /// <param name="edit">The descriptor-addressed property edit map.</param>
     /// <returns>The engine property entries that can be sent to the runtime.</returns>
-    internal static List<EnginePropertyValueEntry> BuildTransformPropertyEntries(PropertyEdit edit)
+    private static List<EnginePropertyValueEntry> BuildTransformPropertyEntries(PropertyEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
 
@@ -325,6 +378,203 @@ public sealed partial class SceneDocumentCommandService
             case "transform.scale.z": field = TransformField.ScaleZ; return true;
             default: field = default; return false;
         }
+    }
+
+    private static List<EnginePropertyValueEntry> BuildPerspectiveCameraPropertyEntries(PerspectiveCameraEdit edit)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+
+        var entries = new List<EnginePropertyValueEntry>(capacity: 4);
+        AddOptional(entries, edit.FieldOfViewDegrees, PerspectiveCameraField.FieldOfViewYRadians, DegreesToRadians);
+        AddOptional(entries, edit.AspectRatio, PerspectiveCameraField.AspectRatio);
+        AddOptional(entries, edit.NearPlane, PerspectiveCameraField.NearPlane);
+        AddOptional(entries, edit.FarPlane, PerspectiveCameraField.FarPlane);
+        return entries;
+    }
+
+    private static List<EnginePropertyValueEntry> BuildPerspectiveCameraPropertyEntries(PerspectiveCamera camera)
+    {
+        ArgumentNullException.ThrowIfNull(camera);
+
+        return
+        [
+            new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, DegreesToRadians(camera.FieldOfView)),
+            new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.AspectRatio, camera.AspectRatio),
+            new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.NearPlane, camera.NearPlane),
+            new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FarPlane, camera.FarPlane),
+        ];
+    }
+
+    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, DirectionalLightComponent light)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+        ArgumentNullException.ThrowIfNull(light);
+
+        var entries = new List<EnginePropertyValueEntry>(capacity: DirectionalLightPropertyEntryCapacity);
+        if (edit.Color.HasValue)
+        {
+            AddDirectionalLightColor(entries, light.Color);
+        }
+
+        AddOptional(entries, edit.AffectsWorld, DirectionalLightField.AffectsWorld);
+        AddOptional(entries, edit.Mobility, DirectionalLightField.Mobility);
+        AddOptional(entries, edit.CastsShadows, DirectionalLightField.CastsShadows);
+        AddOptional(entries, edit.ShadowBias, DirectionalLightField.ShadowBias);
+        AddOptional(entries, edit.ShadowNormalBias, DirectionalLightField.ShadowNormalBias);
+        AddOptional(entries, edit.ContactShadows, DirectionalLightField.ContactShadows);
+        AddOptional(entries, edit.ShadowResolutionHint, DirectionalLightField.ShadowResolutionHint);
+        AddOptional(entries, edit.ExposureCompensation, DirectionalLightField.ExposureCompensation);
+        AddOptional(entries, edit.IntensityLux, DirectionalLightField.IntensityLux);
+        AddOptional(entries, edit.AngularSizeRadians, DirectionalLightField.AngularSizeRadians);
+        AddOptional(entries, edit.EnvironmentContribution, DirectionalLightField.EnvironmentContribution);
+        if (edit.IsSunLight.HasValue)
+        {
+            entries.Add(BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight));
+        }
+
+        AddOptional(entries, edit.CascadeCount, DirectionalLightField.CascadeCount);
+        AddOptional(entries, edit.SplitMode, DirectionalLightField.SplitMode);
+        AddOptional(entries, edit.MaxShadowDistance, DirectionalLightField.MaxShadowDistance);
+        AddOptional(entries, edit.CascadeDistance0, DirectionalLightField.CascadeDistance0);
+        AddOptional(entries, edit.CascadeDistance1, DirectionalLightField.CascadeDistance1);
+        AddOptional(entries, edit.CascadeDistance2, DirectionalLightField.CascadeDistance2);
+        AddOptional(entries, edit.CascadeDistance3, DirectionalLightField.CascadeDistance3);
+        AddOptional(entries, edit.DistributionExponent, DirectionalLightField.DistributionExponent);
+        AddOptional(entries, edit.TransitionFraction, DirectionalLightField.TransitionFraction);
+        AddOptional(entries, edit.DistanceFadeoutFraction, DirectionalLightField.DistanceFadeoutFraction);
+        return entries;
+    }
+
+    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightComponent light)
+    {
+        ArgumentNullException.ThrowIfNull(light);
+
+        var entries = new List<EnginePropertyValueEntry>(capacity: DirectionalLightPropertyEntryCapacity);
+        AddDirectionalLightColor(entries, light.Color);
+        entries.Add(BoolEntry(DirectionalLightField.AffectsWorld, light.AffectsWorld));
+        entries.Add(EnumEntry(DirectionalLightField.Mobility, light.Mobility));
+        entries.Add(BoolEntry(DirectionalLightField.CastsShadows, light.CastsShadows));
+        entries.Add(FloatEntry(DirectionalLightField.ShadowBias, light.ShadowBias));
+        entries.Add(FloatEntry(DirectionalLightField.ShadowNormalBias, light.ShadowNormalBias));
+        entries.Add(BoolEntry(DirectionalLightField.ContactShadows, light.ContactShadows));
+        entries.Add(EnumEntry(DirectionalLightField.ShadowResolutionHint, light.ShadowResolutionHint));
+        entries.Add(FloatEntry(DirectionalLightField.ExposureCompensation, light.ExposureCompensation));
+        entries.Add(FloatEntry(DirectionalLightField.IntensityLux, light.IntensityLux));
+        entries.Add(FloatEntry(DirectionalLightField.AngularSizeRadians, light.AngularSizeRadians));
+        entries.Add(BoolEntry(DirectionalLightField.EnvironmentContribution, light.EnvironmentContribution));
+        entries.Add(BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight));
+        entries.Add(FloatEntry(DirectionalLightField.CascadeCount, light.CascadeCount));
+        entries.Add(EnumEntry(DirectionalLightField.SplitMode, light.SplitMode));
+        entries.Add(FloatEntry(DirectionalLightField.MaxShadowDistance, light.MaxShadowDistance));
+        entries.Add(FloatEntry(DirectionalLightField.CascadeDistance0, light.CascadeDistances.X));
+        entries.Add(FloatEntry(DirectionalLightField.CascadeDistance1, light.CascadeDistances.Y));
+        entries.Add(FloatEntry(DirectionalLightField.CascadeDistance2, light.CascadeDistances.Z));
+        entries.Add(FloatEntry(DirectionalLightField.CascadeDistance3, light.CascadeDistances.W));
+        entries.Add(FloatEntry(DirectionalLightField.DistributionExponent, light.DistributionExponent));
+        entries.Add(FloatEntry(DirectionalLightField.TransitionFraction, light.TransitionFraction));
+        entries.Add(FloatEntry(DirectionalLightField.DistanceFadeoutFraction, light.DistanceFadeoutFraction));
+        return entries;
+    }
+
+    private static void AddDirectionalLightColor(List<EnginePropertyValueEntry> entries, Vector3 color)
+    {
+        entries.Add(FloatEntry(DirectionalLightField.ColorR, color.X));
+        entries.Add(FloatEntry(DirectionalLightField.ColorG, color.Y));
+        entries.Add(FloatEntry(DirectionalLightField.ColorB, color.Z));
+    }
+
+    private static void AddOptional(
+        List<EnginePropertyValueEntry> entries,
+        OptionalEditValue<float> value,
+        PerspectiveCameraField field,
+        Func<float, float>? convert = null)
+    {
+        if (value.HasValue)
+        {
+            entries.Add(new EnginePropertyValueEntry(
+                EngineComponentId.PerspectiveCamera,
+                (ushort)field,
+                convert?.Invoke(value.Value) ?? value.Value));
+        }
+    }
+
+    private static void AddOptional(List<EnginePropertyValueEntry> entries, OptionalEditValue<float> value, DirectionalLightField field)
+    {
+        if (value.HasValue)
+        {
+            entries.Add(FloatEntry(field, value.Value));
+        }
+    }
+
+    private static void AddOptional(List<EnginePropertyValueEntry> entries, OptionalEditValue<int> value, DirectionalLightField field)
+    {
+        if (value.HasValue)
+        {
+            entries.Add(FloatEntry(field, value.Value));
+        }
+    }
+
+    private static void AddOptional(List<EnginePropertyValueEntry> entries, OptionalEditValue<bool> value, DirectionalLightField field)
+    {
+        if (value.HasValue)
+        {
+            entries.Add(BoolEntry(field, value.Value));
+        }
+    }
+
+    private static void AddOptional<T>(List<EnginePropertyValueEntry> entries, OptionalEditValue<T> value, DirectionalLightField field)
+        where T : struct, Enum
+    {
+        if (value.HasValue)
+        {
+            entries.Add(EnumEntry(field, value.Value));
+        }
+    }
+
+    private static EnginePropertyValueEntry FloatEntry(DirectionalLightField field, float value)
+        => new(EngineComponentId.DirectionalLight, (ushort)field, value);
+
+    private static EnginePropertyValueEntry BoolEntry(DirectionalLightField field, bool value)
+        => FloatEntry(field, value ? 1f : 0f);
+
+    private static EnginePropertyValueEntry EnumEntry<T>(DirectionalLightField field, T value)
+        where T : struct, Enum
+        => FloatEntry(field, Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
+
+    private static float DegreesToRadians(float degrees)
+        => degrees * (MathF.PI / 180f);
+
+    private async Task<SceneCommandResult> EditTransformPropertiesOneShotAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        PropertyEdit edit,
+        string label)
+    {
+        var nodes = ResolveNodes(context.Scene, nodeIds);
+        var (nodeTargets, sceneNodes) = ResolveTransformPropertyTargets(nodes);
+        if (nodeTargets.Count == 0)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.EditTransform,
+                SceneDiagnosticCodes.ComponentRemoveDenied,
+                "Property edit ignored",
+                "No selected node has a component matching the requested property ids.",
+                context);
+        }
+
+        var descriptors = Transform.ById;
+        var touchedDescriptors = GetTouchedDescriptors(edit, descriptors);
+        var op = BuildPropertyOp(edit, label, nodeTargets, touchedDescriptors);
+        if (op.EffectiveEdit().Count == 0)
+        {
+            return SceneCommandResult.Success;
+        }
+
+        var resolver = new TransformPropertyTarget(this, context, sceneNodes);
+        await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(true);
+        this.RegisterPropertyOpHistory(context, op, resolver, descriptors);
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        return SceneCommandResult.Success;
     }
 
     private void RegisterPropertyOpHistory(
@@ -407,8 +657,8 @@ public sealed partial class SceneDocumentCommandService
         public Task PushToEngineAsync(Guid nodeId, PropertyEdit edit)
         {
             // Property pipeline §5.3 — translate the descriptor's
-            // engineCommandKey strings into stable EnginePropertyKey wire
-            // ids and dispatch through the new generic SetProperties
+            // engineCommandKey strings into stable engine property wire ids
+            // and dispatch through the new generic SetProperties
             // transport. This replaces the wide UpdateNodeTransformAsync
             // path for property-pipeline edits.
             if (!this.nodes.TryGetValue(nodeId, out var node))
@@ -439,193 +689,6 @@ public sealed partial class SceneDocumentCommandService
                 context,
                 SceneOperationKinds.EditTransform,
                 outcome).ConfigureAwait(true);
-        }
-    }
-}
-
-/// <summary>
-/// Catalog of property descriptors for <see cref="TransformComponent"/>.
-/// </summary>
-public sealed class TransformDescriptors
-{
-    private TransformDescriptors(
-        PropertyDescriptor<float> positionX,
-        PropertyDescriptor<float> positionY,
-        PropertyDescriptor<float> positionZ,
-        PropertyDescriptor<float> rotationX,
-        PropertyDescriptor<float> rotationY,
-        PropertyDescriptor<float> rotationZ,
-        PropertyDescriptor<float> scaleX,
-        PropertyDescriptor<float> scaleY,
-        PropertyDescriptor<float> scaleZ)
-    {
-        this.PositionX = new PropertyId<float>(positionX.Id);
-        this.PositionY = new PropertyId<float>(positionY.Id);
-        this.PositionZ = new PropertyId<float>(positionZ.Id);
-        this.RotationX = new PropertyId<float>(rotationX.Id);
-        this.RotationY = new PropertyId<float>(rotationY.Id);
-        this.RotationZ = new PropertyId<float>(rotationZ.Id);
-        this.ScaleX = new PropertyId<float>(scaleX.Id);
-        this.ScaleY = new PropertyId<float>(scaleY.Id);
-        this.ScaleZ = new PropertyId<float>(scaleZ.Id);
-        this.PositionXDescriptor = positionX;
-        this.PositionYDescriptor = positionY;
-        this.PositionZDescriptor = positionZ;
-        this.RotationXDescriptor = rotationX;
-        this.RotationYDescriptor = rotationY;
-        this.RotationZDescriptor = rotationZ;
-        this.ScaleXDescriptor = scaleX;
-        this.ScaleYDescriptor = scaleY;
-        this.ScaleZDescriptor = scaleZ;
-
-        var byId = new Dictionary<PropertyId, PropertyDescriptor>
-        {
-            [positionX.Id] = positionX,
-            [positionY.Id] = positionY,
-            [positionZ.Id] = positionZ,
-            [rotationX.Id] = rotationX,
-            [rotationY.Id] = rotationY,
-            [rotationZ.Id] = rotationZ,
-            [scaleX.Id] = scaleX,
-            [scaleY.Id] = scaleY,
-            [scaleZ.Id] = scaleZ,
-        };
-        this.ById = byId;
-    }
-
-    /// <summary>Gets the typed id for /local_position/0.</summary>
-    public PropertyId<float> PositionX { get; }
-
-    /// <summary>Gets the typed id for /local_position/1.</summary>
-    public PropertyId<float> PositionY { get; }
-
-    /// <summary>Gets the typed id for /local_position/2.</summary>
-    public PropertyId<float> PositionZ { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/0.</summary>
-    public PropertyId<float> RotationX { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/1.</summary>
-    public PropertyId<float> RotationY { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/2.</summary>
-    public PropertyId<float> RotationZ { get; }
-
-    /// <summary>Gets the typed id for /local_scale/0.</summary>
-    public PropertyId<float> ScaleX { get; }
-
-    /// <summary>Gets the typed id for /local_scale/1.</summary>
-    public PropertyId<float> ScaleY { get; }
-
-    /// <summary>Gets the typed id for /local_scale/2.</summary>
-    public PropertyId<float> ScaleZ { get; }
-
-    /// <summary>Gets the position X descriptor.</summary>
-    public PropertyDescriptor<float> PositionXDescriptor { get; }
-
-    /// <summary>Gets the position Y descriptor.</summary>
-    public PropertyDescriptor<float> PositionYDescriptor { get; }
-
-    /// <summary>Gets the position Z descriptor.</summary>
-    public PropertyDescriptor<float> PositionZDescriptor { get; }
-
-    /// <summary>Gets the rotation X descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationXDescriptor { get; }
-
-    /// <summary>Gets the rotation Y descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationYDescriptor { get; }
-
-    /// <summary>Gets the rotation Z descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationZDescriptor { get; }
-
-    /// <summary>Gets the scale X descriptor.</summary>
-    public PropertyDescriptor<float> ScaleXDescriptor { get; }
-
-    /// <summary>Gets the scale Y descriptor.</summary>
-    public PropertyDescriptor<float> ScaleYDescriptor { get; }
-
-    /// <summary>Gets the scale Z descriptor.</summary>
-    public PropertyDescriptor<float> ScaleZDescriptor { get; }
-
-    /// <summary>Gets the descriptor table indexed by <see cref="PropertyId"/>.</summary>
-    public IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
-
-    /// <summary>
-    /// Builds the canonical descriptor catalog. Validators reject NaN /
-    /// infinite values; scale axes additionally reject zero (degenerate
-    /// transforms).
-    /// </summary>
-    /// <returns>The catalog.</returns>
-    public static TransformDescriptors Build()
-    {
-        var annotation = new EditorAnnotation { Group = "Transform" };
-
-        return new TransformDescriptors(
-            positionX: BuildPositionAxis("/local_position/0", static t => t.LocalPosition.X, static (t, v) => t.LocalPosition = new Vector3(v, t.LocalPosition.Y, t.LocalPosition.Z), "transform.position.x"),
-            positionY: BuildPositionAxis("/local_position/1", static t => t.LocalPosition.Y, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, v, t.LocalPosition.Z), "transform.position.y"),
-            positionZ: BuildPositionAxis("/local_position/2", static t => t.LocalPosition.Z, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, t.LocalPosition.Y, v), "transform.position.z"),
-            rotationX: BuildRotationAxis("/local_rotation_euler_degrees/0", 0, "transform.rotation.x"),
-            rotationY: BuildRotationAxis("/local_rotation_euler_degrees/1", 1, "transform.rotation.y"),
-            rotationZ: BuildRotationAxis("/local_rotation_euler_degrees/2", 2, "transform.rotation.z"),
-            scaleX: BuildScaleAxis("/local_scale/0", static t => t.LocalScale.X, static (t, v) => t.LocalScale = new Vector3(v, t.LocalScale.Y, t.LocalScale.Z), "transform.scale.x"),
-            scaleY: BuildScaleAxis("/local_scale/1", static t => t.LocalScale.Y, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, v, t.LocalScale.Z), "transform.scale.y"),
-            scaleZ: BuildScaleAxis("/local_scale/2", static t => t.LocalScale.Z, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, t.LocalScale.Y, v), "transform.scale.z"));
-
-        static PropertyDescriptor<float> BuildPositionAxis(string pointer, Func<TransformComponent, float> read, Action<TransformComponent, float> write, string key)
-        {
-            return new PropertyDescriptor<float>(
-                id: new PropertyId<float>(SceneDocumentCommandService.TransformKind, pointer),
-                reader: t => read((TransformComponent)t),
-                writer: (t, v) => write((TransformComponent)t, v),
-                validator: static v => float.IsFinite(v) ? ValidationResult.Ok : ValidationResult.Fail("PROPERTY_NONFINITE", "Position must be finite."),
-                annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 },
-                engineCommandKey: key);
-        }
-
-        static PropertyDescriptor<float> BuildRotationAxis(string pointer, int axisIndex, string key)
-        {
-            return new PropertyDescriptor<float>(
-                id: new PropertyId<float>(SceneDocumentCommandService.TransformKind, pointer),
-                reader: t =>
-                {
-                    var euler = TransformConverter.QuaternionToEulerDegrees(((TransformComponent)t).LocalRotation);
-                    return axisIndex switch
-                    {
-                        0 => euler.X,
-                        1 => euler.Y,
-                        _ => euler.Z,
-                    };
-                },
-                writer: (t, v) =>
-                {
-                    var component = (TransformComponent)t;
-                    var euler = TransformConverter.QuaternionToEulerDegrees(component.LocalRotation);
-                    var updated = axisIndex switch
-                    {
-                        0 => new Vector3(v, euler.Y, euler.Z),
-                        1 => new Vector3(euler.X, v, euler.Z),
-                        _ => new Vector3(euler.X, euler.Y, v),
-                    };
-                    component.LocalRotation = TransformConverter.EulerDegreesToQuaternion(updated);
-                },
-                validator: static v => float.IsFinite(v) ? ValidationResult.Ok : ValidationResult.Fail("PROPERTY_NONFINITE", "Rotation must be finite."),
-                annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.5 },
-                engineCommandKey: key);
-        }
-
-        static PropertyDescriptor<float> BuildScaleAxis(string pointer, Func<TransformComponent, float> read, Action<TransformComponent, float> write, string key)
-        {
-            return new PropertyDescriptor<float>(
-                id: new PropertyId<float>(SceneDocumentCommandService.TransformKind, pointer),
-                reader: t => read((TransformComponent)t),
-                writer: (t, v) => write((TransformComponent)t, v),
-                validator: static v => !float.IsFinite(v)
-                    ? ValidationResult.Fail("PROPERTY_NONFINITE", "Scale must be finite.")
-                    : v == 0f
-                        ? ValidationResult.Fail("PROPERTY_DEGENERATE_SCALE", "Scale axis must be non-zero.")
-                        : ValidationResult.Ok,
-                annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 },
-                engineCommandKey: key);
         }
     }
 }

@@ -40,19 +40,19 @@ public static class AssetUris
     /// </summary>
     /// <param name="path">The path within the engine mount point.</param>
     /// <returns>The full asset URI.</returns>
-    public static string BuildEngineUri(string path) => $"{Scheme}:///{EngineMountPoint}/{path.TrimStart('/')}";
+    public static Uri BuildEngineUri(string path) => new($"{Scheme}:///{EngineMountPoint}/{path.TrimStart('/')}");
 
     /// <summary>
     /// Builds a content asset URI.
     /// </summary>
     /// <param name="path">The path within the content mount point.</param>
     /// <returns>The full asset URI.</returns>
-    public static string BuildContentUri(string path) => $"{Scheme}:///{ContentMountPoint}/{path.TrimStart('/')}";
+    public static Uri BuildContentUri(string path) => new($"{Scheme}:///{ContentMountPoint}/{path.TrimStart('/')}");
 
     /// <summary>
     /// Builds a URI for a generated asset.
     /// </summary>
     /// <param name="assetPath">The path of the asset relative to the generated root (e.g., "BasicShapes/Cube").</param>
     /// <returns>The full asset URI.</returns>
-    public static string BuildGeneratedUri(string assetPath) => BuildEngineUri($"{GeneratedPath}/{assetPath}");
+    public static Uri BuildGeneratedUri(string assetPath) => BuildEngineUri($"{GeneratedPath}/{assetPath}");
 }

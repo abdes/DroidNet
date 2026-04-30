@@ -2,17 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.InteropServices;
-
 namespace Oxygen.Editor.World.Messages;
-
-/// <summary>
-/// Snapshot of geometry selection for messaging and undo/redo purposes.
-/// </summary>
-/// <param name="UriString">The string representation of the geometry URI. May be <see langword="null"/> when no geometry is set.</param>
-[StructLayout(LayoutKind.Auto)]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1649:File name should match first type name", Justification = "Auxiliary type in message file")]
-public readonly record struct GeometrySnapshot(string? UriString);
 
 /// <summary>
 /// Message sent when one or more <see cref="SceneNode"/> geometry values have been applied

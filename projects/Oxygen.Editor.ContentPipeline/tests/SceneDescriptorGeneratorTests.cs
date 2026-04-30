@@ -29,9 +29,9 @@ public sealed class SceneDescriptorGeneratorTests
         var inputs = await service.EnsureDescriptorsAsync(
             scope,
             [
-                new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
-                new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Sphere")),
-                new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Plane")),
+                AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
+                AssetUris.BuildGeneratedUri("BasicShapes/Sphere"),
+                AssetUris.BuildGeneratedUri("BasicShapes/Plane"),
             ],
             CancellationToken.None).ConfigureAwait(false);
 
@@ -68,7 +68,7 @@ public sealed class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))),
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
@@ -94,7 +94,7 @@ public sealed class SceneDescriptorGeneratorTests
             input.AssetUri == new Uri("asset:///Content/Materials/Red.omat.json")
             && input.OutputVirtualPath == "/Content/Materials/Red.omat");
         _ = result.Dependencies.Should().Contain(input =>
-            input.AssetUri == new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))
+            input.AssetUri == AssetUris.BuildGeneratedUri("BasicShapes/Cube")
             && input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
         _ = result.Dependencies.Should().Contain(input =>
             input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
@@ -123,7 +123,7 @@ public sealed class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))),
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -176,7 +176,7 @@ public sealed class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = new AssetReference<GeometryAsset>(new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))),
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData

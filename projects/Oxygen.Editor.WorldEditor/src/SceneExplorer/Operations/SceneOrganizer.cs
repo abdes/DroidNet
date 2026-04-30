@@ -82,7 +82,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         folderEntry.Children!.Add(nodeEntry);
         this.LogMoveNodeToFolder(nodeId, folderEntry.FolderId!.Value);
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
 
         return new LayoutChangeRecord(
             OperationName: "MoveNodeToFolder",
@@ -132,7 +132,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             this.LogRemoveNodeFromFolder(nodeId, folderId);
         }
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
 
         return new LayoutChangeRecord(
             OperationName: "RemoveNodeFromFolder",
@@ -161,7 +161,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         RemoveEntriesForNodeIds(layout, [nodeId], removedEntries);
         this.LogRemoveNodeFromLayout(removedEntries.Count, nodeId);
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
 
         return new LayoutChangeRecord(
             OperationName: "RemoveNodeFromLayout",
@@ -200,8 +200,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
                 throw new InvalidOperationException($"Failed to ensure parent node {node.Parent.Id} in layout.");
             }
 
-            parentEntry.Children ??= [];
-            targetList = parentEntry.Children;
+            targetList = parentEntry.EnsureChildren();
         }
 
         // Add to layout
@@ -247,8 +246,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
                 throw new InvalidOperationException($"Parent folder {parentFolderId} not found.");
             }
 
-            parentEntry.Children ??= [];
-            parentEntry.Children.Add(folderEntry);
+            parentEntry.EnsureChildren().Add(folderEntry);
         }
         else if (parentNodeId.HasValue)
         {
@@ -259,15 +257,14 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
                 throw new InvalidOperationException($"Parent node {parentNodeId} not found in layout.");
             }
 
-            parentEntry.Children ??= [];
-            parentEntry.Children.Add(folderEntry);
+            parentEntry.EnsureChildren().Add(folderEntry);
         }
         else
         {
             layout.Add(folderEntry);
         }
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
         this.LogSceneInfo("CreateFolder (End)", scene);
 
         return new LayoutChangeRecord(
@@ -340,7 +337,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             targetParent.Children!.Add(folderEntry);
         }
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
         this.LogMoveFolderToParent(folderId, newParentFolderId);
 
         return new LayoutChangeRecord(
@@ -383,7 +380,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             }
         }
 
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
         this.LogRemoveFolder(folderId, promoteChildrenToParent);
 
         return new LayoutChangeRecord(
@@ -416,7 +413,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         }
 
         folderEntry.Name = newName;
-        scene.ExplorerLayout = layout;
+        scene.SetExplorerLayout(layout);
         this.LogRenameFolder(folderId, newName);
 
         return new LayoutChangeRecord(
@@ -474,12 +471,6 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
     }
 
-    public async Task ReconcileLayoutAsync(
-        SceneAdapter sceneAdapter,
-        Scene scene,
-        IList<ExplorerEntryData>? layout,
-        ILayoutContext layoutContext,
-        bool preserveNodeExpansion = false)
     /// <summary>
     /// Reconciles the provided layout (or builds one from the scene root nodes if
     /// <paramref name="layout"/> is null) with the given <paramref name="sceneAdapter"/>.
@@ -492,6 +483,12 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
     /// <param name="layoutContext">Context used to refresh the visual tree.</param>
     /// <param name="preserveNodeExpansion">If true, preserves node expansion states where possible.</param>
     /// <returns>A task representing the asynchronous reconcile operation.</returns>
+    public async Task ReconcileLayoutAsync(
+        SceneAdapter sceneAdapter,
+        Scene scene,
+        IList<ExplorerEntryData>? layout,
+        ILayoutContext layoutContext,
+        bool preserveNodeExpansion = false)
     {
         ArgumentNullException.ThrowIfNull(sceneAdapter);
         ArgumentNullException.ThrowIfNull(scene);
@@ -500,7 +497,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         var targetLayout = layout ?? BuildLayoutFromRootNodes(scene);
         var layoutClone = this.CloneLayout(targetLayout) ?? [];
         this.LogReconcileStart(scene.GetHashCode(), layoutClone.Count);
-        scene.ExplorerLayout = layoutClone;
+        scene.SetExplorerLayout(layoutClone);
 
         var adapterIndex = await BuildAdapterIndexAsync(sceneAdapter).ConfigureAwait(true);
         this.LogAdapterIndexStats(adapterIndex.NodeAdapters.Count, adapterIndex.FolderAdapters.Count, adapterIndex.AllAdapters.Count);
@@ -563,7 +560,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
 
         // Normalize to ensure folder entries always have a mutable children list for in-place updates.
         var normalized = NormalizeLayout(scene.ExplorerLayout);
-        scene.ExplorerLayout = normalized;
+        scene.SetExplorerLayout(normalized);
         return normalized;
     }
 
@@ -733,16 +730,17 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
     public void EnsureLayoutContainsNodes(Scene scene, IEnumerable<Guid> nodeIds)
     {
         // Ensure layout exists
-        scene.ExplorerLayout ??= BuildLayoutFromRootNodes(scene);
+        var layout = scene.ExplorerLayout ?? BuildLayoutFromRootNodes(scene);
+        scene.SetExplorerLayout(layout);
 
         foreach (var id in nodeIds)
         {
-            if (LayoutContainsNode(scene.ExplorerLayout, id))
+            if (LayoutContainsNode(layout, id))
             {
                 continue;
             }
 
-            scene.ExplorerLayout.Add(new ExplorerEntryData { Type = "Node", NodeId = id });
+            layout.Add(new ExplorerEntryData { Type = "Node", NodeId = id });
         }
 
         static bool LayoutContainsNode(IList<ExplorerEntryData> layout, Guid nodeId)

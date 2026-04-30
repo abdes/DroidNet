@@ -409,8 +409,9 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
             [nameof(SceneEnvironmentData.ManualExposureEv)] = environmentOutcome.Status,
             [nameof(SceneEnvironmentData.ExposureCompensation)] = environmentOutcome.Status,
             [nameof(SceneEnvironmentData.ToneMapping)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.BackgroundColor)] = SyncStatus.Unsupported,
+            [nameof(SceneEnvironmentData.BackgroundColor)] = environmentOutcome.Status,
             [nameof(SceneEnvironmentData.SkyAtmosphere)] = environmentOutcome.Status,
+            [nameof(SceneEnvironmentData.PostProcess)] = environmentOutcome.Status,
         };
 
         return new EnvironmentSyncResult(Worst(perField.Values), perField);
@@ -565,15 +566,16 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(entries);
-        var scope = Scope(scene, node, componentType: nameof(TransformComponent));
+        var operationKind = GetPropertyOperationKind(entries);
+        var scope = Scope(scene, node, componentType: GetPropertyComponentType(entries));
         if (entries.Count == 0)
         {
-            return Task.FromResult(Accepted(SceneOperationKinds.EditTransform, scope));
+            return Task.FromResult(Accepted(operationKind, scope));
         }
 
         if (TryGetReadyWorld(
                 this.engineService,
-                SceneOperationKinds.EditTransform,
+                operationKind,
                 scope,
                 cancellationToken,
                 out var world,
@@ -582,7 +584,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
             return Task.FromResult(this.HandlePropertySyncReadiness(scene, node, entries, readinessOutcome));
         }
 
-        return Task.FromResult(this.ApplyPropertySync(scene, node, entries, scope, world!, cancellationToken));
+        return Task.FromResult(this.ApplyPropertySync(scene, node, entries, scope, world!, operationKind, cancellationToken));
     }
 
     /// <inheritdoc/>
@@ -846,6 +848,24 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
 
         this.LogPropagatingTransforms();
         this.PropagateTransforms(scene, world);
+        var sunOutcome = await this.SyncSunBindingAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
+        if (sunOutcome.Status != SyncStatus.Accepted)
+        {
+            this.LogFailedToSyncSceneWithEngine(
+                new InvalidOperationException($"Initial environment sun sync returned {sunOutcome.Status}: {sunOutcome.Message}"),
+                scene);
+            return false;
+        }
+
+        var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
+        if (environmentOutcome.Status != SyncStatus.Accepted)
+        {
+            this.LogFailedToSyncSceneWithEngine(
+                new InvalidOperationException($"Initial environment sync returned {environmentOutcome.Status}: {environmentOutcome.Message}"),
+                scene);
+            return false;
+        }
+
         this.ReplayPendingPropertySyncs(scene, world);
         return true;
     }
@@ -883,25 +903,26 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
         IReadOnlyList<EnginePropertyValueEntry> entries,
         AffectedScope scope,
         Oxygen.Interop.World.OxygenWorld world,
+        string operationKind,
         CancellationToken cancellationToken)
     {
         try
         {
             world.SetProperties(node.Id, EnginePropertyWire.ToWireEntries(entries));
             this.LogSetPropertiesEnqueued(scene.Id, node.Id, entries.Count);
-            return Accepted(SceneOperationKinds.EditTransform, scope);
+            return Accepted(operationKind, scope);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Cancelled(SceneOperationKinds.EditTransform, scope);
+            return Cancelled(operationKind, scope);
         }
         catch (ArgumentException ex)
         {
             this.LogSetPropertiesRejected(ex, scene.Id, node.Id, entries.Count);
             return Rejected(
-                SceneOperationKinds.EditTransform,
+                operationKind,
                 scope,
-                LiveSyncDiagnosticCodes.TransformRejected,
+                GetPropertyRejectedCode(operationKind),
                 ex.Message,
                 ex);
         }
@@ -909,9 +930,9 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
         {
             this.LogSetPropertiesRejected(ex, scene.Id, node.Id, entries.Count);
             return Rejected(
-                SceneOperationKinds.EditTransform,
+                operationKind,
                 scope,
-                LiveSyncDiagnosticCodes.TransformRejected,
+                GetPropertyRejectedCode(operationKind),
                 ex.Message,
                 ex);
         }
@@ -919,9 +940,9 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
         {
             this.LogSetPropertiesFailed(ex, scene.Id, node.Id, entries.Count);
             return Failed(
-                SceneOperationKinds.EditTransform,
+                operationKind,
                 scope,
-                LiveSyncDiagnosticCodes.TransformFailed,
+                GetPropertyFailedCode(operationKind),
                 ex.Message,
                 ex);
         }

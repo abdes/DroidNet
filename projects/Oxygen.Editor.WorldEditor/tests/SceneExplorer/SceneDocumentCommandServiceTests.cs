@@ -13,6 +13,7 @@ using Oxygen.Assets.Model;
 using Oxygen.Core;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Services;
@@ -28,6 +29,18 @@ namespace Oxygen.Editor.World.SceneExplorer.Tests;
 [TestCategory("Scene Commands")]
 public sealed class SceneDocumentCommandServiceTests
 {
+    [TestMethod]
+    public void ScenePropertyDescriptors_ShouldUseSceneSchemaOverlayAnnotations()
+    {
+        _ = SceneDocumentCommandService.Geometry.GeometryUriDescriptor.Annotation.Renderer.Should().Be("asset-picker");
+        _ = SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor.Annotation.Step.Should().Be(0.1);
+        _ = SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor.Annotation.Extra.Should().Contain("x-editor-unit", "deg");
+        _ = SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor.Annotation.Group.Should().Be("Emission");
+        _ = SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor.Annotation.Extra.Should().Contain("x-editor-unit", "lux");
+        _ = SceneDocumentCommandService.SceneEnvironment.ById[SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters.Id]
+            .Annotation.Extra.Should().Contain("x-editor-unit", "m");
+    }
+
     [TestMethod]
     public async Task RemoveComponentAsync_WhenComponentIsTransform_DeniesAndKeepsAuthoringState()
     {
@@ -68,7 +81,7 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditGeometryAsync(
             context,
             [node.Id],
-            new GeometryEdit(Optional<Uri?>.Supplied(null)),
+            new GeometryEdit(OptionalEditValues.Supplied<Uri?>(null)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
@@ -91,7 +104,7 @@ public sealed class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
-        var geometryUri = new Uri(AssetUris.BuildGeneratedUri("BasicShapes/Cube"), UriKind.Absolute);
+        var geometryUri = AssetUris.BuildGeneratedUri("BasicShapes/Cube");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -102,7 +115,7 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditGeometryAsync(
             context,
             [node.Id],
-            new GeometryEdit(Optional<Uri?>.Supplied(geometryUri)),
+            new GeometryEdit(OptionalEditValues.Supplied<Uri?>(geometryUri)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -113,6 +126,41 @@ public sealed class SceneDocumentCommandServiceTests
         fixture.DocumentService.Verify(
             service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
             Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenGeometryUriChanges_PersistsAndSyncsGeometry()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var geometry = new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+        };
+        _ = node.AddComponent(geometry);
+        var context = CreateContext(scene);
+        var sphereUri = AssetUris.BuildGeneratedUri("BasicShapes/Sphere");
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditGeometry, AffectedScope.Empty);
+        fixture.Sync
+            .Setup(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditPropertiesAsync(
+            context,
+            [node.Id],
+            PropertyEdit.Single(SceneDocumentCommandService.Geometry.GeometryUri, sphereUri),
+            "Edit Geometry",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = geometry.Geometry.Should().NotBeNull();
+        _ = geometry.Geometry!.Uri.Should().Be(sphereUri);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        fixture.Sync.Verify(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [TestMethod]
@@ -224,10 +272,10 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             new TransformEdit(
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(4.0f)),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                PositionX: OptionalEditValues.Supplied<float>(4.0f)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -259,10 +307,10 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             new TransformEdit(
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(0.0f)),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                PositionX: OptionalEditValues.Supplied<float>(0.0f)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -305,10 +353,10 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             new TransformEdit(
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                Optional<Vector3>.Unspecified,
-                PositionX: Optional<float>.Supplied(4.0f)),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                OptionalEditValues.Unspecified<Vector3>(),
+                PositionX: OptionalEditValues.Supplied<float>(4.0f)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -350,13 +398,50 @@ public sealed class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task EditPropertiesAsync_WhenMaterialSlotIsCleared_SyncsNullMaterialUri()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var materialUri = AssetUris.BuildGeneratedUri("Materials/Matte");
+        var geometry = new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+        };
+        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(materialUri) });
+        _ = node.AddComponent(geometry);
+        var context = CreateContext(scene);
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
+        fixture.Sync
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditPropertiesAsync(
+            context,
+            [node.Id],
+            PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, (Uri?)null),
+            "Edit Material Slot",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
+            .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
+        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(
+            sync => sync.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
     public async Task EditMaterialSlotAsync_WhenMaterialIsUnchanged_DoesNotDirtyOrRecordHistory()
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
-        var materialUri = new Uri(AssetUris.BuildGeneratedUri("Materials/Matte"), UriKind.Absolute);
+        var materialUri = AssetUris.BuildGeneratedUri("Materials/Matte");
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
@@ -391,7 +476,7 @@ public sealed class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
-        var materialUri = new Uri(AssetUris.BuildGeneratedUri("Materials/Matte"), UriKind.Absolute);
+        var materialUri = AssetUris.BuildGeneratedUri("Materials/Matte");
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
@@ -433,6 +518,65 @@ public sealed class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task EditPropertiesAsync_WhenPerspectiveCameraPropertiesChange_PersistsAndSyncsCamera()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Camera" };
+        scene.RootNodes.Add(node);
+        var camera = new PerspectiveCamera
+        {
+            Name = "Camera",
+            FieldOfView = 60f,
+            NearPlane = 0.1f,
+            FarPlane = 1000f,
+            AspectRatio = 16f / 9f,
+        };
+        _ = node.AddComponent(camera);
+        var context = CreateContext(scene);
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditPerspectiveCamera, AffectedScope.Empty);
+        IReadOnlyList<EnginePropertyValueEntry>? synced = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .ReturnsAsync(accepted);
+
+        var edit = new PropertyEdit();
+        edit.Set(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 75f);
+        edit.Set(SceneDocumentCommandService.PerspectiveCamera.AspectRatio, 1.5f);
+        edit.Set(SceneDocumentCommandService.PerspectiveCamera.NearPlane, 0.25f);
+        edit.Set(SceneDocumentCommandService.PerspectiveCamera.FarPlane, 2500f);
+
+        var result = await fixture.Sut.EditPropertiesAsync(
+            context,
+            [node.Id],
+            edit,
+            "Edit Camera",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = camera.FieldOfView.Should().Be(75f);
+        _ = camera.AspectRatio.Should().Be(1.5f);
+        _ = camera.NearPlane.Should().Be(0.25f);
+        _ = camera.FarPlane.Should().Be(2500f);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        _ = synced.Should().NotBeNull();
+        _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.PerspectiveCamera && entry.FieldId == (ushort)PerspectiveCameraField.FieldOfViewYRadians);
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [TestMethod]
     public async Task EditDirectionalLightAsync_WhenLightBecomesSun_ClearsOtherSunLights()
     {
         var fixture = CreateFixture();
@@ -444,25 +588,28 @@ public sealed class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(second);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
+        var synced = new List<(SceneNode Node, IReadOnlyList<EnginePropertyValueEntry> Entries)>();
         fixture.Sync
-            .Setup(sync => sync.AttachLightAsync(scene, first, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(accepted);
-        fixture.Sync
-            .Setup(sync => sync.AttachLightAsync(scene, second, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                It.IsAny<SceneNode>(),
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, node, entries, _) => synced.Add((node, entries)))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditDirectionalLightAsync(
             context,
             [second.Id],
             new DirectionalLightEdit(
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<bool>.Supplied(true),
-                Optional<bool>.Unspecified,
-                Optional<bool>.Unspecified,
-                Optional<bool>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<float>.Unspecified),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Supplied<bool>(true),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<float>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -470,8 +617,127 @@ public sealed class SceneDocumentCommandServiceTests
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
-        fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, first, It.IsAny<CancellationToken>()), Times.Once);
-        fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, second, It.IsAny<CancellationToken>()), Times.Once);
+        _ = synced.Should().HaveCount(2);
+        _ = synced.Should().Contain(entry => entry.Node == first && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
+        _ = synced.Should().Contain(entry => entry.Node == second && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                It.IsAny<SceneNode>(),
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenDirectionalLightBecomesSun_PreservesExclusiveSunBehavior()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var first = CreateDirectionalLightNode(scene, "First");
+        var second = CreateDirectionalLightNode(scene, "Second");
+        second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight = false;
+        scene.RootNodes.Add(first);
+        scene.RootNodes.Add(second);
+        var context = CreateContext(scene);
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
+        var synced = new List<(SceneNode Node, IReadOnlyList<EnginePropertyValueEntry> Entries)>();
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                It.IsAny<SceneNode>(),
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, node, entries, _) => synced.Add((node, entries)))
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditPropertiesAsync(
+            context,
+            [second.Id],
+            PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.IsSunLight, true),
+            "Edit Directional Light",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
+        _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        _ = synced.Should().HaveCount(2);
+        _ = synced.Should().Contain(entry => entry.Node == first && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
+        _ = synced.Should().Contain(entry => entry.Node == second && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                It.IsAny<SceneNode>(),
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        fixture.Sync.Verify(
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditPropertiesAsync_WhenDirectionalLightPropertiesChange_PersistsAndSyncsLight()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = CreateDirectionalLightNode(scene, "Sun");
+        scene.RootNodes.Add(node);
+        var light = node.Components.OfType<DirectionalLightComponent>().Single();
+        var context = CreateContext(scene);
+        var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
+        IReadOnlyList<EnginePropertyValueEntry>? synced = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .ReturnsAsync(accepted);
+
+        var edit = BuildDirectionalLightPropertyEdit();
+
+        var result = await fixture.Sut.EditPropertiesAsync(
+            context,
+            [node.Id],
+            edit,
+            "Edit Directional Light",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        AssertDirectionalLightValues(
+            light,
+            color: new Vector3(0.2f, 0.4f, 0.8f),
+            intensityLux: 12_000f,
+            angularSizeRadians: 0.0125f,
+            exposureCompensation: 0.75f,
+            mobility: LightMobility.Mixed,
+            shadowResolutionHint: ShadowResolutionHint.High,
+            cascadeCount: 3,
+            maxShadowDistance: 256f,
+            cascadeDistances: new Vector4(16f, 48f, 128f, 256f),
+            distributionExponent: 2.25f,
+            transitionFraction: 0.2f,
+            distanceFadeoutFraction: 0.15f,
+            shadowBias: 0.001f,
+            shadowNormalBias: 0.04f);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+        _ = synced.Should().NotBeNull();
+        _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.IntensityLux);
+        _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.CascadeDistance3);
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
         fixture.Sync.Verify(
             sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -487,36 +753,51 @@ public sealed class SceneDocumentCommandServiceTests
         var light = node.Components.OfType<DirectionalLightComponent>().Single();
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
+        IReadOnlyList<EnginePropertyValueEntry>? synced = null;
         fixture.Sync
-            .Setup(sync => sync.AttachLightAsync(scene, node, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditDirectionalLightAsync(
             context,
             [node.Id],
-            new DirectionalLightEdit(
-                Optional<Vector3>.Supplied(new Vector3(0.25f, 0.5f, 0.75f)),
-                Optional<float>.Supplied(45_000f),
-                Optional<bool>.Supplied(false),
-                Optional<bool>.Supplied(false),
-                Optional<bool>.Supplied(true),
-                Optional<bool>.Supplied(false),
-                Optional<float>.Supplied(0.02f),
-                Optional<float>.Supplied(1.25f)),
+            BuildDirectionalLightEdit(),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = light.Color.Should().Be(new Vector3(0.25f, 0.5f, 0.75f));
-        _ = light.IntensityLux.Should().Be(45_000f);
-        _ = light.IsSunLight.Should().BeFalse();
-        _ = light.EnvironmentContribution.Should().BeFalse();
-        _ = light.CastsShadows.Should().BeTrue();
-        _ = light.AffectsWorld.Should().BeFalse();
-        _ = light.AngularSizeRadians.Should().Be(0.02f);
-        _ = light.ExposureCompensation.Should().Be(1.25f);
+        AssertDirectionalLightValues(
+            light,
+            color: new Vector3(0.25f, 0.5f, 0.75f),
+            intensityLux: 45_000f,
+            angularSizeRadians: 0.02f,
+            exposureCompensation: 1.25f,
+            mobility: LightMobility.Baked,
+            shadowResolutionHint: ShadowResolutionHint.Ultra,
+            cascadeCount: 2,
+            maxShadowDistance: 512f,
+            cascadeDistances: new Vector4(32f, 128f, 256f, 512f),
+            distributionExponent: 1.5f,
+            transitionFraction: 0.25f,
+            distanceFadeoutFraction: 0.3f,
+            shadowBias: 0.002f,
+            shadowNormalBias: 0.05f);
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
-        fixture.Sync.Verify(sync => sync.AttachLightAsync(scene, node, It.IsAny<CancellationToken>()), Times.Once);
+        _ = synced.Should().NotBeNull();
+        _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.IntensityLux);
+        _ = synced!.Should().Contain(entry => entry.Component == EngineComponentId.DirectionalLight && entry.FieldId == (ushort)DirectionalLightField.DistanceFadeoutFraction);
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
         fixture.Sync.Verify(
             sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -542,13 +823,13 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
             context,
             new SceneEnvironmentEdit(
-                Optional<bool>.Unspecified,
-                Optional<Guid?>.Supplied(second.Id),
-                Optional<ExposureMode>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<ToneMappingMode>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Supplied<Guid?>(second.Id),
+                OptionalEditValues.Unspecified<ExposureMode>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<ToneMappingMode>(),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -581,14 +862,14 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
             context,
             new SceneEnvironmentEdit(
-                Optional<bool>.Unspecified,
-                Optional<Guid?>.Unspecified,
-                Optional<ExposureMode>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<ToneMappingMode>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<SkyAtmosphereEnvironmentData>.Supplied(new() { MieAnisotropy = float.NaN })),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<Guid?>(),
+                OptionalEditValues.Unspecified<ExposureMode>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<ToneMappingMode>(),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                OptionalEditValues.Supplied<SkyAtmosphereEnvironmentData>(new() { MieAnisotropy = float.NaN })),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
@@ -622,13 +903,13 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
             context,
             new SceneEnvironmentEdit(
-                Optional<bool>.Unspecified,
-                Optional<Guid?>.Unspecified,
-                Optional<ExposureMode>.Supplied(ExposureMode.Manual),
-                Optional<float>.Supplied(3.5f),
-                Optional<float>.Unspecified,
-                Optional<ToneMappingMode>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<Guid?>(),
+                OptionalEditValues.Supplied<ExposureMode>(ExposureMode.Manual),
+                OptionalEditValues.Supplied<float>(3.5f),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<ToneMappingMode>(),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -687,15 +968,15 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
             context,
             new SceneEnvironmentEdit(
-                Optional<bool>.Unspecified,
-                Optional<Guid?>.Unspecified,
-                Optional<ExposureMode>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<float>.Unspecified,
-                Optional<ToneMappingMode>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified,
-                Optional<SkyAtmosphereEnvironmentData>.Unspecified,
-                Optional<PostProcessEnvironmentData>.Supplied(postProcess)),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<Guid?>(),
+                OptionalEditValues.Unspecified<ExposureMode>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<ToneMappingMode>(),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                OptionalEditValues.Unspecified<SkyAtmosphereEnvironmentData>(),
+                OptionalEditValues.Supplied<PostProcessEnvironmentData>(postProcess)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -706,6 +987,62 @@ public sealed class SceneDocumentCommandServiceTests
         _ = scene.Environment.ToneMapping.Should().Be(postProcess.ToneMapper);
         _ = syncedEnvironment.Should().NotBeNull();
         _ = syncedEnvironment!.PostProcess.Should().Be(postProcess);
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentPropertiesAsync_WhenPostProcessPropertiesChange_PersistsAndSyncs()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var expected = CreatePostProcessEnvironmentData();
+        scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureKey = 0.18f } });
+        var context = CreateContext(scene);
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        SceneEnvironmentData? syncedEnvironment = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
+            context,
+            BuildPostProcessPropertyEdit(expected),
+            "Edit Environment",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        VerifyPostProcessEnvironment(scene.Environment, expected);
+        _ = syncedEnvironment.Should().NotBeNull();
+        VerifyPostProcessEnvironment(syncedEnvironment!, expected);
+        _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentPropertiesAsync_WhenSkyPropertiesChange_PersistsAndSyncs()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var expected = CreateSkyAtmosphereEnvironmentData();
+        scene.SetEnvironment(new SceneEnvironmentData { SkyAtmosphere = new SkyAtmosphereEnvironmentData { MieAnisotropy = 0.45f } });
+        var context = CreateContext(scene);
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        SceneEnvironmentData? syncedEnvironment = null;
+        fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+            .ReturnsAsync(accepted);
+
+        var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
+            context,
+            BuildSkyAtmospherePropertyEdit(expected),
+            "Edit Environment",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.Environment.SkyAtmosphere.Should().Be(expected);
+        _ = syncedEnvironment.Should().NotBeNull();
+        _ = syncedEnvironment!.SkyAtmosphere.Should().Be(expected);
+        _ = context.History.UndoStack.Should().ContainSingle();
     }
 
     [TestMethod]
@@ -720,13 +1057,13 @@ public sealed class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
             context,
             new SceneEnvironmentEdit(
-                Optional<bool>.Unspecified,
-                Optional<Guid?>.Unspecified,
-                Optional<ExposureMode>.Unspecified,
-                Optional<float>.Supplied(float.NaN),
-                Optional<float>.Unspecified,
-                Optional<ToneMappingMode>.Unspecified,
-                Optional<System.Numerics.Vector3>.Unspecified),
+                OptionalEditValues.Unspecified<bool>(),
+                OptionalEditValues.Unspecified<Guid?>(),
+                OptionalEditValues.Unspecified<ExposureMode>(),
+                OptionalEditValues.Supplied<float>(float.NaN),
+                OptionalEditValues.Unspecified<float>(),
+                OptionalEditValues.Unspecified<ToneMappingMode>(),
+                OptionalEditValues.Unspecified<System.Numerics.Vector3>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
@@ -766,6 +1103,201 @@ public sealed class SceneDocumentCommandServiceTests
         _ = existingSun.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    private static PostProcessEnvironmentData CreatePostProcessEnvironmentData()
+        => new()
+        {
+            ExposureMode = ExposureMode.ManualCamera,
+            ExposureEnabled = false,
+            ManualExposureEv = 4.25f,
+            ExposureCompensationEv = 1.5f,
+            ExposureKey = 0.33f,
+            ToneMapper = ToneMappingMode.Filmic,
+            AutoExposureMeteringMode = MeteringMode.Spot,
+            AutoExposureMinEv = -4f,
+            AutoExposureMaxEv = 12f,
+            AutoExposureSpeedUp = 3f,
+            AutoExposureSpeedDown = 1.5f,
+            AutoExposureLowPercentile = 0.1f,
+            AutoExposureHighPercentile = 0.9f,
+            AutoExposureMinLogLuminance = -9f,
+            AutoExposureLogLuminanceRange = 18f,
+            AutoExposureTargetLuminance = 0.5f,
+            AutoExposureSpotMeterRadius = 0.3f,
+            BloomIntensity = 0.75f,
+            BloomThreshold = 1.4f,
+            Saturation = 0.8f,
+            Contrast = 1.15f,
+            VignetteIntensity = 0.35f,
+            DisplayGamma = 2.2f,
+        };
+
+    private static SkyAtmosphereEnvironmentData CreateSkyAtmosphereEnvironmentData()
+        => new()
+        {
+            PlanetRadiusMeters = 6_360_000f,
+            AtmosphereHeightMeters = 100_000f,
+            GroundAlbedoRgb = new Vector3(0.1f, 0.2f, 0.3f),
+            RayleighScaleHeightMeters = 8000f,
+            MieScaleHeightMeters = 1200f,
+            MieAnisotropy = 0.7f,
+            SkyLuminanceFactorRgb = new Vector3(1.1f, 0.9f, 0.8f),
+            AerialPerspectiveDistanceScale = 0.35f,
+            AerialScatteringStrength = 0.6f,
+            AerialPerspectiveStartDepthMeters = 100f,
+            HeightFogContribution = 0.25f,
+            SunDiskEnabled = false,
+        };
+
+    private static PropertyEdit BuildPostProcessPropertyEdit(PostProcessEnvironmentData value)
+    {
+        var edit = new PropertyEdit();
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ExposureMode, value.ExposureMode);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled, value.ExposureEnabled);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv, value.ManualExposureEv);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation, value.ExposureCompensationEv);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ExposureKey, value.ExposureKey);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.ToneMapping, value.ToneMapper);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode, value.AutoExposureMeteringMode);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv, value.AutoExposureMinEv);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv, value.AutoExposureMaxEv);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp, value.AutoExposureSpeedUp);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown, value.AutoExposureSpeedDown);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile, value.AutoExposureLowPercentile);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile, value.AutoExposureHighPercentile);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance, value.AutoExposureMinLogLuminance);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange, value.AutoExposureLogLuminanceRange);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance, value.AutoExposureTargetLuminance);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value.AutoExposureSpotMeterRadius);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.BloomIntensity, value.BloomIntensity);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.BloomThreshold, value.BloomThreshold);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.Saturation, value.Saturation);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.Contrast, value.Contrast);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity, value.VignetteIntensity);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.DisplayGamma, value.DisplayGamma);
+        return edit;
+    }
+
+    private static PropertyEdit BuildSkyAtmospherePropertyEdit(SkyAtmosphereEnvironmentData value)
+    {
+        var edit = new PropertyEdit();
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters, value.PlanetRadiusMeters);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value.AtmosphereHeightMeters);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, value.GroundAlbedoRgb);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value.RayleighScaleHeightMeters);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters, value.MieScaleHeightMeters);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy, value.MieAnisotropy);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, value.SkyLuminanceFactorRgb);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale, value.AerialPerspectiveDistanceScale);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength, value.AerialScatteringStrength);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters, value.AerialPerspectiveStartDepthMeters);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution, value.HeightFogContribution);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value.SunDiskEnabled);
+        return edit;
+    }
+
+    private static void VerifyPostProcessEnvironment(SceneEnvironmentData environment, PostProcessEnvironmentData value)
+    {
+        _ = environment.ExposureMode.Should().Be(value.ExposureMode);
+        _ = environment.ManualExposureEv.Should().Be(value.ManualExposureEv);
+        _ = environment.ExposureCompensation.Should().Be(value.ExposureCompensationEv);
+        _ = environment.ToneMapping.Should().Be(value.ToneMapper);
+        _ = environment.PostProcess.Should().Be(value);
+    }
+
+    private static PropertyEdit BuildDirectionalLightPropertyEdit()
+    {
+        var edit = new PropertyEdit();
+        edit.Set(SceneDocumentCommandService.DirectionalLight.Color, new Vector3(0.2f, 0.4f, 0.8f));
+        edit.Set(SceneDocumentCommandService.DirectionalLight.IntensityLux, 12_000f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.IsSunLight, false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.EnvironmentContribution, false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CastsShadows, true);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.AffectsWorld, false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, 0.0125f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ExposureCompensation, 0.75f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.Mobility, LightMobility.Mixed);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowBias, 0.001f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowNormalBias, 0.04f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ContactShadows, true);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowResolutionHint, ShadowResolutionHint.High);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeCount, 3);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.MaxShadowDistance, 256f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeDistance0, 16f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeDistance1, 48f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeDistance2, 128f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeDistance3, 256f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.DistributionExponent, 2.25f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.TransitionFraction, 0.2f);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.DistanceFadeoutFraction, 0.15f);
+        return edit;
+    }
+
+    private static DirectionalLightEdit BuildDirectionalLightEdit()
+        => new(
+            Color: OptionalEditValues.Supplied<Vector3>(new Vector3(0.25f, 0.5f, 0.75f)),
+            IntensityLux: OptionalEditValues.Supplied<float>(45_000f),
+            IsSunLight: OptionalEditValues.Supplied<bool>(false),
+            EnvironmentContribution: OptionalEditValues.Supplied<bool>(false),
+            CastsShadows: OptionalEditValues.Supplied<bool>(true),
+            AffectsWorld: OptionalEditValues.Supplied<bool>(false),
+            AngularSizeRadians: OptionalEditValues.Supplied<float>(0.02f),
+            ExposureCompensation: OptionalEditValues.Supplied<float>(1.25f),
+            Mobility: OptionalEditValues.Supplied<LightMobility>(LightMobility.Baked),
+            ShadowBias: OptionalEditValues.Supplied<float>(0.002f),
+            ShadowNormalBias: OptionalEditValues.Supplied<float>(0.05f),
+            ContactShadows: OptionalEditValues.Supplied<bool>(true),
+            ShadowResolutionHint: OptionalEditValues.Supplied<ShadowResolutionHint>(ShadowResolutionHint.Ultra),
+            CascadeCount: OptionalEditValues.Supplied<int>(2),
+            SplitMode: OptionalEditValues.Supplied<DirectionalCsmSplitMode>(DirectionalCsmSplitMode.ManualDistances),
+            MaxShadowDistance: OptionalEditValues.Supplied<float>(512f),
+            CascadeDistance0: OptionalEditValues.Supplied<float>(32f),
+            CascadeDistance1: OptionalEditValues.Supplied<float>(128f),
+            CascadeDistance2: OptionalEditValues.Supplied<float>(256f),
+            CascadeDistance3: OptionalEditValues.Supplied<float>(512f),
+            DistributionExponent: OptionalEditValues.Supplied<float>(1.5f),
+            TransitionFraction: OptionalEditValues.Supplied<float>(0.25f),
+            DistanceFadeoutFraction: OptionalEditValues.Supplied<float>(0.3f));
+
+    private static void AssertDirectionalLightValues(
+        DirectionalLightComponent light,
+        Vector3 color,
+        float intensityLux,
+        float angularSizeRadians,
+        float exposureCompensation,
+        LightMobility mobility,
+        ShadowResolutionHint shadowResolutionHint,
+        int cascadeCount,
+        float maxShadowDistance,
+        Vector4 cascadeDistances,
+        float distributionExponent,
+        float transitionFraction,
+        float distanceFadeoutFraction,
+        float shadowBias,
+        float shadowNormalBias)
+    {
+        _ = light.Color.Should().Be(color);
+        _ = light.IntensityLux.Should().Be(intensityLux);
+        _ = light.IsSunLight.Should().BeFalse();
+        _ = light.EnvironmentContribution.Should().BeFalse();
+        _ = light.CastsShadows.Should().BeTrue();
+        _ = light.AffectsWorld.Should().BeFalse();
+        _ = light.AngularSizeRadians.Should().Be(angularSizeRadians);
+        _ = light.ExposureCompensation.Should().Be(exposureCompensation);
+        _ = light.Mobility.Should().Be(mobility);
+        _ = light.ShadowBias.Should().Be(shadowBias);
+        _ = light.ShadowNormalBias.Should().Be(shadowNormalBias);
+        _ = light.ContactShadows.Should().BeTrue();
+        _ = light.ShadowResolutionHint.Should().Be(shadowResolutionHint);
+        _ = light.CascadeCount.Should().Be(cascadeCount);
+        _ = light.SplitMode.Should().Be(DirectionalCsmSplitMode.ManualDistances);
+        _ = light.MaxShadowDistance.Should().Be(maxShadowDistance);
+        _ = light.CascadeDistances.Should().Be(cascadeDistances);
+        _ = light.DistributionExponent.Should().Be(distributionExponent);
+        _ = light.TransitionFraction.Should().Be(transitionFraction);
+        _ = light.DistanceFadeoutFraction.Should().Be(distanceFadeoutFraction);
     }
 
     private static SceneNode CreateDirectionalLightNode(Scene scene, string name)
@@ -812,10 +1344,10 @@ public sealed class SceneDocumentCommandServiceTests
 
     private static TransformEdit PositionXEdit(float value)
         => new(
-            Optional<Vector3>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            PositionX: Optional<float>.Supplied(value));
+            OptionalEditValues.Unspecified<Vector3>(),
+            OptionalEditValues.Unspecified<Vector3>(),
+            OptionalEditValues.Unspecified<Vector3>(),
+            PositionX: OptionalEditValues.Supplied<float>(value));
 
     private static void ConfigureTransformSessionPropertySync(
         Fixture fixture,

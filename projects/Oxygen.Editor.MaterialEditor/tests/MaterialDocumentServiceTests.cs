@@ -16,11 +16,18 @@ using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
+/// <summary>
+/// Tests material document authoring, schema-backed edits, persistence, and cooking behavior.
+/// </summary>
 [TestClass]
 public sealed class MaterialDocumentServiceTests
 {
+    /// <summary>
+    /// Verifies scalar material edits survive save, close, and reopen.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task CreateEditSaveOpen_ShouldRoundTripScalarFields()
+    public async Task CreateEditSaveOpenRoundTripsScalarFields()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -44,8 +51,12 @@ public sealed class MaterialDocumentServiceTests
         _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
     }
 
+    /// <summary>
+    /// Verifies newly created materials use the asset file stem as the authored material name.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task CreateAsync_ShouldUseAssetFileStemAsMaterialName()
+    public async Task CreateAsyncUsesAssetFileStemAsMaterialName()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Gold.omat.json");
@@ -59,8 +70,12 @@ public sealed class MaterialDocumentServiceTests
         _ = ReadMaterial(workspace, "Content/Materials/Gold.omat.json").Name.Should().Be("Gold");
     }
 
+    /// <summary>
+    /// Verifies saving normalizes descriptor names to the canonical asset file stem.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task SaveAsync_WhenDescriptorNameDiffersFromAssetFileStem_ShouldPersistFileStemName()
+    public async Task SaveAsyncPersistsFileStemNameWhenDescriptorNameDiffersFromAssetFileStem()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Gold.omat.json");
@@ -77,8 +92,12 @@ public sealed class MaterialDocumentServiceTests
         _ = ReadMaterial(workspace, "Content/Materials/Gold.omat.json").Name.Should().Be("Gold");
     }
 
+    /// <summary>
+    /// Verifies legacy scalar editing clamps fields to supported ranges.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditScalarAsync_ShouldClampOutOfRangeScalarFields()
+    public async Task EditScalarAsyncClampsOutOfRangeScalarFields()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -104,8 +123,12 @@ public sealed class MaterialDocumentServiceTests
         _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.0f);
     }
 
+    /// <summary>
+    /// Verifies cooking delegates to the cook service and updates material cook state.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task CookAsync_ShouldUseMaterialCookServiceAndUpdateState()
+    public async Task CookAsyncUsesMaterialCookServiceAndUpdatesState()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -120,8 +143,12 @@ public sealed class MaterialDocumentServiceTests
         _ = cook.LastRequest!.SourceRelativePath.Should().Be("Content/Materials/Test.omat.json");
     }
 
+    /// <summary>
+    /// Verifies dirty documents are rejected before the cook service is called.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task CookAsync_WhenDocumentIsDirty_ShouldRejectWithoutCallingCookService()
+    public async Task CookAsyncRejectsDirtyDocumentWithoutCallingCookService()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -142,8 +169,12 @@ public sealed class MaterialDocumentServiceTests
         _ = publisher.Published.Should().ContainSingle(r => r.Diagnostics.Single().Code == MaterialDiagnosticCodes.DescriptorDirty);
     }
 
+    /// <summary>
+    /// Verifies descriptor-backed material edits mutate the source and mark cooking stale.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditPropertiesAsync_ShouldApplyDescriptorBackedMaterialEditAndMarkDocumentStale()
+    public async Task EditPropertiesAsyncAppliesDescriptorBackedMaterialEditAndMarksDocumentStale()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -166,8 +197,12 @@ public sealed class MaterialDocumentServiceTests
         _ = reopened.Source.DoubleSided.Should().BeTrue();
     }
 
+    /// <summary>
+    /// Verifies alpha mode is editable through the material descriptor catalog.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditPropertiesAsync_ShouldApplyAlphaModeThroughDescriptor()
+    public async Task EditPropertiesAsyncAppliesAlphaModeThroughDescriptor()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -186,8 +221,12 @@ public sealed class MaterialDocumentServiceTests
         _ = reopened.Source.AlphaMode.Should().Be(MaterialAlphaMode.Mask);
     }
 
+    /// <summary>
+    /// Verifies descriptor validation rejects out-of-range scalar values without mutating the source.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditPropertiesAsync_WhenScalarViolatesEngineRange_ShouldRejectWithoutMutating()
+    public async Task EditPropertiesAsyncRejectsOutOfRangeScalarWithoutMutating()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -209,8 +248,12 @@ public sealed class MaterialDocumentServiceTests
             && r.Diagnostics.Single().Domain == FailureDomain.MaterialAuthoring);
     }
 
+    /// <summary>
+    /// Verifies unchanged descriptor edits do not dirty the material or mark cooking stale.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditPropertiesAsync_WhenValueIsUnchanged_ShouldNotDirtyOrMarkCookStale()
+    public async Task EditPropertiesAsyncDoesNotDirtyOrMarkCookStaleWhenValueIsUnchanged()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -228,8 +271,12 @@ public sealed class MaterialDocumentServiceTests
         _ = cook.LastRequest.Should().NotBeNull();
     }
 
+    /// <summary>
+    /// Verifies unknown material property ids are rejected without mutating the source.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditPropertiesAsync_WhenPropertyIdIsUnknown_ShouldRejectWithoutMutating()
+    public async Task EditPropertiesAsyncRejectsUnknownPropertyIdWithoutMutating()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -299,8 +346,11 @@ public sealed class MaterialDocumentServiceTests
         _ = flags.Should().Be((1u << 1) | (1u << 2));
     }
 
+    /// <summary>
+    /// Verifies engine-schema validation and merged-overlay validation accept and reject the same material samples.
+    /// </summary>
     [TestMethod]
-    public void MaterialSchemaValidator_ShouldKeepEngineAndMergedOverlayAcceptanceEquivalent()
+    public void MaterialSchemaValidatorKeepsEngineAndMergedOverlayAcceptanceEquivalent()
     {
         var schemaRoot = FindSchemaRoot();
         var catalog = EditorSchemaCatalog.LoadFromDirectory(schemaRoot);
@@ -334,8 +384,11 @@ public sealed class MaterialDocumentServiceTests
         _ = validator.LintOverlay().Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies material descriptors map to engine schema paths annotated by the material overlay.
+    /// </summary>
     [TestMethod]
-    public void MaterialDescriptors_ShouldMapToOverlayAnnotatedEngineSchemaPaths()
+    public void MaterialDescriptorsMapToOverlayAnnotatedEngineSchemaPaths()
     {
         var schemaRoot = FindSchemaRoot();
         var engine = LoadSchema(schemaRoot, MaterialSchemaValidator.EngineSchemaFileName);
@@ -355,8 +408,12 @@ public sealed class MaterialDocumentServiceTests
         }
     }
 
+    /// <summary>
+    /// Verifies legacy name edits are rejected because the asset file stem owns the material name.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditScalarAsync_WhenNameIsEdited_ShouldRejectBecauseAssetFileStemIsCanonical()
+    public async Task EditScalarAsyncRejectsNameEditsBecauseAssetFileStemIsCanonical()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -376,8 +433,11 @@ public sealed class MaterialDocumentServiceTests
             && r.Diagnostics.Single().Code == MaterialDiagnosticCodes.FieldRejected);
     }
 
+    /// <summary>
+    /// Verifies local-folder mounted material URIs resolve to the mounted source path.
+    /// </summary>
     [TestMethod]
-    public void ProjectMaterialSourcePathResolver_ShouldResolveLocalFolderMountMaterialUri()
+    public void ProjectMaterialSourcePathResolverResolvesLocalFolderMountMaterialUri()
     {
         using var workspace = new TempWorkspace();
         var contextService = new ProjectContextService();
