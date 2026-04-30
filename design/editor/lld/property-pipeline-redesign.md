@@ -13,23 +13,27 @@
 ## 0. Implementation status
 
 This document started as a proposal. The property pipeline now has real
-code behind it, but the migration is not complete. The current state is:
+code behind it. The current state is:
 
 | Area | Status | Evidence / notes |
 | --- | --- | --- |
 | Shared schema project | **Implemented** | `projects/Oxygen.Editor.Schemas/src` contains the schema catalog, overlay loader/linter, `PropertyId`, `PropertyDescriptor<T>`, `PropertyEdit`, `PropertyApply`, `PropertyOp`, `PropertyBinding<T>`, and `CommitGroupController`. `JsonSchema.Net` is centrally versioned and referenced by the project. |
-| Editor overlays | **Implemented for material and transform** | `oxygen.material-descriptor.editor.schema.json` and `oxygen.transform-component.editor.schema.json` live next to the engine schemas under `projects/Oxygen.Engine/src/Oxygen/Cooker/Import/Schemas`. |
+| Editor overlays | **Implemented for material, transform, and scene descriptors** | `oxygen.material-descriptor.editor.schema.json`, `oxygen.transform-component.editor.schema.json`, and `oxygen.scene-descriptor.editor.schema.json` live next to the engine schemas under `projects/Oxygen.Engine/src/Oxygen/Cooker/Import/Schemas`. |
 | Overlay validation gates | **Implemented for the current overlays** | `projects/Oxygen.Editor.Schemas/tests/EditorSchemaOverlayTests.cs` verifies annotation namespace lint, sibling-engine-schema references, overlay coverage, validator parity for material, and CMake isolation from `*.editor.schema.json`. |
 | Generic property apply/undo contract | **Implemented** | `projects/Oxygen.Editor.Schemas/tests/PropertyPipelineContractTests.cs` verifies shared apply/restore identity, mixed-value binding, missing descriptors, and stale commit cancellation. |
-| Native `SetProperties` transport | **Implemented for transform floats** | `SetPropertiesCommand`, `PropertyApplierRegistry`, `TransformPropertyApplier`, `CommandFactory::CreateSetProperties`, and `OxygenWorld::SetProperties` route scalar transform entries through the existing `OnSceneMutation` command phase. |
+| Native `SetProperties` transport | **Implemented for transform, perspective-camera, and directional-light scalar fields** | `SetPropertiesCommand`, `PropertyApplierRegistry`, `TransformPropertyApplier`, `PerspectiveCameraPropertyApplier`, `DirectionalLightPropertyApplier`, `CommandFactory::CreateSetProperties`, and `OxygenWorld::SetProperties` route scalar property entries through the existing `OnSceneMutation` command phase. |
 | Managed transform command path | **Implemented** | `SceneDocumentCommandService.PropertyPipeline.cs` translates transform property edits to `EnginePropertyValueEntry`; `SceneDocumentCommandService.cs` uses `CommitGroupController`, preview sync, terminal sync, `PropertyOp`, and TimeMachine history for one-shot and interactive sessions. |
 | Transform inspector binding surface | **Partial** | `TransformViewModel` uses `PropertyBinding<float>` to read mixed values, but its XAML-facing surface still exposes legacy scalar + `IsIndeterminate` properties and adapts through `TransformEdit`. This preserves existing controls while leaving a cleanup step before the VM is fully schema-native. |
+| Component inspector property catalogs | **Implemented for the current scene-node inspector surface** | `GeometryDescriptors`, `PerspectiveCameraDescriptors`, `DirectionalLightDescriptors`, and `SceneEnvironmentDescriptors` define schema-addressed `PropertyId<T>` descriptors for the geometry URI, material slot 0 URI, perspective camera fields, directional light fields, and scene environment authoring fields. |
+| Component inspector VM property path | **Implemented for geometry/material slot, perspective camera, directional light, and environment** | `GeometryViewModel`, `PerspectiveCameraViewModel`, `DirectionalLightViewModel`, and `EnvironmentViewModel` now build typed `PropertyEdit` values and call `ISceneDocumentCommandService.EditPropertiesAsync` or `EditSceneEnvironmentPropertiesAsync`. |
+| Component command integration | **Implemented with schema-first validation and appropriate sync routes** | `SceneDocumentCommandService.PropertyAdapters.cs` validates descriptor ids and values, then adapts component property edits into the existing command records that own undo/redo, dirty state, material slot sync, environment publication, and exclusive sun-light behavior. Transform, perspective camera, and directional light edits push scalar runtime changes through native `SetProperties`; geometry/material slot and scene environment keep their specialized sync routes because they are non-scalar asset references or scene-level publication. |
 | Engine-not-running behavior | **Implemented for property edits** | Live-sync skips are classified and published as diagnostics. `SetProperties` edits are buffered per scene when the runtime is not running, the skip diagnostic includes the pending count, the Scene Node Editor shows a scene-level pending banner, and the queue replays after the next full scene sync. |
 | Material document property pipeline | **Implemented** | `MaterialDescriptors` maps engine-schema JSON pointers to the editor material source model, and `MaterialDocumentService.EditPropertiesAsync` validates descriptor values plus the resulting engine/merged schema JSON before marking the document dirty/stale. |
 | Material editor VM property path | **Implemented** | `MaterialEditorViewModel` now calls `IMaterialDocumentService.EditPropertiesAsync` directly with typed `PropertyEdit` values. Base-color picker changes are batched into one four-channel edit. |
 | Material cooking | **Implemented for current material descriptors** | `MaterialCookService` and material editor commands can save/cook the authored material source. The cooker still owns final PAK serialization. |
 | Schema-to-PAK round trip | **Implemented for material, generic gate open** | Material tests now edit through `PropertyEdit`, save, cook, and assert the cooked `.omat` descriptor bytes for base color, metalness, roughness, alpha cutoff, domain, and flags. The generic schema↔PAK invariant test described in §5.10 is still open. |
-| Remaining component migrations | **Not started** | Lights, cameras, geometry, and environment still primarily use their existing component-specific edit records and sync paths. |
+| SceneExplorer property migration tests | **Implemented for command-layer coverage** | `SceneDocumentCommandServiceTests` covers descriptor-addressed edits for geometry URI, material slot clearing, perspective camera fields, directional light fields and sun exclusivity, post-process environment fields, sky-atmosphere environment fields, scene-overlay descriptor annotations, and generic scalar property sync entries. The SceneExplorer test executable currently passes 58 tests. |
+| Specialized sync paths that remain | **Intentional** | Geometry and material slot edits still sync through asset-reference APIs, and scene environment edits still publish through environment sync. Those payloads are not scalar component fields, so they are not forced through the initial scalar `SetProperties` wire. |
 
 The remainder of this document keeps the original design language, but
 the migration plan in §7 is annotated with this implementation status.
@@ -109,7 +113,7 @@ For a single conceptual property (e.g. `DirectionalLight.IntensityLux`):
 | Engine runtime | C++ component field, mutated via wide `AttachDirectionalLight(...)` | [`PakFormat_world.h`](../../../projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h) + interop |
 | Cooked PAK | `DirectionalLightRecord.intensity_lux` | [`PakFormat_world.h`](../../../projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h) |
 | Editor model | `DirectionalLightComponent.IntensityLux` | [`LightComponents.cs`](../../../projects/Oxygen.Editor.World/src/Components/LightComponents.cs) |
-| Edit record | `Optional<float> IntensityLux` | [`ComponentEditRecords.cs`](../../../projects/Oxygen.Editor.WorldEditor/src/Documents/Commands/ComponentEditRecords.cs) |
+| Edit record | `OptionalEditValue<float> IntensityLux` | [`DirectionalLightEdit.cs`](../../../projects/Oxygen.Editor.WorldEditor/src/Documents/Commands/DirectionalLightEdit.cs) |
 | ViewModel | `[ObservableProperty] float IntensityLux` + `IntensityLuxIsIndeterminate` | [`DirectionalLightViewModel.cs`](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/DirectionalLightViewModel.cs) |
 
 Plus a per-edit validator and a per-edit undo closure: seven assertions
@@ -229,14 +233,14 @@ and the type system enforces it.
 
 ### 5.2 Generic edit record
 
-Today's `TransformEdit { Optional<float> PositionX, Optional<float> PositionY, ... }`
+Today's `TransformEdit { OptionalEditValue<float> PositionX, OptionalEditValue<float> PositionY, ... }`
 collapses to one shape:
 
 ```text
 PropertyEdit = Map<PropertyId, Value>
 ```
 
-Absence is encoded by absence in the map; the `Optional<>` wrapper
+Absence is encoded by absence in the map; the `OptionalEditValue<>` wrapper
 disappears. Multi-property edits (e.g. dragging X *and* Z together)
 are multi-entry edits. Multi-node edits are the same `PropertyEdit`
 applied to a different node set.
@@ -887,10 +891,10 @@ only thing that moves is *where* mixed-value logic lives).
    engine-rebuild isolation. The editor-schema tests assert that
    `*.editor.schema.json` is not embedded by cooker/PakTool CMake
    schema lists.
-4. **[Done for transform] Implement `SetProperties` as a new
+4. **[Done for transform, perspective camera, and directional light] Implement `SetProperties` as a new
    `IEditorCommand`** plumbed through `ICommandFactory` and drained
-   at `OnSceneMutation` (F6). It currently has a transform scalar
-   applier; additional component appliers remain part of step 9.
+   at `OnSceneMutation` (F6). It has scalar appliers for transform,
+   perspective camera, and directional light properties.
 5. **[Partial] Migrate Transform** end-to-end onto the schema:
    `PropertyEdit`, `PropertyBinding<T>`, `CommitGroupController`,
    `PropertyOp` undo (§5.5). The command/session/history/transport
@@ -911,9 +915,15 @@ only thing that moves is *where* mixed-value logic lives).
 8. **[Done] Add overlay coverage CI gate** (§5.11.7 #1) once
    Transform's overlay is the reference. Coverage is enforced for all
    current editor overlays with explicit hidden-path allowlists.
-9. **[Open] Migrate remaining components** (lights, cameras,
-   geometry, environment) onto the schema. Each migration is local
-   and independently shippable.
+9. **[Done for the current scene-node inspector surface] Migrate
+   remaining component editors** (geometry, material slot,
+   perspective camera, directional light, and scene environment) onto
+   schema-addressed `PropertyEdit` calls. The editor command layer
+   validates descriptor ids and values first. Transform, perspective
+   camera, and directional light scalar edits sync through native
+   `SetProperties`; geometry/material slot and scene-environment edits
+   keep their specialized sync paths for asset-reference and scene-level
+   publication semantics.
 
 ---
 
