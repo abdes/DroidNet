@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
-using System.Numerics;
 using Oxygen.Assets.Model;
 using Oxygen.Core;
 using Oxygen.Core.Diagnostics;
@@ -38,7 +38,7 @@ public sealed class SceneDocumentCommandServiceTests
         var transform = node.Components.OfType<TransformComponent>().Single();
         var context = CreateContext(scene);
 
-        var result = await fixture.Sut.RemoveComponentAsync(context, node.Id, transform.Id);
+        var result = await fixture.Sut.RemoveComponentAsync(context, node.Id, transform.Id).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Components.Should().Contain(transform);
@@ -69,7 +69,7 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             new GeometryEdit(Optional<Uri?>.Supplied(null)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().NotBeNull();
@@ -103,7 +103,7 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             new GeometryEdit(Optional<Uri?>.Supplied(geometryUri)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = context.Metadata.IsDirty.Should().BeFalse();
@@ -132,12 +132,12 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             PositionXEdit(1f),
-            session);
+            session).ConfigureAwait(false);
         _ = await fixture.Sut.EditTransformAsync(
             context,
             [node.Id],
             PositionXEdit(2f),
-            session);
+            session).ConfigureAwait(false);
 
         _ = transform.LocalPosition.X.Should().Be(2f);
         _ = context.Metadata.IsDirty.Should().BeFalse();
@@ -148,47 +148,21 @@ public sealed class SceneDocumentCommandServiceTests
             context,
             [node.Id],
             PositionXEdit(2f),
-            session);
+            session).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = transform.LocalPosition.X.Should().Be(2f);
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
-        await context.History.UndoAsync();
+        await context.History.UndoAsync().ConfigureAwait(false);
         _ = transform.LocalPosition.X.Should().Be(0f);
         _ = context.History.RedoStack.Should().ContainSingle();
 
-        await context.History.RedoAsync();
+        await context.History.RedoAsync().ConfigureAwait(false);
         _ = transform.LocalPosition.X.Should().Be(2f);
         _ = context.History.UndoStack.Should().ContainSingle();
-        fixture.Sync.Verify(
-            sync => sync.TryPreviewSyncAsync(
-                scene.Id,
-                node.Id,
-                It.IsAny<DateTimeOffset>(),
-                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Exactly(2));
-        fixture.Sync.Verify(
-            sync => sync.CompleteTerminalSyncAsync(
-                scene.Id,
-                node.Id,
-                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-        fixture.Sync.Verify(
-            sync => sync.UpdatePropertiesAsync(
-                scene,
-                node,
-                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Exactly(5));
-        _ = synced.Select(entries => entries.Should().ContainSingle().Which.Value)
-            .Should().Equal(1f, 2f, 2f, 0f, 2f);
-        _ = synced.Select(entries => entries.Should().ContainSingle().Which.FieldId)
-            .Should().OnlyContain(field => field == (ushort)TransformField.PositionX);
-        fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
+        VerifyCommittedTransformSessionSync(fixture, scene, node, synced);
     }
 
     [TestMethod]
@@ -207,11 +181,11 @@ public sealed class SceneDocumentCommandServiceTests
         ConfigureTransformSessionPropertySync(fixture, scene, first, synced);
         var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [first.Id], "PositionX");
 
-        _ = await fixture.Sut.EditTransformAsync(context, [first.Id], PositionXEdit(1f), session);
-        _ = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session);
+        _ = await fixture.Sut.EditTransformAsync(context, [first.Id], PositionXEdit(1f), session).ConfigureAwait(false);
+        _ = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session).ConfigureAwait(false);
         session.Commit();
 
-        var result = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session);
+        var result = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = firstTransform.LocalPosition.X.Should().Be(2f);
@@ -254,7 +228,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<Vector3>.Unspecified,
                 Optional<Vector3>.Unspecified,
                 PositionX: Optional<float>.Supplied(4.0f)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = transform.LocalPosition.X.Should().Be(4.0f);
@@ -289,7 +263,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<Vector3>.Unspecified,
                 Optional<Vector3>.Unspecified,
                 PositionX: Optional<float>.Supplied(0.0f)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = context.Metadata.IsDirty.Should().BeFalse();
@@ -335,7 +309,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<Vector3>.Unspecified,
                 Optional<Vector3>.Unspecified,
                 PositionX: Optional<float>.Supplied(4.0f)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = fixture.Results.Published.Should().ContainSingle()
@@ -367,7 +341,7 @@ public sealed class SceneDocumentCommandServiceTests
             [node.Id],
             slotIndex: 0,
             newMaterialUri: null,
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
@@ -397,7 +371,7 @@ public sealed class SceneDocumentCommandServiceTests
             [node.Id],
             slotIndex: 0,
             newMaterialUri: materialUri,
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = context.Metadata.IsDirty.Should().BeFalse();
@@ -439,16 +413,16 @@ public sealed class SceneDocumentCommandServiceTests
             [node.Id],
             slotIndex: 0,
             newMaterialUri: null,
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
-        await context.History.UndoAsync();
+        await context.History.UndoAsync().ConfigureAwait(false);
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
             .Which.Material.Uri.Should().Be(materialUri);
 
-        await context.History.RedoAsync();
+        await context.History.RedoAsync().ConfigureAwait(false);
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
             .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
         fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()), Times.Exactly(2));
@@ -489,7 +463,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<bool>.Unspecified,
                 Optional<float>.Unspecified,
                 Optional<float>.Unspecified),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
@@ -529,7 +503,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<bool>.Supplied(false),
                 Optional<float>.Supplied(0.02f),
                 Optional<float>.Supplied(1.25f)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = light.Color.Should().Be(new Vector3(0.25f, 0.5f, 0.75f));
@@ -575,19 +549,19 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<float>.Unspecified,
                 Optional<ToneMappingMode>.Unspecified,
                 Optional<System.Numerics.Vector3>.Unspecified),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.Environment.SunNodeId.Should().Be(second.Id);
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
 
-        await context.History.UndoAsync();
+        await context.History.UndoAsync().ConfigureAwait(false);
         _ = scene.Environment.SunNodeId.Should().Be(first.Id);
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
 
-        await context.History.RedoAsync();
+        await context.History.RedoAsync().ConfigureAwait(false);
         _ = scene.Environment.SunNodeId.Should().Be(second.Id);
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
@@ -615,7 +589,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<ToneMappingMode>.Unspecified,
                 Optional<System.Numerics.Vector3>.Unspecified,
                 Optional<SkyAtmosphereEnvironmentData>.Supplied(new() { MieAnisotropy = float.NaN })),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.Environment.Should().Be(before);
@@ -655,7 +629,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<float>.Unspecified,
                 Optional<ToneMappingMode>.Unspecified,
                 Optional<System.Numerics.Vector3>.Unspecified),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.Environment.ExposureMode.Should().Be(ExposureMode.Manual);
@@ -722,7 +696,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<System.Numerics.Vector3>.Unspecified,
                 Optional<SkyAtmosphereEnvironmentData>.Unspecified,
                 Optional<PostProcessEnvironmentData>.Supplied(postProcess)),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.Environment.PostProcess.Should().Be(postProcess);
@@ -753,7 +727,7 @@ public sealed class SceneDocumentCommandServiceTests
                 Optional<float>.Unspecified,
                 Optional<ToneMappingMode>.Unspecified,
                 Optional<System.Numerics.Vector3>.Unspecified),
-            EditSessionToken.OneShot);
+            EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = scene.Environment.Should().Be(before);
@@ -784,7 +758,7 @@ public sealed class SceneDocumentCommandServiceTests
             .Setup(sync => sync.UpdateNodeTransformAsync(scene, target, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
-        var result = await fixture.Sut.AddComponentAsync(context, target.Id, typeof(DirectionalLightComponent));
+        var result = await fixture.Sut.AddComponentAsync(context, target.Id, typeof(DirectionalLightComponent)).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = result.Value.Should().BeOfType<DirectionalLightComponent>()
@@ -799,6 +773,41 @@ public sealed class SceneDocumentCommandServiceTests
         var node = new SceneNode(scene) { Name = name };
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Directional Light", IsSunLight = true });
         return node;
+    }
+
+    private static void VerifyCommittedTransformSessionSync(
+        Fixture fixture,
+        Scene scene,
+        SceneNode node,
+        IEnumerable<IReadOnlyList<EnginePropertyValueEntry>> synced)
+    {
+        fixture.Sync.Verify(
+            sync => sync.TryPreviewSyncAsync(
+                scene.Id,
+                node.Id,
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        fixture.Sync.Verify(
+            sync => sync.CompleteTerminalSyncAsync(
+                scene.Id,
+                node.Id,
+                It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        fixture.Sync.Verify(
+            sync => sync.UpdatePropertiesAsync(
+                scene,
+                node,
+                It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(5));
+        _ = synced.Select(entries => entries.Should().ContainSingle().Which.Value)
+            .Should().Equal(1f, 2f, 2f, 0f, 2f);
+        _ = synced.Select(entries => entries.Should().ContainSingle().Which.FieldId)
+            .Should().OnlyContain(field => field == (ushort)TransformField.PositionX);
+        fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static TransformEdit PositionXEdit(float value)
