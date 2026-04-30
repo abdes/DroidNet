@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Schemas;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 
@@ -117,6 +118,17 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [ObservableProperty]
     public partial MaterialCookState CookState { get; set; } = MaterialCookState.NotCooked;
 
+    [ObservableProperty]
+    public partial bool IsDirty { get; set; }
+
+    [ObservableProperty]
+    public partial string StatusText { get; set; } = "Not loaded";
+
+    /// <summary>
+    /// Gets the visibility of the dirty marker.
+    /// </summary>
+    public Visibility IsDirtyVisibility => this.IsDirty ? Visibility.Visible : Visibility.Collapsed;
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -135,24 +147,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     /// <inheritdoc />
     public async Task SaveAsync() => await this.SaveMaterialAsync().ConfigureAwait(true);
-
-    partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(MaterialFieldKeys.BaseColorR, value);
-
-    partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(MaterialFieldKeys.BaseColorG, value);
-
-    partial void OnBaseColorBChanged(float value) => this.ApplyColorEdit(MaterialFieldKeys.BaseColorB, value);
-
-    partial void OnBaseColorAChanged(float value) => this.ApplyColorEdit(MaterialFieldKeys.BaseColorA, value);
-
-    partial void OnMetallicFactorChanged(float value) => this.ApplyEdit(MaterialFieldKeys.MetallicFactor, value);
-
-    partial void OnRoughnessFactorChanged(float value) => this.ApplyEdit(MaterialFieldKeys.RoughnessFactor, value);
-
-    partial void OnAlphaModeChanged(string value) => this.ApplyEdit(MaterialFieldKeys.AlphaMode, value);
-
-    partial void OnAlphaCutoffChanged(float value) => this.ApplyEdit(MaterialFieldKeys.AlphaCutoff, value);
-
-    partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(MaterialFieldKeys.DoubleSided, value);
 
     /// <summary>
     /// Applies a picker-selected base color to the scalar descriptor channels.
@@ -187,11 +181,56 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));
-        this.ApplyEdit(MaterialFieldKeys.BaseColorR, r);
-        this.ApplyEdit(MaterialFieldKeys.BaseColorG, g);
-        this.ApplyEdit(MaterialFieldKeys.BaseColorB, b);
-        this.ApplyEdit(MaterialFieldKeys.BaseColorA, a);
+        var edit = new PropertyEdit();
+        edit.Set(MaterialDescriptors.BaseColorR, r);
+        edit.Set(MaterialDescriptors.BaseColorG, g);
+        edit.Set(MaterialDescriptors.BaseColorB, b);
+        edit.Set(MaterialDescriptors.BaseColorA, a);
+        this.ApplyEdit(edit);
     }
+
+    private static byte ToByte(float value)
+        => (byte)Math.Clamp(MathF.Round(value * 255.0f), 0.0f, 255.0f);
+
+    private static float ToFloat(byte value)
+        => value / 255.0f;
+
+    private static bool NearlyEqual(float left, float right)
+        => MathF.Abs(left - right) <= 0.0001f;
+
+    private static string ToDisplayAlphaMode(MaterialAlphaMode alphaMode)
+        => alphaMode switch
+        {
+            MaterialAlphaMode.Mask => "Mask",
+            MaterialAlphaMode.Blend => "Blend",
+            _ => "Opaque",
+        };
+
+    private static MaterialAlphaMode ToMaterialAlphaMode(string value)
+        => Enum.TryParse<MaterialAlphaMode>(value, ignoreCase: true, out var mode)
+            ? mode
+            : MaterialAlphaMode.Opaque;
+
+    [LoggerMessage(EventId = 0, Level = LogLevel.Warning, Message = "Failed to open material document {MaterialUri}.")]
+    private static partial void LogMaterialOpenFailed(ILogger logger, Exception exception, Uri materialUri);
+
+    partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorR, value));
+
+    partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorG, value));
+
+    partial void OnBaseColorBChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorB, value));
+
+    partial void OnBaseColorAChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorA, value));
+
+    partial void OnMetallicFactorChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.Metalness, value));
+
+    partial void OnRoughnessFactorChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.Roughness, value));
+
+    partial void OnAlphaModeChanged(string value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AlphaMode, ToMaterialAlphaMode(value)));
+
+    partial void OnAlphaCutoffChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AlphaCutoff, value));
+
+    partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.DoubleSided, value));
 
     [RelayCommand]
     private async Task SaveMaterialAsync()
@@ -246,15 +285,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.StatusText = statusText;
     }
 
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(value * 255.0f), 0.0f, 255.0f);
-
-    private static float ToFloat(byte value)
-        => value / 255.0f;
-
-    private static bool NearlyEqual(float left, float right)
-        => MathF.Abs(left - right) <= 0.0001f;
-
     private async Task LoadAsync()
     {
         try
@@ -265,7 +295,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.logger.LogWarning(ex, "Failed to open material document {MaterialUri}.", this.metadata.MaterialUri);
+            LogMaterialOpenFailed(this.logger, ex, this.metadata.MaterialUri);
         }
         finally
         {
@@ -296,15 +326,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.OnPropertyChanged(nameof(this.BaseColorColor));
     }
 
-    private static string ToDisplayAlphaMode(MaterialAlphaMode alphaMode)
-        => alphaMode switch
-        {
-            MaterialAlphaMode.Mask => "Mask",
-            MaterialAlphaMode.Blend => "Blend",
-            _ => "Opaque",
-        };
-
-    private void ApplyColorEdit(string fieldKey, float value)
+    private void ApplyColorEdit(PropertyEdit edit)
     {
         if (this.isApplyingBaseColor)
         {
@@ -313,22 +335,23 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));
-        this.ApplyEdit(fieldKey, value);
+        this.ApplyEdit(edit);
     }
 
-    private void ApplyEdit(string fieldKey, object? value)
+    private void ApplyEdit(PropertyEdit edit)
     {
         if (this.isLoading || this.document is null)
         {
             return;
         }
 
-        _ = this.ApplyEditAsync(fieldKey, value);
+        _ = this.ApplyEditAsync(edit);
     }
 
-    private async Task ApplyEditAsync(string fieldKey, object? value)
+    private async Task ApplyEditAsync(PropertyEdit edit)
     {
-        if (this.document is null)
+        var current = this.document;
+        if (current is null)
         {
             return;
         }
@@ -336,13 +359,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         await this.editGate.WaitAsync().ConfigureAwait(true);
         try
         {
-            if (this.document is null)
-            {
-                return;
-            }
-
             var result = await this.documentService
-                .EditScalarAsync(this.document.DocumentId, new MaterialFieldEdit(fieldKey, value))
+                .EditPropertiesAsync(current.DocumentId, edit)
                 .ConfigureAwait(true);
             if (result.Succeeded)
             {
@@ -357,14 +375,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             this.editGate.Release();
         }
     }
-
-    [ObservableProperty]
-    public partial bool IsDirty { get; set; }
-
-    [ObservableProperty]
-    public partial string StatusText { get; set; } = "Not loaded";
-
-    public Visibility IsDirtyVisibility => this.IsDirty ? Visibility.Visible : Visibility.Collapsed;
 
     partial void OnIsDirtyChanged(bool value)
     {

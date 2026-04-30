@@ -10,7 +10,4 @@
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="AwesomeAssertions" />
-    </ItemGroup>
 </Project>

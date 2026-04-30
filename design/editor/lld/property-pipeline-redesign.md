@@ -1,11 +1,38 @@
 # Property Pipeline Redesign — Critique & Proposal
 
-> Status: Design proposal, ready for implementation planning.
+> Status: Implementation in progress. Last reconciled with code on
+> 2026-04-30.
 > Scope: Authored properties flowing from the WinUI Inspector through the
 > editor command layer, persistence, and the embedded engine. Defines
 > what must change and what must not.
 > Audience: Editor team, engine team, and anyone reviewing the proposal
 > before it becomes an implementation milestone.
+
+---
+
+## 0. Implementation status
+
+This document started as a proposal. The property pipeline now has real
+code behind it, but the migration is not complete. The current state is:
+
+| Area | Status | Evidence / notes |
+| --- | --- | --- |
+| Shared schema project | **Implemented** | `projects/Oxygen.Editor.Schemas/src` contains the schema catalog, overlay loader/linter, `PropertyId`, `PropertyDescriptor<T>`, `PropertyEdit`, `PropertyApply`, `PropertyOp`, `PropertyBinding<T>`, and `CommitGroupController`. `JsonSchema.Net` is centrally versioned and referenced by the project. |
+| Editor overlays | **Implemented for material and transform** | `oxygen.material-descriptor.editor.schema.json` and `oxygen.transform-component.editor.schema.json` live next to the engine schemas under `projects/Oxygen.Engine/src/Oxygen/Cooker/Import/Schemas`. |
+| Overlay validation gates | **Implemented for the current overlays** | `projects/Oxygen.Editor.Schemas/tests/EditorSchemaOverlayTests.cs` verifies annotation namespace lint, sibling-engine-schema references, overlay coverage, validator parity for material, and CMake isolation from `*.editor.schema.json`. |
+| Generic property apply/undo contract | **Implemented** | `projects/Oxygen.Editor.Schemas/tests/PropertyPipelineContractTests.cs` verifies shared apply/restore identity, mixed-value binding, missing descriptors, and stale commit cancellation. |
+| Native `SetProperties` transport | **Implemented for transform floats** | `SetPropertiesCommand`, `PropertyApplierRegistry`, `TransformPropertyApplier`, `CommandFactory::CreateSetProperties`, and `OxygenWorld::SetProperties` route scalar transform entries through the existing `OnSceneMutation` command phase. |
+| Managed transform command path | **Implemented** | `SceneDocumentCommandService.PropertyPipeline.cs` translates transform property edits to `EnginePropertyValueEntry`; `SceneDocumentCommandService.cs` uses `CommitGroupController`, preview sync, terminal sync, `PropertyOp`, and TimeMachine history for one-shot and interactive sessions. |
+| Transform inspector binding surface | **Partial** | `TransformViewModel` uses `PropertyBinding<float>` to read mixed values, but its XAML-facing surface still exposes legacy scalar + `IsIndeterminate` properties and adapts through `TransformEdit`. This preserves existing controls while leaving a cleanup step before the VM is fully schema-native. |
+| Engine-not-running behavior | **Partial** | Live-sync skips are classified and published as diagnostics. `SetProperties` edits are now buffered per scene when the runtime is not running, the skip diagnostic includes the pending count, and the queue replays after the next full scene sync. A dedicated inspector banner is still open. |
+| Material document property pipeline | **Implemented** | `MaterialDescriptors` maps engine-schema JSON pointers to the editor material source model, and `MaterialDocumentService.EditPropertiesAsync` validates descriptor values plus the resulting engine/merged schema JSON before marking the document dirty/stale. |
+| Material editor VM property path | **Implemented** | `MaterialEditorViewModel` now calls `IMaterialDocumentService.EditPropertiesAsync` directly with typed `PropertyEdit` values. Base-color picker changes are batched into one four-channel edit. |
+| Material cooking | **Implemented for current material descriptors** | `MaterialCookService` and material editor commands can save/cook the authored material source. The cooker still owns final PAK serialization. |
+| Schema-to-PAK round trip | **Implemented for material, generic gate open** | Material tests now edit through `PropertyEdit`, save, cook, and assert the cooked `.omat` descriptor bytes for base color, metalness, roughness, alpha cutoff, domain, and flags. The generic schema↔PAK invariant test described in §5.10 is still open. |
+| Remaining component migrations | **Not started** | Lights, cameras, geometry, and environment still primarily use their existing component-specific edit records and sync paths. |
+
+The remainder of this document keeps the original design language, but
+the migration plan in §7 is annotated with this implementation status.
 
 ---
 
@@ -847,31 +874,45 @@ After: 4 files, ~15 LOC.
 Incremental, non-breaking, multi-select preserved at every step (the
 only thing that moves is *where* mixed-value logic lives).
 
-1. **Add `Oxygen.Editor.Schemas` project + `JsonSchema.Net`
-   dependency.** Implement engine-schema + overlay loader and
-   `PropertyDescriptor<T>` model. No behavior change.
-2. **Author the first overlay**
+1. **[Done] Add `Oxygen.Editor.Schemas` project + `JsonSchema.Net`
+   dependency.** Engine-schema + overlay loading, linting,
+   descriptors, property edits, shared apply/undo primitives, binding,
+   and commit grouping are implemented.
+2. **[Done] Author the first overlay**
    (`oxygen.material-descriptor.editor.schema.json`) and prove the
    merge + descriptor generation against the existing material
-   schema in unit tests. Adds CI gates §5.11.7 #2 and #3.
-3. **Add the CMake lint** (CI gate §5.11.7 #4) to guarantee
-   engine-rebuild isolation.
-4. **Implement `SetProperties` as a new `IEditorCommand`** plumbed
-   through `ICommandFactory` and drained at `OnSceneMutation`
-   (F6). Run it in parallel with existing wide methods.
-5. **Migrate Transform** end-to-end onto the schema:
+   schema in unit tests. CI gates §5.11.7 #2 and #3 are implemented
+   for the overlay set.
+3. **[Done] Add the CMake lint** (CI gate §5.11.7 #4) to guarantee
+   engine-rebuild isolation. The editor-schema tests assert that
+   `*.editor.schema.json` is not embedded by cooker/PakTool CMake
+   schema lists.
+4. **[Done for transform] Implement `SetProperties` as a new
+   `IEditorCommand`** plumbed through `ICommandFactory` and drained
+   at `OnSceneMutation` (F6). It currently has a transform scalar
+   applier; additional component appliers remain part of step 9.
+5. **[Partial] Migrate Transform** end-to-end onto the schema:
    `PropertyEdit`, `PropertyBinding<T>`, `CommitGroupController`,
-   `PropertyOp` undo (§5.5). Validate parity against current
-   indeterminate placeholder behavior on drag, wheel, keyboard.
-6. **Add the engine-not-running buffering policy** (§5.7) with
-   inspector banner.
-7. **Add the schema↔PAK round-trip test** (§5.10) so cooking cannot
-   silently diverge.
-8. **Add overlay coverage CI gate** (§5.11.7 #1) once Transform's
-   overlay is the reference.
-9. **Migrate remaining components** (lights, cameras, geometry,
-   environment) onto the schema. Each migration is local and
-   independently shippable.
+   `PropertyOp` undo (§5.5). The command/session/history/transport
+   path is schema-driven. The inspector still exposes legacy
+   scalar + `IsIndeterminate` properties and adapts through
+   `TransformEdit`, so the VM surface is not fully schema-native yet.
+6. **[Partial] Add the engine-not-running buffering policy** (§5.7)
+   with inspector banner. `SetProperties` now buffers skipped edits
+   per scene, reports the pending count in the published live-sync
+   diagnostic, and replays after the next full scene sync. A dedicated
+   inspector banner remains open.
+7. **[Done for material] Add the schema↔PAK round-trip test**
+   (§5.10) so cooking cannot silently diverge. The material editor
+   tests edit through `PropertyEdit`, save, cook, and verify cooked
+   descriptor bytes. A generic cross-schema invariant gate is still
+   open.
+8. **[Done] Add overlay coverage CI gate** (§5.11.7 #1) once
+   Transform's overlay is the reference. Coverage is enforced for all
+   current editor overlays with explicit hidden-path allowlists.
+9. **[Open] Migrate remaining components** (lights, cameras,
+   geometry, environment) onto the schema. Each migration is local
+   and independently shippable.
 
 ---
 

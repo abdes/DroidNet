@@ -2,8 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentPipeline;
@@ -250,6 +253,52 @@ public sealed class MaterialDocumentServiceTests
             && r.Diagnostics.Single().Domain == FailureDomain.MaterialAuthoring);
     }
 
+    /// <summary>
+    /// Verifies a schema-driven material edit round-trips through save and cook into the cooked descriptor layout.
+    /// </summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task EditPropertiesSaveCookRoundTripsSchemaValuesIntoCookedDescriptor()
+    {
+        using var workspace = new TempWorkspace();
+        var materialUri = new Uri("asset:///Content/Materials/RoundTrip.omat.json");
+        var service = CreateCookingService(workspace);
+        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var edit = new PropertyEdit();
+        edit.Set(MaterialDescriptors.BaseColorR, 0.25f);
+        edit.Set(MaterialDescriptors.BaseColorG, 0.5f);
+        edit.Set(MaterialDescriptors.BaseColorB, 0.75f);
+        edit.Set(MaterialDescriptors.BaseColorA, 1.0f);
+        edit.Set(MaterialDescriptors.Metalness, 0.8f);
+        edit.Set(MaterialDescriptors.Roughness, 0.2f);
+        edit.Set(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask);
+        edit.Set(MaterialDescriptors.AlphaCutoff, 0.4f);
+        edit.Set(MaterialDescriptors.DoubleSided, true);
+
+        var editResult = await service.EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        var cook = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+
+        _ = editResult.Succeeded.Should().BeTrue();
+        _ = save.Succeeded.Should().BeTrue();
+        _ = cook.State.Should().Be(MaterialCookState.Cooked);
+
+        var cookedBytes = await File.ReadAllBytesAsync(
+            Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat")).ConfigureAwait(false);
+        _ = cookedBytes.Should().HaveCount(256);
+        _ = ReadSingle(cookedBytes, 0x68).Should().BeApproximately(0.25f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x6C).Should().BeApproximately(0.5f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.75f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(1.0f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0x7C).Should().BeApproximately(0.8f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0x7E).Should().BeApproximately(0.2f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0xB8).Should().BeApproximately(0.4f, 0.0001f);
+        _ = cookedBytes[0x5F].Should().Be(3);
+
+        var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x60, 4));
+        _ = flags.Should().Be((1u << 1) | (1u << 2));
+    }
+
     [TestMethod]
     public void MaterialSchemaValidator_ShouldKeepEngineAndMergedOverlayAcceptanceEquivalent()
     {
@@ -488,6 +537,24 @@ public sealed class MaterialDocumentServiceTests
 
     private static MaterialDocumentService CreateService(TempWorkspace workspace)
         => new(new TestResolver(workspace.Root), new RecordingCookService());
+
+    private static MaterialDocumentService CreateCookingService(TempWorkspace workspace)
+    {
+        var registry = new ImporterRegistry();
+        registry.Register(new MaterialSourceImporter());
+        return new MaterialDocumentService(
+            new TestResolver(workspace.Root),
+            new MaterialCookService(new ImportService(registry), NullLogger<MaterialCookService>.Instance));
+    }
+
+    private static float ReadSingle(byte[] bytes, int offset)
+    {
+        var bits = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4));
+        return BitConverter.Int32BitsToSingle((int)bits);
+    }
+
+    private static float ReadUnorm16(byte[] bytes, int offset)
+        => BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2)) / 65535.0f;
 
     private sealed class RecordingCookService : IMaterialCookService
     {
