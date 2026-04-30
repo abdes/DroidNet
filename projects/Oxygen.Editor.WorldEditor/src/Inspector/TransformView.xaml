@@ -40,9 +40,6 @@
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE7AD;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
-        <editorcontrols:PropertiesExpander.Content>
-            <Button>Hello</Button>
-        </editorcontrols:PropertiesExpander.Content>
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"

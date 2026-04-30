@@ -13,8 +13,8 @@ using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Components;
@@ -34,10 +34,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly ILogger logger;
 
     private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
-    private readonly IDictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> propertyEditorFactories;
+    private readonly Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> propertyEditorFactories;
     private readonly IMessenger messenger;
     private readonly ISceneDocumentCommandService commandService;
     private readonly IDocumentService documentService;
+    private readonly ISceneEngineSync sceneEngineSync;
     private readonly WindowId windowId;
     private readonly DispatcherQueue? dispatcher;
     private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
@@ -47,6 +48,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private bool isDisposed;
     private ICollection<SceneNode> items;
     private Scene? activeScene;
+    private int pendingLiveSyncEditCount;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
@@ -54,7 +56,12 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="messenger">The messenger for MVVM messaging.</param>
+    /// <param name="commandService">The scene document command service.</param>
+    /// <param name="documentService">The document service used by scene commands.</param>
+    /// <param name="windowId">The WinUI window id used for document operations.</param>
     /// <param name="assetCatalog">The asset catalog for Content browser integration.</param>
+    /// <param name="materialPickerService">The material picker service for geometry material slots.</param>
+    /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -68,6 +75,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         WindowId windowId,
         IAssetCatalog assetCatalog,
         IMaterialPickerService materialPickerService,
+        ISceneEngineSync sceneEngineSync,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -77,65 +85,29 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger = messenger;
         this.commandService = commandService;
         this.documentService = documentService;
+        this.sceneEngineSync = sceneEngineSync;
         this.windowId = windowId;
         this.VmToViewConverter = vmToViewConverter;
+        this.dispatcher = hosting.Dispatcher;
+        this.sceneEngineSync.PendingPropertySyncCountChanged += this.OnPendingPropertySyncCountChanged;
 
-        this.propertyEditorFactories = new Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>>
-        {
-            [typeof(TransformComponent)] = _ => new TransformViewModel(
-                loggerFactory: null,
-                commandService: commandService,
-                commandContextProvider: this.CreateCommandContext),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(
-                hosting,
-                assetCatalog,
-                materialPickerService,
-                commandService,
-                this.CreateCommandContext),
-            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(
-                commandService,
-                this.CreateCommandContext),
-            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(
-                commandService,
-                this.CreateCommandContext),
-        };
+        this.propertyEditorFactories = this.CreatePropertyEditorFactories(
+            hosting,
+            assetCatalog,
+            materialPickerService,
+            loggerFactory);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.activeScene = this.items.FirstOrDefault()?.Scene;
+        this.RefreshPendingLiveSyncState();
         this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
         this.UpdateItemsCollection(this.items);
         this.SubscribeToComponentCollections();
         this.LogConstructed(this.items.Count);
-        this.dispatcher = hosting.Dispatcher;
 
-        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() =>
-            {
-                this.items = message.SelectedEntities;
-                this.activeScene = this.items.FirstOrDefault()?.Scene ?? this.activeScene;
-                this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
-                this.LogSelectionChanged(this.items.Count);
-                this.UpdateItemsCollection(this.items);
-                this.SubscribeToComponentCollections();
-            }));
-
-        this.messenger.Register<SceneLoadedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() =>
-            {
-                this.activeScene = message.Scene;
-                this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
-                this.OnPropertyChanged(nameof(this.HasInspectorContent));
-                this.UpdateItemsCollection(this.items);
-            }));
-
-        // Listen for component add/remove requests coming from the details view (sent via global messenger)
-        WeakReferenceMessenger.Default.Register<Messages.ComponentAddRequestedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentAddRequested(message)));
-
-        WeakReferenceMessenger.Default.Register<Messages.ComponentRemoveRequestedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentRemoveRequested(message)));
-        // Component collection changes are observed per-node via CollectionChanged subscriptions.
+        this.RegisterSceneMessages(hosting);
+        this.RegisterComponentMessages(hosting);
     }
 
     /// <summary>
@@ -165,6 +137,42 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     public GridLength PropertyPaneHeight => this.HasItems ? new GridLength(3, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
 
     /// <summary>
+    /// Gets the number of scene property edits buffered until the runtime can replay them.
+    /// </summary>
+    public int PendingLiveSyncEditCount
+    {
+        get => this.pendingLiveSyncEditCount;
+        private set
+        {
+            if (!this.SetProperty(ref this.pendingLiveSyncEditCount, value))
+            {
+                return;
+            }
+
+            this.OnPropertyChanged(nameof(this.HasPendingLiveSyncEdits));
+            this.OnPropertyChanged(nameof(this.PendingLiveSyncMessage));
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the editor should show the pending live-sync banner.
+    /// </summary>
+    public bool HasPendingLiveSyncEdits => this.PendingLiveSyncEditCount > 0;
+
+    /// <summary>
+    /// Gets the title displayed in the pending live-sync banner.
+    /// </summary>
+    public string PendingLiveSyncTitle { get; } = "Runtime sync pending";
+
+    /// <summary>
+    /// Gets the status text displayed in the pending live-sync banner.
+    /// </summary>
+    public string PendingLiveSyncMessage
+        => this.PendingLiveSyncEditCount == 1
+            ? "1 editor property edit will replay after the scene syncs."
+            : $"{this.PendingLiveSyncEditCount} editor property edits will replay after the scene syncs.";
+
+    /// <summary>
     /// Gets the <see cref="ILoggerFactory"/> used by this view model for creating loggers.
     /// The factory is provided via the constructor and may be <see langword="null"/>; when <see langword="null"/>
     /// a <see cref="NullLoggerFactory"/> is used internally to disable logging.
@@ -191,6 +199,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return;
         }
 
+        this.sceneEngineSync.PendingPropertySyncCountChanged -= this.OnPendingPropertySyncCountChanged;
         this.messenger.UnregisterAll(this);
         this.UnsubscribeAllComponentCollections();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
@@ -222,6 +231,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.OnPropertyChanged(nameof(this.HasInspectorContent));
         this.OnPropertyChanged(nameof(this.TopPaneHeight));
         this.OnPropertyChanged(nameof(this.PropertyPaneHeight));
+        this.RefreshPendingLiveSyncState();
     }
 
     /// <inheritdoc/>
@@ -237,51 +247,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             result.Add(this.environmentEditor);
         }
 
-        var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
-        Debug.WriteLine($"[SceneNodeEditorViewModel] propertyEditorFactories has {this.propertyEditorFactories.Count} factories: {string.Join(", ", this.propertyEditorFactories.Keys.Select(k => k.Name))}");
+        var keysToCheck = this.GetApplicablePropertyEditorTypes();
 
         if (this.items.Count == 0)
         {
             return result;
         }
 
-        foreach (var entity in this.items)
-        {
-            Debug.WriteLine($"[SceneNodeEditorViewModel] Checking entity: {entity.Name}, Components: {string.Join(", ", entity.Components.Select(c => c.GetType().Name))}");
-
-            // Filter out keys for which the entity does not have a component
-            foreach (var key in keysToCheck.ToList()
-                         .Where(key => entity.Components.All(component => component.GetType() != key)))
-            {
-                Debug.WriteLine($"[SceneNodeEditorViewModel] Removing key {key.Name} (component not found on entity)");
-                _ = filteredEditors.Remove(key);
-                _ = keysToCheck.Remove(key);
-            }
-        }
-
-        // Ensure editor instances exist for all filtered factories and return instances
         Debug.WriteLine($"[SceneNodeEditorViewModel] Keys to check after filtering: {string.Join(", ", keysToCheck.Select(k => k.Name))}");
-        foreach (var kvp in this.propertyEditorFactories)
-        {
-            if (!keysToCheck.Contains(kvp.Key))
-            {
-                continue; // not applicable for current selection
-            }
-
-            // Create or reuse editor instance for this SceneNodeEditorViewModel
-            if (!this.editorInstances.TryGetValue(kvp.Key, out var inst))
-            {
-                Debug.WriteLine($"[SceneNodeEditorViewModel] Creating NEW editor instance for {kvp.Key.Name}");
-                inst = kvp.Value(this.messenger);
-                this.editorInstances[kvp.Key] = inst;
-            }
-            else
-            {
-                Debug.WriteLine($"[SceneNodeEditorViewModel] Reusing existing editor instance for {kvp.Key.Name}");
-            }
-
-            filteredEditors[kvp.Key] = inst;
-        }
+        this.AddApplicablePropertyEditors(filteredEditors, keysToCheck);
 
         var before = this.propertyEditorFactories.Count;
         var after = filteredEditors.Count;
@@ -289,6 +263,117 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         result.AddRange(filteredEditors.Values);
         return result;
+    }
+
+    private HashSet<Type> GetApplicablePropertyEditorTypes()
+    {
+        var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
+        Debug.WriteLine($"[SceneNodeEditorViewModel] propertyEditorFactories has {this.propertyEditorFactories.Count} factories: {string.Join(", ", this.propertyEditorFactories.Keys.Select(k => k.Name))}");
+
+        foreach (var entity in this.items)
+        {
+            Debug.WriteLine($"[SceneNodeEditorViewModel] Checking entity: {entity.Name}, Components: {string.Join(", ", entity.Components.Select(c => c.GetType().Name))}");
+            foreach (var key in keysToCheck.ToList()
+                         .Where(key => entity.Components.All(component => component.GetType() != key)))
+            {
+                Debug.WriteLine($"[SceneNodeEditorViewModel] Removing key {key.Name} (component not found on entity)");
+                _ = keysToCheck.Remove(key);
+            }
+        }
+
+        return keysToCheck;
+    }
+
+    private void AddApplicablePropertyEditors(
+        Dictionary<Type, IPropertyEditor<SceneNode>> filteredEditors,
+        HashSet<Type> keysToCheck)
+    {
+        foreach (var kvp in this.propertyEditorFactories)
+        {
+            if (!keysToCheck.Contains(kvp.Key))
+            {
+                continue;
+            }
+
+            filteredEditors[kvp.Key] = this.GetOrCreatePropertyEditor(kvp);
+        }
+    }
+
+    private IPropertyEditor<SceneNode> GetOrCreatePropertyEditor(
+        KeyValuePair<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> factory)
+    {
+        if (this.editorInstances.TryGetValue(factory.Key, out var instance))
+        {
+            Debug.WriteLine($"[SceneNodeEditorViewModel] Reusing existing editor instance for {factory.Key.Name}");
+            return instance;
+        }
+
+        Debug.WriteLine($"[SceneNodeEditorViewModel] Creating NEW editor instance for {factory.Key.Name}");
+        instance = factory.Value(this.messenger);
+        this.editorInstances[factory.Key] = instance;
+        return instance;
+    }
+
+    private Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> CreatePropertyEditorFactories(
+        HostingContext hosting,
+        IAssetCatalog assetCatalog,
+        IMaterialPickerService materialPickerService,
+        ILoggerFactory? loggerFactory)
+        => new()
+        {
+            [typeof(TransformComponent)] = _ => new TransformViewModel(
+                loggerFactory: loggerFactory,
+                commandService: this.commandService,
+                commandContextProvider: this.CreateCommandContext),
+            [typeof(GeometryComponent)] = _ => new GeometryViewModel(
+                hosting,
+                assetCatalog,
+                materialPickerService,
+                this.commandService,
+                this.CreateCommandContext),
+            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(
+                this.commandService,
+                this.CreateCommandContext),
+            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(
+                this.commandService,
+                this.CreateCommandContext),
+        };
+
+    private void RegisterSceneMessages(HostingContext hosting)
+    {
+        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
+            {
+                this.items = message.SelectedEntities;
+                this.activeScene = this.items.FirstOrDefault()?.Scene ?? this.activeScene;
+                this.RefreshPendingLiveSyncState();
+                this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
+                this.LogSelectionChanged(this.items.Count);
+                this.UpdateItemsCollection(this.items);
+                this.SubscribeToComponentCollections();
+            }));
+
+        this.messenger.Register<SceneLoadedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
+            {
+                this.activeScene = message.Scene;
+                this.RefreshPendingLiveSyncState();
+                this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
+                this.OnPropertyChanged(nameof(this.HasInspectorContent));
+                this.UpdateItemsCollection(this.items);
+            }));
+    }
+
+    private void RegisterComponentMessages(HostingContext hosting)
+    {
+        // Listen for component add/remove requests coming from the details view (sent via global messenger)
+        WeakReferenceMessenger.Default.Register<Messages.ComponentAddRequestedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentAddRequested(message)));
+
+        WeakReferenceMessenger.Default.Register<Messages.ComponentRemoveRequestedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentRemoveRequested(message)));
+
+        // Component collection changes are observed per-node via CollectionChanged subscriptions.
     }
 
     private SceneDocumentCommandContext? CreateCommandContext()
@@ -311,6 +396,30 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             ? null
             : new SceneDocumentCommandContext(metadata.DocumentId, metadata, scene, UndoRedo.GetHistory(metadata.DocumentId));
     }
+
+    private void OnPendingPropertySyncCountChanged(object? sender, PendingPropertySyncCountChangedEventArgs e)
+    {
+        if (this.activeScene?.Id != e.SceneId)
+        {
+            return;
+        }
+
+        void UpdateCount()
+            => this.PendingLiveSyncEditCount = e.PendingCount;
+
+        if (this.dispatcher is { HasThreadAccess: false })
+        {
+            _ = this.dispatcher.TryEnqueue(UpdateCount);
+            return;
+        }
+
+        UpdateCount();
+    }
+
+    private void RefreshPendingLiveSyncState()
+        => this.PendingLiveSyncEditCount = this.activeScene is null
+            ? 0
+            : this.sceneEngineSync.GetPendingPropertySyncCount(this.activeScene.Id);
 
     private void OnComponentAddRequested(Messages.ComponentAddRequestedMessage message)
     {
@@ -373,28 +482,14 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         foreach (var kvp in this.componentNotifiers.ToList())
         {
-            try
-            {
-                kvp.Key.CollectionChanged -= this.OnNodeComponentsChanged;
-            }
-            catch
-            {
-                // ignore
-            }
+            kvp.Key.CollectionChanged -= this.OnNodeComponentsChanged;
         }
 
         this.componentNotifiers.Clear();
 
         foreach (var component in this.componentPropertyNotifiers.Keys.ToList())
         {
-            try
-            {
-                component.PropertyChanged -= this.OnSelectedComponentPropertyChanged;
-            }
-            catch
-            {
-                // ignore
-            }
+            component.PropertyChanged -= this.OnSelectedComponentPropertyChanged;
         }
 
         this.componentPropertyNotifiers.Clear();
@@ -441,5 +536,4 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         _ = e;
         _ = this.dispatcher?.DispatchAsync(this.RefreshPropertyEditorValues);
     }
-
 }

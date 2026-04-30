@@ -24,7 +24,7 @@ code behind it, but the migration is not complete. The current state is:
 | Native `SetProperties` transport | **Implemented for transform floats** | `SetPropertiesCommand`, `PropertyApplierRegistry`, `TransformPropertyApplier`, `CommandFactory::CreateSetProperties`, and `OxygenWorld::SetProperties` route scalar transform entries through the existing `OnSceneMutation` command phase. |
 | Managed transform command path | **Implemented** | `SceneDocumentCommandService.PropertyPipeline.cs` translates transform property edits to `EnginePropertyValueEntry`; `SceneDocumentCommandService.cs` uses `CommitGroupController`, preview sync, terminal sync, `PropertyOp`, and TimeMachine history for one-shot and interactive sessions. |
 | Transform inspector binding surface | **Partial** | `TransformViewModel` uses `PropertyBinding<float>` to read mixed values, but its XAML-facing surface still exposes legacy scalar + `IsIndeterminate` properties and adapts through `TransformEdit`. This preserves existing controls while leaving a cleanup step before the VM is fully schema-native. |
-| Engine-not-running behavior | **Partial** | Live-sync skips are classified and published as diagnostics. `SetProperties` edits are now buffered per scene when the runtime is not running, the skip diagnostic includes the pending count, and the queue replays after the next full scene sync. A dedicated inspector banner is still open. |
+| Engine-not-running behavior | **Implemented for property edits** | Live-sync skips are classified and published as diagnostics. `SetProperties` edits are buffered per scene when the runtime is not running, the skip diagnostic includes the pending count, the Scene Node Editor shows a scene-level pending banner, and the queue replays after the next full scene sync. |
 | Material document property pipeline | **Implemented** | `MaterialDescriptors` maps engine-schema JSON pointers to the editor material source model, and `MaterialDocumentService.EditPropertiesAsync` validates descriptor values plus the resulting engine/merged schema JSON before marking the document dirty/stale. |
 | Material editor VM property path | **Implemented** | `MaterialEditorViewModel` now calls `IMaterialDocumentService.EditPropertiesAsync` directly with typed `PropertyEdit` values. Base-color picker changes are batched into one four-channel edit. |
 | Material cooking | **Implemented for current material descriptors** | `MaterialCookService` and material editor commands can save/cook the authored material source. The cooker still owns final PAK serialization. |
@@ -897,11 +897,12 @@ only thing that moves is *where* mixed-value logic lives).
    path is schema-driven. The inspector still exposes legacy
    scalar + `IsIndeterminate` properties and adapts through
    `TransformEdit`, so the VM surface is not fully schema-native yet.
-6. **[Partial] Add the engine-not-running buffering policy** (§5.7)
-   with inspector banner. `SetProperties` now buffers skipped edits
-   per scene, reports the pending count in the published live-sync
-   diagnostic, and replays after the next full scene sync. A dedicated
-   inspector banner remains open.
+6. **[Done for property edits] Add the engine-not-running buffering
+   policy** (§5.7) with inspector banner. `SetProperties` buffers
+   skipped edits per scene, reports the pending count in the published
+   live-sync diagnostic, the Scene Node Editor shows one scene-level
+   pending banner across all component editors, and the queue replays
+   after the next full scene sync.
 7. **[Done for material] Add the schema↔PAK round-trip test**
    (§5.10) so cooking cannot silently diverge. The material editor
    tests edit through `PropertyEdit`, save, cook, and verify cooked

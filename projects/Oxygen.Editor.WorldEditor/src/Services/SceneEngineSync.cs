@@ -40,6 +40,9 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
     }
 
     /// <inheritdoc/>
+    public event EventHandler<PendingPropertySyncCountChangedEventArgs>? PendingPropertySyncCountChanged;
+
+    /// <inheritdoc/>
     public void Dispose()
         => this.sceneSyncGate.Dispose();
 
@@ -861,6 +864,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
                 Message = $"The runtime engine is {this.engineService.State}; live sync was buffered. {pendingCount} pending property edit(s) will replay after scene sync.",
             };
             this.LogSetPropertiesBuffered(scene.Id, node.Id, entries.Count, pendingCount);
+            this.OnPendingPropertySyncCountChanged(scene.Id, pendingCount);
             return bufferedOutcome;
         }
 
@@ -1176,6 +1180,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
         }
 
         this.LogBufferedSetPropertiesReplayCompleted(scene.Id, pendingEntries.Count, replayed, skipped);
+        this.OnPendingPropertySyncCountChanged(scene.Id, pendingCount: 0);
 
         static bool SceneContainsNode(Scene scene, Guid nodeId)
         {
@@ -1190,6 +1195,11 @@ public sealed partial class SceneEngineSync : ISceneEngineSync, IDisposable
             return false;
         }
     }
+
+    private void OnPendingPropertySyncCountChanged(Guid sceneId, int pendingCount)
+        => this.PendingPropertySyncCountChanged?.Invoke(
+            this,
+            new PendingPropertySyncCountChangedEventArgs(sceneId, pendingCount));
 
     private Oxygen.Interop.World.OxygenWorld? TryGetWorld()
     {
