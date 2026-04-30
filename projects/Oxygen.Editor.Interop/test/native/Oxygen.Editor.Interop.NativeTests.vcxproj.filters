@@ -12,6 +12,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetEnvironmentCommand.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\EnvironmentCommand_native_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\InputAccumulator_native_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

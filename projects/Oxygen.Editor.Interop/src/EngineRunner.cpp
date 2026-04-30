@@ -30,6 +30,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
@@ -194,7 +195,7 @@ namespace Oxygen::Interop {
 
       if (shared->engine) {
         interop::LogInfoMessage(
-          "Registering renderer and EditorModule with surface registry.");
+          "Registering scene sync, renderer, and EditorModule with surface registry.");
 
         auto renderer_config = shared->renderer_config;
         if (renderer_config.upload_queue_key.empty()) {
@@ -207,6 +208,10 @@ namespace Oxygen::Interop {
         interop::LogInfoMessage(fmt::format(fmt::runtime(
           "Creating editor Vortex renderer with capabilities: {}"),
           oxygen::vortex::to_string(renderer_capabilities)).c_str());
+
+        shared->engine->RegisterModule(
+          std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+            oxygen::engine::kSceneObserverSyncModulePriority));
 
         auto renderer_unique = std::make_unique<oxygen::vortex::Renderer>(
           shared->gfx_weak, std::move(renderer_config), renderer_capabilities);
@@ -222,6 +227,7 @@ namespace Oxygen::Interop {
       return gcnew EngineContext(shared);
     }
     catch (const std::exception& ex) {
+      LogInfoMessage(ex.what());
 #if defined(_DEBUG) ||                                                         \
     !defined(NDEBUG) // FIXME: use proper logging with LoguruWrapper
       ::System::Diagnostics::Debug::WriteLine(gcnew::System::String(ex.what()));

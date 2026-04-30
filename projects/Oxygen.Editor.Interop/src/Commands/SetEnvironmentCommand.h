@@ -9,6 +9,8 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 
 #include <EditorModule/EditorCommand.h>
 
@@ -17,26 +19,29 @@ namespace oxygen::interop::module {
   struct SkyAtmosphereParams {
     bool enabled = true;
     bool sun_disk_enabled = true;
-    float planet_radius_m = 6'360'000.0F;
-    float atmosphere_height_m = 80'000.0F;
+    float planet_radius_m = oxygen::engine::atmos::kDefaultPlanetRadiusM;
+    float atmosphere_height_m
+      = oxygen::engine::atmos::kDefaultAtmosphereHeightM;
     Vec3 ground_albedo_rgb { 0.4F, 0.4F, 0.4F };
-    float rayleigh_scale_height_m = 8'000.0F;
-    float mie_scale_height_m = 1'200.0F;
-    float mie_anisotropy = 0.8F;
+    float rayleigh_scale_height_m
+      = oxygen::engine::atmos::kDefaultRayleighScaleHeightM;
+    float mie_scale_height_m
+      = oxygen::engine::atmos::kDefaultMieScaleHeightM;
+    float mie_anisotropy = oxygen::engine::atmos::kDefaultMieAnisotropyG;
     Vec3 sky_luminance_factor_rgb { 1.0F, 1.0F, 1.0F };
     float aerial_perspective_distance_scale = 1.0F;
     float aerial_scattering_strength = 1.0F;
-    float aerial_perspective_start_depth_m = 0.0F;
+    float aerial_perspective_start_depth_m = 100.0F;
     float height_fog_contribution = 1.0F;
   };
 
   struct PostProcessParams {
     int tone_mapper = 1;
-    int exposure_mode = 2;
+    int exposure_mode = 0;
     bool exposure_enabled = true;
     float exposure_compensation_ev = 0.0F;
-    float exposure_key = 10.0F;
-    float manual_exposure_ev = 9.7F;
+    float exposure_key = oxygen::engine::kExposureCalibrationKey;
+    float manual_exposure_ev = 13.0F;
     float auto_exposure_min_ev = -6.0F;
     float auto_exposure_max_ev = 16.0F;
     float auto_exposure_speed_up = 3.0F;

@@ -123,8 +123,12 @@ namespace Oxygen::Interop::World {
     void SetVisibility(System::Guid nodeId, bool visible);
     void AttachDirectionalLight(System::Guid nodeId, float intensityLux,
       float angularSizeRadians, System::Numerics::Vector3 color,
-      bool affectsWorld, bool castsShadows, float exposureCompensation,
-      bool environmentContribution, bool isSunLight);
+      bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
+      float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
+      float exposureCompensation, bool environmentContribution, bool isSunLight,
+      int cascadeCount, int splitMode, float maxShadowDistance,
+      System::Numerics::Vector4 cascadeDistances, float distributionExponent,
+      float transitionFraction, float distanceFadeoutFraction);
     void AttachPointLight(System::Guid nodeId, float luminousFluxLumens,
       float range, float sourceRadius, float decayExponent,
       System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
