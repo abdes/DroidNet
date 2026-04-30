@@ -6,10 +6,14 @@
 
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <memory>
 
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -26,8 +30,27 @@ namespace oxygen::interop::module {
   struct LightCommonParams {
     oxygen::Vec3 color { 1.0F, 1.0F, 1.0F };
     bool affects_world = true;
+    oxygen::scene::LightMobility mobility
+      = oxygen::scene::LightMobility::kRealtime;
     bool casts_shadows = false;
+    oxygen::scene::ShadowSettings shadow {};
     float exposure_compensation_ev = 0.0F;
+  };
+
+  struct DirectionalLightParams {
+    std::uint32_t cascade_count = oxygen::scene::kMaxShadowCascades;
+    oxygen::scene::DirectionalCsmSplitMode split_mode
+      = oxygen::scene::DirectionalCsmSplitMode::kGenerated;
+    float max_shadow_distance
+      = oxygen::scene::kDefaultDirectionalMaxShadowDistance;
+    std::array<float, oxygen::scene::kMaxShadowCascades> cascade_distances
+      = oxygen::scene::kDefaultDirectionalCascadeDistances;
+    float distribution_exponent
+      = oxygen::scene::kDefaultDirectionalDistributionExponent;
+    float transition_fraction
+      = oxygen::scene::kDefaultDirectionalTransitionFraction;
+    float distance_fadeout_fraction
+      = oxygen::scene::kDefaultDirectionalDistanceFadeoutFraction;
   };
 
   class AttachLightCommand final : public EditorCommand {
@@ -36,7 +59,8 @@ namespace oxygen::interop::module {
       LightCommonParams common, float intensity, float range,
       float inner_cone_angle, float outer_cone_angle,
       float source_radius, float decay_exponent, float angular_size,
-      bool environment_contribution, bool is_sun_light)
+      bool environment_contribution, bool is_sun_light,
+      DirectionalLightParams directional = {})
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , node_(node)
       , kind_(kind)
@@ -50,6 +74,7 @@ namespace oxygen::interop::module {
       , angular_size_(angular_size)
       , environment_contribution_(environment_contribution)
       , is_sun_light_(is_sun_light)
+      , directional_(directional)
     {
     }
 
@@ -73,6 +98,20 @@ namespace oxygen::interop::module {
         light->SetAngularSizeRadians(angular_size_);
         light->SetEnvironmentContribution(environment_contribution_);
         light->SetIsSunLight(is_sun_light_);
+        ApplyAtmosphereRole(*light);
+        auto cascaded_shadows = oxygen::scene::CascadedShadowSettings {};
+        cascaded_shadows.cascade_count = directional_.cascade_count;
+        cascaded_shadows.split_mode = directional_.split_mode;
+        cascaded_shadows.max_shadow_distance = directional_.max_shadow_distance;
+        cascaded_shadows.cascade_distances = directional_.cascade_distances;
+        cascaded_shadows.distribution_exponent
+          = directional_.distribution_exponent;
+        cascaded_shadows.transition_fraction = directional_.transition_fraction;
+        cascaded_shadows.distance_fadeout_fraction
+          = directional_.distance_fadeout_fraction;
+        light->CascadedShadows()
+          = oxygen::scene::CanonicalizeCascadedShadowSettings(
+            cascaded_shadows);
         (void)scene_node.ReplaceLight(std::move(light));
         break;
       }
@@ -99,6 +138,10 @@ namespace oxygen::interop::module {
         break;
       }
       }
+
+      context.Scene->GetDirectionalLightResolver().OnLightChanged(node_);
+      context.Scene->Update(false);
+      context.Scene->SyncObservers();
     }
 
   private:
@@ -106,8 +149,27 @@ namespace oxygen::interop::module {
     {
       common.affects_world = common_.affects_world;
       common.color_rgb = common_.color;
+      common.mobility = common_.mobility;
       common.casts_shadows = common_.casts_shadows;
+      common.shadow = common_.shadow;
       common.exposure_compensation_ev = common_.exposure_compensation_ev;
+    }
+
+    static void ApplyAtmosphereRole(oxygen::scene::DirectionalLight& light)
+    {
+      if (light.GetEnvironmentContribution() && light.IsSunLight()) {
+        light.SetAtmosphereLightSlot(
+          oxygen::scene::AtmosphereLightSlot::kPrimary);
+        light.SetUsePerPixelAtmosphereTransmittance(true);
+        light.SetAtmosphereDiskLuminanceScale(
+          { 1.0F, 0.95F, 0.9F, 1.0F });
+        return;
+      }
+
+      light.SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kNone);
+      light.SetUsePerPixelAtmosphereTransmittance(false);
+      light.SetAtmosphereDiskLuminanceScale(
+        { 1.0F, 1.0F, 1.0F, 1.0F });
     }
 
     oxygen::scene::NodeHandle node_;
@@ -122,6 +184,7 @@ namespace oxygen::interop::module {
     float angular_size_ = 0.0F;
     bool environment_contribution_ = false;
     bool is_sun_light_ = false;
+    DirectionalLightParams directional_ {};
   };
 
   class DetachLightCommand final : public EditorCommand {
@@ -145,6 +208,9 @@ namespace oxygen::interop::module {
 
       auto scene_node = *scene_node_opt;
       (void)scene_node.DetachLight();
+      context.Scene->GetDirectionalLightResolver().OnLightChanged(node_);
+      context.Scene->Update(false);
+      context.Scene->SyncObservers();
     }
 
   private:

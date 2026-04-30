@@ -10,6 +10,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include <api_export.h>
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
 
@@ -35,17 +36,19 @@ namespace oxygen::interop::module {
     auto operator=(PropertyApplierRegistry&&)
       -> PropertyApplierRegistry& = delete;
 
-    [[nodiscard]] static auto Instance() -> PropertyApplierRegistry&;
+    [[nodiscard]] OXGN_EI_API static auto Instance()
+      -> PropertyApplierRegistry&;
 
     //! Registers all built-in appliers (Transform, …). Idempotent.
-    static void Bootstrap();
+    OXGN_EI_API static void Bootstrap();
 
     //! Adds an applier; later registrations for the same component id
     //! replace earlier ones.
-    void Register(std::unique_ptr<IComponentPropertyApplier> applier);
+    OXGN_EI_API void Register(
+      std::unique_ptr<IComponentPropertyApplier> applier);
 
     //! Returns the applier for `id`, or nullptr if none is registered.
-    [[nodiscard]] auto Find(ComponentId id) const noexcept
+    [[nodiscard]] OXGN_EI_API auto Find(ComponentId id) const noexcept
       -> IComponentPropertyApplier*;
 
   private:

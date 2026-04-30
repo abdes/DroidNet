@@ -91,9 +91,13 @@ namespace Oxygen::Interop::World {
       System::Guid nodeId, LightKind kind, float intensity, float range,
       float innerConeAngle, float outerConeAngle,
       float sourceRadius, float decayExponent, float angularSize,
-      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
-      float exposureCompensation,
-      bool environmentContribution, bool isSunLight)
+      System::Numerics::Vector3 color, bool affectsWorld, int mobility,
+      bool castsShadows, float shadowBias, float shadowNormalBias,
+      bool contactShadows, int shadowResolutionHint, float exposureCompensation,
+      bool environmentContribution, bool isSunLight, int cascadeCount,
+      int splitMode, float maxShadowDistance,
+      System::Numerics::Vector4 cascadeDistances, float distributionExponent,
+      float transitionFraction, float distanceFadeoutFraction)
     {
       auto native_ctx = context->NativePtr();
       if (!native_ctx || !native_ctx->engine) {
@@ -119,13 +123,36 @@ namespace Oxygen::Interop::World {
       LightCommonParams common {};
       common.color = oxygen::Vec3 { color.X, color.Y, color.Z };
       common.affects_world = affectsWorld;
+      common.mobility = static_cast<oxygen::scene::LightMobility>(mobility);
       common.casts_shadows = castsShadows;
+      common.shadow.bias = shadowBias;
+      common.shadow.normal_bias = shadowNormalBias;
+      common.shadow.contact_shadows = contactShadows;
+      common.shadow.resolution_hint
+        = static_cast<oxygen::scene::ShadowResolutionHint>(
+          shadowResolutionHint);
       common.exposure_compensation_ev = exposureCompensation;
+
+      DirectionalLightParams directional {};
+      directional.cascade_count
+        = cascadeCount > 0 ? static_cast<std::uint32_t>(cascadeCount) : 1U;
+      directional.split_mode
+        = static_cast<oxygen::scene::DirectionalCsmSplitMode>(splitMode);
+      directional.max_shadow_distance = maxShadowDistance;
+      directional.cascade_distances = {
+        cascadeDistances.X,
+        cascadeDistances.Y,
+        cascadeDistances.Z,
+        cascadeDistances.W,
+      };
+      directional.distribution_exponent = distributionExponent;
+      directional.transition_fraction = transitionFraction;
+      directional.distance_fadeout_fraction = distanceFadeoutFraction;
 
       auto cmd = std::make_unique<AttachLightCommand>(opt.value(), kind,
         common, intensity, range, innerConeAngle, outerConeAngle,
         sourceRadius, decayExponent, angularSize, environmentContribution,
-        isSunLight);
+        isSunLight, directional);
       editor_module->get().Enqueue(std::move(cmd));
     }
 
@@ -593,12 +620,16 @@ namespace Oxygen::Interop::World {
     float vignetteIntensity,
     float displayGamma) {
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew System::InvalidOperationException(
+        "SetEnvironment failed because the native engine context is not available.");
+    }
 
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
+    if (!editor_module) {
+      throw gcnew System::InvalidOperationException(
+        "SetEnvironment failed because EditorModule is not available.");
+    }
 
     SkyAtmosphereParams atmosphere {};
     atmosphere.enabled = atmosphereEnabled;
@@ -755,11 +786,18 @@ namespace Oxygen::Interop::World {
 
   void OxygenWorld::AttachDirectionalLight(System::Guid nodeId,
     float intensityLux, float angularSizeRadians, System::Numerics::Vector3 color,
-    bool affectsWorld, bool castsShadows, float exposureCompensation,
-    bool environmentContribution, bool isSunLight) {
+    bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
+    float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
+    float exposureCompensation, bool environmentContribution, bool isSunLight,
+    int cascadeCount, int splitMode, float maxShadowDistance,
+    System::Numerics::Vector4 cascadeDistances, float distributionExponent,
+    float transitionFraction, float distanceFadeoutFraction) {
     EnqueueAttachLight(context_, nodeId, LightKind::kDirectional, intensityLux,
       0.0F, 0.0F, 0.0F, 0.0F, 2.0F, angularSizeRadians, color, affectsWorld,
-      castsShadows, exposureCompensation, environmentContribution, isSunLight);
+      mobility, castsShadows, shadowBias, shadowNormalBias, contactShadows,
+      shadowResolutionHint, exposureCompensation, environmentContribution,
+      isSunLight, cascadeCount, splitMode, maxShadowDistance, cascadeDistances,
+      distributionExponent, transitionFraction, distanceFadeoutFraction);
   }
 
   void OxygenWorld::AttachPointLight(System::Guid nodeId,
@@ -768,7 +806,10 @@ namespace Oxygen::Interop::World {
     float exposureCompensation) {
     EnqueueAttachLight(context_, nodeId, LightKind::kPoint,
       luminousFluxLumens, range, 0.0F, 0.0F, sourceRadius, decayExponent, 0.0F,
-      color, affectsWorld, castsShadows, exposureCompensation, false, false);
+      color, affectsWorld, 0, castsShadows, 0.0F, 0.02F, false, 1,
+      exposureCompensation, false, false, 4, 0, 160.0F,
+      System::Numerics::Vector4(8.0F, 24.0F, 64.0F, 160.0F), 3.0F, 0.1F,
+      0.1F);
   }
 
   void OxygenWorld::AttachSpotLight(System::Guid nodeId,
@@ -778,8 +819,10 @@ namespace Oxygen::Interop::World {
     float exposureCompensation) {
     EnqueueAttachLight(context_, nodeId, LightKind::kSpot, luminousFluxLumens,
       range, innerConeAngleRadians, outerConeAngleRadians, sourceRadius,
-      decayExponent, 0.0F, color, affectsWorld, castsShadows,
-      exposureCompensation, false, false);
+      decayExponent, 0.0F, color, affectsWorld, 0, castsShadows,
+      0.0F, 0.02F, false, 1, exposureCompensation, false, false, 4, 0,
+      160.0F, System::Numerics::Vector4(8.0F, 24.0F, 64.0F, 160.0F), 3.0F,
+      0.1F, 0.1F);
   }
 
   void OxygenWorld::DetachLight(System::Guid nodeId) {

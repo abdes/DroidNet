@@ -8,6 +8,7 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <RootNamespace>Oxygen.Editor.Interop.Tests</RootNamespace>
+        <OxygenEngineInstallDir>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</OxygenEngineInstallDir>
     </PropertyGroup>
 
     <ItemGroup>
@@ -30,5 +31,12 @@
             <OutputItemType>Content</OutputItemType>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </ProjectReference>
+    </ItemGroup>
+
+    <ItemGroup Condition="Exists('$(OxygenEngineInstallDir)\bin')">
+        <Content Include="$(OxygenEngineInstallDir)\bin\*.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>%(Filename)%(Extension)</Link>
+        </Content>
     </ItemGroup>
 </Project>
