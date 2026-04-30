@@ -66,27 +66,86 @@
                         NumberValue="{x:Bind ViewModel.ColorB, Mode=TwoWay}" />
                 </Grid>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Light">
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Emission">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <controls:NumberBox
-                        Label="Lux"
-                        LabelPosition="Left"
+                        Label="lux"
+                        LabelPosition="Right"
                         Mask="~.###"
                         NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}" />
                     <controls:NumberBox
                         Grid.Column="1"
-                        Label="Angular"
-                        LabelPosition="Left"
-                        Mask="~.###"
+                        Label="rad"
+                        LabelPosition="Right"
+                        Mask="~.####"
                         NumberValue="{x:Bind ViewModel.AngularSizeRadians, Mode=TwoWay}" />
                 </Grid>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Flags">
-                <Grid ColumnSpacing="12" RowSpacing="8">
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Direction">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:NumberBox
+                        Label="azimuth °"
+                        LabelPosition="Left"
+                        Mask="~.#"
+                        NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Column="1"
+                        Label="elevation °"
+                        LabelPosition="Left"
+                        Mask="~.#"
+                        NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}" />
+                </Grid>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Environment">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleSwitch Header="Sun" IsOn="{x:Bind ViewModel.IsSunLight, Mode=TwoWay}" />
+                    <ToggleSwitch
+                        Grid.Column="1"
+                        Header="Contributes"
+                        IsOn="{x:Bind ViewModel.EnvironmentContribution, Mode=TwoWay}" />
+                </Grid>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Common">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleSwitch Header="Affects World" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
+                    <ComboBox
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        ItemsSource="{x:Bind ViewModel.MobilityOptions}"
+                        SelectedItem="{x:Bind ViewModel.Mobility, Mode=TwoWay}" />
+                </Grid>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Exposure">
+                <controls:NumberBox
+                    Label="EV"
+                    LabelPosition="Right"
+                    Mask="~.###"
+                    NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}" />
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Shadows">
+                <Grid ColumnSpacing="8" RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -95,28 +154,128 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <ToggleSwitch Header="Sun" IsOn="{x:Bind ViewModel.IsSunLight, Mode=TwoWay}" />
+                    <ToggleSwitch Header="Cast" IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
                     <ToggleSwitch
                         Grid.Column="1"
-                        Header="Environment"
-                        IsOn="{x:Bind ViewModel.EnvironmentContribution, Mode=TwoWay}" />
-                    <ToggleSwitch
+                        Header="Contact"
+                        IsOn="{x:Bind ViewModel.ContactShadows, Mode=TwoWay}" />
+                    <ComboBox
                         Grid.Row="1"
-                        Header="Shadows"
-                        IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
-                    <ToggleSwitch
+                        HorizontalAlignment="Stretch"
+                        ItemsSource="{x:Bind ViewModel.ShadowResolutionOptions}"
+                        SelectedItem="{x:Bind ViewModel.ShadowResolutionHint, Mode=TwoWay}" />
+                    <Grid
                         Grid.Row="1"
                         Grid.Column="1"
-                        Header="Affects World"
-                        IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:NumberBox
+                            Label="bias"
+                            LabelPosition="Left"
+                            Mask="~.####"
+                            NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            Grid.Column="1"
+                            Label="normal"
+                            LabelPosition="Left"
+                            Mask="~.####"
+                            NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}" />
+                    </Grid>
                 </Grid>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Exposure Compensation">
-                <controls:NumberBox
-                    Label="EV"
-                    LabelPosition="Left"
-                    Mask="~.###"
-                    NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}" />
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Cascades">
+                <Grid ColumnSpacing="8" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:NumberBox
+                        Label="count"
+                        LabelPosition="Left"
+                        Mask="#."
+                        NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}" />
+                    <ComboBox
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        ItemsSource="{x:Bind ViewModel.SplitModeOptions}"
+                        SelectedItem="{x:Bind ViewModel.SplitMode, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Row="1"
+                        Label="max m"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Label="dist"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}" />
+                    <Grid
+                        Grid.Row="2"
+                        Grid.ColumnSpan="2"
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:NumberBox
+                            Label="1"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            Grid.Column="1"
+                            Label="2"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            Grid.Column="2"
+                            Label="3"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            Grid.Column="3"
+                            Label="4"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}" />
+                    </Grid>
+                </Grid>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Cascade Blend">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:NumberBox
+                        Label="transition"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}" />
+                    <controls:NumberBox
+                        Grid.Column="1"
+                        Label="fade"
+                        LabelPosition="Left"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}" />
+                </Grid>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>

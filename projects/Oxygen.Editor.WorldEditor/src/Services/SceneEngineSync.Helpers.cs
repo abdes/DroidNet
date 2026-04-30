@@ -74,6 +74,41 @@ public sealed partial class SceneEngineSync
         return classified;
     }
 
+    private static string GetPropertyOperationKind(IReadOnlyList<EnginePropertyValueEntry> entries)
+        => GetFirstComponent(entries) switch
+        {
+            EngineComponentId.PerspectiveCamera => SceneOperationKinds.EditPerspectiveCamera,
+            EngineComponentId.DirectionalLight => SceneOperationKinds.EditDirectionalLight,
+            _ => SceneOperationKinds.EditTransform,
+        };
+
+    private static string GetPropertyComponentType(IReadOnlyList<EnginePropertyValueEntry> entries)
+        => GetFirstComponent(entries) switch
+        {
+            EngineComponentId.PerspectiveCamera => nameof(PerspectiveCamera),
+            EngineComponentId.DirectionalLight => nameof(DirectionalLightComponent),
+            _ => nameof(TransformComponent),
+        };
+
+    private static EngineComponentId GetFirstComponent(IReadOnlyList<EnginePropertyValueEntry> entries)
+        => entries.Count == 0 ? EngineComponentId.Transform : entries[0].Component;
+
+    private static string GetPropertyRejectedCode(string operationKind)
+        => operationKind switch
+        {
+            SceneOperationKinds.EditPerspectiveCamera => LiveSyncDiagnosticCodes.CameraRejected,
+            SceneOperationKinds.EditDirectionalLight => LiveSyncDiagnosticCodes.LightRejected,
+            _ => LiveSyncDiagnosticCodes.TransformRejected,
+        };
+
+    private static string GetPropertyFailedCode(string operationKind)
+        => operationKind switch
+        {
+            SceneOperationKinds.EditPerspectiveCamera => LiveSyncDiagnosticCodes.CameraFailed,
+            SceneOperationKinds.EditDirectionalLight => LiveSyncDiagnosticCodes.LightFailed,
+            _ => LiveSyncDiagnosticCodes.TransformFailed,
+        };
+
     private static bool TryGetReadyWorld(
         IEngineService engineService,
         string operationKind,
@@ -339,10 +374,22 @@ public sealed partial class SceneEngineSync
                     directional.AngularSizeRadians,
                     directional.Color,
                     directional.AffectsWorld,
+                    (int)directional.Mobility,
                     directional.CastsShadows,
+                    directional.ShadowBias,
+                    directional.ShadowNormalBias,
+                    directional.ContactShadows,
+                    (int)directional.ShadowResolutionHint,
                     directional.ExposureCompensation,
                     directional.EnvironmentContribution,
-                    directional.IsSunLight);
+                    directional.IsSunLight,
+                    directional.CascadeCount,
+                    (int)directional.SplitMode,
+                    directional.MaxShadowDistance,
+                    directional.CascadeDistances,
+                    directional.DistributionExponent,
+                    directional.TransitionFraction,
+                    directional.DistanceFadeoutFraction);
                 break;
 
             case PointLightComponent point:

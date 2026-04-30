@@ -7,6 +7,9 @@ using Oxygen.Editor.Schemas.Bindings;
 
 namespace Oxygen.Editor.Schemas.Tests;
 
+/// <summary>
+/// Tests the generic property edit, binding, apply, and commit-group contracts.
+/// </summary>
 [TestClass]
 public sealed class PropertyPipelineContractTests
 {
@@ -19,8 +22,12 @@ public sealed class PropertyPipelineContractTests
         new EditorAnnotation { Label = "X", Renderer = "numberbox" },
         "test.x");
 
+    /// <summary>
+    /// Verifies undo and redo are the same property apply operation over opposite snapshots.
+    /// </summary>
+    /// <returns>A task that completes when the apply sequence has been verified.</returns>
     [TestMethod]
-    public async Task ApplyAsync_WhenUndoRedoSnapshotsAreSwapped_ShouldPreserveStructuralIdentity()
+    public async Task ApplyAsyncPreservesStructuralIdentityWhenSnapshotsAreSwapped()
     {
         var nodeId = Guid.NewGuid();
         var target = new Target { X = 1.0f };
@@ -41,8 +48,11 @@ public sealed class PropertyPipelineContractTests
         _ = resolver.Pushed.Should().OnlyContain(edit => edit.Contains(X.Id));
     }
 
+    /// <summary>
+    /// Verifies multi-selection mixed values are represented by the binding state.
+    /// </summary>
     [TestMethod]
-    public void PropertyBinding_UpdateFromModel_ShouldRepresentMixedValuesAsBindingState()
+    public void PropertyBindingRepresentsMixedValuesAsBindingState()
     {
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
@@ -61,8 +71,11 @@ public sealed class PropertyPipelineContractTests
         _ = binding.Nodes.Should().Equal(first, second);
     }
 
+    /// <summary>
+    /// Verifies missing descriptor entries fail with the unresolved property id.
+    /// </summary>
     [TestMethod]
-    public void ApplyToTarget_WhenDescriptorIsMissing_ShouldFailWithPropertyId()
+    public void ApplyToTargetFailsWithPropertyIdWhenDescriptorIsMissing()
     {
         var target = new Target { X = 1.0f };
         var edit = PropertyEdit.Single(X, 2.0f);
@@ -77,8 +90,12 @@ public sealed class PropertyPipelineContractTests
         _ = target.X.Should().Be(1.0f);
     }
 
+    /// <summary>
+    /// Verifies closing a commit group cancels any stale scheduled idle commit.
+    /// </summary>
+    /// <returns>A task that completes when the idle commit delay has elapsed.</returns>
     [TestMethod]
-    public async Task CommitGroupController_WhenSessionClosesBeforeIdleDelay_ShouldNotFireStaleCommit()
+    public async Task CommitGroupControllerDoesNotFireStaleCommitAfterSessionCloses()
     {
         var controller = new CommitGroupController();
         var nodeId = Guid.NewGuid();

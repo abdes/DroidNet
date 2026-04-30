@@ -21,7 +21,7 @@ internal static class BuiltInAssets
         // Basic shape geometries (1 LOD, 1 SubMesh "Main")
         yield return new GeometryAsset
         {
-            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            Uri = AssetUris.BuildGeneratedUri("BasicShapes/Cube"),
             Lods =
             [
                 new MeshLod
@@ -34,7 +34,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Sphere")),
+            Uri = AssetUris.BuildGeneratedUri("BasicShapes/Sphere"),
             Lods =
             [
                 new MeshLod
@@ -47,7 +47,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Plane")),
+            Uri = AssetUris.BuildGeneratedUri("BasicShapes/Plane"),
             Lods =
             [
                 new MeshLod
@@ -60,7 +60,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Cylinder")),
+            Uri = AssetUris.BuildGeneratedUri("BasicShapes/Cylinder"),
             Lods =
             [
                 new MeshLod
@@ -74,7 +74,7 @@ internal static class BuiltInAssets
         // Default material
         yield return new MaterialAsset
         {
-            Uri = new(AssetUris.BuildGeneratedUri("Materials/Default")),
+            Uri = AssetUris.BuildGeneratedUri("Materials/Default"),
         };
     }
 }

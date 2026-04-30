@@ -113,7 +113,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
             rows.Insert(
                 0,
                 new MaterialPickerResult(
-                    new Uri(AssetUris.BuildGeneratedUri("Materials/Default"), UriKind.Absolute),
+                    AssetUris.BuildGeneratedUri("Materials/Default"),
                     "Default",
                     AssetState.Generated,
                     DerivedState: null,
@@ -208,7 +208,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
     }
 
     private static bool IsDefaultMaterial(Uri uri)
-        => string.Equals(uri.ToString(), AssetUris.BuildGeneratedUri("Materials/Default"), StringComparison.OrdinalIgnoreCase);
+        => UriValuesEqual(uri, AssetUris.BuildGeneratedUri("Materials/Default"));
 
     private static bool IsMaterialUri(Uri uri)
     {

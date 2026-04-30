@@ -10,7 +10,7 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>
 ///   Logging methods for <see cref="TransformViewModel"/>.
 /// </summary>
-public partial class TransformViewModel
+public sealed partial class TransformViewModel
 {
     [LoggerMessage(
         SkipEnabledCheck = true,

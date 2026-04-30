@@ -2,15 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
+using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
@@ -98,6 +101,36 @@ public sealed class SceneNodeEditorViewModelTests
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
     }
 
+    [TestMethod]
+    public async Task DirectionalLightEditor_WhenSunDirectionChanges_EditsTransformRotation()
+    {
+        var scene = CreateScene();
+        var node = CreateDirectionalLightNode(scene);
+        var context = CreateContext(scene);
+        var commandService = new Mock<ISceneDocumentCommandService>();
+        var editCompletion = new TaskCompletionSource<TransformEdit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = commandService
+            .Setup(service => service.EditTransformAsync(
+                context,
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && node.Id.Equals(ids[0])),
+                It.IsAny<TransformEdit>(),
+                It.IsAny<EditSessionToken>()))
+            .Callback<SceneDocumentCommandContext, IReadOnlyList<Guid>, TransformEdit, EditSessionToken>(
+                (_, _, edit, _) => editCompletion.SetResult(edit))
+            .ReturnsAsync(SceneCommandResult.Success);
+
+        using var sut = new DirectionalLightViewModel(commandService.Object, () => context);
+        sut.UpdateValues([node]);
+        sut.SunAzimuth = 45f;
+
+        var edit = await editCompletion.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        _ = edit.Position.HasValue.Should().BeFalse();
+        _ = edit.RotationEulerDegrees.HasValue.Should().BeTrue();
+        _ = edit.Scale.HasValue.Should().BeFalse();
+        _ = edit.RotationEulerDegrees.Value.Should().Match<Vector3>(static value => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z));
+    }
+
     private static SceneNodeEditorViewModel CreateSut(
         ISceneEngineSync sceneEngineSync,
         IList<SceneNode> selectedNodes)
@@ -130,10 +163,24 @@ public sealed class SceneNodeEditorViewModelTests
         return new Scene(project) { Name = "Test Scene" };
     }
 
+    private static SceneDocumentCommandContext CreateContext(Scene scene)
+    {
+        var metadata = new SceneDocumentMetadata { Title = scene.Name };
+        return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
+    }
+
     private static SceneNode CreateNode(Scene scene)
     {
         var node = new SceneNode(scene) { Name = "Cube" };
         node.Components.Clear();
+        scene.RootNodes.Add(node);
+        return node;
+    }
+
+    private static SceneNode CreateDirectionalLightNode(Scene scene)
+    {
+        var node = new SceneNode(scene) { Name = "Sun" };
+        _ = node.AddComponent(new DirectionalLightComponent { Name = "Directional Light" });
         scene.RootNodes.Add(node);
         return node;
     }
