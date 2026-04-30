@@ -67,7 +67,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
     }
 
     /// <inheritdoc />
-    public async Task<SceneCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind)
+    public async Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind)
     {
         try
         {
@@ -80,7 +80,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             });
 
             await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreatePrimitive, $"Create {normalized}").ConfigureAwait(true);
-            return SceneCommandResult<SceneNode>.Success(node);
+            return SceneCommandResults.Success(node);
         }
         catch (Exception ex)
         {
@@ -91,12 +91,12 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 $"The {kind} primitive could not be created.",
                 context,
                 ex);
-            return SceneCommandResult<SceneNode>.Failure(operationResultId);
+            return SceneCommandResults.Failure<SceneNode>(operationResultId);
         }
     }
 
     /// <inheritdoc />
-    public async Task<SceneCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind)
+    public async Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind)
     {
         try
         {
@@ -112,7 +112,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             _ = node.AddComponent(light);
 
             await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreateLight, $"Create {normalized} Light").ConfigureAwait(true);
-            return SceneCommandResult<SceneNode>.Success(node);
+            return SceneCommandResults.Success(node);
         }
         catch (Exception ex)
         {
@@ -123,7 +123,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 $"The {kind} light could not be created.",
                 context,
                 ex);
-            return SceneCommandResult<SceneNode>.Failure(operationResultId);
+            return SceneCommandResults.Failure<SceneNode>(operationResultId);
         }
     }
 
@@ -366,11 +366,12 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
         var after = targets.Select(static target => CameraState.Capture(target.Node, target.Camera!)).ToList();
         this.RecordCameraHistory(context, before, after);
+        var propertyEntries = BuildPerspectiveCameraPropertyEntries(edit);
         var operationResultId = await this.SyncEditedNodesAsync(
             context,
             targets.Select(static target => target.Node).ToList(),
             SceneOperationKinds.EditPerspectiveCamera,
-            node => this.sceneEngineSync.AttachCameraAsync(context.Scene, node)).ConfigureAwait(true);
+            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, propertyEntries)).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         return new SceneCommandResult(true, operationResultId);
     }
@@ -436,17 +437,25 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             targets.Select(static target => target.Node),
             allSunStates,
             afterSunStates);
+        var targetNodeIds = targets.Select(static target => target.Node.Id).ToHashSet();
         var operationResultId = await this.SyncEditedNodesAsync(
             context,
             syncNodes,
             SceneOperationKinds.EditDirectionalLight,
-            node => this.sceneEngineSync.AttachLightAsync(context.Scene, node)).ConfigureAwait(true);
+            node =>
+            {
+                var light = node.Components.OfType<DirectionalLightComponent>().First();
+                var entries = targetNodeIds.Contains(node.Id)
+                    ? BuildDirectionalLightPropertyEntries(edit, light)
+                    : new List<EnginePropertyValueEntry> { BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight) };
+                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries);
+            }).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         return new SceneCommandResult(true, operationResultId);
     }
 
     /// <inheritdoc />
-    public async Task<SceneCommandResult<GameComponent>> AddComponentAsync(
+    public async Task<SceneValueCommandResult<GameComponent>> AddComponentAsync(
         SceneDocumentCommandContext context,
         Guid nodeId,
         Type componentType)
@@ -463,7 +472,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 "Component was not added",
                 "The target scene node no longer exists.",
                 context);
-            return SceneCommandResult<GameComponent>.Failure(operationResultId);
+            return SceneCommandResults.Failure<GameComponent>(operationResultId);
         }
 
         if (!CanAddComponent(node, componentType, out var reason))
@@ -474,7 +483,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 "Component was not added",
                 reason,
                 context);
-            return SceneCommandResult<GameComponent>.Failure(operationResultId);
+            return SceneCommandResults.Failure<GameComponent>(operationResultId);
         }
 
         var component = CreateComponent(componentType);
@@ -498,7 +507,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = this.messenger.Send(new ComponentAddedMessage(node, component, added: true));
-        return new SceneCommandResult<GameComponent>(true, component, operationResultIdFromSync);
+        return new SceneValueCommandResult<GameComponent>(true, component, operationResultIdFromSync);
     }
 
     /// <inheritdoc />
@@ -848,7 +857,22 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
            edit.CastsShadows.HasValue ||
            edit.AffectsWorld.HasValue ||
            edit.AngularSizeRadians.HasValue ||
-           edit.ExposureCompensation.HasValue;
+           edit.ExposureCompensation.HasValue ||
+           edit.Mobility.HasValue ||
+           edit.ShadowBias.HasValue ||
+           edit.ShadowNormalBias.HasValue ||
+           edit.ContactShadows.HasValue ||
+           edit.ShadowResolutionHint.HasValue ||
+           edit.CascadeCount.HasValue ||
+           edit.SplitMode.HasValue ||
+           edit.MaxShadowDistance.HasValue ||
+           edit.CascadeDistance0.HasValue ||
+           edit.CascadeDistance1.HasValue ||
+           edit.CascadeDistance2.HasValue ||
+           edit.CascadeDistance3.HasValue ||
+           edit.DistributionExponent.HasValue ||
+           edit.TransitionFraction.HasValue ||
+           edit.DistanceFadeoutFraction.HasValue;
 
     private static bool HasAnyEnvironmentField(SceneEnvironmentEdit edit)
         => edit.AtmosphereEnabled.HasValue ||
@@ -861,7 +885,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
            edit.SkyAtmosphere.HasValue ||
            edit.PostProcess.HasValue;
 
-    private static T Get<T>(Optional<T> optional) => optional.Value!;
+    private static T Get<T>(OptionalEditValue<T> optional) => optional.Value!;
 
     private static ValidationIssue? ValidateTransformEdit(TransformEdit edit)
     {
@@ -946,12 +970,33 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         if ((edit.Color.HasValue && !IsFinite(Get(edit.Color))) ||
             (edit.IntensityLux.HasValue && !float.IsFinite(Get(edit.IntensityLux))) ||
             (edit.AngularSizeRadians.HasValue && !float.IsFinite(Get(edit.AngularSizeRadians))) ||
-            (edit.ExposureCompensation.HasValue && !float.IsFinite(Get(edit.ExposureCompensation))))
+            (edit.ExposureCompensation.HasValue && !float.IsFinite(Get(edit.ExposureCompensation))) ||
+            (edit.ShadowBias.HasValue && !float.IsFinite(Get(edit.ShadowBias))) ||
+            (edit.ShadowNormalBias.HasValue && !float.IsFinite(Get(edit.ShadowNormalBias))) ||
+            (edit.MaxShadowDistance.HasValue && !float.IsFinite(Get(edit.MaxShadowDistance))) ||
+            (edit.CascadeDistance0.HasValue && !float.IsFinite(Get(edit.CascadeDistance0))) ||
+            (edit.CascadeDistance1.HasValue && !float.IsFinite(Get(edit.CascadeDistance1))) ||
+            (edit.CascadeDistance2.HasValue && !float.IsFinite(Get(edit.CascadeDistance2))) ||
+            (edit.CascadeDistance3.HasValue && !float.IsFinite(Get(edit.CascadeDistance3))) ||
+            (edit.DistributionExponent.HasValue && !float.IsFinite(Get(edit.DistributionExponent))) ||
+            (edit.TransitionFraction.HasValue && !float.IsFinite(Get(edit.TransitionFraction))) ||
+            (edit.DistanceFadeoutFraction.HasValue && !float.IsFinite(Get(edit.DistanceFadeoutFraction))))
         {
             return new(
                 SceneDiagnosticCodes.DirectionalLightFieldNotFinite,
                 "Light was not edited",
                 "Directional light values must be finite numbers.",
+                IsFailure: true);
+        }
+
+        if ((edit.Mobility.HasValue && !Enum.IsDefined(Get(edit.Mobility))) ||
+            (edit.ShadowResolutionHint.HasValue && !Enum.IsDefined(Get(edit.ShadowResolutionHint))) ||
+            (edit.SplitMode.HasValue && !Enum.IsDefined(Get(edit.SplitMode))))
+        {
+            return new(
+                SceneDiagnosticCodes.DirectionalLightFieldNotFinite,
+                "Light was not edited",
+                "Directional light enum values must be valid.",
                 IsFailure: true);
         }
 
@@ -1069,6 +1114,13 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
     private static void ApplyDirectionalLightEdit(DirectionalLightComponent light, DirectionalLightEdit edit)
     {
+        ApplyDirectionalLightCommonEdit(light, edit);
+        ApplyDirectionalLightShadowEdit(light, edit);
+        ApplyDirectionalLightCascadeEdit(light, edit);
+    }
+
+    private static void ApplyDirectionalLightCommonEdit(DirectionalLightComponent light, DirectionalLightEdit edit)
+    {
         if (edit.Color.HasValue)
         {
             light.Color = Vector3.Clamp(Get(edit.Color), Vector3.Zero, Vector3.One);
@@ -1107,6 +1159,91 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         if (edit.ExposureCompensation.HasValue)
         {
             light.ExposureCompensation = Math.Clamp(Get(edit.ExposureCompensation), -10f, 10f);
+        }
+
+        if (edit.Mobility.HasValue)
+        {
+            light.Mobility = Get(edit.Mobility);
+        }
+    }
+
+    private static void ApplyDirectionalLightShadowEdit(DirectionalLightComponent light, DirectionalLightEdit edit)
+    {
+        if (edit.ShadowBias.HasValue)
+        {
+            light.ShadowBias = Get(edit.ShadowBias);
+        }
+
+        if (edit.ShadowNormalBias.HasValue)
+        {
+            light.ShadowNormalBias = Math.Max(0f, Get(edit.ShadowNormalBias));
+        }
+
+        if (edit.ContactShadows.HasValue)
+        {
+            light.ContactShadows = Get(edit.ContactShadows);
+        }
+
+        if (edit.ShadowResolutionHint.HasValue)
+        {
+            light.ShadowResolutionHint = Get(edit.ShadowResolutionHint);
+        }
+    }
+
+    private static void ApplyDirectionalLightCascadeEdit(DirectionalLightComponent light, DirectionalLightEdit edit)
+    {
+        if (edit.CascadeCount.HasValue)
+        {
+            light.CascadeCount = Math.Clamp(Get(edit.CascadeCount), 1, 4);
+        }
+
+        if (edit.SplitMode.HasValue)
+        {
+            light.SplitMode = Get(edit.SplitMode);
+        }
+
+        if (edit.MaxShadowDistance.HasValue)
+        {
+            light.MaxShadowDistance = Math.Max(0.001f, Get(edit.MaxShadowDistance));
+        }
+
+        if (edit.CascadeDistance0.HasValue)
+        {
+            var distances = light.CascadeDistances;
+            light.CascadeDistances = new Vector4(Math.Max(0.001f, Get(edit.CascadeDistance0)), distances.Y, distances.Z, distances.W);
+        }
+
+        if (edit.CascadeDistance1.HasValue)
+        {
+            var distances = light.CascadeDistances;
+            light.CascadeDistances = new Vector4(distances.X, Math.Max(0.001f, Get(edit.CascadeDistance1)), distances.Z, distances.W);
+        }
+
+        if (edit.CascadeDistance2.HasValue)
+        {
+            var distances = light.CascadeDistances;
+            light.CascadeDistances = new Vector4(distances.X, distances.Y, Math.Max(0.001f, Get(edit.CascadeDistance2)), distances.W);
+        }
+
+        if (edit.CascadeDistance3.HasValue)
+        {
+            var distances = light.CascadeDistances;
+            light.CascadeDistances = new Vector4(distances.X, distances.Y, distances.Z, Math.Max(0.001f, Get(edit.CascadeDistance3)));
+        }
+
+        if (edit.DistributionExponent.HasValue)
+        {
+            light.DistributionExponent = Math.Max(1f, Get(edit.DistributionExponent));
+        }
+
+        if (edit.TransitionFraction.HasValue)
+        {
+            light.TransitionFraction = Math.Clamp(Get(edit.TransitionFraction), 0f, 1f);
+        }
+
+        if (edit.DistanceFadeoutFraction.HasValue)
+        {
+            light.DistanceFadeoutFraction = Math.Clamp(Get(edit.DistanceFadeoutFraction), 0f, 1f);
         }
     }
 
@@ -1541,7 +1678,15 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         context.History.AddChange("Reapply Camera", async () => await this.ApplyCameraStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        _ = await this.SyncEditedNodesAsync(context, states.Select(static state => state.Node).ToList(), SceneOperationKinds.EditPerspectiveCamera, node => this.sceneEngineSync.AttachCameraAsync(context.Scene, node)).ConfigureAwait(true);
+        _ = await this.SyncEditedNodesAsync(
+            context,
+            states.Select(static state => state.Node).ToList(),
+            SceneOperationKinds.EditPerspectiveCamera,
+            node =>
+            {
+                var camera = node.Components.OfType<PerspectiveCamera>().First();
+                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildPerspectiveCameraPropertyEntries(camera));
+            }).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
     }
 
@@ -1568,7 +1713,15 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, inverse, states, inverseSunStates, sunStates).ConfigureAwait(true));
         var syncNodes = IncludeDirectionalSunChangedNodes(states.Select(static state => state.Node), inverseSunStates, sunStates);
-        _ = await this.SyncEditedNodesAsync(context, syncNodes, SceneOperationKinds.EditDirectionalLight, node => this.sceneEngineSync.AttachLightAsync(context.Scene, node)).ConfigureAwait(true);
+        _ = await this.SyncEditedNodesAsync(
+            context,
+            syncNodes,
+            SceneOperationKinds.EditDirectionalLight,
+            node =>
+            {
+                var light = node.Components.OfType<DirectionalLightComponent>().First();
+                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildDirectionalLightPropertyEntries(light));
+            }).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
     }
 
@@ -2049,7 +2202,19 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         bool CastsShadows,
         bool AffectsWorld,
         float AngularSizeRadians,
-        float ExposureCompensation)
+        float ExposureCompensation,
+        LightMobility Mobility,
+        float ShadowBias,
+        float ShadowNormalBias,
+        bool ContactShadows,
+        ShadowResolutionHint ShadowResolutionHint,
+        int CascadeCount,
+        DirectionalCsmSplitMode SplitMode,
+        float MaxShadowDistance,
+        Vector4 CascadeDistances,
+        float DistributionExponent,
+        float TransitionFraction,
+        float DistanceFadeoutFraction)
     {
         public static DirectionalLightState Capture(SceneNode node, DirectionalLightComponent light)
             => new(
@@ -2062,7 +2227,19 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 light.CastsShadows,
                 light.AffectsWorld,
                 light.AngularSizeRadians,
-                light.ExposureCompensation);
+                light.ExposureCompensation,
+                light.Mobility,
+                light.ShadowBias,
+                light.ShadowNormalBias,
+                light.ContactShadows,
+                light.ShadowResolutionHint,
+                light.CascadeCount,
+                light.SplitMode,
+                light.MaxShadowDistance,
+                light.CascadeDistances,
+                light.DistributionExponent,
+                light.TransitionFraction,
+                light.DistanceFadeoutFraction);
 
         public void Apply()
         {
@@ -2074,6 +2251,18 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             this.Light.AffectsWorld = this.AffectsWorld;
             this.Light.AngularSizeRadians = this.AngularSizeRadians;
             this.Light.ExposureCompensation = this.ExposureCompensation;
+            this.Light.Mobility = this.Mobility;
+            this.Light.ShadowBias = this.ShadowBias;
+            this.Light.ShadowNormalBias = this.ShadowNormalBias;
+            this.Light.ContactShadows = this.ContactShadows;
+            this.Light.ShadowResolutionHint = this.ShadowResolutionHint;
+            this.Light.CascadeCount = this.CascadeCount;
+            this.Light.SplitMode = this.SplitMode;
+            this.Light.MaxShadowDistance = this.MaxShadowDistance;
+            this.Light.CascadeDistances = this.CascadeDistances;
+            this.Light.DistributionExponent = this.DistributionExponent;
+            this.Light.TransitionFraction = this.TransitionFraction;
+            this.Light.DistanceFadeoutFraction = this.DistanceFadeoutFraction;
         }
     }
 

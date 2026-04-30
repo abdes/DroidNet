@@ -12,6 +12,8 @@ using Oxygen.Assets.Catalog;
 using Oxygen.Core;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -26,12 +28,14 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// the scene document command service so undo, dirty state, diagnostics, and live sync stay
 /// on the document command path.
 /// </remarks>
-public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
+public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly IAssetCatalog assetCatalog;
     private readonly IMaterialPickerService materialPickerService;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
+    private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
+    private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
     private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<MaterialPickerItem> contentMaterialItems = [];
@@ -46,7 +50,9 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="GeometryViewModel"/> class.
     /// </summary>
+    /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetCatalog">Asset catalog used to populate and subscribe to mesh assets.</param>
+    /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
     /// <param name="commandService">Optional command service used to apply geometry edits.</param>
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
@@ -62,102 +68,10 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         this.commandContextProvider = commandContextProvider;
         this.dispatcherQueue = hosting.Dispatcher;
 
-        var engineItems = new List<AssetPickerItem>
-        {
-            CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("BasicShapes/Cube"), "/Engine/Generated/BasicShapes/Cube"),
-            CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), "/Engine/Generated/BasicShapes/Sphere"),
-            CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("BasicShapes/Plane"), "/Engine/Generated/BasicShapes/Plane"),
-            CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("BasicShapes/Cylinder"), "/Engine/Generated/BasicShapes/Cylinder"),
-            CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("BasicShapes/Cone"), "/Engine/Generated/BasicShapes/Cone"),
-            CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("BasicShapes/Quad"), "/Engine/Generated/BasicShapes/Quad"),
-            CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("BasicShapes/Torus"), "/Engine/Generated/BasicShapes/Torus"),
-            CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo"), "/Engine/Generated/BasicShapes/ArrowGizmo"),
-        };
-
-        // Start with Engine group only
-        this.Groups =
-        [
-            new AssetGroup("Engine", engineItems),
-            new AssetGroup("Content", this.contentItems),
-        ];
-
-        this.MaterialGroups =
-        [
-            new MaterialGroup("Assignment", [CreateNoMaterialItem()]),
-            new MaterialGroup(
-                "Engine",
-                [
-                    CreateEngineMaterialItem(
-                        "Default",
-                        AssetUris.BuildGeneratedUri("Materials/Default"),
-                        "/Engine/Generated/Materials/Default"),
-                ]),
-            new MaterialGroup("Content", this.contentMaterialItems),
-        ];
-
-        Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
-
-        this.materialResultsSubscription = this.materialPickerService.Results.Subscribe(
-            rows => this.DispatchOnUi(() => this.ReplaceContentMaterialItems(rows)),
-            ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
-        _ = this.materialPickerService.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false });
-
-        // Get initial snapshot and track seen assets to deduplicate replay
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
-                var meshAssets = allAssets.Where(a => IsSelectableCookedMesh(a.Uri)).ToList();
-
-                Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
-
-                var selectedByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
-                foreach (var asset in meshAssets)
-                {
-                    var key = GetMeshLogicalKey(asset.Uri);
-                    if (!selectedByKey.TryGetValue(key, out var existing) || IsPreferredMeshUri(asset.Uri, existing.Uri))
-                    {
-                        selectedByKey[key] = asset;
-                    }
-                }
-
-                // Populate initial items on the UI thread.
-                this.DispatchOnUi(() =>
-                    {
-                        foreach (var asset in selectedByKey.Values.OrderBy(a => AssetUriHelper.GetVirtualPath(a.Uri), StringComparer.OrdinalIgnoreCase))
-                        {
-                            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name} ({asset.Uri})");
-                            var item = CreateContentItem(asset);
-                            var key = GetMeshLogicalKey(asset.Uri);
-                            this.contentItemsByKey[key] = item;
-                            this.contentItems.Add(item);
-                        }
-                    });
-
-                // Subscribe to future changes, deduplicating replayed items.
-                this.assetChangesSubscription = this.assetCatalog.Changes
-                    .Where(n => IsSelectableCookedMesh(n.Uri))
-                    .Subscribe(
-                        notification =>
-                            this.DispatchOnUi(() =>
-                                {
-                                    this.ApplyAssetChange(notification);
-                                }),
-                        ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex}"));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[GeometryViewModel] Failed to initialize content assets: {ex}");
-            }
-        });
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        this.assetChangesSubscription?.Dispose();
-        this.materialResultsSubscription?.Dispose();
+        this.Groups = CreateGeometryGroups(this.contentItems);
+        this.MaterialGroups = CreateMaterialGroups(this.contentMaterialItems);
+        this.StartMaterialPickerSubscription();
+        this.StartAssetCatalogSubscription();
     }
 
     /// <summary>
@@ -304,10 +218,12 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
             return;
         }
 
-        var result = await this.commandService.EditGeometryAsync(
+        var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.GeometryUri, newUri);
+        var result = await this.commandService.EditPropertiesAsync(
             context,
             nodes.Select(static node => node.Id).ToList(),
-            new GeometryEdit(Optional<Uri?>.Supplied(newUri)),
+            edit,
+            "Edit Geometry",
             EditSessionToken.OneShot).ConfigureAwait(true);
         if (!result.Succeeded)
         {
@@ -356,11 +272,12 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
             return;
         }
 
-        var result = await this.commandService.EditMaterialSlotAsync(
+        var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, item.Uri);
+        var result = await this.commandService.EditPropertiesAsync(
             context,
             nodes.Select(static node => node.Id).ToList(),
-            slotIndex: 0,
-            item.Uri,
+            edit,
+            "Edit Material Slot",
             EditSessionToken.OneShot).ConfigureAwait(true);
         if (!result.Succeeded)
         {
@@ -395,62 +312,58 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
     {
         this.selectedItems = items;
 
-        var uriStrings = items
-            .Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri?.ToString())
+        var targets = items
+            .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
+            .Where(static target => target.Geometry is not null)
             .ToList();
+        var nodeIds = targets.Select(static target => target.Node.Id).ToList();
+        var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Geometry);
 
-        var first = uriStrings.FirstOrDefault();
-        var isMixed = uriStrings.Exists(u => !string.Equals(u, first, StringComparison.Ordinal));
+        this.geometryUriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
+        this.IsMixed = this.geometryUriBinding.IsMixed;
 
-        this.IsMixed = isMixed;
-
-        if (isMixed)
+        if (this.geometryUriBinding.IsMixed)
         {
             this.SelectedAssetUriString = null;
             this.SelectedAssetName = "--";
         }
         else
         {
-            this.SelectedAssetUriString = first;
-            this.SelectedAssetName = first is null ? "None" : ExtractNameFromUriString(first);
+            var selectedUri = this.geometryUriBinding.HasValue ? this.geometryUriBinding.Value : null;
+            this.SelectedAssetUriString = selectedUri?.ToString();
+            this.SelectedAssetName = selectedUri is null ? "None" : ExtractNameFromUriString(selectedUri.ToString());
         }
 
-        var materialUriStrings = items
-            .Select(static node => NormalizeMaterialUri(node.Components.OfType<GeometryComponent>().FirstOrDefault()?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material.Uri)?.ToString())
-            .ToList();
+        this.materialSlot0UriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
+        this.IsMaterialMixed = this.materialSlot0UriBinding.IsMixed;
 
-        var firstMaterial = materialUriStrings.FirstOrDefault();
-        var isMaterialMixed = materialUriStrings.Exists(u => !string.Equals(u, firstMaterial, StringComparison.Ordinal));
-
-        this.IsMaterialMixed = isMaterialMixed;
-
-        if (isMaterialMixed)
+        if (this.materialSlot0UriBinding.IsMixed)
         {
             this.SelectedMaterialUriString = null;
             this.SelectedMaterialName = "--";
             return;
         }
 
-        this.SelectedMaterialUriString = firstMaterial;
-        this.SelectedMaterialName = firstMaterial is null
+        var selectedMaterial = this.materialSlot0UriBinding.HasValue ? this.materialSlot0UriBinding.Value : null;
+        this.SelectedMaterialUriString = selectedMaterial?.ToString();
+        this.SelectedMaterialName = selectedMaterial is null
             ? "None"
-            : this.ResolveMaterialDisplayName(new Uri(firstMaterial, UriKind.Absolute));
+            : this.ResolveMaterialDisplayName(selectedMaterial);
     }
 
-    private static string ExtractNameFromUriString(string uriString)
+    /// <inheritdoc />
+    public void Dispose()
     {
-        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
-        {
-            return uriString;
-        }
-
-        var lastSegment = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        return string.IsNullOrWhiteSpace(lastSegment) ? uriString : lastSegment;
+        this.assetChangesSubscription?.Dispose();
+        this.materialResultsSubscription?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
     /// Extracts the user-facing material name from a material descriptor or cooked material URI.
     /// </summary>
+    /// <param name="uriString">The material URI string.</param>
+    /// <returns>The user-facing material name.</returns>
     internal static string ExtractMaterialNameFromUriString(string uriString)
     {
         var name = ExtractNameFromUriString(uriString);
@@ -465,9 +378,67 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         return name;
     }
 
-    private static AssetPickerItem CreateEngineItem(string name, string uriString, string displayPath)
+    private static IReadOnlyList<AssetGroup> CreateGeometryGroups(ObservableCollection<AssetPickerItem> contentItems)
+        =>
+        [
+            new AssetGroup(
+                "Engine",
+                [
+                    CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("BasicShapes/Cube"), "/Engine/Generated/BasicShapes/Cube"),
+                    CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), "/Engine/Generated/BasicShapes/Sphere"),
+                    CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("BasicShapes/Plane"), "/Engine/Generated/BasicShapes/Plane"),
+                    CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("BasicShapes/Cylinder"), "/Engine/Generated/BasicShapes/Cylinder"),
+                    CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("BasicShapes/Cone"), "/Engine/Generated/BasicShapes/Cone"),
+                    CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("BasicShapes/Quad"), "/Engine/Generated/BasicShapes/Quad"),
+                    CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("BasicShapes/Torus"), "/Engine/Generated/BasicShapes/Torus"),
+                    CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo"), "/Engine/Generated/BasicShapes/ArrowGizmo"),
+                ]),
+            new AssetGroup("Content", contentItems),
+        ];
+
+    private static IReadOnlyList<MaterialGroup> CreateMaterialGroups(ObservableCollection<MaterialPickerItem> contentMaterialItems)
+        =>
+        [
+            new MaterialGroup("Assignment", [CreateNoMaterialItem()]),
+            new MaterialGroup(
+                "Engine",
+                [
+                    CreateEngineMaterialItem(
+                        "Default",
+                        AssetUris.BuildGeneratedUri("Materials/Default"),
+                        "/Engine/Generated/Materials/Default"),
+                ]),
+            new MaterialGroup("Content", contentMaterialItems),
+        ];
+
+    private static Dictionary<string, AssetRecord> BuildPreferredMeshAssets(IEnumerable<AssetRecord> meshAssets)
     {
-        var uri = new Uri(uriString, UriKind.Absolute);
+        var selectedByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
+        foreach (var asset in meshAssets)
+        {
+            var key = GetMeshLogicalKey(asset.Uri);
+            if (!selectedByKey.TryGetValue(key, out var existing) || IsPreferredMeshUri(asset.Uri, existing.Uri))
+            {
+                selectedByKey[key] = asset;
+            }
+        }
+
+        return selectedByKey;
+    }
+
+    private static string ExtractNameFromUriString(string uriString)
+    {
+        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
+        {
+            return uriString;
+        }
+
+        var lastSegment = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        return string.IsNullOrWhiteSpace(lastSegment) ? uriString : lastSegment;
+    }
+
+    private static AssetPickerItem CreateEngineItem(string name, Uri uri, string displayPath)
+    {
         return new AssetPickerItem(
             Name: name,
             Uri: uri,
@@ -487,7 +458,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         //  - optionally mounted utility roots (Cooked/Imported/Build)
         //  - engine assets (handled separately in this view model)
         // We must exclude these to avoid duplicates and ensure applied URIs resolve correctly.
-
         var mountPoint = AssetUriHelper.GetMountPoint(uri);
         if (string.IsNullOrWhiteSpace(mountPoint))
         {
@@ -540,12 +510,12 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
         var candidateExt = Path.GetExtension(AssetUriHelper.GetRelativePath(candidate)).ToUpperInvariant();
         var existingExt = Path.GetExtension(AssetUriHelper.GetRelativePath(existing)).ToUpperInvariant();
 
-        if (candidateExt == existingExt)
+        if (string.Equals(candidateExt, existingExt, StringComparison.Ordinal))
         {
             return false;
         }
 
-        if (candidateExt == ".OGEO")
+        if (string.Equals(candidateExt, ".OGEO", StringComparison.Ordinal))
         {
             return true;
         }
@@ -563,26 +533,97 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
             IsEnabled: true,
             ThumbnailModel: string.Empty);
 
-    private static MaterialPickerItem CreateEngineMaterialItem(string name, string uriString, string displayPath)
+    private static MaterialPickerItem CreateEngineMaterialItem(string name, Uri uri, string displayPath)
         => new(
             Name: name,
-            Uri: new Uri(uriString, UriKind.Absolute),
+            Uri: uri,
             DisplayType: "Material",
             DisplayPath: displayPath,
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: "\uE8B9");
 
-    private static Uri? NormalizeMaterialUri(Uri? uri)
+    private static bool UriValuesEqual(Uri? left, Uri? right)
+        => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private static AssetPickerItem CreateContentItem(AssetRecord asset)
     {
-        if (uri is null)
+        string displayPath;
+        var mountPoint = AssetUriHelper.GetMountPoint(asset.Uri);
+
+        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            displayPath = "/" + AssetUriHelper.GetRelativePath(asset.Uri);
+        }
+        else
+        {
+            displayPath = AssetUriHelper.GetVirtualPath(asset.Uri);
         }
 
-        return string.Equals(uri.ToString(), "asset:///__uninitialized__", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : uri;
+        return new AssetPickerItem(
+            Name: asset.Name,
+            Uri: asset.Uri,
+            DisplayType: "Static Mesh",
+            DisplayPath: displayPath,
+            Group: AssetPickerGroup.Content,
+            IsEnabled: true,
+            ThumbnailModel: "\uE7C3");
+    }
+
+    private static MaterialPickerItem CreateContentMaterialItem(MaterialPickerResult asset)
+        => new(
+            Name: asset.DisplayName,
+            Uri: asset.MaterialUri,
+            DisplayType: asset.DisplayState == AssetState.Missing ? "Missing material" : "Material",
+            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
+            Group: AssetPickerGroup.Content,
+            IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
+            ThumbnailModel: "\uE8B9");
+
+    private void StartMaterialPickerSubscription()
+    {
+        this.materialResultsSubscription = this.materialPickerService.Results.Subscribe(
+            rows => this.DispatchOnUi(() => this.ReplaceContentMaterialItems(rows)),
+            ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
+        _ = this.materialPickerService.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false });
+    }
+
+    private void StartAssetCatalogSubscription()
+    {
+        Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
+        var initializeTask = Task.Run(this.InitializeContentAssetsAsync);
+        _ = initializeTask.ContinueWith(
+            static task => Debug.WriteLine($"[GeometryViewModel] Failed to initialize content assets: {task.Exception}"),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+    }
+
+    private async Task InitializeContentAssetsAsync()
+    {
+        var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
+        var meshAssets = allAssets.Where(static asset => IsSelectableCookedMesh(asset.Uri)).ToList();
+        Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
+
+        var selectedByKey = BuildPreferredMeshAssets(meshAssets);
+        this.DispatchOnUi(() => this.PopulateInitialContentItems(selectedByKey.Values));
+        this.assetChangesSubscription = this.assetCatalog.Changes
+            .Where(static notification => IsSelectableCookedMesh(notification.Uri))
+            .Subscribe(
+                notification => this.DispatchOnUi(() => this.ApplyAssetChange(notification)),
+                ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex}"));
+    }
+
+    private void PopulateInitialContentItems(IEnumerable<AssetRecord> assets)
+    {
+        foreach (var asset in assets.OrderBy(static asset => AssetUriHelper.GetVirtualPath(asset.Uri), StringComparer.OrdinalIgnoreCase))
+        {
+            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name} ({asset.Uri})");
+            var item = CreateContentItem(asset);
+            var key = GetMeshLogicalKey(asset.Uri);
+            this.contentItemsByKey[key] = item;
+            this.contentItems.Add(item);
+        }
     }
 
     private void ApplyAssetChange(AssetChange notification)
@@ -645,9 +686,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
             ? item.Name
             : ExtractMaterialNameFromUriString(uri.ToString());
 
-    private static bool UriValuesEqual(Uri? left, Uri? right)
-        => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
-
     private void DispatchOnUi(Action action)
     {
         // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
@@ -664,40 +702,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
     }
-
-    private static AssetPickerItem CreateContentItem(AssetRecord asset)
-    {
-        string displayPath;
-        var mountPoint = AssetUriHelper.GetMountPoint(asset.Uri);
-
-        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
-        {
-            displayPath = "/" + AssetUriHelper.GetRelativePath(asset.Uri);
-        }
-        else
-        {
-            displayPath = AssetUriHelper.GetVirtualPath(asset.Uri);
-        }
-
-        return new AssetPickerItem(
-            Name: asset.Name,
-            Uri: asset.Uri,
-            DisplayType: "Static Mesh",
-            DisplayPath: displayPath,
-            Group: AssetPickerGroup.Content,
-            IsEnabled: true,
-            ThumbnailModel: "\uE7C3");
-    }
-
-    private static MaterialPickerItem CreateContentMaterialItem(MaterialPickerResult asset)
-        => new(
-            Name: asset.DisplayName,
-            Uri: asset.MaterialUri,
-            DisplayType: asset.DisplayState == AssetState.Missing ? "Missing material" : "Material",
-            DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
-            Group: AssetPickerGroup.Content,
-            IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
-            ThumbnailModel: "\uE8B9");
 
     private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)
     {

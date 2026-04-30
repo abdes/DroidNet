@@ -22,7 +22,7 @@ namespace Oxygen.Editor.World.Inspector;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class TransformViewModel(
+public sealed partial class TransformViewModel(
     ILoggerFactory? loggerFactory = null,
     ISceneDocumentCommandService? commandService = null,
     Func<SceneDocumentCommandContext?>? commandContextProvider = null) : ComponentPropertyEditor, IDisposable
@@ -297,13 +297,11 @@ public partial class TransformViewModel(
 
         var cts = new CancellationTokenSource();
         this.wheelIdleCommits[property] = cts;
+        var token = cts.Token;
         _ = Task.Run(async () =>
         {
-            try
-            {
-                await Task.Delay(MouseWheelCommitDelay, cts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
+            await Task.Delay(MouseWheelCommitDelay).ConfigureAwait(false);
+            if (token.IsCancellationRequested)
             {
                 return;
             }
@@ -389,7 +387,14 @@ public partial class TransformViewModel(
                 }
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
+        {
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.LogApplyFailed(property, ex);
+        }
+        catch (ArgumentException ex)
         {
             this.LogApplyFailed(property, ex);
         }
@@ -430,7 +435,7 @@ public partial class TransformViewModel(
     }
 
     private static TransformEdit EmptyEdit()
-        => new(Optional<Vector3>.Unspecified, Optional<Vector3>.Unspecified, Optional<Vector3>.Unspecified);
+        => new(OptionalEditValues.Unspecified<Vector3>(), OptionalEditValues.Unspecified<Vector3>(), OptionalEditValues.Unspecified<Vector3>());
 
     private static TransformEdit NewEdit(
         float? positionX = null,
@@ -443,18 +448,18 @@ public partial class TransformViewModel(
         float? scaleY = null,
         float? scaleZ = null)
         => new(
-            Optional<Vector3>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            PositionX: positionX.HasValue ? Optional<float>.Supplied(positionX.Value) : Optional<float>.Unspecified,
-            PositionY: positionY.HasValue ? Optional<float>.Supplied(positionY.Value) : Optional<float>.Unspecified,
-            PositionZ: positionZ.HasValue ? Optional<float>.Supplied(positionZ.Value) : Optional<float>.Unspecified,
-            RotationXDegrees: rotationX.HasValue ? Optional<float>.Supplied(rotationX.Value) : Optional<float>.Unspecified,
-            RotationYDegrees: rotationY.HasValue ? Optional<float>.Supplied(rotationY.Value) : Optional<float>.Unspecified,
-            RotationZDegrees: rotationZ.HasValue ? Optional<float>.Supplied(rotationZ.Value) : Optional<float>.Unspecified,
-            ScaleX: scaleX.HasValue ? Optional<float>.Supplied(scaleX.Value) : Optional<float>.Unspecified,
-            ScaleY: scaleY.HasValue ? Optional<float>.Supplied(scaleY.Value) : Optional<float>.Unspecified,
-            ScaleZ: scaleZ.HasValue ? Optional<float>.Supplied(scaleZ.Value) : Optional<float>.Unspecified);
+            OptionalEditValues.Unspecified<Vector3>(),
+            OptionalEditValues.Unspecified<Vector3>(),
+            OptionalEditValues.Unspecified<Vector3>(),
+            PositionX: positionX.HasValue ? OptionalEditValues.Supplied<float>(positionX.Value) : OptionalEditValues.Unspecified<float>(),
+            PositionY: positionY.HasValue ? OptionalEditValues.Supplied<float>(positionY.Value) : OptionalEditValues.Unspecified<float>(),
+            PositionZ: positionZ.HasValue ? OptionalEditValues.Supplied<float>(positionZ.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationXDegrees: rotationX.HasValue ? OptionalEditValues.Supplied<float>(rotationX.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationYDegrees: rotationY.HasValue ? OptionalEditValues.Supplied<float>(rotationY.Value) : OptionalEditValues.Unspecified<float>(),
+            RotationZDegrees: rotationZ.HasValue ? OptionalEditValues.Supplied<float>(rotationZ.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleX: scaleX.HasValue ? OptionalEditValues.Supplied<float>(scaleX.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleY: scaleY.HasValue ? OptionalEditValues.Supplied<float>(scaleY.Value) : OptionalEditValues.Unspecified<float>(),
+            ScaleZ: scaleZ.HasValue ? OptionalEditValues.Supplied<float>(scaleZ.Value) : OptionalEditValues.Unspecified<float>());
 
     private static float ExtractValue(TransformEdit edit)
         => edit.PositionX.HasValue ? edit.PositionX.Value! :
@@ -493,33 +498,33 @@ public partial class TransformViewModel(
 
     private void UpdatePositionValues(ICollection<SceneNode> items)
     {
-        this.UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
-        this.UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
-        this.UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
+        UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
+        UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
+        UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
     }
 
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
-        this.UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
-        this.UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
-        this.UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
+        UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
+        UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
+        UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
     }
 
     private void UpdateScaleValues(ICollection<SceneNode> items)
     {
-        this.UpdateBindingValue(
+        UpdateBindingValue(
             this.scaleXBinding,
             items,
             value => this.ScaleX = value,
             mixed => this.ScaleXIsIndeterminate = mixed,
             this.NormalizeScaleBindingValue);
-        this.UpdateBindingValue(
+        UpdateBindingValue(
             this.scaleYBinding,
             items,
             value => this.ScaleY = value,
             mixed => this.ScaleYIsIndeterminate = mixed,
             this.NormalizeScaleBindingValue);
-        this.UpdateBindingValue(
+        UpdateBindingValue(
             this.scaleZBinding,
             items,
             value => this.ScaleZ = value,
@@ -527,7 +532,7 @@ public partial class TransformViewModel(
             this.NormalizeScaleBindingValue);
     }
 
-    private void UpdateBindingValue(
+    private static void UpdateBindingValue(
         PropertyBinding<float> binding,
         ICollection<SceneNode> items,
         Action<float> setValue,

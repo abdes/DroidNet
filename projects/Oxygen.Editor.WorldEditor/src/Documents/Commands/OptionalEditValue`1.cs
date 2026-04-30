@@ -2,17 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.InteropServices;
+
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
 /// Represents an explicitly supplied partial-edit value.
 /// </summary>
 /// <typeparam name="T">The value type.</typeparam>
-public readonly record struct Optional<T>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct OptionalEditValue<T>
 {
     private readonly T? value;
 
-    private Optional(T? value)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OptionalEditValue{T}"/> struct with a supplied value.
+    /// </summary>
+    /// <param name="value">The supplied value.</param>
+    internal OptionalEditValue(T? value)
     {
         this.HasValue = true;
         this.value = value;
@@ -30,18 +37,6 @@ public readonly record struct Optional<T>
         => this.HasValue
             ? this.value
             : throw new InvalidOperationException("Optional value was not supplied.");
-
-    /// <summary>
-    /// Gets an unspecified optional field.
-    /// </summary>
-    public static Optional<T> Unspecified => default;
-
-    /// <summary>
-    /// Creates an optional field with an explicitly supplied value.
-    /// </summary>
-    /// <param name="value">The supplied value.</param>
-    /// <returns>The optional wrapper.</returns>
-    public static Optional<T> Supplied(T? value) => new(value);
 
     /// <summary>
     /// Deconstructs this instance into its presence flag and value.

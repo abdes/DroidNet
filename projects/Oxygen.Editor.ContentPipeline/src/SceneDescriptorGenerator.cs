@@ -409,7 +409,10 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
             return null;
         }
 
-        if (string.Equals(materialUri.ToString(), AssetUris.BuildGeneratedUri("Materials/Default"), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(
+                materialUri.ToString(),
+                AssetUris.BuildGeneratedUri("Materials/Default").ToString(),
+                StringComparison.OrdinalIgnoreCase))
         {
             return "/Engine/Generated/Materials/Default.omat";
         }

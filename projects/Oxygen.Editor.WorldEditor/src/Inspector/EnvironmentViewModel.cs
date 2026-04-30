@@ -7,6 +7,7 @@ using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -217,6 +218,7 @@ public partial class EnvironmentViewModel(
     /// <summary>
     /// Sets the scene context used when no node is selected.
     /// </summary>
+    /// <param name="value">The scene to edit, or <see langword="null"/> when a node selection owns the inspector.</param>
     public void SetScene(Scene? value)
     {
         if (ReferenceEquals(this.scene, value))
@@ -243,6 +245,7 @@ public partial class EnvironmentViewModel(
     /// <summary>
     /// Applies the selected background color from the color picker.
     /// </summary>
+    /// <param name="color">The selected background color.</param>
     public void SetBackgroundColor(Color color)
     {
         var r = color.R / 255f;
@@ -261,8 +264,11 @@ public partial class EnvironmentViewModel(
         }
 
         this.NotifyBackgroundChanged();
-        this.ApplyEnvironmentEdit(BackgroundEdit(new Vector3(r, g, b)));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, new Vector3(r, g, b));
     }
+
+    private static byte ToByte(float value)
+        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
 
     [RelayCommand]
     private void ClearSun()
@@ -280,25 +286,11 @@ public partial class EnvironmentViewModel(
             this.isApplyingEditorValues = false;
         }
 
-        this.ApplyEnvironmentEdit(new SceneEnvironmentEdit(
-            Optional<bool>.Unspecified,
-            Optional<Guid?>.Supplied(null),
-            Optional<ExposureMode>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<ToneMappingMode>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            Optional<SkyAtmosphereEnvironmentData>.Unspecified));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunNodeId, (Guid?)null);
     }
 
-    partial void OnAtmosphereEnabledChanged(bool value) => this.ApplyEnvironmentEdit(new SceneEnvironmentEdit(
-        Optional<bool>.Supplied(value),
-        Optional<Guid?>.Unspecified,
-        Optional<ExposureMode>.Unspecified,
-        Optional<float>.Unspecified,
-        Optional<float>.Unspecified,
-        Optional<ToneMappingMode>.Unspecified,
-        Optional<Vector3>.Unspecified));
+    partial void OnAtmosphereEnabledChanged(bool value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled, value);
 
     partial void OnSelectedSunChanged(SunLightOption? value)
     {
@@ -312,70 +304,84 @@ public partial class EnvironmentViewModel(
             return;
         }
 
-        this.ApplyEnvironmentEdit(new SceneEnvironmentEdit(
-            Optional<bool>.Unspecified,
-            Optional<Guid?>.Supplied(value.NodeId),
-            Optional<ExposureMode>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<ToneMappingMode>.Unspecified,
-            Optional<Vector3>.Unspecified));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunNodeId, value.NodeId);
     }
 
     partial void OnExposureModeChanged(ExposureMode value)
     {
         this.OnPropertyChanged(nameof(this.IsManualExposureVisible));
         this.OnPropertyChanged(nameof(this.IsAutoExposureVisible));
-        this.ApplyPostProcessEdit(post => post with { ExposureMode = value });
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ExposureMode, value);
     }
 
-    partial void OnExposureEnabledChanged(bool value) => this.ApplyPostProcessEdit(post => post with { ExposureEnabled = value });
+    partial void OnExposureEnabledChanged(bool value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled, value);
 
-    partial void OnManualExposureEvChanged(float value) => this.ApplyPostProcessEdit(post => post with { ManualExposureEv = value });
+    partial void OnManualExposureEvChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv, value);
 
-    partial void OnExposureCompensationChanged(float value) => this.ApplyPostProcessEdit(post => post with { ExposureCompensationEv = value });
+    partial void OnExposureCompensationChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation, value);
 
-    partial void OnExposureKeyChanged(float value) => this.ApplyPostProcessEdit(post => post with { ExposureKey = value });
+    partial void OnExposureKeyChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ExposureKey, value);
 
     partial void OnToneMappingChanged(ToneMappingMode value)
     {
         this.OnPropertyChanged(nameof(this.IsToneMappingControlsVisible));
-        this.ApplyPostProcessEdit(post => post with { ToneMapper = value });
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.ToneMapping, value);
     }
 
-    partial void OnAutoExposureMeteringModeChanged(MeteringMode value) => this.ApplyPostProcessEdit(post => post with { AutoExposureMeteringMode = value });
+    partial void OnAutoExposureMeteringModeChanged(MeteringMode value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode, value);
 
-    partial void OnAutoExposureMinEvChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureMinEv = value });
+    partial void OnAutoExposureMinEvChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv, value);
 
-    partial void OnAutoExposureMaxEvChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureMaxEv = value });
+    partial void OnAutoExposureMaxEvChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv, value);
 
-    partial void OnAutoExposureSpeedUpChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureSpeedUp = value });
+    partial void OnAutoExposureSpeedUpChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp, value);
 
-    partial void OnAutoExposureSpeedDownChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureSpeedDown = value });
+    partial void OnAutoExposureSpeedDownChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown, value);
 
-    partial void OnAutoExposureLowPercentileChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureLowPercentile = value });
+    partial void OnAutoExposureLowPercentileChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile, value);
 
-    partial void OnAutoExposureHighPercentileChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureHighPercentile = value });
+    partial void OnAutoExposureHighPercentileChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile, value);
 
-    partial void OnAutoExposureMinLogLuminanceChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureMinLogLuminance = value });
+    partial void OnAutoExposureMinLogLuminanceChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance, value);
 
-    partial void OnAutoExposureLogLuminanceRangeChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureLogLuminanceRange = value });
+    partial void OnAutoExposureLogLuminanceRangeChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange, value);
 
-    partial void OnAutoExposureTargetLuminanceChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureTargetLuminance = value });
+    partial void OnAutoExposureTargetLuminanceChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance, value);
 
-    partial void OnAutoExposureSpotMeterRadiusChanged(float value) => this.ApplyPostProcessEdit(post => post with { AutoExposureSpotMeterRadius = value });
+    partial void OnAutoExposureSpotMeterRadiusChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value);
 
-    partial void OnBloomIntensityChanged(float value) => this.ApplyPostProcessEdit(post => post with { BloomIntensity = value });
+    partial void OnBloomIntensityChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BloomIntensity, value);
 
-    partial void OnBloomThresholdChanged(float value) => this.ApplyPostProcessEdit(post => post with { BloomThreshold = value });
+    partial void OnBloomThresholdChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BloomThreshold, value);
 
-    partial void OnSaturationChanged(float value) => this.ApplyPostProcessEdit(post => post with { Saturation = value });
+    partial void OnSaturationChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.Saturation, value);
 
-    partial void OnContrastChanged(float value) => this.ApplyPostProcessEdit(post => post with { Contrast = value });
+    partial void OnContrastChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.Contrast, value);
 
-    partial void OnVignetteIntensityChanged(float value) => this.ApplyPostProcessEdit(post => post with { VignetteIntensity = value });
+    partial void OnVignetteIntensityChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity, value);
 
-    partial void OnDisplayGammaChanged(float value) => this.ApplyPostProcessEdit(post => post with { DisplayGamma = value });
+    partial void OnDisplayGammaChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.DisplayGamma, value);
 
     partial void OnBackgroundRChanged(float value) => this.ApplyBackgroundAxisEdit(value, this.BackgroundG, this.BackgroundB);
 
@@ -383,84 +389,61 @@ public partial class EnvironmentViewModel(
 
     partial void OnBackgroundBChanged(float value) => this.ApplyBackgroundAxisEdit(this.BackgroundR, this.BackgroundG, value);
 
-    partial void OnPlanetRadiusKmChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { PlanetRadiusMeters = value * 1000.0f });
+    partial void OnPlanetRadiusKmChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters, value * 1000.0f);
 
-    partial void OnAtmosphereHeightKmChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { AtmosphereHeightMeters = value * 1000.0f });
+    partial void OnAtmosphereHeightKmChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value * 1000.0f);
 
-    partial void OnGroundAlbedoRChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { GroundAlbedoRgb = new Vector3(value, this.GroundAlbedoG, this.GroundAlbedoB) });
+    partial void OnGroundAlbedoRChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(value, this.GroundAlbedoG, this.GroundAlbedoB));
 
-    partial void OnGroundAlbedoGChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { GroundAlbedoRgb = new Vector3(this.GroundAlbedoR, value, this.GroundAlbedoB) });
+    partial void OnGroundAlbedoGChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, value, this.GroundAlbedoB));
 
-    partial void OnGroundAlbedoBChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { GroundAlbedoRgb = new Vector3(this.GroundAlbedoR, this.GroundAlbedoG, value) });
+    partial void OnGroundAlbedoBChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, this.GroundAlbedoG, value));
 
-    partial void OnRayleighScaleHeightKmChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { RayleighScaleHeightMeters = value * 1000.0f });
+    partial void OnRayleighScaleHeightKmChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value * 1000.0f);
 
-    partial void OnMieScaleHeightKmChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { MieScaleHeightMeters = value * 1000.0f });
+    partial void OnMieScaleHeightKmChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters, value * 1000.0f);
 
-    partial void OnMieAnisotropyChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { MieAnisotropy = value });
+    partial void OnMieAnisotropyChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy, value);
 
-    partial void OnSkyLuminanceRChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { SkyLuminanceFactorRgb = new Vector3(value, this.SkyLuminanceG, this.SkyLuminanceB) });
+    partial void OnSkyLuminanceRChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(value, this.SkyLuminanceG, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceGChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { SkyLuminanceFactorRgb = new Vector3(this.SkyLuminanceR, value, this.SkyLuminanceB) });
+    partial void OnSkyLuminanceGChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(this.SkyLuminanceR, value, this.SkyLuminanceB));
 
-    partial void OnSkyLuminanceBChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { SkyLuminanceFactorRgb = new Vector3(this.SkyLuminanceR, this.SkyLuminanceG, value) });
+    partial void OnSkyLuminanceBChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SkyLuminance, new Vector3(this.SkyLuminanceR, this.SkyLuminanceG, value));
 
-    partial void OnAerialPerspectiveDistanceScaleChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { AerialPerspectiveDistanceScale = value });
+    partial void OnAerialPerspectiveDistanceScaleChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale, value);
 
-    partial void OnAerialScatteringStrengthChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { AerialScatteringStrength = value });
+    partial void OnAerialScatteringStrengthChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength, value);
 
-    partial void OnAerialPerspectiveStartDepthMetersChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { AerialPerspectiveStartDepthMeters = value });
+    partial void OnAerialPerspectiveStartDepthMetersChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters, value);
 
-    partial void OnHeightFogContributionChanged(float value) => this.ApplySkyAtmosphereEdit(sky => sky with { HeightFogContribution = value });
+    partial void OnHeightFogContributionChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution, value);
 
-    partial void OnSunDiskEnabledChanged(bool value) => this.ApplySkyAtmosphereEdit(sky => sky with { SunDiskEnabled = value });
+    partial void OnSunDiskEnabledChanged(bool value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
 
     private void ApplyBackgroundAxisEdit(float r, float g, float b)
     {
         this.NotifyBackgroundChanged();
-        this.ApplyEnvironmentEdit(BackgroundEdit(new Vector3(r, g, b)));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, new Vector3(r, g, b));
     }
 
-    private void ApplySkyAtmosphereEdit(Func<SkyAtmosphereEnvironmentData, SkyAtmosphereEnvironmentData> edit)
-    {
-        if (this.scene is null)
-        {
-            return;
-        }
-
-        var next = edit(this.scene.Environment.SkyAtmosphere ?? new());
-        this.ApplyEnvironmentEdit(new SceneEnvironmentEdit(
-            Optional<bool>.Unspecified,
-            Optional<Guid?>.Unspecified,
-            Optional<ExposureMode>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<ToneMappingMode>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            Optional<SkyAtmosphereEnvironmentData>.Supplied(next)));
-    }
-
-    private void ApplyPostProcessEdit(Func<PostProcessEnvironmentData, PostProcessEnvironmentData> edit)
-    {
-        if (this.scene is null)
-        {
-            return;
-        }
-
-        var next = edit(this.scene.Environment.PostProcess ?? new());
-        this.ApplyEnvironmentEdit(new SceneEnvironmentEdit(
-            Optional<bool>.Unspecified,
-            Optional<Guid?>.Unspecified,
-            Optional<ExposureMode>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<ToneMappingMode>.Unspecified,
-            Optional<Vector3>.Unspecified,
-            Optional<SkyAtmosphereEnvironmentData>.Unspecified,
-            Optional<PostProcessEnvironmentData>.Supplied(next)));
-    }
-
-    private void ApplyEnvironmentEdit(SceneEnvironmentEdit edit)
+    private void ApplyEnvironmentProperty<T>(PropertyId<T> propertyId, T value)
     {
         if (this.isApplyingEditorValues || this.scene is null)
         {
@@ -472,12 +455,16 @@ public partial class EnvironmentViewModel(
             return;
         }
 
-        _ = this.ApplyEnvironmentEditAsync(context, edit);
+        _ = this.ApplyEnvironmentEditAsync(context, PropertyEdit.Single(propertyId, value));
     }
 
-    private async Task ApplyEnvironmentEditAsync(SceneDocumentCommandContext context, SceneEnvironmentEdit edit)
+    private async Task ApplyEnvironmentEditAsync(SceneDocumentCommandContext context, PropertyEdit edit)
     {
-        _ = await commandService!.EditSceneEnvironmentAsync(context, edit, EditSessionToken.OneShot).ConfigureAwait(true);
+        _ = await commandService!.EditSceneEnvironmentPropertiesAsync(
+            context,
+            edit,
+            "Edit Environment",
+            EditSessionToken.OneShot).ConfigureAwait(true);
         this.RefreshFromScene();
     }
 
@@ -536,18 +523,6 @@ public partial class EnvironmentViewModel(
         this.StaleSunText = this.HasStaleSun ? $"Stale sun: {selectedSunNodeId:N}" : string.Empty;
     }
 
-    private static SceneEnvironmentEdit BackgroundEdit(Vector3 color)
-        => new(
-            Optional<bool>.Unspecified,
-            Optional<Guid?>.Unspecified,
-            Optional<ExposureMode>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<float>.Unspecified,
-            Optional<ToneMappingMode>.Unspecified,
-            Optional<Vector3>.Supplied(color),
-            Optional<SkyAtmosphereEnvironmentData>.Unspecified,
-            Optional<PostProcessEnvironmentData>.Unspecified);
-
     private void ApplyPostProcessEditorValues(PostProcessEnvironmentData? value)
     {
         value ??= new();
@@ -602,12 +577,4 @@ public partial class EnvironmentViewModel(
         this.OnPropertyChanged(nameof(this.BackgroundColor));
         this.OnPropertyChanged(nameof(this.BackgroundBrush));
     }
-
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
 }
-
-/// <summary>
-/// Directional light option for scene sun binding.
-/// </summary>
-public sealed record SunLightOption(Guid? NodeId, string DisplayName);
