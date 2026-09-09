@@ -6,8 +6,28 @@
 
 **Key attributes:**
 
-- Pure domain model: no UI, engine, or I/O dependencies
-- In-memory only: supports property change notification and JSON round-tripping
+- Managed scene authoring model with no direct WinUI or native interop project reference
+- In-memory authoring state with observable properties and stream-based JSON serialization
+
+### Authoring boundary
+
+[Oxygen.Editor.World.csproj](src/Oxygen.Editor.World.csproj) depends on managed
+asset/core utilities and resources, while UI, document history, and runtime
+orchestration belong to their respective modules. This separation lets scene
+data and serialization be exercised without creating a viewport or engine
+context.
+
+The model remains the authoring source of truth; the live engine is a projection
+of it. [SceneSerializer](src/Serialization/SceneSerializer.cs) handles the data
+format, while project/document services own file locations and durable saves.
+The [scene command service](../Oxygen.Editor.WorldEditor/src/Documents/Commands/SceneDocumentCommandService.cs)
+coordinates authoring edits, history, dirty state, and sync intent. Property
+notifications or direct model mutation alone do not establish those guarantees.
+
+Preserve this boundary when adding components. The owning contract is the
+[editor architecture](../../design/editor/ARCHITECTURE.md); end-to-end feature
+and validation requirements are in
+[documents and commands](../../design/editor/lld/documents-and-commands.md).
 
 ## Purpose
 
@@ -22,12 +42,12 @@ This module provides:
 
 ## Technology Stack
 
-| Technology                        | Version                        | Purpose                  |
-|------------------------------------|--------------------------------|--------------------------|
-| .NET                              | 9.0 (Windows 10.0.26100.0)     | Target framework         |
-| C#                                | 13 (preview, nullable enabled) | Language                 |
-| Microsoft.Extensions.Logging      | Latest                         | Logging abstractions     |
-| System.Numerics                   | Built-in                       | Vector3 for Transform    |
+| Technology | Version | Purpose |
+| --- | --- | --- |
+| .NET | 9.0 (Windows 10.0.26100.0) | Target framework |
+| C# | 13 (preview, nullable enabled) | Language |
+| Microsoft.Extensions.Logging | Latest | Logging abstractions |
+| System.Numerics | Built-in | Vector3 for Transform |
 
 ## Architecture
 
@@ -80,18 +100,18 @@ classDiagram
 
 ### Key Classes
 
-| Class                | Purpose                        | Features                                      |
-|----------------------|-------------------------------|-----------------------------------------------|
-| `GameObject`         | Base for all entities         | `INotifyPropertyChanged`, `Id`, `Name`, validation, override slots |
-| `Scene`              | Root container                | RootNodes, AllNodes, project reference, JSON  |
-| `SceneNode`          | Hierarchical entity           | Components, flags, parent/child, override slots, circular protection |
-| `GameComponent`      | Base for components           | `INotifyPropertyChanged`, Node reference, polymorphic serialization, override slots |
-| `Transform`          | Spatial component             | LocalPosition, LocalRotation, LocalScale      |
-| `GeometryComponent`  | Geometry asset reference      | AssetReference, targeted overrides            |
-| `CameraComponent`    | Camera base                   | Near/Far plane, concrete types                |
-| `OrthographicCamera` | Orthographic camera           | OrthographicSize, Near/Far plane              |
-| `PerspectiveCamera`  | Perspective camera            | FieldOfView, AspectRatio, Near/Far plane      |
-| `Category`           | Project categorization        | Enum-style, not for nodes/entities            |
+| Class | Purpose | Features |
+| --- | --- | --- |
+| `GameObject` | Base for all entities | `INotifyPropertyChanged`, `Id`, `Name`, validation, override slots |
+| `Scene` | Root container | RootNodes, AllNodes, project reference, JSON |
+| `SceneNode` | Hierarchical entity | Components, flags, parent/child, override slots, circular protection |
+| `GameComponent` | Base for components | `INotifyPropertyChanged`, Node reference, polymorphic serialization, override slots |
+| `Transform` | Spatial component | LocalPosition, LocalRotation, LocalScale |
+| `GeometryComponent` | Geometry asset reference | AssetReference, targeted overrides |
+| `CameraComponent` | Camera base | Near/Far plane, concrete types |
+| `OrthographicCamera` | Orthographic camera | OrthographicSize, Near/Far plane |
+| `PerspectiveCamera` | Perspective camera | FieldOfView, AspectRatio, Near/Far plane |
+| `Category` | Project categorization | Enum-style, not for nodes/entities |
 
 ## Core Concepts
 
@@ -177,22 +197,22 @@ public Vector3 LocalPosition
 
 The Slots system provides a flexible, extensible mechanism for property overrides at multiple levels of the world model. Slots are observable containers for overridable properties, enabling fine-grained control over rendering, materials, LOD, and lighting.
 
-| Concept                | Description |
-|------------------------|-------------|
-| **`OverrideSlot`**       | Abstract base for all slot types. Supports property change notification and serialization. Can be attached to `GameObject` (global), `GameComponent` (component-level), or `GeometryOverrideTarget` (targeted overrides). |
+| Concept | Description |
+| --- | --- |
+| **`OverrideSlot`** | Abstract base for all slot types. Supports property change notification and serialization. Can be attached to `GameObject` (global), `GameComponent` (component-level), or `GeometryOverrideTarget` (targeted overrides). |
 | **`OverridableProperty<T>`** | Value type representing a property with a default and optional override value. Used within slots to encapsulate override semantics. |
-| **Slot Types**         | See table below for built-in slot types. |
+| **Slot Types** | See table below for built-in slot types. |
 | **Targeted Overrides** | `GeometryOverrideTarget` allows slots to be scoped to specific LODs/submeshes for per-part customization. |
-| **Usage Patterns**     | Slots are hydrated/dehydrated for persistence. Factories and registration patterns ensure extensibility. Query or create slots using `GetOrCreateSlot<T>()`. |
+| **Usage Patterns** | Slots are hydrated/dehydrated for persistence. Factories and registration patterns ensure extensibility. Query or create slots using `GetOrCreateSlot<T>()`. |
 
 #### Built-in Slot Types
 
-| Slot Type            | Purpose/Overrides                | Typical Scope                |
-|----------------------|----------------------------------|------------------------------|
-| `LevelOfDetailSlot`  | LOD selection policy (distance, fixed, screen space error) | GeometryComponent |
-| `LightingSlot`       | Shadow casting/receiving         | GeometryComponent, GameObject |
-| `RenderingSlot`      | Visibility, rendering flags      | GeometryComponent, GameObject |
-| `MaterialsSlot`      | Material assignment              | GeometryOverrideTarget        |
+| Slot Type | Purpose/Overrides | Typical Scope |
+| --- | --- | --- |
+| `LevelOfDetailSlot` | LOD selection policy (distance, fixed, screen space error) | GeometryComponent |
+| `LightingSlot` | Shadow casting/receiving | GeometryComponent, GameObject |
+| `RenderingSlot` | Visibility, rendering flags | GeometryComponent, GameObject |
+| `MaterialsSlot` | Material assignment | GeometryOverrideTarget |
 
 #### Example Usage
 
