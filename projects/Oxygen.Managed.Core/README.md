@@ -29,6 +29,42 @@ Oxygen.Managed.Core
 - **Delegation:** `OxygenPathFinder` delegates to a parent `IPathFinder` for common platform-specific paths, composing functionality cleanly.
 - **File System Abstraction:** Uses `IFileSystem` from Testably.Abstractions for cross-platform compatibility and unit testability.
 
+## Structured operation diagnostics
+
+The [Diagnostics](src/Diagnostics) namespace supplies shared contracts for
+authoring, project, content-pipeline, and runtime operation results:
+
+- [OperationResult](src/Diagnostics/OperationResult.cs) carries correlation
+  identity, operation kind, status/severity, user-facing text, affected scope,
+  child diagnostics, and an optional action.
+- [DiagnosticRecord](src/Diagnostics/DiagnosticRecord.cs) identifies the failure
+  domain and stable code, with separate user-facing and technical details.
+- [IOperationResultPublisher](src/Diagnostics/IOperationResultPublisher.cs) and
+  [IOperationResultStore](src/Diagnostics/IOperationResultStore.cs) separate
+  producers from consumers and retained snapshots.
+- [OperationStatusReducer](src/Diagnostics/OperationStatusReducer.cs) and
+  [ExceptionDiagnosticAdapter](src/Diagnostics/ExceptionDiagnosticAdapter.cs)
+  centralize status reduction and exception conversion.
+
+The editor host owns the concrete
+[OperationResultStore](../Oxygen.Editor/src/Diagnostics/OperationResultStore.cs).
+It retains a bounded current-session history (512 results by default), returns
+snapshot collections, and snapshots observers under its lock before notifying
+them outside the lock. Subscription disposal removes the observer.
+
+Notification remains synchronous on the publishing thread. UI subscribers must
+dispatch UI work appropriately; the store is neither a durable audit log nor an
+asynchronous delivery queue. Preserve the separation between shared contracts
+here and host retention/presentation policy.
+
+[OperationStatusReducerTests](tests/OperationStatusReducerTests.cs) and
+[ExceptionDiagnosticAdapterTests](tests/ExceptionDiagnosticAdapterTests.cs)
+cover the shared result behavior. Native engine failures still require explicit
+propagation into these contracts; engine-loop supervision is tracked in
+[issue #6](https://github.com/abdes/DroidNet/issues/6).
+See the [diagnostics LLD](../../design/editor/lld/diagnostics-operation-results.md)
+for product presentation and correlation requirements.
+
 ## Getting Started
 
 ### Prerequisites
