@@ -11,6 +11,7 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Services;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -28,7 +29,7 @@ public sealed class SceneDocumentSaveTests
     public async Task SaveFailureKeepsSceneDirtyAndPublishesDocumentResult(bool throwsException)
     {
         var projects = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        var save = projects.Setup(service => service.SaveSceneAsync(It.IsAny<Scene>()));
+        var save = projects.Setup(service => service.SaveSceneSnapshotAsync(It.IsAny<SceneSaveSnapshot>()));
         if (throwsException)
         {
             _ = save.ThrowsAsync(new IOException("Disk unavailable"));
@@ -50,7 +51,7 @@ public sealed class SceneDocumentSaveTests
             new StrongReferenceMessenger(),
             results.Object,
             new OperationStatusReducer());
-        var scene = new Scene(new Mock<IProject>().Object) { Name = "Test Scene" };
+        var scene = new Scene(Mock.Of<IProject>(project => project.ProjectInfo == Mock.Of<IProjectInfo>(info => info.Location == "H:/SceneSaveTest"))) { Name = "Test Scene" };
         var metadata = new SceneDocumentMetadata(scene.Id) { Title = scene.Name, IsDirty = true };
         var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));
         context.History.AddChange("Keep edit", () => Task.CompletedTask);

@@ -253,6 +253,14 @@ vetoes; material disposal no longer discards implicitly. Focused lifecycle,
 material persistence, and native window/dialog tests cover the failure and
 cancellation boundaries. Full editor scenario validation is still pending.
 
+Issue #4 is implemented: scene/material saves capture coherent snapshots,
+serialize competing writes, and acknowledge only persisted revisions. Newer
+edits remain dirty and prevent save-and-close. Standard Debug editor build and
+232 relevant tests pass, including deterministic storage interleavings and
+hierarchy edits awaiting live sync. Modified C# files have no active compiler,
+analyzer, or IDE diagnostics. Manual interaction replay was not performed.
+
+
 - [x] Required LLDs are reviewed:
       `documents-and-commands`, `scene-authoring-model`, `scene-explorer`,
       `diagnostics-operation-results`.

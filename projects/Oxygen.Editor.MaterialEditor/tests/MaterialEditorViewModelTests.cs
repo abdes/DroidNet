@@ -18,6 +18,32 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers these public test classes using the repository's default discovery configuration.")]
 public sealed class MaterialEditorViewModelTests
 {
+    /// <summary>Verifies saving a snapshot keeps newer edits dirty and requires another save before closing.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task SaveAcknowledgesSnapshotWhileNewerUiEditsRemainDirty()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new RecordingDocumentService(CreateDocument()) { PendingWrite = release.Task };
+        var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
+        using var sut = new MaterialEditorViewModel(metadata, service);
+        await WaitForLoadAsync(sut).ConfigureAwait(false);
+        sut.MetallicFactor = 0.25f;
+        var save = sut.SaveAsync();
+        await service.WriteStarted.Task.ConfigureAwait(false);
+        sut.MetallicFactor = 0.75f;
+        _ = service.PropertyEditCount.Should().Be(2);
+        release.SetResult();
+        await save.ConfigureAwait(false);
+        _ = sut.MetallicFactor.Should().Be(0.75f);
+        _ = sut.IsDirty.Should().BeTrue();
+        _ = metadata.IsDirty.Should().BeTrue();
+        _ = sut.StatusText.Should().Be("Saved; newer changes remain unsaved");
+        await sut.PrepareForCloseAsync().ConfigureAwait(false);
+        _ = (await sut.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
+        _ = metadata.IsDirty.Should().BeFalse();
+    }
+
     /// <summary>Verifies resource disposal never makes a material close decision.</summary>
     /// <returns>The asynchronous test task.</returns>
     [TestMethod]
@@ -168,7 +194,11 @@ public sealed class MaterialEditorViewModelTests
 
         public List<Guid> ClosedDocuments { get; } = [];
 
-        public MaterialDocument Document { get; } = document;
+        public MaterialDocument Document { get; private set; } = document;
+
+        public Task? PendingWrite { get; set; }
+
+        public TaskCompletionSource WriteStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public List<PropertyEdit> PropertyEdits
         {
@@ -193,6 +223,8 @@ public sealed class MaterialEditorViewModelTests
         }
 
         public int ScalarEditCalls { get; private set; }
+
+        public MaterialDocument GetDocument(Guid documentId) => this.Document;
 
         public Task<MaterialDocument> CreateAsync(Uri targetUri, CancellationToken cancellationToken = default)
         {
@@ -230,16 +262,24 @@ public sealed class MaterialEditorViewModelTests
             lock (this.sync)
             {
                 this.propertyEdits.Add(edit.Clone());
+                this.Document = this.Document with { Revision = this.Document.Revision + 1, IsDirty = true };
             }
 
             return this.PendingEdit ?? Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }
 
-        public Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken cancellationToken = default)
+        public async Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken cancellationToken = default)
         {
-            _ = documentId;
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new MaterialSaveResult(Succeeded: true, OperationId: null));
+            var revision = this.Document.Revision;
+            _ = this.WriteStarted.TrySetResult();
+            if (this.PendingWrite is { } write)
+            {
+                await write.ConfigureAwait(false);
+            }
+
+            this.Document = this.Document with { SavedRevision = revision, IsDirty = this.Document.Revision != revision };
+            return new MaterialSaveResult(Succeeded: true, OperationId: null) { HasUnsavedChanges = this.Document.IsDirty };
         }
 
         public Task<MaterialCookResult> CookAsync(Guid documentId, CancellationToken cancellationToken = default)

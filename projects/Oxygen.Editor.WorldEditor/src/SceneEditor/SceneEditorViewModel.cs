@@ -123,7 +123,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.RegisterMessages();
 
         // Track mutations via the undo stack
-        ((INotifyCollectionChanged)UndoRedo.GetHistory(metadata.DocumentId).UndoStack).CollectionChanged += this.OnUndoStackChanged;
 
         // RunAtFps is sourced directly from the engine service at runtime
         // (see property implementation). No constructor seeding required.
@@ -324,7 +323,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
-            ((INotifyCollectionChanged)UndoRedo.GetHistory(this.Metadata.DocumentId).UndoStack).CollectionChanged -= this.OnUndoStackChanged;
             this.messenger.UnregisterAll(this);
 
             foreach (var viewport in this.Viewports)
@@ -585,16 +583,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.LogSaveFailed();
         }
 
-        return result.Succeeded;
-    }
-
-    private void OnUndoStackChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.Action == NotifyCollectionChangedAction.Add && !this.Metadata.IsDirty)
-        {
-            this.Metadata.IsDirty = true;
-            _ = this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata);
-        }
+        return result.Succeeded && !result.HasUnsavedChanges;
     }
 
     // TODO: Implement locate in content browser (publish a message / call service). For now log.

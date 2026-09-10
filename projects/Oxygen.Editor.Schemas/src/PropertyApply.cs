@@ -9,37 +9,6 @@ using System.Threading.Tasks;
 namespace Oxygen.Editor.Schemas;
 
 /// <summary>
-/// Opaque handle that resolves a node id to its mutable model target and
-/// to an asynchronous engine-sync function.
-/// </summary>
-/// <remarks>
-/// The schema layer cannot reference the world / scene / interop types
-/// directly. Callers (the command service) inject this resolver, so the
-/// schema layer remains pure.
-/// </remarks>
-public interface IPropertyTarget
-{
-    /// <summary>
-    /// Tries to obtain the model target object that owns the property
-    /// values for the given node id.
-    /// </summary>
-    /// <param name="nodeId">The node id.</param>
-    /// <param name="target">The model target, or <c>null</c> when the node
-    /// is unknown / removed.</param>
-    /// <returns><see langword="true"/> when the node was found.</returns>
-    bool TryGetTarget(Guid nodeId, out object? target);
-
-    /// <summary>
-    /// Pushes the given edit to the engine for the given node.
-    /// </summary>
-    /// <param name="nodeId">The node id.</param>
-    /// <param name="edit">The edit to apply.</param>
-    /// <returns>A task that completes when the engine has accepted (or
-    /// buffered) the edit.</returns>
-    Task PushToEngineAsync(Guid nodeId, PropertyEdit edit);
-}
-
-/// <summary>
 /// Pure model+engine apply. The same function is used to "do" and to
 /// "undo"; that's the structural property that makes
 /// <c>redo(OP) == undo(UOP) == OP</c> hold by construction.
@@ -67,26 +36,45 @@ public static class PropertyApply
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(descriptors);
 
-        var snapshot = side == ApplySide.After ? op.After : op.Before;
+        ApplyToTargets(op, side, resolver, descriptors);
+        await PushToEngineAsync(op, side, resolver).ConfigureAwait(false);
+    }
 
+    /// <summary>Applies the complete model snapshot synchronously before engine I/O can yield.</summary>
+    /// <param name="op">The property operation.</param>
+    /// <param name="side">The snapshot to apply.</param>
+    /// <param name="resolver">Resolves authoring targets.</param>
+    /// <param name="descriptors">The property descriptors.</param>
+    public static void ApplyToTargets(PropertyOp op, ApplySide side, IPropertyTarget resolver, IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors)
+    {
+        ArgumentNullException.ThrowIfNull(op);
+        ArgumentNullException.ThrowIfNull(resolver);
+        var snapshot = side == ApplySide.After ? op.After : op.Before;
         foreach (var nodeId in op.Nodes)
         {
-            if (!snapshot.PerNode.TryGetValue(nodeId, out var edit))
+            if (snapshot.PerNode.TryGetValue(nodeId, out var edit) && resolver.TryGetTarget(nodeId, out var target) && target is not null)
             {
-                continue;
+                ApplyToTarget(target, edit, descriptors);
             }
+        }
+    }
 
-            if (!resolver.TryGetTarget(nodeId, out var target) || target is null)
+    /// <summary>Synchronizes a previously applied model snapshot with the engine.</summary>
+    /// <param name="op">The property operation.</param>
+    /// <param name="side">The applied snapshot.</param>
+    /// <param name="resolver">The engine synchronization boundary.</param>
+    /// <returns>The synchronization task.</returns>
+    public static async Task PushToEngineAsync(PropertyOp op, ApplySide side, IPropertyTarget resolver)
+    {
+        ArgumentNullException.ThrowIfNull(op);
+        ArgumentNullException.ThrowIfNull(resolver);
+        var snapshot = side == ApplySide.After ? op.After : op.Before;
+        foreach (var nodeId in op.Nodes)
+        {
+            if (snapshot.PerNode.TryGetValue(nodeId, out var edit) && resolver.TryGetTarget(nodeId, out var target) && target is not null)
             {
-                continue;
+                await resolver.PushToEngineAsync(nodeId, edit).ConfigureAwait(true);
             }
-
-            // 1. Update the model — the source of truth for the editor.
-            ApplyToTarget(target, edit, descriptors);
-
-            // 2. Push to engine. Single round-trip per node carrying every
-            //    changed property, in line with §5.3.
-            await resolver.PushToEngineAsync(nodeId, edit).ConfigureAwait(false);
         }
     }
 
@@ -118,16 +106,4 @@ public static class PropertyApply
             descriptor.WriteBoxed(target, value);
         }
     }
-}
-
-/// <summary>
-/// Selects which side of a <see cref="PropertyOp"/> to apply.
-/// </summary>
-public enum ApplySide
-{
-    /// <summary>Apply the pre-edit snapshot (used by undo).</summary>
-    Before,
-
-    /// <summary>Apply the post-edit snapshot (used by do/redo).</summary>
-    After,
 }

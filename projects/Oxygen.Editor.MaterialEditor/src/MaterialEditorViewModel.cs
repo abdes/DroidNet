@@ -29,6 +29,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly Action<Uri>? assetChanged;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private readonly Task loadTask;
+    private Task<bool>? pendingSave;
     private MaterialDocument? document;
     private bool isLoading;
     private bool isDisposed;
@@ -152,6 +153,11 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         this.isClosing = true;
         await this.loadTask.ConfigureAwait(true);
+        if (this.pendingSave is { } save)
+        {
+            _ = await save.ConfigureAwait(true);
+        }
+
         await this.editGate.WaitAsync().ConfigureAwait(true);
         _ = this.editGate.Release();
     }
@@ -239,9 +245,22 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [LoggerMessage(EventId = 0, Level = LogLevel.Warning, Message = "Failed to open material document {MaterialUri}.")]
     private static partial void LogMaterialOpenFailed(ILogger logger, Exception exception, Uri materialUri);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Disposal drains pending work, logs its failure, and still releases the edit gate.")]
     private async Task DisposeGateAsync()
     {
-        await this.loadTask.ConfigureAwait(true);
+        try
+        {
+            await this.loadTask.ConfigureAwait(true);
+            if (this.pendingSave is { } save)
+            {
+                _ = await save.ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception)
+        {
+            this.LogPendingWorkFailedDuringDispose(exception);
+        }
+
         await this.editGate.WaitAsync().ConfigureAwait(true);
         _ = this.editGate.Release();
         this.editGate.Dispose();
@@ -274,37 +293,51 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
     }
 
-    private async Task<bool> SaveCoreAsync()
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pending material work failed while disposing the editor.")]
+    private partial void LogPendingWorkFailedDuringDispose(Exception exception);
+
+    private Task<bool> SaveCoreAsync() => this.pendingSave = this.SaveAfterPendingAsync(this.pendingSave);
+
+    private async Task<bool> SaveAfterPendingAsync(Task<bool>? previous)
+    {
+        if (previous is { IsCompleted: false })
+        {
+            _ = await previous.ConfigureAwait(true);
+        }
+
+        return await this.SaveSnapshotAsync().ConfigureAwait(true);
+    }
+
+    private async Task<bool> SaveSnapshotAsync()
     {
         await this.loadTask.ConfigureAwait(true);
         await this.editGate.WaitAsync().ConfigureAwait(true);
-        try
+        var current = this.document;
+        _ = this.editGate.Release();
+        if (current is null)
         {
-            if (this.document is null)
-            {
-                this.StatusText = "The material is not loaded and cannot be saved.";
-                return false;
-            }
-
-            var result = await this.documentService.SaveAsync(this.document.DocumentId).ConfigureAwait(true);
-            if (result.Succeeded)
-            {
-                this.metadata.IsDirty = false;
-                this.IsDirty = false;
-                this.StatusText = "Saved";
-                this.assetChanged?.Invoke(this.metadata.MaterialUri);
-            }
-            else
-            {
-                this.StatusText = "Save failed. Your changes are still open.";
-            }
-
-            return result.Succeeded;
+            this.StatusText = "The material is not loaded and cannot be saved.";
+            return false;
         }
-        finally
+
+        var result = await this.documentService.SaveAsync(current.DocumentId).ConfigureAwait(true);
+        if (this.isDisposed)
         {
-            _ = this.editGate.Release();
+            return result.Succeeded && !result.HasUnsavedChanges;
         }
+
+        if (!result.Succeeded)
+        {
+            this.StatusText = "Save failed. Your changes are still open.";
+            return false;
+        }
+
+        this.document = this.documentService.GetDocument(current.DocumentId);
+        this.metadata.IsDirty = this.document.IsDirty;
+        this.IsDirty = this.document.IsDirty;
+        this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : "Saved";
+        this.assetChanged?.Invoke(this.metadata.MaterialUri);
+        return !this.IsDirty;
     }
 
     [RelayCommand]
@@ -421,6 +454,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
                 .ConfigureAwait(true);
             if (result.Succeeded)
             {
+                this.document = this.documentService.GetDocument(current.DocumentId);
                 this.metadata.IsDirty = true;
                 this.IsDirty = true;
                 this.CookState = MaterialCookState.Stale;

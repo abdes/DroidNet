@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -29,4 +29,11 @@ public sealed record MaterialDocument(
     MaterialSource Source,
     MaterialAsset? Asset,
     bool IsDirty,
-    MaterialCookState CookState);
+    MaterialCookState CookState)
+{
+    /// <summary>Gets the current authoring revision.</summary>
+    public long Revision { get; init; }
+
+    /// <summary>Gets the latest revision successfully persisted.</summary>
+    public long SavedRevision { get; init; }
+}

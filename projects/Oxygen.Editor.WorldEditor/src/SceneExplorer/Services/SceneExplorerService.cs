@@ -5,47 +5,39 @@
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Services;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneExplorer.Services;
 
 /// <summary>
 /// Implementation of the <see cref="ISceneExplorerService"/>.
 /// </summary>
-public partial class SceneExplorerService : ISceneExplorerService
+/// <param name="sceneMutator">The scene mutator.</param>
+/// <param name="sceneOrganizer">The scene organizer.</param>
+/// <param name="sceneEngineSync">The scene engine sync.</param>
+/// <param name="operationResults">The operation results.</param>
+/// <param name="statusReducer">The status reducer.</param>
+/// <param name="logger">The logger.</param>
+public partial class SceneExplorerService(
+    ISceneMutator sceneMutator,
+    ISceneOrganizer sceneOrganizer,
+    ISceneEngineSync sceneEngineSync,
+    IOperationResultPublisher operationResults,
+    IStatusReducer statusReducer,
+    ILogger<SceneExplorerService>? logger = null) : ISceneExplorerService
 {
-    private readonly ISceneMutator sceneMutator;
-    private readonly ISceneOrganizer sceneOrganizer;
-    private readonly ISceneEngineSync sceneEngineSync;
-    private readonly IOperationResultPublisher operationResults;
-    private readonly IStatusReducer statusReducer;
-    private readonly ILogger<SceneExplorerService> logger;
+    private readonly ISceneMutator sceneMutator = sceneMutator;
+    private readonly ISceneOrganizer sceneOrganizer = sceneOrganizer;
+    private readonly ISceneEngineSync sceneEngineSync = sceneEngineSync;
+    private readonly IOperationResultPublisher operationResults = operationResults;
+    private readonly IStatusReducer statusReducer = statusReducer;
+    private readonly ILogger<SceneExplorerService> logger = logger ?? NullLogger<SceneExplorerService>.Instance;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SceneExplorerService"/> class.
-    /// </summary>
-    /// <param name="sceneMutator">The scene mutator for scene graph operations.</param>
-    /// <param name="sceneOrganizer">The scene organizer for layout operations.</param>
-    /// <param name="sceneEngineSync">The scene engine sync service.</param>
-    /// <param name="logger">The logger.</param>
-    public SceneExplorerService(
-        ISceneMutator sceneMutator,
-        ISceneOrganizer sceneOrganizer,
-        ISceneEngineSync sceneEngineSync,
-        IOperationResultPublisher operationResults,
-        IStatusReducer statusReducer,
-        ILogger<SceneExplorerService>? logger = null)
-    {
-        this.sceneMutator = sceneMutator;
-        this.sceneOrganizer = sceneOrganizer;
-        this.sceneEngineSync = sceneEngineSync;
-        this.operationResults = operationResults;
-        this.statusReducer = statusReducer;
-        this.logger = logger ?? NullLogger<SceneExplorerService>.Instance;
-    }
+    /// <inheritdoc/>
+    public event EventHandler<SceneAuthoringChangedEventArgs>? AuthoringChanged;
 
     /// <inheritdoc />
     public async Task<SceneNodeChangeRecord?> CreateNodeAsync(ITreeItem parent, string name)
@@ -56,6 +48,7 @@ public partial class SceneExplorerService : ISceneExplorerService
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Live synchronization failures are reported without rolling back authoring changes.")]
     public async Task<SceneNodeChangeRecord?> AddNodeAsync(ITreeItem parent, SceneNode node)
     {
         var scene = this.GetScene(parent) ?? throw new InvalidOperationException("Could not resolve scene from parent.");
@@ -82,9 +75,10 @@ public partial class SceneExplorerService : ISceneExplorerService
             }
 
             // Also update layout to put it in the folder
-            this.sceneOrganizer.MoveNodeToFolder(node.Id, folderAdapter.Id, scene);
+            _ = this.sceneOrganizer.MoveNodeToFolder(node.Id, folderAdapter.Id, scene);
         }
 
+        this.NotifyAuthoringChanged(scene);
         if (change?.RequiresEngineSync == true)
         {
             try
@@ -93,7 +87,7 @@ public partial class SceneExplorerService : ISceneExplorerService
             }
             catch (Exception ex)
             {
-                this.logger.LogWarning(ex, "Scene node {NodeId} was added to the authoring model, but live sync failed.", node.Id);
+                this.LogAuthoringSyncFailed(ex, node.Id, "add");
                 this.PublishLiveSyncWarning(
                     SceneOperationKinds.NodeCreate,
                     DiagnosticCodes.LiveSyncPrefix + "CREATE_NODE_FAILED",
@@ -135,6 +129,7 @@ public partial class SceneExplorerService : ISceneExplorerService
         }
 
         this.LogCreateFolderCreated(record.NewFolder.FolderId.Value, record.NewFolder.Name ?? "<null>");
+        this.NotifyAuthoringChanged(scene);
         return Task.FromResult(record.NewFolder.FolderId.Value);
     }
 
@@ -155,108 +150,24 @@ public partial class SceneExplorerService : ISceneExplorerService
 
         if (item is SceneNodeAdapter nodeAdapter)
         {
-            var node = nodeAdapter.AttachedObject;
-            SceneNodeChangeRecord? change = null;
-
-            // If the node belongs to a different scene instance (stale reference), we should try to find the equivalent node in the current scene.
-            if (!ReferenceEquals(node.Scene, scene))
-            {
-                this.LogMoveItemNodeSceneMismatch(node, scene);
-
-                // Find the node in the correct scene by ID
-                var freshNode = FindNodeById(scene, node.Id);
-                if (freshNode != null)
-                {
-                    this.LogMoveItemResolvedFreshNode(freshNode);
-                    node = freshNode;
-                }
-                else
-                {
-                    this.LogMoveItemCouldNotResolveNode(node);
-
-                    // We might still proceed, but it's risky. The Mutator might fail or operate on the wrong object.
-                    // However, if we return null, the operation aborts.
-                    // Let's try to proceed with the stale node if we can't find a fresh one, but it will likely fail later.
-                }
-            }
-
-            if (newParent is SceneAdapter)
-            {
-                // Move to Root
-                this.LogMoveItemMovingToRoot();
-                change = this.sceneMutator.CreateNodeAtRoot(node, scene);
-                this.sceneOrganizer.RemoveNodeFromLayout(node.Id, scene);
-            }
-            else if (newParent is SceneNodeAdapter targetNodeAdapter)
-            {
-                // Move to Node
-                this.LogMoveItemMovingToNode(targetNodeAdapter);
-                change = this.sceneMutator.CreateNodeUnderParent(node, targetNodeAdapter.AttachedObject, scene);
-                this.sceneOrganizer.RemoveNodeFromLayout(node.Id, scene);
-            }
-            else if (newParent is FolderAdapter folderAdapter)
-            {
-                // Move to Folder
-                this.LogMoveItemMovingToFolder(folderAdapter);
-
-                // First, ensure the node is in the correct lineage (parented to the folder's scene parent).
-                var sceneParentItem = FindSceneParent(folderAdapter);
-                this.LogMoveItemFolderSceneParent(sceneParentItem);
-
-                if (sceneParentItem is SceneAdapter)
-                {
-                    this.LogMoveItemReparentingToRoot();
-                    change = this.sceneMutator.CreateNodeAtRoot(node, scene);
-                }
-                else if (sceneParentItem is SceneNodeAdapter sna)
-                {
-                    this.LogMoveItemReparentingToNode(sna);
-                    change = this.sceneMutator.CreateNodeUnderParent(node, sna.AttachedObject, scene);
-                }
-
-                // Now that the node is in the correct lineage, we can move it into the folder.
-                this.LogMoveItemMovedToFolder(node.Id, folderAdapter.Id);
-                try
-                {
-                    this.sceneOrganizer.MoveNodeToFolder(node.Id, folderAdapter.Id, scene);
-                }
-                catch (Exception ex)
-                {
-                    this.LogMoveItemMoveToFolderFailed(ex, node.Id, folderAdapter.Id);
-                    throw;
-                }
-            }
-
-            if (change?.RequiresEngineSync == true)
-            {
-                try
-                {
-                    await this.sceneEngineSync.ReparentNodeAsync(node.Id, change.NewParentId).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    this.logger.LogWarning(ex, "Scene node {NodeId} was moved in the authoring model, but live sync failed.", node.Id);
-                    this.PublishLiveSyncWarning(
-                        SceneOperationKinds.NodeReparent,
-                        DiagnosticCodes.LiveSyncPrefix + "REPARENT_NODE_FAILED",
-                        "Scene was updated but live preview was not",
-                        node,
-                        ex);
-                }
-            }
-
-            return change;
+            return await this.MoveNodeAsync(scene, nodeAdapter, newParent).ConfigureAwait(true);
         }
-        else if (item is FolderAdapter folderAdapter)
+
+        if (item is FolderAdapter folderAdapter)
         {
             if (newParent is FolderAdapter targetFolder)
             {
-                this.sceneOrganizer.MoveFolderToParent(folderAdapter.Id, targetFolder.Id, scene);
+                _ = this.sceneOrganizer.MoveFolderToParent(folderAdapter.Id, targetFolder.Id, scene);
             }
             else if (newParent is SceneAdapter)
             {
-                this.sceneOrganizer.MoveFolderToParent(folderAdapter.Id, newParentFolderId: null, scene);
+                _ = this.sceneOrganizer.MoveFolderToParent(folderAdapter.Id, newParentFolderId: null, scene);
             }
+        }
+
+        if (item is FolderAdapter)
+        {
+            this.NotifyAuthoringChanged(scene);
         }
 
         return null;
@@ -278,7 +189,7 @@ public partial class SceneExplorerService : ISceneExplorerService
             var children = await newParent.Children.ConfigureAwait(false);
             var newIndex = children.IndexOf(item);
 
-            await this.MoveItemAsync(item, newParent, newIndex).ConfigureAwait(false);
+            _ = await this.MoveItemAsync(item, newParent, newIndex).ConfigureAwait(false);
         }
     }
 
@@ -287,6 +198,7 @@ public partial class SceneExplorerService : ISceneExplorerService
     {
         var itemsList = items.ToList();
         var changes = new List<SceneNodeChangeRecord>();
+        List<SceneNode> pendingSync = [];
         if (itemsList.Count == 0)
         {
             return changes;
@@ -305,30 +217,24 @@ public partial class SceneExplorerService : ISceneExplorerService
                 var change = this.sceneMutator.RemoveNode(nodeAdapter.AttachedObject.Id, scene);
                 if (change.RequiresEngineSync)
                 {
-                    try
-                    {
-                        await this.sceneEngineSync.RemoveNodeAsync(nodeAdapter.AttachedObject.Id).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        this.logger.LogWarning(ex, "Scene node {NodeId} was removed from the authoring model, but live sync failed.", nodeAdapter.AttachedObject.Id);
-                        this.PublishLiveSyncWarning(
-                            SceneOperationKinds.NodeDelete,
-                            DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED",
-                            "Scene was updated but live preview was not",
-                            nodeAdapter.AttachedObject,
-                            ex);
-                    }
+                    pendingSync.Add(nodeAdapter.AttachedObject);
                 }
 
                 // Also remove from layout if present
-                this.sceneOrganizer.RemoveNodeFromLayout(nodeAdapter.AttachedObject.Id, scene);
+                _ = this.sceneOrganizer.RemoveNodeFromLayout(nodeAdapter.AttachedObject.Id, scene);
                 changes.Add(change);
+                this.NotifyAuthoringChanged(scene);
             }
             else if (item is FolderAdapter folderAdapter)
             {
-                this.sceneOrganizer.RemoveFolder(folderAdapter.Id, promoteChildrenToParent: false, scene);
+                _ = this.sceneOrganizer.RemoveFolder(folderAdapter.Id, promoteChildrenToParent: false, scene);
+                this.NotifyAuthoringChanged(scene);
             }
+        }
+
+        foreach (var node in pendingSync)
+        {
+            await this.SyncRemovedNodeAsync(node).ConfigureAwait(true);
         }
 
         return changes;
@@ -341,14 +247,20 @@ public partial class SceneExplorerService : ISceneExplorerService
         {
             nodeAdapter.AttachedObject.Name = newName;
         }
-        else if (item is FolderAdapter folderAdapter)
+
+        if (item is FolderAdapter folderAdapter)
         {
             folderAdapter.Label = newName;
             var scene = this.GetScene(item);
             if (scene != null)
             {
-                this.sceneOrganizer.RenameFolder(folderAdapter.Id, newName, scene);
+                _ = this.sceneOrganizer.RenameFolder(folderAdapter.Id, newName, scene);
             }
+        }
+
+        if (this.GetScene(item) is { } modifiedScene)
+        {
+            this.NotifyAuthoringChanged(modifiedScene);
         }
 
         return Task.CompletedTask;
@@ -401,6 +313,117 @@ public partial class SceneExplorerService : ISceneExplorerService
         }
 
         return null;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Live synchronization failures are reported without rolling back authoring changes.")]
+    private async Task<SceneNodeChangeRecord?> MoveNodeAsync(Scene scene, SceneNodeAdapter nodeAdapter, ITreeItem newParent)
+    {
+        var node = this.ResolveMovingNode(scene, nodeAdapter.AttachedObject);
+        var change = this.MoveNodeModel(scene, node, newParent);
+        this.NotifyAuthoringChanged(scene);
+        if (change?.RequiresEngineSync == true)
+        {
+            try
+            {
+                await this.sceneEngineSync.ReparentNodeAsync(node.Id, change.NewParentId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                this.LogAuthoringSyncFailed(ex, node.Id, "move");
+                this.PublishLiveSyncWarning(
+                    SceneOperationKinds.NodeReparent,
+                    DiagnosticCodes.LiveSyncPrefix + "REPARENT_NODE_FAILED",
+                    "Scene was updated but live preview was not",
+                    node,
+                    ex);
+            }
+        }
+
+        return change;
+    }
+
+    private SceneNode ResolveMovingNode(Scene scene, SceneNode node)
+    {
+        if (!ReferenceEquals(node.Scene, scene))
+        {
+            this.LogMoveItemNodeSceneMismatch(node, scene);
+
+            var freshNode = FindNodeById(scene, node.Id);
+            if (freshNode != null)
+            {
+                this.LogMoveItemResolvedFreshNode(freshNode);
+                node = freshNode;
+            }
+            else
+            {
+                this.LogMoveItemCouldNotResolveNode(node);
+            }
+        }
+
+        return node;
+    }
+
+    private SceneNodeChangeRecord? MoveNodeModel(Scene scene, SceneNode node, ITreeItem newParent)
+    {
+        SceneNodeChangeRecord? change = null;
+        if (newParent is SceneAdapter)
+        {
+            this.LogMoveItemMovingToRoot();
+            change = this.sceneMutator.CreateNodeAtRoot(node, scene);
+            _ = this.sceneOrganizer.RemoveNodeFromLayout(node.Id, scene);
+        }
+        else if (newParent is SceneNodeAdapter targetNodeAdapter)
+        {
+            this.LogMoveItemMovingToNode(targetNodeAdapter);
+            change = this.sceneMutator.CreateNodeUnderParent(node, targetNodeAdapter.AttachedObject, scene);
+            _ = this.sceneOrganizer.RemoveNodeFromLayout(node.Id, scene);
+        }
+        else if (newParent is FolderAdapter folderAdapter)
+        {
+            this.LogMoveItemMovingToFolder(folderAdapter);
+
+            var sceneParentItem = FindSceneParent(folderAdapter);
+            this.LogMoveItemFolderSceneParent(sceneParentItem);
+
+            if (sceneParentItem is SceneAdapter)
+            {
+                this.LogMoveItemReparentingToRoot();
+                change = this.sceneMutator.CreateNodeAtRoot(node, scene);
+            }
+            else if (sceneParentItem is SceneNodeAdapter sna)
+            {
+                this.LogMoveItemReparentingToNode(sna);
+                change = this.sceneMutator.CreateNodeUnderParent(node, sna.AttachedObject, scene);
+            }
+
+            this.LogMoveItemMovedToFolder(node.Id, folderAdapter.Id);
+            try
+            {
+                _ = this.sceneOrganizer.MoveNodeToFolder(node.Id, folderAdapter.Id, scene);
+            }
+            catch (Exception ex)
+            {
+                this.LogMoveItemMoveToFolderFailed(ex, node.Id, folderAdapter.Id);
+                throw;
+            }
+        }
+
+        return change;
+    }
+
+    private void NotifyAuthoringChanged(Scene scene) => this.AuthoringChanged?.Invoke(this, new SceneAuthoringChangedEventArgs(scene));
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Failed live synchronization does not roll back committed authoring state.")]
+    private async Task SyncRemovedNodeAsync(SceneNode node)
+    {
+        try
+        {
+            await this.sceneEngineSync.RemoveNodeAsync(node.Id).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            this.PublishLiveSyncWarning(SceneOperationKinds.NodeDelete, DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED", "Scene was updated but live preview was not", node, exception);
+        }
     }
 
     private Scene? GetScene(ITreeItem item)
@@ -469,4 +492,7 @@ public partial class SceneExplorerService : ISceneExplorerService
                 NodeName = node.Name,
             },
             exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene node {NodeId} authoring {Action} succeeded, but live sync failed.")]
+    private partial void LogAuthoringSyncFailed(Exception exception, Guid nodeId, string action);
 }

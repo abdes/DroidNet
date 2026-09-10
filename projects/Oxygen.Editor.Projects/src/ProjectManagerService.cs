@@ -4,10 +4,11 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.World;
-using DroidNet.Storage;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Projects;
 
@@ -30,6 +31,8 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Justification = "used by generated logging methods")]
     private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ??
                                       NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
+
+    private readonly DocumentWriteCoordinator sceneWrites = new();
 
     /// <inheritdoc />
     public IProject? CurrentProject { get; private set; }
@@ -144,6 +147,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<Scene?> CreateSceneAsync(string sceneName)
     {
         if (this.CurrentProject is null)
@@ -189,39 +193,66 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc />
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Snapshot and storage failures preserve the project-service boolean failure contract.")]
     public async Task<bool> SaveSceneAsync(Scene scene)
     {
-        if (scene.Project.ProjectInfo.Location is null)
-        {
-            this.CouldNotSaveScene(scene.Name, "Project location is null");
-            return false;
-        }
-
+        ArgumentNullException.ThrowIfNull(scene);
         try
         {
-            var projectFolder = await storage.GetFolderFromPathAsync(scene.Project.ProjectInfo.Location).ConfigureAwait(true);
-            var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
-
-            // Create or get the scene file
-            var sceneFileName = scene.Name + Constants.SceneFileExtension;
-            var sceneFile = await scenesFolder.GetDocumentAsync(sceneFileName).ConfigureAwait(true);
-
-            // Serialize and save the scene using SceneSerializer
-            var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(scene.Project);
-            using var stream = new System.IO.MemoryStream();
-            await serializer.SerializeAsync(stream, scene).ConfigureAwait(true);
-            var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
-            await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
-
-            return true;
+            var path = Path.Combine(scene.Project.ProjectInfo.Location ?? string.Empty, scene.Name + Constants.SceneFileExtension);
+            return await this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene))).ConfigureAwait(true);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            this.CouldNotSaveScene(scene.Name, ex.Message);
+            this.CouldNotSaveScene(scene.Name, exception.Message);
             return false;
         }
     }
 
+    /// <inheritdoc/>
+    public Task<bool> SaveSceneSnapshotAsync(SceneSaveSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var path = Path.Combine(snapshot.ProjectLocation, snapshot.SceneName + Constants.SceneFileExtension);
+        return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot));
+    }
+
+    private static async Task<DroidNet.Storage.IFolder> GetScenesFolderAsync(DroidNet.Storage.IFolder projectFolder)
+    {
+        var contentFolder = await projectFolder.GetFolderAsync(Constants.ContentFolderName).ConfigureAwait(true);
+        if (!await contentFolder.ExistsAsync().ConfigureAwait(true))
+        {
+            await contentFolder.CreateAsync().ConfigureAwait(true);
+        }
+
+        var scenesFolder = await contentFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+        if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
+        {
+            await scenesFolder.CreateAsync().ConfigureAwait(true);
+        }
+
+        return scenesFolder;
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The persistence boundary reports all storage failures to the calling authoring command.")]
+    private async Task<bool> WriteSceneSnapshotAsync(SceneSaveSnapshot snapshot)
+    {
+        try
+        {
+            var projectFolder = await storage.GetFolderFromPathAsync(snapshot.ProjectLocation).ConfigureAwait(true);
+            var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
+            var sceneFile = await scenesFolder.GetDocumentAsync(snapshot.SceneName + Constants.SceneFileExtension).ConfigureAwait(true);
+            await sceneFile.WriteAllTextAsync(snapshot.Json).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            this.CouldNotSaveScene(snapshot.SceneName, ex.Message);
+            return false;
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     private async Task LoadProjectScenesAsync(Project project)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
@@ -242,7 +273,8 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             try
             {
                 var json = await item.ReadAllTextAsync().ConfigureAwait(true);
-                using var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+                var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+                await using var streamLifetime = stream.ConfigureAwait(true);
                 var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
 
                 // Clear nodes to maintain lazy loading behavior (nodes are loaded in LoadSceneAsync)
@@ -280,7 +312,8 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             // Use SceneSerializer for high-performance deserialization
             var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
             var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(true);
-            using var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            await using var streamLifetime = stream.ConfigureAwait(true);
             var loadedScene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
 
             return loadedScene;
@@ -293,23 +326,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             this.CouldNotLoadScene(sceneLocation, ex.Message);
             return null;
         }
-    }
-
-    private static async Task<DroidNet.Storage.IFolder> GetScenesFolderAsync(DroidNet.Storage.IFolder projectFolder)
-    {
-        var contentFolder = await projectFolder.GetFolderAsync(Constants.ContentFolderName).ConfigureAwait(true);
-        if (!await contentFolder.ExistsAsync().ConfigureAwait(true))
-        {
-            await contentFolder.CreateAsync().ConfigureAwait(true);
-        }
-
-        var scenesFolder = await contentFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
-        if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
-        {
-            await scenesFolder.CreateAsync().ConfigureAwait(true);
-        }
-
-        return scenesFolder;
     }
 
     [LoggerMessage(

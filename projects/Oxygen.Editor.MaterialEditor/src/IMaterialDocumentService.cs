@@ -11,6 +11,11 @@ namespace Oxygen.Editor.MaterialEditor;
 /// </summary>
 public interface IMaterialDocumentService : IMaterialPropertyEditService
 {
+    /// <summary>Gets the current immutable authoring and persistence state.</summary>
+    /// <param name="documentId">The open material document identity.</param>
+    /// <returns>The current document snapshot.</returns>
+    public MaterialDocument GetDocument(Guid documentId);
+
     /// <summary>
     /// Creates a new material document at the target URI.
     /// </summary>
