@@ -45,6 +45,7 @@ namespace oxygen::interop::module {
   class EditorViewportNavigation;
   class SurfaceRegistry;
   class EditorCommand;
+  class SceneAssetRequests;
   class EditorCompositor;
 } // namespace oxygen::interop::module
 
@@ -209,6 +210,7 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::IAsyncEngine> engine_{};
 
     std::shared_ptr<oxygen::scene::Scene> scene_;
+    std::unique_ptr<SceneAssetRequests> asset_requests_;
     oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_{};
     std::unique_ptr<oxygen::content::VirtualPathResolver> path_resolver_;
 

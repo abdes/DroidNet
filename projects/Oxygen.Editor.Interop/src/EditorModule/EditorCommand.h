@@ -26,6 +26,8 @@ namespace oxygen {
 
 namespace oxygen::interop::module {
 
+  class SceneAssetRequests;
+
   //! Context passed to EditorCommands during execution.
   struct CommandContext {
     // Use observer_ptr to make volatility explicit (command handlers must
@@ -34,6 +36,7 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::scene::Scene> Scene;
     oxygen::observer_ptr<oxygen::content::IAssetLoader> AssetLoader;
     oxygen::observer_ptr<oxygen::content::VirtualPathResolver> PathResolver;
+    oxygen::observer_ptr<SceneAssetRequests> AssetRequests;
   };
 
   //! Abstract base class for all editor commands.

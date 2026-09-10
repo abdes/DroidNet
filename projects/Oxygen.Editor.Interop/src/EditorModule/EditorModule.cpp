@@ -7,6 +7,7 @@
 #pragma unmanaged
 
 #include "pch.h"
+#include <EditorModule/SceneAssetRequests.h>
 
 #include <Commands/CreateSceneCommand.h>
 #include <Commands/CreateViewCommand.h>
@@ -158,6 +159,7 @@ namespace oxygen::interop::module {
   }
 
   EditorModule::~EditorModule() {
+    asset_requests_.reset();
     LOG_F(INFO, "EditorModule destroying; releasing registered surfaces.");
 
     if (registry_) {
@@ -311,7 +313,8 @@ namespace oxygen::interop::module {
       .FrameContext = observer_ptr { context.get() },
       .Scene = observer_ptr{scene_.get()},
       .AssetLoader = observer_ptr{asset_loader_.get()},
-      .PathResolver = observer_ptr{path_resolver_.get()}
+      .PathResolver = observer_ptr{path_resolver_.get()},
+      .AssetRequests = observer_ptr{asset_requests_.get()}
     };
 
     // 1) Destroy view commands first
@@ -540,7 +543,8 @@ namespace oxygen::interop::module {
     CommandContext cmd_context{
       .Scene = observer_ptr{scene_.get()},
       .AssetLoader = observer_ptr{asset_loader_.get()},
-      .PathResolver = observer_ptr{path_resolver_.get()}
+      .PathResolver = observer_ptr{path_resolver_.get()},
+      .AssetRequests = observer_ptr{asset_requests_.get()}
     };
     command_queue_.DrainIf(
       [](const std::unique_ptr<EditorCommand>& cmd) {
@@ -558,6 +562,10 @@ namespace oxygen::interop::module {
           }
         }
       });
+
+    if (scene_ && asset_requests_) {
+      asset_requests_->Drain(*scene_);
+    }
 
     if (scene_ && !graphics_.expired() && view_manager_) {
       auto gfx = graphics_.lock();
@@ -995,7 +1003,11 @@ namespace oxygen::interop::module {
         scene_.reset();
       }
     }
+    asset_requests_.reset();
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name), 1024U);
+
+    asset_requests_ = std::make_unique<SceneAssetRequests>(
+      *asset_loader_, *path_resolver_);
 
     auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
     (void)environment
@@ -1160,6 +1172,7 @@ namespace oxygen::interop::module {
     bool destroy_views,
     engine::FrameContext* frame_context) {
     LOG_F(INFO, "EditorModule::ApplyDestroyScene: destroying current scene");
+    asset_requests_.reset();
     // Ensure all views are destroyed/cleaned up before releasing the scene.
     if (destroy_views && view_manager_) {
       try {

@@ -26,4 +26,18 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\AssetRequests_native_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\SceneAssetRequests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetGeometryCommand.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetMaterialOverrideCommand.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

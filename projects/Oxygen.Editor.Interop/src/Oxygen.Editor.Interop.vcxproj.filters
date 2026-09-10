@@ -326,4 +326,12 @@
       <UniqueIdentifier>{8a9b2c3d-4e5f-6071-8293-a4b5c6d7e8f9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="EditorModule\SceneAssetRequests.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClInclude Include="EditorModule\SceneAssetRequests.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

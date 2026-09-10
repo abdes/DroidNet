@@ -199,6 +199,31 @@ The sync outcome is `Accepted` once the engine command is queued. Runtime asset
 resolution/load failure is logged by the native command because the material may
 not be mounted yet; it must not roll back the authored scene slot.
 
+Geometry and material loads use `SceneAssetRequests`, owned by the native
+editor's current scene session. Every request advances its target generation
+before resolution or cache lookup. Geometry generations are per node; material
+generations are per node and slot (LOD 0 in V0.1). Cached and procedural results
+obey the same acceptance checks as asynchronous results. Undo/redo issues these
+same commands and therefore supersedes pending work.
+
+Loader callbacks enqueue immutable results through a weak completion inbox.
+They do not retain scene nodes, command contexts, or the editor module, and do
+not mutate the scene. During `SceneMutation`, the module executes its queued
+authoring commands first, then accepts only current results for live node
+handles. Dead targets, including deleted descendants, are pruned before result
+acceptance. Detach retires all geometry/material intent for that renderable,
+including when its initial geometry is still loading. Scene replacement and
+shutdown retire the entire inbox.
+
+Current material results wait for pending geometry readiness and are applied
+to the accepted geometry's slot layout. Geometry replacement retains the
+existing override-by-slot-index behavior. Clear records an explicit empty slot
+intent and clears a visible override even while replacement geometry loads,
+preventing pending material loads from restoring it. Missing slots and
+current resolution/load failures produce native diagnostics with asset and
+target context; obsolete failures are discarded. Queue acceptance still means
+`Accepted`, not that an asset has finished loading.
+
 ### 8.3 Component remove → detach
 
 When `Scene.Component.Remove` removes a Geometry/Light/Camera, the command

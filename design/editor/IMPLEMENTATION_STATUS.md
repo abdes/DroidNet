@@ -260,6 +260,14 @@ edits remain dirty and prevent save-and-close. Standard Debug editor build and
 hierarchy edits awaiting live sync. Modified C# files have no active compiler,
 analyzer, or IDE diagnostics. Manual interaction replay was not performed.
 
+Issue #5 is implemented: scene-session request generations reject superseded
+geometry/material completions, and accepted results apply during scene mutation
+after queued authoring commands. Clear, detach, deletion, scene replacement,
+and shutdown invalidate obsolete work. Debug editor build and all 34 native
+tests pass, including 19 controlled-completion regression cases. Native analysis
+reports zero findings in modified source/test files. No engine source changes
+or engine rebuild were required; manual editor interaction was not replayed.
+
 
 - [x] Required LLDs are reviewed:
       `documents-and-commands`, `scene-authoring-model`, `scene-explorer`,
