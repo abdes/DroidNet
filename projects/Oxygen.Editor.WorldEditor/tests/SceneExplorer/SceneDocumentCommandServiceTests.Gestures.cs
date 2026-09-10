@@ -278,8 +278,8 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty);
         var terminal = new List<Guid>();
-        _ = fixture.Sync.Setup(value => value.UpdatePropertiesAsync(scene, It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-        _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+        _ = fixture.Sync.Setup(value => value.UpdatePropertiesAsync(scene, It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
+        _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)));
         _ = fixture.Sync.Setup(value => value.TryPreviewSyncAsync(scene.Id, It.IsAny<Guid>(), It.IsAny<DateTimeOffset>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
             .Returns((Guid _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> sync, CancellationToken cancellationToken) => Preview(sync, cancellationToken));

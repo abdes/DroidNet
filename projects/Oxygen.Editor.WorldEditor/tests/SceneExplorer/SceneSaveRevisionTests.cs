@@ -59,7 +59,7 @@ public sealed class SceneSaveRevisionTests
         scene.RootNodes.Add(second);
         scene.SetExplorerLayout([new ExplorerEntryData { NodeId = first.Id }, new ExplorerEntryData { NodeId = second.Id }]);
         var sync = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Sync.Setup(value => value.RemoveNodeAsync(It.IsAny<Guid>())).Returns(sync.Task);
+        _ = fixture.Sync.Setup(value => value.RemoveNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>())).Returns(sync.Task);
         var service = MakeHierarchyService(fixture);
         service.AuthoringChanged += (_, _) => fixture.Context.Metadata.IsDirty = true;
         var removal = service.DeleteItemsAsync([new SceneNodeAdapter(first), new SceneNodeAdapter(second)]);
@@ -146,7 +146,7 @@ public sealed class SceneSaveRevisionTests
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var sync = new TaskCompletionSource<SyncOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Sync.Setup(value => value.UpdatePropertiesAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<CancellationToken>())).Returns(sync.Task);
+        _ = fixture.Sync.Setup(value => value.UpdatePropertiesAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).Returns(sync.Task);
         var edit = fixture.Commands.EditTransformAsync(fixture.Context, [first.Id, second.Id], new TransformEdit(default, default, default, PositionX: OptionalEditValues.Supplied(42f)), EditSessionToken.OneShot);
         _ = edit.IsCompleted.Should().BeFalse();
         _ = first.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(42);

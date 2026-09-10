@@ -487,7 +487,8 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
       implementation has managed regression coverage; save/close and control gates remain.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:
       numeric feedback and ordering tests pass; complete dependent/control evidence remains.
-- [ ] 07A.4 offline/reconnect/lifetime convergence with failed work retained.
+- [x] 07A.4 offline/reconnect/lifetime convergence with failed work retained;
+      WorldEditor 131/131 and Runtime 61/61 regressions pass.
 - [ ] 07A.5 shared atomic write/conflict safety (#7), preserving landed #4 revisions.
 - [x] 07A.7 active loop supervision/state diagnostics and restart isolation (#6),
       with Runtime direct-service and native regressions passing 59/59.

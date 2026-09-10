@@ -18,6 +18,12 @@ public static class LiveSyncDiagnosticCodes
     /// <summary>Live sync operation was cancelled.</summary>
     public const string Cancelled = DiagnosticCodes.LiveSyncPrefix + "Cancelled";
 
+    /// <summary>A deferred scene mutation was rejected by the runtime.</summary>
+    public const string MutationRejected = DiagnosticCodes.LiveSyncPrefix + "MUTATION.Rejected";
+
+    /// <summary>A deferred scene mutation failed during runtime publication.</summary>
+    public const string MutationFailed = DiagnosticCodes.LiveSyncPrefix + "MUTATION.Failed";
+
     /// <summary>Transform live sync was rejected.</summary>
     public const string TransformRejected = DiagnosticCodes.LiveSyncPrefix + "TRANSFORM.Rejected";
 

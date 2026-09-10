@@ -31,7 +31,6 @@ public sealed partial class SceneEngineSync(
 {
     private static readonly TimeSpan NodeCreationTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, DocumentLifetime> documentLifetimes = [];
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The application owns the injected engine service; disposing scene synchronization must not shut down the shared runtime.")]
     private readonly IEngineService engineService = engineService ?? throw new ArgumentNullException(nameof(engineService));
     private readonly ILogger<SceneEngineSync> logger = loggerFactory?.CreateLogger<SceneEngineSync>() ?? NullLoggerFactory.Instance.CreateLogger<SceneEngineSync>();
@@ -45,30 +44,25 @@ public sealed partial class SceneEngineSync(
     public event EventHandler<PendingPropertySyncCountChangedEventArgs>? PendingPropertySyncCountChanged;
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.activeWorld = null;
-        this.activeScene = null;
-        if (this.observedWorld is { } observedWorld)
-        {
-            observedWorld.AssetLoadFailed -= this.OnAssetLoadFailed;
-            this.observedWorld = null;
-        }
-
-        this.sceneSyncGate.Dispose();
-    }
-
-    /// <inheritdoc/>
     public async Task<bool> SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        lock (this.documentGate)
+        {
+            if (this.disposed || !this.TryGetDocument(scene, out _))
+            {
+                return false;
+            }
+
+            this.SelectRequestedScene(scene);
+        }
 
         if (this.engineService.State != EngineServiceState.Running)
         {
             this.LogEngineNotRunningDeferringSceneSync(scene);
         }
 
-        while (!cancellationToken.IsCancellationRequested)
+        while (!this.disposed && !cancellationToken.IsCancellationRequested)
         {
             var state = this.engineService.State;
             if (state == EngineServiceState.Running)
@@ -92,45 +86,13 @@ public sealed partial class SceneEngineSync(
             }
         }
 
-        return !cancellationToken.IsCancellationRequested && await this.SyncSceneAsync(scene, cancellationToken).ConfigureAwait(false);
+        return !this.disposed && !cancellationToken.IsCancellationRequested
+            && await this.SyncSceneCoreAsync(scene, skipIfCurrent: true, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SyncSceneAsync(Scene scene, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-
-        try
-        {
-            await this.sceneSyncGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-
-        var world = this.TryGetWorld();
-        if (world is null)
-        {
-            _ = this.sceneSyncGate.Release();
-            this.LogOxygenWorldNotAvailableSkippingSceneSync(scene);
-            return false;
-        }
-
-        try
-        {
-            return await this.BuildSceneInEngineAsync(scene, world, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToSyncSceneWithEngine(ex, scene);
-            return false;
-        }
-        finally
-        {
-            _ = this.sceneSyncGate.Release();
-        }
-    }
+    public Task<bool> SyncSceneAsync(Scene scene, CancellationToken cancellationToken = default)
+        => this.SyncSceneCoreAsync(scene, skipIfCurrent: false, cancellationToken);
 
     /// <inheritdoc/>
     public Task<SyncOutcome> UpdateNodeTransformAsync(
@@ -372,38 +334,24 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public async Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+    public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,
         SceneEnvironmentData environment,
         CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(environment);
-
-        var scope = Scope(scene);
-        if (this.TryClassifyReadiness(
-                this.engineService,
-                scene,
-                SceneOperationKinds.EditEnvironment,
-                scope,
-                cancellationToken,
-                out var readinessOutcome))
-        {
-            return new EnvironmentSyncResult(readinessOutcome.Status, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
-        }
-
-        var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken).ConfigureAwait(false);
-        var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken).ConfigureAwait(false);
-        var backgroundOutcome = await this.SyncBackgroundAsync(scene, environment, cancellationToken).ConfigureAwait(false);
-        return EnvironmentResult(sunOutcome, environmentOutcome, backgroundOutcome);
-    }
+        => this.UpdateEnvironmentAsync(scene, environment, this.CaptureRevision(scene), cancellationToken);
 
     /// <inheritdoc/>
     public async Task CreateNodeAsync(SceneNode node, Guid? parentGuid = null)
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        var world = this.TryGetWorld();
+        if (this.TryDeferNodeCreation(node, parentGuid, out var pending))
+        {
+            await pending.ConfigureAwait(false);
+            return;
+        }
+
+        var world = this.TryGetWorld(node.Scene);
         if (world is null)
         {
             this.LogCannotCreateNode(node);
@@ -424,7 +372,7 @@ public sealed partial class SceneEngineSync(
             }
 
             ApplyTransform(world, node);
-            this.ApplyRenderableComponents(world, node);
+            _ = this.ApplyRenderableComponents(world, node);
 
             this.LogCreatedAndInitializedNode(node);
         }
@@ -436,9 +384,9 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeAsync(Guid nodeId)
+    public Task RemoveNodeAsync(Scene scene, Guid nodeId)
     {
-        var world = this.TryGetWorld();
+        var world = this.TryGetWorld(scene);
         if (world is null)
         {
             this.LogCannotRemoveNode(nodeId);
@@ -447,7 +395,7 @@ public sealed partial class SceneEngineSync(
 
         try
         {
-            world.Execute(new RuntimeRemoveSceneNode(nodeId));
+            this.ExecuteOrDefer(scene, world, new RuntimeRemoveSceneNode(nodeId));
             this.LogRemovedNode(nodeId);
         }
         catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
@@ -459,9 +407,9 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeHierarchyAsync(Guid rootNodeId)
+    public Task RemoveNodeHierarchyAsync(Scene scene, Guid rootNodeId)
     {
-        var world = this.TryGetWorld();
+        var world = this.TryGetWorld(scene);
         if (world is null)
         {
             this.LogCannotRemoveNodeHierarchy(rootNodeId);
@@ -469,33 +417,33 @@ public sealed partial class SceneEngineSync(
         }
 
         // OxygenWorld's RemoveSceneNode handles hierarchy destruction if children exist.
-        world.Execute(new RuntimeRemoveSceneNode(rootNodeId));
+        this.ExecuteOrDefer(scene, world, new RuntimeRemoveSceneNode(rootNodeId));
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
-    public Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds)
+    public Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<Guid> rootNodeIds)
     {
         if (rootNodeIds.Count == 0)
         {
             return Task.CompletedTask;
         }
 
-        var world = this.TryGetWorld();
+        var world = this.TryGetWorld(scene);
         if (world is null)
         {
             this.LogCannotRemoveNodeHierarchies();
             return Task.CompletedTask;
         }
 
-        world.Execute(new RuntimeRemoveSceneNodes(rootNodeIds.ToImmutableArray()));
+        this.ExecuteOrDefer(scene, world, new RuntimeRemoveSceneNodes(rootNodeIds.ToImmutableArray()));
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
-    public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
+    public Task ReparentNodeAsync(Scene scene, Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
     {
-        var world = this.TryGetWorld();
+        var world = this.TryGetWorld(scene);
         if (world is null)
         {
             this.LogCannotReparentNode(nodeId);
@@ -504,7 +452,7 @@ public sealed partial class SceneEngineSync(
 
         try
         {
-            world.Execute(new RuntimeReparentSceneNode(nodeId, newParentGuid, preserveWorldTransform));
+            this.ExecuteOrDefer(scene, world, new RuntimeReparentSceneNode(nodeId, newParentGuid, preserveWorldTransform));
             this.LogReparentedNode(nodeId, newParentGuid);
         }
         catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
@@ -516,21 +464,21 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false)
+    public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false)
     {
         if (nodeIds.Count == 0)
         {
             return Task.CompletedTask;
         }
 
-        var world = this.TryGetWorld();
+        var world = this.TryGetWorld(scene);
         if (world is null)
         {
             this.LogCannotReparentHierarchies();
             return Task.CompletedTask;
         }
 
-        world.Execute(new RuntimeReparentSceneNodes(nodeIds.ToImmutableArray(), newParentGuid, preserveWorldTransform));
+        this.ExecuteOrDefer(scene, world, new RuntimeReparentSceneNodes(nodeIds.ToImmutableArray(), newParentGuid, preserveWorldTransform));
         return Task.CompletedTask;
     }
 
@@ -547,29 +495,17 @@ public sealed partial class SceneEngineSync(
         SceneNode node,
         IReadOnlyList<EnginePropertyValueEntry> entries,
         CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(entries);
-        var operationKind = GetPropertyOperationKind(entries);
-        var scope = Scope(scene, node, componentType: GetPropertyComponentType(entries));
-        return entries.Count == 0
-            ? Task.FromResult(Accepted(operationKind, scope))
-            : this.TryGetReadyWorld(
-                this.engineService,
-                scene,
-                operationKind,
-                scope,
-                cancellationToken,
-                out var world,
-                out var readinessOutcome)
-            ? Task.FromResult(this.HandlePropertySyncReadiness(scene, node, entries, readinessOutcome))
-            : Task.FromResult(this.ApplyPropertySync(scene, node, entries, scope, world!, operationKind, cancellationToken));
-    }
+        => this.UpdatePropertiesAsync(scene, node, entries, this.CaptureRevision(scene), cancellationToken);
 
     /// <inheritdoc/>
     public int GetPendingPropertySyncCount(Guid sceneId)
-        => this.pendingPropertySyncs.Count(sceneId);
+    {
+        lock (this.documentGate)
+        {
+            return this.pendingPropertySyncs.Count(sceneId)
+                + (this.openScenes.TryGetValue(sceneId, out var lifetime) ? lifetime.PendingMutations.Count + (lifetime.PendingEnvironment is null ? 0 : 1) : 0);
+        }
+    }
 
     /// <inheritdoc/>
     public Task AttachGeometryAsync(SceneNode node, GeometryComponent geometry)
@@ -793,97 +729,219 @@ public sealed partial class SceneEngineSync(
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<bool> BuildSceneInEngineAsync(
+    private static RuntimeSetEnvironment BuildEnvironmentCommand(SceneEnvironmentData environment)
+    {
+        var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
+        var post = environment.PostProcess ?? new PostProcessEnvironmentData();
+        return new RuntimeSetEnvironment(
+                environment.AtmosphereEnabled,
+                sky.SunDiskEnabled,
+                sky.PlanetRadiusMeters,
+                sky.AtmosphereHeightMeters,
+                sky.GroundAlbedoRgb,
+                sky.RayleighScaleHeightMeters,
+                sky.MieScaleHeightMeters,
+                sky.MieAnisotropy,
+                sky.SkyLuminanceFactorRgb,
+                sky.AerialPerspectiveDistanceScale,
+                sky.AerialScatteringStrength,
+                sky.AerialPerspectiveStartDepthMeters,
+                sky.HeightFogContribution,
+                (int)post.ExposureMode,
+                post.ExposureEnabled,
+                post.ExposureKey,
+                post.ManualExposureEv,
+                post.ExposureCompensationEv,
+                (int)post.ToneMapper,
+                (int)post.AutoExposureMeteringMode,
+                post.AutoExposureMinEv,
+                post.AutoExposureMaxEv,
+                post.AutoExposureSpeedUp,
+                post.AutoExposureSpeedDown,
+                post.AutoExposureLowPercentile,
+                post.AutoExposureHighPercentile,
+                post.AutoExposureMinLogLuminance,
+                post.AutoExposureLogLuminanceRange,
+                post.AutoExposureTargetLuminance,
+                post.AutoExposureSpotMeterRadius,
+                post.BloomIntensity,
+                post.BloomThreshold,
+                post.Saturation,
+                post.Contrast,
+                post.VignetteIntensity,
+                post.DisplayGamma);
+    }
+
+    private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        lock (this.documentGate)
+        {
+            if (this.disposed || !this.TryGetDocument(scene, out _))
+            {
+                return false;
+            }
+
+            this.SelectRequestedScene(scene);
+            _ = Interlocked.Increment(ref this.syncOperations);
+        }
+
+        var entered = false;
+        try
+        {
+            await this.sceneSyncGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            if (this.disposed || !ReferenceEquals(this.requestedScene, scene))
+            {
+                return false;
+            }
+
+            if (skipIfCurrent && this.IsSceneProjectionCurrent(scene))
+            {
+                return true;
+            }
+
+            var world = this.TryGetWorld();
+            if (world is null)
+            {
+                this.LogOxygenWorldNotAvailableSkippingSceneSync(scene);
+                return false;
+            }
+
+            var projection = await this.CaptureSceneProjectionAsync(scene).ConfigureAwait(false);
+            return projection is not null && await this.BuildSceneInEngineAsync(projection, world, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception exception) when (EngineInteropExceptionPolicy.IsRecoverable(exception))
+        {
+            this.LogFailedToSyncSceneWithEngine(exception, scene);
+            return false;
+        }
+        finally
+        {
+            if (entered)
+            {
+                _ = this.sceneSyncGate.Release();
+            }
+
+            _ = Interlocked.Decrement(ref this.syncOperations);
+            this.TryDisposeSyncGate();
+        }
+    }
+
+    private async Task<EnvironmentSyncResult> ApplyEnvironmentAsync(
         Scene scene,
+        SceneEnvironmentData environment,
+        CancellationToken cancellationToken,
+        WorldDispatch? dispatchOverride = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(environment);
+
+        var scope = Scope(scene);
+        if (dispatchOverride is null && this.TryClassifyReadiness(
+                this.engineService,
+                scene,
+                SceneOperationKinds.EditEnvironment,
+                scope,
+                cancellationToken,
+                out var readinessOutcome))
+        {
+            return EnvironmentResult(readinessOutcome, readinessOutcome, readinessOutcome);
+        }
+
+        var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
+        var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
+        var backgroundOutcome = await this.SyncBackgroundAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
+        return EnvironmentResult(sunOutcome, environmentOutcome, backgroundOutcome);
+    }
+
+    private async Task<bool> BuildSceneInEngineAsync(
+        SceneProjection projection,
         WorldDispatch world,
         CancellationToken cancellationToken)
     {
+        var scene = projection.Snapshot;
         cancellationToken.ThrowIfCancellationRequested();
-        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, this.documentLifetimes.GetValue(scene, _ => new()).Id, Guid.NewGuid());
+        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid());
         world = new WorldDispatch(world.Commands, target, cancellationToken);
-        this.activeWorld = world;
-        this.activeScene = scene;
-        var activation = await world.Commands.ActivateSceneAsync(Guid.NewGuid(), target, scene.Name, cancellationToken).ConfigureAwait(false);
-        var created = activation.Succeeded;
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!created)
+        lock (this.documentGate)
         {
-            this.LogFailedToSyncSceneWithEngine(
-                new InvalidOperationException("CreateSceneAsync returned false"),
-                scene);
-            return false;
+            if (!this.IsDocumentCurrent(projection.Lifetime))
+            {
+                return false;
+            }
+
+            this.activeWorld = world;
+            this.activeScene = projection.Lifetime.Scene;
+            this.projecting = projection;
         }
 
-        this.LogCreatedSceneInEngine(scene);
-        this.LogSceneTransforms(scene);
-
-        var nodesCreated = await this.CreateAllNodesAsync(scene, world, cancellationToken).ConfigureAwait(false);
-        if (!nodesCreated)
+        try
         {
-            return false;
+            var activation = await world.Commands.ActivateSceneAsync(Guid.NewGuid(), target, scene.Name, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return activation.Succeeded
+                && await this.CreateAllNodesAsync(scene, world, cancellationToken).ConfigureAwait(false)
+                && await this.CompleteSceneProjectionAsync(projection, world, cancellationToken).ConfigureAwait(false);
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        this.LogApplyingHierarchyAndComponents(scene.RootNodes.Count);
-        this.ApplyHierarchyAndComponents(scene, world);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        this.LogPropagatingTransforms();
-        this.PropagateTransforms(scene, world);
-        var sunOutcome = await this.SyncSunBindingAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
-        if (sunOutcome.Status != SyncStatus.Accepted)
+        finally
         {
-            this.LogFailedToSyncSceneWithEngine(
-                new InvalidOperationException($"Initial environment sun sync returned {sunOutcome.Status}: {sunOutcome.Message}"),
-                scene);
-            return false;
+            if (ReferenceEquals(this.projecting, projection))
+            {
+                this.projecting = null;
+                this.FinishDeferredWaiters(projection.Lifetime);
+            }
         }
-
-        var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
-        if (environmentOutcome.Status != SyncStatus.Accepted)
-        {
-            this.LogFailedToSyncSceneWithEngine(
-                new InvalidOperationException($"Initial environment sync returned {environmentOutcome.Status}: {environmentOutcome.Message}"),
-                scene);
-            return false;
-        }
-
-        var backgroundOutcome = await this.SyncBackgroundAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
-        if (backgroundOutcome.Status != SyncStatus.Accepted)
-        {
-            this.LogFailedToSyncSceneWithEngine(new InvalidOperationException(backgroundOutcome.Message), scene);
-            return false;
-        }
-
-        this.ReplayPendingPropertySyncs(scene, world);
-        return true;
     }
 
-    private SyncOutcome HandlePropertySyncReadiness(
-        Scene scene,
-        SceneNode node,
-        IReadOnlyList<EnginePropertyValueEntry> entries,
-        SyncOutcome readinessOutcome)
+    private async Task<bool> CompleteSceneProjectionAsync(SceneProjection projection, WorldDispatch world, CancellationToken cancellationToken)
     {
-        if (LiveSyncBufferingPolicy.ShouldBufferPropertySync(readinessOutcome))
+        var scene = projection.Snapshot;
+        var target = world.Target;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!this.IsDocumentCurrent(projection.Lifetime) || this.activeWorld?.Target != target)
         {
-            var pendingCount = this.pendingPropertySyncs.Enqueue(scene.Id, node.Id, entries);
-            var bufferedOutcome = readinessOutcome with
-            {
-                Message = string.Create(CultureInfo.InvariantCulture, $"The runtime engine is {this.engineService.State}; live sync was buffered. {pendingCount} pending property edit(s) will replay after scene sync."),
-            };
-            this.LogSetPropertiesBuffered(scene.Id, node.Id, entries.Count, pendingCount);
-            this.OnPendingPropertySyncCountChanged(scene.Id, pendingCount);
-            return bufferedOutcome;
+            return false;
         }
 
-        this.LogSetPropertiesSkipped(
-            scene.Id,
-            node.Id,
-            readinessOutcome.Status,
-            readinessOutcome.Code ?? LiveSyncDiagnosticCodes.NotRunning,
-            entries.Count);
-        return readinessOutcome;
+        if (!this.ApplyHierarchyAndComponents(scene, world) || !this.PropagateTransforms(scene, world))
+        {
+            return false;
+        }
+
+        if (scene.Environment.SunNodeId is { } sunId
+            && FindNode(scene, sunId)?.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is null)
+        {
+            return false;
+        }
+
+        world.Execute(BuildEnvironmentCommand(scene.Environment));
+        world.Execute(new RuntimeSetBackgroundColor(scene.Environment.BackgroundColor));
+        lock (this.documentGate)
+        {
+            if (!this.IsDocumentCurrent(projection.Lifetime) || this.activeWorld?.Target != target)
+            {
+                return false;
+            }
+
+            this.SupersedePendingSyncs(projection);
+        }
+
+        while (this.IsDocumentCurrent(projection.Lifetime) && this.activeWorld?.Target == target)
+        {
+            var current = await this.ReplayPendingSceneSyncsAsync(projection, world).ConfigureAwait(false);
+            var published = await this.PublishProjectedNodesAsync(projection, target, current).ConfigureAwait(false);
+            if (!current || published)
+            {
+                return current;
+            }
+        }
+
+        return false;
     }
 
     private SyncOutcome ApplyPropertySync(
@@ -944,7 +1002,8 @@ public sealed partial class SceneEngineSync(
     private async Task<SyncOutcome> SyncSunBindingAsync(
         Scene scene,
         SceneEnvironmentData environment,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        WorldDispatch? dispatchOverride = null)
     {
         if (environment.SunNodeId is not { } sunNodeId)
         {
@@ -964,71 +1023,44 @@ public sealed partial class SceneEngineSync(
                 Scope(scene, sunNode, componentType: nameof(DirectionalLightComponent)),
                 LiveSyncDiagnosticCodes.EnvironmentRejected,
                 $"Environment sun node '{sunNode.Name}' does not have a directional light component.")
-            : await this.AttachLightAsync(scene, sunNode, cancellationToken).ConfigureAwait(false);
+            : dispatchOverride is null
+            ? await this.AttachLightAsync(scene, sunNode, cancellationToken).ConfigureAwait(false)
+            : await this.ExecuteNodeSyncAsync(
+                scene,
+                sunNode,
+                sunNode.Id,
+                SceneOperationKinds.EditDirectionalLight,
+                nameof(DirectionalLightComponent),
+                LiveSyncDiagnosticCodes.LightRejected,
+                LiveSyncDiagnosticCodes.LightFailed,
+                world => ApplyLight(world, sunNode, sunNode.Components.OfType<DirectionalLightComponent>().First()),
+                cancellationToken,
+                dispatchOverride).ConfigureAwait(false);
     }
 
     private Task<SyncOutcome> SyncEnvironmentSystemsAsync(
         Scene scene,
         SceneEnvironmentData environment,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        WorldDispatch? dispatchOverride = null)
     {
         var scope = Scope(scene);
-        if (this.TryClassifyReadiness(
+        return dispatchOverride is null && this.TryClassifyReadiness(
                 this.engineService,
                 scene,
                 SceneOperationKinds.EditEnvironment,
                 scope,
                 cancellationToken,
-                out var readinessOutcome))
-        {
-            return Task.FromResult(readinessOutcome);
-        }
-
-        var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
-        var post = environment.PostProcess ?? new PostProcessEnvironmentData();
-        return this.ExecuteSceneSyncAsync(
+                out var readinessOutcome)
+            ? Task.FromResult(readinessOutcome)
+            : this.ExecuteSceneSyncAsync(
             scene,
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(new RuntimeSetEnvironment(
-                environment.AtmosphereEnabled,
-                sky.SunDiskEnabled,
-                sky.PlanetRadiusMeters,
-                sky.AtmosphereHeightMeters,
-                sky.GroundAlbedoRgb,
-                sky.RayleighScaleHeightMeters,
-                sky.MieScaleHeightMeters,
-                sky.MieAnisotropy,
-                sky.SkyLuminanceFactorRgb,
-                sky.AerialPerspectiveDistanceScale,
-                sky.AerialScatteringStrength,
-                sky.AerialPerspectiveStartDepthMeters,
-                sky.HeightFogContribution,
-                (int)post.ExposureMode,
-                post.ExposureEnabled,
-                post.ExposureKey,
-                post.ManualExposureEv,
-                post.ExposureCompensationEv,
-                (int)post.ToneMapper,
-                (int)post.AutoExposureMeteringMode,
-                post.AutoExposureMinEv,
-                post.AutoExposureMaxEv,
-                post.AutoExposureSpeedUp,
-                post.AutoExposureSpeedDown,
-                post.AutoExposureLowPercentile,
-                post.AutoExposureHighPercentile,
-                post.AutoExposureMinLogLuminance,
-                post.AutoExposureLogLuminanceRange,
-                post.AutoExposureTargetLuminance,
-                post.AutoExposureSpotMeterRadius,
-                post.BloomIntensity,
-                post.BloomThreshold,
-                post.Saturation,
-                post.Contrast,
-                post.VignetteIntensity,
-                post.DisplayGamma)),
-            cancellationToken);
+            world => world.Execute(BuildEnvironmentCommand(environment)),
+            cancellationToken,
+            dispatchOverride);
     }
 
     private Task<SyncOutcome> ExecuteNodeSyncAsync(
@@ -1059,16 +1091,18 @@ public sealed partial class SceneEngineSync(
         string rejectedCode,
         string failedCode,
         Action<WorldDispatch> apply,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        WorldDispatch? dispatchOverride = null)
     {
         var scope = Scope(scene, node, nodeId, componentType);
-        if (this.TryGetReadyWorld(
+        var world = dispatchOverride;
+        if (world is null && this.TryGetReadyWorld(
                 this.engineService,
                 scene,
                 operationKind,
                 scope,
                 cancellationToken,
-                out var world,
+                out world,
                 out var readinessOutcome))
         {
             return Task.FromResult(readinessOutcome);
@@ -1077,6 +1111,11 @@ public sealed partial class SceneEngineSync(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (dispatchOverride is null && this.TryDeferMutation(scene, world!, apply, operationKind, scope, out var deferred))
+            {
+                return Task.FromResult(deferred);
+            }
+
             apply(world!);
             return Task.FromResult(Accepted(operationKind, scope));
         }
@@ -1116,16 +1155,18 @@ public sealed partial class SceneEngineSync(
         string rejectedCode,
         string failedCode,
         Action<WorldDispatch> apply,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        WorldDispatch? dispatchOverride = null)
     {
         var scope = Scope(scene);
-        if (this.TryGetReadyWorld(
+        var world = dispatchOverride;
+        if (world is null && this.TryGetReadyWorld(
                 this.engineService,
                 scene,
                 operationKind,
                 scope,
                 cancellationToken,
-                out var world,
+                out world,
                 out var readinessOutcome))
         {
             return Task.FromResult(readinessOutcome);
@@ -1134,6 +1175,11 @@ public sealed partial class SceneEngineSync(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (dispatchOverride is null && this.TryDeferMutation(scene, world!, apply, operationKind, scope, out var deferred))
+            {
+                return Task.FromResult(deferred);
+            }
+
             apply(world!);
             return Task.FromResult(Accepted(operationKind, scope));
         }
@@ -1167,58 +1213,18 @@ public sealed partial class SceneEngineSync(
         }
     }
 
-    private void ReplayPendingPropertySyncs(Scene scene, WorldDispatch world)
-    {
-        var pendingEntries = this.pendingPropertySyncs.Drain(scene.Id);
-        if (pendingEntries.Count == 0)
-        {
-            return;
-        }
-
-        var replayed = 0;
-        var skipped = 0;
-        foreach (var pendingEntry in pendingEntries)
-        {
-            if (!SceneContainsNode(scene, pendingEntry.NodeId))
-            {
-                skipped++;
-                this.LogBufferedSetPropertiesReplaySkipped(scene.Id, pendingEntry.NodeId, pendingEntry.Entries.Count);
-                continue;
-            }
-
-            try
-            {
-                world.Execute(new RuntimeSetProperties(pendingEntry.NodeId, EnginePropertyWire.ToWireEntries(pendingEntry.Entries)));
-                replayed++;
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
-            {
-                skipped++;
-                this.LogBufferedSetPropertiesReplayRejected(ex, scene.Id, pendingEntry.NodeId, pendingEntry.Entries.Count);
-            }
-        }
-
-        this.LogBufferedSetPropertiesReplayCompleted(scene.Id, pendingEntries.Count, replayed, skipped);
-        this.OnPendingPropertySyncCountChanged(scene.Id, pendingCount: 0);
-
-        static bool SceneContainsNode(Scene scene, Guid nodeId)
-        {
-            foreach (var rootNode in scene.RootNodes)
-            {
-                if (SceneTraversal.FindNodeById(rootNode, nodeId) is not null)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
     private void OnPendingPropertySyncCountChanged(Guid sceneId, int pendingCount)
         => this.PendingPropertySyncCountChanged?.Invoke(
             this,
             new PendingPropertySyncCountChangedEventArgs(sceneId, pendingCount));
+
+    private WorldDispatch? TryGetWorld(Scene scene)
+    {
+        var world = this.TryGetWorld();
+        return world is not null && ReferenceEquals(this.activeScene, scene) && world.Target.SceneId == scene.Id
+            ? world
+            : null;
+    }
 
     private WorldDispatch? TryGetWorld()
     {
@@ -1244,8 +1250,9 @@ public sealed partial class SceneEngineSync(
         }
     }
 
-    private void ApplyRenderableComponents(WorldDispatch world, SceneNode node)
+    private bool ApplyRenderableComponents(WorldDispatch world, SceneNode node)
     {
+        var succeeded = true;
         var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
         if (geometryComp is not null)
         {
@@ -1255,6 +1262,7 @@ public sealed partial class SceneEngineSync(
             }
             catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
+                succeeded = false;
                 this.LogFailedToAttachGeometry(ex, node);
             }
         }
@@ -1267,6 +1275,7 @@ public sealed partial class SceneEngineSync(
             }
             catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
+                succeeded = false;
                 this.LogFailedToAttachCameraComponent(ex, node.Id);
             }
         }
@@ -1279,9 +1288,12 @@ public sealed partial class SceneEngineSync(
             }
             catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
+                succeeded = false;
                 this.LogFailedToAttachLightComponent(ex, node.Id);
             }
         }
+
+        return succeeded;
     }
 
     private void ApplyCamera(WorldDispatch world, SceneNode node, CameraComponent camera)
@@ -1349,14 +1361,16 @@ public sealed partial class SceneEngineSync(
         return false;
     }
 
-    private void ApplyHierarchyAndComponents(Scene scene, WorldDispatch world)
+    private bool ApplyHierarchyAndComponents(Scene scene, WorldDispatch world)
     {
+        var succeeded = true;
+
         void ResolveAndApply(SceneNode node, Guid? parentGuid)
         {
             if (!node.IsActive)
             {
                 this.LogNodeCreationNotSuccessful(node);
-                _ = scene.RootNodes.Remove(node);
+                succeeded = false;
                 return;
             }
 
@@ -1367,6 +1381,7 @@ public sealed partial class SceneEngineSync(
             }
             catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
+                succeeded = false;
                 this.LogFailedToReparentNode(ex, node);
             }
 
@@ -1377,10 +1392,11 @@ public sealed partial class SceneEngineSync(
             }
             catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
+                succeeded = false;
                 this.LogFailedToSetTransform(ex, node);
             }
 
-            this.ApplyRenderableComponents(world, node);
+            succeeded &= this.ApplyRenderableComponents(world, node);
 
             foreach (var child in node.Children)
             {
@@ -1393,9 +1409,11 @@ public sealed partial class SceneEngineSync(
             this.LogProcessingHierarchyRootNode(root);
             ResolveAndApply(root, parentGuid: null);
         }
+
+        return succeeded;
     }
 
-    private void PropagateTransforms(Scene scene, WorldDispatch world)
+    private bool PropagateTransforms(Scene scene, WorldDispatch world)
     {
         try
         {
@@ -1417,10 +1435,13 @@ public sealed partial class SceneEngineSync(
             {
                 world.Execute(new RuntimeUpdateTransformsForNodes([.. handles]));
             }
+
+            return true;
         }
         catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogFailedToRequestTransformPropagation(ex);
+            return false;
         }
     }
 

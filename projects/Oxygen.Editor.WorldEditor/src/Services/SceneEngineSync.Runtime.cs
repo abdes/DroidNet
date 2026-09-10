@@ -23,17 +23,20 @@ public sealed partial class SceneEngineSync
             _ => Failed(operationKind, scope, failedCode, result.Message ?? "Runtime command failed.", result.Exception),
         };
 
-    private sealed class DocumentLifetime
-    {
-        public Guid Id { get; } = Guid.NewGuid();
-    }
-
     // This local dispatch context keeps the captured target and cancellation token together.
     // It owns no native objects and does not resolve a later active scene during dispatch.
     private sealed record WorldDispatch(IRuntimeWorldCommands Commands, RuntimeSceneTarget Target, CancellationToken CancellationToken)
     {
+        public Action<RuntimeWorldCommand>? Collect { get; init; }
+
         public void Execute(RuntimeWorldCommand command)
         {
+            if (this.Collect is { } collect)
+            {
+                collect(command);
+                return;
+            }
+
             var result = this.Commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), this.Target, command), this.CancellationToken);
             if (!result.Succeeded)
             {

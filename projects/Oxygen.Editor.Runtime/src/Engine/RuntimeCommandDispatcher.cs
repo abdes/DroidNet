@@ -13,6 +13,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
     private IRuntimeCommandTransport? transport;
     private Task? loop;
     private TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource sceneEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private RuntimeSceneTarget? scene;
     private Guid runId;
     private bool sceneReady;
@@ -68,6 +69,22 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             this.views.Clear();
             this.assetOperations.Clear();
             _ = this.ended.TrySetResult();
+            _ = this.sceneEnded.TrySetResult();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void InvalidateScene(RuntimeSceneTarget target)
+    {
+        lock (this.gate)
+        {
+            if (this.scene == target)
+            {
+                this.scene = null;
+                this.sceneReady = false;
+                this.assetOperations.Clear();
+                _ = this.sceneEnded.TrySetResult();
+            }
         }
     }
 
@@ -232,13 +249,15 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                 return new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "A scene activation requires scene, document and activation identities.");
             }
 
+            _ = this.sceneEnded.TrySetResult();
+            this.sceneEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
             this.scene = target;
             this.sceneReady = false;
             this.assetOperations.Clear();
             try
             {
                 creation = this.transport!.ActivateSceneAsync(name);
-                runEnded = Task.WhenAny(this.loop!, this.ended.Task);
+                runEnded = Task.WhenAny(this.loop!, this.ended.Task, this.sceneEnded.Task);
             }
             catch (Exception exception) when (IsRecoverable(exception))
             {
@@ -251,30 +270,39 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             var completed = await Task.WhenAny(creation, runEnded).WaitAsync(cancellationToken).ConfigureAwait(false);
             if (completed != creation)
             {
-                return new(operationId, target.RunId, RuntimeCommandStatus.Unavailable, "The runtime ended before scene creation completed.");
+                lock (this.gate)
+                {
+                    return this.CheckRun(operationId, target.RunId, cancellationToken)
+                        ?? new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "The scene activation was invalidated before creation completed.");
+                }
             }
 
             var created = await creation.ConfigureAwait(false);
-            lock (this.gate)
-            {
-                var rejection = this.CheckRun(operationId, target.RunId, cancellationToken);
-                if (rejection is not null)
-                {
-                    return rejection;
-                }
-
-                if (this.scene != target)
-                {
-                    return new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "Scene creation was superseded by another activation.");
-                }
-
-                this.sceneReady = created;
-                return created ? Accepted(operationId, target.RunId) : new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "Native scene creation was rejected.");
-            }
+            return this.CompleteSceneActivation(operationId, target, created, cancellationToken);
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
             return Failure(operationId, target.RunId, exception);
+        }
+    }
+
+    private RuntimeCommandResult CompleteSceneActivation(Guid operationId, RuntimeSceneTarget target, bool created, CancellationToken cancellationToken)
+    {
+        lock (this.gate)
+        {
+            var rejection = this.CheckRun(operationId, target.RunId, cancellationToken);
+            if (rejection is not null)
+            {
+                return rejection;
+            }
+
+            if (this.scene != target)
+            {
+                return new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "Scene creation was superseded by another activation.");
+            }
+
+            this.sceneReady = created;
+            return created ? Accepted(operationId, target.RunId) : new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "Native scene creation was rejected.");
         }
     }
 
@@ -299,7 +327,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             try
             {
                 creation = this.transport!.CreateNodeAsync(command);
-                runEnded = Task.WhenAny(this.loop!, this.ended.Task);
+                runEnded = Task.WhenAny(this.loop!, this.ended.Task, this.sceneEnded.Task);
             }
             catch (Exception exception) when (IsRecoverable(exception))
             {
@@ -312,7 +340,11 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             var completed = await Task.WhenAny(creation, runEnded).WaitAsync(cancellationToken).ConfigureAwait(false);
             if (completed != creation)
             {
-                return new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Unavailable, "The runtime ended before node creation completed.");
+                lock (this.gate)
+                {
+                    return this.Check(request.OperationId, request.Target, cancellationToken)
+                        ?? new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Rejected, "The scene activation was invalidated before node creation completed.");
+                }
             }
 
             await creation.ConfigureAwait(false);

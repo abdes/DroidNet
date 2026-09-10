@@ -34,6 +34,12 @@ public sealed record AffectedScope
     /// </summary>
     public Guid? DocumentId { get; init; }
 
+    /// <summary>Gets the open-document lifetime that originated the operation.</summary>
+    public Guid? DocumentLifetime { get; init; }
+
+    /// <summary>Gets the authoring revision captured with the operation payload.</summary>
+    public long? AuthoringRevision { get; init; }
+
     /// <summary>
     /// Gets the affected document path.
     /// </summary>

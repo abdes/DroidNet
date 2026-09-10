@@ -28,7 +28,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <see cref="PropertyEdit"/>, <see cref="PropertyApply"/>,
 /// <see cref="PropertyOp"/>) to the concrete C# transform model
 /// (<see cref="TransformComponent"/>) and to the generic engine property sync
-/// (<see cref="ISceneEngineSync.UpdatePropertiesAsync"/>).
+/// (<see cref="ISceneEngineSync.UpdatePropertiesAsync(Scene, SceneNode, IReadOnlyList{EnginePropertyValueEntry}, SceneSyncRevision, CancellationToken)"/>).
 /// </para>
 /// <para>
 /// <b>EditTransformAsync</b> in the sibling partial keeps its public
@@ -396,13 +396,21 @@ public sealed partial class SceneDocumentCommandService
 
     private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, DirectionalLightComponent light)
     {
-        ArgumentNullException.ThrowIfNull(edit);
         ArgumentNullException.ThrowIfNull(light);
+        return BuildDirectionalLightPropertyEntries(edit, light.Color, light.IsSunLight);
+    }
+
+    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit)
+        => BuildDirectionalLightPropertyEntries(edit, edit.Color.HasValue ? edit.Color.Value : Vector3.Zero, edit.IsSunLight.HasValue && edit.IsSunLight.Value);
+
+    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, Vector3 color, bool isSunLight)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
 
         var entries = new List<EnginePropertyValueEntry>(capacity: DirectionalLightPropertyEntryCapacity);
         if (edit.Color.HasValue)
         {
-            AddDirectionalLightColor(entries, light.Color);
+            AddDirectionalLightColor(entries, color);
         }
 
         AddOptional(entries, edit.AffectsWorld, DirectionalLightField.AffectsWorld);
@@ -418,7 +426,7 @@ public sealed partial class SceneDocumentCommandService
         AddOptional(entries, edit.EnvironmentContribution, DirectionalLightField.EnvironmentContribution);
         if (edit.IsSunLight.HasValue)
         {
-            entries.Add(BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight));
+            entries.Add(BoolEntry(DirectionalLightField.IsSunLight, isSunLight));
         }
 
         AddOptional(entries, edit.CascadeCount, DirectionalLightField.CascadeCount);
@@ -562,15 +570,15 @@ public sealed partial class SceneDocumentCommandService
         var resolver = new TransformPropertyTarget(this, context, sceneNodes);
         PropertyApply.ApplyToTargets(op, ApplySide.After, resolver, descriptors);
         this.RegisterPropertyOpHistory(context, op, resolver, descriptors);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await PropertyApply.PushToEngineAsync(op, ApplySide.After, resolver).ConfigureAwait(true);
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        await CompletePublicationAsync(metadataUpdate, PropertyApply.PushToEngineAsync(op, ApplySide.After, resolver.WithRevision(revision))).ConfigureAwait(true);
         return SceneCommandResult.Success;
     }
 
     private void RegisterPropertyOpHistory(
         SceneDocumentCommandContext context,
         PropertyOp op,
-        IPropertyTarget resolver,
+        TransformPropertyTarget resolver,
         IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors)
         => this.RegisterPropertyOpHistory(
             context,
@@ -585,7 +593,7 @@ public sealed partial class SceneDocumentCommandService
     private void RegisterPropertyOpHistory(
         SceneDocumentCommandContext context,
         PropertyOp op,
-        IPropertyTarget resolver,
+        TransformPropertyTarget resolver,
         IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors,
         ApplySide applySide,
         string label,
@@ -605,8 +613,8 @@ public sealed partial class SceneDocumentCommandService
                     inverseLabel,
                     applySide,
                     label);
-                await this.MarkDirtyAsync(context).ConfigureAwait(true);
-                await PropertyApply.PushToEngineAsync(op, applySide, resolver).ConfigureAwait(true);
+                var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+                await CompletePublicationAsync(metadataUpdate, PropertyApply.PushToEngineAsync(op, applySide, resolver.WithRevision(revision))).ConfigureAwait(true);
             });
 
     /// <summary>
@@ -616,11 +624,16 @@ public sealed partial class SceneDocumentCommandService
     /// <param name="owner">The owning command service.</param>
     /// <param name="context">The authoring context.</param>
     /// <param name="nodes">The transform targets.</param>
+    /// <param name="revision">The revision captured for this immutable transport instance.</param>
     private sealed class TransformPropertyTarget(
         SceneDocumentCommandService owner,
         SceneDocumentCommandContext context,
-        IReadOnlyDictionary<Guid, SceneNode> nodes) : IPropertyTarget
+        IReadOnlyDictionary<Guid, SceneNode> nodes,
+        SceneSyncRevision revision = default) : IPropertyTarget
     {
+        public TransformPropertyTarget WithRevision(SceneSyncRevision captured)
+            => new(owner, context, nodes, captured);
+
         public bool TryGetTarget(Guid nodeId, out object? target)
         {
             if (nodes.TryGetValue(nodeId, out var node))
@@ -648,19 +661,21 @@ public sealed partial class SceneDocumentCommandService
             var entries = BuildTransformPropertyEntries(edit);
             return entries.Count == 0
                 ? Task.CompletedTask
-                : PushAndPublishAsync(owner, context, node, entries);
+                : PushAndPublishAsync(owner, context, node, entries, revision);
         }
 
         private static async Task PushAndPublishAsync(
             SceneDocumentCommandService owner,
             SceneDocumentCommandContext context,
             SceneNode node,
-            IReadOnlyList<EnginePropertyValueEntry> entries)
+            IReadOnlyList<EnginePropertyValueEntry> entries,
+            SceneSyncRevision revision)
         {
             var outcome = await owner.sceneEngineSync.UpdatePropertiesAsync(
                 context.Scene,
                 node,
-                entries).ConfigureAwait(true);
+                entries,
+                revision).ConfigureAwait(true);
             _ = await owner.PublishSyncOutcomeAsync(
                 context,
                 SceneOperationKinds.EditTransform,

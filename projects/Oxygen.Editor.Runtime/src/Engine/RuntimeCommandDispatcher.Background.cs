@@ -24,7 +24,7 @@ internal sealed partial class RuntimeCommandDispatcher
             try
             {
                 observation = this.transport!.ObserveBackgroundAsync();
-                runEnded = Task.WhenAny(this.loop!, this.ended.Task);
+                runEnded = Task.WhenAny(this.loop!, this.ended.Task, this.sceneEnded.Task);
             }
             catch (Exception exception) when (IsRecoverable(exception))
             {
@@ -37,7 +37,12 @@ internal sealed partial class RuntimeCommandDispatcher
             var completed = await Task.WhenAny(observation, runEnded).WaitAsync(cancellationToken).ConfigureAwait(false);
             if (completed != observation)
             {
-                return BackgroundResult(new(operationId, target.RunId, RuntimeCommandStatus.Unavailable, "The runtime ended before background observation completed."), target);
+                lock (this.gate)
+                {
+                    var interrupted = this.Check(operationId, target, cancellationToken)
+                        ?? new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "The scene activation was invalidated before observation completed.");
+                    return BackgroundResult(interrupted, target);
+                }
             }
 
             var state = await observation.ConfigureAwait(false);

@@ -100,6 +100,17 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.activeScene = this.items.FirstOrDefault()?.Scene;
+        if (this.activeScene is null)
+        {
+            var activeDocument = this.documentService.GetActiveDocumentId(this.windowId);
+            var metadata = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>()
+                .FirstOrDefault(document => document.DocumentId == activeDocument);
+            if (metadata is not null)
+            {
+                this.activeScene = this.sceneEngineSync.GetDocumentScene(metadata);
+            }
+        }
+
         this.RefreshPendingLiveSyncState();
         this.environmentEditor.SetScene(this.items.Count == 0 ? this.activeScene : null);
         this.UpdateItemsCollection(this.items);
@@ -350,6 +361,26 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void RegisterSceneMessages(HostingContext hosting)
     {
+        this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
+            {
+                if (!this.documentService.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, message.Metadata)))
+                {
+                    return;
+                }
+
+                if (this.items.Any(node => !ReferenceEquals(node.Scene, message.Scene)))
+                {
+                    this.items = [];
+                }
+
+                this.activeScene = message.Scene;
+                this.RefreshPendingLiveSyncState();
+                this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
+                this.UpdateItemsCollection(this.items);
+                this.SubscribeToComponentCollections();
+            }));
+
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
             _ = hosting.Dispatcher.DispatchAsync(() =>
             {

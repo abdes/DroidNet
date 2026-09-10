@@ -221,6 +221,29 @@ node, switch scenes, close/reopen the same source, and edit during full resync.
 The live scene converges to current committed authoring values; the pending
 indicator cannot clear after an unreported failed replay.
 
+Implementation and automated gate (2026-09-11): open-document metadata instances
+own distinct projection lifetimes, including close-before-load and same-source
+reopen protection. Commands capture payload/revision before asynchronous metadata
+notification; notification no longer delays native publication. Full sync uses an
+owned scene snapshot captured on the UI dispatcher. Only an accepted snapshot can
+supersede earlier work. Later scalar, environment, hierarchy and component requests
+replay in revision/preview order; failed requests retain their status and pending
+count. Node creation precedes its subsequent property updates, and deleted or
+replaced targets cannot resurrect stale fields. Topology calls carry their source
+scene explicitly. Runtime scene invalidation ends pending acknowledgments.
+
+The requested scene resynchronizes when Runtime announces a new running lifetime.
+Authoring-load notification is separate from native readiness, so offline data can
+populate the inspector and save path. Current readiness is published only after
+replay; disposal retires document work before releasing the asynchronous sync gate.
+
+WorldEditor tests pass 131/131, including real command edit/undo/reconnect/redo,
+delayed metadata notification, snapshot/replay ordering, background failure and
+recovery, topology/component changes during projection, inactive-scene isolation,
+close/reopen, automatic recovery and disposal. Runtime tests pass 61/61, including
+pending scene/node cancellation and old-activation isolation. Required visible
+control/native field evidence remains in 07A.6.
+
 ### 07A.5 - Shared Atomic Save And Conflict Safety (#7)
 
 Preserve the landed #4 snapshot/revision and writer serialization. Factor the
@@ -337,7 +360,7 @@ There is no autosave scope expansion.
 - [ ] 07A.1 truthful background dispatch and live behavior pass.
 - [ ] 07A.2 gesture/history/selection/cancel cases pass on the existing controls.
 - [ ] 07A.3 scoped inline diagnostics and dependent invalidation cases pass.
-- [ ] 07A.4 offline/reconnect/lifetime convergence cases pass.
+- [x] 07A.4 offline/reconnect/lifetime convergence cases pass.
 - [ ] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
 - [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
 - [ ] 07A.8 document-owned material history and session tests pass (#9).

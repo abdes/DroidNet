@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
@@ -23,6 +24,36 @@ public interface ISceneEngineSync
     ///     Occurs when the number of buffered property sync requests changes for a scene.
     /// </summary>
     public event EventHandler<PendingPropertySyncCountChangedEventArgs>? PendingPropertySyncCountChanged;
+
+    /// <summary>Occurs after a current scene snapshot and its later pending work are accepted.</summary>
+    /// <remarks>Delivered on the configured UI dispatcher; acceptance does not prove presentation.</remarks>
+    public event EventHandler<SceneSynchronizationCompletedEventArgs>? SceneSynchronized;
+
+    /// <summary>Registers the scene and authoring revision owner for an open document.</summary>
+    /// <param name="scene">The loaded authoring scene.</param>
+    /// <param name="metadata">The metadata instance belonging to this open document.</param>
+    /// <returns>False if the document closed before its asynchronous load completed.</returns>
+    public bool RegisterDocument(Scene scene, SceneDocumentMetadata metadata);
+
+    /// <summary>Gets authoring data already loaded for a document, independently of runtime readiness.</summary>
+    /// <param name="metadata">The open document instance.</param>
+    /// <returns>The loaded scene, or null if it is still loading or has closed.</returns>
+    public Scene? GetDocumentScene(SceneDocumentMetadata metadata);
+
+    /// <summary>Invalidates queued work and runtime delivery for one document instance.</summary>
+    /// <param name="metadata">The closing document instance.</param>
+    public void CloseDocument(SceneDocumentMetadata metadata);
+
+    /// <summary>Captures revision and preview order before asynchronous publication.</summary>
+    /// <param name="scene">The registered authoring scene.</param>
+    /// <returns>The captured stamp, or an empty lifetime when the scene is no longer open.</returns>
+    public SceneSyncRevision CaptureRevision(Scene scene);
+
+    /// <summary>Captures authoring order only for the expected open-document instance.</summary>
+    /// <param name="scene">The source scene.</param>
+    /// <param name="metadata">The document instance that originated the mutation.</param>
+    /// <returns>The captured stamp, or an empty lifetime if the document was replaced.</returns>
+    public SceneSyncRevision CaptureRevision(Scene scene, SceneDocumentMetadata metadata);
 
     /// <summary>
     ///     Synchronizes an entire scene with the engine, creating all nodes and establishing the hierarchy.
@@ -53,41 +84,46 @@ public interface ISceneEngineSync
     /// <summary>
     ///     Removes a scene node from the engine.
     /// </summary>
+    /// <param name="scene">The originating authoring scene.</param>
     /// <param name="nodeId">The GUID of the node to remove.</param>
     /// <returns>A task that completes when the node is removed.</returns>
-    public Task RemoveNodeAsync(Guid nodeId);
+    public Task RemoveNodeAsync(Scene scene, Guid nodeId);
 
     /// <summary>
     ///     Removes a scene node hierarchy (node and all descendants) from the engine.
     /// </summary>
+    /// <param name="scene">The originating authoring scene.</param>
     /// <param name="rootNodeId">The GUID of the hierarchy root to remove.</param>
     /// <returns>A task that completes when the hierarchy is removed.</returns>
-    public Task RemoveNodeHierarchyAsync(Guid rootNodeId);
+    public Task RemoveNodeHierarchyAsync(Scene scene, Guid rootNodeId);
 
     /// <summary>
     ///     Removes multiple scene node hierarchies (nodes and all descendants) from the engine.
     /// </summary>
+    /// <param name="scene">The originating authoring scene.</param>
     /// <param name="rootNodeIds">The GUIDs of the hierarchy roots to remove.</param>
     /// <returns>A task that completes when the hierarchies are removed.</returns>
-    public Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds);
+    public Task RemoveNodeHierarchiesAsync(Scene scene, IReadOnlyList<Guid> rootNodeIds);
 
     /// <summary>
     ///     Reparents a node in the engine to the provided parent (null = root).
     /// </summary>
+    /// <param name="scene">The originating authoring scene.</param>
     /// <param name="nodeId">Node id to reparent.</param>
     /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make a root node.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
     /// <returns>A task that completes when the node is reparented.</returns>
-    public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
+    public Task ReparentNodeAsync(Scene scene, Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     /// <summary>
     ///     Reparents multiple node hierarchies to the same parent in the engine.
     /// </summary>
+    /// <param name="scene">The originating authoring scene.</param>
     /// <param name="nodeIds">Hierarchy roots to move.</param>
     /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make roots.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
     /// <returns>A task that completes when the hierarchies are reparented.</returns>
-    public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
+    public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     // ============================================================================
     // TransformComponent Operations
@@ -123,6 +159,20 @@ public interface ISceneEngineSync
         Scene scene,
         SceneNode node,
         IReadOnlyList<EnginePropertyValueEntry> entries,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Projects property values using the revision captured at authoring time.</summary>
+    /// <param name="scene">The authoring scene.</param>
+    /// <param name="node">The edited node.</param>
+    /// <param name="entries">The immutable property payload.</param>
+    /// <param name="revision">The lifetime and order captured before asynchronous work.</param>
+    /// <param name="cancellationToken">Cancels this delivery attempt.</param>
+    /// <returns>The native acceptance or retained pending outcome.</returns>
+    public Task<SyncOutcome> UpdatePropertiesAsync(
+        Scene scene,
+        SceneNode node,
+        IReadOnlyList<EnginePropertyValueEntry> entries,
+        SceneSyncRevision revision,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -364,6 +414,18 @@ public interface ISceneEngineSync
     public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,
         SceneEnvironmentData environment,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Projects an environment snapshot in its captured authoring order.</summary>
+    /// <param name="scene">The source authoring scene.</param>
+    /// <param name="environment">The immutable scene-system payload.</param>
+    /// <param name="revision">The revision captured before asynchronous work.</param>
+    /// <param name="cancellationToken">Cancels this delivery attempt.</param>
+    /// <returns>Independent environment field outcomes.</returns>
+    public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
+        Scene scene,
+        SceneEnvironmentData environment,
+        SceneSyncRevision revision,
         CancellationToken cancellationToken = default);
 
     /// <summary>
