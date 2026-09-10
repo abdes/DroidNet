@@ -94,7 +94,7 @@ engine/cooker interfaces; the engine remains the binary-format authority.
    property entry points. Record adapters converge on the same transaction.
 2. Resolve all targets and validate the complete proposed state before changing
    any target. Stale/invalid targets reject the transaction without partial edits.
-3. Apply model changes synchronously under the author's gate; publish revision
+3. Apply model changes synchronously under the authoring owner's gate; publish revision
    and history for the successful commit before awaiting runtime work.
 4. One gesture creates one undo entry. Previews add no history; commit captures
    final values; Escape/cancel restores before-values with no new history.
@@ -196,3 +196,23 @@ Schema properties, specialized adapters, revision-aware resynchronization, and
 explicit material Save/Cook preview are the V0.1 contract. No alternative wire
 or property architecture remains undecided. Unchecked gates are implementation/
 validation work; progress lives in [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
+
+## 16. Landed Foundations And Issue Ownership
+
+Issue #4 supplies coherent save snapshots, writer serialization and saved-revision
+acknowledgment. Preserve that implementation; ED-M07A.5 closes the separate #7
+atomic storage/conflict guarantees. Issue #9 material history is not supplied by
+schema validation or source replacement: ED-M07A.8 adds document-owned history.
+
+Issue #5 supplies native asset-request generations. Preserve it beneath Runtime's
+managed capabilities (#10, ED-M07A.0); the managed property queue still needs its
+own revision/document-lifetime convergence in 07A.4. Active engine-run observation
+is #6/07A.7, distinct from #3's completed shutdown safeguards. Current asset-load
+failure events must preserve #5 correlation and cannot be confused with initial
+queue acceptance or ED-M08 rendered-frame proof.
+
+During an ED-M08 capture session, authoring commits normally but all newer scene
+projection requests remain visibly pending. The saved-revision capture is isolated
+from those edits and navigation. On session release, current-snapshot convergence
+supersedes older queued values; stale document/view/run lifetimes cannot replay.
+This is a bounded validation mode, not another authoring source of truth.

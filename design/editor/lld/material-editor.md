@@ -495,3 +495,31 @@ by ContentPipeline section 16 and qualified in ED-M07B. All editable V0.1 scalar
 fields and flags must load/render with their saved values. Read-only existing
 texture references are preserved but not claimed as newly qualified texture
 creation/import. ED-M08 proves the actual runtime material, not the CPU swatch.
+
+## 17. Document History (#9)
+
+ED-M07A.8 adds material-document-owned TimeMachine history. Existing property
+validation, source replacement and dirty/cooked-stale updates do not create undo
+entries by themselves. Capture descriptor-addressed before/after snapshots under
+the material authoring lock, apply undo/redo through the same source commit path,
+and advance authoring revisions before asynchronous notifications. Preserve the
+landed #4 save acknowledgment and serialization.
+
+Active material commands target that document lifetime's history. Scalar and
+multi-channel color gestures use the shared session controller, with one entry
+per committed gesture, no entry for rejected/cancelled/unchanged edits, and exact
+before-value restoration. Source edits and undo/redo update dirty and cook-stale
+state coherently relative to the saved/published revisions. Switching/closing a
+document cannot target another document's history. Tests cover scalar/color
+changes, drag/wheel/color sessions, save/undo/redo, no-op/rejection/cancel and
+history isolation through the material service and UI command routing.
+
+## 18. Shared Atomic Save (#7)
+
+Material WriteBytesAsync already uses a unique same-directory temporary path and
+File.Move replacement. ED-M07A.5 factors that mechanism into the shared atomic
+storage primitive also used by scene saves, and closes flush/cleanup/collision/
+replacement-failure guarantees. Retain the #4 immutable snapshot and newer-edits-
+remain-dirty behavior. Atomic replacement and revision acknowledgment are separate
+requirements; neither substitutes for the other. Guarantees cover process
+interruption and reported I/O failure, not universal hardware power-loss durability.

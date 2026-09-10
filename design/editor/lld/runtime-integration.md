@@ -438,12 +438,13 @@ the adapter MUST observe **all** of:
 | Precondition | Source | Failure classification |
 | --- | --- | --- |
 | `IEngineService.State == Running` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning`. |
-| `IEngineService.World is not null` | `EngineService.World` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning` (race with shutdown). |
+| Managed world capability is available for the matching run/scene lifetime | `IEngineService.WorldCommands` target contract in section 18 | Unavailable/stale target result; no concrete facade access from the feature. |
 | `IEngineService.State != Faulted` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`. |
 | Scope cancellation token not cancelled | command-supplied `CancellationToken` | `SyncOutcome.Failed`, code `OXE.LIVESYNC.Cancelled`. |
 
 The adapter performs these checks **without** taking any runtime lock other
-than reading the `State` snapshot and the `World` reference. It never blocks
+than reading managed state/capability availability. The Runtime adapter rechecks
+run/target identity before native dispatch. The feature never blocks
 waiting for `Running`. Calls to `SyncSceneWhenReadyAsync` (full-scene resync)
 remain the only awaiting variant and are reserved for workspace/document
 activation, not inspector edits.
@@ -594,3 +595,77 @@ revision before scene sync; late operations from an earlier activation cannot
 change it. Pending edits remain visible until their actual current-state sync
 succeeds. These guarantees are qualified in ED-M07A.4 and ED-M07B.2/4, with
 standalone rendered evidence in ED-M08.
+
+## 18. Managed World/Input Capabilities And Loop Supervision
+
+### Capability Boundary (#10, ED-M07A.0)
+
+Runtime owns injectable, managed-only `IRuntimeWorldCommands` and
+`IRuntimeInputCommands`. IEngineService exposes WorldCommands/InputCommands,
+not concrete OxygenWorld/OxygenInput. Port all feature consumers and remove the
+old concrete properties in the same change; no forwarding compatibility facade
+remains public. Existing direct facade use is migration debt under the prior
+contract, not evidence that every old caller violated its accepted design.
+
+World commands cover scene projection, node create/remove/reparent, scalar
+property edits, geometry/material identity, scene environment and observed-state
+requests. Feature/domain owners build immutable projection requests; Runtime
+does not own a second authored scene model. Managed target records carry run ID,
+scene/document lifetime, authored node ID, and view generation where relevant.
+Input records carry managed key/button/modifier values, physical viewport-pixel
+positions/deltas and that view target. WinUI event interpretation stays in the
+UI bridge; native enum/struct/facade conversion is internal to Runtime adapters.
+
+Capability responses identify operation/run/target and Accepted, Rejected,
+Unavailable, Cancelled or Failed. Accepted remains boundary acceptance; observed
+state and captures have their separate ED-M08 completion contract. An unavailable
+capability is representable without loading the mixed-mode facade. The adapter
+checks run/target lifetime again at dispatch and preserves #5 native request
+acceptance, generation invalidation, and mutation-phase application.
+
+Managed substitutes must simulate each outcome without constructing interop
+world/input objects. Adapter tests cover key/button/modifier translation,
+coordinate units, numeric payloads and identities. Dependency/call-site checks
+reject feature facade access and native input DTO construction. Existing narrow
+view configuration value types are not permission to expose world/input behavior.
+
+### Active Run Observer (#6, ED-M07A.7)
+
+The rebased #3 implementation already makes State read Faulted for a completed
+loop task and ends surface waits when that task completes. Retain those safeguards.
+Add one observer for each started run with a unique run ID. Under the lifecycle
+gate it distinguishes requested shutdown from unexpected exit/fault, updates
+state, publishes a managed state-change event with run ID and original outcome,
+and emits a Runtime execution diagnostic. UI subscribers marshal to the dispatcher.
+An old observer cannot modify a new run or dispose its ownership.
+
+Resolve outstanding operation waits against run termination; no synchronous UI
+wait or indefinite frame acknowledgment is permitted. Normal stop is not a fault.
+Unexpected exit without an exception is still a diagnosed runtime failure.
+State notification and diagnostics must occur without waiting for another State
+getter or Shutdown call. Direct EngineService tests drive controlled run tasks
+through fault, unexpected exit, stop, stop/exit race and restart. This adds active
+supervision to #3; it does not repeat or weaken its cleanup contract.
+
+Current native asset-load failures use #5 request/session/target correlation.
+ED-M07A.0 forwards current failures through the managed runtime diagnostic/event
+boundary to existing feature result surfaces; superseded failures remain discarded.
+This is additional feature-visible reporting over the landed native mechanism,
+not a new loader-generation implementation or a change to Accepted semantics.
+
+## 19. Bounded Validation Capture Session
+
+ED-M08 temporarily pins the saved scene projection/camera/profile under a
+run/document/view-lifetime capture lease. New authoring revisions continue, but
+matching scene mutation requests remain visibly pending until embedded observation
+and capture finish. Navigation is disabled for the pinned viewport during that
+window. This explicit validation mode does not claim the preview shows newer edits.
+
+The standalone-validation LLD defines acquisition, timeout and release. Every
+success/cancel/failure path removes temporary profile state and converges to the
+current valid document snapshot; activation/close/run replacement invalidates old
+callbacks and forbids restoring stale scene/view state. The capture lease can end
+before standalone loading completes; the separate output read lease protects
+published files until that process exits. Test edits during warm-up, late callbacks,
+fault/cancel and scene changes. Normal one-live-scene current-revision behavior
+resumes after the capture session, not merely after restoring camera settings.

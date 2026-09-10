@@ -1188,3 +1188,19 @@ document, content-pipeline, runtime, and standalone LLDs implement these rules:
 
 These are design guarantees, not claims of implementation. Their evidence and
 remaining work are recorded in IMPLEMENTATION_STATUS and owning milestone plans.
+
+## 19. Runtime Capability And Procedural Authority Decisions
+
+ED-M07A.0 (#10) confines concrete C++/CLI world/input facades and transport
+conversion to internal Runtime adapters. Feature live-sync/input uses injectable
+managed capability contracts with explicit run/target lifetimes and acceptance
+semantics. No second authoring model or feature policy is moved into Runtime.
+ED-M07A.7 (#6) actively supervises each runtime run and publishes unexpected-exit
+state/diagnostics while preserving the completed #3 shutdown safeguards.
+
+ED-M07B.7 (#11) gives engine/content one authority for procedural recipe parameters,
+bounds, default materials, caching and identity mapping, used by immediate live
+preview and cook generation. Interop does not select generators or construct pak
+format records; editor tooling does not maintain a second set of generator
+constants. Existing authored procedural URIs and #5 native request-generation
+acceptance are preserved. Actual visual parity remains ED-M08 evidence.

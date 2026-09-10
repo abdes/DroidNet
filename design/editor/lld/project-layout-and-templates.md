@@ -380,7 +380,7 @@ row represents a cooked artifact from `.cooked`.
 ## 6. Ownership
 
 The table lists positive ownership. Forbidden ownership edges are defined in
-[Dependency Rules](#dependency-rules); consumers must not infer authoring roots
+[Dependency Rules](#13-dependency-rules); consumers must not infer authoring roots
 or target folders outside the project layout policy.
 
 | Owner | Responsibility |

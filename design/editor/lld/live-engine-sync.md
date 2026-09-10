@@ -30,37 +30,18 @@ lifecycle, surface/view leases, and cooked-root mounting stay in
 
 ## 4. Current Baseline
 
-- `Oxygen.Editor.WorldEditor/src/Services/ISceneEngineSync.cs` and
-  `SceneEngineSync.cs` provide:
-  - `Task<bool> SyncSceneAsync(Scene, ct)` and
-    `Task<bool> SyncSceneWhenReadyAsync(Scene, ct)` (full resync; destroys/
-    recreates the native scene through `OxygenWorld.DestroyScene()` /
-    `CreateSceneAsync(name)`).
-  - `Task CreateNodeAsync(node, parentGuid?)`,
-    `Task RemoveNodeAsync(nodeId)`, `RemoveNodeHierarchyAsync`,
-    `RemoveNodeHierarchiesAsync`,
-    `ReparentNodeAsync(nodeId, newParent, preserveWorld)`,
-    `ReparentHierarchiesAsync`, `UpdateNodeTransformAsync(node)`.
-  - Internal `ApplyRenderableComponents` covers Geometry, Light, Camera
-    attaches.
-  - Several rendering/material override slot operations currently throw
-    `NotImplementedException`.
-- `IEngineService.State : EngineServiceState` exposes the `NoEngine` →
-  `Initializing` → `Ready` → `Starting` → `Running` → `ShuttingDown` /
-  `Faulted` lifecycle. `OxygenWorld` is valid only in `Running`.
-- A class-level `SemaphoreSlim sceneSyncGate` already serializes scene-wide
-  syncs; per-op coalescing inside an `EditSessionToken` is not implemented yet.
-- Sync failures today are mostly logged. ED-M03 introduced `SceneCommandResult`
-  with `OperationResultId` but the population from sync paths is incomplete.
+The rebased source has typed SyncOutcome/EnvironmentSyncResult, property edits,
+a preview coalescer, native material override dispatch and native scene-system
+updates. Camera/light/environment controls still submit one-shot edits; background
+RGB is absent from the native environment call; managed property replay has no
+document-revision boundary. ED-M07A names those concrete gaps.
 
-Brownfield gaps:
-
-1. No typed `SyncResult` enum / record; methods return `bool` or `Task`.
-2. Material slot, environment, and several override slots throw
-   `NotImplementedException` — must become `Unsupported` results.
-3. Per-edit-session coalescing (one drag → one sync call) is not implemented.
-4. `OperationResult` propagation from sync into `SceneCommandResult` is
-   inconsistent.
+Issue #5 is implemented: native SceneAssetRequests owns geometry/material request
+generations, scene sessions, completion inboxes and mutation-phase acceptance.
+Its automated evidence is recorded in the issue plan. Preserve that mechanism;
+it is distinct from the managed scalar-property replay queue fixed in ED-M07A.4.
+Runtime-managed world/input capabilities are the ED-M07A.0 target; concrete
+OxygenWorld use in the current adapter is the known #10 migration starting point.
 
 ## 5. Target Design
 
@@ -338,7 +319,8 @@ Diagnostic codes (under `OXE.LIVESYNC.`):
 Allowed:
 
 - Commands → `ISceneEngineSync`.
-- `SceneEngineSync` → `IEngineService`, `OxygenWorld`.
+- `SceneEngineSync` -> Runtime-owned managed world capability.
+- Internal Runtime adapter -> `OxygenWorld`; feature code never obtains the facade.
 
 Forbidden:
 
@@ -387,3 +369,16 @@ The canonical [property-pipeline.md](./property-pipeline.md) governs typed
 property entry points, shared sessions/history, current field diagnostics and
 revision-aware runtime convergence. Existing record adapters implement the same
 contract; they are not an alternative architecture.
+
+## 16. Issue Integration Boundaries
+
+[#5](../plan/issue-005-asset-request-generations.md) guards native async geometry/
+material completions and remains intact through #10 managed-capability migration
+and #11 procedural resolver changes. Register procedural/cache/async intent before
+resolution; accept its completion only under the existing scene-mutation and
+request-generation authority. Do not add a competing generation counter in a VM.
+
+ED-M07B.7 uses the engine/content procedural definition authority for every exposed
+built-in shape. Immediate preview and cooker generation share its parameters,
+bounds, default material and identity mapping; interop only dispatches identity
+and transport. No format structures or independent defaults belong in this layer.

@@ -43,9 +43,11 @@ or artifacts exist today.
    from the saved authoring/descriptor snapshot associated with that publication,
    plus its URI-to-cooked-node/asset mapping. Do not derive expectations from
    whatever the live runtime happens to contain.
-4. Synchronize embedded preview to that saved revision, select the authored
-   validation camera, disable editor overlays, and capture observed state/image.
-   Restore editor navigation/view settings after validation; do not save them.
+4. Acquire the bounded embedded capture session defined below. Synchronize the
+   saved revision, pin the validation camera/profile, disable editor overlays,
+   and capture observed state/image while newer authoring sync remains pending.
+   Release that session and converge to current authoring/view state afterward;
+   never save the temporary camera/profile as authoring data.
 5. Launch the matched RenderScene executable with an exact validation request.
    It mounts only the requested roots, loads exactly the requested scene, applies
    the controlled profile, and writes native observed-state and capture artifacts.
@@ -157,6 +159,35 @@ Thresholds and profiles are acceptance decisions, not claims about current
 results. A failed run is fixed or requires an explicit design change; it is not
 made green by silently relaxing thresholds or choosing different scenes.
 
+### Saved-Revision Embedded Capture Session
+
+Only one capture session may own the embedded runtime at a time. It records
+operation ID, runtime run ID, document/scene/view lifetimes, saved revision,
+profile and view settings before synchronizing the saved snapshot. All later
+scene mutations for that target, including hierarchy changes, property changes,
+asset assignments and environment updates, stay pending rather than changing
+the captured projection. Authoring commits and revisions continue normally.
+The viewport labels the saved revision being captured and the presence of newer
+pending edits. Navigation and view-profile changes in that viewport are disabled
+with capture-phase feedback during the bounded warm-up/observation/capture window;
+input cannot silently move the comparison camera.
+
+The session ends after the embedded artifacts are finalized, without waiting
+for the standalone child when that child no longer needs the embedded runtime.
+On success, cancellation or failure, remove the temporary capture profile and
+restore the current document/view intent only if their lifetimes still match.
+Synchronize a coherent current authoring snapshot, supersede pending work at or
+before that revision, and apply only newer valid work before reporting the preview
+current. Do not simply restore the old scene snapshot or blindly replay old edits.
+
+Scene activation, document close, view destruction and runtime replacement cancel
+and invalidate the capture session. A late capture callback cannot restore an old
+view or scene into a new activation. The new active document follows its normal
+full-sync path. Runtime failure leaves authoring intact and preview visibly pending/
+unavailable; restart converges to current state. Release capture ownership on every
+terminal path; the independent published-output lease remains until native reads
+finish. The 120-second validation timeout also bounds capture-session waits.
+
 ## 9. UI And Process Behavior
 
 Camera selection uses the selected authored PerspectiveCamera, otherwise the
@@ -215,6 +246,11 @@ editor adapter, not engine authoring policy.
 - [ ] Mismatched artifacts/requests fail before unsafe native loading.
 - [ ] Every required field passes saved/cooked/observed semantic comparisons.
 - [ ] Controlled static and auto-exposure/field-coverage visual cases pass.
+- [ ] Edit/hierarchy change during warm-up does not contaminate the saved-revision
+  image; afterward preview converges to the newer revision and the result remains
+  labeled for its captured snapshot. Navigation cannot move the pinned camera.
+- [ ] Cancel/fault/activation/close during capture releases ownership and cannot
+  restore stale scene/view state, including late capture callbacks.
 - [ ] Missing assets, invalid index, wrong root/scene, unsupported fields, stale
   publication, cancellation, timeout and child crash produce precise failures.
 - [ ] Output leasing blocks replacement during native reads and is released on

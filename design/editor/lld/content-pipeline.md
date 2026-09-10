@@ -866,3 +866,55 @@ Compare stable asset identities, canonical descriptors, resolved dependencies,
 and loaded values. Byte-for-byte reproducibility is required only for outputs
 whose format declares it; timestamps and diagnostic operation IDs are excluded
 from semantic comparison. ED-M08 proves rendered equivalence.
+
+## 18. Owned Native Worker Lifetime (#8)
+
+ED-M07B.6 runs each native cook worker in an operation-owned Windows job with
+kill-on-close descendant containment. Establish job membership before the worker
+can execute or create descendants; no start-then-attach escape window is allowed.
+Start with structured arguments and hidden
+window behavior, and drain stdout/stderr concurrently. The present native CLI
+has no cooperative cancellation protocol: cancellation terminates only that job,
+then awaits the child/descendant termination and observes reader tasks. Handle
+exit/cancel races by the actual outcome. Cleanup of manifests/snapshot/staging
+and release of the project operation gate occur only after termination/I/O drain.
+
+If termination fails, report an explicit termination failure, retain the job and
+operation/input ownership, and keep published output protected; never return a
+successful Cancelled outcome while writes can continue. Stream cancellation alone
+or disposal of Process is not process termination. No embedded-engine or unrelated
+process may be killed. Controlled subprocess tests include a periodic writer,
+a descendant writer, large output on both streams, startup failure, natural exit
+races and failed termination. After successful cancellation, no writer survives
+and no additional writes occur.
+
+## 19. One Procedural Asset Authority (#11)
+
+ED-M07B.7 adds a supported engine/content procedural-definition capability shared
+by live resolution and cooking. The engine owns immutable recipe/version data,
+generator parameters, computed bounds, default material semantics and deterministic
+identity mapping. Editor project policy supplies the selected virtual mount/output
+scope, not duplicate generator defaults. A definition yields the live asset and
+schema-valid cook contribution through the same engine-owned generation helpers.
+The cooker remains the native format authority.
+
+The required exposed set is Cube, Sphere, Plane, Cylinder, Cone, Quad, Torus and
+ArrowGizmo. Existing URIs remain authored identity. The current native interop
+branch handles all eight but constructs pak geometry descriptors/defaults itself;
+the managed descriptor service only handles three and separately specifies bounds,
+sphere segments and default material values. These are the source-identified
+ownership/coverage gaps; differing rendered results are not presumed without proof.
+
+Remove generator selection/defaults/cache policy and manually maintained pak
+fields from SetGeometryCommand. It calls the supported resolver through the
+runtime adapter and preserves #5 request generation and completion acceptance.
+ProceduralGeometryDescriptorService consumes the same definition/cook contribution;
+it no longer owns independent parameters, bounds or default-material constants.
+No explicit cook is required for initial procedural preview. User overrides remain
+user-authored values over the shared default, not a second generated default.
+
+For every exposed shape compare live/cooked identity mapping, bounds, topology,
+vertex attributes, default material and explicit overrides using supported engine
+APIs. Save/reopen preserves its URI and values. Include thin/zero-thickness bounds
+and sphere segment defaults. ED-M08 records actual loaded/visual parity separately;
+source implementation and unit tests alone do not establish rendered equivalence.

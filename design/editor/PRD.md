@@ -170,7 +170,7 @@ undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
 | Capability | Authoritative field/interaction contract | Preview and release condition |
 | --- | --- | --- |
 | Scene hierarchy and Transform | `scene-authoring-model.md`; `property-inspector.md` Transform table; `property-pipeline.md` | Create/delete/rename/reparent and transforms synchronize; hierarchy/IDs survive cook/load. |
-| Geometry and material slot 0 | `property-inspector.md` Geometry table; `asset-primitives.md` | Cube, sphere, plane, and the qualified imported static geometry subset resolve after validated cook; identity changes synchronize. Other override-slot metadata may remain read-only. |
+| Geometry and material slot 0 | `property-inspector.md` Geometry table; `asset-primitives.md` | Cube, Sphere, Plane, Cylinder, Cone, Quad, Torus, ArrowGizmo, and the qualified imported static geometry subset resolve after validated cook; identity changes synchronize. Other override-slot metadata may remain read-only. |
 | Perspective camera | `property-inspector.md` PerspectiveCamera table | All editable fields synchronize and cook; validation uses an explicitly chosen authored camera, separately from editor navigation. |
 | Directional light and sun | `property-inspector.md` DirectionalLight table | All editable fields synchronize and cook, including coherent exclusive sun binding. |
 | Scene environment and post-processing | `environment-authoring.md` editable SkyAtmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background tables | All editable fields, including background and post-processing, must have live and cooked runtime mappings. A missing native API/schema is implementation work, not a release exception. |
@@ -229,7 +229,7 @@ recorded configuration, not a claim about all hardware satisfying a GPU name.
 User-selected scale: 100 scene nodes and 1,000 logical authored catalog entries.
 Derived companions must not inflate logical row counts. The fixture includes
 hierarchy, 98 geometry nodes, one perspective camera, one directional sun,
-environment settings, cube/sphere/plane and a small imported mesh, shared and
+environment settings, every exposed built-in shape and small imported meshes, shared and
 distinct scalar materials. Pad the catalog with valid scalar descriptors to
 exactly 1,000 entries. Keep visible geometry at or below 250,000 triangles.
 

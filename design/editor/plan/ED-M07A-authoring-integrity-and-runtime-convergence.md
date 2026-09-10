@@ -28,8 +28,12 @@ replacement, or another baseline audit.
 
 ## 4. Identified Delivery Gaps And Evidence
 
-Source inspection is against the committed `72c42e1cd` worktree. Concurrent
-save-revision fixes are a separate workstream and are not assumed landed here.
+Source inspection is against `editor` at `ea395a310` after rebasing. Issues
+[#2](https://github.com/abdes/DroidNet/issues/2),
+[#3](https://github.com/abdes/DroidNet/issues/3),
+[#4](https://github.com/abdes/DroidNet/issues/4) and
+[#5](https://github.com/abdes/DroidNet/issues/5) are landed. Their documented
+automated evidence is retained; running-editor replay is not inferred.
 
 | Gap | Concrete source evidence | Owning task |
 | --- | --- | --- |
@@ -47,6 +51,24 @@ scene/property command validation, undo paths, schema catalogs, and the sync
 coalescer have implementations. Exercise these paths when closing the named gaps;
 do not replace them merely because the old ledger lacked complete evidence.
 
+GitHub issue ownership (issue reports were rechecked against the rebased source):
+
+| Issue | Current evidence and remaining scope | Owner |
+| --- | --- | --- |
+| [#6](https://github.com/abdes/DroidNet/issues/6) | EngineService.State already returns Faulted when the stored loop task completes; surface waits observe loop exit after #3. No ongoing run observer publishes the original fault/exit result or lifetime-scoped state event. | 07A.7 |
+| [#7](https://github.com/abdes/DroidNet/issues/7) | Scene snapshot writes still call WriteAllTextAsync directly. Material writes already use a same-directory temporary file plus File.Move; shared guarantees, durability/cleanup and boundary failure tests remain. #4 revision acknowledgment is implemented and must be preserved. | 07A.5 |
+| [#9](https://github.com/abdes/DroidNet/issues/9) | Material source edits commit and mark dirty/stale but do not register document history. Schema validation and the #4 authoring lock do not supply undo/redo. | 07A.8 |
+| [#10](https://github.com/abdes/DroidNet/issues/10) | IEngineService exposes concrete OxygenWorld/OxygenInput and feature input/sync constructs or consumes interop payloads. | 07A.0 |
+
+Landed foundations to retain: #2 close/discard guards; #3 serialized lifecycle,
+cleanup and loop-ended surface waits; #4 coherent snapshots, per-destination
+serialization and revision acknowledgment (232 recorded automated tests); #5
+native geometry/material completion generations, scene-session invalidation and
+mutation-phase application (34 recorded native tests, 19 issue-specific).
+Do not reimplement these or claim their automated evidence proves the new UI/
+rendered gates. #5 does not add revision/lifetime identity to the separate
+managed PendingPropertySyncQueue, so 07A.4 remains required.
+
 ## 5. Non-Scope
 
 No generic validation dashboard, new property architecture, full inspector
@@ -57,6 +79,33 @@ the canonical property contract. Purely cosmetic schema-native VM rewrites are
 not release requirements.
 
 ## 6. Implementation Sequence
+
+### 07A.0 - Managed Runtime Capabilities (#10)
+
+Define Runtime-owned, UI-independent `IRuntimeWorldCommands` and
+`IRuntimeInputCommands`, exposed as typed capabilities by IEngineService. Move
+concrete OxygenWorld/OxygenInput ownership and DTO conversion into internal
+Runtime adapters. Port SceneEngineSync and viewport input to these capabilities
+in one migration; remove the concrete facade properties from the feature-facing
+service rather than keep compatibility forwarding accessors.
+
+Managed DTOs carry runtime session, scene/view lifetime, authored node identity,
+property values and input semantics using managed primitives. Pointer positions
+are physical viewport pixels; WinUI event interpretation stays in the UI bridge,
+and native enum/layout conversion stays in the Runtime adapter. No second scene
+model or authoring policy enters Runtime. Preserve #5 native request generation
+and queued/accepted completion semantics under the new adapter.
+
+Forward current native asset-load failures through managed result/event reporting
+using #5 request identity; do not recreate its loader generation mechanism or
+report superseded failures against current authoring.
+
+Pass: managed substitutes drive every world/input success, rejection, cancellation
+and fault path; conversion tests cover identities, units, key/button/modifier
+values and numeric payloads. Feature code contains no OxygenWorld/OxygenInput
+access or native input DTO construction. Existing navigation, scene mutation,
+#2-5 lifecycle/save/load regressions and sync outcome behavior remain passing.
+Run this contract migration before adding new background/supervision behavior.
 
 ### 07A.1 - Background Application And Truthful Per-Field Results
 
@@ -111,19 +160,26 @@ node, switch scenes, close/reopen the same source, and edit during full resync.
 The live scene converges to current committed authoring values; the pending
 indicator cannot clear after an unreported failed replay.
 
-### 07A.5 - Scene/Material Save Integrity And Conflict Handling
+### 07A.5 - Shared Atomic Save And Conflict Safety (#7)
 
-Integrate the existing save-revision issue fixes when landed, then implement
-remaining document-contract gaps: atomic scene replacement, serialized writes,
-coherent snapshots/revision acknowledgment, external-change rejection and conflict
-choices, single-writer coordination, and explicit-Save-only crash safety. Do not
-redo an issue fix that already supplies the required behavior.
+Preserve the landed #4 snapshot/revision and writer serialization. Factor the
+material temporary-file/rename path into a shared storage-level atomic-write
+primitive used by both scene and material persistence. Write a unique temporary
+file in the destination directory, close/flush it to the specified process-crash
+contract, and atomically replace the destination. Define existing-file/first-save,
+replacement failure, cancellation, cleanup, and target-collision behavior; do not
+claim universal hardware power-loss durability. Keep document revision/history
+policy in the authoring owner, not the storage primitive.
 
-Pass: deterministic storage gates hold save A while edit B commits; A succeeds
-without clearing B, queued saves cannot overwrite out of order, and failure leaves
-the prior valid file and current history intact. Repeat for already-dirty edits,
-undo/redo, explorer layout and material source. Exercise interrupted replacement,
-external modification, Save Copy, and save-and-close with a newer revision.
+Add the document contract's external-change rejection, conflict choices and
+single-writer coordination. Retain the explicit-Save-only recovery choice; no
+autosave or unsaved crash recovery is introduced.
+
+Pass: inject write/flush/replace failure and cancellation for existing and first
+saves. Previous saved content remains complete; temporary files cannot be loaded
+as assets or clobber a concurrent save. Repeat for scene/material owners, retain
+#4 edit/save and save/save tests, and exercise external modification, Save Copy,
+interrupted replacement and save-and-close with newer unsaved revisions.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 
@@ -142,6 +198,38 @@ listed transitions. All required behavior passes. Source-only tests and prior
 partial manual notes do not substitute for the control/native cases. Missing
 native capability is a failed gate, not a request for a new audit.
 
+### 07A.7 - Observe Runtime Loop Lifetime (#6)
+
+Observe the loop task immediately after start with a unique run identity. Under
+the lifecycle gate distinguish requested stop from unexpected normal exit/fault,
+publish the original result through Runtime diagnostics and a managed immutable
+state-change notification, and transition out of Running. A previous observer
+cannot modify a newer run. Retain #3 cleanup ownership and loop-ended surface
+wait handling; terminate other pending requests predictably without synchronous
+UI waits. Ordinary shutdown produces no spurious runtime-fault notification.
+
+Pass: direct managed-service tests use a controlled runtime session to fault,
+exit unexpectedly, stop normally, race stop/exit and restart while an old observer
+finishes. Assert state notification, original exception/exit cause, finite pending
+request completion, and unchanged newer-run identity. Getter-based detection
+alone does not satisfy active diagnostic publication.
+
+### 07A.8 - Material Document Undo/Redo (#9)
+
+Add document-owned TimeMachine history using per-target before/after source
+snapshots and the shared property/session mechanism. Route scalar and multi-
+channel edits and undo/redo through the same validated apply/commit path under
+the material authoring lock. Wire active-material-document undo/redo commands;
+never use scene or global selected-document history implicitly. Preserve #4
+revision acknowledgment and writer serialization.
+
+Pass: scalar roughness/alpha and four-channel color edits undo/redo to exact
+values; dirty and cooked-stale states stay coherent through save/undo/redo.
+Drag/wheel/color sessions produce one intended entry; no-op/rejected/cancelled
+edits produce none. Document switching and close/reopen isolate history and
+queued gestures. Tests exercise the material service and UI command routing,
+not just generic PropertyOp inversion.
+
 ## 7. Project/File Touch Points
 
 - `WorldEditor/src/Inspector`: existing camera/light/environment/geometry/host
@@ -159,19 +247,22 @@ native capability is a failed gate, not a request for a new audit.
 
 ## 8. Risks And Containment
 
-Source save fixes are being developed independently: merge their contracts and
-proof without claiming them before landing. Preserve domain-specific sun/asset
+The rebased #2-5 fixes are landed: preserve their contracts and documented
+automated evidence without treating them as proof of unrelated gaps. Preserve domain-specific sun/asset
 rules when adding generic sessions. Native background work must use engine-owned
 capabilities. Save conflicts must not be resolved by silently discarding edits.
 There is no autosave scope expansion.
 
 ## 9. Validation Gates
 
+- [ ] 07A.0 managed capability migration and boundary tests pass (#10).
 - [ ] 07A.1 truthful background dispatch and live behavior pass.
 - [ ] 07A.2 gesture/history/selection/cancel cases pass on the existing controls.
 - [ ] 07A.3 scoped inline diagnostics and dependent invalidation cases pass.
 - [ ] 07A.4 offline/reconnect/lifetime convergence cases pass.
-- [ ] 07A.5 scene/material persistence and conflict cases pass.
+- [ ] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
+- [ ] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
+- [ ] 07A.8 document-owned material history and session tests pass (#9).
 - [ ] 07A.6 field/workflow evidence is complete and the user has validated the
   visible behavior; native acceptance alone is not presented-state proof.
 

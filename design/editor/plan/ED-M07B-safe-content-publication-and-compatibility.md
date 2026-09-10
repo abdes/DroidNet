@@ -32,6 +32,8 @@ validation; this milestone owns the additional work and evidence.
 | Runtime mount contract is UnmountProjectCookedRoot followed by MountProjectCookedRoot. | Pause/drain, all-root rollback and interrupted-publication recovery. | 07B.2 |
 | ProjectCookScopeProvider derives project/root/output facts; existing Content Browser exposes Cook Asset/Folder/Project. | UI completion must use the closed PRD scope, not invent settings/preset/batch schedulers. | 07B.5 |
 | Native discovery locates installed tooling; no qualified artifact-set fingerprint is established by the existing design. | Detect mismatched editor/native/cooker/schema artifacts before unsafe calls. | 07B.4 |
+| [#8](https://github.com/abdes/DroidNet/issues/8): ContentPipelineProcessRunner cancels stream reads/WaitForExitAsync without terminating the child; ImportToolContentPipelineApi cleans the manifest in finally. | Owned worker termination, descendant handling, reader drain and cleanup ordering. | 07B.6 |
+| [#11](https://github.com/abdes/DroidNet/issues/11): SetGeometryCommand constructs built-ins/default material and pak geometry fields, while ProceduralGeometryDescriptorService separately defines generator parameters/bounds/defaults and supports only Cube/Sphere/Plane. The UI exposes eight built-ins. | One engine/content authority for all exposed procedural geometry and live/cooked semantics. | 07B.7 |
 
 ## 5. Scope And Non-Scope
 
@@ -108,6 +110,45 @@ and choosing Cook rebuilds it; no generated-file editing or new settings/preset
 panel is needed. Published material changes appear on all scene uses after
 resume. Failed publication has a distinct result from a successful staged cook.
 
+### 07B.6 - Own And Drain Native Worker Processes (#8)
+
+Preserve structured ArgumentList and concurrent stdout/stderr reads. Run native
+cook workers in an operation-owned Windows job with descendant ownership and
+kill-on-close containment. On cancellation, stop the launched worker/job (the
+current CLI has no cooperative cancel protocol), await process-tree termination
+and observe both reader tasks before deleting the manifest/staging or releasing
+the operation. Treat exit/cancel races by the actual terminal result. A terminate
+failure is explicit and retains operation ownership/inputs; successful Cancelled
+cannot be returned while writes continue. Never terminate the embedded engine
+or unrelated user processes. See content-pipeline section 18.
+
+Pass: a controlled writer child and descendant, large stdout/stderr, immediate
+exit, startup failure, cancel/exit races and termination failure are exercised.
+No output writes occur after successful cancellation; reader failures are observed,
+manifest cleanup follows termination, and published output is unchanged.
+
+### 07B.7 - One Procedural Content Authority (#11)
+
+Add an engine/content-owned procedural definition/resolution capability used by
+both immediate preview and cooker descriptor generation. It owns generator
+parameters, computed bounds, default material semantics and deterministic identity
+mapping. Runtime/Interop transports identity/requests and results; remove its
+built-in policy switch, generated-content cache policy and hardcoded pak fields.
+Managed descriptor generation consumes the same engine definition rather than
+maintaining independent parameters/bounds/material constants.
+
+Cover the existing authorable picker set: Cube, Sphere, Plane, Cylinder, Cone,
+Quad, Torus and ArrowGizmo. Preserve their URIs and immediate preview without
+requiring an explicit cook first. An authored ArrowGizmo asset is geometry;
+editor-only gizmo overlays remain transient. Preserve #5 request-generation and
+scene-mutation acceptance for all cached/procedural/async paths.
+
+Pass: every listed shape previews, saves/reopens, cooks and loads. Compare identity,
+bounds, topology/index counts, vertex semantics, default material and authored
+overrides through supported APIs; use the same parameter cases for live and
+cooked output. No pak format constants remain in interop procedural construction.
+Source/unit tests are separate from the ED-M08 visual/loaded parity evidence.
+
 ## 7. Project/File Touch Points
 
 - `ContentPipeline/src`: ContentPipelineService, ContentImportManifestBuilder,
@@ -136,6 +177,8 @@ is run implicitly by this documentation task.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [ ] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
+- [ ] 07B.6 cancellation owns/drains native workers and descendants (#8).
+- [ ] 07B.7 all eight procedural assets use one semantic authority (#11).
 - [ ] 07B.5 all four cook scopes, stale material feedback and resumed preview pass
   through the visible editor workflow, with user validation evidence.
 
