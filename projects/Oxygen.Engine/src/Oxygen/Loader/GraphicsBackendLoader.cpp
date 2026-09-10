@@ -512,9 +512,14 @@ auto GraphicsBackendLoader::GetInstance(
   }
 
   static bool first_call = true;
-  static std::shared_ptr<PlatformServices> services = platform_services
-    ? std::move(platform_services)
-    : std::make_shared<PlatformServices>();
+  // MSVC 14.51.36231 miscompiles the conditional initializer into a self-move.
+  static std::shared_ptr<PlatformServices> services = [&platform_services]()
+    -> std::shared_ptr<PlatformServices> {
+    if (platform_services) {
+      return std::move(platform_services);
+    }
+    return std::make_shared<PlatformServices>();
+  }();
   static PlatformServices::ModuleHandle origin_module_handle = nullptr;
   if (origin_module_handle == nullptr) {
     origin_module_handle
@@ -634,9 +639,14 @@ auto GraphicsBackendLoader::GetInstanceRelaxed(
 
   static bool first_call = true;
   static PlatformServices::ModuleHandle origin_module_handle = nullptr;
-  static std::shared_ptr<PlatformServices> services = platform_services
-    ? std::move(platform_services)
-    : std::make_shared<PlatformServices>();
+  // MSVC 14.51.36231 miscompiles the conditional initializer into a self-move.
+  static std::shared_ptr<PlatformServices> services = [&platform_services]()
+    -> std::shared_ptr<PlatformServices> {
+    if (platform_services) {
+      return std::move(platform_services);
+    }
+    return std::make_shared<PlatformServices>();
+  }();
   static auto instance = std::unique_ptr<GraphicsBackendLoader>(
     new GraphicsBackendLoader(origin_module_handle, services));
 
