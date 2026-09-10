@@ -41,8 +41,11 @@ parity claim. No M04 closure sweep or M09 tool dependency.
    startup selection/restored state. Load exact requested roots and scene via
    engine APIs, validate artifact fingerprints and produce native observations.
 3. Add controlled embedded/native rendered captures through runtime capabilities,
-   explicit camera selection and scene-frame timing. Preserve the user's view
-   and authored state; do not confuse queue acceptance with a captured image.
+   explicit camera selection and scene-frame timing. Implement the bounded
+   saved-revision capture session: hold newer scene sync, disable navigation in
+   the pinned viewport, and restore/converge current valid scene/view state on
+   all terminal paths. Activation/close invalidates late callbacks. Do not
+   confuse queue acceptance with a captured image.
 4. Implement semantic/image comparisons and auto-exposure cases using the fixed
    tolerances in the LLD. Missing artifacts/fields fail; native exit zero alone
    does not pass. Retain original captures and field mismatch pointers.
@@ -70,6 +73,10 @@ and validation; no implementation proof is inferred from this plan.
 - [ ] Missing/mismatched request/build/root/asset fails before unsafe use.
 - [ ] Every required field passes observed-state comparison after save/cook/load.
 - [ ] Base static images and exposure/field cases pass the specified tolerances.
+- [ ] Edits during warm-up cannot change the captured saved revision; capture
+  release applies current authoring, and navigation cannot contaminate the image.
+- [ ] Capture cancellation/failure/activation/close and late callbacks cannot
+  restore old scene/view state or retain capture ownership.
 - [ ] Cancel, timeout, child crash, source edits during validation and attempted
   publication during the output lease preserve state and report precise results.
 - [ ] The user validates the complete artifact set for the qualified build.

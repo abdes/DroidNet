@@ -353,7 +353,7 @@ pass/fail cases; implementation starts with those fixes, not another audit.
 
 Exit gate: native background truth, gesture sessions, scoped field diagnostics,
 revision/lifetime-aware replay, scene/material save integrity and complete actual
-control/native evidence pass the six task gates. Earlier milestone evidence is
+control/native evidence pass the named task gates, including issues #6/#7/#9/#10. Earlier milestone evidence is
 retained; ED-M07A gets its own validation row.
 
 ### ED-M07B - Safe Content Publication And Compatibility
@@ -364,7 +364,9 @@ Purpose: close descriptor/publication/import/compatibility gaps in the
 Exit gate: saved dependency capture, staged validation, brief preview pause,
 rollback/recovery, PostProcess/Background native cook/load mapping, matched-build
 preflight and portable static/scalar import pass their specified failure cases.
-All four existing cook scopes expose honest freshness/publication results.
+All four existing cook scopes expose honest freshness/publication results. Native
+worker lifetime (#8) and all eight procedural assets' shared authority (#11)
+pass their concrete tasks before parity.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
@@ -518,3 +520,28 @@ A milestone closes only when:
 
 Working demos do not close milestones. The milestone outcome must be usable,
 documented, and validated against the PRD requirement IDs it claims to satisfy.
+
+## 9. GitHub Issue Integration At Editor ea395a310
+
+This is an ownership/evidence map, not an issue-closure claim or second progress
+ledger. Historical issue bodies were checked against the rebased source. Issues
+6-11 remain implementation tasks even where earlier fixes already supply part
+of their requested behavior. Their complete acceptance cases live in the owning
+plan tasks and LLDs.
+
+| Issue | Landed evidence or remaining work | Milestone/task |
+| --- | --- | --- |
+| [#2](https://github.com/abdes/DroidNet/issues/2) | Save/Discard/Cancel and coordinated document/window closure landed in 5f1f98140. Preserve the guards and recorded evidence. | Existing foundation; regression dependency for 07A.5/8. |
+| [#3](https://github.com/abdes/DroidNet/issues/3) | Serialized runtime teardown, ownership retention, completed-loop State detection and loop-ended surface waits landed in f6ab4f94c. | Existing foundation; #6 adds active run supervision in 07A.7. |
+| [#4](https://github.com/abdes/DroidNet/issues/4) | Coherent saved snapshots, writer serialization, revision acknowledgment and 232 recorded automated tests landed in 519e19e9f; manual editor replay was not performed. | Existing foundation; atomic-file/conflict gaps are 07A.5, history is 07A.8. |
+| [#5](https://github.com/abdes/DroidNet/issues/5) | Native geometry/material request generations and mutation-phase acceptance landed in ea395a310; 34 native tests recorded, including 19 regressions. | Preserve through 07A.0/4 and 07B.7; managed property replay is a distinct gap. |
+| [#6](https://github.com/abdes/DroidNet/issues/6) | Active loop observer, original-failure diagnostics, state event, finite pending work and restart isolation; existing getter/teardown safeguards retained. | ED-M07A.7; Runtime LLD section 18. |
+| [#7](https://github.com/abdes/DroidNet/issues/7) | Shared atomic storage contract and scene adoption; retain existing material temp/rename and #4 revision behavior; test first/existing save and failures. | ED-M07A.5; document section 16 and material section 18. |
+| [#8](https://github.com/abdes/DroidNet/issues/8) | Own/terminate/drain worker job and descendants before cleanup/cancel completion; controlled subprocess and stream tests. | ED-M07B.6; pipeline section 18. |
+| [#9](https://github.com/abdes/DroidNet/issues/9) | Material-document undo/redo, gesture history, dirty/cook state and document isolation. | ED-M07A.8; material section 17. |
+| [#10](https://github.com/abdes/DroidNet/issues/10) | Injectable managed world/input capabilities, Runtime-owned facade/DTO conversion, full consumer migration and boundary tests. | ED-M07A.0; Runtime section 18. |
+| [#11](https://github.com/abdes/DroidNet/issues/11) | Engine/content procedural definition authority for eight exposed assets, no interop pak policy, shared live/cook semantic tests. | ED-M07B.7; pipeline section 19; visual parity in ED-M08. |
+
+No earlier milestone is reopened or superseded by this map. New proof belongs
+to the gap-closing milestones. The issue #2-5 plans retain their recorded limits,
+including automated versus running-editor evidence.

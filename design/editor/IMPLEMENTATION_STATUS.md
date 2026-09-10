@@ -51,8 +51,9 @@ Current execution:
 Previously recorded milestone statuses and evidence are preserved. No new
 implementation or closure sweep is assigned to M04. Its identified omissions
 and missing evidence are concrete tasks in ED-M07A; downstream descriptor gaps
-are ED-M07B. Concurrent save-revision fixes contribute only after they land and
-supply the relevant proof; they do not automatically advance any milestone.
+are ED-M07B. Issue fixes #2-5 are included through editor ea395a310. Preserve their recorded
+automated evidence and limits; they do not automatically advance a milestone.
+PLAN section 9 maps #6-11 to the remaining concrete gap tasks.
 
 ## 3. Milestone Tracker
 
@@ -478,11 +479,14 @@ Trace: `REQ-005` through `REQ-009`, `REQ-011`, `REQ-012`, `REQ-014`, `REQ-022`,
 
 Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 
+- [ ] 07A.0 managed world/input capabilities and facade conversion (#10).
 - [ ] 07A.1 native background application and truthful field results.
 - [ ] 07A.2 camera/light/environment gesture sessions and cancellation.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation.
 - [ ] 07A.4 offline/reconnect/lifetime convergence with failed work retained.
-- [ ] 07A.5 scene/material captured-revision, atomic-write and conflict safety.
+- [ ] 07A.5 shared atomic write/conflict safety (#7), preserving landed #4 revisions.
+- [ ] 07A.7 active loop supervision/state diagnostics and restart isolation (#6).
+- [ ] 07A.8 material document history and edit sessions (#9).
 - [ ] 07A.6 complete actual-control/native field and transition evidence.
 
 ### ED-M07B - Safe Content Publication And Compatibility
@@ -499,6 +503,8 @@ Plan: [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md).
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
 - [ ] 07B.5 existing-surface freshness/publication feedback for all cook scopes.
+- [ ] 07B.6 owned native worker/descendant termination and I/O drain (#8).
+- [ ] 07B.7 single procedural authority for all eight exposed assets (#11).
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
@@ -602,7 +608,7 @@ recorded in section 5.
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
-| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `planned` | Execute the six source-backed repair/evidence tasks. |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `planned` | Execute the named repair/evidence tasks, including issues #6/#7/#9/#10. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | Implement saved snapshots, safe publication, mappings and qualification. |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
