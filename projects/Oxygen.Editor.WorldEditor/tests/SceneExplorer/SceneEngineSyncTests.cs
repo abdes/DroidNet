@@ -5,48 +5,50 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
 [TestClass]
 [TestCategory("Live Engine Sync")]
-public sealed class SceneEngineSyncTests
+public sealed partial class SceneEngineSyncTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public async Task UpdateNodeTransform_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
 
-        var outcome = await sut.UpdateNodeTransformAsync(scene, node).ConfigureAwait(false);
+        var outcome = await sut.UpdateNodeTransformAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
         _ = outcome.Scope.SceneId.Should().Be(scene.Id);
         _ = outcome.Scope.NodeId.Should().Be(node.Id);
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
     public async Task UpdateNodeTransform_WhenWorldIsNull_ReturnsSkippedNotRunning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Running);
-        engine.SetupGet(s => s.World).Returns((Oxygen.Interop.World.OxygenWorld)null!);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Running);
+        _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
 
-        var outcome = await sut.UpdateNodeTransformAsync(scene, node).ConfigureAwait(false);
+        var outcome = await sut.UpdateNodeTransformAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
@@ -73,7 +75,7 @@ public sealed class SceneEngineSyncTests
     public async Task UpdateProperties_WhenEngineNotRunning_BuffersPendingPropertySync()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
@@ -81,7 +83,7 @@ public sealed class SceneEngineSyncTests
         var countChanges = new List<PendingPropertySyncCountChangedEventArgs>();
         sut.PendingPropertySyncCountChanged += (_, args) => countChanges.Add(args);
 
-        var outcome = await sut.UpdatePropertiesAsync(scene, node, entries).ConfigureAwait(false);
+        var outcome = await sut.UpdatePropertiesAsync(scene, node, entries, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
@@ -90,7 +92,7 @@ public sealed class SceneEngineSyncTests
         _ = countChanges.Should().ContainSingle()
             .Which.Should().Match<PendingPropertySyncCountChangedEventArgs>(
                 args => args.SceneId == scene.Id && args.PendingCount == 1);
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
@@ -116,25 +118,25 @@ public sealed class SceneEngineSyncTests
     public async Task UpdateProperties_WhenEngineFaulted_DoesNotBuffer()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         var entries = new[] { CreateTransformEntry(42.0f) };
 
-        var outcome = await sut.UpdatePropertiesAsync(scene, node, entries).ConfigureAwait(false);
+        var outcome = await sut.UpdatePropertiesAsync(scene, node, entries, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.RuntimeFaulted);
         _ = sut.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
     public async Task UpdateMaterialSlot_WhenEngineFaulted_ReturnsRuntimeFaulted()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
@@ -143,11 +145,12 @@ public sealed class SceneEngineSyncTests
             scene,
             node,
             slotIndex: 0,
-            materialUri: new Uri("asset:///Materials/Test")).ConfigureAwait(false);
+            materialUri: new Uri("asset:///Materials/Test"),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.RuntimeFaulted);
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
@@ -176,44 +179,44 @@ public sealed class SceneEngineSyncTests
     public async Task AttachCamera_WhenEngineNotRunning_ReturnsSkippedBeforeUnsupportedCamera()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Camera" };
         node.Components.Add(new OrthographicCamera { Name = "Camera" });
 
-        var outcome = await sut.AttachCameraAsync(scene, node).ConfigureAwait(false);
+        var outcome = await sut.AttachCameraAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
     public async Task UpdateEnvironment_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
 
-        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment).ConfigureAwait(false);
+        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Overall.Should().Be(SyncStatus.SkippedNotRunning);
         _ = result.PerField.Should().BeEmpty();
-        engine.VerifyGet(s => s.World, Times.Never);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
     [TestMethod]
     public async Task UpdateEnvironment_WhenRunningWorldIsMissing_ReturnsSkippedNotRunning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        engine.SetupGet(s => s.State).Returns(EngineServiceState.Running);
-        engine.SetupGet(s => s.World).Returns((Oxygen.Interop.World.OxygenWorld)null!);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Running);
+        _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
 
-        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment).ConfigureAwait(false);
+        var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Overall.Should().Be(SyncStatus.SkippedNotRunning);
         _ = result.PerField.Should().BeEmpty();
@@ -258,7 +261,7 @@ public sealed class SceneEngineSyncTests
     [TestMethod]
     public void MaterialOverridePathMapper_MapsNullAndEmptySentinelToClearOverride()
     {
-        _ = MaterialOverridePathMapper.ToEnginePath(null).Should().BeNull();
+        _ = MaterialOverridePathMapper.ToEnginePath(materialUri: null).Should().BeNull();
         _ = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///__uninitialized__")).Should().BeNull();
     }
 
@@ -278,7 +281,7 @@ public sealed class SceneEngineSyncTests
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var sceneId = Guid.NewGuid();
         var nodeId = Guid.NewGuid();
-        var start = DateTimeOffset.Parse("2026-04-27T00:00:00Z", null, System.Globalization.DateTimeStyles.AssumeUniversal);
+        var start = DateTimeOffset.Parse("2026-04-27T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
         var previewCount = 0;
         var terminalCount = 0;
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty);
@@ -293,7 +296,8 @@ public sealed class SceneEngineSyncTests
                 {
                     previewCount++;
                     return Task.FromResult(accepted);
-                }).ConfigureAwait(false);
+                },
+                cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
             if (outcome is not null)
             {
@@ -309,7 +313,8 @@ public sealed class SceneEngineSyncTests
             {
                 terminalCount++;
                 return Task.FromResult(accepted);
-            }).ConfigureAwait(false);
+            },
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = terminal.Should().Be(accepted);
         _ = terminalCount.Should().Be(1);

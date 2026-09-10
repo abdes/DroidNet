@@ -471,7 +471,7 @@ Exit evidence required:
 
 ### ED-M07A - Authoring Integrity And Runtime Convergence
 
-Status: `planned`
+Status: `active`
 
 Trace: `REQ-005` through `REQ-009`, `REQ-011`, `REQ-012`, `REQ-014`, `REQ-022`,
 `REQ-024`, `REQ-026`, `REQ-037`, `REQ-038`; `SUCCESS-002`, `SUCCESS-003`,
@@ -479,7 +479,8 @@ Trace: `REQ-005` through `REQ-009`, `REQ-011`, `REQ-012`, `REQ-014`, `REQ-022`,
 
 Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 
-- [ ] 07A.0 managed world/input capabilities and facade conversion (#10).
+- [ ] 07A.0 managed world/input capabilities and facade conversion (#10): migration
+      implemented; native asset-failure forwarding and running-editor checks remain.
 - [ ] 07A.1 native background application and truthful field results.
 - [ ] 07A.2 camera/light/environment gesture sessions and cancellation.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation.
@@ -608,7 +609,7 @@ recorded in section 5.
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
-| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `planned` | Execute the named repair/evidence tasks, including issues #6/#7/#9/#10. |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `active` | Complete 07A.0 native asset-failure forwarding and running-editor checks, then continue the named repair/evidence tasks. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | Implement saved snapshots, safe publication, mappings and qualification. |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |

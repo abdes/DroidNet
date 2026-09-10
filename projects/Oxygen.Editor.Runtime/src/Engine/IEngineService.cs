@@ -4,8 +4,6 @@
 
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
-using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -87,34 +85,11 @@ public interface IEngineService : IAsyncDisposable
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     public int ActiveSurfaceCount { get; }
 
-    /// <summary>
-    ///     Gets the world instance associated with this engine service. This will be used to mutate
-    ///     and query the engine world, including scenes and scene objects. May be null if the
-    ///     engine is not yet initialized.
-    /// </summary>
-    /// <remarks>
-    ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error and throws an exception.
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    /// </remarks>
-    /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
-    public OxygenWorld World { get; }
+    /// <summary>Gets managed scene commands, including an explicit unavailable outcome before startup.</summary>
+    public IRuntimeWorldCommands WorldCommands { get; }
 
-    /// <summary>
-    ///     Gets the input bridge instance associated with this engine service. This provides
-    ///     managed access to runtime input facilities of the native engine.
-    ///     May be null if the engine is not yet initialized.
-    /// </summary>
-    /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Ready"/></item>
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    /// </remarks>
-    public OxygenInput Input { get; }
+    /// <summary>Gets managed viewport input commands with run and view-generation validation.</summary>
+    public IRuntimeInputCommands InputCommands { get; }
 
     /// <summary>
     ///     Mounts the project's cooked assets root directory in the engine's virtual path resolver.

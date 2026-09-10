@@ -49,6 +49,7 @@ public sealed partial class EngineService
             try
             {
                 this.engineLoopTask = this.session!.RunAsync();
+                this.commandDispatcher.BeginRun(this.session.Commands, this.engineLoopTask);
                 this.state = EngineServiceState.Running;
             }
             catch
@@ -115,8 +116,6 @@ public sealed partial class EngineService
             config.Engine.Graphics.Headless = true;
             config.Engine.EnableAssetLoader = true;
             this.session.Initialize(config, loggerFactory?.CreateLogger("Oxygen.Engine"));
-            this.World = this.session.World;
-            this.Input = this.session.Input;
             this.state = EngineServiceState.Ready;
             this.LogContextReady();
             return true;
@@ -137,6 +136,7 @@ public sealed partial class EngineService
             return failures;
         }
 
+        this.commandDispatcher.EndRun();
         this.state = EngineServiceState.ShuttingDown;
         this.LogShutdownRequested();
         foreach (var lease in this.activeLeases.Values.ToArray())
@@ -168,8 +168,6 @@ public sealed partial class EngineService
         this.orphanedViewportIds.Clear();
         this.reservedSurfaceCount = 0;
         this.session = null;
-        this.World = null!;
-        this.Input = null!;
         this.state = EngineServiceState.NoEngine;
         return failures;
     }

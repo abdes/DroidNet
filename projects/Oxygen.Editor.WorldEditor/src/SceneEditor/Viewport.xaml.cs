@@ -16,11 +16,10 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Runtime.Input;
+using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
+using Oxygen.Managed.Core.Diagnostics;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -33,6 +32,18 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 {
     private const string LoggerCategoryName = "Oxygen.Editor.LevelEditor.Viewport";
     private const uint MinimumPixelExtent = 2;
+
+    private static readonly bool EnableInputDebugLogs =
+        string.Equals(
+            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_INPUT_LOGS"),
+            "1",
+            StringComparison.Ordinal);
+
+    private static readonly bool EnableWheelDebugLogs =
+        string.Equals(
+            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_WHEEL_LOGS"),
+            "1",
+            StringComparison.Ordinal);
 
     private IViewportSurfaceLease? surfaceLease;
     private bool swapChainSizeHooked;
@@ -60,70 +71,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private bool hasPointerPosition;
 
     private bool lastAltKeyDown;
-
-    private static readonly bool EnableInputDebugLogs =
-        string.Equals(
-            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_INPUT_LOGS"),
-            "1",
-            StringComparison.Ordinal);
-
-    // Dedicated wheel-only tracing to help verify scroll routing and
-    // accumulator correctness without turning on noisy full input logs.
-    private static readonly bool EnableWheelDebugLogs =
-        string.Equals(
-            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_WHEEL_LOGS"),
-            "1",
-            StringComparison.Ordinal);
-
-    private void DebugInputLog(string message)
-    {
-        if (!EnableInputDebugLogs)
-        {
-            return;
-        }
-
-        var viewportId = this.ViewModel?.ViewportId;
-        var viewId = this.ViewModel?.AssignedViewId;
-        Debug.WriteLine($"[Viewport] vm.viewportId={viewportId} viewId={viewId} :: {message}");
-    }
-
-    private void DebugWheelLog(string message)
-    {
-        if (!EnableWheelDebugLogs)
-        {
-            return;
-        }
-
-        var viewportId = this.ViewModel?.ViewportId;
-        var viewId = this.ViewModel?.AssignedViewId;
-        Debug.WriteLine($"[Viewport.Wheel] vm.viewportId={viewportId} viewId={viewId} :: {message}");
-    }
-
-    private void SyncAltKeyStateIfNeeded(ViewportViewModel viewModel, ViewIdManaged viewId)
-    {
-        var is_down = InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Menu)
-            .HasFlag(CoreVirtualKeyStates.Down);
-
-        if (is_down == this.lastAltKeyDown)
-        {
-            return;
-        }
-
-        this.lastAltKeyDown = is_down;
-        var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
-
-        viewModel.EngineService.Input.PushKeyEvent(
-            viewId,
-            new EditorKeyEventManaged
-            {
-                key = PlatformKey.LeftAlt,
-                pressed = is_down,
-                repeat = false,
-                timestamp = DateTime.UtcNow,
-                position = position,
-            });
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
@@ -163,6 +110,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
+    /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
         if (this.isDisposed)
@@ -194,6 +142,99 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private static string GetViewportId(ViewportViewModel? viewModel)
         => viewModel?.ViewportId.ToString("D", CultureInfo.InvariantCulture) ?? "none";
+
+    private static bool TryTranslateMouseButton(PointerUpdateKind kind, out RuntimeMouseButton button, out bool pressed)
+    {
+        button = RuntimeMouseButton.None;
+        pressed = false;
+
+        switch (kind)
+        {
+            case PointerUpdateKind.LeftButtonPressed:
+                button = RuntimeMouseButton.Left;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.LeftButtonReleased:
+                button = RuntimeMouseButton.Left;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.RightButtonPressed:
+                button = RuntimeMouseButton.Right;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.RightButtonReleased:
+                button = RuntimeMouseButton.Right;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.MiddleButtonPressed:
+                button = RuntimeMouseButton.Middle;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.MiddleButtonReleased:
+                button = RuntimeMouseButton.Middle;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.XButton1Pressed:
+                button = RuntimeMouseButton.ExtButton1;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.XButton1Released:
+                button = RuntimeMouseButton.ExtButton1;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.XButton2Pressed:
+                button = RuntimeMouseButton.ExtButton2;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.XButton2Released:
+                button = RuntimeMouseButton.ExtButton2;
+                pressed = false;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void DebugInputLog(string message)
+    {
+        if (!EnableInputDebugLogs)
+        {
+            return;
+        }
+
+        var viewportId = this.ViewModel?.ViewportId;
+        var viewId = this.ViewModel?.AssignedViewId;
+        Debug.WriteLine($"[Viewport] vm.viewportId={viewportId} viewId={viewId} :: {message}");
+    }
+
+    private void DebugWheelLog(string message)
+    {
+        if (!EnableWheelDebugLogs)
+        {
+            return;
+        }
+
+        var viewportId = this.ViewModel?.ViewportId;
+        var viewId = this.ViewModel?.AssignedViewId;
+        Debug.WriteLine($"[Viewport.Wheel] vm.viewportId={viewportId} viewId={viewId} :: {message}");
+    }
+
+    private void SyncAltKeyStateIfNeeded(ViewportViewModel viewModel, RuntimeViewTarget viewId)
+    {
+        var is_down = InputKeyboardSource
+            .GetKeyStateForCurrentThread(VirtualKey.Menu)
+            .HasFlag(CoreVirtualKeyStates.Down);
+
+        if (is_down == this.lastAltKeyDown)
+        {
+            return;
+        }
+
+        this.lastAltKeyDown = is_down;
+        var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
+
+        viewModel.ForwardInput(viewId, new RuntimeKeyEvent(RuntimeKey.LeftAlt, is_down, Repeat: false, position, DateTime.UtcNow));
+    }
 
     private void OnDataContextChanged(FrameworkElement sender, Microsoft.UI.Xaml.DataContextChangedEventArgs args)
     {
@@ -291,7 +332,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (this.surfaceLease != null)
         {
             this.LogSurfaceAlreadyAttachedOnLoad();
-            _ = this.NotifyViewportResizeAsync();
+            _ = this.NotifyViewportResizeAsync(CancellationToken.None);
             return;
         }
 
@@ -325,7 +366,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 .Switch()
                 .Subscribe(
                     _ => { },
-                    ex => this.LogResizeFailed(ex));
+                    this.LogResizeFailed);
 
             this.swapChainSizeHooked = true;
             this.LogSwapChainHookRegistered();
@@ -358,14 +399,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             {
                 // Subscription/subject disposed concurrently; ignore safely.
             }
-            catch (Exception ex)
+            catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
             {
                 this.LogResizeFailed(ex);
             }
         }
         else
         {
-            _ = this.NotifyViewportResizeAsync();
+            _ = this.NotifyViewportResizeAsync(CancellationToken.None);
         }
     }
 
@@ -403,8 +444,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.LogResizeSkipped("Resize canceled");
         }
-#pragma warning disable CA1031 // Engine resize failures should not crash the UI; log and continue.
-        catch (Exception ex)
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogResizeFailed(ex);
             this.ViewModel?.PublishRuntimeWarning(
@@ -415,7 +455,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 "The viewport surface could not be resized.",
                 ex);
         }
-#pragma warning restore CA1031
     }
 
     private async void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -497,69 +536,17 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.DebugInputLog("UnregisterInputHandlers: unhooked");
     }
 
-    private static bool TryTranslateMouseButton(PointerUpdateKind kind, out PlatformMouseButton button, out bool pressed)
-    {
-        button = PlatformMouseButton.None;
-        pressed = false;
-
-        switch (kind)
-        {
-            case PointerUpdateKind.LeftButtonPressed:
-                button = PlatformMouseButton.Left;
-                pressed = true;
-                return true;
-            case PointerUpdateKind.LeftButtonReleased:
-                button = PlatformMouseButton.Left;
-                pressed = false;
-                return true;
-            case PointerUpdateKind.RightButtonPressed:
-                button = PlatformMouseButton.Right;
-                pressed = true;
-                return true;
-            case PointerUpdateKind.RightButtonReleased:
-                button = PlatformMouseButton.Right;
-                pressed = false;
-                return true;
-            case PointerUpdateKind.MiddleButtonPressed:
-                button = PlatformMouseButton.Middle;
-                pressed = true;
-                return true;
-            case PointerUpdateKind.MiddleButtonReleased:
-                button = PlatformMouseButton.Middle;
-                pressed = false;
-                return true;
-            case PointerUpdateKind.XButton1Pressed:
-                button = PlatformMouseButton.ExtButton1;
-                pressed = true;
-                return true;
-            case PointerUpdateKind.XButton1Released:
-                button = PlatformMouseButton.ExtButton1;
-                pressed = false;
-                return true;
-            case PointerUpdateKind.XButton2Pressed:
-                button = PlatformMouseButton.ExtButton2;
-                pressed = true;
-                return true;
-            case PointerUpdateKind.XButton2Released:
-                button = PlatformMouseButton.ExtButton2;
-                pressed = false;
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private bool TryGetInputTarget(out ViewportViewModel? viewModel, out ViewIdManaged viewId)
+    private bool TryGetInputTarget(out ViewportViewModel? viewModel, out RuntimeViewTarget viewId)
     {
         viewModel = this.ViewModel;
-        viewId = viewModel?.AssignedViewId ?? ViewIdManaged.Invalid;
-        return viewModel?.EngineService?.Input != null && viewId.IsValid;
+        viewId = viewModel?.AssignedInputTarget ?? default;
+        return viewModel?.AssignedInputTarget is not null;
     }
 
-    private bool TryGetInputTargetVerbose(out ViewportViewModel? viewModel, out ViewIdManaged viewId)
+    private bool TryGetInputTargetVerbose(out ViewportViewModel? viewModel, out RuntimeViewTarget viewId)
     {
         viewModel = this.ViewModel;
-        viewId = viewModel?.AssignedViewId ?? ViewIdManaged.Invalid;
+        viewId = viewModel?.AssignedInputTarget ?? default;
 
         if (viewModel is null)
         {
@@ -573,13 +560,13 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return false;
         }
 
-        if (viewModel.EngineService.Input is null)
+        if (viewModel.AssignedInputTarget is null)
         {
             this.DebugInputLog("Input target missing: EngineService.Input is null");
             return false;
         }
 
-        if (!viewId.IsValid)
+        if (viewId.Generation == Guid.Empty)
         {
             this.DebugInputLog("Input target missing: AssignedViewId is invalid");
             return false;
@@ -603,7 +590,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         this.DebugInputLog("FocusLost: forwarding to EngineService.Input.OnFocusLost");
-        viewModel.EngineService.Input.OnFocusLost(viewId);
+        viewModel.ForwardInput(viewId, new RuntimeFocusLostEvent());
     }
 
     private void OnLostFocus(object sender, RoutedEventArgs e)
@@ -638,7 +625,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
-        if (translated == PlatformKey.None)
+        if (translated == RuntimeKey.None)
         {
             this.DebugInputLog("KeyDown: TranslateKey returned None");
             return;
@@ -647,21 +634,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
         this.DebugInputLog($"KeyDown: forwarding key={translated} pressed=true");
 
-        if (translated == PlatformKey.LeftAlt)
+        if (translated == RuntimeKey.LeftAlt)
         {
             this.lastAltKeyDown = true;
         }
 
-        viewModel.EngineService.Input.PushKeyEvent(
-            viewId,
-            new EditorKeyEventManaged
-            {
-                key = translated,
-                pressed = true,
-                repeat = e.KeyStatus.RepeatCount > 1,
-                timestamp = DateTime.UtcNow,
-                position = position,
-            });
+        viewModel.ForwardInput(viewId, new RuntimeKeyEvent(translated, Pressed: true, e.KeyStatus.RepeatCount > 1, position, DateTime.UtcNow));
     }
 
     private void OnKeyUp(object sender, KeyRoutedEventArgs e)
@@ -688,7 +666,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
-        if (translated == PlatformKey.None)
+        if (translated == RuntimeKey.None)
         {
             this.DebugInputLog("KeyUp: TranslateKey returned None");
             return;
@@ -697,21 +675,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
         this.DebugInputLog($"KeyUp: forwarding key={translated} pressed=false");
 
-        if (translated == PlatformKey.LeftAlt)
+        if (translated == RuntimeKey.LeftAlt)
         {
             this.lastAltKeyDown = false;
         }
 
-        viewModel.EngineService.Input.PushKeyEvent(
-            viewId,
-            new EditorKeyEventManaged
-            {
-                key = translated,
-                pressed = false,
-                repeat = false,
-                timestamp = DateTime.UtcNow,
-                position = position,
-            });
+        viewModel.ForwardInput(viewId, new RuntimeKeyEvent(translated, Pressed: false, Repeat: false, position, DateTime.UtcNow));
     }
 
     private void OnSwapChainPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -728,10 +697,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         _ = this.Focus(FocusState.Pointer);
 
-        if (this.SwapChainPanel != null)
-        {
-            this.SwapChainPanel.CapturePointer(e.Pointer);
-        }
+        _ = this.SwapChainPanel?.CapturePointer(e.Pointer);
 
         if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
         {
@@ -742,8 +708,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
-        this.DebugInputLog($"PointerPressed: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}");
-        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        this.DebugInputLog(string.Create(CultureInfo.InvariantCulture, $"PointerPressed: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}"));
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;
 
@@ -754,22 +720,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             pressed = true;
         }
 
-        if (button == PlatformMouseButton.None)
+        if (button == RuntimeMouseButton.None)
         {
             this.DebugInputLog("PointerPressed: could not determine button");
             return;
         }
 
         this.DebugInputLog($"PointerPressed: forwarding button={button} pressed={pressed}");
-        viewModel.EngineService.Input.PushButtonEvent(
-            viewId,
-            new EditorButtonEventManaged
-            {
-                button = button,
-                pressed = pressed,
-                timestamp = DateTime.UtcNow,
-                position = pos,
-            });
+        viewModel.ForwardInput(viewId, new RuntimeButtonEvent(button, pressed, pos, DateTime.UtcNow));
     }
 
     private void OnSwapChainPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -784,18 +742,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return;
         }
 
-        if (this.SwapChainPanel != null)
-        {
-            this.SwapChainPanel.ReleasePointerCapture(e.Pointer);
-        }
+        this.SwapChainPanel?.ReleasePointerCapture(e.Pointer);
 
         // CRITICAL: Restore keyboard focus after releasing pointer capture
         // ReleasePointerCapture causes WinUI to stop routing keyboard events!
         // Must defer focus call to next message loop cycle - immediate Focus() fails.
-        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.High, () =>
-        {
-            _ = this.Focus(FocusState.Keyboard);
-        });
+        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.High, () => _ = this.Focus(FocusState.Keyboard));
 
         if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
         {
@@ -806,8 +758,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
-        this.DebugInputLog($"PointerReleased: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}");
-        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        this.DebugInputLog(string.Create(CultureInfo.InvariantCulture, $"PointerReleased: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}"));
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;
 
@@ -818,22 +770,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             pressed = false;
         }
 
-        if (button == PlatformMouseButton.None)
+        if (button == RuntimeMouseButton.None)
         {
             this.DebugInputLog("PointerReleased: could not determine button");
             return;
         }
 
         this.DebugInputLog($"PointerReleased: forwarding button={button} pressed={pressed}");
-        viewModel.EngineService.Input.PushButtonEvent(
-            viewId,
-            new EditorButtonEventManaged
-            {
-                button = button,
-                pressed = pressed,
-                timestamp = DateTime.UtcNow,
-                position = pos,
-            });
+        viewModel.ForwardInput(viewId, new RuntimeButtonEvent(button, pressed, pos, DateTime.UtcNow));
     }
 
     private void OnSwapChainPointerMoved(object sender, PointerRoutedEventArgs e)
@@ -853,7 +797,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
-        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
         var delta = this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
 
         this.lastPointerPosition = pos;
@@ -861,17 +805,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         if (delta != Vector2.Zero)
         {
-            this.DebugInputLog($"PointerMoved: pos=({pos.X:0.0},{pos.Y:0.0}) delta=({delta.X:0.0},{delta.Y:0.0})");
+            this.DebugInputLog(string.Create(CultureInfo.InvariantCulture, $"PointerMoved: pos=({pos.X:0.0},{pos.Y:0.0}) delta=({delta.X:0.0},{delta.Y:0.0})"));
         }
 
-        viewModel.EngineService.Input.PushMouseMotion(
-            viewId,
-            new EditorMouseMotionEventManaged
-            {
-                motion = delta,
-                position = pos,
-                timestamp = DateTime.UtcNow,
-            });
+        viewModel.ForwardInput(viewId, new RuntimeMouseMotionEvent(delta, pos, DateTime.UtcNow));
     }
 
     private void OnSwapChainPointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -895,7 +832,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
-        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;
 
@@ -904,22 +841,15 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (Math.Abs(ticks) <= float.Epsilon)
         {
             this.DebugInputLog("PointerWheelChanged: zero delta");
-            this.DebugWheelLog($"rawDelta={rawDelta} ticks={ticks:0.00} (ignored: zero)");
+            this.DebugWheelLog(string.Create(CultureInfo.InvariantCulture, $"rawDelta={rawDelta} ticks={ticks:0.00} (ignored: zero)"));
             return;
         }
 
         this.DebugWheelLog(
-            $"rawDelta={rawDelta} ticks={ticks:0.00} pos=({pos.X:0.0},{pos.Y:0.0})");
+            string.Create(CultureInfo.InvariantCulture, $"rawDelta={rawDelta} ticks={ticks:0.00} pos=({pos.X:0.0},{pos.Y:0.0})"));
 
-        this.DebugInputLog($"PointerWheelChanged: forwarding ticks={ticks:0.00}");
-        viewModel.EngineService.Input.PushMouseWheel(
-            viewId,
-            new EditorMouseWheelEventManaged
-            {
-                scroll = new Vector2(0.0f, (float)ticks),
-                position = pos,
-                timestamp = DateTime.UtcNow,
-            });
+        this.DebugInputLog(string.Create(CultureInfo.InvariantCulture, $"PointerWheelChanged: forwarding ticks={ticks:0.00}"));
+        viewModel.ForwardInput(viewId, new RuntimeMouseWheelEvent(new Vector2(0.0f, (float)ticks), pos, DateTime.UtcNow));
     }
 
     private async Task AttachSurfaceAsync(string reason = "General")
@@ -947,126 +877,19 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         await this.CancelPendingAttachAsync().ConfigureAwait(true);
         this.attachCancellationSource = new CancellationTokenSource();
         var cancellationToken = this.attachCancellationSource.Token;
-        var requestedViewModel = viewModel;
         var requestId = Interlocked.Increment(ref this.attachRequestId);
 
         try
         {
-            // If the SwapChainPanel hasn't been measured yet we can end up
-            // registering a 1x1 backbuffer which the engine will use to
-            // configure the camera incorrectly. Wait briefly for the panel to
-            // be measured so we can pass a realistic initial size to the
-            // engine. This is conservative and short-lived; if measurement does
-            // not complete we fall back to proceeding immediately.
-            const int maxAttempts = 10;
-            const int delayMs = 50;
-            var attempted = 0;
-            while (attempted < maxAttempts && !cancellationToken.IsCancellationRequested)
-            {
-                if (this.TryGetSwapChainPixelSize(out var w, out var h) && w >= MinimumPixelExtent && h >= MinimumPixelExtent)
-                {
-                    break; // measured to a usable size
-                }
+            await this.WaitForPanelMeasurementAsync(cancellationToken).ConfigureAwait(true);
 
-                attempted++;
-                try
-                {
-                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(true);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-            }
-
-            // Use a non-empty tag for surface requests — control `Name` is often
-            // the empty string (not null), so the null-coalescing operator
-            // doesn't help. Treat empty/whitespace as missing and fall back.
-            var requestTag = string.IsNullOrWhiteSpace(this.Name) ? "viewport" : this.Name;
-            var request = viewModel.CreateSurfaceRequest(requestTag);
-            var lease = await viewModel.EngineService.AttachViewportAsync(request, this.SwapChainPanel, cancellationToken).ConfigureAwait(true);
-
-            // Validate that we still want this lease. If any condition fails we dispose
-            // it and clean up. This reduces duplicated checks and paths above.
-            var shouldKeepLease = this.IsLoaded && !this.isDisposed && ReferenceEquals(requestedViewModel, this.ViewModel) && requestId == this.attachRequestId;
-            if (!shouldKeepLease)
-            {
-                this.LogAttachOutcomeIgnored(!this.IsLoaded || this.isDisposed ? "ControlStateChanged" : !ReferenceEquals(requestedViewModel, this.ViewModel) ? "ViewModelChanged" : "SupersededRequest");
-                await this.DisposeLeaseSilentlyAsync(lease).ConfigureAwait(true);
-                if (requestId == this.attachRequestId)
-                {
-                    await this.CancelPendingAttachAsync().ConfigureAwait(true);
-                }
-
-                return;
-            }
-
-            this.surfaceLease = lease;
-            this.LogSurfaceAttached(viewModel.ViewportId);
-
-            // Create an engine view for this viewport and associate it with the
-            // UI-managed view model. The UI owns view lifecycle: create -> destroy.
-            try
-            {
-                // Only create if we don't already have an assigned view id
-                if (!viewModel.AssignedViewId.IsValid)
-                {
-                    // Compute a reasonable initial pixel size for the view
-                    _ = this.TryGetSwapChainPixelSize(out var pixelW, out var pixelH);
-
-                    var cfg = new ViewConfigManaged
-                    {
-                        Name = requestTag,
-                        Purpose = "Viewport",
-                        CompositingTarget = lease.Key.ViewportId,
-                        Width = pixelW,
-                        Height = pixelH,
-                        ClearColor = viewModel.ClearColor,
-                    };
-
-                    var created = await viewModel.EngineService.CreateViewAsync(cfg).ConfigureAwait(true);
-                    if (created.IsValid)
-                    {
-                        viewModel.AssignedViewId = created;
-                        this.LogViewCreated(viewModel.ViewportId, created);
-                        await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
-                        await viewModel.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
-                    }
-                    else
-                    {
-                        viewModel.PublishRuntimeFailure(
-                            RuntimeOperationKinds.ViewCreate,
-                            FailureDomain.RuntimeView,
-                            DiagnosticCodes.ViewPrefix + "CREATE_REJECTED",
-                            "Viewport view was not created",
-                            "The runtime rejected the engine view creation request for this viewport.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                this.LogCreateViewFailed(viewModel.ViewportId, ex);
-                viewModel.PublishRuntimeFailure(
-                    RuntimeOperationKinds.ViewCreate,
-                    FailureDomain.RuntimeView,
-                    DiagnosticCodes.ViewPrefix + "CREATE_FAILED",
-                    "Viewport view creation failed",
-                    "The runtime could not create an engine view for this viewport.",
-                    ex);
-            }
-
-            // Perform the initial resize unconditionally (do not cancel via the
-            // attach token) so the swapchain receives its first backbuffer size.
-            // Subsequent resize events are handled by the debounced pipeline and
-            // are cancellable.
-            await this.NotifyViewportResizeAsync(CancellationToken.None).ConfigureAwait(true);
+            await this.AttachMeasuredSurfaceAsync(viewModel, requestId, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             this.LogAttachmentCanceled(reason);
         }
-#pragma warning disable CA1031 // Engine attachment failures should be logged and suppressed to keep UI responsive.
-        catch (Exception ex)
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogAttachmentFailed(ex);
             viewModel.PublishRuntimeFailure(
@@ -1077,7 +900,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 "The runtime could not attach the viewport surface.",
                 ex);
         }
-#pragma warning restore CA1031
     }
 
     private async Task DetachSurfaceAsync(string reason = "General")
@@ -1097,53 +919,15 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         try
         {
-            // If the UI created an engine view for this viewport, destroy it
-            // before we dispose the surface lease. The UI owns view lifecycle.
-            var vm = this.ViewModel;
-            if (vm?.AssignedViewId.IsValid == true && vm.EngineService != null)
-            {
-                try
-                {
-                    var destroyed = await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
-                    if (!destroyed)
-                    {
-                        vm.PublishRuntimeWarning(
-                            RuntimeOperationKinds.ViewDestroy,
-                            FailureDomain.RuntimeView,
-                            DiagnosticCodes.ViewPrefix + "DESTROY_REJECTED",
-                            "Viewport view teardown was rejected",
-                            "The runtime rejected the engine view teardown request for this viewport.");
-                    }
-
-                    vm.AssignedViewId = ViewIdManaged.Invalid;
-                    this.LogViewDestroyed(vm.ViewportId);
-                }
-                catch (Exception ex)
-                {
-                    this.LogDestroyViewFailed(vm.ViewportId, ex);
-                    vm.PublishRuntimeWarning(
-                        RuntimeOperationKinds.ViewDestroy,
-                        FailureDomain.RuntimeView,
-                        DiagnosticCodes.ViewPrefix + "DESTROY_FAILED",
-                        "Viewport view teardown failed",
-                        "The runtime could not destroy the engine view for this viewport.",
-                        ex);
-                }
-                finally
-                {
-                    vm.AssignedViewId = ViewIdManaged.Invalid;
-                }
-            }
+            await this.DestroyAssignedViewAsync().ConfigureAwait(true);
 
             await this.surfaceLease.DisposeAsync().ConfigureAwait(true);
             this.LogLeaseDisposed(GetViewportId(this.ViewModel));
         }
-#pragma warning disable CA1031 // Disposal errors are logged but should not crash the control during teardown.
-        catch (Exception ex)
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogLeaseDisposeFailed(ex);
         }
-#pragma warning restore CA1031
         finally
         {
             this.surfaceLease = null;
@@ -1157,9 +941,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return;
         }
 
-        if (this.SwapChainPanel != null)
+        if (this.SwapChainPanel is { } panel)
         {
-            this.SwapChainPanel.SizeChanged -= this.OnSwapChainPanelSizeChanged;
+            panel.SizeChanged -= this.OnSwapChainPanelSizeChanged;
         }
 
         // Stop and dispose the Rx subscription and subject when we detach so
@@ -1168,8 +952,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.sizeChangedSubscription?.Dispose();
         }
-        catch
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
+            this.LogResizeFailed(ex);
         }
 
         this.sizeChangedSubscription = null;
@@ -1179,8 +964,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.sizeChangedSubject?.OnCompleted();
             this.sizeChangedSubject?.Dispose();
         }
-        catch
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
+            this.LogResizeFailed(ex);
         }
 
         this.sizeChangedSubject = null;
@@ -1244,9 +1030,181 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             await lease.DisposeAsync().ConfigureAwait(true);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogLeaseDisposeFailed(ex);
         }
+    }
+
+    private async Task WaitForPanelMeasurementAsync(CancellationToken cancellationToken)
+    {
+        // If the SwapChainPanel hasn't been measured yet we can end up
+        // registering a 1x1 backbuffer which the engine will use to
+        // configure the camera incorrectly. Wait briefly for the panel to
+        // be measured so we can pass a realistic initial size to the
+        // engine. This is conservative and short-lived; if measurement does
+        // not complete we fall back to proceeding immediately.
+        const int maxAttempts = 10;
+        const int delayMs = 50;
+        var attempted = 0;
+        while (attempted < maxAttempts && !cancellationToken.IsCancellationRequested)
+        {
+            if (this.TryGetSwapChainPixelSize(out var w, out var h) && w >= MinimumPixelExtent && h >= MinimumPixelExtent)
+            {
+                break; // measured to a usable size
+            }
+
+            attempted++;
+            try
+            {
+                await Task.Delay(delayMs, cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task CreateAssignedViewAsync(ViewportViewModel viewModel, IViewportSurfaceLease lease, string requestTag)
+    {
+        // Create an engine view for this viewport and associate it with the
+        // UI-managed view model. The UI owns view lifecycle: create -> destroy.
+        try
+        {
+            // Only create if we don't already have an assigned view id
+            if (!viewModel.AssignedViewId.IsValid)
+            {
+                // Compute a reasonable initial pixel size for the view
+                _ = this.TryGetSwapChainPixelSize(out var pixelW, out var pixelH);
+
+                var cfg = new ViewConfigManaged
+                {
+                    Name = requestTag,
+                    Purpose = "Viewport",
+                    CompositingTarget = lease.Key.ViewportId,
+                    Width = pixelW,
+                    Height = pixelH,
+                    ClearColor = viewModel.ClearColor,
+                };
+
+                var created = await viewModel.EngineService.CreateViewAsync(cfg).ConfigureAwait(true);
+                if (created.IsValid)
+                {
+                    viewModel.AssignedViewId = created;
+                    viewModel.AssignedInputTarget = viewModel.EngineService.InputCommands.GetViewTarget(created.Value);
+                    this.LogViewCreated(viewModel.ViewportId, created);
+                    await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
+                    await viewModel.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    viewModel.PublishRuntimeFailure(
+                        RuntimeOperationKinds.ViewCreate,
+                        FailureDomain.RuntimeView,
+                        DiagnosticCodes.ViewPrefix + "CREATE_REJECTED",
+                        "Viewport view was not created",
+                        "The runtime rejected the engine view creation request for this viewport.");
+                }
+            }
+        }
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+        {
+            this.LogCreateViewFailed(viewModel.ViewportId, ex);
+            viewModel.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewCreate,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CREATE_FAILED",
+                "Viewport view creation failed",
+                "The runtime could not create an engine view for this viewport.",
+                ex);
+        }
+    }
+
+    private async Task<bool> KeepAttachedLeaseAsync(ViewportViewModel requestedViewModel, long requestId, IViewportSurfaceLease lease)
+    {
+        var shouldKeepLease = this.IsLoaded && !this.isDisposed && ReferenceEquals(requestedViewModel, this.ViewModel) && requestId == this.attachRequestId;
+        if (!shouldKeepLease)
+        {
+            this.LogAttachOutcomeIgnored(!this.IsLoaded || this.isDisposed ? "ControlStateChanged" : !ReferenceEquals(requestedViewModel, this.ViewModel) ? "ViewModelChanged" : "SupersededRequest");
+            await this.DisposeLeaseSilentlyAsync(lease).ConfigureAwait(true);
+            if (requestId == this.attachRequestId)
+            {
+                await this.CancelPendingAttachAsync().ConfigureAwait(true);
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task DestroyAssignedViewAsync()
+    {
+        // If the UI created an engine view for this viewport, destroy it
+        // before we dispose the surface lease. The UI owns view lifecycle.
+        var vm = this.ViewModel;
+        if (vm?.AssignedViewId.IsValid == true && vm.EngineService != null)
+        {
+            try
+            {
+                var destroyed = await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
+                if (!destroyed)
+                {
+                    vm.PublishRuntimeWarning(
+                        RuntimeOperationKinds.ViewDestroy,
+                        FailureDomain.RuntimeView,
+                        DiagnosticCodes.ViewPrefix + "DESTROY_REJECTED",
+                        "Viewport view teardown was rejected",
+                        "The runtime rejected the engine view teardown request for this viewport.");
+                }
+
+                vm.AssignedViewId = ViewIdManaged.Invalid;
+                vm.AssignedInputTarget = null;
+                this.LogViewDestroyed(vm.ViewportId);
+            }
+            catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
+            {
+                this.LogDestroyViewFailed(vm.ViewportId, ex);
+                vm.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewDestroy,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "DESTROY_FAILED",
+                    "Viewport view teardown failed",
+                    "The runtime could not destroy the engine view for this viewport.",
+                    ex);
+            }
+            finally
+            {
+                vm.AssignedViewId = ViewIdManaged.Invalid;
+                vm.AssignedInputTarget = null;
+            }
+        }
+    }
+
+    private async Task AttachMeasuredSurfaceAsync(ViewportViewModel viewModel, long requestId, CancellationToken cancellationToken)
+    {
+        // Use a non-empty tag for surface requests — control `Name` is often
+        // the empty string (not null), so the null-coalescing operator
+        // doesn't help. Treat empty/whitespace as missing and fall back.
+        var requestTag = string.IsNullOrWhiteSpace(this.Name) ? "viewport" : this.Name;
+        var request = viewModel.CreateSurfaceRequest(requestTag);
+        var lease = await viewModel.EngineService.AttachViewportAsync(request, this.SwapChainPanel, cancellationToken).ConfigureAwait(true);
+
+        if (!await this.KeepAttachedLeaseAsync(viewModel, requestId, lease).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        this.surfaceLease = lease;
+        this.LogSurfaceAttached(viewModel.ViewportId);
+
+        await this.CreateAssignedViewAsync(viewModel, lease, requestTag).ConfigureAwait(true);
+
+        // Perform the initial resize unconditionally (do not cancel via the
+        // attach token) so the swapchain receives its first backbuffer size.
+        // Subsequent resize events are handled by the debounced pipeline and
+        // are cancellable.
+        await this.NotifyViewportResizeAsync(CancellationToken.None).ConfigureAwait(true);
     }
 }

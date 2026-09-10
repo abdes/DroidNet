@@ -9,17 +9,17 @@ using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Moq;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Interop;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
 [TestClass]
 [TestCategory("Viewport Camera")]
-public sealed class ViewportCameraControlModeTests
+public sealed partial class ViewportCameraControlModeTests
 {
     [TestMethod]
     public void CameraMenu_ShouldExposeProjectionFlyAndViewSettings()
@@ -105,11 +105,11 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new ViewIdManaged(43);
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraMovementSpeedAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 12.0f))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
@@ -123,13 +123,13 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new ViewIdManaged(44);
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraSettingsAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 75.0f,
                 0.1f,
                 1000.0f))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
@@ -143,11 +143,11 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new ViewIdManaged(42);
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 CameraControlModeManaged.Fly))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
         sut.CameraControlMode = CameraControlModeManaged.Fly;
@@ -165,20 +165,20 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new ViewIdManaged(45);
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraPresetAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 CameraViewPresetManaged.Perspective))
-            .ReturnsAsync(true);
-        engine
+            .ReturnsAsync(value: true);
+        _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 CameraControlModeManaged.Fly))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal)).Command?.Execute(null);
+        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal)).Command?.Execute(parameter: null);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Perspective);
@@ -191,21 +191,21 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new ViewIdManaged(46);
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 CameraControlModeManaged.OrbitTurntable))
-            .ReturnsAsync(true);
-        engine
+            .ReturnsAsync(value: true);
+        _ = engine
             .Setup(service => service.SetViewCameraPresetAsync(
                 It.Is<ViewIdManaged>(id => id.Value == viewId.Value),
                 CameraViewPresetManaged.Top))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
         sut.CameraControlMode = CameraControlModeManaged.Fly;
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Top", StringComparison.Ordinal)).Command?.Execute(null);
+        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Top", StringComparison.Ordinal)).Command?.Execute(parameter: null);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Top);
@@ -218,11 +218,11 @@ public sealed class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var results = new CapturingOperationResultPublisher();
-        engine
+        _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.IsAny<ViewIdManaged>(),
                 CameraControlModeManaged.OrbitTrackball))
-            .ReturnsAsync(false);
+            .ReturnsAsync(value: false);
         using var sut = CreateViewportViewModel(engine.Object, results);
         sut.AssignedViewId = new ViewIdManaged(7);
         sut.CameraControlMode = CameraControlModeManaged.OrbitTrackball;
@@ -241,7 +241,7 @@ public sealed class ViewportCameraControlModeTests
         IOperationResultPublisher? operationResults = null)
     {
         var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>(MockBehavior.Loose);
-        appearanceSettings
+        _ = appearanceSettings
             .SetupGet(service => service.Settings)
             .Returns(new AppearanceSettings { AppThemeMode = ElementTheme.Default });
 
@@ -270,7 +270,7 @@ public sealed class ViewportCameraControlModeTests
         public IDisposable Subscribe(IObserver<OperationResult> observer) => new NoopDisposable();
     }
 
-    private sealed class NoopDisposable : IDisposable
+    private sealed partial class NoopDisposable : IDisposable
     {
         public void Dispose()
         {

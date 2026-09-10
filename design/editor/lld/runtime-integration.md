@@ -629,6 +629,23 @@ coordinate units, numeric payloads and identities. Dependency/call-site checks
 reject feature facade access and native input DTO construction. Existing narrow
 view configuration value types are not permission to expose world/input behavior.
 
+The managed implementation uses `RuntimeWorldRequest` with immutable
+`RuntimeWorldCommand` records and `RuntimeInputRequest` with immutable input records.
+`RuntimeSceneTarget` includes run, authored scene, open-document and activation IDs;
+each full scene projection creates a fresh activation. `RuntimeViewTarget` includes
+run, document, viewport, generation and the process-local view value. The service
+registers a new generation after native view creation and invalidates it before
+destruction. Input callers retain the target captured at creation.
+
+`RuntimeCommandDispatcher` serializes immediate dispatch with invalidation and
+checks targets again after asynchronous acknowledgments. Run termination ends
+pending creation waits. `NativeRuntimeCommandTransport` owns both concrete
+facades; `RuntimeTransportConversion` owns native input/property DTO conversion.
+The feature's WinUI input bridge interprets keys and scales positions/deltas into
+physical viewport pixels. Scene sync keeps authoring policy and reduces managed
+results to its existing per-operation outcomes. The separate asynchronous
+asset-failure notification work below remains required before closing 07A.0.
+
 ### Active Run Observer (#6, ED-M07A.7)
 
 The rebased #3 implementation already makes State read Faulted for a completed

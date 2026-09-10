@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -57,23 +56,6 @@ public sealed partial class SceneEngineSync
         return null;
     }
 
-    private static bool TryClassifyReadiness(
-        IEngineService engineService,
-        string operationKind,
-        AffectedScope scope,
-        CancellationToken cancellationToken,
-        out SyncOutcome outcome)
-    {
-        var classified = TryGetReadyWorld(
-            engineService,
-            operationKind,
-            scope,
-            cancellationToken,
-            out _,
-            out outcome);
-        return classified;
-    }
-
     private static string GetPropertyOperationKind(IReadOnlyList<EnginePropertyValueEntry> entries)
         => GetFirstComponent(entries) switch
         {
@@ -108,57 +90,6 @@ public sealed partial class SceneEngineSync
             SceneOperationKinds.EditDirectionalLight => LiveSyncDiagnosticCodes.LightFailed,
             _ => LiveSyncDiagnosticCodes.TransformFailed,
         };
-
-    private static bool TryGetReadyWorld(
-        IEngineService engineService,
-        string operationKind,
-        AffectedScope scope,
-        CancellationToken cancellationToken,
-        out Oxygen.Interop.World.OxygenWorld? world,
-        out SyncOutcome outcome)
-    {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            world = null;
-            outcome = Cancelled(operationKind, scope);
-            return true;
-        }
-
-        var state = engineService.State;
-        if (state == EngineServiceState.Faulted)
-        {
-            world = null;
-            outcome = RuntimeFaulted(operationKind, scope);
-            return true;
-        }
-
-        if (state != EngineServiceState.Running)
-        {
-            world = null;
-            outcome = RuntimeNotRunning(operationKind, scope, state);
-            return true;
-        }
-
-        try
-        {
-            world = engineService.World;
-        }
-        catch (InvalidOperationException ex)
-        {
-            world = null;
-            outcome = RuntimeWorldUnavailable(operationKind, scope, ex);
-            return true;
-        }
-
-        if (world is null)
-        {
-            outcome = RuntimeWorldUnavailable(operationKind, scope);
-            return true;
-        }
-
-        outcome = null!;
-        return false;
-    }
 
     private static SyncOutcome Accepted(string operationKind, AffectedScope scope)
         => new(SyncStatus.Accepted, operationKind, scope);
@@ -270,105 +201,46 @@ public sealed partial class SceneEngineSync
             AssetVirtualPath = assetVirtualPath,
         };
 
-    private static async Task<bool> CreateNodeWithCallbackAsync(
-        Oxygen.Interop.World.OxygenWorld world,
-        SceneNode node,
-        Guid? parentGuid,
-        bool initializeWorldAsRoot,
-        CancellationToken cancellationToken)
-    {
-        var syncContext = SynchronizationContext.Current;
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(NodeCreationTimeout);
-        using var registration = timeout.Token.Register(
-            static state =>
-            {
-                var completion = (TaskCompletionSource<bool>)state!;
-                _ = completion.TrySetCanceled();
-            },
-            tcs);
-
-        world.CreateSceneNode(
-            node.Name,
-            node.Id,
-            parentGuid,
-            nativeHandle =>
-            {
-                void SetActive()
-                {
-                    try
-                    {
-                        node.IsActive = true;
-                        _ = tcs.TrySetResult(true);
-                    }
-                    catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-                    {
-                        _ = tcs.TrySetException(ex);
-                    }
-                }
-
-                if (syncContext is not null)
-                {
-                    syncContext.Post(_ => SetActive(), null);
-                }
-                else
-                {
-                    SetActive();
-                }
-            },
-            initializeWorldAsRoot);
-
-        try
-        {
-            return await tcs.Task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-    }
-
-    private static void ApplyTransform(Oxygen.Interop.World.OxygenWorld world, SceneNode node)
+    private static void ApplyTransform(WorldDispatch world, SceneNode node)
     {
         var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
         if (transform is not null)
         {
             var (position, rotation, scale) = TransformConverter.ToNative(transform);
-            world.SetLocalTransform(node.Id, position, rotation, scale);
+            world.Execute(new RuntimeSetLocalTransform(node.Id, position, rotation, scale));
         }
     }
 
-    private static void ApplyGeometry(Oxygen.Interop.World.OxygenWorld world, SceneNode node, GeometryComponent geometry)
+    private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
         if (geometry.Geometry?.Uri != null)
         {
             var enginePath = AssetUriHelper.GetEnginePath(geometry.Geometry.Uri);
-            world.SetGeometry(node.Id, enginePath);
+            world.Execute(new RuntimeSetGeometry(node.Id, enginePath));
             ApplyMaterialOverrides(world, node, geometry);
         }
         else
         {
-            world.DetachGeometry(node.Id);
+            world.Execute(new RuntimeDetachGeometry(node.Id));
         }
     }
 
-    private static void ApplyMaterialOverrides(Oxygen.Interop.World.OxygenWorld world, SceneNode node, GeometryComponent geometry)
+    private static void ApplyMaterialOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
         var slots = geometry.OverrideSlots.OfType<MaterialsSlot>().ToList();
         for (var index = 0; index < slots.Count; index++)
         {
             var materialUri = slots[index].Material.Uri;
-            world.SetMaterialOverride(node.Id, index, MaterialOverridePathMapper.ToEnginePath(materialUri));
+            world.Execute(new RuntimeSetMaterialOverride(node.Id, index, MaterialOverridePathMapper.ToEnginePath(materialUri)));
         }
     }
 
-    private static void ApplyLight(Oxygen.Interop.World.OxygenWorld world, SceneNode node, LightComponent light)
+    private static void ApplyLight(WorldDispatch world, SceneNode node, LightComponent light)
     {
         switch (light)
         {
             case DirectionalLightComponent directional:
-                world.AttachDirectionalLight(
+                world.Execute(new RuntimeAttachDirectionalLight(
                     node.Id,
                     directional.IntensityLux,
                     directional.AngularSizeRadians,
@@ -389,11 +261,11 @@ public sealed partial class SceneEngineSync
                     directional.CascadeDistances,
                     directional.DistributionExponent,
                     directional.TransitionFraction,
-                    directional.DistanceFadeoutFraction);
+                    directional.DistanceFadeoutFraction));
                 break;
 
             case PointLightComponent point:
-                world.AttachPointLight(
+                world.Execute(new RuntimeAttachPointLight(
                     node.Id,
                     point.LuminousFluxLumens,
                     point.Range,
@@ -402,11 +274,11 @@ public sealed partial class SceneEngineSync
                     point.Color,
                     point.AffectsWorld,
                     point.CastsShadows,
-                    point.ExposureCompensation);
+                    point.ExposureCompensation));
                 break;
 
             case SpotLightComponent spot:
-                world.AttachSpotLight(
+                world.Execute(new RuntimeAttachSpotLight(
                     node.Id,
                     spot.LuminousFluxLumens,
                     spot.Range,
@@ -417,7 +289,7 @@ public sealed partial class SceneEngineSync
                     spot.Color,
                     spot.AffectsWorld,
                     spot.CastsShadows,
-                    spot.ExposureCompensation);
+                    spot.ExposureCompensation));
                 break;
         }
     }
@@ -429,5 +301,128 @@ public sealed partial class SceneEngineSync
             : PerspectiveCamera.DefaultFieldOfViewDegrees;
 
         return degrees * (MathF.PI / 180.0f);
+    }
+
+    private bool TryClassifyReadiness(
+        IEngineService engineService,
+        Scene scene,
+        string operationKind,
+        AffectedScope scope,
+        CancellationToken cancellationToken,
+        out SyncOutcome outcome)
+    {
+        var classified = this.TryGetReadyWorld(
+            engineService,
+            scene,
+            operationKind,
+            scope,
+            cancellationToken,
+            out _,
+            out outcome);
+        return classified;
+    }
+
+    private bool TryGetReadyWorld(
+        IEngineService engineService,
+        Scene scene,
+        string operationKind,
+        AffectedScope scope,
+        CancellationToken cancellationToken,
+        out WorldDispatch? world,
+        out SyncOutcome outcome)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            world = null;
+            outcome = Cancelled(operationKind, scope);
+            return true;
+        }
+
+        var state = engineService.State;
+        if (state == EngineServiceState.Faulted)
+        {
+            world = null;
+            outcome = RuntimeFaulted(operationKind, scope);
+            return true;
+        }
+
+        if (state != EngineServiceState.Running)
+        {
+            world = null;
+            outcome = RuntimeNotRunning(operationKind, scope, state);
+            return true;
+        }
+
+        try
+        {
+            var commands = engineService.WorldCommands;
+            world = commands is null ? null : this.activeWorld is { } active && active.Target.SceneId == scope.SceneId && ReferenceEquals(this.activeScene, scene) && ReferenceEquals(active.Commands, commands)
+                ? active with { CancellationToken = cancellationToken } : null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            world = null;
+            outcome = RuntimeWorldUnavailable(operationKind, scope, ex);
+            return true;
+        }
+
+        if (world is null)
+        {
+            outcome = RuntimeWorldUnavailable(operationKind, scope);
+            return true;
+        }
+
+        outcome = null!;
+        return false;
+    }
+
+    private async Task<bool> CreateNodeWithCallbackAsync(
+        WorldDispatch world,
+        SceneNode node,
+        Guid? parentGuid,
+        bool initializeWorldAsRoot,
+        CancellationToken cancellationToken)
+    {
+        var syncContext = SynchronizationContext.Current;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(NodeCreationTimeout);
+        var result = await world.Commands.CreateNodeAsync(
+            new RuntimeWorldRequest(Guid.NewGuid(), world.Target, new RuntimeCreateNode(node.Name, node.Id, parentGuid, initializeWorldAsRoot)),
+            timeout.Token).ConfigureAwait(false);
+        if (!result.Succeeded || timeout.IsCancellationRequested || this.activeWorld?.Target != world.Target)
+        {
+            return false;
+        }
+
+        if (syncContext is null)
+        {
+            node.IsActive = true;
+        }
+        else
+        {
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            syncContext.Post(
+                state =>
+                {
+                    _ = state;
+                    try
+                    {
+                        if (!cancellationToken.IsCancellationRequested && world.Commands.RunId == world.Target.RunId && this.activeWorld?.Target == world.Target)
+                        {
+                            node.IsActive = true;
+                        }
+
+                        _ = completion.TrySetResult();
+                    }
+                    catch (Exception exception) when (EngineInteropExceptionPolicy.IsRecoverable(exception))
+                    {
+                        _ = completion.TrySetException(exception);
+                    }
+                },
+                state: null);
+            await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return node.IsActive;
     }
 }
