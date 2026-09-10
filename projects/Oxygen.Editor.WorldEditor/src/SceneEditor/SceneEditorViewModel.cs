@@ -16,27 +16,28 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.LevelEditor;
-using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Documents;
+using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Interop;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDisposable
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
 {
     // A small palette of candidate clear colors shared by viewports. We wrap the
     // palette here so the Scene Editor decides the per-viewport colors.
@@ -65,6 +66,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private SceneViewLayout? previousLayout;
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
+    private bool isClosing;
+    private Task<bool>? pendingSave;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
@@ -73,6 +76,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="documentService">The document service.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
+    /// <param name="operationResults">The visible operation-result publisher.</param>
+    /// <param name="statusReducer">The diagnostic status reducer.</param>
+    /// <param name="commandService">The scene authoring command service.</param>
+    /// <param name="contentPipelineService">The explicit content cooking service.</param>
+    /// <param name="assetProvider">The content-browser asset provider.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="loggerFactory">The logger factory.</param>
@@ -99,7 +107,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.documentService = documentService;
         this.windowId = windowId;
         this.loggerFactory = loggerFactory;
-        this.Viewports = new ObservableCollection<ViewportViewModel>();
+        this.Viewports = [];
         this.Metadata = metadata;
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
@@ -119,40 +127,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         // RunAtFps is sourced directly from the engine service at runtime
         // (see property implementation). No constructor seeding required.
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// Releases resources used by the <see cref="SceneEditorViewModel"/>.
-    /// </summary>
-    /// <param name="disposing">True if called from Dispose, false if called from finalizer.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
-
-            ((INotifyCollectionChanged)UndoRedo.GetHistory(this.Metadata.DocumentId).UndoStack).CollectionChanged -= this.OnUndoStackChanged;
-            this.messenger.UnregisterAll(this);
-
-            foreach (var viewport in this.Viewports)
-            {
-                viewport.Dispose();
-            }
-            this.Viewports.Clear();
-        }
-    }
-
-    private void RegisterMessages()
-    {
-        this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
-        this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
     }
 
     /// <summary>
@@ -236,12 +210,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <summary>
     /// Gets minimum allowed native logging verbosity value for the engine (e.g. -9).
     /// </summary>
-    public int MinLoggingVerbosity => EngineConstants.MinLoggingVerbosity;
+    public int MinLoggingVerbosity { get; } = EngineConstants.MinLoggingVerbosity;
 
     /// <summary>
     /// Gets maximum allowed native logging verbosity value for the engine (e.g. +9).
     /// </summary>
-    public int MaxLoggingVerbosity => EngineConstants.MaxLoggingVerbosity;
+    public int MaxLoggingVerbosity { get; } = EngineConstants.MaxLoggingVerbosity;
 
     /// <summary>
     /// Gets or sets current native engine logging verbosity; sourced from the engine service.
@@ -282,6 +256,110 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
     }
 
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Marks the given viewport as focused and clears focus from all other viewports.
+    /// </summary>
+    /// <param name="viewport">The viewport to focus.</param>
+    public void SetFocusedViewport(ViewportViewModel viewport)
+    {
+        ArgumentNullException.ThrowIfNull(viewport);
+
+        this.FocusedViewportId = viewport.ViewportId;
+        this.ApplyFocusedViewportFlags();
+    }
+
+    /// <inheritdoc/>
+    public async Task SaveAsync()
+    {
+        if (!this.isClosing)
+        {
+            _ = await this.SaveForCloseAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task PrepareForCloseAsync()
+    {
+        this.isClosing = true;
+        if (this.pendingSave is { } save)
+        {
+            _ = await save.ConfigureAwait(true);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ResumeEditing() => this.isClosing = false;
+
+    /// <inheritdoc/>
+    public Task CloseAsync(bool discard)
+    {
+        if (this.Metadata.IsDirty && !discard)
+        {
+            throw new InvalidOperationException("The scene has unsaved changes.");
+        }
+
+        // Histories contain delegates over scene objects which must not survive a reload.
+        UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task<bool> SaveForCloseAsync()
+        => this.pendingSave is { IsCompleted: false } save ? save : this.pendingSave = this.SaveCoreAsync();
+
+    /// <summary>
+    /// Releases resources used by the <see cref="SceneEditorViewModel"/>.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose, false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
+
+            ((INotifyCollectionChanged)UndoRedo.GetHistory(this.Metadata.DocumentId).UndoStack).CollectionChanged -= this.OnUndoStackChanged;
+            this.messenger.UnregisterAll(this);
+
+            foreach (var viewport in this.Viewports)
+            {
+                viewport.Dispose();
+            }
+
+            this.Viewports.Clear();
+        }
+    }
+
+    private static Uri GetSceneAssetUri(Oxygen.Editor.World.Scene scene)
+    {
+        var mountName = scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault(
+                mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
+            ?.Name
+            ?? scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault()?.Name
+            ?? "Content";
+        return new Uri($"{AssetUris.Scheme}:///{mountName}/Scenes/{scene.Name}.oscene.json");
+    }
+
+    private static List<string> GetValidatedCookedRoots(ContentCookResult result)
+        => result.Validation?.CookedRoot
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+           ?? [];
+
+    private void RegisterMessages()
+    {
+        this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
+        this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
+    }
+
     partial void OnCurrentLayoutChanging(SceneViewLayout value)
     {
         // If the scene is not yet synchronized into the engine, defer
@@ -316,45 +394,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                 this.loggerFactory);
             var newIndex = this.Viewports.Count;
 
-            // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
-            var paletteLen = DefaultViewportClearColors.Length;
-            var preferred = (int)(((uint)viewport.ViewportId.GetHashCode()) % (uint)paletteLen);
-
-            // Build a set of colors already assigned to current viewports so
-            // we can avoid duplicates when possible.
-            var used = new HashSet<int>(this.Viewports
-                .Select(vm =>
-                {
-                    // map existing color back to palette index; if not found, -1
-                    for (var idx = 0; idx < DefaultViewportClearColors.Length; idx++)
-                    {
-                        var c = DefaultViewportClearColors[idx];
-                        if (vm.ClearColor.R == c.R && vm.ClearColor.G == c.G && vm.ClearColor.B == c.B && vm.ClearColor.A == c.A)
-                        {
-                            return idx;
-                        }
-                    }
-                    return -1;
-                })
-                .Where(i => i >= 0));
-
-            var chosen = -1;
-            for (var i = 0; i < paletteLen; i++)
-            {
-                var idx = (preferred + i) % paletteLen;
-                if (!used.Contains(idx))
-                {
-                    chosen = idx;
-                    break;
-                }
-            }
-
-            if (chosen < 0)
-            {
-                chosen = preferred; // fall back to preferred if all are used
-            }
-
-            viewport.ClearColor = DefaultViewportClearColors[chosen];
+            viewport.ClearColor = this.ChooseViewportClearColor(viewport.ViewportId);
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
             this.LogCreatingViewport(newIndex, viewport);
@@ -380,19 +420,48 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.EnsureFocusedViewportIsValid();
     }
 
-    /// <summary>
-    /// Marks the given viewport as focused and clears focus from all other viewports.
-    /// </summary>
-    /// <param name="viewport">The viewport to focus.</param>
-    public void SetFocusedViewport(ViewportViewModel viewport)
+    private ColorManaged ChooseViewportClearColor(Guid viewportId)
     {
-        if (viewport is null)
+        // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
+        var paletteLen = DefaultViewportClearColors.Length;
+        var preferred = (int)(((uint)viewportId.GetHashCode()) % (uint)paletteLen);
+
+        // Build a set of colors already assigned to current viewports so
+        // we can avoid duplicates when possible.
+        var used = new HashSet<int>(this.Viewports
+            .Select(vm =>
+            {
+                // map existing color back to palette index; if not found, -1
+                for (var idx = 0; idx < DefaultViewportClearColors.Length; idx++)
+                {
+                    var c = DefaultViewportClearColors[idx];
+                    if (vm.ClearColor.R == c.R && vm.ClearColor.G == c.G && vm.ClearColor.B == c.B && vm.ClearColor.A == c.A)
+                    {
+                        return idx;
+                    }
+                }
+
+                return -1;
+            })
+            .Where(i => i >= 0));
+
+        var chosen = -1;
+        for (var i = 0; i < paletteLen; i++)
         {
-            throw new ArgumentNullException(nameof(viewport));
+            var idx = (preferred + i) % paletteLen;
+            if (!used.Contains(idx))
+            {
+                chosen = idx;
+                break;
+            }
         }
 
-        this.FocusedViewportId = viewport.ViewportId;
-        this.ApplyFocusedViewportFlags();
+        if (chosen < 0)
+        {
+            chosen = preferred; // fall back to preferred if all are used
+        }
+
+        return DefaultViewportClearColors[chosen];
     }
 
     private void EnsureFocusedViewportIsValid()
@@ -453,18 +522,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     }
 
     [RelayCommand]
-    private void ChangeLayout(SceneViewLayout layout)
-    {
-        this.CurrentLayout = layout;
-    }
+    private void ChangeLayout(SceneViewLayout layout) => this.CurrentLayout = layout;
 
     [RelayCommand]
-    private async Task Save()
-    {
-        await this.SaveAsync().ConfigureAwait(true);
-    }
+    private async Task Save() => await this.SaveAsync().ConfigureAwait(true);
 
     [RelayCommand]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "User-triggered cook failures must be published as operation results rather than escape the UI command.")]
     private async Task CookCurrentSceneAsync()
     {
         if (this.scene is null)
@@ -475,7 +539,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         try
         {
-            var sceneUri = this.GetSceneAssetUri(this.scene);
+            var sceneUri = GetSceneAssetUri(this.scene);
             var result = await this.contentPipelineService.CookCurrentSceneAsync(this.scene, sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
             result = await this.RefreshCatalogAfterCookAsync(result, sceneUri).ConfigureAwait(true);
@@ -491,13 +555,23 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
     }
 
-    /// <inheritdoc/>
-    public async Task SaveAsync()
+    private async Task<bool> SaveCoreAsync()
     {
         if (this.scene is null)
         {
             this.LogSaveRequestedButSceneNotReady();
-            return;
+            this.operationResults.Publish(new OperationResult
+            {
+                OperationId = Guid.NewGuid(),
+                OperationKind = "Scene.Save",
+                Status = OperationStatus.Failed,
+                Severity = DiagnosticSeverity.Error,
+                Title = "Scene was not saved",
+                Message = "The scene is still loading. Wait for it to finish before saving.",
+                AffectedScope = new AffectedScope { DocumentId = this.Metadata.DocumentId, DocumentName = this.Metadata.Title },
+                CompletedAt = DateTimeOffset.UtcNow,
+            });
+            return false;
         }
 
         this.LogSaveRequested();
@@ -510,6 +584,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             this.LogSaveFailed();
         }
+
+        return result.Succeeded;
     }
 
     private void OnUndoStackChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -521,22 +597,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
     }
 
+    // TODO: Implement locate in content browser (publish a message / call service). For now log.
     [RelayCommand]
-    private void LocateInContentBrowser()
-    {
-        // TODO: Implement locate in content browser (publish a message / call service). For now log.
-        this.LogLocateInContentBrowserRequested();
-    }
-
-    private Uri GetSceneAssetUri(Oxygen.Editor.World.Scene scene)
-    {
-        var mountName = scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault(
-                mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
-            ?.Name
-            ?? scene.Project.ProjectInfo.AuthoringMounts.FirstOrDefault()?.Name
-            ?? "Content";
-        return new Uri($"{AssetUris.Scheme}:///{mountName}/Scenes/{scene.Name}.oscene.json");
-    }
+    private void LocateInContentBrowser() => this.LogLocateInContentBrowserRequested();
 
     private void PublishCookResult(ContentCookResult result, Uri sceneUri)
     {
@@ -643,14 +706,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             };
         }
     }
-
-    private static IReadOnlyList<string> GetValidatedCookedRoots(ContentCookResult result)
-        => result.Validation?.CookedRoot
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(static root => !string.IsNullOrWhiteSpace(root))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList()
-           ?? [];
 
     private IMenuSource BuildQuickAddMenu()
     {

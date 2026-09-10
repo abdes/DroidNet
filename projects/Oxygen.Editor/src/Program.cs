@@ -16,6 +16,8 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 using DryIoc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -24,12 +26,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Gltf;
-using Oxygen.Managed.Assets.Import.Materials;
-using Oxygen.Managed.Assets.Import.Textures;
-using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Managed.Core.Services;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
@@ -44,9 +40,14 @@ using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
-using DroidNet.Storage;
-using DroidNet.Storage.Native;
+using Oxygen.Managed.Assets.Import;
+using Oxygen.Managed.Assets.Import.Gltf;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Import.Textures;
+using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Managed.Core.Services;
 using Serilog;
 
 namespace Oxygen.Editor;
@@ -310,7 +311,11 @@ public static partial class Program
         container.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
-        container.Register<IDocumentService, EditorDocumentService>(Reuse.Singleton);
+        container.Register<EditorDocumentService>(Reuse.Singleton);
+        container.RegisterMapping<IDocumentService, EditorDocumentService>();
+        container.RegisterMapping<IEditorDocumentService, EditorDocumentService>();
+        container.Register<DocumentCloseCoordinator>(Reuse.Singleton);
+        container.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
     }
 
     private static void RegisterDiagnosticsServices(IContainer container)

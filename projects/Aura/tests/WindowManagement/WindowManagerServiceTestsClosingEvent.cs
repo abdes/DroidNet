@@ -22,6 +22,66 @@ namespace DroidNet.Aura.Tests;
 public partial class WindowManagerServiceTestsClosingEvent : WindowManagerServiceTestsBase
 {
     [TestMethod]
+    public Task WindowClosing_AwaitsEarlierHandlerBeforeCommittingPreparedState_Async() => EnqueueAsync(async () =>
+    {
+        using var sut = this.CreateService();
+        var window = MakeSmallWindow();
+        var context = await sut.RegisterDecoratedWindowAsync(window, new("Test")).ConfigureAwait(true);
+        var decision = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prepared = false;
+        bool? completionApproved = null;
+        sut.WindowClosing += async (_, args) =>
+        {
+            await decision.Task.ConfigureAwait(false);
+            args.Cancel = true;
+        };
+        sut.WindowClosing += (_, args) =>
+        {
+            prepared = true;
+            args.AddCompletionTask(approved =>
+            {
+                completionApproved = approved;
+                return Task.CompletedTask;
+            });
+            return Task.CompletedTask;
+        };
+
+        var close = sut.CloseWindowAsync(context.Id);
+        _ = close.IsCompleted.Should().BeFalse();
+        _ = prepared.Should().BeFalse();
+        decision.SetResult();
+
+        _ = (await close.ConfigureAwait(true)).Should().BeFalse();
+        _ = completionApproved.Should().BeFalse();
+        _ = sut.GetWindow(context.Id).Should().NotBeNull();
+    });
+
+    [TestMethod]
+    public Task WindowClosing_LaterVetoCancelsPreparedCompletion_Async() => EnqueueAsync(async () =>
+    {
+        using var sut = this.CreateService();
+        var context = await sut.RegisterDecoratedWindowAsync(MakeSmallWindow(), new("Test")).ConfigureAwait(true);
+        bool? completionApproved = null;
+        sut.WindowClosing += (_, args) =>
+        {
+            args.AddCompletionTask(approved =>
+            {
+                completionApproved = approved;
+                return Task.CompletedTask;
+            });
+            return Task.CompletedTask;
+        };
+        sut.WindowClosing += (_, args) =>
+        {
+            args.Cancel = true;
+            return Task.CompletedTask;
+        };
+
+        _ = (await sut.CloseWindowAsync(context.Id).ConfigureAwait(true)).Should().BeFalse();
+        _ = completionApproved.Should().BeFalse();
+    });
+
+    [TestMethod]
     public Task WindowClosing_IsFiredBeforeClose_Async() => EnqueueAsync(async () =>
     {
         // Arrange

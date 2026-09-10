@@ -27,6 +27,40 @@ namespace DroidNet.Aura.Tests;
 public sealed partial class DialogServiceTests : WindowManagerServiceTestsBase
 {
     [TestMethod]
+    public Task ShowAsync_FailedPrimaryActionKeepsDialogOpenForRetry_Async() => EnqueueAsync(async () =>
+    {
+        using var windowManager = this.CreateService();
+        var (root, window) = await PrepareOwnerWindowAsync(windowManager).ConfigureAwait(true);
+        var dialogService = new DialogService(windowManager);
+        var firstSave = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempt = 0;
+        var showTask = dialogService.ShowAsync(
+            new DialogSpec("Unsaved changes", "A dirty document")
+            {
+                PrimaryButtonText = "Save",
+                SecondaryButtonText = "Discard",
+                CloseButtonText = "Cancel",
+                PrimaryAction = () => ++attempt == 1 ? firstSave.Task : Task.FromResult(true),
+            },
+            window.Id,
+            this.TestContext.CancellationToken);
+        var dialog = await this.WaitForSingleDialogAsync(root, TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        var save = await this.WaitForDialogButtonAsync(dialog, DialogButton.Primary, "Save", TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        InvokeButton(save);
+        _ = dialog.IsPrimaryButtonEnabled.Should().BeFalse();
+        _ = dialog.IsSecondaryButtonEnabled.Should().BeFalse();
+        dialog.Hide();
+        _ = showTask.IsCompleted.Should().BeFalse();
+        firstSave.SetResult(false);
+
+        save = await this.WaitForDialogButtonAsync(dialog, DialogButton.Primary, "Save", TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        _ = showTask.IsCompleted.Should().BeFalse();
+        InvokeButton(save);
+        _ = (await showTask.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Be(DialogButton.Primary);
+        _ = attempt.Should().Be(2);
+    });
+
+    [TestMethod]
     public Task ShowMessageAsync_WhenNoActiveWindow_Throws_Async() => EnqueueAsync(async () =>
     {
         // Arrange

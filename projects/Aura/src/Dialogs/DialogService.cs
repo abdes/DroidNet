@@ -165,6 +165,54 @@ public sealed class DialogService : IDialogService
         return element;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Exceptions from the async-void button event are transferred to the awaited dialog task.")]
+    private static async Task<ContentDialogResult> ShowContentDialogAsync(
+        ContentDialog dialog, Func<Task<bool>>? primaryAction, CancellationToken cancellationToken)
+    {
+        if (primaryAction is null)
+        {
+            return await dialog.ShowAsync();
+        }
+
+        var isBusy = false;
+        var actionCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        dialog.Closing += (_, args) => args.Cancel = isBusy;
+        dialog.PrimaryButtonClick += async (sender, args) =>
+        {
+            var deferral = args.GetDeferral();
+            isBusy = true;
+            dialog.IsPrimaryButtonEnabled = false;
+            dialog.IsSecondaryButtonEnabled = false;
+            try
+            {
+                args.Cancel = !await primaryAction().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _ = actionCompletion.TrySetException(ex);
+                args.Cancel = false;
+            }
+            finally
+            {
+                isBusy = false;
+                dialog.IsPrimaryButtonEnabled = true;
+                dialog.IsSecondaryButtonEnabled = true;
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    args.Cancel = false;
+                }
+
+                deferral.Complete();
+            }
+        };
+
+        var result = await dialog.ShowAsync();
+        _ = actionCompletion.TrySetResult();
+        await actionCompletion.Task.ConfigureAwait(true);
+
+        return result;
+    }
+
     private async Task<DialogButton> ShowAsync(DialogSpec dialog, WindowId? ownerWindowId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(dialog);
@@ -187,7 +235,7 @@ public sealed class DialogService : IDialogService
                 var registration = cancellationToken.Register(() => owner.DispatcherQueue.TryEnqueue(contentDialog.Hide));
                 await using (registration.ConfigureAwait(false))
                 {
-                    var result = await contentDialog.ShowAsync();
+                    var result = await ShowContentDialogAsync(contentDialog, dialog.PrimaryAction, cancellationToken).ConfigureAwait(true);
 
                     cancellationToken.ThrowIfCancellationRequested();
                     return MapResult(result);

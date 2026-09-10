@@ -239,6 +239,13 @@ Outcome: scene documents, commands, dirty state, undo/redo, selection model,
 scene explorer, operation results, and save/reopen form a reliable authoring
 core.
 
+Issue #2 close protection is implemented: tab closure and scene replacement use
+Save/Discard/Cancel, and workspace/window closure uses one selectable unsaved
+document list. Document teardown follows successful preparation and all window
+vetoes; material disposal no longer discards implicitly. Focused lifecycle,
+material persistence, and native window/dialog tests cover the failure and
+cancellation boundaries. Full editor scenario validation is still pending.
+
 - [x] Required LLDs are reviewed:
       `documents-and-commands`, `scene-authoring-model`, `scene-explorer`,
       `diagnostics-operation-results`.

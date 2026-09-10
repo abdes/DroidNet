@@ -6,13 +6,13 @@ using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Materials;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Assets.Import;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -20,8 +20,53 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 /// Tests material document authoring, schema-backed edits, persistence, and cooking behavior.
 /// </summary>
 [TestClass]
-public sealed class MaterialDocumentServiceTests
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers these public test classes using the repository's default discovery configuration.")]
+public sealed partial class MaterialDocumentServiceTests
 {
+    /// <summary>Gets or sets the current test context.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Verifies an I/O failure retains dirty state and allows a successful retry.</summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task SaveIoFailurePublishesResultAndKeepsMaterialDirtyAndOpen()
+    {
+        using var workspace = new TempWorkspace();
+        var results = new RecordingOperationPublisher();
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), results);
+        var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Locked.omat.json"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        await using (var lockedFile = new FileStream(document.SourcePath, FileMode.Open, FileAccess.Read, FileShare.None).ConfigureAwait(false))
+        {
+            var result = await service.SaveAsync(document.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = result.Succeeded.Should().BeFalse();
+            _ = results.Published.Should().ContainSingle().Which.Status.Should().Be(OperationStatus.Failed);
+            Func<Task> close = () => service.CloseAsync(document.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken);
+            _ = await close.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        }
+
+        _ = (await service.SaveAsync(document.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        await service.CloseAsync(document.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(document.MaterialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
+    }
+
+    /// <summary>Verifies explicit discard preserves the last persisted authoring values.</summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task ExplicitDiscardReopensLastSavedMaterial()
+    {
+        using var workspace = new TempWorkspace();
+        var service = CreateService(workspace);
+        var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Discard.omat.json"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(document.DocumentId, discard: true, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var reopened = await service.OpenAsync(document.MaterialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.0f);
+    }
+
     /// <summary>
     /// Verifies scalar material edits survive save, close, and reopen.
     /// </summary>
@@ -33,17 +78,18 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var service = CreateService(workspace);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = await service.EditScalarAsync(
             created.DocumentId,
-            new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f)).ConfigureAwait(false);
+            new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = edit.Succeeded.Should().BeTrue();
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = save.Succeeded.Should().BeTrue();
 
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.MaterialGuid.Should().Be(created.MaterialGuid);
         _ = reopened.Source.Schema.Should().Be("oxygen.material.v1");
@@ -62,7 +108,7 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Gold.omat.json");
         var service = CreateService(workspace);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = created.DisplayName.Should().Be("Gold");
         _ = created.MaterialGuid.Should().NotBe(Guid.Empty);
@@ -82,11 +128,11 @@ public sealed class MaterialDocumentServiceTests
         await WriteMaterialAsync(workspace, "Content/Materials/Gold.omat.json", "Old Descriptor Name").ConfigureAwait(false);
         var service = CreateService(workspace);
 
-        var opened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+        var opened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = opened.DisplayName.Should().Be("Gold");
         _ = opened.Source.Name.Should().Be("Gold");
 
-        var save = await service.SaveAsync(opened.DocumentId).ConfigureAwait(false);
+        var save = await service.SaveAsync(opened.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = save.Succeeded.Should().BeTrue();
         _ = ReadMaterial(workspace, "Content/Materials/Gold.omat.json").Name.Should().Be("Gold");
@@ -103,21 +149,23 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var service = CreateService(workspace);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = await service.EditScalarAsync(
             created.DocumentId,
-            new MaterialFieldEdit(MaterialFieldKeys.BaseColorR, 2.0f)).ConfigureAwait(false);
+            new MaterialFieldEdit(MaterialFieldKeys.BaseColorR, 2.0f),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = edit.Succeeded.Should().BeTrue();
 
         edit = await service.EditScalarAsync(
             created.DocumentId,
-            new MaterialFieldEdit(MaterialFieldKeys.RoughnessFactor, -1.0f)).ConfigureAwait(false);
+            new MaterialFieldEdit(MaterialFieldKeys.RoughnessFactor, -1.0f),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = edit.Succeeded.Should().BeTrue();
 
-        await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
+        _ = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.Source.PbrMetallicRoughness.BaseColorR.Should().Be(1.0f);
         _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.0f);
@@ -135,8 +183,8 @@ public sealed class MaterialDocumentServiceTests
         var cook = new RecordingCookService();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
-        var result = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
         _ = cook.LastRequest.Should().NotBeNull();
@@ -156,12 +204,13 @@ public sealed class MaterialDocumentServiceTests
         var publisher = new RecordingOperationPublisher();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook, publisher);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(
             created.DocumentId,
-            new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f)).ConfigureAwait(false);
+            new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var result = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+        var result = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Rejected);
         _ = result.OperationId.Should().NotBeNull();
@@ -179,16 +228,16 @@ public sealed class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var service = CreateService(workspace);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = new PropertyEdit();
         edit.Set(MaterialDescriptors.Metalness, 0.8f);
         edit.Set(MaterialDescriptors.Roughness, 0.25f);
-        edit.Set(MaterialDescriptors.DoubleSided, true);
+        edit.Set(MaterialDescriptors.DoubleSided, value: true);
 
-        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = save.Succeeded.Should().BeTrue();
@@ -207,14 +256,15 @@ public sealed class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var service = CreateService(workspace);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask)).ConfigureAwait(false);
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+            PropertyEdit.Single(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = save.Succeeded.Should().BeTrue();
@@ -232,13 +282,13 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var publisher = new RecordingOperationPublisher();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), publisher);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = PropertyEdit.Single(MaterialDescriptors.Metalness, 2.0f);
 
-        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+        var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = save.Succeeded.Should().BeTrue();
@@ -259,12 +309,13 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var cook = new RecordingCookService();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.Metalness, created.Source.PbrMetallicRoughness.MetallicFactor)).ConfigureAwait(false);
-        var cookResult = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+            PropertyEdit.Single(MaterialDescriptors.Metalness, created.Source.PbrMetallicRoughness.MetallicFactor),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cookResult = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = cookResult.State.Should().Be(MaterialCookState.Cooked);
@@ -282,15 +333,16 @@ public sealed class MaterialDocumentServiceTests
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var publisher = new RecordingOperationPublisher();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), publisher);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var unknown = new PropertyId<float>("material", "/parameters/unknown");
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(unknown, 0.25f)).ConfigureAwait(false);
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        await service.CloseAsync(created.DocumentId, discard: false).ConfigureAwait(false);
-        var reopened = await service.OpenAsync(materialUri).ConfigureAwait(false);
+            PropertyEdit.Single(unknown, 0.25f),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = save.Succeeded.Should().BeTrue();
@@ -310,7 +362,7 @@ public sealed class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/RoundTrip.omat.json");
         var service = CreateCookingService(workspace);
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = new PropertyEdit();
         edit.Set(MaterialDescriptors.BaseColorR, 0.25f);
         edit.Set(MaterialDescriptors.BaseColorG, 0.5f);
@@ -320,18 +372,18 @@ public sealed class MaterialDocumentServiceTests
         edit.Set(MaterialDescriptors.Roughness, 0.2f);
         edit.Set(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask);
         edit.Set(MaterialDescriptors.AlphaCutoff, 0.4f);
-        edit.Set(MaterialDescriptors.DoubleSided, true);
+        edit.Set(MaterialDescriptors.DoubleSided, value: true);
 
-        var editResult = await service.EditPropertiesAsync(created.DocumentId, edit).ConfigureAwait(false);
-        var save = await service.SaveAsync(created.DocumentId).ConfigureAwait(false);
-        var cook = await service.CookAsync(created.DocumentId).ConfigureAwait(false);
+        var editResult = await service.EditPropertiesAsync(created.DocumentId, edit, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cook = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = editResult.Succeeded.Should().BeTrue();
         _ = save.Succeeded.Should().BeTrue();
         _ = cook.State.Should().Be(MaterialCookState.Cooked);
 
         var cookedBytes = await File.ReadAllBytesAsync(
-            Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat")).ConfigureAwait(false);
+            Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cookedBytes.Should().HaveCount(256);
         _ = ReadSingle(cookedBytes, 0x68).Should().BeApproximately(0.25f, 0.0001f);
         _ = ReadSingle(cookedBytes, 0x6C).Should().BeApproximately(0.5f, 0.0001f);
@@ -420,10 +472,11 @@ public sealed class MaterialDocumentServiceTests
         var publisher = new RecordingOperationPublisher();
         var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), publisher);
 
-        var created = await service.CreateAsync(materialUri).ConfigureAwait(false);
+        var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await service.EditScalarAsync(
             created.DocumentId,
-            new MaterialFieldEdit(MaterialFieldKeys.Name, "Renamed")).ConfigureAwait(false);
+            new MaterialFieldEdit(MaterialFieldKeys.Name, "Renamed"),
+            cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.OperationId.Should().NotBeNull();
@@ -505,12 +558,9 @@ public sealed class MaterialDocumentServiceTests
             }
 
             node = ResolveLocalReference(root, node);
-            if (segment.All(static ch => ch is >= '0' and <= '9') && node["items"] is JsonObject)
-            {
-                return coveredPointer;
-            }
-
-            return null;
+            return segment.All(static ch => ch is >= '0' and <= '9') && node["items"] is JsonObject
+                ? coveredPointer
+                : null;
         }
 
         return coveredPointer;
@@ -590,9 +640,12 @@ public sealed class MaterialDocumentServiceTests
 
         var path = Path.Combine(workspace.Root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var stream = File.Create(path);
-        MaterialSourceWriter.Write(stream, source);
-        await stream.FlushAsync().ConfigureAwait(false);
+        var stream = File.Create(path);
+        await using (stream.ConfigureAwait(false))
+        {
+            MaterialSourceWriter.Write(stream, source);
+            await stream.FlushAsync().ConfigureAwait(false);
+        }
     }
 
     private static MaterialDocumentService CreateService(TempWorkspace workspace)
@@ -650,7 +703,7 @@ public sealed class MaterialDocumentServiceTests
         public void Publish(OperationResult result) => this.Published.Add(result);
     }
 
-    private sealed class EmptyDisposable : IDisposable
+    private sealed partial class EmptyDisposable : IDisposable
     {
         public void Dispose()
         {
@@ -671,7 +724,7 @@ public sealed class MaterialDocumentServiceTests
         }
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <UseWinUI>true</UseWinUI>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <RootNamespace>Oxygen.Editor.MaterialEditor</RootNamespace>

@@ -7,20 +7,17 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
-using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -32,6 +29,9 @@ using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -65,7 +65,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <param name="container">The IoC container for dependency resolution.</param>
     /// <param name="router">The router for navigation within the workspace.</param>
     /// <param name="projectContextService">The active project context service.</param>
+    /// <param name="projectManager">The project authoring service.</param>
+    /// <param name="projectUsage">The recent-scene restoration store.</param>
     /// <param name="engineService">The engine service for mounting cooked roots.</param>
+    /// <param name="operationResults">The visible operation-result publisher.</param>
+    /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "will generate another warning due to capture of container arg")]
     public WorkspaceViewModel(
@@ -234,10 +238,100 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 this.engineService.UnmountProjectCookedRoot();
             }
 
+            this.documentManager?.Dispose();
+            this.documentManager = null;
+            this.messenger?.UnregisterAll(this);
             this.engineStartupGate.Dispose();
         }
 
         base.Dispose(disposing);
+    }
+
+    private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)
+    {
+        if (!string.Equals(sceneAssetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var fileName = System.IO.Path.GetFileName(Uri.UnescapeDataString(sceneAssetUri.AbsolutePath));
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var sceneName = fileName.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
+            : System.IO.Path.GetFileNameWithoutExtension(fileName);
+
+        return project.Scenes.FirstOrDefault(scene =>
+            string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Id.ToString("D"), sceneName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void ValidateCookedIndexFiles(Oxygen.Managed.Assets.Persistence.LooseCooked.V1.Document document, string cookedRoot)
+    {
+        foreach (var asset in document.Assets)
+        {
+            if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
+            {
+                throw new InvalidDataException("Cooked index contains an asset without a descriptor path.");
+            }
+
+            var descriptorPath = System.IO.Path.Combine(
+                cookedRoot,
+                asset.DescriptorRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            if (!System.IO.File.Exists(descriptorPath))
+            {
+                throw new FileNotFoundException("Cooked asset descriptor is missing.", descriptorPath);
+            }
+
+            var actualSize = new System.IO.FileInfo(descriptorPath).Length;
+            if (actualSize != (long)asset.DescriptorSize)
+            {
+                throw new InvalidDataException(
+                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Cooked descriptor size mismatch for '{asset.DescriptorRelativePath}': expected {asset.DescriptorSize}, found {actualSize}."));
+            }
+        }
+
+        foreach (var file in document.Files)
+        {
+            if (string.IsNullOrWhiteSpace(file.RelativePath))
+            {
+                throw new InvalidDataException("Cooked index contains a file record without a path.");
+            }
+
+            var filePath = System.IO.Path.Combine(
+                cookedRoot,
+                file.RelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            if (!System.IO.File.Exists(filePath))
+            {
+                throw new FileNotFoundException("Cooked file record is missing.", filePath);
+            }
+
+            var actualSize = new System.IO.FileInfo(filePath).Length;
+            if (actualSize != (long)file.Size)
+            {
+                throw new InvalidDataException(
+                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Cooked file size mismatch for '{file.RelativePath}': expected {file.Size}, found {actualSize}."));
+            }
+        }
+    }
+
+    private static bool IsUnderRoot(string candidatePath, string rootPath)
+    {
+        var normalizedCandidate = System.IO.Path.GetFullPath(candidatePath)
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        var normalizedRoot = System.IO.Path.GetFullPath(rootPath)
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+
+        return normalizedCandidate.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+               || normalizedCandidate.StartsWith(
+                   normalizedRoot + System.IO.Path.DirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase)
+               || normalizedCandidate.StartsWith(
+                   normalizedRoot + System.IO.Path.AltDirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RefreshCookedRootsAsync()
@@ -252,7 +346,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         if (this.projectContextService.ActiveProject is not { } activeProject
             || string.IsNullOrWhiteSpace(activeProject.ProjectRoot))
         {
-            this.logger.LogWarning("Cannot refresh cooked roots: No active project context.");
+            this.LogRefreshWithoutProject();
             return;
         }
 
@@ -263,8 +357,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         const string indexFileName = "container.index.bin";
 
         var cookedBaseRoot = System.IO.Path.Combine(projectLocation, cookedFolderName);
-        this.logger.LogInformation(
-            "Refreshing cooked roots. Project location: {ProjectLocation}, cooked root: {CookedBaseRoot}",
+        this.LogRefreshingCookedRoots(
             projectLocation,
             cookedBaseRoot);
 
@@ -275,16 +368,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // each valid per-mount root is mounted.
         this.engineService.UnmountProjectCookedRoot();
 
-        if (!System.IO.Directory.Exists(cookedBaseRoot))
+        if (!this.EnsureCookedRootExists(cookedBaseRoot))
         {
-            this.logger.LogWarning(
-                "Cooked root directory does not exist: {CookedBaseRoot}. Assets will not be available in the engine.",
-                cookedBaseRoot);
-            this.PublishCookedRootWarning(
-                AssetMountDiagnosticCodes.RefreshFailed,
-                "Cooked root is missing",
-                "The workspace opened, but cooked assets are not available because the project cooked root does not exist.",
-                cookedBaseRoot);
             return;
         }
 
@@ -292,37 +377,119 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         var cookedBaseIndexPath = System.IO.Path.Combine(cookedBaseRoot, indexFileName);
         if (System.IO.File.Exists(cookedBaseIndexPath))
         {
-            if (this.IsCookedIndexMountable(cookedBaseIndexPath))
-            {
-                try
-                {
-                    this.engineService.MountProjectCookedRoot(cookedBaseRoot);
-                    mounted.Add(cookedBaseRoot);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    this.logger.LogWarning(ex, "Failed to mount cooked root {CookedBaseRoot}.", cookedBaseRoot);
-                    this.PublishCookedRootWarning(
-                        AssetMountDiagnosticCodes.RefreshFailed,
-                        "Cooked root mount failed",
-                        "The workspace opened, but cooked assets may not be available because the engine rejected the cooked root.",
-                        cookedBaseRoot,
-                        ex);
-                }
-            }
-            else
-            {
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Cooked index is incompatible",
-                    "The workspace opened, but cooked assets may not be available because the cooked index could not be read.",
-                    cookedBaseIndexPath);
-            }
-
-            this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+            this.MountBaseCookedRoot(cookedBaseRoot, cookedBaseIndexPath, mounted);
+            this.LogMountedRoots(mounted);
             return;
         }
 
+        var mountPoints = this.GetCookedMountPoints(activeProject, cookedBaseRoot);
+
+        this.MountCookedMountPoints(mountPoints, cookedBaseRoot, indexFileName, mounted);
+
+        this.ReportMountedRoots(mounted, cookedBaseRoot, indexFileName);
+    }
+
+    private void ReportMountedRoots(List<string> mounted, string cookedBaseRoot, string indexFileName)
+    {
+        if (mounted.Count == 0)
+        {
+            this.LogCookedIndicesMissing(
+                cookedBaseRoot,
+                indexFileName);
+            this.PublishCookedRootWarning(
+                AssetMountDiagnosticCodes.RefreshFailed,
+                "Cooked index is missing",
+                "The workspace opened, but cooked assets are not available because no cooked index was found.",
+                cookedBaseRoot);
+            return;
+        }
+
+        this.LogMountedRoots(mounted);
+    }
+
+    private bool EnsureCookedRootExists(string cookedBaseRoot)
+    {
+        if (!System.IO.Directory.Exists(cookedBaseRoot))
+        {
+            this.LogCookedRootMissing(cookedBaseRoot);
+            this.PublishCookedRootWarning(
+                AssetMountDiagnosticCodes.RefreshFailed,
+                "Cooked root is missing",
+                "The workspace opened, but cooked assets are not available because the project cooked root does not exist.",
+                cookedBaseRoot);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void MountBaseCookedRoot(string cookedBaseRoot, string cookedBaseIndexPath, List<string> mounted)
+    {
+        if (this.IsCookedIndexMountable(cookedBaseIndexPath))
+        {
+            try
+            {
+                this.engineService.MountProjectCookedRoot(cookedBaseRoot);
+                mounted.Add(cookedBaseRoot);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.LogBaseRootMountFailed(ex, cookedBaseRoot);
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Cooked root mount failed",
+                    "The workspace opened, but cooked assets may not be available because the engine rejected the cooked root.",
+                    cookedBaseRoot,
+                    ex);
+            }
+        }
+        else
+        {
+            this.PublishCookedRootWarning(
+                AssetMountDiagnosticCodes.RefreshFailed,
+                "Cooked index is incompatible",
+                "The workspace opened, but cooked assets may not be available because the cooked index could not be read.",
+                cookedBaseIndexPath);
+        }
+    }
+
+    private void MountCookedMountPoints(IEnumerable<string> mountPoints, string cookedBaseRoot, string indexFileName, List<string> mounted)
+    {
+        foreach (var mountPoint in mountPoints.Order(StringComparer.Ordinal))
+        {
+            var cookedMountRoot = System.IO.Path.Combine(cookedBaseRoot, mountPoint);
+            var indexPath = System.IO.Path.Combine(cookedMountRoot, indexFileName);
+
+            if (!System.IO.File.Exists(indexPath))
+            {
+                continue;
+            }
+
+            if (!this.IsCookedIndexMountable(indexPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                this.engineService.MountProjectCookedRoot(cookedMountRoot);
+                mounted.Add(cookedMountRoot);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.LogMountPointFailed(ex, cookedMountRoot);
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Cooked root mount failed",
+                    "The workspace opened, but cooked assets may not be available because the engine rejected a cooked mount point.",
+                    cookedMountRoot,
+                    ex);
+            }
+        }
+    }
+
+    private HashSet<string> GetCookedMountPoints(ProjectContext activeProject, string cookedBaseRoot)
+    {
         var mountPoints = new HashSet<string>(StringComparer.Ordinal);
         foreach (var mount in activeProject.AuthoringMounts)
         {
@@ -348,7 +515,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             or ArgumentException
             or NotSupportedException)
         {
-            this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
+            this.LogMountEnumerationFailed(ex, cookedBaseRoot);
             this.PublishCookedRootWarning(
                 AssetMountDiagnosticCodes.RefreshFailed,
                 "Cooked roots could not be enumerated",
@@ -357,53 +524,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 ex);
         }
 
-        foreach (var mountPoint in mountPoints.OrderBy(static m => m, StringComparer.Ordinal))
-        {
-            var cookedMountRoot = System.IO.Path.Combine(cookedBaseRoot, mountPoint);
-            var indexPath = System.IO.Path.Combine(cookedMountRoot, indexFileName);
-
-            if (!System.IO.File.Exists(indexPath))
-            {
-                continue;
-            }
-
-            if (!this.IsCookedIndexMountable(indexPath))
-            {
-                continue;
-            }
-
-            try
-            {
-                this.engineService.MountProjectCookedRoot(cookedMountRoot);
-                mounted.Add(cookedMountRoot);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                this.logger.LogWarning(ex, "Failed to mount cooked root {CookedMountRoot}.", cookedMountRoot);
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Cooked root mount failed",
-                    "The workspace opened, but cooked assets may not be available because the engine rejected a cooked mount point.",
-                    cookedMountRoot,
-                    ex);
-            }
-        }
-
-        if (mounted.Count == 0)
-        {
-            this.logger.LogWarning(
-                "No cooked index files found under {CookedBaseRoot} (expected .cooked/<MountPoint>/{IndexFileName}). Assets will not be available in the engine.",
-                cookedBaseRoot,
-                indexFileName);
-            this.PublishCookedRootWarning(
-                AssetMountDiagnosticCodes.RefreshFailed,
-                "Cooked index is missing",
-                "The workspace opened, but cooked assets are not available because no cooked index was found.",
-                cookedBaseRoot);
-            return;
-        }
-
-        this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
+        return mountPoints;
     }
 
     private async Task MountValidatedCookedRootsAsync(IReadOnlyList<string> cookedRoots)
@@ -416,7 +537,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         if (this.projectContextService.ActiveProject is not { } activeProject
             || string.IsNullOrWhiteSpace(activeProject.ProjectRoot))
         {
-            this.logger.LogWarning("Cannot mount validated cooked roots: No active project context.");
+            this.LogValidatedMountWithoutProject();
             return;
         }
 
@@ -426,7 +547,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             .Where(static root => !string.IsNullOrWhiteSpace(root))
             .Select(System.IO.Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static root => root, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
 
         if (normalizedRoots.Count == 0)
@@ -439,6 +560,37 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             return;
         }
 
+        var mountableRoots = this.GetMountableRoots(normalizedRoots, cookedBaseRoot);
+
+        if (mountableRoots.Count == 0)
+        {
+            return;
+        }
+
+        this.engineService.UnmountProjectCookedRoot();
+        foreach (var root in mountableRoots)
+        {
+            try
+            {
+                this.engineService.MountProjectCookedRoot(root);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.LogValidatedMountFailed(ex, root);
+                this.PublishCookedRootWarning(
+                    AssetMountDiagnosticCodes.RefreshFailed,
+                    "Validated cooked root mount failed",
+                    "Cooked output was validated, but the runtime rejected the cooked root.",
+                    root,
+                    ex);
+            }
+        }
+
+        this.LogMountedRoots(mountableRoots, validated: true);
+    }
+
+    private List<string> GetMountableRoots(IReadOnlyList<string> normalizedRoots, string cookedBaseRoot)
+    {
         var mountableRoots = new List<string>();
         foreach (var root in normalizedRoots)
         {
@@ -476,34 +628,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             mountableRoots.Add(root);
         }
 
-        if (mountableRoots.Count == 0)
-        {
-            return;
-        }
-
-        this.engineService.UnmountProjectCookedRoot();
-        foreach (var root in mountableRoots)
-        {
-            try
-            {
-                this.engineService.MountProjectCookedRoot(root);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                this.logger.LogWarning(ex, "Failed to mount validated cooked root {CookedRoot}.", root);
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Validated cooked root mount failed",
-                    "Cooked output was validated, but the runtime rejected the cooked root.",
-                    root,
-                    ex);
-            }
-        }
-
-        this.logger.LogInformation(
-            "Mounted {Count} validated cooked roots: {CookedRoots}",
-            mountableRoots.Count,
-            string.Join("; ", mountableRoots));
+        return mountableRoots;
     }
 
     private async Task OpenInitialSceneAsync()
@@ -525,14 +650,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         if (this.documentManager is null)
         {
-            this.logger.LogWarning("Cannot open initial scene {SceneName}: document manager is not available.", scene.Name);
+            this.LogInitialSceneManagerUnavailable(scene.Name);
             return;
         }
 
         var opened = await this.documentManager.OpenSceneAsync(scene).ConfigureAwait(true);
         if (!opened)
         {
-            this.logger.LogWarning("Initial scene {SceneName} was selected for project {ProjectName}, but the document did not open.", scene.Name, context.Name);
+            this.LogInitialSceneNotOpened(scene.Name, context.Name);
         }
     }
 
@@ -564,32 +689,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.logger.LogWarning(ex, "Failed to restore the last opened scene for project {ProjectName}.", context.Name);
+            this.LogSceneRestorationFailed(ex, context.Name);
         }
 
         return project.ActiveScene;
-    }
-
-    private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)
-    {
-        if (!string.Equals(sceneAssetUri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var fileName = System.IO.Path.GetFileName(Uri.UnescapeDataString(sceneAssetUri.AbsolutePath));
-        if (string.IsNullOrWhiteSpace(fileName))
-        {
-            return null;
-        }
-
-        var sceneName = fileName.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
-            ? fileName[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
-            : System.IO.Path.GetFileNameWithoutExtension(fileName);
-
-        return project.Scenes.FirstOrDefault(scene =>
-            string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Id.ToString("D"), sceneName, StringComparison.OrdinalIgnoreCase));
     }
 
     [SuppressMessage(
@@ -613,26 +716,24 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
                 case EngineServiceState.NoEngine:
                 case EngineServiceState.Faulted:
-                    this.logger.LogInformation("Starting embedded engine for workspace activation.");
+                    this.LogEngineStarting();
                     _ = await this.engineService.InitializeAsync().ConfigureAwait(true);
                     await this.engineService.StartAsync().ConfigureAwait(true);
                     return this.engineService.State == EngineServiceState.Running;
 
                 case EngineServiceState.Ready:
-                    this.logger.LogInformation("Starting initialized embedded engine for workspace activation.");
+                    this.LogInitializedEngineStarting();
                     await this.engineService.StartAsync().ConfigureAwait(true);
                     return this.engineService.State == EngineServiceState.Running;
 
                 default:
-                    this.logger.LogWarning(
-                        "Cannot refresh cooked roots while engine is in state {EngineState}.",
-                        this.engineService.State);
+                    this.LogEngineStateNotReady(this.engineService.State);
                     return false;
             }
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to start embedded engine for workspace activation.");
+            this.LogEngineStartFailed(ex);
             RuntimeOperationResults.PublishFailure(
                 this.operationResults,
                 this.statusReducer,
@@ -659,51 +760,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             var document = LooseCookedIndex.Read(stream);
             var cookedRoot = System.IO.Path.GetDirectoryName(indexPath)
                 ?? throw new InvalidDataException("Cooked index path has no parent directory.");
-            foreach (var asset in document.Assets)
-            {
-                if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
-                {
-                    throw new InvalidDataException("Cooked index contains an asset without a descriptor path.");
-                }
-
-                var descriptorPath = System.IO.Path.Combine(
-                    cookedRoot,
-                    asset.DescriptorRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
-                if (!System.IO.File.Exists(descriptorPath))
-                {
-                    throw new FileNotFoundException("Cooked asset descriptor is missing.", descriptorPath);
-                }
-
-                var actualSize = new System.IO.FileInfo(descriptorPath).Length;
-                if (actualSize != (long)asset.DescriptorSize)
-                {
-                    throw new InvalidDataException(
-                        $"Cooked descriptor size mismatch for '{asset.DescriptorRelativePath}': expected {asset.DescriptorSize}, found {actualSize}.");
-                }
-            }
-
-            foreach (var file in document.Files)
-            {
-                if (string.IsNullOrWhiteSpace(file.RelativePath))
-                {
-                    throw new InvalidDataException("Cooked index contains a file record without a path.");
-                }
-
-                var filePath = System.IO.Path.Combine(
-                    cookedRoot,
-                    file.RelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
-                if (!System.IO.File.Exists(filePath))
-                {
-                    throw new FileNotFoundException("Cooked file record is missing.", filePath);
-                }
-
-                var actualSize = new System.IO.FileInfo(filePath).Length;
-                if (actualSize != (long)file.Size)
-                {
-                    throw new InvalidDataException(
-                        $"Cooked file size mismatch for '{file.RelativePath}': expected {file.Size}, found {actualSize}.");
-                }
-            }
+            ValidateCookedIndexFiles(document, cookedRoot);
 
             return true;
         }
@@ -715,28 +772,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             or ArgumentException
             or FormatException)
         {
-            this.logger.LogWarning(
-                ex,
-                "Skipping incompatible cooked index {IndexPath}. Re-cook the project to regenerate this mount point.",
-                indexPath);
+            this.LogCookedIndexRejected(ex, indexPath);
             return false;
         }
-    }
-
-    private static bool IsUnderRoot(string candidatePath, string rootPath)
-    {
-        var normalizedCandidate = System.IO.Path.GetFullPath(candidatePath)
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-        var normalizedRoot = System.IO.Path.GetFullPath(rootPath)
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-
-        return normalizedCandidate.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
-               || normalizedCandidate.StartsWith(
-                   normalizedRoot + System.IO.Path.DirectorySeparatorChar,
-                   StringComparison.OrdinalIgnoreCase)
-               || normalizedCandidate.StartsWith(
-                   normalizedRoot + System.IO.Path.AltDirectorySeparatorChar,
-                   StringComparison.OrdinalIgnoreCase);
     }
 
     private AffectedScope CreateProjectScope()
