@@ -13,6 +13,14 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public interface IEngineService : IAsyncDisposable
 {
+    /// <summary>Reports lifecycle transitions and unexpected loop termination.</summary>
+    /// <remarks>
+    /// Notifications are ordered and delivered outside the lifecycle gate, on the thread that
+    /// completes the operation. UI consumers must dispatch to their UI thread and use the run
+    /// identity to distinguish notifications from an earlier lifetime.
+    /// </remarks>
+    public event EventHandler<EngineStateChangedEventArgs>? StateChanged;
+
     /// <summary>
     ///     Gets the current lifecycle state of the service.
     /// </summary>

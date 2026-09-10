@@ -42,7 +42,7 @@ public sealed partial class NativeLoopCleanupTests
             var loop = runner.RunEngineAsync(context);
             var cleanup = runner.WaitForLoopCleanupAsync();
             var commands = new RuntimeCommandDispatcher();
-            commands.BeginRun(new NativeRuntimeCommandTransport(context), loop);
+            _ = commands.BeginRun(new NativeRuntimeCommandTransport(context), loop);
             try
             {
                 await check(commands).ConfigureAwait(false);

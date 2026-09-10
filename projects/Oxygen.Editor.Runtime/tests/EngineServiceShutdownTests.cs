@@ -7,6 +7,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -62,7 +63,7 @@ public sealed class EngineServiceShutdownTests
         var factory = new Mock<ILoggerFactory>();
         _ = factory.Setup(value => value.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
         var native = new FakeEngineSession { FailAt = "Stop" };
-        var service = new EngineService(Context(), () => native, loggerFactory: factory.Object);
+        var service = new EngineService(Context(), () => native, Mock.Of<IOperationResultPublisher>(), loggerFactory: factory.Object);
         _ = await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.StartAsync().ConfigureAwait(false);
         await service.DisposeAsync().ConfigureAwait(false);
@@ -244,7 +245,7 @@ public sealed class EngineServiceShutdownTests
         var first = new FakeEngineSession { Unregister = _ => Task.FromResult(false) };
         var second = new FakeEngineSession();
         var sessions = new Queue<EngineSession>([first, second]);
-        var service = new EngineService(Context(), sessions.Dequeue);
+        var service = new EngineService(Context(), sessions.Dequeue, Mock.Of<IOperationResultPublisher>());
         await using var lifetime = service.ConfigureAwait(false);
         _ = await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.StartAsync().ConfigureAwait(false);
@@ -266,7 +267,7 @@ public sealed class EngineServiceShutdownTests
 
     private static HostingContext Context() => new() { Dispatcher = null!, Application = null!, DispatcherScheduler = null! };
 
-    private static EngineService Create(FakeEngineSession native) => new(Context(), () => native);
+    private static EngineService Create(FakeEngineSession native) => new(Context(), () => native, Mock.Of<IOperationResultPublisher>());
 
     private static Task<IViewportSurfaceLease> AttachAsync(EngineService service)
         => service.AttachViewportCoreAsync(new ViewportSurfaceKey(Guid.NewGuid(), Guid.NewGuid()), null!).AsTask();

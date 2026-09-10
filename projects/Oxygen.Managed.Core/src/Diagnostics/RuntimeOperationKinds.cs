@@ -10,6 +10,11 @@ namespace Oxygen.Managed.Core.Diagnostics;
 public static class RuntimeOperationKinds
 {
     /// <summary>
+    /// Embedded runtime loop lifetime.
+    /// </summary>
+    public const string Loop = "Runtime.Loop";
+
+    /// <summary>
     /// Embedded runtime startup.
     /// </summary>
     public const string Start = "Runtime.Start";

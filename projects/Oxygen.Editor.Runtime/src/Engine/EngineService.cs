@@ -9,6 +9,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Interop;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -20,11 +21,13 @@ namespace Oxygen.Editor.Runtime.Engine;
 ///     presentation surfaces and views used by the editor.
 /// </summary>
 /// <param name="hostingContext">Provides access to the UI dispatcher context.</param>
+/// <param name="operationResults">Publishes structured runtime lifetime failures.</param>
 /// <param name="loggerFactory">Optional factory used to bridge native engine logging.</param>
 /// <param name="engineSettings">Editor native engine startup settings.</param>
 /// <param name="pathFinder">Resolves editor configuration paths.</param>
 public sealed partial class EngineService(
     HostingContext hostingContext,
+    IOperationResultPublisher operationResults,
     ILoggerFactory? loggerFactory = null,
     ISettingsService<IEngineSettings>? engineSettings = null,
     IPathFinder? pathFinder = null) : IEngineService
@@ -33,6 +36,7 @@ public sealed partial class EngineService(
     private const string EditorCVarsArchiveFileName = "engine-cvars.json";
 
     private readonly HostingContext hostingContext = hostingContext;
+    private readonly IOperationResultPublisher operationResults = operationResults;
     private readonly IEngineSettings engineSettings = engineSettings?.Settings ?? new EngineSettings();
     private readonly IPathFinder? pathFinder = pathFinder;
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
@@ -54,12 +58,16 @@ public sealed partial class EngineService(
     /// <summary>Initializes a new instance of the <see cref="EngineService"/> class with a native ownership factory.</summary>
     /// <param name="hostingContext">The UI context.</param>
     /// <param name="sessionFactory">Creates the native ownership boundary.</param>
+    /// <param name="operationResults">The runtime diagnostics publisher.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
-    internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, ILoggerFactory? loggerFactory = null)
-        : this(hostingContext, loggerFactory)
+    internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, IOperationResultPublisher operationResults, ILoggerFactory? loggerFactory = null)
+        : this(hostingContext, operationResults, loggerFactory)
     {
         this.sessionFactory = sessionFactory;
     }
+
+    /// <inheritdoc/>
+    public event EventHandler<EngineStateChangedEventArgs>? StateChanged;
 
     /// <inheritdoc/>
     public EngineServiceState State => this.state is EngineServiceState.Running && this.engineLoopTask?.IsCompleted == true
