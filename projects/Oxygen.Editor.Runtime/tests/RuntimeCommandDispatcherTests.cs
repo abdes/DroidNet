@@ -15,6 +15,45 @@ public sealed class RuntimeCommandDispatcherTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task InvalidatedScene_EndsPendingWaitAndCannotInvalidateItsReplacement(bool pendingActivation)
+    {
+        var activation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var creation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var native = new Mock<IRuntimeCommandTransport>();
+        _ = native.Setup(value => value.ActivateSceneAsync(It.IsAny<string>())).Returns(pendingActivation ? activation.Task : Task.FromResult(true));
+        _ = native.Setup(value => value.CreateNodeAsync(It.IsAny<RuntimeCreateNode>())).Returns(creation.Task);
+        var sut = Start(native.Object);
+        var first = Scene(sut);
+        var sceneCreation = sut.ActivateSceneAsync(Guid.NewGuid(), first, "First", this.TestContext.CancellationToken);
+        Task<RuntimeCommandResult> pending;
+        if (pendingActivation)
+        {
+            pending = sceneCreation;
+        }
+        else
+        {
+            _ = await sceneCreation.ConfigureAwait(false);
+            pending = sut.CreateNodeAsync(new(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", Guid.NewGuid(), ParentId: null, InitializeWorldAsRoot: true)), this.TestContext.CancellationToken);
+        }
+
+        sut.InvalidateScene(first);
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = native.Setup(value => value.ActivateSceneAsync(It.IsAny<string>())).ReturnsAsync(value: true);
+        var second = Scene(sut);
+        _ = await sut.ActivateSceneAsync(Guid.NewGuid(), second, "Second", this.TestContext.CancellationToken).ConfigureAwait(false);
+        sut.InvalidateScene(first);
+        activation.SetResult(true);
+        creation.SetResult();
+
+        _ = result.Status.Should().Be(RuntimeCommandStatus.Rejected);
+        var current = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), second, new RuntimeDetachGeometry(Guid.NewGuid())), this.TestContext.CancellationToken);
+        _ = current.Status.Should().Be(RuntimeCommandStatus.Accepted);
+        sut.EndRun();
+    }
+
+    [TestMethod]
     public void UnavailableWorldAndInput_DoNotRequireNativeFacades()
     {
         var sut = new RuntimeCommandDispatcher();

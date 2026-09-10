@@ -13,6 +13,10 @@ public interface IRuntimeWorldCommands
     /// <summary>Gets the current run identity, or empty when unavailable.</summary>
     public Guid RunId { get; }
 
+    /// <summary>Invalidates commands and notifications for the specified scene activation.</summary>
+    /// <param name="target">The activation being closed or superseded.</param>
+    public void InvalidateScene(RuntimeSceneTarget target);
+
     /// <summary>Checks request correlation again after a consumer marshals a failure to its UI thread.</summary>
     /// <param name="request">The original asset operation.</param>
     /// <returns>Whether this is still the current asset request for its live target.</returns>

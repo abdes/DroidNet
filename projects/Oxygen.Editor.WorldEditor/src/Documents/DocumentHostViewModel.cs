@@ -18,6 +18,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -182,6 +183,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.DocumentService,
                 this.windowId,
                 this.engineService,
+                this.container.Resolve<ISceneEngineSync>(),
                 this.operationResults,
                 this.statusReducer,
                 this.container.Resolve<ISceneDocumentCommandService>(),

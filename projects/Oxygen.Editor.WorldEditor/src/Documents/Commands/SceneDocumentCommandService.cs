@@ -363,12 +363,12 @@ public sealed partial class SceneDocumentCommandService(
         var after = targets.ConvertAll(static target => CameraState.Capture(target.Node, target.Camera!));
         this.RecordCameraHistory(context, before, after);
         var propertyEntries = BuildPerspectiveCameraPropertyEntries(edit);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operationResultId = await this.SyncEditedNodesAsync(
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
             context,
             targets.ConvertAll(static target => target.Node),
             SceneOperationKinds.EditPerspectiveCamera,
-            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, propertyEntries)).ConfigureAwait(true);
+            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, propertyEntries, revision))).ConfigureAwait(true);
         return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
@@ -545,8 +545,8 @@ public sealed partial class SceneDocumentCommandService(
         var afterSunStates = CaptureDirectionalSunStates(context.Scene);
         this.RecordEnvironmentHistory(context, before, after, beforeSunStates, afterSunStates);
 
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operationResultId = await this.PublishEnvironmentSyncAsync(context, after).ConfigureAwait(true);
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentSyncAsync(context, after, revision)).ConfigureAwait(true);
         if (validation is not null)
         {
             operationResultId ??= this.PublishSceneWarning(
@@ -653,6 +653,15 @@ public sealed partial class SceneDocumentCommandService(
                 ex);
             return new SceneCommandResult(Succeeded: false, operationResultId);
         }
+    }
+
+    private static async Task CompletePublicationAsync(Task metadata, Task projection)
+        => await Task.WhenAll(metadata, projection).ConfigureAwait(true);
+
+    private static async Task<T> CompletePublicationAsync<T>(Task metadata, Task<T> projection)
+    {
+        await Task.WhenAll(metadata, projection).ConfigureAwait(true);
+        return await projection.ConfigureAwait(true);
     }
 
     private static string NormalizePrimitiveKind(string kind)
@@ -1472,19 +1481,19 @@ public sealed partial class SceneDocumentCommandService(
             allSunStates,
             afterSunStates);
         var targetNodeIds = targets.Select(static target => target.node.Id).ToHashSet();
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operationResultId = await this.SyncEditedNodesAsync(
+        var payloads = syncNodes.ToDictionary(node => node.Id, node =>
+        {
+            var light = node.Components.OfType<DirectionalLightComponent>().First();
+            return targetNodeIds.Contains(node.Id)
+                ? BuildDirectionalLightPropertyEntries(edit, light)
+                : [BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight)];
+        });
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
             context,
             syncNodes,
             SceneOperationKinds.EditDirectionalLight,
-            node =>
-            {
-                var light = node.Components.OfType<DirectionalLightComponent>().First();
-                IReadOnlyList<EnginePropertyValueEntry> entries = targetNodeIds.Contains(node.Id)
-                    ? BuildDirectionalLightPropertyEntries(edit, light)
-                    : [BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight)];
-                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries);
-            }).ConfigureAwait(true);
+            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, payloads[node.Id], revision))).ConfigureAwait(true);
         return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
@@ -1541,7 +1550,7 @@ public sealed partial class SceneDocumentCommandService(
     {
         try
         {
-            await this.sceneEngineSync.RemoveNodeHierarchyAsync(node.Id).ConfigureAwait(true);
+            await this.sceneEngineSync.RemoveNodeHierarchyAsync(context.Scene, node.Id).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -1549,17 +1558,19 @@ public sealed partial class SceneDocumentCommandService(
         }
     }
 
-    private async Task MarkDirtyAsync(SceneDocumentCommandContext context)
+    private Task MarkDirtyAsync(SceneDocumentCommandContext context)
+        => this.MarkDirtyAsync(context, out _);
+
+    private Task MarkDirtyAsync(SceneDocumentCommandContext context, out SceneSyncRevision revision)
     {
         var wasDirty = context.Metadata.IsDirty;
         context.Metadata.IsDirty = true;
-        if (wasDirty)
-        {
-            return;
-        }
-
-        _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
+        revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
+        return wasDirty ? Task.CompletedTask : this.PublishDirtyMetadataAsync(context);
     }
+
+    private async Task PublishDirtyMetadataAsync(SceneDocumentCommandContext context)
+        => _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
 
     private async Task<SceneCommandResult> EditTransformSessionAsync(
         SceneDocumentCommandContext context,
@@ -1603,21 +1614,18 @@ public sealed partial class SceneDocumentCommandService(
             return SceneCommandResult.Success;
         }
 
+        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
         var closed = this.transformCommitGroups.Close(key, after) ?? group;
         var op = new PropertyOp(closed.Nodes, closed.Before, after, closed.Label);
+        var metadataUpdate = Task.CompletedTask;
         if (op.EffectiveEdit().Count > 0)
         {
-            await this.MarkDirtyAsync(context).ConfigureAwait(true);
+            var resolver = new TransformPropertyTarget(this, context, sceneNodes);
+            this.RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
+            metadataUpdate = this.MarkDirtyAsync(context, out revision);
         }
 
-        var operationResultId = await this.CompleteTerminalTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
-        if (op.EffectiveEdit().Count == 0)
-        {
-            return new SceneCommandResult(Succeeded: true, operationResultId);
-        }
-
-        var resolver = new TransformPropertyTarget(this, context, sceneNodes);
-        this.RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
+        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.CompleteTerminalTransformSessionAsync(context, sceneNodes, after, revision)).ConfigureAwait(true);
         return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
@@ -1645,6 +1653,7 @@ public sealed partial class SceneDocumentCommandService(
             PropertyApply.ApplyToTarget(transform, edit, Transform.ById);
         }
 
+        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
         foreach (var (nodeId, edit) in active.Before.PerNode)
         {
             if (!sceneNodes.TryGetValue(nodeId, out var node))
@@ -1661,7 +1670,7 @@ public sealed partial class SceneDocumentCommandService(
             _ = await this.sceneEngineSync.CancelPreviewSyncAsync(
                 context.Scene.Id,
                 node.Id,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
         }
 
         return SceneCommandResult.Success;
@@ -1672,6 +1681,7 @@ public sealed partial class SceneDocumentCommandService(
         Dictionary<Guid, SceneNode> nodes,
         PropertySnapshot snapshot)
     {
+        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
         var observedAt = DateTimeOffset.UtcNow;
         foreach (var (nodeId, edit) in snapshot.PerNode)
         {
@@ -1690,14 +1700,15 @@ public sealed partial class SceneDocumentCommandService(
                 context.Scene.Id,
                 node.Id,
                 observedAt,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
         }
     }
 
     private async Task<Guid?> CompleteTerminalTransformSessionAsync(
         SceneDocumentCommandContext context,
         Dictionary<Guid, SceneNode> nodes,
-        PropertySnapshot snapshot)
+        PropertySnapshot snapshot,
+        SceneSyncRevision revision)
     {
         Guid? firstOperationResultId = null;
         foreach (var (nodeId, edit) in snapshot.PerNode)
@@ -1716,7 +1727,7 @@ public sealed partial class SceneDocumentCommandService(
             var outcome = await this.sceneEngineSync.CompleteTerminalSyncAsync(
                 context.Scene.Id,
                 node.Id,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, cancellationToken)).ConfigureAwait(true);
+                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
             firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.EditTransform, outcome).ConfigureAwait(true);
         }
 
@@ -1764,16 +1775,13 @@ public sealed partial class SceneDocumentCommandService(
         }
 
         context.History.AddChange("Reapply Camera", async () => await this.ApplyCameraStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        _ = await this.SyncEditedNodesAsync(
+        var payloads = states.ToDictionary(state => state.Node.Id, state => BuildPerspectiveCameraPropertyEntries(state.Node.Components.OfType<PerspectiveCamera>().First()));
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        _ = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
             context,
             states.Select(static state => state.Node).ToList(),
             SceneOperationKinds.EditPerspectiveCamera,
-            node =>
-            {
-                var camera = node.Components.OfType<PerspectiveCamera>().First();
-                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildPerspectiveCameraPropertyEntries(camera));
-            }).ConfigureAwait(true);
+            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, payloads[node.Id], revision))).ConfigureAwait(true);
     }
 
     private void RecordDirectionalLightHistory(
@@ -1799,16 +1807,13 @@ public sealed partial class SceneDocumentCommandService(
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, inverse, states, inverseSunStates, sunStates).ConfigureAwait(true));
         var syncNodes = IncludeDirectionalSunChangedNodes(states.Select(static state => state.Node), inverseSunStates, sunStates);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        _ = await this.SyncEditedNodesAsync(
+        var payloads = syncNodes.ToDictionary(node => node.Id, node => BuildDirectionalLightPropertyEntries(node.Components.OfType<DirectionalLightComponent>().First()));
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        _ = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
             context,
             syncNodes,
             SceneOperationKinds.EditDirectionalLight,
-            node =>
-            {
-                var light = node.Components.OfType<DirectionalLightComponent>().First();
-                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildDirectionalLightPropertyEntries(light));
-            }).ConfigureAwait(true);
+            node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, payloads[node.Id], revision))).ConfigureAwait(true);
     }
 
     private void RecordEnvironmentHistory(
@@ -1829,8 +1834,8 @@ public sealed partial class SceneDocumentCommandService(
         context.Scene.SetEnvironment(environment);
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Environment", async () => await this.ApplyEnvironmentForHistoryAsync(context, inverse, environment, inverseSunStates, sunStates).ConfigureAwait(true));
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        _ = await this.PublishEnvironmentSyncAsync(context, environment).ConfigureAwait(true);
+        var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+        _ = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentSyncAsync(context, environment, revision)).ConfigureAwait(true);
     }
 
     private async Task<Guid?> SyncComponentAddAsync(SceneDocumentCommandContext context, SceneNode node, GameComponent component)
@@ -1946,9 +1951,9 @@ public sealed partial class SceneDocumentCommandService(
         return firstOperationResultId;
     }
 
-    private async Task<Guid?> PublishEnvironmentSyncAsync(SceneDocumentCommandContext context, SceneEnvironmentData environment)
+    private async Task<Guid?> PublishEnvironmentSyncAsync(SceneDocumentCommandContext context, SceneEnvironmentData environment, SceneSyncRevision revision)
     {
-        var result = await this.sceneEngineSync.UpdateEnvironmentAsync(context.Scene, environment).ConfigureAwait(true);
+        var result = await this.sceneEngineSync.UpdateEnvironmentAsync(context.Scene, environment, revision).ConfigureAwait(true);
         if (result.Overall == SyncStatus.Accepted)
         {
             return null;
@@ -2041,6 +2046,11 @@ public sealed partial class SceneDocumentCommandService(
 
     private void PublishNodeAdded(SceneDocumentCommandContext context, SceneNode node)
     {
+        if (!ReferenceEquals(FindNode(context.Scene, node.Id), node))
+        {
+            return;
+        }
+
         this.selectionService.SetSelection(context.DocumentId, [node], "Command");
         _ = this.messenger.Send(new SceneNodeAddedMessage([node]));
         _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([node]));

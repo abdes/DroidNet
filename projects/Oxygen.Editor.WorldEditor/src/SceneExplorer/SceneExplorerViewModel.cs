@@ -94,6 +94,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.documentService = documentService;
         this.windowId = windowId;
         this.sceneEngineSync = sceneEngineSync;
+        this.sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         this.sceneExplorerService = sceneExplorerService;
         this.sceneExplorerService.AuthoringChanged += this.OnAuthoringChanged;
         this.selectionService = selectionService;
@@ -327,6 +328,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (disposing)
         {
+            this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
             this.documentService.DocumentActivated -= this.OnDocumentActivated;
             this.messenger.UnregisterAll(this);
@@ -731,6 +733,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene loading reports failures without terminating the editor.")]
     private async Task LoadSceneAsync(Scene scene)
     {
+        var documentMetadata = this.documentService.GetOpenDocuments(this.windowId)
+            .OfType<SceneDocumentMetadata>()
+            .FirstOrDefault(document => document.DocumentId == scene.Id);
+        if (documentMetadata is null)
+        {
+            return;
+        }
+
         this.loadingDocumentId = scene.Id;
         try
         {
@@ -752,6 +762,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 return;
             }
 
+            if (!this.sceneEngineSync.RegisterDocument(loadedScene, documentMetadata))
+            {
+                return;
+            }
+
             await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
 
             if (ct.IsCancellationRequested)
@@ -759,18 +774,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 return;
             }
 
-            // Delegate scene synchronization to the service (wait until engine is running).
-            var sceneSynced = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
-            if (!sceneSynced || ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            // Notify other components (e.g. viewport/view lifecycle) that the scene
-            // has been created/synchronized in the engine and is ready for rendering.
-            // This allows views to defer creating engine views until the scene exists.
-            this.LogSceneLoadedMessageSent(loadedScene.Id, System.DateTime.UtcNow);
-            _ = this.messenger.Send(new SceneLoadedMessage(loadedScene));
+            _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, documentMetadata));
+            _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -786,6 +791,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 this.loadingDocumentId = Guid.Empty;
             }
         }
+    }
+
+    private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
+    {
+        if (this.isDisposed || this.loadSceneCts?.IsCancellationRequested == true
+            || this.documentService.GetActiveDocumentId(this.windowId) != args.Metadata.DocumentId
+            || !ReferenceEquals(this.Scene?.AttachedObject, args.Scene)
+            || !ReferenceEquals(this.CreateCommandContext()?.Metadata, args.Metadata))
+        {
+            return;
+        }
+
+        this.LogSceneLoadedMessageSent(args.Scene.Id, DateTime.UtcNow);
+        _ = this.messenger.Send(new SceneLoadedMessage(args.Scene));
     }
 
     private async void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -854,7 +873,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             this.RecordMoveUndo(args);
             _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
-            }
+        }
         finally
         {
             if (args.IsBatch)

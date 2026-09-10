@@ -22,7 +22,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var context = CreateContext(scene);
         var failure = new SyncOutcome(SyncStatus.Rejected, SceneOperationKinds.EditEnvironment, AffectedScope.Empty, LiveSyncDiagnosticCodes.EnvironmentBackgroundRejected, "Native background was rejected");
-        _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+        _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Rejected, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)
             {
                 [nameof(SceneEnvironmentData.BackgroundColor)] = failure,

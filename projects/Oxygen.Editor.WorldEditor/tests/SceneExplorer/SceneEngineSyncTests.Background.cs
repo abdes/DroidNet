@@ -6,6 +6,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core.Diagnostics;
@@ -26,6 +27,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = commands.Setup(value => value.Execute(It.Is<RuntimeWorldRequest>(request => request.Command is RuntimeSetBackgroundColor), It.IsAny<CancellationToken>()))
             .Returns((RuntimeWorldRequest request, CancellationToken _) => new RuntimeCommandResult(request.OperationId, request.Target.RunId, nativeStatus, "Background rejected", new NotSupportedException("Controlled background failure")));

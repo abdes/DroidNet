@@ -36,7 +36,7 @@ public sealed partial class SceneEngineSync
         return new(Worst(fields.Values.Select(value => value.Status)), fields);
     }
 
-    private async Task<SyncOutcome> SyncBackgroundAsync(Scene scene, SceneEnvironmentData environment, CancellationToken cancellationToken)
+    private async Task<SyncOutcome> SyncBackgroundAsync(Scene scene, SceneEnvironmentData environment, CancellationToken cancellationToken, WorldDispatch? dispatchOverride = null)
     {
         var outcome = await this.ExecuteSceneSyncAsync(
             scene,
@@ -44,7 +44,8 @@ public sealed partial class SceneEngineSync
             LiveSyncDiagnosticCodes.EnvironmentBackgroundRejected,
             LiveSyncDiagnosticCodes.EnvironmentBackgroundFailed,
             world => world.Execute(new RuntimeSetBackgroundColor(environment.BackgroundColor)),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            dispatchOverride).ConfigureAwait(false);
         return outcome.Status == SyncStatus.Unsupported
             ? outcome with { Code = LiveSyncDiagnosticCodes.EnvironmentBackgroundUnsupported } : outcome;
     }

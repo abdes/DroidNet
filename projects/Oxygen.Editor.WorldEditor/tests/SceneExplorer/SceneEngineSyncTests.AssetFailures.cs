@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -33,6 +34,7 @@ public sealed partial class SceneEngineSyncTests
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(results.Add);
         using var sut = new SceneEngineSync(engine.Object, operationResults: publisher.Object);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);

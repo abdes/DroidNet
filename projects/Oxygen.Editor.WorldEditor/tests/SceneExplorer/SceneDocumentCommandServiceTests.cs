@@ -9,9 +9,6 @@ using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
@@ -22,6 +19,9 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
@@ -81,7 +81,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditGeometryAsync(
             context,
             [node.Id],
-            new GeometryEdit(OptionalEditValues.Supplied<Uri?>(null)),
+            new GeometryEdit(OptionalEditValues.Supplied<Uri?>(value: null)),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
@@ -144,7 +144,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var sphereUri = AssetUris.BuildGeneratedUri("BasicShapes/Sphere");
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditGeometry, AffectedScope.Empty);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.AttachGeometryAsync(scene, node, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
@@ -203,11 +203,11 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
-        await context.History.UndoAsync().ConfigureAwait(false);
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = transform.LocalPosition.X.Should().Be(0f);
         _ = context.History.RedoStack.Should().ContainSingle();
 
-        await context.History.RedoAsync().ConfigureAwait(false);
+        await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = transform.LocalPosition.X.Should().Be(2f);
         _ = context.History.UndoStack.Should().ContainSingle();
         VerifyCommittedTransformSessionSync(fixture, scene, node, synced);
@@ -245,6 +245,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 second,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -259,13 +260,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         var transform = node.Components.OfType<TransformComponent>().Single();
         var context = CreateContext(scene);
         IReadOnlyList<EnginePropertyValueEntry>? synced = null;
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, _, entries, _, _) => synced = entries)
             .ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
 
         var result = await fixture.Sut.EditTransformAsync(
@@ -289,6 +291,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         fixture.Sync.Verify(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()), Times.Never);
@@ -321,6 +324,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 It.IsAny<Scene>(),
                 It.IsAny<SceneNode>(),
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
         fixture.DocumentService.Verify(
@@ -336,11 +340,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var context = CreateContext(scene);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SyncOutcome(
                 SyncStatus.SkippedNotRunning,
@@ -380,8 +385,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
-        fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()))
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditMaterialSlotAsync(
@@ -414,21 +419,21 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
-        fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()))
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditPropertiesAsync(
             context,
             [node.Id],
-            PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, (Uri?)null),
+            PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, value: (Uri?)null),
             "Edit Material Slot",
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
             .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
-        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()), Times.Once);
         fixture.Sync.Verify(
             sync => sync.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -486,10 +491,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
-        fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()))
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
@@ -503,14 +508,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
 
-        await context.History.UndoAsync().ConfigureAwait(false);
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
             .Which.Material.Uri.Should().Be(materialUri);
 
-        await context.History.RedoAsync().ConfigureAwait(false);
+        await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
             .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
-        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, null, It.IsAny<CancellationToken>()), Times.Exactly(2));
+        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()), Times.Exactly(2));
         fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri, It.IsAny<CancellationToken>()), Times.Once);
         fixture.Sync.Verify(
             sync => sync.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
@@ -536,13 +541,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditPerspectiveCamera, AffectedScope.Empty);
         IReadOnlyList<EnginePropertyValueEntry>? synced = null;
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, _, entries, _, _) => synced = entries)
             .ReturnsAsync(accepted);
 
         var edit = new PropertyEdit();
@@ -572,6 +578,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -588,14 +595,15 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(second);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
-        var synced = new List<(SceneNode Node, IReadOnlyList<EnginePropertyValueEntry> Entries)>();
-        fixture.Sync
+        var synced = new List<(SceneNode node, IReadOnlyList<EnginePropertyValueEntry> entries)>();
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 It.IsAny<SceneNode>(),
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, node, entries, _) => synced.Add((node, entries)))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, node, entries, _, _) => synced.Add((node, entries)))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditDirectionalLightAsync(
@@ -604,7 +612,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             new DirectionalLightEdit(
                 OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
                 OptionalEditValues.Unspecified<float>(),
-                OptionalEditValues.Supplied<bool>(true),
+                OptionalEditValues.Supplied<bool>(value: true),
                 OptionalEditValues.Unspecified<bool>(),
                 OptionalEditValues.Unspecified<bool>(),
                 OptionalEditValues.Unspecified<bool>(),
@@ -618,17 +626,18 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().HaveCount(2);
-        _ = synced.Should().Contain(entry => entry.Node == first && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
-        _ = synced.Should().Contain(entry => entry.Node == second && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
+        _ = synced.Should().Contain(entry => entry.node == first && entry.entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
+        _ = synced.Should().Contain(entry => entry.node == second && entry.entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
         fixture.Sync.Verify(
             sync => sync.UpdatePropertiesAsync(
                 scene,
                 It.IsAny<SceneNode>(),
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Exactly(2));
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -644,20 +653,21 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(second);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
-        var synced = new List<(SceneNode Node, IReadOnlyList<EnginePropertyValueEntry> Entries)>();
-        fixture.Sync
+        var synced = new List<(SceneNode node, IReadOnlyList<EnginePropertyValueEntry> entries)>();
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 It.IsAny<SceneNode>(),
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, node, entries, _) => synced.Add((node, entries)))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, node, entries, _, _) => synced.Add((node, entries)))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditPropertiesAsync(
             context,
             [second.Id],
-            PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.IsSunLight, true),
+            PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.IsSunLight, value: true),
             "Edit Directional Light",
             EditSessionToken.OneShot).ConfigureAwait(false);
 
@@ -666,17 +676,18 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().HaveCount(2);
-        _ = synced.Should().Contain(entry => entry.Node == first && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
-        _ = synced.Should().Contain(entry => entry.Node == second && entry.Entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
+        _ = synced.Should().Contain(entry => entry.node == first && entry.entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 0f)));
+        _ = synced.Should().Contain(entry => entry.node == second && entry.entries.Contains(new EnginePropertyValueEntry(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.IsSunLight, 1f)));
         fixture.Sync.Verify(
             sync => sync.UpdatePropertiesAsync(
                 scene,
                 It.IsAny<SceneNode>(),
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Exactly(2));
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -691,13 +702,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
         IReadOnlyList<EnginePropertyValueEntry>? synced = null;
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, _, entries, _, _) => synced = entries)
             .ReturnsAsync(accepted);
 
         var edit = BuildDirectionalLightPropertyEdit();
@@ -710,22 +722,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        AssertDirectionalLightValues(
-            light,
-            color: new Vector3(0.2f, 0.4f, 0.8f),
-            intensityLux: 12_000f,
-            angularSizeRadians: 0.0125f,
-            exposureCompensation: 0.75f,
-            mobility: LightMobility.Mixed,
-            shadowResolutionHint: ShadowResolutionHint.High,
-            cascadeCount: 3,
-            maxShadowDistance: 256f,
-            cascadeDistances: new Vector4(16f, 48f, 128f, 256f),
-            distributionExponent: 2.25f,
-            transitionFraction: 0.2f,
-            distanceFadeoutFraction: 0.15f,
-            shadowBias: 0.001f,
-            shadowNormalBias: 0.04f);
+        AssertDirectionalLightEditApplied(light);
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = synced.Should().NotBeNull();
@@ -736,10 +733,11 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -754,13 +752,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditDirectionalLight, AffectedScope.Empty);
         IReadOnlyList<EnginePropertyValueEntry>? synced = null;
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced = entries)
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, _, entries, _, _) => synced = entries)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditDirectionalLightAsync(
@@ -796,10 +795,11 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -816,8 +816,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = first.Id });
         var context = CreateContext(scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
-        fixture.Sync
-            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
@@ -837,17 +837,17 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
 
-        await context.History.UndoAsync().ConfigureAwait(false);
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.Environment.SunNodeId.Should().Be(first.Id);
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
 
-        await context.History.RedoAsync().ConfigureAwait(false);
+        await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.Environment.SunNodeId.Should().Be(second.Id);
         _ = first.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeFalse();
         _ = second.Components.OfType<DirectionalLightComponent>().Single().IsSunLight.Should().BeTrue();
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Exactly(3));
     }
 
@@ -879,7 +879,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid);
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
         fixture.DocumentService.Verify(
             service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
@@ -895,9 +895,9 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
-        fixture.Sync
-            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, SceneSyncRevision, CancellationToken>((_, environment, _, _) => syncedEnvironment = environment)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
@@ -960,9 +960,9 @@ public sealed partial class SceneDocumentCommandServiceTests
         };
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
-        fixture.Sync
-            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, SceneSyncRevision, CancellationToken>((_, environment, _, _) => syncedEnvironment = environment)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditSceneEnvironmentAsync(
@@ -999,9 +999,9 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
-        fixture.Sync
-            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, SceneSyncRevision, CancellationToken>((_, environment, _, _) => syncedEnvironment = environment)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
@@ -1027,9 +1027,9 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
-        fixture.Sync
-            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneEnvironmentData, CancellationToken>((_, environment, _) => syncedEnvironment = environment)
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, SceneSyncRevision, CancellationToken>((_, environment, _, _) => syncedEnvironment = environment)
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
@@ -1073,7 +1073,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             .Which.Diagnostics.Should().ContainSingle()
             .Which.Code.Should().Be(SceneDiagnosticCodes.EnvironmentManualExposureInvalid);
         fixture.Sync.Verify(
-            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -1088,10 +1088,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(target);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.AddComponent, AffectedScope.Empty);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.AttachLightAsync(scene, target, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdateNodeTransformAsync(scene, target, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
@@ -1104,6 +1104,24 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
     }
+
+    private static void AssertDirectionalLightEditApplied(DirectionalLightComponent light)
+        => AssertDirectionalLightValues(
+            light,
+            color: new Vector3(0.2f, 0.4f, 0.8f),
+            intensityLux: 12_000f,
+            angularSizeRadians: 0.0125f,
+            exposureCompensation: 0.75f,
+            mobility: LightMobility.Mixed,
+            shadowResolutionHint: ShadowResolutionHint.High,
+            cascadeCount: 3,
+            maxShadowDistance: 256f,
+            cascadeDistances: new Vector4(16f, 48f, 128f, 256f),
+            distributionExponent: 2.25f,
+            transitionFraction: 0.2f,
+            distanceFadeoutFraction: 0.15f,
+            shadowBias: 0.001f,
+            shadowNormalBias: 0.04f);
 
     private static PostProcessEnvironmentData CreatePostProcessEnvironmentData()
         => new()
@@ -1211,16 +1229,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         var edit = new PropertyEdit();
         edit.Set(SceneDocumentCommandService.DirectionalLight.Color, new Vector3(0.2f, 0.4f, 0.8f));
         edit.Set(SceneDocumentCommandService.DirectionalLight.IntensityLux, 12_000f);
-        edit.Set(SceneDocumentCommandService.DirectionalLight.IsSunLight, false);
-        edit.Set(SceneDocumentCommandService.DirectionalLight.EnvironmentContribution, false);
-        edit.Set(SceneDocumentCommandService.DirectionalLight.CastsShadows, true);
-        edit.Set(SceneDocumentCommandService.DirectionalLight.AffectsWorld, false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.IsSunLight, value: false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.EnvironmentContribution, value: false);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.CastsShadows, value: true);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.AffectsWorld, value: false);
         edit.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, 0.0125f);
         edit.Set(SceneDocumentCommandService.DirectionalLight.ExposureCompensation, 0.75f);
         edit.Set(SceneDocumentCommandService.DirectionalLight.Mobility, LightMobility.Mixed);
         edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowBias, 0.001f);
         edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowNormalBias, 0.04f);
-        edit.Set(SceneDocumentCommandService.DirectionalLight.ContactShadows, true);
+        edit.Set(SceneDocumentCommandService.DirectionalLight.ContactShadows, value: true);
         edit.Set(SceneDocumentCommandService.DirectionalLight.ShadowResolutionHint, ShadowResolutionHint.High);
         edit.Set(SceneDocumentCommandService.DirectionalLight.CascadeCount, 3);
         edit.Set(SceneDocumentCommandService.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances);
@@ -1239,16 +1257,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         => new(
             Color: OptionalEditValues.Supplied<Vector3>(new Vector3(0.25f, 0.5f, 0.75f)),
             IntensityLux: OptionalEditValues.Supplied<float>(45_000f),
-            IsSunLight: OptionalEditValues.Supplied<bool>(false),
-            EnvironmentContribution: OptionalEditValues.Supplied<bool>(false),
-            CastsShadows: OptionalEditValues.Supplied<bool>(true),
-            AffectsWorld: OptionalEditValues.Supplied<bool>(false),
+            IsSunLight: OptionalEditValues.Supplied<bool>(value: false),
+            EnvironmentContribution: OptionalEditValues.Supplied<bool>(value: false),
+            CastsShadows: OptionalEditValues.Supplied<bool>(value: true),
+            AffectsWorld: OptionalEditValues.Supplied<bool>(value: false),
             AngularSizeRadians: OptionalEditValues.Supplied<float>(0.02f),
             ExposureCompensation: OptionalEditValues.Supplied<float>(1.25f),
             Mobility: OptionalEditValues.Supplied<LightMobility>(LightMobility.Baked),
             ShadowBias: OptionalEditValues.Supplied<float>(0.002f),
             ShadowNormalBias: OptionalEditValues.Supplied<float>(0.05f),
-            ContactShadows: OptionalEditValues.Supplied<bool>(true),
+            ContactShadows: OptionalEditValues.Supplied<bool>(value: true),
             ShadowResolutionHint: OptionalEditValues.Supplied<ShadowResolutionHint>(ShadowResolutionHint.Ultra),
             CascadeCount: OptionalEditValues.Supplied<int>(2),
             SplitMode: OptionalEditValues.Supplied<DirectionalCsmSplitMode>(DirectionalCsmSplitMode.ManualDistances),
@@ -1333,6 +1351,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()),
             Times.Exactly(5));
         _ = synced.Select(entries => entries.Should().ContainSingle().Which.Value)
@@ -1356,15 +1375,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         List<IReadOnlyList<EnginePropertyValueEntry>> synced)
     {
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.UpdatePropertiesAsync(
                 scene,
                 node,
                 It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(),
+                It.IsAny<SceneSyncRevision>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, CancellationToken>((_, _, entries, _) => synced.Add(entries))
+            .Callback<Scene, SceneNode, IReadOnlyList<EnginePropertyValueEntry>, SceneSyncRevision, CancellationToken>((_, _, entries, _, _) => synced.Add(entries))
             .ReturnsAsync(accepted);
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.TryPreviewSyncAsync(
                 scene.Id,
                 node.Id,
@@ -1373,7 +1393,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns<Guid, Guid, DateTimeOffset, Func<CancellationToken, Task<SyncOutcome>>, CancellationToken>(
                 async (_, _, _, sync, cancellationToken) => (SyncOutcome?)await sync(cancellationToken).ConfigureAwait(false));
-        fixture.Sync
+        _ = fixture.Sync
             .Setup(sync => sync.CompleteTerminalSyncAsync(
                 scene.Id,
                 node.Id,
@@ -1395,18 +1415,21 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture()
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
+        long sequence = 0;
+        _ = sync.Setup(value => value.CaptureRevision(It.IsAny<Scene>(), It.IsAny<SceneDocumentMetadata>()))
+            .Returns((Scene _, SceneDocumentMetadata metadata) => new SceneSyncRevision(metadata.DocumentId, metadata.ChangeVersion, Interlocked.Increment(ref sequence)));
         var documentService = new Mock<IDocumentService>(MockBehavior.Strict);
-        documentService
+        _ = documentService
             .Setup(service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
         var results = new CapturingOperationResultPublisher();
         var sut = new SceneDocumentCommandService(
             new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
-            sync.Object,
+            synchronization ?? sync.Object,
             new Mock<IProjectManagerService>(MockBehavior.Strict).Object,
             documentService.Object,
             default,
@@ -1432,7 +1455,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         public IDisposable Subscribe(IObserver<OperationResult> observer) => new NoopDisposable();
     }
 
-    private sealed class NoopDisposable : IDisposable
+    private sealed partial class NoopDisposable : IDisposable
     {
         public void Dispose()
         {

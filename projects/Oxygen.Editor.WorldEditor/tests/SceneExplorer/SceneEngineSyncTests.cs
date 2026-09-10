@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
@@ -78,7 +79,9 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
         var countChanges = new List<PendingPropertySyncCountChangedEventArgs>();
         sut.PendingPropertySyncCountChanged += (_, args) => countChanges.Add(args);
@@ -115,20 +118,22 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
-    public async Task UpdateProperties_WhenEngineFaulted_DoesNotBuffer()
+    public async Task UpdateProperties_WhenEngineFaulted_BuffersForRecovery()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Faulted);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
         var entries = new[] { CreateTransformEntry(42.0f) };
 
         var outcome = await sut.UpdatePropertiesAsync(scene, node, entries, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
         _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.RuntimeFaulted);
-        _ = sut.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
+        _ = sut.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
@@ -199,11 +204,13 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Overall.Should().Be(SyncStatus.SkippedNotRunning);
-        _ = result.PerField.Should().BeEmpty();
+        _ = result.PerField.Should().NotBeEmpty();
+        _ = result.PerField.Values.Should().OnlyContain(outcome => outcome.Status == SyncStatus.SkippedNotRunning);
         engine.VerifyGet(s => s.WorldCommands, Times.Never);
     }
 
@@ -215,11 +222,13 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(s => s.WorldCommands).Returns((IRuntimeWorldCommands)null!);
         using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
 
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Overall.Should().Be(SyncStatus.SkippedNotRunning);
-        _ = result.PerField.Should().BeEmpty();
+        _ = result.PerField.Should().NotBeEmpty();
+        _ = result.PerField.Values.Should().OnlyContain(outcome => outcome.Status == SyncStatus.SkippedNotRunning);
     }
 
     [TestMethod]
@@ -234,7 +243,8 @@ public sealed partial class SceneEngineSyncTests
         var result = await sut.UpdateEnvironmentAsync(scene, scene.Environment, cts.Token).ConfigureAwait(false);
 
         _ = result.Overall.Should().Be(SyncStatus.Cancelled);
-        _ = result.PerField.Should().BeEmpty();
+        _ = result.PerField.Should().NotBeEmpty();
+        _ = result.PerField.Values.Should().OnlyContain(outcome => outcome.Status == SyncStatus.Cancelled);
         engine.VerifyNoOtherCalls();
     }
 

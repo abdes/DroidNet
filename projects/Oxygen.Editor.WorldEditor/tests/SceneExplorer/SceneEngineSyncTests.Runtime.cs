@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.World.SceneExplorer.Tests;
@@ -26,6 +27,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         _ = (await sut.SyncSceneAsync(scene, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -66,6 +68,7 @@ public sealed partial class SceneEngineSyncTests
         _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
         using var sut = new SceneEngineSync(engine.Object);
         var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Camera" };
         scene.RootNodes.Add(node);
         node.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
@@ -93,6 +96,7 @@ public sealed partial class SceneEngineSyncTests
             .ReturnsAsync((RuntimeWorldRequest request, CancellationToken _) => new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted));
         _ = world.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()))
             .Returns((RuntimeWorldRequest request, CancellationToken _) => new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted));
+        _ = world.Setup(value => value.InvalidateScene(It.IsAny<RuntimeSceneTarget>()));
         return world;
     }
 }

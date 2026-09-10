@@ -54,6 +54,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly ISceneEngineSync sceneEngineSync;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ISceneDocumentCommandService commandService;
@@ -76,6 +77,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="documentService">The document service.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
+    /// <param name="sceneEngineSync">Tracks the scene's runtime projection lifetime.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="commandService">The scene authoring command service.</param>
@@ -89,6 +91,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IDocumentService documentService,
         WindowId windowId,
         IEngineService engineService,
+        ISceneEngineSync sceneEngineSync,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
         ISceneDocumentCommandService commandService,
@@ -99,6 +102,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         ILoggerFactory? loggerFactory = null)
     {
         this.engineService = engineService;
+        this.sceneEngineSync = sceneEngineSync;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.commandService = commandService;
@@ -109,6 +113,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.loggerFactory = loggerFactory;
         this.Viewports = [];
         this.Metadata = metadata;
+        this.scene = sceneEngineSync.GetDocumentScene(metadata);
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
@@ -305,6 +310,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         // Histories contain delegates over scene objects which must not survive a reload.
+        this.sceneEngineSync.CloseDocument(this.Metadata);
         UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
         return Task.CompletedTask;
     }
@@ -321,6 +327,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         if (disposing)
         {
+            this.sceneEngineSync.CloseDocument(this.Metadata);
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
             this.messenger.UnregisterAll(this);
@@ -355,6 +362,14 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private void RegisterMessages()
     {
         this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
+        this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) =>
+        {
+            if (ReferenceEquals(this.Metadata, message.Metadata))
+            {
+                this.scene = message.Scene;
+                this.sceneReady = false;
+            }
+        });
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
     }
 

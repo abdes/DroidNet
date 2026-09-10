@@ -376,6 +376,17 @@ property entry points, shared sessions/history, current field diagnostics and
 revision-aware runtime convergence. Existing record adapters implement the same
 contract; they are not an alternative architecture.
 
+`SceneEngineSync` registers each open metadata instance with its loaded authoring
+scene. Publication captures that lifetime, authoring revision and preview sequence
+before asynchronous work. An owned scene snapshot is captured on the UI dispatcher;
+successful initial projection supersedes only work covered by that snapshot.
+Later scalar values, scene-system payloads and captured topology/component commands
+are replayed in order. Rejected work remains pending with its original diagnostic.
+Closing or replacing a document retires its delivery targets and waiting requests;
+a new runtime run resynchronizes the requested open scene. Authoring-loaded data
+and native-ready notifications are separate, and native readiness is emitted only
+after the pending work for that activation has been accepted.
+
 ## 16. Issue Integration Boundaries
 
 [#5](../plan/issue-005-asset-request-generations.md) guards native async geometry/

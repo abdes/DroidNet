@@ -7,6 +7,7 @@ using DroidNet.TimeMachine;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -213,7 +214,8 @@ public sealed partial class SceneDocumentCommandService
 
     private async Task<SceneCommandResult> PreviewPropertyGestureAsync(PropertyGesture gesture, PropertySnapshot after)
     {
-        var pending = this.SynchronizeGestureSnapshotAsync(gesture, after, EditSessionState.Open);
+        var revision = this.sceneEngineSync.CaptureRevision(gesture.Context.Scene, gesture.Context.Metadata);
+        var pending = this.SynchronizeGestureSnapshotAsync(gesture, after, EditSessionState.Open, revision, gesture.Context.Scene.Environment);
         _ = gesture.Pending.RemoveAll(task => task.IsCompleted);
         gesture.Pending.Add(pending);
         var operation = await pending.ConfigureAwait(true);
@@ -242,6 +244,8 @@ public sealed partial class SceneDocumentCommandService
         var after = PropertySnapshot.Capture(models, gesture.Descriptors);
         _ = this.propertyCommitGroups.Close(gesture.Key, after);
         var op = new PropertyOp(gesture.Nodes, gesture.Before, after, gesture.Label);
+        var metadataUpdate = Task.CompletedTask;
+        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
         if (phase == EditSessionState.Cancelled)
         {
             gesture.Token.Cancel();
@@ -254,12 +258,13 @@ public sealed partial class SceneDocumentCommandService
             if (op.EffectiveEdit().Count > 0)
             {
                 this.RegisterGestureHistory(context, gesture.Kind, op);
-                await this.MarkDirtyAsync(context).ConfigureAwait(true);
+                metadataUpdate = this.MarkDirtyAsync(context, out revision);
             }
         }
 
+        var environment = context.Scene.Environment;
+        var operation = await CompletePublicationAsync(metadataUpdate, this.SynchronizeGestureSnapshotAsync(gesture, after, phase, revision, environment)).ConfigureAwait(true);
         _ = await Task.WhenAll(gesture.Pending).ConfigureAwait(true);
-        var operation = await this.SynchronizeGestureSnapshotAsync(gesture, after, phase).ConfigureAwait(true);
         return targetsChanged
             ? this.ValidationFailure(OperationKindForPropertyKind(gesture.Kind), "PROPERTY_TARGET_GONE", "Property edit cancelled", "An edited component was removed or replaced.", context)
             : new(Succeeded: true, operation);
@@ -270,12 +275,18 @@ public sealed partial class SceneDocumentCommandService
         {
             ApplyGestureSnapshot(context, kind, op.Before, GestureDescriptors(kind)!);
             this.RegisterGestureHistory(context, kind, op.Inverse());
-            await this.MarkDirtyAsync(context).ConfigureAwait(true);
             var gesture = new PropertyGesture(context, EditSessionToken.OneShot, kind, string.Empty, op.Nodes, [], op.Before, op.Label, GestureTargets(context, kind, op.Nodes));
-            _ = await this.SynchronizeGestureSnapshotAsync(gesture, op.Before, EditSessionState.Committed).ConfigureAwait(true);
+            var environment = context.Scene.Environment;
+            var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
+            _ = await CompletePublicationAsync(metadataUpdate, this.SynchronizeGestureSnapshotAsync(gesture, op.Before, EditSessionState.Committed, revision, environment)).ConfigureAwait(true);
         });
 
-    private async Task<Guid?> SynchronizeGestureSnapshotAsync(PropertyGesture gesture, PropertySnapshot snapshot, EditSessionState phase)
+    private async Task<Guid?> SynchronizeGestureSnapshotAsync(
+        PropertyGesture gesture,
+        PropertySnapshot snapshot,
+        EditSessionState phase,
+        SceneSyncRevision revision,
+        SceneEnvironmentData environment)
     {
         Guid? firstResult = null;
         foreach (var (nodeId, edit) in snapshot.PerNode)
@@ -284,10 +295,9 @@ public sealed partial class SceneDocumentCommandService
             Func<CancellationToken, Task<SyncOutcome>> sync;
             if (string.Equals(gesture.Kind, SceneEnvironmentKind, StringComparison.Ordinal))
             {
-                var environment = scene.Environment;
                 sync = async cancellationToken =>
                 {
-                    var result = await this.sceneEngineSync.UpdateEnvironmentAsync(scene, environment, cancellationToken).ConfigureAwait(true);
+                    var result = await this.sceneEngineSync.UpdateEnvironmentAsync(scene, environment, revision, cancellationToken).ConfigureAwait(true);
                     return result.PerField.Values.FirstOrDefault(value => value.Status != SyncStatus.Accepted)
                         ?? new SyncOutcome(result.Overall, SceneOperationKinds.EditEnvironment, Scope(gesture.Context));
                 };
@@ -306,10 +316,10 @@ public sealed partial class SceneDocumentCommandService
                 {
                     TransformKind => BuildTransformPropertyEntries(edit),
                     PerspectiveCameraKind => BuildPerspectiveCameraPropertyEntries(BuildPerspectiveCameraEditFromPropertyEdit(edit)),
-                    DirectionalLightKind => BuildDirectionalLightPropertyEntries(BuildDirectionalLightEditFromPropertyEdit(edit), node.Components.OfType<DirectionalLightComponent>().First()),
+                    DirectionalLightKind => BuildDirectionalLightPropertyEntries(BuildDirectionalLightEditFromPropertyEdit(edit)),
                     _ => [],
                 };
-                sync = cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(scene, node, entries, cancellationToken);
+                sync = cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(scene, node, entries, revision, cancellationToken);
             }
             else
             {

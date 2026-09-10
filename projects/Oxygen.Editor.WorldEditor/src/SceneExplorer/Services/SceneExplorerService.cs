@@ -325,7 +325,7 @@ public partial class SceneExplorerService(
         {
             try
             {
-                await this.sceneEngineSync.ReparentNodeAsync(node.Id, change.NewParentId).ConfigureAwait(false);
+                await this.sceneEngineSync.ReparentNodeAsync(scene, node.Id, change.NewParentId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -418,7 +418,7 @@ public partial class SceneExplorerService(
     {
         try
         {
-            await this.sceneEngineSync.RemoveNodeAsync(node.Id).ConfigureAwait(true);
+            await this.sceneEngineSync.RemoveNodeAsync(node.Scene, node.Id).ConfigureAwait(true);
         }
         catch (Exception exception)
         {
