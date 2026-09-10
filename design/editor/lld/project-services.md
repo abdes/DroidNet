@@ -580,3 +580,19 @@ Straightforward unit tests should cover:
 - Exact visual treatment for stale recent-project rows is owned by
   `project-workspace-shell.md` and Project Browser UI. Project services keep the
   classification stable and do not remove stale entries implicitly.
+
+## 16. V0.1 Policy Boundary
+
+ProjectCookScope contains project identity/root/cooked-root facts derived from
+manifest mounts. V0.1 has no generic project settings panel or project renderer
+preset. Scene render intent and transient FPS/logging use their existing owners.
+ContentPipeline executes all cook/import/publication work; Projects cannot own
+that orchestration. Normal default project creation/authoring needs no manual
+manifest repair. Extra/local mounts follow the accepted layout validation rules;
+absolute local mounts are explicit nonportable dependencies.
+
+Saved file plumbing consumes immutable serialized snapshots from the authoring
+owner, coordinates per-destination writes, and preserves last valid source per
+documents-and-commands section 16. It does not infer scene revisions or authoring
+policy from runtime completion. ED-M07A qualifies integrity; ED-M07B consumes the
+project facts for safe publication and matched-build qualification.

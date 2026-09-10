@@ -49,9 +49,13 @@ Planning rules:
 4. Milestone validation is recorded once in `IMPLEMENTATION_STATUS.md`.
 5. If scope changes, update PRD/ARCHITECTURE/DESIGN before reshaping milestone
    work.
-6. V0.1 scope is the accepted LLD set. All V0.1 LLD gates must be implemented
-   and validated unless the user explicitly defers them. The only currently
-   deferred V0.1 feature is multi-viewport engine stability/support.
+6. PRD section 8 owns the V0.1 capability boundary; the linked LLD field and
+   interaction contracts define its details. Required gates execute under their
+   current owning milestones. Multi-viewport stability is the explicit deferral;
+   listed non-goals are exclusions, not permission to omit required fields.
+7. Previously recorded milestone status/evidence is retained. Identified missing
+   implementation or additional guarantees execute in named gap-closing
+   milestones; do not create a retrospective closure sweep.
 
 ## 3. Milestone Sequence
 
@@ -66,6 +70,8 @@ flowchart LR
     M06[ED-M06<br/>Assets and content browser]
     M06A[ED-M06A<br/>Game project layout and templates]
     M07[ED-M07<br/>Content pipeline]
+    M07A[ED-M07A<br/>Authoring integrity and runtime convergence]
+    M07B[ED-M07B<br/>Safe content publication and compatibility]
     M08[ED-M08<br/>Runtime parity and validation]
     M09[ED-M09<br/>Viewport authoring tools]
     M10[ED-M10<br/>V0.1 acceptance]
@@ -73,14 +79,14 @@ flowchart LR
     M00 --> M01
     M01 --> M03
     M02 --> M03
-    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M08 --> M09 --> M10
+    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M10
 ```
 
-`ED-M02` remains landed but not fully validated. Later authoring milestones may
-keep their own manual validation evidence separate from live-preview evidence
-until `ED-M02` is validated. `ED-M06A` is the next prerequisite before
-`ED-M07`; content pipeline work must not start on stale project layout or
-template assumptions.
+`ED-M02` still requires its recorded supported-viewport validation. The current
+execution sequence is ED-M07A -> ED-M07B -> ED-M08 -> ED-M09 -> ED-M10. Earlier
+milestones retain their delivery records; source-identified omissions execute
+in 07A/07B, with no new M04 closure action. Implementation can progress while
+ED-M02's evidence is collected, but M08 cannot close without that evidence.
 
 ## 4. Milestone Roadmap
 
@@ -95,6 +101,8 @@ template assumptions.
 | `ED-M06` | Asset identity and content browser | Source, generated, descriptor, cooked, missing, broken, and runtime-availability overlay states are visible and selectable by identity; authoritative mounted state is deferred to `ED-M07`. | `content-browser-asset-identity`, `asset-primitives`, `project-services`, `diagnostics-operation-results` | required before implementation |
 | `ED-M06A` | Game project layout and template standardization | Newly created projects, predefined templates, scene/material creation targets, content-root navigation, source-media placement, and derived-root presentation match the accepted game-project filesystem contract. | `project-layout-and-templates`, `project-services`, `project-workspace-shell`, `content-browser-asset-identity`, `material-editor`, `scene-authoring-model`, `diagnostics-operation-results` | required before implementation |
 | `ED-M07` | Content pipeline and cooking | Descriptor/manifest generation, cook, inspect, cooked validation, catalog refresh, and mount refresh work as explicit workflows. | `content-pipeline`, `project-services`, `asset-primitives`, `runtime-integration`, `diagnostics-operation-results` | required before implementation |
+| `ED-M07A` | Authoring integrity and runtime convergence | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence. | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync` | detailed plan exists |
+| `ED-M07B` | Safe content publication and compatibility | Saved input snapshots, staged/rollback-protected publication, required native descriptor mappings, matched builds and reproducible import work. | `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives` | detailed plan exists |
 | `ED-M08` | Runtime parity and standalone validation | A minimum authored content slice proves embedded preview, cooked output, mounted content, and standalone runtime load agree. | `standalone-runtime-validation`, `live-engine-sync`, `runtime-integration`, `content-pipeline`, `environment-authoring` | required before implementation |
 | `ED-M09` | Viewport authoring tools and overlays | Camera navigation, frame selected/all, selection highlight, transform gizmos, node icons, and overlays are usable in supported viewport layouts. | `viewport-and-tools`, `documents-and-commands`, `scene-explorer`, `runtime-integration` | required before implementation |
 | `ED-M10` | V0.1 acceptance | The full PRD V0.1 workflow completes end-to-end without manual repair. | all V0.1 LLDs | required before validation |
@@ -196,6 +204,10 @@ Exit gate:
 - Operation result presentation exists for command, save, and sync failures.
 
 ### ED-M04 - Scene Editing UX And Component Inspectors
+
+Delivery note: this is the original milestone scope. Its recorded status/evidence
+is preserved. Concrete missing implementation and evidence are assigned to
+ED-M07A and ED-M07B; no new execution or closure sweep occurs under ED-M04.
 
 Purpose: make the supported scene component set authorable through real UI,
 not hardcoded defaults or debug-only paths. Material asset authoring and
@@ -332,44 +344,45 @@ Exit gate:
 - Cook output validates before mount.
 - Cook, inspect, and mount failures produce visible operation results.
 
+### ED-M07A - Authoring Integrity And Runtime Convergence
+
+Purpose: close the source-identified inspector/property and authoring-integrity
+gaps in the [detailed plan](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
+This plan names existing working paths, missing behavior, file touch points and
+pass/fail cases; implementation starts with those fixes, not another audit.
+
+Exit gate: native background truth, gesture sessions, scoped field diagnostics,
+revision/lifetime-aware replay, scene/material save integrity and complete actual
+control/native evidence pass the six task gates. Earlier milestone evidence is
+retained; ED-M07A gets its own validation row.
+
+### ED-M07B - Safe Content Publication And Compatibility
+
+Purpose: close descriptor/publication/import/compatibility gaps in the
+[detailed plan](plan/ED-M07B-safe-content-publication-and-compatibility.md).
+
+Exit gate: saved dependency capture, staged validation, brief preview pause,
+rollback/recovery, PostProcess/Background native cook/load mapping, matched-build
+preflight and portable static/scalar import pass their specified failure cases.
+All four existing cook scopes expose honest freshness/publication results.
+
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Purpose: prove the minimum runtime parity slice before full V0.1 acceptance.
-The minimum slice is one geometry node, one scalar material, one camera, one
-directional light, and scene environment settings.
+Purpose: prove exact saved/published project content in embedded and standalone
+runtime using the PRD 100-node/1,000-entry qualification fixture and field suite.
+The one-mesh smoke scene is a development aid, not the complete acceptance gate.
 
-ED-M08 cannot start as a standalone-only validation exercise. It first requires
-all accepted non-deferred V0.1 LLD gates to be closed, especially reopened
-`property-inspector.md` and `environment-authoring.md` gates. Material
-assignment must affect the embedded runtime path, and scene environment systems
-must be editable through the UI. Multi-viewport remains the only deferred
-feature.
+Prerequisites: ED-M07A/07B validated and ED-M02 supported-viewport evidence.
+ED-M09 tool completion is not a prerequisite. Required LLDs are property-pipeline,
+standalone-runtime-validation, live-engine-sync, runtime-integration,
+content-pipeline and environment-authoring. The
+[detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns the
+exact-request RenderScene entry point, observations/captures and comparisons.
 
-LLD work:
-
-- `standalone-runtime-validation.md` is reviewed in detail.
-- `live-engine-sync.md` is reviewed for V0.1 component/material/environment
-  coverage.
-- `runtime-integration.md` is re-reviewed for mount and runtime-state evidence.
-- `environment-authoring.md` is reviewed for runtime parity of atmosphere,
-  exposure, tone mapping, and lighting.
-
-ED-M08 owns embedded/standalone agreement for authored components, asset
-references, and environment settings after validated mount. ED-M07 cook success
-or an unsupported-field warning is not proof of that agreement. The standalone
-LLD and detailed ED-M08 plan still need their required review before
-implementation.
-
-Exit gate:
-
-- All non-deferred V0.1 LLD gates needed by the minimum slice are implemented;
-  no requirement is silently dropped or treated as optional.
-- Embedded preview renders the minimum authored content slice.
-- Cooked output for the minimum slice loads in standalone runtime.
-- Expected geometry, material, camera, directional light, atmosphere, exposure,
-  and tone mapping are present within documented tolerance.
-- Failures identify cooked output, asset resolution, runtime load, sync, or
-  parity mismatch.
+Exit gate: exact project/scene loading, every required field's semantic parity,
+controlled static/auto-exposure image cases, precise failure/cancel/timeout
+behavior and output leasing pass the standalone LLD's fixed criteria. No
+unsupported required field or native exit-success shortcut closes this gate.
 
 ### ED-M09 - Viewport Authoring Tools And Overlays
 
@@ -381,10 +394,9 @@ LLD work:
 - `viewport-and-tools.md` is reviewed in detail.
 - `documents-and-commands.md` provides selection and transform command
   behavior.
-- Its section 15 also assigns expansion of validation invalidation to
-  ED-M04/ED-M09. ED-M09 LLD review must define its viewport/tool contribution
-  and carry forward the incremental-validation performance risk. This does
-  not add a validation dashboard to V0.1 scope.
+- Viewport tools consume ED-M07A.3 scoped field diagnostics and the canonical
+  property sessions; no separate validation model or open invalidation design
+  remains. Viewport-and-tools section 16 fixes the interaction and failure rules.
 - `scene-explorer.md` provides hierarchy/selection coordination.
 - `runtime-integration.md` is re-reviewed for input bridge and frame-phase
   constraints.
@@ -404,8 +416,8 @@ Purpose: close the full V0.1 workflow in product terms.
 LLD work:
 
 - All V0.1 LLDs have been reviewed or explicitly marked as not gating V0.1.
-- Any residual open issue is either resolved or moved out of V0.1 by PRD/design
-  decision.
+- The scope decisions are fixed in PRD sections 8-10. Required implementation
+  and validation failures remain release blockers until fixed; no silent deferral.
 
 Exit gate:
 
@@ -417,6 +429,8 @@ Exit gate:
 - Generate descriptors/manifests.
 - Cook, inspect, refresh, and mount output.
 - Load cooked scene in standalone runtime.
+- Pass the matched-build, 100-node/1,000-entry workload, save/cook failure,
+  clean-copy reproduction and lifecycle/performance cases in the ED-M10 plan.
 - Record final `SUCCESS-XXX` validation evidence in
   `IMPLEMENTATION_STATUS.md`.
 
@@ -430,6 +444,7 @@ Exit gate:
 | `documents-and-commands.md` | `ED-M03` | Gating LLD for authoring foundation and selection model. |
 | `scene-authoring-model.md` | `ED-M03` | Gating LLD for component persistence and authoring source of truth. |
 | `scene-explorer.md` | `ED-M03` | Gating LLD for hierarchy and selection behavior. |
+| `property-pipeline.md` | `ED-M07A` | Canonical property identity, revision/history, session, field diagnostic and convergence contract. |
 | `property-inspector.md` | `ED-M04` | Gating LLD for component editor implementation. |
 | `environment-authoring.md` | `ED-M04` | Needed before environment and parity work. |
 | `settings-architecture.md` | `ED-M04` | Scaffold reviewed for project settings in `ED-M01`; detailed review in `ED-M04`; re-reviewed in `ED-M07` for project cook scope and content-root settings. |
@@ -484,6 +499,11 @@ Active milestone plans:
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` |
+| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` |
+| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` |
+| [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` |
 
 ## 8. Milestone Closure
 

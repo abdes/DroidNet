@@ -32,9 +32,9 @@ these rules:
    authoring data.
 4. The embedded live engine is a runtime projection of editor-authored data,
    not the source of truth.
-5. New V0.1 editor features must close end-to-end: UI, view model, authoring
-   model, command path, persistence, live sync where supported, cook/runtime
-   behavior where applicable, and operation result handling.
+5. Required V0.1 capabilities close end-to-end according to PRD section 8:
+   authoring, commands, persistence, live projection, cooked runtime behavior,
+   and operation results. A missing required engine API is unfinished work.
 6. Runtime integration must use the managed runtime boundary. Manual file
    repair workflows and editor-owned copies of engine runtime systems are
    outside the target architecture.
@@ -58,6 +58,7 @@ these rules:
 - [15. Requirements Traceability](#15-requirements-traceability)
 - [16. Extension Model](#16-extension-model)
 - [17. Architectural Governance](#17-architectural-governance)
+- [18. V0.1 Guarantees](#18-v01-revision-publication-and-compatibility-guarantees)
 
 ## 1. Purpose and Scope
 
@@ -156,7 +157,7 @@ flowchart TB
     WS --> UI
     UI --> Commands
     Commands --> World
-    World --> Pipeline
+    Commands --> Pipeline
     CB --> Pipeline
     Pipeline --> Cooked
     WS --> Runtime
@@ -362,15 +363,17 @@ flowchart TB
     Workspace --> FeatureUI
     FeatureUI --> AppServices
     AppServices --> Domains
-    Domains --> Pipeline
+    AppServices --> Pipeline
+    AppServices --> Runtime
     Pipeline --> Runtime
     Runtime --> Interop
     Interop --> Engine
 ```
 
-The target dependency direction is downward or through an explicitly documented
-runtime boundary. Lower layers must not depend on workspace, inspector,
-content-browser, or shell implementation details.
+The concrete dependency graph in section 14 is authoritative. Application
+services orchestrate domain, pipeline, and runtime collaborators; domain models
+do not depend on pipeline or UI implementations. Lower layers must not depend
+on workspace, inspector, content-browser, or shell implementation details.
 
 ## 6. Module Ownership
 
@@ -387,6 +390,8 @@ template payload mechanics belong in LLDs that implement this contract.
 | `Oxygen.Editor.Routing` | editor-specific route glue | route helpers and editor route integration contracts | feature state or workflow policy |
 | `Oxygen.Editor.ProjectBrowser` | no-project/startup UX | recent projects, templates, create/open flow, invalid project states, transition to workspace | project persistence rules, scene editing, content browsing inside workspace |
 | `Oxygen.Editor.Documents` | generic document abstractions | shared document contracts, document identity, document lifecycle primitives | world-specific document behavior |
+| `Oxygen.Editor.Schemas` | shared property mechanics | schema/overlay catalog, typed edits, mixed values, snapshots, reusable apply/session mechanics | feature policy, WinUI, runtime lifecycle, native calls, cooked binary offsets |
+| `Oxygen.Managed.Core` | shared non-UI contracts | operation-result and diagnostic primitives | workflow orchestration, runtime execution, UI |
 | `Oxygen.Editor.World` | scene authoring domain | scenes, nodes, components, scene serialization, scene-owned settings, authoring references | WinUI, routing, docking, runtime handles, native interop, cook execution |
 | `Oxygen.Editor.WorldEditor` | open scene workspace feature | scene documents, hierarchy, inspector, viewport UI, commands, selection, validation presentation, scene-engine sync orchestration | native calls directly from VMs, reusable asset/cook primitives, project-wide cook policy |
 | `Oxygen.Editor.MaterialEditor` | planned material editor feature | material documents, material inspector/tools, material preview UI, material validation presentation | reusable asset/cook primitives, native engine calls, project policy |
@@ -442,8 +447,10 @@ Architectural requirements:
 - Project Browser remains the startup route.
 - Workspace restoration happens after a project is open.
 - Partial restoration failures must be visible.
-- Engine startup may be eager or lazy by implementation decision, but runtime
-  state must be explicit at the managed runtime boundary.
+- Workspace activation is the first normal engine startup trigger. Process
+  discovery/compatibility checks do not start the engine or prevent Project
+  Browser visibility. Native work is disabled visibly until the matched build
+  is available; safe authoring/save is independent of native availability.
 
 ### 8.2 Scene Load
 
@@ -646,7 +653,7 @@ domain
   -> persistence
   -> command mutation
   -> editor UI
-  -> live sync where supported
+  -> live projection per the PRD capability matrix
   -> cook/runtime behavior where applicable
   -> operation results/diagnostics
 ```
@@ -667,7 +674,7 @@ support:
 - assignment to geometry
 - save/reopen
 - cook
-- embedded preview where engine APIs support it
+- embedded preview after explicit Save/Cook publication
 - standalone runtime load
 
 Texture authoring, material graphs, and complex texture workflows are outside
@@ -848,11 +855,12 @@ V0.1 live sync must cover the supported authoring surface:
 - geometry attachment/detachment
 - perspective camera attachment and camera parameters
 - directional light attachment and parameters
-- material assignment/override where supported by engine APIs
+- material assignment/override against validated published assets
 - environment settings required by V0.1
 
-Unsupported sync must surface as a visible result or diagnostic when triggered
-by user workflow.
+Unsupported sync must surface visibly and blocks release of a required field.
+The property-pipeline LLD owns revision-aware offline synchronization and
+reconnect; queued work is scoped to a document lifetime and scene identity.
 
 ### 11.5 Viewport UX Boundary
 
@@ -984,6 +992,7 @@ flowchart TB
     Routing[Oxygen.Editor.Routing]
     PB[Oxygen.Editor.ProjectBrowser]
     Docs[Oxygen.Editor.Documents]
+    Schemas[Oxygen.Editor.Schemas]
     WorldEditor[Oxygen.Editor.WorldEditor]
     MaterialEditor[Oxygen.Editor.MaterialEditor]
     PhysicsEditor[Oxygen.Editor.PhysicsEditor]
@@ -1008,6 +1017,7 @@ flowchart TB
     WorldEditor --> UI
     WorldEditor --> Routing
     WorldEditor --> Docs
+    WorldEditor --> Schemas
     WorldEditor --> World
     WorldEditor --> ContentBrowser
     WorldEditor --> Projects
@@ -1015,6 +1025,7 @@ flowchart TB
     WorldEditor --> Runtime
     MaterialEditor --> UI
     MaterialEditor --> Docs
+    MaterialEditor --> Schemas
     MaterialEditor --> Assets
     MaterialEditor --> Pipeline
     MaterialEditor --> Runtime
@@ -1059,6 +1070,7 @@ contract package or inversion point rather than creating a compile-time cycle.
 | `ContentPipeline` | `Projects` | project identity, authored roots, and cook-scope facts |
 | `ContentPipeline` | `Assets` | reusable asset/cook primitives |
 | `ContentPipeline` | `Interop` | native cooker/content tool adapters |
+| scene/material command owners | `Schemas` | shared property identity, validation, snapshots, and sessions |
 | `Runtime` | `Interop` | embedded engine lifecycle, surfaces, views, mounts |
 | `Interop` | Oxygen Engine editor interface | native engine capabilities |
 
@@ -1077,6 +1089,7 @@ contract package or inversion point rather than creating a compile-time cycle.
 | `Interop` -> editor policy modules | native bridge exposes capabilities, not policy |
 | `Assets` -> editor UI or runtime modules | asset primitives must remain reusable |
 | `Storage` -> asset/editor/project modules | storage remains a primitive layer |
+| `Schemas` -> feature UI, `Runtime`, `Interop`, cooked binary layouts | property mechanics cannot own workflow policy or native encodings |
 
 ## 15. Requirements Traceability
 
@@ -1104,7 +1117,7 @@ domain model
   -> command mutations
   -> editor UI and property fields
   -> validation/operation results
-  -> live sync adapter where supported
+  -> live sync adapter for runtime-facing authoring
   -> descriptor/manifest contribution where applicable
   -> cook/runtime validation where applicable
 ```
@@ -1146,3 +1159,32 @@ Architectural drift must not be hidden behind working demos. If a path works
 only because of manual file repair, raw cooked path entry, direct native calls
 from UI, log-only error discovery, or editor-only runtime copies, it is not the
 target architecture.
+
+## 18. V0.1 Revision, Publication, And Compatibility Guarantees
+
+PRD sections 8-10 define capability and qualification scope. The property,
+document, content-pipeline, runtime, and standalone LLDs implement these rules:
+
+1. Authoring commit/revision is synchronous with model changes. Save acknowledges
+   its coherent captured revision; newer edits remain dirty. Atomic replacement
+   preserves the last valid save. External modification is a conflict. Crash
+   recovery is limited to explicit Save; V0.1 has no autosave promise.
+2. One cook writer per project snapshots saved inputs and hashes, writes private
+   staging output, and validates before publication. Authoring may continue;
+   later edits mark the successful captured cook stale.
+3. Publication briefly pauses preview, drains affected runtime reads, replaces
+   fixed cooked roots with rollback output retained, then mounts and resumes.
+   Failure restores the prior validated output or leaves preview explicitly
+   unavailable with recoverable output retained. Partial publication is never
+   reported current. See content-pipeline section 16 for the transaction.
+4. Async results carry project/document lifetime and operation identity. Stale
+   completion cannot replace a later scene, project, or cook publication.
+5. One scene is live at a time. Activation synchronizes its current snapshot;
+   old queues/handles cannot cross scene or document lifetimes.
+6. Editor/runtime/cooker/schema artifacts form one matched build. Incompatibility
+   is detected before native calls; safe source authoring remains accessible.
+   Standalone proof identifies the exact published project output and never
+   relies on developer-local example content or hidden restored settings.
+
+These are design guarantees, not claims of implementation. Their evidence and
+remaining work are recorded in IMPLEMENTATION_STATUS and owning milestone plans.

@@ -7,7 +7,7 @@ Status: `ED-M05 implementation-ready`
 Define the V0.1 scalar material editor baseline: material asset identity,
 material documents, scalar PBR property editing, descriptor persistence, content
 browser selection, assignment to geometry, minimum cook, and embedded preview
-where engine APIs support it.
+after explicit successful Save/Cook publication.
 
 This LLD is not an ED-M04 implementation gate. ED-M04 only creates the Geometry
 material assignment slot and leaves a clean handoff into this ED-M05 workflow.
@@ -388,9 +388,9 @@ ED-M05 does not introduce a managed material preview API. Preview is:
 2. **In the scene**: the slot assignment is recorded in scene data and the
    geometry material slot sync maps the descriptor URI to the cooked `.omat`
    virtual path before queuing the runtime material override. The editor does
-   not force a cook or mount refresh from assignment; if the material is not
-   mounted yet, authoring remains valid and the native command logs the runtime
-   load failure.
+   not force a cook from assignment. If the material is not published/mounted,
+   authoring remains valid and the scene shows a pending/missing-material state
+   with a visible operation diagnostic; logs alone are insufficient.
 
 No engine cooked-root remount is forced from the material editor. The user
 triggers cook explicitly; project-level mount/refresh is owned by
@@ -458,11 +458,40 @@ Forbidden:
 7. No code path in `Oxygen.Editor.MaterialEditor` calls
    `OxygenWorld`, `IEngineService`, or `ISceneEngineSync` directly.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Whether the deterministic swatch is later replaced by an embedded material
-  preview view once runtime APIs mature. ED-M05 uses the deterministic swatch.
-- Whether imported texture refs get first-class pickers after V0.1. ED-M05
-  preserves them and shows them read-only.
-- Whether any ED-M05 material-authoring need genuinely requires augmenting
-  `oxygen.material.v1`; default assumption is no.
+Keep the deterministic CPU swatch, visibly labeled approximate. Runtime material
+updates require explicit Save/Cook publication. Existing texture references are
+preserved read-only; first-class texture pickers/authoring are excluded. Reuse
+the engine material descriptor schema; no parallel editor material schema is
+introduced. Required missing native field support is an implementation task in
+ED-M07B, never an unresolved choice or permission to omit a V0.1 field.
+
+## 16. V0.1 Property, Save, And Preview Contract
+
+[property-pipeline.md](./property-pipeline.md) owns shared property identity,
+validation, apply/history and edit-session mechanics. Material service entry
+points implement that contract; typed scalar record adapters cannot create a
+second history or persistence path. Scene-specific target logic stays outside
+Schemas.
+
+[documents-and-commands.md section 16](./documents-and-commands.md#16-v01-authoring-integrity-qualification)
+applies to material saves: coherent captured revision, serialized writes, newer
+edits remain dirty, atomic replacement and conflict handling. The source model
+is never replaced by an older successful save. These gaps are qualified in
+ED-M07A, independently of the earlier ED-M05 evidence and issue-fix tests.
+
+The material swatch updates immediately and is labeled as an approximation.
+The embedded scene uses the last validated published material. Editing the
+source marks its scene use stale and offers the existing Save/Cook workflow.
+After explicit save and successful publication, all instances using that material
+identity refresh without restarting the editor. Assigning an unpublished material
+preserves identity, reports pending/missing runtime content visibly, and offers
+Cook; it must not pretend the current source is rendered. Offline publication
+records NotMounted and converges on activation. No automatic save/cook is added.
+
+The fixed-root publication transaction, including material-only cook, is owned
+by ContentPipeline section 16 and qualified in ED-M07B. All editable V0.1 scalar
+fields and flags must load/render with their saved values. Read-only existing
+texture references are preserved but not claimed as newly qualified texture
+creation/import. ED-M08 proves the actual runtime material, not the CPU swatch.

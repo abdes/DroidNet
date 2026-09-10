@@ -1,105 +1,230 @@
 # Standalone Runtime Validation LLD
 
-Status: `scaffold`
+Status: `V0.1 design contract; ED-M08 implementation and validation pending`
 
 ## 1. Purpose
 
-Define how V0.1 cooked output is launched or loaded by standalone runtime code
-to prove that editor-authored scenes are real Oxygen runtime products.
+Prove that the exact saved/published Oxygen Editor project scene loads through
+native runtime content APIs and renders the same authored content as embedded
+preview. Validation is read-only for authored and published files.
 
 ## 2. PRD Traceability
 
-- `GOAL-001`
-- `REQ-018`
-- `REQ-022`
-- `REQ-023`
-- `REQ-024`
-- `REQ-030`
-- `REQ-037`
-- `SUCCESS-001`
-- `SUCCESS-004`
-- `SUCCESS-006`
+`GOAL-001`, `GOAL-003`, `REQ-018`, `REQ-019`, `REQ-022` through `REQ-026`,
+`REQ-030`, `REQ-037`, `REQ-039` through `REQ-042`; `SUCCESS-001`,
+`SUCCESS-003`, `SUCCESS-004`, `SUCCESS-006`.
 
 ## 3. Architecture Links
 
-- `ARCHITECTURE.md` sections 2.1, 8.6, 12, 13, 15
+- [runtime-integration.md](./runtime-integration.md): scene/view completion,
+  qualification, published-root leases, and capture boundary.
+- [content-pipeline.md](./content-pipeline.md): immutable input snapshot,
+  staged validation, publication metadata and output transaction.
+- [environment-authoring.md](./environment-authoring.md): authored field semantics.
+- [property-pipeline.md](./property-pipeline.md): current-revision live projection.
+- [PRD.md](../PRD.md) sections 8-10: scope, workload, and release acceptance.
 
-## 4. Current Baseline
+## 4. Source Baseline
 
-To be reviewed against current standalone engine examples, cooked scene load
-paths, launch tooling, and validation logs.
+RenderScene already uses the engine AssetLoader and scene instantiation path.
+Its existing `--scene` startup override searches checked-in example content and
+accepts fuzzy names. That is not a sufficient editor-project validation entry
+point. The exact request, observations, and capture/report contract below must
+be implemented and validated in ED-M08; this LLD does not claim those options
+or artifacts exist today.
 
-## 5. Target Design
+## 5. Target Workflow
 
-Standalone validation consumes cooked output and verifies that expected V0.1
-authored content loads in a standalone engine context without manual file
-repair.
+1. Save participating documents explicitly and publish a successful cook.
+2. Select `Validate in Standalone` for the active scene from its existing scene
+   command/menu surface. The managed workflow rejects dirty dependencies,
+   uncommitted publication journals, missing output, and build/schema mismatch.
+3. Acquire a read lease on the published project output. Capture expected state
+   from the saved authoring/descriptor snapshot associated with that publication,
+   plus its URI-to-cooked-node/asset mapping. Do not derive expectations from
+   whatever the live runtime happens to contain.
+4. Synchronize embedded preview to that saved revision, select the authored
+   validation camera, disable editor overlays, and capture observed state/image.
+   Restore editor navigation/view settings after validation; do not save them.
+5. Launch the matched RenderScene executable with an exact validation request.
+   It mounts only the requested roots, loads exactly the requested scene, applies
+   the controlled profile, and writes native observed-state and capture artifacts.
+6. Compare both observations to expected authored semantics and compare the
+   controlled images. Publish a structured result with artifact paths.
+7. Release the output lease after the child process exits and all reads finish.
+   New edits during validation remain dirty and mark the result as applying to
+   the older saved revision; they cannot be cleared by validation completion.
 
 ## 6. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
-| `Oxygen.Editor.ContentPipeline` | cooked output and manifest/index validation before launch |
-| standalone validation harness | launch/load and expected-content checks |
-| `diagnostics-operation-results.md` | visible result and failure-domain mapping |
+| WorldEditor scene command | User entry point and active-document context. |
+| ContentPipeline managed validation coordinator | Preflight, expected-state/request generation, output lease, matched tool discovery, process lifetime, comparison and result publication. |
+| Runtime | Embedded observed state/capture via stable managed engine capabilities; view restoration. |
+| RenderScene / reusable DemoShell loader code | Exact-root native loading, native observations, controlled rendering, process result. |
+| Engine | Asset/scene interpretation, rendering and supported capture APIs; editor code never reads raw PAK offsets. |
 
-## 7. Data Contracts
+No new standalone authoring domain or generic validation dashboard is introduced.
+The native validation entry point is implemented in RenderScene, not an editor
+copy of runtime loading/rendering.
 
-To define:
+## 7. Request And Result Contracts
 
-- standalone validation request
-- expected scene content summary
-- launch/load result
-- parity evidence
-- validation failure domain
+ED-M08 adds the required CLI entry point:
 
-## 8. Commands, Services, Or Adapters
+```text
+Oxygen.Examples.RenderScene.exe --editor-validation-request <absolute-request.json>
+```
 
-To define:
+This is a target CLI contract, not an existing supported invocation. The request
+is versioned JSON with these required fields:
 
-- launch standalone runtime
-- load cooked scene
-- collect runtime summary
-- compare expected content
-- publish validation result
+| Field | Meaning |
+| --- | --- |
+| `request_version` | Exactly 1; other versions fail before loading. |
+| `operation_id`, `project_id` | Stable correlation and project identity. |
+| `publication_id` | Successfully committed cook operation identity. |
+| `build_fingerprint` | Editor/native/tool/schema hashes and build configuration. |
+| `roots` | Ordered absolute cooked-root paths, mount names, index hashes; exact allowlist. |
+| `scene_virtual_path`, `scene_asset_key` | Exact scene identity; both must resolve to the same cooked asset. No substring/stem fallback. |
+| `expected_state_path`, `expected_state_hash` | Saved authoring/descriptor expectation and identity mapping. |
+| `profile` | Camera identity, resolution, fixed timestep, seed, exposure/render settings and warm-up/capture frames. |
+| `artifact_directory` | Operation-owned output directory outside authored content. |
 
-## 9. UI Surfaces
+Expected state contains node hierarchy and source-to-cooked identity mapping,
+transforms, geometry/material resolutions, all editable camera/light fields,
+material values, and environment/post-process values. Native observed state
+comes from loaded scene/assets and effective scene systems, not by echoing the
+request or reading editor JSON as runtime truth.
 
-To define:
+Artifacts: `request.json`, `expected-state.json`, `embedded-observed.json`,
+`standalone-observed.json`, `embedded.png`, `standalone.png`, `comparison.json`,
+`result.json`, and correlated logs under `.oxygen/validation/<OperationId>`.
+Results identify phase, status, diagnostic codes, mismatch JSON pointers,
+maximum errors, image metrics, captured revision/publication/build identities,
+and artifact hashes. The result file is finalized atomically after writes.
 
-- validation command surface
-- validation result summary
-- technical details/log correlation
+Process exit codes: 0 only when load, observation and requested captures finish;
+2 for request/compatibility failure; 3 for load/runtime failure; 4 for observation/
+capture failure; 5 for cancellation. A native exit 0 alone is not parity success:
+the managed comparison must also pass and verify complete artifact identities.
+
+## 8. Controlled Profile And Comparison
+
+The base fixture is the PRD's 100-node / 1,000-entry project. A smaller smoke
+scene may aid development but cannot replace release qualification. Use an
+explicit authored PerspectiveCamera and its full transform/FOV/near/far values,
+1920x1080 output, matched Release artifacts, conventional directional shadows,
+fixed 1/60-second simulation steps, random seed 0 where randomness is present,
+and no editor-only overlays, debug shading, capture-provider overlays, restored
+example scene, or synthetic replacement sun/material.
+
+Reset scene/render histories before each controlled run. The base fixture is authored with manual exposure EV 9.7 and ACES fitted tone
+mapping. Its static comparison preserves those authored settings; warm up 120
+scene frames and capture frame 120 in each process. An arbitrary selected scene
+retains its saved environment values; use the auto-exposure protocol for its
+auto mode rather than overriding authored settings to obtain a passing image.
+Record the effective setting snapshot so hidden CVar/startup overrides cannot
+explain a mismatch. Restore the user's view afterward without dirtying assets.
+
+Semantic tolerances:
+
+- IDs, references, hierarchy, enums, booleans and array membership: exact.
+- Floating scalars/vectors: absolute error <= 1e-4 or relative error <= 1e-4.
+- Quaternion orientation: angular difference <= 0.01 degree, accounting for
+  equivalent opposite-sign quaternions.
+- Every required field is compared, including values not visually obvious in
+  the base fixture. Missing observations or unsupported fields fail the gate.
+
+Image comparison uses normalized sRGB RGB channels after identical output
+conversion: whole-image RMSE <= 0.01 and 99th-percentile absolute channel error
+<= 0.03. Only the outermost one-pixel border is excluded; no content-dependent
+mask, automatic rebaseline, or omission of failed geometry is permitted. Keep
+both original images and metrics for user inspection.
+
+A field-coverage suite changes every editable camera/light/environment/material
+field through editor UI or the same command service, saves, cooks, loads, and
+compares semantic values. Camera framing and representative geometry/material/
+lighting/atmosphere changes also have visible before/after checks. Test all
+supported tone mapper and exposure modes. Auto-exposure cases reset history and
+compare effective exposure at scene frames 120, 240, and 600 within 0.05 EV,
+using the same luminance input/profile; static-image manual-exposure success
+cannot substitute for this behavior. Each case states the affected field and
+expected effect before running.
+
+Thresholds and profiles are acceptance decisions, not claims about current
+results. A failed run is fixed or requires an explicit design change; it is not
+made green by silently relaxing thresholds or choosing different scenes.
+
+## 9. UI And Process Behavior
+
+Camera selection uses the selected authored PerspectiveCamera, otherwise the
+sole authored perspective camera. If several exist, the action requires an
+explicit camera choice; if none exists, it asks the user to create one. No
+implicit editor-navigation camera is used as authored camera truth.
+
+The scene's `Validate in Standalone` action is enabled for a saved scene with
+validated published dependencies and matched tooling. Preflight explains any
+blocking condition with a direct action such as Save or Cook. While running,
+show the phase and Cancel; keep authoring responsive and report the snapshot
+revision being validated. Success/failure uses existing operation/output surfaces
+with copyable artifact paths. There is no additional validation-center panel.
+
+Use structured process arguments, an operation-owned working directory, and no
+shell command concatenation. Cancellation stops only the launched validation
+child, waits for termination and I/O drain, then releases its output lease.
+A 120-second process timeout is a visible validation failure, not a pass or an
+infinite engine-frame wait. Failure must not change the author's scene or saved
+files. No fallback to example content, another camera, or another engine build.
 
 ## 10. Persistence And Round Trip
 
-Standalone validation does not mutate authoring data. It records evidence for
-the current cooked output.
+Request/results/captures are local derived evidence under `.oxygen`; they are
+not authored scene content. Publication and source hashes make evidence
+reproducible. The coordinator holds the output lease until native reads finish,
+so another cook cannot replace roots mid-validation. Evidence from a different
+publication or edited source remains historical and cannot close the current gate.
 
-## 11. Live Sync / Cook / Runtime Behavior
+## 11. Runtime Boundaries
 
-Standalone validation runs after cook validation. It is separate from embedded
-live preview and must not use live editor runtime state as proof.
+Native validation uses the engine AssetLoader, scene instantiation, and renderer.
+Embedded capture passes through Runtime/Interop stable capabilities. Headless
+loading may prove semantic checks, but a headless/null-renderer run cannot prove
+visual parity. The target CLI accepts arbitrary qualified project output; users
+never copy their scene into the engine examples directory.
 
-## 12. Operation Results And Diagnostics
+## 12. Diagnostics
 
-Failures must identify whether the issue is cooked output, asset resolution,
-runtime load, expected-content mismatch, or launch environment.
+Distinguish request/schema/build mismatch, missing output, bad index, unresolved
+asset, unsupported required field, load failure, observation failure, capture
+failure, semantic mismatch, image mismatch, timeout, and cancellation. Report
+partial artifacts on failure. Logs support the result and do not replace it.
 
-## 13. Dependency Rules
+## 13. Dependencies
 
-The validation harness consumes cooked output and runtime launch capabilities.
-It must not depend on WorldEditor UI internals.
+ContentPipeline reads project/document/publication contracts. RenderScene reads
+only the request, expected identity mapping, and cooked output through engine
+APIs; it has no WorldEditor/WinUI dependency. Expected-state generation is an
+editor adapter, not engine authoring policy.
 
-## 14. Validation Gates
+## 14. ED-M08 Validation Gates
 
-To define:
+- [ ] Exact project-root/scene requests work without checked-in example content,
+  name matching, persisted UI selection, or default-camera/sun substitutions.
+- [ ] Mismatched artifacts/requests fail before unsafe native loading.
+- [ ] Every required field passes saved/cooked/observed semantic comparisons.
+- [ ] Controlled static and auto-exposure/field-coverage visual cases pass.
+- [ ] Missing assets, invalid index, wrong root/scene, unsupported fields, stale
+  publication, cancellation, timeout and child crash produce precise failures.
+- [ ] Output leasing blocks replacement during native reads and is released on
+  all terminal paths; authoring and saved files remain unchanged.
+- [ ] User review of the qualification artifacts is recorded once in the ED-M08
+  ledger row; native exit success alone never closes parity.
 
-- cooked scene launches
-- expected geometry/material/camera/light/environment summary matches
-- failures produce operation result and logs
+## 15. Scope Decisions
 
-## 15. Open Issues
-
-- Whether validation is launched from editor UI, command line, or both.
-- Exact runtime summary format.
+The user entry point is editor UI; execution uses the specified exact-request
+RenderScene CLI. The request/result format, comparison profile, error tolerances,
+artifact ownership and gates are decided above. Implementation is pending and
+owned by the ED-M08 plan; no design placeholder authorizes a shortcut.

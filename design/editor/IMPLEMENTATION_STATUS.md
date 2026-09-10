@@ -32,66 +32,27 @@ Rules for this file:
 
 ## 2. Current Focus
 
-Current program target: **Oxygen Editor V0.1**.
+Current program target: **Oxygen Editor V0.1**, with the closed capability/UI,
+explicit-Save recovery, publication-pause and small-project qualification choices
+in PRD sections 8-10.
 
-Current execution focus:
+Current execution:
 
-- [x] Prepare `ED-M01` by reviewing `project-workspace-shell.md`,
-      `project-services.md`, and `diagnostics-operation-results.md`.
-- [x] Implement and validate `ED-M01` from
-      [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md).
-- [x] Review `ED-M02` LLDs and detailed plan, then implement live viewport
-      stabilization for the single live viewport path, sane camera framing,
-      native runtime discovery, and runtime settings.
-- [x] Defer multi-viewport stability out of `ED-M02`; later engine
-      multi-surface/multi-view work must own it.
-- [ ] Validate `ED-M02` manually with the supported single live viewport,
-      correct surface presentation, cooked-root warning behavior, runtime
-      settings, and camera preset failure handling.
-- [x] Draft `ED-M03` required LLDs and detailed implementation plan for
-      review.
-- [x] Land `ED-M03` authoring foundation implementation and targeted test
-      validation.
-- [x] Validate `ED-M03` manually for quick-add, selection, dirty/save,
-      undo/redo, save/reopen, and visible diagnostics.
-- [x] Record the earlier partial `ED-M04` inspector implementation and manual
-      validation evidence. The milestone remains reopened as recorded below;
-      this item does not close all supported V0.1 component/environment gates.
-- [x] Land `ED-M05` scalar material authoring implementation and corrective
-      UX/content-root pass.
-- [x] Validate `ED-M05` formally and record the validation ledger row.
-- [x] Review and remediate `ED-M06` LLDs for Asset Identity and Content
-      Browser before any ED-M06 implementation starts.
-- [x] Review the detailed `ED-M06` implementation plan before any ED-M06
-      implementation starts.
-- [x] Add and review the game-project filesystem architecture contract and
-      `project-layout-and-templates.md` LLD.
-- [x] Add detailed `ED-M06A` planning for game project layout and template
-      standardization before content pipeline work.
-- [x] Review the detailed `ED-M06A` implementation plan before source changes.
-- [x] Implement `ED-M06A` project layout, predefined template, project
-      creation, scene/material target, Content Browser root, and picker
-      filtering corrections.
-- [x] Validate `ED-M06A` manually before resuming `ED-M07`.
-- [x] Implement and manually validate `ED-M07` content pipeline and cooking.
-- [ ] Close every non-deferred V0.1 LLD gate before V0.1 acceptance. The only
-      deferred V0.1 feature is multi-viewport engine stability/support, by
-      explicit user decision. Current reopened gates include
-      `property-inspector` and `environment-authoring`, and any additional LLD
-      gate discovered during audit must be implemented rather than silently
-      narrowed.
+1. Collect the already-pending ED-M02 supported single-viewport evidence.
+2. Execute [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md):
+   source-identified background, gesture, inline-result, replay-lifetime and
+   save-integrity fixes, followed by the listed control/native validation cases.
+3. Execute [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md):
+   saved input/staging/publication/recovery, required native descriptor mappings,
+   matched-build and portable-import guarantees.
+4. Continue through the exact ED-M08 parity, ED-M09 interaction and ED-M10 release
+   qualification plans. No later milestone is an entry dependency of an earlier one.
 
-`ED-M02` may close in parallel with `ED-M03` LLD review and detailed planning.
-`ED-M03` implementation may not rely on live preview as validation evidence
-until `ED-M02` is `validated`.
-
-Current resume point:
-
-1. Validate or record the supported single live viewport behavior for `ED-M02`.
-2. Audit the accepted V0.1 LLDs and complete every non-deferred gate before
-   `ED-M08` parity closure. Do not reinterpret or simplify scope; only
-   multi-viewport remains deferred.
-3. Keep this ledger synchronized whenever a milestone or detailed plan changes.
+Previously recorded milestone statuses and evidence are preserved. No new
+implementation or closure sweep is assigned to M04. Its identified omissions
+and missing evidence are concrete tasks in ED-M07A; downstream descriptor gaps
+are ED-M07B. Concurrent save-revision fixes contribute only after they land and
+supply the relevant proof; they do not automatically advance any milestone.
 
 ## 3. Milestone Tracker
 
@@ -296,10 +257,10 @@ Trace: `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-005`, `REQ-007`,
 `REQ-008`, `REQ-009`, `REQ-022`, `REQ-024`, `REQ-026`, `REQ-037`;
 `SUCCESS-002`, `SUCCESS-003`, `SUCCESS-004`
 
-Outcome: command/data support for V0.1 scene components is landed, but the
-visible inspector closure is reopened because accepted `property-inspector` and
-`environment-authoring` gates were not fully implemented. All non-deferred gates
-from those LLDs remain in scope; only multi-viewport is deferred.
+Delivery record: the original command/data and inspector work has the recorded
+status and partial evidence below. Its implementation omissions are identified
+from source in ED-M07A; native descriptor omissions are in ED-M07B. All required
+V0.1 behavior is retained. No new work is assigned to an M04 closure sweep.
 
 - [x] Required LLDs are reviewed:
       `property-inspector`, `environment-authoring`, `settings-architecture`,
@@ -328,29 +289,14 @@ from those LLDs remain in scope; only multi-viewport is deferred.
       direct interop.
 - [x] Inspector host view models route ED-M04-supported fields through the
       command service instead of direct mutation.
-- [ ] Component inspector UI covers Transform, Geometry, PerspectiveCamera,
-      DirectionalLight, Environment, and material slot editing end to end.
 - [x] Component edits persist through save/reopen from the migrated inspector
       UI.
-- [ ] Scene-level Environment editing is reachable from empty selection or the
-      accepted Scene/Environment affordance and routes edits through
-      `EditSceneEnvironmentAsync`.
-- [ ] Environment authoring satisfies `environment-authoring.md` validation:
-      defaults are visible, sun reference/stale warning behavior is visible,
-      supported fields save/reopen, undo/redo, and sync/unsupported outcomes
-      produce operation results.
-- [ ] Geometry material assignment applies to the live preview through the
-      supported runtime sync path; it must not remain a persisted-only identity
-      edit.
-- [ ] Any additional `property-inspector.md` or `environment-authoring.md`
-      V0.1 validation gate not explicitly listed above is audited,
-      implemented, and validated unless it is the explicitly deferred
-      multi-viewport feature.
 
-Exit evidence required:
-
-- [ ] One `ED-M04` validation ledger row records component editor coverage,
-      settings/environment behavior, persistence, and live preview readiness.
+The source-backed gap table and pass/fail cases are in
+[ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md)
+and [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md).
+M04's recorded status and original evidence are unchanged; new results are
+recorded under those gap-closing milestones, not retrospectively attributed here.
 
 ### ED-M05 - Scalar Material Authoring
 
@@ -505,8 +451,8 @@ catalog refresh, and mount refresh work as explicit workflows.
       folder, project, and generated-scene-descriptor inputs.
 - [x] Cooking includes current scene, one asset, selected folder, full project,
       and referenced V0.1 asset descriptors with focused service tests.
-- [x] Cook output validates before inspection; runtime mount refresh wiring is
-      still pending and must remain validation-gated.
+- [x] Cook output inspection/validation and validation-gated runtime refresh
+      have the recorded ED-M07 evidence. Transactional replacement is ED-M07B.
 - [x] Content Browser exposes Cook Selected Asset, Cook Folder, Cook Project,
       Inspect Cooked Output, and Validate Cooked Output commands; commands
       publish operation results and refresh catalog state.
@@ -522,6 +468,38 @@ Exit evidence required:
 - [x] One `ED-M07` validation ledger row records descriptor/manifest inputs,
       cook output, inspect result, mount result, and failure-result behavior.
 
+### ED-M07A - Authoring Integrity And Runtime Convergence
+
+Status: `planned`
+
+Trace: `REQ-005` through `REQ-009`, `REQ-011`, `REQ-012`, `REQ-014`, `REQ-022`,
+`REQ-024`, `REQ-026`, `REQ-037`, `REQ-038`; `SUCCESS-002`, `SUCCESS-003`,
+`SUCCESS-007`.
+
+Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
+
+- [ ] 07A.1 native background application and truthful field results.
+- [ ] 07A.2 camera/light/environment gesture sessions and cancellation.
+- [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation.
+- [ ] 07A.4 offline/reconnect/lifetime convergence with failed work retained.
+- [ ] 07A.5 scene/material captured-revision, atomic-write and conflict safety.
+- [ ] 07A.6 complete actual-control/native field and transition evidence.
+
+### ED-M07B - Safe Content Publication And Compatibility
+
+Status: `planned`
+
+Trace: `REQ-014` through `REQ-024`, `REQ-026`, `REQ-037`, `REQ-039` through
+`REQ-042`; `SUCCESS-004`, `SUCCESS-006`, `SUCCESS-007`.
+
+Plan: [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md).
+
+- [ ] 07B.1 coherent saved dependency snapshots and serialized project cooks.
+- [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
+- [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
+- [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
+- [ ] 07B.5 existing-surface freshness/publication feedback for all cook scopes.
+
 ### ED-M08 - Runtime Parity And Standalone Validation
 
 Status: `blocked`
@@ -530,19 +508,17 @@ Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-018`,
 `REQ-019`, `REQ-022`, `REQ-023`, `REQ-024`, `REQ-026`, `REQ-030`,
 `REQ-037`; `SUCCESS-001`, `SUCCESS-003`, `SUCCESS-004`, `SUCCESS-006`
 
-Outcome: a minimum authored content slice proves embedded preview, cooked
-output, mounted content, and standalone runtime load agree.
+Outcome: the qualified PRD fixture and field suite prove exact saved/published
+content in embedded preview and standalone runtime under controlled comparison.
 
-- [ ] All accepted non-deferred V0.1 LLD gates are audited and closed first.
-      `property-inspector` and `environment-authoring` are explicitly reopened;
-      additional gaps discovered during audit must be implemented. The only
-      deferred feature is multi-viewport.
+- [ ] ED-M07A and ED-M07B gates pass, and ED-M02 supported-viewport evidence
+      is recorded. ED-M09 tools are not a prerequisite.
 - [ ] Required LLDs are reviewed:
       `standalone-runtime-validation`, `live-engine-sync`,
       `runtime-integration`, `content-pipeline`, `environment-authoring`.
-- [ ] Detailed `ED-M08` implementation plan exists.
-- [ ] Embedded preview renders the minimum authored content slice.
-- [ ] Cooked output for the minimum slice loads in standalone runtime.
+- [x] Detailed `ED-M08` implementation plan exists; product validation remains pending.
+- [ ] Embedded preview renders the qualified PRD fixture and field cases.
+- [ ] The exact published project output loads through the ED-M08 request contract.
 - [ ] Expected geometry, material, camera, directional light, atmosphere,
       exposure, and tone mapping are present within documented tolerance.
 - [ ] Failures classify cooked output, asset resolution, runtime load, sync, or
@@ -567,7 +543,7 @@ gizmos, node icons, and overlays are usable in supported viewport layouts.
 - [ ] Required LLDs are reviewed:
       `viewport-and-tools`, `documents-and-commands`, `scene-explorer`,
       `runtime-integration`.
-- [ ] Detailed `ED-M09` implementation plan exists.
+- [x] Detailed `ED-M09` implementation plan exists; product validation remains pending.
 - [ ] Camera navigation and frame selected/all are usable.
 - [ ] Selection highlight is implemented.
 - [ ] Transform gizmo UX mutates through commands.
@@ -621,17 +597,24 @@ recorded in section 5.
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` | `validated` | No further action. |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` | `landed` | Validate or record the supported single viewport result only; multi-viewport remains deferred and is not an ED-M02 gate. |
 | [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` | `validated` | No further action for ED-M03; DynamicTree rename commit hook remains deferred. |
-| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `landed` | Corrective pass required before ED-M08: implement every non-deferred `property-inspector` and `environment-authoring` V0.1 gate; only multi-viewport is deferred. |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md) | `ED-M04` | `landed` | No new execution under M04. Source-identified omissions and missing evidence execute in ED-M07A/07B. |
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
-| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 preserves two unresolved UI scope questions by user decision; they are not claims of implemented or validated behavior. |
+| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `planned` | Execute the six source-backed repair/evidence tasks. |
+| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | Implement saved snapshots, safe publication, mappings and qualification. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
+| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
+| [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
 
 ## 5. Validation Ledger
 
-One row per milestone. Do not add running notes here; update the milestone
-checklist or detailed plan tracker instead.
+One row per milestone. Existing rows retain their original evidence and
+qualification limits; their historical wording is not a current execution
+instruction. Current gap work and new proof belong to ED-M07A/07B and later
+rows. Do not add running notes; update the owning plan instead.
 
 | Milestone | Status | Date | Evidence |
 | --- | --- | --- | --- |
@@ -644,6 +627,8 @@ checklist or detailed plan tracker instead.
 | `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
+| `ED-M07A` | `pending` | - | No validation evidence yet for the new authoring-integrity/runtime-convergence gates. |
+| `ED-M07B` | `pending` | - | No validation evidence yet for the new publication/compatibility gates. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

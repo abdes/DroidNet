@@ -1,6 +1,6 @@
 # Content Pipeline LLD
 
-Status: `ED-M07 review-ready`
+Status: `V0.1 design contract; ED-M07B implementation and validation pending`
 
 ## 1. Purpose
 
@@ -257,29 +257,21 @@ Mapping requirements:
 | point/spot lights | best-effort descriptor output when component data exists; unsupported fields produce warnings, not silent drops |
 | `SceneEnvironmentData.AtmosphereEnabled` + `SkyAtmosphere` | full native `environment.sky_atmosphere` payload with authored V0.1 scalar/vector values overlaid onto fixed native defaults for fields not exposed by the editor |
 | `SceneEnvironmentData.SunNodeId` | encoded through the selected directional light's `is_sun_light` / `environment_contribution` fields, not through a separate editor-only environment field |
-| `SceneEnvironmentData.PostProcess` native `PostProcessVolume` fields and `BackgroundColor` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warnings in ED-M07 unless the native scene descriptor schema accepts the exact field; do not encode invented native environment/post-process fields |
-| unmapped editor fields | one `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` warning per field; never silently dropped |
+| `SceneEnvironmentData.PostProcess` native `PostProcessVolume` fields and `BackgroundColor` | Required V0.1 native descriptor/runtime mapping. Missing schema/API coverage fails validation and blocks publication; extend the engine contract rather than inventing editor-owned runtime fields. |
+| unmapped editable V0.1 fields | One actionable error per field; fail before publication. Read-only/editor-only metadata is omitted only by its explicit contract. |
 
 The adapter must reject an empty scene descriptor because the native schema
 requires at least one node. The user-facing message must name the scene.
 
 Native environment emission rule:
 
-- ED-M07 may emit an `environment` block only as a complete engine-default
-  payload with supported editor overrides applied. Supported editor overrides
-  are `AtmosphereEnabled` plus `SkyAtmosphere.{PlanetRadiusMeters,
-  AtmosphereHeightMeters, GroundAlbedoRgb, RayleighScaleHeightMeters,
-  MieScaleHeightMeters, MieAnisotropy, SkyLuminanceFactorRgb,
-  AerialPerspectiveDistanceScale, AerialScatteringStrength,
-  AerialPerspectiveStartDepthMeters, HeightFogContribution, SunDiskEnabled}`.
-- Post-process authoring is fully persisted and live-synced by ED-M04, but
-  ED-M07 descriptor generation emits warnings for post-process fields until the
-  descriptor schema has exact native fields for them.
-- ED-M07 must not emit partial native environment subobjects to satisfy schema
-  shape by guesswork.
-- If a complete default payload is not available, omit `environment` and emit
-  warnings for each supported editor environment value that could not be
-  represented.
+ED-M07B.3 completes native schema/import/load support for the PRD-required
+SkyAtmosphere, PostProcess and LDR Background fields. Emit complete validated
+native scene-system payloads with the captured authored values. Never invent
+native fields, substitute defaults for authored values, or omit required systems
+with warnings. Missing native mapping is an actionable error before publication.
+The existing sky-only generator and its warnings are the identified baseline
+omission, not an alternate V0.1 completion policy.
 
 Scene descriptor `name` normalization:
 
@@ -601,15 +593,16 @@ material slots, project manifests, or recent documents.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
-- Cook is explicit and may run while the editor runtime is already running.
+- Cook is explicit and stages output while runtime/authoring may continue. Preview
+  briefly pauses for the publication transaction in section 16.
 - Runtime cooked-root refresh happens only after cooked output validation
   succeeds.
 - Scene save, material save/cook, Content Browser import/cook, and catalog-only
   refresh paths must not publish unvalidated cooked-root refresh messages.
   Keeping the source tree free of direct save-time cooked-root refresh
   publishers is an ED-M07 closure precondition.
-- Runtime mount refresh is best-effort and reports `AssetMount` diagnostics on
-  failure.
+- Runtime publication uses the section 16 transaction; mount failure reports
+  `AssetMount`, restores prior output, and never reports the new output current.
 - ED-M07 proves embedded runtime can refresh mounted cooked roots after cook.
 - ED-M08 owns standalone runtime parity and content visual equivalence.
 - Multi-viewport remains deferred and is not an ED-M07 validation target.
@@ -637,7 +630,7 @@ Failure mapping:
 | Failure | Domain | Code |
 | --- | --- | --- |
 | scene descriptor generation failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed` |
-| unsupported authored scene value omitted | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` |
+| required authored scene value cannot be represented; publication blocked | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` |
 | procedural geometry descriptor failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` |
 | manifest generation failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed` |
 | source path missing | `AssetImport` | `OXE.ASSETIMPORT.SourceMissing` |
@@ -709,9 +702,167 @@ ED-M07 is complete when:
     warnings without partial native environment payloads.
 15. standalone parity remains deferred to ED-M08.
 
-## 15. Open Issues
+## 15. Closed Scope Decisions
 
-No ED-M07 design open issue is allowed before implementation starts. ED-M07.1
-is the accepted audit step that records the Interop/ImportTool/managed choice
-for each cooker/inspect/validation path; ED-M07.2+ coding is blocked until that
-decision is recorded in `IMPLEMENTATION_STATUS.md`.
+V0.1 uses existing Cook Asset/Folder/Scene/Project actions to rebuild stale
+content. No separate stale-only scheduler, generic project-settings panel,
+project renderer-preset selector, or descriptor/manifest editor/launcher is
+required. Source/generated paths are visible and copyable in content/result
+information; Inspect and Validate operate on cooked products. Project mounts
+supply cook policy; scene settings supply render intent. These decisions are
+normative in PRD section 8 and ED-M07 section 11.
+
+## 16. Saved Inputs And Publication Transaction
+
+This section replaces the earlier direct-output publication assumption. Fixed
+published paths remain `.cooked/<Mount>/container.index.bin` and companions.
+The transaction is a required ED-M07B contract, not a claim of current code.
+
+### Input Capture And Serialization
+
+- ContentPipeline is the sole writer/coordinator for scene, material, asset,
+  folder, and project cooks. Existing material helpers execute through it and
+  cannot publish independently. One cook/publish operation per project runs at
+  a time; a later request waits or can be cancelled, and captures inputs only
+  when it obtains the project operation gate.
+- Complete/cancel an active edit gesture first. Reject a cook if any open scene
+  or material document in the dependency closure is dirty. Name the documents
+  and offer the ordinary Save workflow; never save implicitly.
+- Resolve the saved dependency closure, including importer settings and source
+  media, then capture a coherent byte snapshot under document/read coordination.
+  Read participating files through handles that exclude concurrent writes while
+  their bytes are copied. If the set changes while dependencies are resolved,
+  retry capture at most three times, then fail visibly. Do not guess a mixture
+  of revisions. External inaccessible/conflicting files fail before cooking.
+- Copy inputs to `.build/cook/<OperationId>/inputs`, preserving their logical
+  mount-relative relationships. Record document saved revisions where known,
+  source hashes, import settings, schema/build fingerprint, project lifetime,
+  target scope, and operation identity. Native jobs read this private snapshot.
+- Authoring may continue after capture. A later edit or source change marks the
+  result stale relative to current authoring, while a successful cook of the
+  captured input remains a successful, identifiable historical result.
+
+### Staging And Validation
+
+- Write native output to `.build/cook/<OperationId>/output/<Mount>` on the same
+  volume as the published root. The manifest's physical output is staging;
+  virtual paths remain `/<Mount>/...` and authoring URIs remain unchanged.
+- For a partial asset/folder cook, seed staging from the previous published
+  root and replace the selected assets and dependencies. Preserve unrelated
+  entries. Track generated subassets so reimport removes superseded outputs
+  from that source without deleting unrelated assets or changing stable IDs.
+- Run native inspect, complete-root validation, reference/dependency validation,
+  and all required descriptor-field checks on staging. Unsupported required
+  V0.1 content is an error, not a successful result with omitted values.
+- Before publication, ensure the operation still owns the project lifetime and
+  publication gate. A closed/replaced project invalidates the operation. Failure
+  or cancellation here leaves published output and preview untouched.
+
+### Publication And Rollback
+
+1. Record the complete affected-root set and prior publication metadata in a
+   durable transaction journal at `.build/cook/<OperationId>/publication.json`.
+   Use explicit states Prepared, OldRetained, RootsInstalled, RuntimeReady,
+   Committed, and RolledBack. Each filesystem step is recoverable from the journal.
+2. Announce `Publishing cooked content` and suspend preview at a runtime boundary.
+   The runtime drains requests/reads using affected roots and releases conflicting
+   file handles. UI and authoring remain responsive. A standalone validation
+   reader holds a project-output lease; publication waits for its exit or reports
+   busy, without terminating another process or writing through its lease.
+3. Retain previous roots under the same operation's `previous/<Mount>` directory,
+   then install validated staging roots at the fixed `.cooked/<Mount>` locations.
+   Same-volume directory renames and a journal protect replacement; all affected
+   roots form one logical transaction. A partial swap cannot become published.
+4. Mount the complete validated root set through the normal runtime service.
+   Resynchronize the current active authoring scene, with its current document
+   lifetime and revision. Retain pending/newer edits and show their stale-material
+   state where their source is newer than the captured cook.
+5. Atomically publish `.cooked/publication.json`: operation ID, project identity,
+   input revisions/hashes, schema/build fingerprint, output/index hashes, root
+   set, and completion time. Refresh catalog rows from that publication and
+   resume preview; only then report full publication success. With no live
+   runtime, record validated disk publication and `NotMounted`, never `Mounted`.
+6. If replacement/remount fails, restore all prior roots and metadata, remount
+   the prior validated set, and resume. Report publication failure independently
+   from successful staging/cook. If restoration/remount also fails, retain the
+   journal and backups and leave preview visibly unavailable; never report the
+   new set current or destroy the last recoverable validated output.
+7. Recovery runs before new cook or runtime mount on project reopen. An
+   uncommitted journal restores the prior complete root set. A committed journal
+   verifies the published set before mounting. Missing/invalid recovery material
+   produces a blocking pipeline diagnostic with preserved files. Cleanup removes
+   only operation-owned staging/backups after commit/rollback and released leases.
+
+Cancellation before publication drains the worker and ends as Cancelled without
+changing published output. Cancellation during publication is deferred until
+commit or rollback reaches a safe state; the final result reports what actually
+happened. The UI may show Cancelling, but a cancellation token alone is not proof
+that native I/O stopped. Publication is also valid when preview is unavailable;
+no engine startup is required merely to cook saved source.
+
+### Result And UI Contract
+
+Extend the pipeline result with input provenance, the captured/current freshness
+comparison, publication state, and mount state. Distinguish CookFailed,
+ValidationFailed, PublicationFailed, MountFailed, Cancelled, and successful
+publication in structured diagnostics. A staged success plus failed publication
+is partial success for the composite workflow, never a usable new mounted cook.
+Copyable generated descriptor/manifest paths are diagnostic affordances; they
+are not authored identities or required manual repair steps.
+
+### ED-M07B Validation Gates
+
+- [ ] Dirty dependencies reject capture; later edits do not mutate the captured
+  bytes or get cleared by cook completion. Overlapping requests serialize.
+- [ ] Asset/folder recook preserves unrelated published entries and stable
+  source/subasset identity; deleted generated subassets are reconciled.
+- [ ] Inspect and validation run on staging before any published file changes.
+- [ ] Failure/cancellation at every staging and publication boundary preserves
+  or restores the prior complete output; recovery handles interruption between
+  each pair of journaled steps, including first publication with no prior root.
+- [ ] Preview pause/drain/resume, active-scene change, runtime fault, failed new
+  mount, failed rollback mount, and standalone reader leases are exercised.
+- [ ] Input/output hashes and publication state are queryable in results;
+  stale/newer authoring never becomes falsely current. User workflows need no
+  manual generated-file edits.
+
+## 17. Qualified Import And Reproduction Policy
+
+V0.1 qualifies glTF 2.0 (`.gltf`/`.glb`) and FBX through the existing native
+importers, restricted to static triangle geometry, node-local transforms, normals,
+UVs when present, and material groups assignable to supported scalar materials.
+The qualification fixtures include one small self-contained source of each
+format. They use explicit source units/axis metadata and the engine importer's
+canonical Oxygen conversion; the import report records effective units, handedness,
+axis conversion, winding, and resulting bounds. Unknown/ambiguous FBX units or
+axis metadata is rejected rather than guessed. A unit cube, oriented triangle,
+and nonuniform transform fixture prove each conversion.
+
+No animation, skinning, morphs, physics, scripts, or unsupported light/camera
+components enter the qualified scene. Detect such required content before
+publication and return a precise unsupported-content result while preserving the
+source. Import must not appear successful by silently dropping those features.
+Existing imported texture references may be preserved/read-only, but texture
+creation/editing and general textured-import qualification are outside V0.1.
+Texture-bearing imports are rejected by the qualified scalar-only entry point
+with an explanation; existing read-only references are not stripped on save.
+
+Importer version/options, source hashes, and source-relative dependency paths
+are retained in authored import descriptors/configuration. Reimport uses those
+facts; name/ID changes cannot silently redirect existing scene references. File
+rename/move/reference repair UI is excluded; externally missing references remain
+visible and retain their URIs. External source edits trigger stale state and an
+explicit reimport/cook; they cannot silently replace a dirty authored material.
+
+Portable project truth is Project.oxy, authored Content, retained SourceMedia,
+import descriptors/settings, and Config. `.cooked`, `.imported`, `.pipeline`,
+`.build`, and `.oxygen` are reproducible/local and excluded from version control.
+Absolute local mounts are explicit nonportable dependencies, reported as such;
+the portable qualification fixture uses project-relative mounts only.
+
+ED-M07B qualification deletes derived products from a copied fixture, then
+reimports/cooks using only retained sources/settings and the matched toolchain.
+Compare stable asset identities, canonical descriptors, resolved dependencies,
+and loaded values. Byte-for-byte reproducibility is required only for outputs
+whose format declares it; timestamps and diagnostic operation IDs are excluded
+from semantic comparison. ED-M08 proves rendered equivalence.

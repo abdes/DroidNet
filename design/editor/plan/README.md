@@ -3,8 +3,8 @@
 Status: `active planning index`
 
 This folder contains the detailed milestone plans listed below.
-[../PLAN.md](../PLAN.md) also owns future milestones whose detailed plans have
-not yet been written. Each active milestone has one detailed plan.
+[../PLAN.md](../PLAN.md) owns order and milestone outcomes. Each active
+execution milestone has one detailed plan; earlier delivery plans remain records.
 
 `PLAN.md` owns the top-level milestone order and exit gates. Files in this
 folder own implementation sequencing, touch points, risks, and validation plans
@@ -44,3 +44,8 @@ Detailed milestone plans should include:
 | [ED-M06-asset-identity-content-browser.md](./ED-M06-asset-identity-content-browser.md) | `ED-M06` | Content Browser asset identity rows, shared state reducer, typed picker projection, missing/broken references, and browser persistence boundaries. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](./ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | Game project layout, predefined templates, project creation, scene/material authoring targets, Content Browser roots, and material picker filtering before content pipeline work. |
 | [ED-M07-content-pipeline-and-cooking.md](./ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | Descriptor generation, manifest/import orchestration, cook, inspect, validation, catalog refresh, and validated runtime mount refresh. |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](./ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | Source-identified authoring/inspector omissions, save integrity, field diagnostics and runtime convergence. |
+| [ED-M07B-safe-content-publication-and-compatibility.md](./ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | Saved snapshots, staged publication/rollback, required native mappings, matched-build and import qualification. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](./ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | Exact project-output loading, native observations and controlled semantic/visual parity. |
+| [ED-M09-viewport-authoring-tools.md](./ED-M09-viewport-authoring-tools.md) | `ED-M09` | Concrete viewport navigation, picking, transform and overlay interaction. |
+| [ED-M10-v01-release-qualification.md](./ED-M10-v01-release-qualification.md) | `ED-M10` | Qualified build/workload, full workflow, failure safety and performance proof. |

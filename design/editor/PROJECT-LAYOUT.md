@@ -145,6 +145,7 @@ feature project.
 | `projects/Oxygen.Editor.Routing` | Editor-specific route helpers and route integration glue. | Feature state or feature workflow policy. |
 | `projects/Oxygen.Editor.ProjectBrowser` | No-project startup experience, project creation/opening UI, recent project UI, project templates UI. | Project persistence rules, scene editing, content browsing inside an opened workspace. |
 | `projects/Oxygen.Editor.Documents` | Generic document abstractions shared by editor features. | World-editor-specific scene document behavior. |
+| `projects/Oxygen.Editor.Schemas` | Schema/overlay catalog, typed properties/edits, mixed values, snapshots, apply/session mechanics. | Feature UI/policy, runtime lifecycle, native calls, cooked binary offsets. |
 | `projects/Oxygen.Editor.World` | Pure authoring scene/domain model: scenes, nodes, components, scene serialization, scene-owned settings, authoring references. | WinUI, routing, docking, runtime engine handles, interop, cook execution. |
 | `projects/Oxygen.Editor.WorldEditor` | Open scene workspace: documents, hierarchy, inspector, viewport UI, commands, selection, scene validation presentation, scene-engine sync orchestration. | Native calls directly from view models, reusable asset import/cook primitives, project-wide cook policy. |
 | `projects/Oxygen.Editor.MaterialEditor` | Full material document/editor workspace, material inspector/tools, material preview UI, material validation presentation. | Reusable asset/cook primitives, native engine calls, project policy. |
@@ -152,7 +153,7 @@ feature project.
 | `projects/Oxygen.Editor.PhysicsEditor` | Full physics scene sidecar editor workspace, physics scene documents/tools, physics validation presentation. | Shared physics domain ownership, reusable cook primitives, native engine calls, project policy. |
 | `projects/Oxygen.Editor.ContentBrowser` | Project asset navigation, catalogs UI, source/descriptor/cooked views, asset picker UI, content diagnostics presentation. | Scene component mutation policy, project template management, engine mounting. |
 | `projects/Oxygen.Editor.ContentPipeline` | Editor tooling orchestration for import, cook, pak, inspect, asset jobs, pipeline diagnostics, and engine cooker/content tool adapters. | Panels, feature-specific authoring policy, low-level cooked binary structures. |
-| `projects/Oxygen.Editor.Projects` | Project metadata, project services, project settings, content root policy, project-level cook orchestration. | WinUI panels, scene inspector UI, native interop. |
+| `projects/Oxygen.Editor.Projects` | Project metadata, services, settings, content root policy, project-level cook scope facts. | WinUI panels, scene inspector UI, native interop, cook execution/orchestration. |
 | `projects/Oxygen.Editor.Runtime` | Managed engine lifecycle, effective runtime settings application, surface leases, view service, cooked-root mount service, runtime diagnostics. | Authoring defaults, project policy, UI workflow, scene serialization. |
 | `projects/Oxygen.Editor.Interop` | C++/CLI bridge to stable Oxygen Engine APIs. | Authoring policy, UI behavior, project layout policy, cooker policy, fallback behavior. |
 | `projects/Oxygen.Editor.Data` | Durable editor data, settings infrastructure, persistent state DB, settings descriptors/generators. | Feature-specific settings ownership or UI. |

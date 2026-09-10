@@ -602,7 +602,10 @@ mapped to the nearest editor code above for the user-facing result.
 The owning workflow reports whether the primary state changed. The shared
 status reducer combines that primary-state flag with diagnostics:
 
-- cancellation or `OperationCanceledException`: `Cancelled`.
+- cancellation before the primary state changes: `Cancelled`.
+- cancellation of downstream sync after a successful authoring commit: a child
+  `Cancelled` result; preserve parent success with warnings/partial success as
+  appropriate. Never imply the already-committed mutation was cancelled.
 - no warning/error diagnostics and primary goal completed: `Succeeded`.
 - warning diagnostics only and primary goal completed: `SucceededWithWarnings`.
 - error/fatal diagnostics and primary goal completed: `PartiallySucceeded`.
@@ -753,9 +756,17 @@ ED-M07 diagnostics are complete when:
 - runtime mount refresh failure publishes `Runtime.CookedRoot.Refresh` under
   `AssetMount`, not `AssetCook`.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Whether long-running progress becomes a separate diagnostics-progress channel
-  or a feature-local concern. Progress is out of ED-M01 scope.
-- Exact visual treatment for Project Browser "details" expansion. The contract
-  requires details to be available; the Project Browser LLD owns placement.
+Long-running save/cook/validation uses feature-local busy/phase/cancel state and
+finalized shared operation results. No separate progress bus is required. Project
+Browser uses existing inline details; workspace/viewport show pending/failure
+state and output details. ED-M07A.3 owns current field diagnostic replacement by
+revision/target; historical operation results remain separate. There is no full
+validation dashboard with filters/fix actions in V0.1.
+
+ED-M07B distinguishes staged cook, publication, rollback and mount outcomes, with
+input/output/build identities and freshness. An unsupported required field is an
+error blocking publication. ED-M08 adds exact-request/native-load/observation/
+capture/comparison/timeout results. Cancellation is final only after owned work
+is drained or publication reaches a safe commit/rollback state.

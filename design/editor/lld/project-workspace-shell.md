@@ -516,9 +516,13 @@ classification, cancellation, and half-created workspace cleanup. UI automation
 should be added where the existing WinUI test infrastructure makes startup-route
 validation practical.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Exact workspace layout persistence format and versioning are owned by the
-  workspace/document LLDs but must be consumable by this flow.
-- Mid-session project switching behavior is out of ED-M01 unless explicitly
-  pulled forward. V0.1 starts with one active workspace per host process.
+Workspace layout uses the existing versioned/guarded persistence service; invalid
+restoration is best effort with visible diagnostics. V0.1 has one active project
+per editor process. To change projects, close the current workspace through the
+normal Save/Discard/Cancel guards, return to Project Browser, then activate the
+new project. In-place hot project switching and simultaneous independent project
+runtimes are excluded. Closing/cancelling cannot leak a prior project's async
+results into the next activation. Native mismatch must not prevent Project
+Browser visibility or safe source authoring/save.

@@ -310,10 +310,90 @@ Evidence must include manual single-viewport notes or screenshots, logs showing
 the document/viewport ID, and targeted tests for pure layout/metadata helpers
 where practical.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Exact future UX for frame selected/all is deferred to ED-M09.
-- Whether selection outline and node icons are pure overlay UI or partly engine
-  debug rendering is deferred to ED-M09.
-- View lifecycle remains coordinated by viewport code-behind in ED-M02.
-  Possible runtime adapter extraction is post-ED-M02 cleanup.
+ED-M02 remains the recorded presentation/lifecycle baseline. ED-M09 implements
+the interaction contract below and consumes ED-M07A's command/session/diagnostic
+mechanism. Multi-viewport stability remains excluded. Existing unqualified
+multi-pane controls must be disabled with a clear explanation in the V0.1 build;
+visible but crash-prone modes do not qualify as an acceptable deferred feature.
+
+## 16. V0.1 Viewport Interaction Contract
+
+### Navigation And Focus
+
+Preserve existing Turntable (default), Trackball and Fly modes. Alt+left drag
+orbits, Alt+middle drag pans, Alt+right drag dollies; wheel zooms; RMB mouse-look
+with WASD/QE moves in fly navigation; Home resets the view. These are the existing
+native EditorViewport navigation feature families. Focus/capture routes input
+only to the active viewport. Release capture and held keys on focus loss,
+document change, publication pause, cancellation and viewport destruction.
+Navigation never mutates authored camera components or adds scene undo entries.
+
+Frame Selected (`F`) frames the combined world bounds of selected nodes. With
+no selection, disable it with a reason. Frame All (`Shift+F`) frames all visible
+scene content. Use a 10% margin with the current aspect/FOV; finite point/icon
+bounds handle camera/light-only scenes. Empty scenes use the normal default
+view. Invalid/missing bounds produce a diagnostic and leave the view unchanged.
+Preserve near/far correctness and do not silently move authored nodes.
+
+### Picking And Selection
+
+Unmodified left click selects the nearest visible pickable geometry or camera/
+light icon; Ctrl+click toggles membership. Empty-space click clears selection.
+SceneExplorer and Inspector consume the same document-scoped selection service.
+A gizmo hit takes precedence over object picking; Alt/RMB navigation never
+selects objects. Picking results include scene/document/view lifetime and are
+ignored if stale. Engine-owned picking/render identity is mapped to authored
+node IDs through runtime services; UI does not maintain a second scene database.
+
+Selection highlight follows the same IDs and updates after undo, deletion,
+reparent, scene activation and missing-geometry resolution. Camera/light icons
+are editor overlays, never authored/cooked geometry. An icon click uses the
+same selection operation as a geometry click.
+
+### Transform Tools
+
+W/E/R select translate/rotate/scale when viewport navigation is not capturing
+those keys. Toolbar actions expose the same operations. Provide World/Local
+space; default World. The pivot is the active (last-selected) node's origin and
+orientation for Local, and its world position with world axes for World.
+Multi-selection applies one common world-space delta around that pivot while
+preserving each target's original transform. Display the chosen space/pivot.
+
+Use the existing command/property session owner: begin snapshots targets,
+previews update authoring without history, release commits one entry, Escape
+restores all before-values. Focus/selection/scene loss cancels an unfinished
+drag before changing its context. Reject non-finite/zero-scale or nonrepresentable
+parent-transform results without partial model changes; do not invent shear or
+silently approximate a transform the authored model cannot represent.
+
+Snapping is a toolbar toggle, off by default: translation 1 metre, rotation
+15 degrees, scale increment 0.1. These are session tool settings, not scene
+render intent. One snapped or unsnapped drag still produces one undo entry.
+
+### Overlays And Diagnostics
+
+Required overlays are selection highlight, transform gizmo, camera/light icons,
+and the existing grid/origin affordance, each with visibility control. Their state
+is view/session metadata; disabling them for parity does not dirty the scene.
+Field/tool errors use ED-M07A.3's current revision-scoped diagnostics and existing
+operation/output surfaces. Tool rejection leaves before-values intact. No new
+validation dashboard or independently scheduled full-scene validation is added.
+
+### ED-M09 Pass/Fail Gates
+
+- [ ] Navigate each existing mode, lose focus during drag/key hold, close/reopen,
+  and pause for publication: no stuck input, leaked capture, or authored-camera
+  mutation; only the supported single viewport is enabled.
+- [ ] Frame selected/all handles multiple transformed parents, tiny/large finite
+  bounds, missing geometry, camera/light-only and empty scenes as specified.
+- [ ] Picking, Ctrl membership, empty clear, icons, hierarchy and inspector agree
+  on selection; stale async results never select a different active scene.
+- [ ] Translate/rotate/scale, World/Local, multi-selection, snapping, commit/cancel
+  and invalid parent transforms pass through the same command/session path.
+  Each gesture has one undo entry and exact before-value restoration.
+- [ ] Highlight/icons/gizmo/grid visibility survives expected view operations and
+  never changes saved/cooked scene content. Overlay-off captures match M08 state.
+- [ ] The PRD's 100-node viewport remains responsive; actual user validation
+  records interaction outcomes, not screenshots alone or engine API acceptance.

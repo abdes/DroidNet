@@ -298,7 +298,7 @@ serializer path. ED-M03 must prove:
 - create/rename/delete/reparent survives save/reopen.
 - primitive and light nodes created through ED-M03 commands survive
   save/reopen.
-- dirty state is cleared only after successful save.
+- dirty state clears only when the current committed revision is successfully saved.
 - failed save leaves dirty state set.
 
 Scene save has no cook side effect. `Scene.Save` reports authoring-data
@@ -369,7 +369,7 @@ ED-M03 documents/commands are complete when:
 - selection changes in scene explorer are reflected by inspector consumers.
 - folder/layout operations are command-shaped, layout-only, dirty tracked, and
   save/reopen where current explorer layout persistence supports them.
-- save clears dirty state only on success.
+- save acknowledges its captured revision; newer changes remain dirty.
 - save/reopen preserves ED-M03-supported hierarchy and created nodes.
 - command/save/sync failure paths produce operation results or output/log
   diagnostics with document/node scope where known.
@@ -380,5 +380,51 @@ ED-M03 documents/commands are complete when:
 - Cross-document selection and cross-document undo are out of ED-M03; selection
   and history are isolated per scene document.
 - Command batching for sliders/text fields is ED-M04.
-- Full validation invalidation model is scaffolded in ED-M03 and expanded in
-  ED-M04/ED-M09.
+- Current field diagnostics are keyed by document lifetime, target/PropertyId
+  and revision; newer successful edits replace resolved current errors and
+  revalidate affected near/far and sun/reference dependents. ED-M07A.3 implements
+  this mechanism; ED-M09 tools consume it without another validation model.
+
+## 16. V0.1 Authoring Integrity Qualification
+
+ED-M07A owns proof of this cross-cutting contract; previous ED-M03 validation
+remains evidence for its original scope. Material documents obey the same rules
+through their own persistence owner. The issue-fix implementation may supply
+parts of this behavior; its completion does not automatically validate ED-M07A.
+
+- Authoring and saved revisions are distinct. Every committed change, undo/redo,
+  and persisted explorer-layout edit advances authoring revision synchronously
+  with the mutation, before asynchronous sync. Saving an already-dirty document
+  must not suppress later revision increments.
+- Save finishes/cancels a pending gesture, waits for the document/destination
+  save gate, then captures owned serialized bytes and revision before I/O awaits.
+  Snapshot capture covers all nested state. Queued saves capture when they gain
+  the gate; writes cannot finish out of order or acknowledge a reopened lifetime.
+- A successful write acknowledges only its captured revision. If newer edits
+  exist, report Saved; newer changes remain unsaved. Preserve current model,
+  selection and history. Save-and-close requires the current revision to be saved.
+- Save uses a same-directory temporary file, flushes completed bytes, and atomically
+  replaces the destination while retaining the previous valid file until commit
+  is established. Failures/interrupted writes preserve a valid prior saved file
+  and the current authoring state; incomplete temporary files are never loaded
+  as authored data. New-file creation never overwrites an existing asset.
+- V0.1 is single-writer per project/document destination. A second editor writer
+  is rejected through an owned project/write lease. Before replacement compare
+  disk identity/content hash with the opened/last-saved baseline under write
+  coordination. Changed or inaccessible files produce Document.Conflict rather
+  than overwrite. External tools must not race writes to open authoring files;
+  collaborative simultaneous authoring and forced overwrite are unsupported.
+- Conflict UI offers Reload from disk (through explicit unsaved-discard
+  confirmation), Save Copy to a new normal authored target, or Cancel/keep edits.
+  Save Copy creates a distinct asset identity and does not silently redirect
+  existing scene references. Never overwrite the externally changed source.
+- Crash recovery is explicitly limited to the last successful Save. There is no
+  autosave timer or unsaved recovery snapshot feature in V0.1. This limitation
+  does not excuse corruption of a previously saved file by a failed later save.
+
+ED-M07A gates use deterministic storage coordination: capture A, edit B, complete
+A; queue another save; fail before/after temporary-file flush; replace externally;
+close/reopen the document; cancel a close with unsaved newer edits. Inspect actual
+persisted bytes, revisions, dirty state, identity and history for both scene and
+material paths. Repeat with already-dirty documents, undo/redo and layout changes.
+Process interruption tests prove reopening finds the last valid saved source.
