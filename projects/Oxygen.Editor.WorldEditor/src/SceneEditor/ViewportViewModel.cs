@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,12 +14,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Interop;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LevelEditor;
 
@@ -65,6 +66,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     /// <param name="documentId">The owning document identifier.</param>
     /// <param name="engineService">The shared engine service.</param>
+    /// <param name="operationResults">The host-level operation result publisher.</param>
+    /// <param name="statusReducer">The shared operation status reducer.</param>
     /// <param name="appearanceSettings">
     ///     The <see cref="ISettingsService{IAppearanceSettings}" /> used to provide appearance and theme settings.
     ///     This service supplies the current theme and notifies the view model of changes.
@@ -73,8 +76,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    /// <param name="operationResults">The host-level operation result publisher.</param>
-    /// <param name="statusReducer">The shared operation status reducer.</param>
     public ViewportViewModel(
         Guid documentId,
         IEngineService engineService,
@@ -180,6 +181,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// unaffected by this property.
     /// </summary>
     public ViewIdManaged AssignedViewId { get; set; } = ViewIdManaged.Invalid;
+
+    /// <summary>Gets or sets the input target captured for this view creation.</summary>
+    public RuntimeViewTarget? AssignedInputTarget { get; set; }
 
     /// <summary>
     /// Gets the engine service reference, enabling views to request surfaces.
@@ -504,7 +508,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 this.OnPropertyChanged(nameof(this.LayoutMenu));
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogMenuRebuildFailed(ex);
         }
@@ -587,14 +591,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     }
 
     private void AddPerspectiveCameraItems(MenuBuilder builder)
-    {
-        _ = builder
+        => _ = builder
             .AddSeparator("Perspective")
             .AddMenuItem(this.CreatePerspectiveCameraModeItem("Turntable", CameraControlModeManaged.OrbitTurntable))
             .AddMenuItem(this.CreatePerspectiveCameraModeItem("Trackball", CameraControlModeManaged.OrbitTrackball))
             .AddMenuItem(this.CreatePerspectiveCameraModeItem("Fly", CameraControlModeManaged.Fly))
             .AddMenuItem(this.CreateCameraNumberBoxMenuItem(MovementSpeedText, this.movementSpeedItem));
-    }
 
     private MenuItemData CreatePerspectiveCameraModeItem(string text, CameraControlModeManaged mode)
         => new()
@@ -858,7 +860,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private string CreateViewportTechnicalMessage(Exception? exception)
     {
         var viewId = this.AssignedViewId.IsValid ? this.AssignedViewId.ToString() : "Invalid";
-        var message = $"DocumentId={this.DocumentId}; ViewportId={this.ViewportId}; ViewportIndex={this.ViewportIndex}; IsPrimary={this.IsPrimaryViewport}; ViewId={viewId}";
+        var message = string.Create(CultureInfo.InvariantCulture, $"DocumentId={this.DocumentId}; ViewportId={this.ViewportId}; ViewportIndex={this.ViewportIndex}; IsPrimary={this.IsPrimaryViewport}; ViewId={viewId}");
         return exception is null ? message : $"{message}; {exception.Message}";
     }
 }

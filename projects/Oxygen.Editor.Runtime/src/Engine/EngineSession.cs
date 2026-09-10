@@ -5,8 +5,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
-using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -19,11 +17,8 @@ internal abstract class EngineSession
     /// <summary>Gets the context still owned by this session.</summary>
     public abstract EngineContext? Context { get; }
 
-    /// <summary>Gets the world facade for the owned context.</summary>
-    public abstract OxygenWorld World { get; }
-
-    /// <summary>Gets the input facade for the owned context.</summary>
-    public abstract OxygenInput Input { get; }
+    /// <summary>Gets the internal runtime command transport for the owned context.</summary>
+    public abstract IRuntimeCommandTransport Commands { get; }
 
     /// <summary>Gets a value indicating whether runner ownership remains.</summary>
     public abstract bool HasRunner { get; }

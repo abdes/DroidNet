@@ -7,8 +7,6 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
-using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -19,8 +17,7 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
 {
     private EngineRunner? runner;
     private EngineContext? context;
-    private OxygenWorld world = null!;
-    private OxygenInput input = null!;
+    private IRuntimeCommandTransport commands = null!;
 
     /// <inheritdoc/>
     public override EngineRunner Runner => this.runner ?? throw new InvalidOperationException("Engine runner is unavailable.");
@@ -29,10 +26,7 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
     public override EngineContext? Context => this.context;
 
     /// <inheritdoc/>
-    public override OxygenWorld World => this.world;
-
-    /// <inheritdoc/>
-    public override OxygenInput Input => this.input;
+    public override IRuntimeCommandTransport Commands => this.commands;
 
     /// <inheritdoc/>
     public override bool HasRunner => this.runner is not null;
@@ -62,8 +56,7 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
             throw new InvalidOperationException("Failed to create engine context.");
         }
 
-        this.world = new OxygenWorld(this.context);
-        this.input = new OxygenInput(this.context);
+        this.commands = new NativeRuntimeCommandTransport(this.context);
         this.runner.SetTargetFps(this.context, Math.Clamp(config.Engine.TargetFps, 0, EngineConfig.MaxTargetFps));
     }
 
@@ -112,8 +105,7 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
     {
         this.context?.Dispose();
         this.context = null;
-        this.world = null!;
-        this.input = null!;
+        this.commands = null!;
     }
 
     /// <inheritdoc/>

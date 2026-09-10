@@ -23,6 +23,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Oxygen.Editor.Runtime.Tests" />
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />

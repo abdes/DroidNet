@@ -9,8 +9,6 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
-using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -45,6 +43,7 @@ public sealed partial class EngineService(
     private readonly Func<EngineSession> sessionFactory = () => new NativeEngineSession(hostingContext);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
+    private readonly RuntimeCommandDispatcher commandDispatcher = new();
     private int reservedSurfaceCount;
 
     private EngineSession? session;
@@ -150,33 +149,11 @@ public sealed partial class EngineService(
         }
     }
 
-    /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
-    public OxygenWorld World
-    {
-        get
-        {
-            _ = this.EnsureIsReadyOrRunning();
-            return field;
-        }
+    /// <inheritdoc/>
+    public IRuntimeWorldCommands WorldCommands => this.commandDispatcher;
 
-        private set => field = value;
-    }
-    = null!; // will be initialized during engine initialization
-
-    /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
-    public OxygenInput Input
-    {
-        get
-        {
-            _ = this.EnsureIsReadyOrRunning();
-            return field;
-        }
-
-        private set => field = value;
-    }
-    = null!; // will be initialized during engine initialization
+    /// <inheritdoc/>
+    public IRuntimeInputCommands InputCommands => this.commandDispatcher;
 
     private EngineContext? EngineContext => this.session?.Context;
 
@@ -184,14 +161,14 @@ public sealed partial class EngineService(
     public void MountProjectCookedRoot(string path)
     {
         _ = this.EnsureIsRunning();
-        this.World.AddLooseCookedRoot(path);
+        this.session!.Commands.MountCookedRoot(path);
     }
 
     /// <inheritdoc/>
     public void UnmountProjectCookedRoot()
     {
         _ = this.EnsureIsRunning();
-        this.World.ClearCookedRoots();
+        this.session!.Commands.ClearCookedRoots();
     }
 
     private static bool ShouldUseEditorCVarsArchive(string? cvarsArchivePath)

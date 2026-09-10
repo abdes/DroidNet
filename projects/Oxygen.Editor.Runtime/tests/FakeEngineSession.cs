@@ -6,8 +6,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
-using Oxygen.Interop.Input;
-using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -20,9 +18,7 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override EngineContext? Context => null;
 
-    public override OxygenWorld World => null!;
-
-    public override OxygenInput Input => null!;
+    public override IRuntimeCommandTransport Commands { get; } = Moq.Mock.Of<IRuntimeCommandTransport>();
 
     public override bool HasRunner => this.hasRunner;
 

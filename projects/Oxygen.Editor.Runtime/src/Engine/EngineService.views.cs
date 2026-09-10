@@ -20,7 +20,17 @@ public sealed partial class EngineService
         {
             var runner = this.EnsureIsRunning();
             this.LogCreateView(config);
-            return await this.AwaitRuntimeOperationAsync(runner.TryCreateViewAsync(this.EngineContext, config)).ConfigureAwait(true);
+            var viewId = await this.AwaitRuntimeOperationAsync(runner.TryCreateViewAsync(this.EngineContext, config)).ConfigureAwait(true);
+            if (viewId.IsValid && config.CompositingTarget is { } viewportId)
+            {
+                var lease = this.activeLeases.Values.FirstOrDefault(value => value.Key.ViewportId == viewportId);
+                if (lease is not null)
+                {
+                    this.commandDispatcher.RegisterView(viewId.Value, lease.Key.DocumentId, viewportId);
+                }
+            }
+
+            return viewId;
         }
         finally
         {
@@ -35,6 +45,7 @@ public sealed partial class EngineService
         try
         {
             var runner = this.EnsureIsRunning();
+            this.commandDispatcher.UnregisterView(viewId.Value);
             this.LogDestroyView(viewId);
             return await this.AwaitRuntimeOperationAsync(runner.TryDestroyViewAsync(this.EngineContext, viewId)).ConfigureAwait(true);
         }
