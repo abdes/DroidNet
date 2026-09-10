@@ -64,10 +64,48 @@ public sealed class PresenterStateChangeEventArgs(
 /// </remarks>
 public sealed class WindowClosingEventArgs : CancelEventArgs
 {
+    private readonly List<Func<bool, Task>> completionTasks = [];
+
     /// <summary>
     ///     Gets the ID of the window being closed.
     /// </summary>
     public required WindowId WindowId { get; init; }
+
+    /// <summary>
+    /// Registers work to run after every close handler has finished. The argument is true only
+    /// when all handlers approved closure; false releases any prepared state without closing it.
+    /// </summary>
+    /// <param name="completion">The asynchronous commit or cancellation cleanup.</param>
+    public void AddCompletionTask(Func<bool, Task> completion)
+    {
+        ArgumentNullException.ThrowIfNull(completion);
+        this.completionTasks.Add(completion);
+    }
+
+    /// <summary>Commits approved work or releases prepared state after all guards finish.</summary>
+    /// <param name="approved">Whether every close guard approved.</param>
+    /// <returns>The completion task.</returns>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "All prepared resources must receive cancellation cleanup before a completion failure is rethrown.")]
+    internal async Task CompleteAsync(bool approved)
+    {
+        Exception? failure = null;
+        foreach (var completion in this.completionTasks)
+        {
+            try
+            {
+                await completion(approved && !this.Cancel && failure is null).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                failure ??= ex;
+            }
+        }
+
+        if (failure is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failure);
+        }
+    }
 }
 
 /// <summary>

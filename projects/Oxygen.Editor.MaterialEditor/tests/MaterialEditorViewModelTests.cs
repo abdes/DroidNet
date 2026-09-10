@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Managed.Assets.Import.Materials;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Model;
 using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -15,8 +15,51 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 /// Tests schema-property editing from the material editor view model.
 /// </summary>
 [TestClass]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers these public test classes using the repository's default discovery configuration.")]
 public sealed class MaterialEditorViewModelTests
 {
+    /// <summary>Verifies resource disposal never makes a material close decision.</summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task DisposalDoesNotCloseOrDiscardTheMaterial()
+    {
+        var service = new RecordingDocumentService(CreateDocument());
+        var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service);
+        await WaitForLoadAsync(sut).ConfigureAwait(false);
+        sut.MetallicFactor = 0.75f;
+        await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
+
+        sut.Dispose();
+
+        _ = service.ClosedDocuments.Should().BeEmpty();
+    }
+
+    /// <summary>Verifies pending edits finish before saving and closing the authoring document.</summary>
+    /// <returns>The asynchronous test task.</returns>
+    [TestMethod]
+    public async Task ApprovedCloseWaitsForPendingEditAndUsesAuthoringDocumentIdentity()
+    {
+        var service = new RecordingDocumentService(CreateDocument());
+        var editCompleted = new TaskCompletionSource<MaterialEditResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.PendingEdit = editCompleted.Task;
+        var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
+        using var sut = new MaterialEditorViewModel(metadata, service);
+        await WaitForLoadAsync(sut).ConfigureAwait(false);
+        sut.MetallicFactor = 0.75f;
+
+        var preparation = sut.PrepareForCloseAsync();
+        _ = preparation.IsCompleted.Should().BeFalse();
+        editCompleted.SetResult(new MaterialEditResult(Succeeded: true, OperationId: null));
+        await preparation.ConfigureAwait(false);
+        _ = metadata.IsDirty.Should().BeTrue();
+        _ = (await sut.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
+        await sut.CloseAsync(discard: false).ConfigureAwait(false);
+
+        _ = service.ClosedDocuments.Should().ContainSingle().Which.Should().Be(service.Document.DocumentId);
+        _ = metadata.DocumentId.Should().NotBe(service.Document.DocumentId);
+        _ = metadata.IsDirty.Should().BeFalse();
+    }
+
     /// <summary>
     /// Verifies scalar edits use the schema-driven service entry point.
     /// </summary>
@@ -67,14 +110,10 @@ public sealed class MaterialEditorViewModelTests
     }
 
     private static async Task WaitForLoadAsync(MaterialEditorViewModel viewModel)
-    {
-        await WaitUntilAsync(() => string.Equals(viewModel.StatusText, "Cook: NotCooked", StringComparison.Ordinal)).ConfigureAwait(false);
-    }
+        => await WaitUntilAsync(() => string.Equals(viewModel.StatusText, "Cook: NotCooked", StringComparison.Ordinal)).ConfigureAwait(false);
 
     private static async Task WaitForEditAsync(RecordingDocumentService service, int expectedCount)
-    {
-        await WaitUntilAsync(() => service.PropertyEditCount >= expectedCount).ConfigureAwait(false);
-    }
+        => await WaitUntilAsync(() => service.PropertyEditCount >= expectedCount).ConfigureAwait(false);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
@@ -125,6 +164,10 @@ public sealed class MaterialEditorViewModelTests
         private readonly Lock sync = new();
         private readonly List<PropertyEdit> propertyEdits = [];
 
+        public Task<MaterialEditResult>? PendingEdit { get; set; }
+
+        public List<Guid> ClosedDocuments { get; } = [];
+
         public MaterialDocument Document { get; } = document;
 
         public List<PropertyEdit> PropertyEdits
@@ -133,7 +176,7 @@ public sealed class MaterialEditorViewModelTests
             {
                 lock (this.sync)
                 {
-                    return this.propertyEdits.Select(static edit => edit.Clone()).ToList();
+                    return this.propertyEdits.ConvertAll(static edit => edit.Clone());
                 }
             }
         }
@@ -189,7 +232,7 @@ public sealed class MaterialEditorViewModelTests
                 this.propertyEdits.Add(edit.Clone());
             }
 
-            return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
+            return this.PendingEdit ?? Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }
 
         public Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -212,6 +255,7 @@ public sealed class MaterialEditorViewModelTests
 
         public Task CloseAsync(Guid documentId, bool discard, CancellationToken cancellationToken = default)
         {
+            this.ClosedDocuments.Add(documentId);
             _ = documentId;
             _ = discard;
             cancellationToken.ThrowIfCancellationRequested();

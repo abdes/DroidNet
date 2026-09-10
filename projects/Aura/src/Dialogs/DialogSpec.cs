@@ -32,4 +32,10 @@ public sealed record DialogSpec(string Title, object? Content)
     ///     Gets the default button.
     /// </summary>
     public DialogButton DefaultButton { get; init; } = DialogButton.Close;
+
+    /// <summary>
+    /// Gets an optional asynchronous primary action. Returning false keeps the dialog open.
+    /// The dialog prevents dismissal and repeated actions while this operation is running.
+    /// </summary>
+    public Func<Task<bool>>? PrimaryAction { get; init; }
 }

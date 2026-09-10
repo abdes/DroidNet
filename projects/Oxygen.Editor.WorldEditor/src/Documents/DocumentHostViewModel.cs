@@ -5,20 +5,21 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Aura.Windowing;
 using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -35,6 +36,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     private readonly IStatusReducer statusReducer;
     private readonly IContainer container;
     private readonly WindowId windowId;
+    private readonly DocumentCloseCoordinator closeCoordinator;
+    private readonly WorkspaceCloseCoordinator workspaceCloseCoordinator;
 
     private readonly IViewLocator viewLocator;
     private readonly Dictionary<Guid, object> activeEditors = [];
@@ -47,19 +50,25 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <param name="documentService">The document service used to manage documents.</param>
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
+    /// <param name="operationResults">The visible operation-result publisher.</param>
+    /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="container">The dependency injection container used to resolve services and manage editor lifetimes.</param>
+    /// <param name="closeCoordinator">The shared authoring close coordinator.</param>
+    /// <param name="windowManager">The window lifecycle service.</param>
     /// <param name="windowId">The window identifier.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
     ///     process. If <see langword="null" />, logging is disabled.
     /// </param>
     public DocumentHostViewModel(
-        IDocumentService documentService,
+        IEditorDocumentService documentService,
         IViewLocator viewLocator,
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
         IContainer container,
+        DocumentCloseCoordinator closeCoordinator,
+        IWindowManagerService windowManager,
         WindowId windowId,
         ILoggerFactory? loggerFactory = null)
     {
@@ -73,6 +82,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.windowId = windowId;
+        this.closeCoordinator = closeCoordinator;
+        this.workspaceCloseCoordinator = new WorkspaceCloseCoordinator(windowManager, documentService, windowId);
 
         this.DocumentService.DocumentOpened += this.OnDocumentOpened;
         this.DocumentService.DocumentClosed += this.OnDocumentClosed;
@@ -109,12 +120,19 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         if (disposing)
         {
             this.LogDisposing();
+            this.workspaceCloseCoordinator.Dispose();
             this.DocumentService.DocumentOpened -= this.OnDocumentOpened;
             this.DocumentService.DocumentClosed -= this.OnDocumentClosed;
             this.DocumentService.DocumentActivated -= this.OnDocumentActivated;
 
             foreach (var documentId in this.activeEditors.Keys.ToArray())
             {
+                this.closeCoordinator.Unregister(this.windowId, documentId);
+                if (this.activeEditors[documentId] is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+
                 _ = this.ReleaseDocumentSurfacesAsync(documentId);
             }
 
@@ -124,11 +142,39 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
+        if (e.WindowId != this.windowId)
+        {
+            return;
+        }
+
         this.LogOnDocumentOpened(e.Metadata.DocumentId, e.Metadata.GetType().Name);
 
+        var editor = this.CreateEditor(e.Metadata);
+        if (editor != null)
+        {
+            this.activeEditors[e.Metadata.DocumentId] = editor;
+            this.closeCoordinator.Register(this.windowId, e.Metadata.DocumentId, editor);
+
+            if (e.ShouldSelect)
+            {
+                this.LogSelectingEditor(e.Metadata.DocumentId);
+                this.ActiveEditor = editor;
+            }
+        }
+        else
+        {
+            this.LogFailedToCreateEditor(e.Metadata.DocumentId);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to deactivate previous scene editor view during document switch.")]
+    private partial void LogViewDeactivationFailed(Exception exception);
+
+    private IDocumentCloseParticipant? CreateEditor(IDocumentMetadata metadata)
+    {
         // Create the editor ViewModel based on metadata type
-        object? editor = null;
-        if (e.Metadata is SceneDocumentMetadata sceneMeta)
+        IDocumentCloseParticipant? editor = null;
+        if (metadata is SceneDocumentMetadata sceneMeta)
         {
             var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
             editor = new SceneEditorViewModel(
@@ -145,7 +191,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 messenger,
                 this.loggerFactory);
         }
-        else if (e.Metadata is MaterialDocumentMetadata materialMeta)
+        else if (metadata is MaterialDocumentMetadata materialMeta)
         {
             editor = new MaterialEditorViewModel(
                 materialMeta,
@@ -159,26 +205,20 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
         else
         {
-            this.LogUnknownMetadataType(e.Metadata.GetType().Name);
+            this.LogUnknownMetadataType(metadata.GetType().Name);
         }
 
-        if (editor != null)
-        {
-            this.activeEditors[e.Metadata.DocumentId] = editor;
-            if (e.ShouldSelect)
-            {
-                this.LogSelectingEditor(e.Metadata.DocumentId);
-                this.ActiveEditor = editor;
-            }
-        }
-        else
-        {
-            this.LogFailedToCreateEditor(e.Metadata.DocumentId);
-        }
+        return editor;
     }
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e)
     {
+        if (e.WindowId != this.windowId)
+        {
+            return;
+        }
+
+        this.closeCoordinator.Unregister(this.windowId, e.Metadata.DocumentId);
         this.LogOnDocumentClosed(e.Metadata.DocumentId);
         if (this.activeEditors.TryGetValue(e.Metadata.DocumentId, out var editor))
         {
@@ -212,6 +252,11 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
 
     private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
+        if (e.WindowId != this.windowId)
+        {
+            return;
+        }
+
         this.LogOnDocumentActivated(e.DocumentId);
 
         if (this.activeEditors.TryGetValue(e.DocumentId, out var editor))
@@ -235,6 +280,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         _ = this.SwitchActiveEditorViewAsync(value, requestId);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "View teardown failures are logged so an approved document transition can finish without crashing the UI.")]
     private async Task SwitchActiveEditorViewAsync(object? value, long requestId)
     {
         await this.activeEditorViewGate.WaitAsync().ConfigureAwait(true);
@@ -253,7 +299,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 }
                 catch (Exception ex)
                 {
-                    this.logger.LogWarning(ex, "Failed to deactivate previous scene editor view during document switch.");
+                    this.LogViewDeactivationFailed(ex);
                 }
             }
 
@@ -289,7 +335,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
         finally
         {
-            this.activeEditorViewGate.Release();
+            _ = this.activeEditorViewGate.Release();
         }
     }
 }

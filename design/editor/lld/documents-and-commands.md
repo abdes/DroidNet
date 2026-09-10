@@ -227,6 +227,47 @@ ED-M03 surfaces:
 
 ## 10. Persistence And Round Trip
 
+### Unsaved Document Closure
+
+`EditorDocumentService` prepares closure before removing documents or raising
+`DocumentClosed`. Its existing asynchronous `DocumentClosing` vetoes apply to
+both individual closes and every document in a workspace close. Scene replacement
+uses this same path with `force: false`.
+
+`DocumentCloseCoordinator` owns editor close preparation and the registered
+`IDocumentCloseParticipant` authoring owners. Participants drain pending saves
+and material edits, expose save success, and close only after an explicit
+decision. View-model disposal releases resources; it does not authorize discard.
+The material participant maps the tab identity to the material service identity.
+
+The WorldEditor `DocumentClosePrompt` supplies two presentations:
+
+- Individual tab closure and scene replacement: Save, Discard, Cancel.
+- Workspace/window closure: one list of dirty documents, all selected by
+  default, with Save Selected, Discard All, and Cancel in a Close workspace dialog.
+  The dialog explains that unchecked documents' changes will be discarded.
+
+Selected saves run while the dialog remains open. Failed saves show a per-document
+message and publish an operation result. Retry preserves already successful
+saves; Cancel preserves all open documents, unsaved authoring state, history,
+selection, and active context. Successful saves are not rolled back by Cancel.
+No unchecked document is discarded while any selected save is failing.
+
+`WorkspaceCloseCoordinator` prepares all documents during Aura's cancelable
+`WindowClosing` event. Aura awaits every handler before running completion
+callbacks: approval commits the document transaction; a veto disposes preparation
+without closing documents. Duplicate close requests cannot bypass a pending
+decision. Document opening, detaching, and activation are rejected while the
+window's close transaction is pending. Edits detected during a selected save
+remain dirty and prevent that close from proceeding.
+
+Automated coverage exercises cancellation and scene replacement through the real
+document service, selected workspace saves and discards, late vetoes, overlapping
+requests, material save I/O failure/retry and disposal, and native window/dialog
+asynchronous behavior. Full editor workflow validation remains a separate gate.
+
+### Scene Round Trip
+
 `Scene.Save` persists supported scene graph state through the existing scene
 serializer path. ED-M03 must prove:
 

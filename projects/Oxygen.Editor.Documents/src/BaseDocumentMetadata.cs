@@ -15,6 +15,8 @@ namespace Oxygen.Editor.Documents;
 /// </param>
 public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentMetadata
 {
+    private bool isDirty;
+
     /// <summary>
     /// Gets the document identifier.
     /// </summary>
@@ -27,7 +29,21 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
     public Uri? IconUri { get; set; }
 
     /// <inheritdoc/>
-    public bool IsDirty { get; set; }
+    public bool IsDirty
+    {
+        get => this.isDirty;
+        set
+        {
+            this.isDirty = value;
+            if (value)
+            {
+                this.ChangeVersion++;
+            }
+        }
+    }
+
+    /// <summary>Gets the authoring version used to detect edits arriving during a save.</summary>
+    public long ChangeVersion { get; private set; }
 
     /// <inheritdoc/>
     public bool IsPinnedHint { get; set; }

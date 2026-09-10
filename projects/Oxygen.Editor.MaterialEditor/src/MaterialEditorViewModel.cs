@@ -9,9 +9,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Assets.Import.Materials;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 
@@ -20,17 +21,19 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <summary>
 /// View model for the scalar material editor document.
 /// </summary>
-public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDisposable
+public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
 {
     private readonly MaterialDocumentMetadata metadata;
     private readonly IMaterialDocumentService documentService;
     private readonly ILogger logger;
     private readonly Action<Uri>? assetChanged;
     private readonly SemaphoreSlim editGate = new(1, 1);
+    private readonly Task loadTask;
     private MaterialDocument? document;
     private bool isLoading;
     private bool isDisposed;
     private bool isApplyingBaseColor;
+    private bool isClosing;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorViewModel"/> class.
@@ -51,7 +54,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.assetChanged = assetChanged;
         this.MaterialUriText = metadata.MaterialUri.ToString();
 
-        _ = this.LoadAsync();
+        this.loadTask = this.LoadAsync();
     }
 
     /// <summary>
@@ -138,15 +141,37 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.isDisposed = true;
-        this.editGate.Dispose();
-        if (this.document is not null)
-        {
-            _ = this.documentService.CloseAsync(this.document.DocumentId, discard: true);
-        }
+        _ = this.DisposeGateAsync();
     }
 
     /// <inheritdoc />
     public async Task SaveAsync() => await this.SaveMaterialAsync().ConfigureAwait(true);
+
+    /// <inheritdoc />
+    public async Task PrepareForCloseAsync()
+    {
+        this.isClosing = true;
+        await this.loadTask.ConfigureAwait(true);
+        await this.editGate.WaitAsync().ConfigureAwait(true);
+        _ = this.editGate.Release();
+    }
+
+    /// <inheritdoc />
+    public Task<bool> SaveForCloseAsync() => this.SaveCoreAsync();
+
+    /// <inheritdoc />
+    public async Task CloseAsync(bool discard)
+    {
+        await this.loadTask.ConfigureAwait(true);
+        if (this.document is { } current)
+        {
+            await this.documentService.CloseAsync(current.DocumentId, discard).ConfigureAwait(true);
+            this.document = null;
+        }
+    }
+
+    /// <inheritdoc />
+    public void ResumeEditing() => this.isClosing = false;
 
     /// <summary>
     /// Applies a picker-selected base color to the scalar descriptor channels.
@@ -214,6 +239,14 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [LoggerMessage(EventId = 0, Level = LogLevel.Warning, Message = "Failed to open material document {MaterialUri}.")]
     private static partial void LogMaterialOpenFailed(ILogger logger, Exception exception, Uri materialUri);
 
+    private async Task DisposeGateAsync()
+    {
+        await this.loadTask.ConfigureAwait(true);
+        await this.editGate.WaitAsync().ConfigureAwait(true);
+        _ = this.editGate.Release();
+        this.editGate.Dispose();
+    }
+
     partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorR, value));
 
     partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorG, value));
@@ -235,18 +268,42 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [RelayCommand]
     private async Task SaveMaterialAsync()
     {
-        if (this.document is null)
+        if (!this.isClosing && !this.isDisposed)
         {
-            return;
+            _ = await this.SaveCoreAsync().ConfigureAwait(true);
         }
+    }
 
-        var result = await this.documentService.SaveAsync(this.document.DocumentId).ConfigureAwait(true);
-        if (result.Succeeded)
+    private async Task<bool> SaveCoreAsync()
+    {
+        await this.loadTask.ConfigureAwait(true);
+        await this.editGate.WaitAsync().ConfigureAwait(true);
+        try
         {
-            this.metadata.IsDirty = false;
-            this.IsDirty = false;
-            this.StatusText = "Saved";
-            this.assetChanged?.Invoke(this.metadata.MaterialUri);
+            if (this.document is null)
+            {
+                this.StatusText = "The material is not loaded and cannot be saved.";
+                return false;
+            }
+
+            var result = await this.documentService.SaveAsync(this.document.DocumentId).ConfigureAwait(true);
+            if (result.Succeeded)
+            {
+                this.metadata.IsDirty = false;
+                this.IsDirty = false;
+                this.StatusText = "Saved";
+                this.assetChanged?.Invoke(this.metadata.MaterialUri);
+            }
+            else
+            {
+                this.StatusText = "Save failed. Your changes are still open.";
+            }
+
+            return result.Succeeded;
+        }
+        finally
+        {
+            _ = this.editGate.Release();
         }
     }
 
@@ -340,7 +397,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private void ApplyEdit(PropertyEdit edit)
     {
-        if (this.isLoading || this.document is null)
+        if (this.isLoading || this.isClosing || this.isDisposed || this.document is null)
         {
             return;
         }
@@ -372,7 +429,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
         finally
         {
-            this.editGate.Release();
+            _ = this.editGate.Release();
         }
     }
 

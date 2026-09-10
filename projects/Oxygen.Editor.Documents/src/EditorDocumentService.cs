@@ -16,14 +16,15 @@ namespace Oxygen.Editor.Documents;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the
 ///     recognition process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
-    : IDocumentService, IDocumentServiceState
+public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null, DocumentCloseCoordinator? closeCoordinator = null)
+    : IEditorDocumentService, IDocumentServiceState
 {
     private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<EditorDocumentService>();
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
     private readonly Dictionary<WindowId, Guid> activeDocuments = [];
+    private readonly HashSet<WindowId> closingWindows = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -49,10 +50,15 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     /// <inheritdoc/>
     public async Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
+        if (this.closingWindows.Contains(windowId))
+        {
+            return Guid.Empty;
+        }
+
         var documentId = metadata.DocumentId;
         this.LogOpenDocumentCalled(windowId.Value, documentId);
 
-        if (!await this.EnsureSingleNonClosableDocumentAsync(windowId, metadata).ConfigureAwait(false))
+        if (!await this.EnsureSingleNonClosableDocumentAsync(windowId, metadata).ConfigureAwait(true))
         {
             this.LogDocumentOpenAborted(windowId.Value, documentId);
             return Guid.Empty;
@@ -82,36 +88,22 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
             return false;
         }
 
-        var closingArgs = new DocumentClosingEventArgs(windowId, metadata, force);
-        this.DocumentClosing?.Invoke(this, closingArgs);
-        if (!force)
-        {
-            var allowed = await closingArgs.WaitForVetoResultAsync().ConfigureAwait(false);
-            if (!allowed)
-            {
-                return false;
-            }
-        }
-
-        _ = docs.Remove(documentId);
-        if (docs.Count == 0)
-        {
-            _ = this.windowDocs.Remove(windowId);
-        }
-
-        if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
-        {
-            _ = this.activeDocuments.Remove(windowId);
-        }
-
-        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
-        this.LogDocumentClosed(windowId.Value, documentId);
-        return true;
+        using var transaction = await this.PrepareCloseAsync(windowId, [metadata], isWorkspaceClose: false, force).ConfigureAwait(true);
+        return transaction is not null && await transaction.CommitAsync().ConfigureAwait(true);
     }
+
+    /// <inheritdoc/>
+    public Task<DocumentCloseTransaction?> PrepareCloseAllAsync(WindowId windowId)
+        => this.PrepareCloseAsync(windowId, this.GetOpenDocuments(windowId), isWorkspaceClose: true, force: false);
 
     /// <inheritdoc/>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
     {
+        if (this.closingWindows.Contains(windowId))
+        {
+            return Task.FromResult<IDocumentMetadata?>(null);
+        }
+
         this.LogDetachDocumentCalled(windowId.Value, documentId);
 
         if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
@@ -139,9 +131,14 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     /// <inheritdoc/>
     public async Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
+        if (this.closingWindows.Contains(targetWindowId))
+        {
+            return false;
+        }
+
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
-        if (!await this.EnsureSingleNonClosableDocumentAsync(targetWindowId, metadata).ConfigureAwait(false))
+        if (!await this.EnsureSingleNonClosableDocumentAsync(targetWindowId, metadata).ConfigureAwait(true))
         {
             this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
             return false;
@@ -182,6 +179,11 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     /// <inheritdoc/>
     public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
     {
+        if (this.closingWindows.Contains(windowId))
+        {
+            return Task.FromResult(false);
+        }
+
         this.LogSelectDocumentCalled(windowId.Value, documentId);
 
         if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
@@ -207,6 +209,103 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
         => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
             ? documentId
             : null;
+
+    private async Task<DocumentCloseTransaction?> PrepareCloseAsync(
+        WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, bool isWorkspaceClose, bool force)
+    {
+        if (!this.closingWindows.Add(windowId))
+        {
+            return null;
+        }
+
+        var retained = false;
+        DocumentCloseTransaction? authoring = null;
+        try
+        {
+            if (!await this.ConfirmVetoesAsync(windowId, documents, force).ConfigureAwait(true))
+            {
+                return null;
+            }
+
+            if (closeCoordinator is not null)
+            {
+                authoring = await closeCoordinator.PrepareAsync(windowId, documents, isWorkspaceClose, force).ConfigureAwait(true);
+                if (authoring is null)
+                {
+                    return null;
+                }
+            }
+            else if (!force && documents.Any(metadata => metadata.IsDirty))
+            {
+                // Applications must install a close policy before dirty documents can be closed.
+                return null;
+            }
+
+            retained = true;
+            return new DocumentCloseTransaction(
+                async () =>
+                {
+                    if (authoring is not null && !await authoring.CommitAsync().ConfigureAwait(true))
+                    {
+                        return false;
+                    }
+
+                    foreach (var metadata in documents)
+                    {
+                        this.RemoveClosedDocument(windowId, metadata);
+                    }
+
+                    return true;
+                },
+                () =>
+                {
+                    authoring?.Dispose();
+                    _ = this.closingWindows.Remove(windowId);
+                });
+        }
+        finally
+        {
+            if (!retained)
+            {
+                authoring?.Dispose();
+                _ = this.closingWindows.Remove(windowId);
+            }
+        }
+    }
+
+    private async Task<bool> ConfirmVetoesAsync(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, bool force)
+    {
+        foreach (var metadata in documents)
+        {
+            var args = new DocumentClosingEventArgs(windowId, metadata, force);
+            this.DocumentClosing?.Invoke(this, args);
+            if (!force && !await args.WaitForVetoResultAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void RemoveClosedDocument(WindowId windowId, IDocumentMetadata metadata)
+    {
+        var documentId = metadata.DocumentId;
+        var docs = this.windowDocs[windowId];
+        _ = docs.Remove(documentId);
+        if (docs.Count == 0)
+        {
+            _ = this.windowDocs.Remove(windowId);
+        }
+
+        if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
+        {
+            _ = this.activeDocuments.Remove(windowId);
+        }
+
+        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
+        this.LogDocumentClosed(windowId.Value, documentId);
+    }
 
     private async Task<bool> EnsureSingleNonClosableDocumentAsync(WindowId windowId, IDocumentMetadata metadata)
     {
@@ -244,7 +343,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
 
         if (existingId.HasValue)
         {
-            var closed = await this.CloseDocumentAsync(windowId, existingId.Value, force: false).ConfigureAwait(false);
+            var closed = await this.CloseDocumentAsync(windowId, existingId.Value, force: false).ConfigureAwait(true);
             if (!closed)
             {
                 return false;
