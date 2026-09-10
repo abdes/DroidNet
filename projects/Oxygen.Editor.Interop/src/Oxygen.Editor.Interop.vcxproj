@@ -23,6 +23,9 @@
     <ClCompile Include="Commands\HideViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="EditorModule\SceneAssetRequests.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetGeometryCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -188,6 +191,7 @@
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="EditorModule\CommandFactory.h" />
+    <ClInclude Include="EditorModule\SceneAssetRequests.h" />
     <ClInclude Include="EditorModule\EditorCommand.h" />
     <ClInclude Include="EditorModule\EditorCompositor.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />

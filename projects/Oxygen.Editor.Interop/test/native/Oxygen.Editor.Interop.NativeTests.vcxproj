@@ -78,6 +78,16 @@
     <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetEnvironmentCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\SceneAssetRequests.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetGeometryCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetMaterialOverrideCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="src\AssetRequests_native_test.cpp" />
     <ClCompile Include="src\EnvironmentCommand_native_test.cpp" />
     <ClCompile Include="src\InputAccumulator_native_test.cpp" />
   </ItemGroup>

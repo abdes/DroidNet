@@ -403,6 +403,24 @@ Later consumers:
 
 ED-M02 must not add authoring-specific scene mutation semantics here.
 
+### Scene Asset Completion Lifetime
+
+The interop editor module owns one `SceneAssetRequests` session alongside its
+native scene. Retire that session before scene teardown or replacement and at
+module destruction. Pending loader callbacks retain only a weak completion
+inbox, so they cannot keep the old scene/module alive or apply results after
+shutdown. No engine rebuild or new public runtime API is needed for this
+coordination; it uses existing loader callbacks and `SceneMutation` ordering.
+
+Within `SceneMutation`, queued authoring commands execute before the completion
+inbox is drained. Generation validation and application occur on that same
+mutation path. Full node handles protect node identity, and the separate scene
+session lifetime prevents reused scene identifiers from accepting old results.
+The generation and material-slot semantics belong to
+[live-engine-sync.md](./live-engine-sync.md#82-material-slot-v01-behavior).
+Current asset failures retain the native runtime logging path and do not change
+the managed queue-acceptance contract or roll back authored edits.
+
 ### ED-M04 Inspector-Driven Sync Semantics
 
 ED-M04 adds **no new public surface** to `IEngineService`. It pins the exact

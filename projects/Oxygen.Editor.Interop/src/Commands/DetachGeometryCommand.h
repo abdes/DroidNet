@@ -7,10 +7,13 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <stdexcept>
+
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <EditorModule/EditorCommand.h>
+#include <EditorModule/SceneAssetRequests.h>
 
 namespace oxygen::interop::module {
 
@@ -37,8 +40,12 @@ namespace oxygen::interop::module {
     if (!sceneNode || !sceneNode->IsAlive())
       return;
 
+    if (!context.AssetRequests) {
+      throw std::logic_error("Detach command requires scene asset request state");
+    }
+    context.AssetRequests->Detach(node_);
     auto r = sceneNode->GetRenderable();
-    r.Detach();
+    static_cast<void>(r.Detach());
   }
 
 } // namespace oxygen::interop::module
