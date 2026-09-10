@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -299,7 +300,7 @@ private:
   // std::mutex parallel_results_mutex_;
   // std::vector<AsyncJobState> async_jobs_ {};
 
-  bool shutdown_requested_ { false };
+  std::atomic_bool shutdown_requested_ { false };
   EngineConfig config_; // Engine configuration
   co::Nursery* nursery_ { nullptr };
   frame::SequenceNumber frame_number_ { 0 };

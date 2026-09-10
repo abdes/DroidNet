@@ -264,18 +264,32 @@ namespace Oxygen::Interop {
 
     Monitor::Enter(state_lock_);
     try {
-      if (engine_task_ != nullptr && !engine_task_->IsCompleted) {
+      if ((engine_task_ != nullptr && !engine_task_->IsCompleted)
+        || (loop_cleanup_source_ != nullptr && !loop_cleanup_source_->Task->IsCompletedSuccessfully)) {
         throw gcnew InvalidOperationException(
           "The engine loop is already running.");
       }
 
       active_context_ = ctx;
+      loop_cleanup_source_ = gcnew TaskCompletionSource<bool>(
+        TaskCreationOptions::RunContinuationsAsynchronously);
       engine_completion_source_ = gcnew TaskCompletionSource<bool>(
         TaskCreationOptions::RunContinuationsAsynchronously);
       engine_task_ = engine_completion_source_->Task;
-      render_thread_context_->Start(
-        gcnew ParameterizedThreadStart(this, &EngineRunner::EngineLoopAdapter),
-        ctx, "OxygenEngineLoop");
+      try {
+        render_thread_context_->Start(
+          gcnew ParameterizedThreadStart(this, &EngineRunner::EngineLoopAdapter),
+          ctx, "OxygenEngineLoop");
+      }
+      catch (...) {
+        // No loop lifetime task was returned, so leave no task that disposal
+        // could wait on indefinitely after thread startup failed.
+        engine_task_ = nullptr;
+        active_context_ = nullptr;
+        engine_completion_source_ = nullptr;
+        loop_cleanup_source_->TrySetResult(true);
+        throw;
+      }
       started_task = engine_task_;
     }
     finally {
@@ -283,6 +297,30 @@ namespace Oxygen::Interop {
     }
 
     return started_task;
+  }
+
+  auto EngineRunner::WaitForLoopCleanupAsync() -> Task^ {
+    Task^ cleanup = nullptr;
+    bool retry = false;
+    Monitor::Enter(state_lock_);
+    try {
+      if (loop_cleanup_source_ != nullptr
+        && loop_cleanup_source_->Task->IsFaulted) {
+        // Explicit cleanup retry after the previous callback finished failing.
+        loop_cleanup_source_ = gcnew TaskCompletionSource<bool>(
+          TaskCreationOptions::RunContinuationsAsynchronously);
+        retry = true;
+      }
+      cleanup = loop_cleanup_source_ != nullptr
+        ? loop_cleanup_source_->Task : Task::CompletedTask;
+    }
+    finally {
+      Monitor::Exit(state_lock_);
+    }
+    if (retry) {
+      DispatchToUi(gcnew Action(this, &EngineRunner::OnEngineLoopExited));
+    }
+    return cleanup;
   }
 
   auto EngineRunner::StopEngine(EngineContext^ ctx) -> void {
@@ -377,60 +415,79 @@ namespace Oxygen::Interop {
   }
 
   void EngineRunner::OnEngineLoopExited() {
-    LogInfoMessage("OnEngineLoopExited invoked; clearing surface registry.");
-    ResetSurfaceRegistry();
+    auto cleanup = loop_cleanup_source_;
+    try {
+      LogInfoMessage("OnEngineLoopExited invoked; clearing surface registry.");
+      ResetSurfaceRegistry();
 
-    // No managed pending_tokens_ map is defined in this class; we use the
-    // native tokens_map for outstanding tokens. Proceed to clear native
-    // outstanding entries instead (done below).
+      // No managed pending_tokens_ map is defined in this class; we use the
+      // native tokens_map for outstanding tokens. Proceed to clear native
+      // outstanding entries instead (done below).
 
-    // Also fail any outstanding native tokens_map entries so awaiting callers
-    // using the async native APIs do not hang when the engine loop exits.
-    {
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      try {
-        auto msg = fmt::format(
-          fmt::runtime(
-            "OnEngineLoopExited: failing outstanding "
-            "tokens_map entries (count={})"),
-          tokens_map.size());
-        LogInfoMessage(msg.c_str());
-      }
-      catch (...) { /* ignore logging failures */
-      }
+      // Also fail any outstanding native tokens_map entries so awaiting callers
+      // using the async native APIs do not hang when the engine loop exits.
+      {
+        std::lock_guard<std::mutex> lg(tokens_mutex);
+        try {
+          auto msg = fmt::format(
+            fmt::runtime(
+              "OnEngineLoopExited: failing outstanding "
+              "tokens_map entries (count={})"),
+            tokens_map.size());
+          LogInfoMessage(msg.c_str());
+        }
+        catch (...) { /* ignore logging failures */
+        }
 
-      for (auto& it : tokens_map) {
-        void* hv = it.second;
-        if (hv != nullptr) {
-          try {
-            System::IntPtr ip(hv);
-            auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(ip);
-            auto tcs =
-              safe_cast<System::Threading::Tasks::TaskCompletionSource<bool>^>(
-                gh.Target);
-            if (tcs != nullptr) {
-              tcs->TrySetResult(false);
+        for (auto& it : tokens_map) {
+          void* hv = it.second;
+          if (hv != nullptr) {
+            try {
+              System::IntPtr ip(hv);
+              auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(ip);
+              auto tcs =
+                safe_cast<System::Threading::Tasks::TaskCompletionSource<bool>^>(
+                  gh.Target);
+              if (tcs != nullptr) {
+                tcs->TrySetResult(false);
+              }
+              gh.Free();
             }
-            gh.Free();
-          }
-          catch (...) { /* swallow */
+            catch (...) { /* swallow */
+            }
           }
         }
+        tokens_map.clear();
       }
-      tokens_map.clear();
-    }
 
-    Monitor::Enter(state_lock_);
-    try {
-      engine_task_ = nullptr;
-      active_context_ = nullptr;
-      engine_completion_source_ = nullptr;
-      if (render_thread_context_ != nullptr) {
-        render_thread_context_->Clear();
+      Monitor::Enter(state_lock_);
+      try {
+        engine_task_ = nullptr;
+        active_context_ = nullptr;
+        engine_completion_source_ = nullptr;
+        if (render_thread_context_ != nullptr) {
+          render_thread_context_->Clear();
+        }
+      }
+      finally {
+        Monitor::Exit(state_lock_);
       }
     }
-    finally {
-      Monitor::Exit(state_lock_);
+    catch (System::Exception^ exception) {
+      if (cleanup != nullptr) {
+        cleanup->TrySetException(exception);
+      }
+      return;
+    }
+    catch (...) {
+      if (cleanup != nullptr) {
+        cleanup->TrySetException(gcnew InvalidOperationException(
+          "Native loop cleanup failed."));
+      }
+      return;
+    }
+    if (cleanup != nullptr) {
+      cleanup->TrySetResult(true);
     }
   }
 

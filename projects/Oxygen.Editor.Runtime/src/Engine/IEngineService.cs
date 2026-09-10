@@ -32,8 +32,7 @@ public interface IEngineService : IAsyncDisposable
     /// </throws>
     /// <remarks>
     ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error, and will cause the immediate termination of the application process in
-    ///     debug builds.
+    ///     logic error and throws an exception.
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Ready"/></item>
     ///      <item><see cref="EngineServiceState.Running"/></item>
@@ -49,8 +48,7 @@ public interface IEngineService : IAsyncDisposable
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     /// <remarks>
     ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error, and will cause the immediate termination of the application process in
-    ///     debug builds.
+    ///     logic error and throws an exception.
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Ready"/></item>
     ///      <item><see cref="EngineServiceState.Running"/></item>
@@ -65,8 +63,7 @@ public interface IEngineService : IAsyncDisposable
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     /// <remarks>
     ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error, and will cause the immediate termination of the application process in
-    ///     debug builds.
+    ///     logic error and throws an exception.
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Ready"/></item>
     ///      <item><see cref="EngineServiceState.Running"/></item>
@@ -81,8 +78,7 @@ public interface IEngineService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error, and will cause the immediate termination of the application process in
-    ///     debug builds.
+    ///     logic error and throws an exception.
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Ready"/></item>
     ///      <item><see cref="EngineServiceState.Running"/></item>
@@ -98,14 +94,27 @@ public interface IEngineService : IAsyncDisposable
     /// </summary>
     /// <remarks>
     ///     Allowed only in the following states, and using it in any other state is considered a
-    ///     logic error, and will cause the immediate termination of the application process in
-    ///     debug builds.
+    ///     logic error and throws an exception.
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
     /// </remarks>
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     public OxygenWorld World { get; }
+
+    /// <summary>
+    ///     Gets the input bridge instance associated with this engine service. This provides
+    ///     managed access to runtime input facilities of the native engine.
+    ///     May be null if the engine is not yet initialized.
+    /// </summary>
+    /// <remarks>
+    ///     Allowed only in the following states:
+    ///     <list type="bullet">
+    ///      <item><see cref="EngineServiceState.Ready"/></item>
+    ///      <item><see cref="EngineServiceState.Running"/></item>
+    ///     </list>
+    /// </remarks>
+    public OxygenInput Input { get; }
 
     /// <summary>
     ///     Mounts the project's cooked assets root directory in the engine's virtual path resolver.
@@ -132,41 +141,14 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     public void UnmountProjectCookedRoot();
 
-    /// <summary>
-    ///     Gets the input bridge instance associated with this engine service. This provides
-    ///     managed access to runtime input facilities of the native engine.
-    ///     May be null if the engine is not yet initialized.
-    /// </summary>
+    /// <summary>Initializes the runtime, first completing cleanup of any previous failed instance.</summary>
+    /// <param name="cancellationToken">Cancels waiting for another lifecycle operation; native creation is synchronous.</param>
+    /// <returns>A task yielding <see langword="true"/> when ready or already running.</returns>
     /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Ready"/></item>
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
+    /// Lifecycle operations are serialized. Failure preserves the original exception and attempts
+    /// partial cleanup. Unreleased ownership remains in <c>Faulted</c> and must be cleaned before
+    /// another instance can be initialized. New initialization is rejected after disposal is requested.
     /// </remarks>
-    public OxygenInput Input { get; }
-
-    /// <summary>
-    ///     Initializes the runtime engine.
-    /// </summary>
-    /// <param name="cancellationToken">A cancellation token, that can be used to cancel the operation.</param>
-    /// <returns>A <see cref="ValueTask"/> that yields a boolean indicating success or failure.</returns>
-    /// <remarks>
-    ///     Allowed only in the following states, and using it in any other state will have no effect.
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.NoEngine"/></item>
-    ///      <item><see cref="EngineServiceState.Faulted"/></item>
-    ///     </list>
-    ///     Immediately transitions the service to the <c>Initializing</c> state until
-    ///     initialization completes, at which point the service will transition to either the
-    ///     <c>Ready</c> state on success, or the <c>NoEngine</c> state on failure.
-    ///     <para>
-    ///     This operation may take time, and can be cancelled via the provided cancellation token.
-    ///     When cancelled, the initialization process will be aborted, the runtime engine instance
-    ///     will be destroyed, and the service will transition back to the <c>NoEngine</c>
-    ///     state.</para>
-    /// </remarks>
-    /// <seealso cref="EngineServiceState"/>
     public ValueTask<bool> InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -183,35 +165,26 @@ public interface IEngineService : IAsyncDisposable
     ///     </list>
     ///     Will have no effect in <c>Starting</c> or <c>Running</c> states.
     ///     <para>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.</para>
+    ///     Using it in any other state throws an exception.</para>
     ///     <para>
     ///     Immediately transitions the service to the <c>Starting</c> state until completion, at
     ///     which point the service will transition to the <c>Running</c> state upon success, and to
-    ///     the <c>Faulted</c> state on failure.</para>
+    ///     the <c>Faulted</c> state if the loop fails. Synchronous startup failure attempts cleanup
+    ///     before returning the original error.</para>
     /// </remarks>
     public ValueTask StartAsync();
 
-    /// <summary>
-    ///     Shuts down and disposes the runtime engine.
-    /// </summary>
-    /// <returns>A <see cref="ValueTask"/> that completes when the engine service has stopped.</returns>
-    /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
+    /// <summary>Shuts down the native engine and reports failures after attempting all safe cleanup.</summary>
+    /// <returns>A task that completes after teardown has been attempted.</returns>
+    /// <exception cref="AggregateException">One or more cleanup operations failed.</exception>
     /// <remarks>
-    ///     <b>Not</b> allowed in the following states, and breaking that is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Initializing"/></item>
-    ///      <item><see cref="EngineServiceState.Starting"/></item>
-    ///      <item><see cref="EngineServiceState.ShuttingDown"/></item>
-    ///     </list>
-    ///     Has no effect when called in <c>NoEngine</c> state. When called in any other allowed
-    ///     state, and the engine not already shutdown, it immediately transitions the service to
-    ///     the <c>ShuttingDown</c> state, the frame loop will be stopped if running, and once the
-    ///     shutdown process is complete, the service will transition back to the <c>NoEngine</c>
-    ///     state on success, or to the <c>Faulted</c> state on failure.
-    ///     <para>
-    ///     This operation will take some time, and is not cancellable.</para>
+    /// Lifecycle and asynchronous surface/view operations are serialized. Repeated calls wait
+    /// for prior work and may retry incomplete cleanup. This operation is not cancellable.
+    /// The state is <see cref="EngineServiceState.NoEngine"/> only when native ownership is
+    /// fully released, or <see cref="EngineServiceState.Faulted"/> when resources remain.
+    /// Reported failures can include intermediate errors even when final cleanup succeeded.
+    /// <see cref="IAsyncDisposable.DisposeAsync"/> uses the same cleanup as a non-throwing,
+    /// logged fallback and permanently rejects new runtime work once disposal is requested.
     /// </remarks>
     public ValueTask ShutdownAsync();
 
@@ -235,8 +208,7 @@ public interface IEngineService : IAsyncDisposable
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
+    ///     Using it in any other state throws an exception.
     ///     <para>
     ///     The provided <paramref name="cancellationToken"/> is observed before the native
     ///     registration call and immediately after a successful registration. If cancellation
@@ -248,21 +220,11 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     public ValueTask<IViewportSurfaceLease> AttachViewportAsync(ViewportSurfaceRequest request, SwapChainPanel panel, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Releases every surface leased by the specified document, allowing the slots to be reused
-    ///     for other surface leases.
-    /// </summary>
+    /// <summary>Releases every surface leased by the specified document.</summary>
     /// <param name="documentId">The owning document.</param>
-    /// <returns>A <see cref="ValueTask"/> that completes when the releases have finished.</returns>
-    /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
-    /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
-    /// </remarks>
+    /// <returns>A task that completes after every matching release has been attempted.</returns>
+    /// <exception cref="AggregateException">One or more surface releases failed.</exception>
+    /// <remarks>Safe during teardown and after shutdown. Failed native releases remain tracked until cleaned up.</remarks>
     public ValueTask ReleaseDocumentSurfacesAsync(Guid documentId);
 
     // -- View Management --
@@ -281,8 +243,7 @@ public interface IEngineService : IAsyncDisposable
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
+    ///     Using it in any other state throws an exception.
     /// </remarks>
     public Task<ViewIdManaged> CreateViewAsync(ViewConfigManaged config);
 
@@ -301,8 +262,7 @@ public interface IEngineService : IAsyncDisposable
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
+    ///     Using it in any other state throws an exception.
     /// </remarks>
     public Task<bool> DestroyViewAsync(ViewIdManaged viewId);
 
@@ -321,8 +281,7 @@ public interface IEngineService : IAsyncDisposable
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
+    ///     Using it in any other state throws an exception.
     /// </remarks>
     public Task<bool> ShowViewAsync(ViewIdManaged viewId);
 
@@ -341,8 +300,7 @@ public interface IEngineService : IAsyncDisposable
     ///     <list type="bullet">
     ///      <item><see cref="EngineServiceState.Running"/></item>
     ///     </list>
-    ///     Using it in any other state is considered a logic error, and will cause the immediate
-    ///     termination of the application process in debug builds.
+    ///     Using it in any other state throws an exception.
     /// </remarks>
     public Task<bool> HideViewAsync(ViewIdManaged viewId);
 

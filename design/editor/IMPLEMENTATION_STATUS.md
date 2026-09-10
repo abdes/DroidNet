@@ -207,6 +207,13 @@ Implementation:
 - [x] Runtime, single-surface view, cooked-root, viewport-layout, and
       runtime-settings workflows publish stable operation-kind diagnostics.
 - [x] Runtime FPS setter clamps before applying to the engine runner.
+- [x] Issue #3 corrects shutdown guards, retains failed native ownership for
+      retry, and shuts down through application lifecycle integration after
+      approved document close. The engine owner rebuilt/reinstalled the native
+      stop/reset fix; 29 runtime, 13 Aura close, and 3 native tests pass. Standard
+      Debug editor build and startup/normal-close smoke pass; modified C# files
+      have no active compiler/analyzer/IDE diagnostics. Full manual viewport and
+      dirty-document replay remains separate from this evidence.
 - [x] Cooked-root refresh warnings are non-fatal and leave the workspace usable.
 - [x] Targeted MSBuild builds and executable test runs pass for the ED-M02
       touched projects.

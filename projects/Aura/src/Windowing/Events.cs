@@ -65,6 +65,7 @@ public sealed class PresenterStateChangeEventArgs(
 public sealed class WindowClosingEventArgs : CancelEventArgs
 {
     private readonly List<Func<bool, Task>> completionTasks = [];
+    private readonly List<Func<Task>> finalizationTasks = [];
 
     /// <summary>
     ///     Gets the ID of the window being closed.
@@ -80,6 +81,14 @@ public sealed class WindowClosingEventArgs : CancelEventArgs
     {
         ArgumentNullException.ThrowIfNull(completion);
         this.completionTasks.Add(completion);
+    }
+
+    /// <summary>Registers work after all close transactions successfully commit, before the window is destroyed.</summary>
+    /// <param name="finalization">The final asynchronous cleanup; it must not veto closure.</param>
+    public void AddFinalizationTask(Func<Task> finalization)
+    {
+        ArgumentNullException.ThrowIfNull(finalization);
+        this.finalizationTasks.Add(finalization);
     }
 
     /// <summary>Commits approved work or releases prepared state after all guards finish.</summary>
@@ -98,6 +107,14 @@ public sealed class WindowClosingEventArgs : CancelEventArgs
             catch (Exception ex)
             {
                 failure ??= ex;
+            }
+        }
+
+        if (approved && !this.Cancel && failure is null)
+        {
+            foreach (var finalization in this.finalizationTasks)
+            {
+                await finalization().ConfigureAwait(false);
             }
         }
 

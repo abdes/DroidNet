@@ -22,6 +22,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="Oxygen.Editor.Runtime.Tests" />
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />

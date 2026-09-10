@@ -6,6 +6,8 @@
 
 #include <exception>
 #include <memory>
+#include <mutex>
+#include <utility>
 #include <stdexcept>
 #include <thread>
 
@@ -31,6 +33,9 @@
 #include <Oxygen/Platform/Platform.h>
 
 namespace {
+
+// Protect the editor API's engine owner while stop/config calls overlap loop exit.
+std::mutex engine_owner_mutex;
 
 //! Event loop tick: drives the engine's asio context (if supplied) and
 //! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
@@ -219,7 +224,13 @@ auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
 
   try {
     ctx->platform->Stop();
-    ctx->engine.reset();
+    std::shared_ptr<AsyncEngine> stopped_engine;
+    {
+      const std::scoped_lock lock(engine_owner_mutex);
+      stopped_engine = std::move(ctx->engine);
+    }
+    // Module destruction must not run under the API ownership lock.
+    stopped_engine.reset();
     if (!ctx->gfx_weak.expired()) {
       auto gfx = ctx->gfx_weak.lock();
       gfx->Stop();
@@ -244,11 +255,15 @@ auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
 
 auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
 {
-  ctx->engine->Stop();
+  const std::scoped_lock lock(engine_owner_mutex);
+  if (ctx && ctx->engine) {
+    ctx->engine->Stop();
+  }
 }
 
 auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void
 {
+  const std::scoped_lock lock(engine_owner_mutex);
   if (!ctx || !ctx->engine) {
     return; // nothing to do
   }
@@ -262,6 +277,7 @@ auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void
 
 auto GetEngineConfig(std::shared_ptr<EngineContext> ctx) -> EngineConfig
 {
+  const std::scoped_lock lock(engine_owner_mutex);
   if (!ctx || !ctx->engine) {
     return EngineConfig {};
   }

@@ -180,31 +180,61 @@ UI never calls `Oxygen.Editor.Interop` directly for view lifecycle.
 `EngineServiceState` is the authoritative lifecycle state exposed to managed
 editor code.
 
-Allowed ED-M02 transitions:
+Runtime lifecycle transitions:
 
 ```mermaid
 stateDiagram-v2
     [*] --> NoEngine
     NoEngine --> Initializing
     Initializing --> Ready
-    Initializing --> NoEngine
+    Initializing --> ShuttingDown: partial initialization failure
     Ready --> Starting
     Starting --> Running
-    Starting --> Faulted
+    Starting --> ShuttingDown: startup failure
+    Running --> Faulted: loop exits unexpectedly
     Running --> ShuttingDown
     Ready --> ShuttingDown
-    ShuttingDown --> NoEngine
-    ShuttingDown --> Faulted
-    Faulted --> Initializing
+    Faulted --> ShuttingDown: cleanup or reinitialization request
+    ShuttingDown --> NoEngine: ownership released
+    ShuttingDown --> Faulted: ownership remains
 ```
 
 Rules:
 
-- `InitializeAsync` is idempotent outside transient states.
-- `StartAsync` is idempotent for `Starting`/`Running`.
-- `ShutdownAsync` is not cancellable and must not run during initialization or
-  startup.
-- Failed startup transitions to `Faulted`; retry requires re-initialization.
+- Lifecycle and asynchronous surface/view operations share a gate. Shutdown
+  drains earlier operations; repeated shutdown/disposal waits for prior cleanup.
+- Normal-operation guards remain distinct from internal teardown preconditions.
+  `Ready`, partial initialization, and faulted execution all have cleanup paths.
+- A failed surface release is recorded independently. Remaining releases and
+  safe native destruction still run. Unreleased native surfaces remain tracked
+  until successful release or destruction of their native owner.
+- Native loop exit ends waits for surface/view acknowledgments that can no longer
+  arrive. Stop and loop completion precede context destruction; the interop
+  `WaitForLoopCleanupAsync` signal additionally covers posted UI cleanup.
+- Native `StopEngine` must tolerate repeated calls and synchronize with removal
+  of the engine owner. The stop request flag crosses threads and is atomic.
+- `ShutdownAsync` reports accumulated failures after establishing final ownership
+  state. An intermediate error can be reported even if eventual cleanup released
+  everything. `NoEngine` is never reported while native ownership remains.
+- `DisposeAsync` uses the same teardown as a non-throwing, logged fallback. Once
+  disposal is requested, new runtime operations are rejected. Cleanup remains
+  callable after failure; retained resources cannot be overwritten on restart.
+- Initialization/startup exceptions retain their original cause; secondary
+  cleanup failures are logged. Reinitialization first cleans any failed session.
+- The application registers `EngineShutdownService` after the UI hosted service
+  so ordinary host shutdown awaits runtime teardown before stopping the dispatcher.
+  Hosted-service construction does not resolve UI-dependent services. The `App`
+  constructor connects window tracking once the dispatcher exists, using the same
+  shutdown singleton registered with the host.
+  Final-window shutdown also runs in Aura's finalization phase, after every close
+  guard and document commit succeeds and before native window destruction.
+  Canceled document close does not shut down the runtime. Overlapping approved
+  window closes count toward the final-window decision.
+- The application caller catches shutdown failures and publishes
+  `Runtime.Shutdown` operation results and logs. Existing exit behavior is
+  retained; this fix does not introduce retry dialogs or forced termination.
+
+Implementation and validation details: [issue #3 plan](../plan/issue-003-runtime-shutdown.md).
 
 ### Runtime Settings Snapshot
 

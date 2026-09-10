@@ -17,6 +17,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
 
 namespace Oxygen.Editor;
@@ -42,6 +43,7 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter to be used to set the content inside the content control.</param>
     /// <param name="windowManager">The window manager service for multi-window support.</param>
+    /// <param name="runtimeShutdown">Tracks shutdown once the UI dispatcher is available.</param>
     /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
     /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
     /// <param name="chromeService">The chrome service for automatic chrome application.</param>
@@ -62,12 +64,13 @@ public partial class App
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
         IWindowManagerService windowManager,
+        EngineShutdownService runtimeShutdown,
         IAppThemeModeService themeModeService,
         WindowBackdropService backdropService,
         WindowChromeService chromeService,
         WindowPlacementService placementService)
     {
-        _ = windowManager; // Unused; injected only for early initialization
+        runtimeShutdown.ObserveWindows(windowManager);
         _ = backdropService; // Unused; injected only for early initialization
         _ = themeModeService; // Unused; injected only to instantiate it early
         _ = chromeService; // Unused; injected only to instantiate it early

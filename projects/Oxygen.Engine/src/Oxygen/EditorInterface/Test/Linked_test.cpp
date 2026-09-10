@@ -18,4 +18,16 @@ NOLINT_TEST(LinkedEditorApiTest, CanUseApi)
   [[maybe_unused]] auto created = CreateScene("Test Scene");
 }
 
+NOLINT_TEST(LinkedEditorApiTest, StopWithoutContextIsHarmless)
+{
+  EXPECT_NO_THROW(StopEngine(nullptr));
+}
+
+NOLINT_TEST(LinkedEditorApiTest, StopWithoutEngineIsRepeatable)
+{
+  const auto context = std::make_shared<EngineContext>();
+  EXPECT_NO_THROW(StopEngine(context));
+  EXPECT_NO_THROW(StopEngine(context));
+}
+
 } // namespace

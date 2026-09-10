@@ -267,6 +267,8 @@ public static partial class Program
         RegisterDiagnosticsServices(container);
         RegisterAssetServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
+        container.Register<EngineShutdownService>(Reuse.Singleton);
+        container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 
         /*
          * Set up the view model to view converters. We're using the standard

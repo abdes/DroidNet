@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>Oxygen.Editor.Runtime.Tests</RootNamespace>
+        <AssemblyName>Oxygen.Editor.Runtime.Tests</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\src\Oxygen.Editor.Runtime.csproj" />
+        <PackageReference Include="Moq" />
+        <Compile Include="..\..\Oxygen.Editor.Interop\test\NativeDllSearchPath.cs" Link="NativeDllSearchPath.cs" />
+    </ItemGroup>
+</Project>
