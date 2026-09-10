@@ -82,7 +82,11 @@ These rules apply to all Oxygen Editor design and implementation work.
 ## 5. Planning Rules
 
 1. LLDs must include ownership, data contracts, failure modes, and exit gates.
-2. Work packages must identify files/projects likely to change.
+2. Each active milestone has one detailed plan with numbered implementation
+   slices and files/projects likely to change. Shared contracts belong in LLDs.
 3. Roadmap items must be measurable by user workflow, not only by code surface.
 4. Current-state claims must match the repository. If implementation changes,
    update [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
+5. Consolidating or superseding a plan does not implement, validate, or defer
+   its requirements. Preserve requirement destinations and existing evidence;
+   record unresolved scope questions in the owning milestone plan.

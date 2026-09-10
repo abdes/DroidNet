@@ -2,16 +2,24 @@
 
 Status: `active planning index`
 
-This folder contains detailed implementation plans for milestones and work
-packages listed in [../PLAN.md](../PLAN.md).
+This folder contains the detailed milestone plans listed below.
+[../PLAN.md](../PLAN.md) also owns future milestones whose detailed plans have
+not yet been written. Each active milestone has one detailed plan.
 
 `PLAN.md` owns the top-level milestone order and exit gates. Files in this
 folder own implementation sequencing, touch points, risks, and validation plans
-for a specific milestone or work package.
+for a specific milestone, using numbered implementation slices inside its plan.
+Shared contracts live in the LLDs; delivery gates belong to named milestones.
+Issue-specific repair notes may also live here. They do not replace milestone
+plans or establish milestone completion.
+
+[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) is authoritative for
+milestone progress and validation evidence. A detailed plan's presence or
+acceptance is not evidence that its workflow has been implemented or validated.
 
 ## Required Plan Sections
 
-Detailed milestone/work-package plans should include:
+Detailed milestone plans should include:
 
 1. Purpose
 2. PRD Traceability
@@ -23,23 +31,6 @@ Detailed milestone/work-package plans should include:
 8. Dependency And Execution Risks
 9. Validation Gates
 10. Status Ledger Hook
-
-## Existing Work-Package Plans
-
-These plans predate the final milestone structure and should be reconciled when
-their milestone becomes active.
-
-The `ED-WPxx.y` numeric prefix is historical and does not necessarily match the
-current milestone ID after the `ED-M01` insertion.
-
-| Work Package | Milestone | Purpose |
-| --- | --- | --- |
-| [ED-WP02.1-normalize-scene-mutation-commands.md](./ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | Command model, dirty state, undo/redo. |
-| [ED-WP02.2-component-inspectors-and-live-sync.md](./ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | V0.1 component editors and sync completion. |
-| [ED-WP04.1-asset-reference-model.md](./ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | Asset reference identity and picker model. |
-| [ED-WP05.1-manifest-driven-cooking.md](./ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | Historical/superseded context; `ED-M07-content-pipeline-and-cooking.md` is the active plan. |
-| [ED-WP06.1-settings-architecture-and-editors.md](./ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | Settings ownership, persistence, validation, and editors. |
-| [ED-WP08.1-validation-model.md](./ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | Structured validation and diagnostics model. |
 
 ## Milestone Plans
 

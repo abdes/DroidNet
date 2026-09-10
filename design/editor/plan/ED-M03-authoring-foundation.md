@@ -336,3 +336,25 @@ After implementation/user validation:
 - add one validation ledger row recording command/dirty/undo behavior,
   save/reopen result, selection behavior, diagnostics coverage, and deferred
   non-scope items.
+
+## 11. Delivery Boundaries
+
+Command and validation responsibilities are divided across milestones:
+
+- ED-M03.2 and ED-M03.4 own create/delete/rename/reparent, command results,
+  dirty state, undo/redo, and scoped command diagnostics; ED-M03.6 owns
+  save/reopen. The accepted contract is `ISceneDocumentCommandService` in
+  [documents-and-commands.md](../lld/documents-and-commands.md).
+- ED-M04 owns component add/remove/property edits, transform/environment
+  edits, inspector migration, edit-session batching, and component validation.
+  ED-M05 owns real material asset picking and assignment.
+- Validation-result contracts are owned by the diagnostics LLD and the
+  ED-M01 foundation. ED-M03 consumes them for authoring/save/sync failures;
+  this is not ownership of a separate validation dashboard.
+- The full validation invalidation model remains an open design item in
+  documents-and-commands section 15, assigned there to ED-M04/ED-M09. ED-M03
+  validation does not close those later contributions.
+
+The existing validation ledger row and DynamicTree rename-hook exception
+remain the evidence and scope boundary. ED-M03 evidence does not establish
+completion of the later component, settings, or validation contributions.

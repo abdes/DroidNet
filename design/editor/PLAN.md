@@ -33,7 +33,7 @@ PRD
     -> DESIGN
       -> PLAN
         -> LLDs for the milestone
-          -> detailed milestone/work-package implementation plans
+          -> detailed milestone implementation plans
             -> implementation
               -> IMPLEMENTATION_STATUS validation ledger
 ```
@@ -354,6 +354,12 @@ LLD work:
 - `environment-authoring.md` is reviewed for runtime parity of atmosphere,
   exposure, tone mapping, and lighting.
 
+ED-M08 owns embedded/standalone agreement for authored components, asset
+references, and environment settings after validated mount. ED-M07 cook success
+or an unsupported-field warning is not proof of that agreement. The standalone
+LLD and detailed ED-M08 plan still need their required review before
+implementation.
+
 Exit gate:
 
 - All non-deferred V0.1 LLD gates needed by the minimum slice are implemented;
@@ -375,6 +381,10 @@ LLD work:
 - `viewport-and-tools.md` is reviewed in detail.
 - `documents-and-commands.md` provides selection and transform command
   behavior.
+- Its section 15 also assigns expansion of validation invalidation to
+  ED-M04/ED-M09. ED-M09 LLD review must define its viewport/tool contribution
+  and carry forward the incremental-validation performance risk. This does
+  not add a validation dashboard to V0.1 scope.
 - `scene-explorer.md` provides hierarchy/selection coordination.
 - `runtime-integration.md` is re-reviewed for input bridge and frame-phase
   constraints.
@@ -435,12 +445,17 @@ Exit gate:
 
 ## 7. Detailed Implementation Plans
 
-Detailed implementation plans are created per milestone or work package under
-[plan/](./plan/). Each active milestone has either a single milestone plan
-(`ED-Mxx-...md`) or one or more work-package plans (`ED-WPxx.y-...md`). The
-owner choice is recorded in [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
-The `ED-WPxx.y` numeric prefix is historical and does not necessarily match the
-current milestone ID after the `ED-M01` insertion.
+Each active milestone has one detailed implementation plan (`ED-Mxx-...md`)
+under [plan/](./plan/), with numbered implementation slices inside it. The
+milestone owns the delivery outcome and validation gates; its slices describe
+how to deliver them. Shared technical contracts remain in the LLDs. A concern
+that spans milestones must identify the contribution and gates owned by each
+milestone rather than create a second execution plan.
+
+[IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) owns milestone progress
+and validation evidence. A plan or slice being written, accepted, or reorganized
+does not establish implementation or validation completion. Future milestones
+still require reviewed LLDs and a detailed plan before implementation starts.
 
 Detailed plans are expected to contain:
 
@@ -453,17 +468,9 @@ Detailed plans are expected to contain:
 - validation gates
 - rollback or containment notes where useful
 
-Existing detailed plans are early work-package plans and should be reconciled
-with this milestone structure as each milestone starts:
-
-| Plan | Milestone |
-| --- | --- |
-| [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` |
-| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` |
-| [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` |
-| [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` historical; superseded by `ED-M07-content-pipeline-and-cooking.md` |
-| [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` |
-| [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` |
+Unresolved scope questions remain explicit in the owning milestone plan.
+Reorganizing plans does not resolve those questions, defer features, or establish
+implementation or validation completion.
 
 Active milestone plans:
 

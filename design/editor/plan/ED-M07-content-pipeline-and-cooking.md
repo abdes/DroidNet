@@ -1,6 +1,10 @@
 # ED-M07 - Content Pipeline And Cooking
 
-Status: `accepted - implementation active`
+Status: `accepted implementation plan`
+
+Milestone progress and recorded validation are maintained in
+[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md). Section 11 records
+unresolved UI scope questions separately from that validation.
 
 ## 1. Purpose
 
@@ -371,6 +375,7 @@ Docs/ledger:
 | Risk | Mitigation |
 | --- | --- |
 | Editor duplicates native cooker behavior. | ED-M07.1 audits `Oxygen.Cooker` and records the chosen Interop/ImportTool/managed path before implementation. |
+| Import tool discovery or cooker schema drift invalidates a previously working adapter. | ED-M07.3 uses the engine install/runtime discovery policy; ED-M07.4-6 validate descriptors/manifests against the accepted native contracts. Prior workflow validation does not prove compatibility with a later engine install. |
 | Managed scene writer omits material/environment data. | Full scene cook uses native `oxygen.scene` descriptor import unless equivalent managed coverage is intentionally added. |
 | Material/geometry dependencies cook after scene. | Manifest builder adds dependency edges before scene jobs. |
 | Validation is skipped because cook succeeded. | Service contract requires inspect/validate before mount refresh. |
@@ -426,8 +431,44 @@ Before implementation starts:
 - mark the ED-M07 LLD review checkbox only after review acceptance.
 - mark this detailed plan checkbox only after plan review acceptance.
 - update the detailed plan tracker to point to this milestone plan.
-- keep `ED-WP05.1-manifest-driven-cooking.md` as historical/deferred context
-  once this plan is accepted.
 
 ED-M07 closes only after the user manually validates the scenarios in §9 and
 one validation ledger row is recorded.
+
+## 11. Shared Contracts And Unresolved UI Scope
+
+ED-M07.2-9 own descriptor/manifest generation, four cook scopes, inspection,
+validation, catalog refresh, validated mount refresh, asset-reference cook
+mapping, and pipeline diagnostics. Acceptance gates are in section 9 and the
+required LLDs.
+
+Project facts and settings are consumed through
+[project-services.md](../lld/project-services.md); scene environment intent
+belongs to ED-M04. Cooked scene load and visual parity, including camera,
+directional light/sun, atmosphere, exposure, and tone mapping, belong to
+[ED-M08](../PLAN.md#ed-m08---runtime-parity-and-standalone-validation).
+ED-M07's recorded validation does not prove those later outcomes. In particular,
+the unsupported-field warnings described in ED-M07.4 are not parity evidence.
+
+The user directed the consolidation to preserve these two questions as
+unresolved scope questions. They are neither newly accepted implementation
+gates nor discarded requirements, and neither is claimed complete:
+
+- [ ] Resolve the project settings editor for cook/runtime defaults,
+  including a default renderer preset. Settings-architecture currently
+  specifies ED-M04 scene/runtime surfaces and leaves project cook/content
+  settings for re-review. Project-services
+  provides facts and service ownership, not a complete editor/default-preset
+  contract. Identify the accepted UI, storage, mutation, and runtime ownership
+  decision before assigning implementation or changing milestone closure.
+- [ ] Resolve the dedicated `recook stale assets` and
+  `open descriptor/manifest` actions. The accepted ED-M07 UI lists Cook,
+  Cook Folder, Cook Current Scene, Inspect, Validate, and Refresh; that list
+  does not establish these additional actions as implemented or equivalent.
+  Decide whether they are required dedicated UI, covered by an explicitly
+  accepted existing workflow, or outside scope before changing any gate.
+
+If a decision changes accepted V0.1 scope, update the PRD/design/LLD authority
+and the affected milestone plan and status together. Retain the existing
+validation evidence at its original scope. Document reorganization and issue
+fixes do not establish a scope decision or additional milestone validation.

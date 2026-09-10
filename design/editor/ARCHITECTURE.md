@@ -1137,7 +1137,7 @@ Architecture compliance is evaluated through three evidence classes:
    validation where appropriate, embedded preview, cooked output, standalone
    runtime load, and milestone ledger summary
 
-LLDs and work packages must reference the relevant `GOAL-XXX`, `REQ-XXX`, and
+LLDs and milestone plans must reference the relevant `GOAL-XXX`, `REQ-XXX`, and
 `SUCCESS-XXX` IDs. Milestones close only when
 [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) records the concise
 validation summary for the milestone.

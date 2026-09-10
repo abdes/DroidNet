@@ -7,7 +7,7 @@ Architecture, ownership, and implementation contracts live in
 [ARCHITECTURE.md](./ARCHITECTURE.md), [DESIGN.md](./DESIGN.md), and
 [lld/](./lld/README.md).
 
-LLDs, work packages, and validation summaries must reference `GOAL-XXX`,
+LLDs, milestone plans, and validation summaries must reference `GOAL-XXX`,
 `REQ-XXX`, or `SUCCESS-XXX` IDs from this document. Requirement IDs are
 intentionally coarse so implementation can evolve without breaking traceability
 on every small workflow step.
@@ -80,7 +80,7 @@ Out of V0.1 scope:
 
 Requirements describe product behavior that must work as specified. The
 verification method for that behavior is decided during implementation and
-recorded by the owning LLD/work package.
+recorded by the owning LLD/milestone plan.
 
 | ID | Requirement |
 | --- | --- |
@@ -139,7 +139,7 @@ recorded by the owning LLD/work package.
 ## 7. Validation Policy
 
 Validation proves that the requirements work; it is not itself the product
-requirement. Each LLD/work package decides the right verification method for its
+requirement. Each LLD/milestone plan decides the right verification method for its
 scope.
 
 Cheap, meaningful automated tests should be added when they give useful signal,
