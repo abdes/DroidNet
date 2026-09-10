@@ -18,7 +18,7 @@ public sealed class RuntimeAssetFailureTests
     {
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
-        sut.BeginRun(native.Object, new TaskCompletionSource().Task);
+        _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
         var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetGeometry(Guid.NewGuid(), "/Content/Missing.ogeo"));
@@ -47,7 +47,7 @@ public sealed class RuntimeAssetFailureTests
     {
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
-        sut.BeginRun(native.Object, new TaskCompletionSource().Task);
+        _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
         var target = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var node = Guid.NewGuid();

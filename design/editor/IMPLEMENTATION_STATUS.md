@@ -489,7 +489,8 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
       numeric feedback and ordering tests pass; complete dependent/control evidence remains.
 - [ ] 07A.4 offline/reconnect/lifetime convergence with failed work retained.
 - [ ] 07A.5 shared atomic write/conflict safety (#7), preserving landed #4 revisions.
-- [ ] 07A.7 active loop supervision/state diagnostics and restart isolation (#6).
+- [x] 07A.7 active loop supervision/state diagnostics and restart isolation (#6),
+      with Runtime direct-service and native regressions passing 59/59.
 - [ ] 07A.8 material document history and edit sessions (#9).
 - [ ] 07A.6 complete actual-control/native field and transition evidence.
 

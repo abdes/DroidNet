@@ -22,7 +22,7 @@ public sealed class RuntimeBackgroundObservationTests
         var completion = new TaskCompletionSource<RuntimeBackgroundState>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = native.Setup(value => value.ObserveBackgroundAsync()).Returns(completion.Task);
         var sut = new RuntimeCommandDispatcher();
-        sut.BeginRun(native.Object, new TaskCompletionSource().Task);
+        _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
         var first = new RuntimeSceneTarget(sut.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), first, "First", this.TestContext.CancellationToken).ConfigureAwait(false);
         var pending = sut.ObserveBackgroundAsync(Guid.NewGuid(), first, this.TestContext.CancellationToken);

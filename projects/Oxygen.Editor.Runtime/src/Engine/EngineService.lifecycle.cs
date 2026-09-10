@@ -29,6 +29,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.PublishStateChanges();
         }
     }
 
@@ -44,17 +45,19 @@ public sealed partial class EngineService
                 return;
             }
 
-            this.state = EngineServiceState.Starting;
+            this.ChangeState(EngineServiceState.Starting);
             this.LogStartingEngineLoop();
             try
             {
                 this.engineLoopTask = this.session!.RunAsync();
-                this.commandDispatcher.BeginRun(this.session.Commands, this.engineLoopTask);
-                this.state = EngineServiceState.Running;
+                var runId = this.commandDispatcher.BeginRun(this.session.Commands, this.engineLoopTask);
+                this.currentRun = new(runId, this.engineLoopTask);
+                this.ChangeState(EngineServiceState.Running);
+                _ = this.ObserveLoopAsync(this.currentRun);
             }
             catch
             {
-                this.state = EngineServiceState.Faulted;
+                this.ChangeState(EngineServiceState.Faulted);
                 _ = await this.ShutdownCoreAsync().ConfigureAwait(true);
                 throw;
             }
@@ -62,6 +65,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.PublishStateChanges();
         }
     }
 
@@ -76,6 +80,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.PublishStateChanges();
         }
     }
 
@@ -91,6 +96,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.PublishStateChanges();
         }
     }
 
@@ -104,7 +110,7 @@ public sealed partial class EngineService
 
     private async Task<bool> InitializeCoreAsync()
     {
-        this.state = EngineServiceState.Initializing;
+        this.ChangeState(EngineServiceState.Initializing);
         try
         {
             this.session = this.sessionFactory();
@@ -116,7 +122,7 @@ public sealed partial class EngineService
             config.Engine.Graphics.Headless = true;
             config.Engine.EnableAssetLoader = true;
             this.session.Initialize(config, loggerFactory?.CreateLogger("Oxygen.Engine"));
-            this.state = EngineServiceState.Ready;
+            this.ChangeState(EngineServiceState.Ready);
             this.LogContextReady();
             return true;
         }
@@ -132,12 +138,17 @@ public sealed partial class EngineService
         List<Exception> failures = [];
         if (this.session is null)
         {
-            this.state = EngineServiceState.NoEngine;
+            this.ChangeState(EngineServiceState.NoEngine);
             return failures;
         }
 
         this.commandDispatcher.EndRun();
-        this.state = EngineServiceState.ShuttingDown;
+        if (this.currentRun is { } run && this.engineLoopTask is { IsCompleted: false })
+        {
+            run.StopRequested = true;
+        }
+
+        this.ChangeState(EngineServiceState.ShuttingDown);
         this.LogShutdownRequested();
         foreach (var lease in this.activeLeases.Values.ToArray())
         {
@@ -146,7 +157,7 @@ public sealed partial class EngineService
 
         if (!await this.StopLoopAsync(failures).ConfigureAwait(true))
         {
-            this.state = EngineServiceState.Faulted;
+            this.ChangeState(EngineServiceState.Faulted);
             return failures;
         }
 
@@ -154,7 +165,7 @@ public sealed partial class EngineService
         _ = this.TryCleanup(this.session.DestroyContext, "Destroy context", failures);
         if (this.session.HasRunner || this.session.HasContext)
         {
-            this.state = EngineServiceState.Faulted;
+            this.ChangeState(EngineServiceState.Faulted);
             return failures;
         }
 
@@ -168,7 +179,8 @@ public sealed partial class EngineService
         this.orphanedViewportIds.Clear();
         this.reservedSurfaceCount = 0;
         this.session = null;
-        this.state = EngineServiceState.NoEngine;
+        this.ChangeState(EngineServiceState.NoEngine);
+        this.currentRun = null;
         return failures;
     }
 
@@ -184,7 +196,11 @@ public sealed partial class EngineService
             return false;
         }
 
-        _ = await this.TryCleanupAsync(() => this.engineLoopTask, "Await loop", failures).ConfigureAwait(true);
+        _ = await this.TryCleanupAsync(this.AwaitLoopForShutdownAsync, "Await loop", failures).ConfigureAwait(true);
+        if (this.currentRun is { } run)
+        {
+            this.ObserveLoopCompletion(run, await run.Completion.ConfigureAwait(true));
+        }
 
         // Native loop completion precedes the dispatcher callback that releases surface tokens.
         if (!await this.TryCleanupAsync(this.session!.CompleteLoopCleanupAsync, "Complete loop cleanup", failures).ConfigureAwait(true))
@@ -194,6 +210,18 @@ public sealed partial class EngineService
 
         this.engineLoopTask = null;
         return true;
+    }
+
+    private async Task AwaitLoopForShutdownAsync()
+    {
+        try
+        {
+            await this.engineLoopTask!.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (this.currentRun?.StopRequested == true)
+        {
+            // Cancellation following our stop request is ordinary loop completion.
+        }
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Each native cleanup failure is recorded while independent resources continue cleanup.")]

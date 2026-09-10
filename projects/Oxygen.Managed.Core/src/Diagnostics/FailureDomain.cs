@@ -128,4 +128,9 @@ public enum FailureDomain
     /// Global editor settings infrastructure.
     /// </summary>
     Settings,
+
+    /// <summary>
+    /// Embedded runtime loop execution and lifetime.
+    /// </summary>
+    RuntimeExecution,
 }

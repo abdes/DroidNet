@@ -58,7 +58,7 @@ public sealed class RuntimeCommandDispatcherTests
         _ = native.Setup(value => value.CreateNodeAsync(It.IsAny<RuntimeCreateNode>())).Returns(new TaskCompletionSource().Task);
         var loop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var sut = new RuntimeCommandDispatcher();
-        sut.BeginRun(native.Object, loop.Task);
+        _ = sut.BeginRun(native.Object, loop.Task);
         var first = Scene(sut);
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), first, "First", this.TestContext.CancellationToken).ConfigureAwait(false);
         var request = new RuntimeWorldRequest(Guid.NewGuid(), first, new RuntimeCreateNode("Cube", Guid.NewGuid(), ParentId: null, InitializeWorldAsRoot: true));
@@ -66,7 +66,7 @@ public sealed class RuntimeCommandDispatcherTests
 
         loop.SetResult();
         var result = await pending.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        sut.BeginRun(native.Object, new TaskCompletionSource().Task);
+        _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
         var oldMutation = sut.Execute(request, this.TestContext.CancellationToken);
 
         _ = result.Status.Should().Be(RuntimeCommandStatus.Unavailable);
@@ -177,7 +177,7 @@ public sealed class RuntimeCommandDispatcherTests
     private static RuntimeCommandDispatcher Start(IRuntimeCommandTransport transport)
     {
         var sut = new RuntimeCommandDispatcher();
-        sut.BeginRun(transport, new TaskCompletionSource().Task);
+        _ = sut.BeginRun(transport, new TaskCompletionSource().Task);
         return sut;
     }
 

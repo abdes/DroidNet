@@ -37,7 +37,8 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
     /// <summary>Installs one native transport and its run identity.</summary>
     /// <param name="commandTransport">The native adapter.</param>
     /// <param name="loopTask">The runtime lifetime task.</param>
-    public void BeginRun(IRuntimeCommandTransport commandTransport, Task loopTask)
+    /// <returns>The new run identity, including when the loop has already completed.</returns>
+    public Guid BeginRun(IRuntimeCommandTransport commandTransport, Task loopTask)
     {
         lock (this.gate)
         {
@@ -47,6 +48,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             this.transport.AssetLoadFailed += this.OnAssetLoadFailed;
             this.loop = loopTask;
             this.ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            return this.runId;
         }
     }
 

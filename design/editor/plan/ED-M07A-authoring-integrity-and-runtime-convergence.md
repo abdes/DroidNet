@@ -275,6 +275,23 @@ finishes. Assert state notification, original exception/exit cause, finite pendi
 request completion, and unchanged newer-run identity. Getter-based detection
 alone does not satisfy active diagnostic publication.
 
+Implementation and automated gate (2026-09-10): the loop observer shares the
+command dispatcher's run identity and captures the original completion before
+acquiring the lifecycle gate. Shutdown consumes that same completion before
+clearing ownership, preserving failures when it wins the observer race. Ordered
+immutable StateChanged notifications and Runtime.Loop operation diagnostics are
+published outside the lifecycle gate. Requested cancellation is ordinary stop;
+unexpected normal exit and non-cancellation exceptions are reported once. The
+observer invalidates command delivery without destroying native resources.
+
+Runtime tests pass 59/59, including nine new direct-service cases for fault and
+unexpected exit with pending work, normal/cancelled stop, exit before shutdown,
+fault during shutdown, immediate completion, failing subscribers and restart
+inside an old notification. Existing native cleanup, asset-failure and background
+tests remain passing. MSBuild passed Managed.Core, Runtime and the editor app;
+changed implementation files have no unsuppressed compiler analyzer/IDE diagnostics.
+This satisfies issue #6's runtime supervision gate without a presented-frame claim.
+
 ### 07A.8 - Material Document Undo/Redo (#9)
 
 Add document-owned TimeMachine history using per-target before/after source
@@ -322,7 +339,7 @@ There is no autosave scope expansion.
 - [ ] 07A.3 scoped inline diagnostics and dependent invalidation cases pass.
 - [ ] 07A.4 offline/reconnect/lifetime convergence cases pass.
 - [ ] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
-- [ ] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
+- [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
 - [ ] 07A.8 document-owned material history and session tests pass (#9).
 - [ ] 07A.6 field/workflow evidence is complete and the user has validated the
   visible behavior; native acceptance alone is not presented-state proof.

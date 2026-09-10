@@ -653,11 +653,21 @@ notification delivery; it does not allocate or accept native load generations.
 
 The rebased #3 implementation already makes State read Faulted for a completed
 loop task and ends surface waits when that task completes. Retain those safeguards.
-Add one observer for each started run with a unique run ID. Under the lifecycle
-gate it distinguishes requested shutdown from unexpected exit/fault, updates
-state, publishes a managed state-change event with run ID and original outcome,
-and emits a Runtime execution diagnostic. UI subscribers marshal to the dispatcher.
-An old observer cannot modify a new run or dispose its ownership.
+`EngineService` installs one observer for each started run, using the command
+dispatcher's unique run ID even if the loop completes during startup. Under the
+lifecycle gate it distinguishes requested shutdown from unexpected exit/fault
+and captures the state transition and original outcome. `StateChanged` events
+and `Runtime.Loop` operation results are then delivered in order outside that
+gate. UI subscribers marshal to the dispatcher and check the notification's run
+identity. An old observer cannot modify a new run or dispose its ownership.
+
+Shutdown consumes the same captured loop completion before releasing the run,
+so an observer waiting for the gate cannot lose its diagnostic. A loop already
+completed when shutdown begins remains unexpected. Cancellation after a stop
+request is ordinary completion; a non-cancellation exception is still reported.
+Notifications preserve the original exception, with its type and details in the
+shared operation-result store. Subscriber failure cannot interrupt cleanup or
+suppress other state-change subscribers.
 
 Resolve outstanding operation waits against run termination; no synchronous UI
 wait or indefinite frame acknowledgment is permitted. Normal stop is not a fault.
