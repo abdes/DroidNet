@@ -442,6 +442,47 @@ void FailureDiagnostics() {
           "loader exceptions escaped diagnostic path");
 }
 
+// Confirms failure delivery uses the native generation after mutation-phase
+// validation, discards superseded callbacks, and terminates failed requests.
+void CorrelatedFailureDelivery() {
+  Fixture f;
+  f.Attach();
+  std::vector<uint64_t> generations;
+  auto on_failure = [&generations](uint64_t generation,
+                                  const std::string&) {
+    generations.push_back(generation);
+  };
+  SetGeometryCommand old_geometry(f.node.GetHandle(), "old");
+  old_geometry.SetFailureCallback(on_failure);
+  f.Execute(old_geometry);
+  SetGeometryCommand current_geometry(f.node.GetHandle(), "current");
+  current_geometry.SetFailureCallback(on_failure);
+  f.Execute(current_geometry);
+  f.geometry_loads[0]({}, "obsolete");
+  f.geometry_loads[1]({}, "current");
+  Require(generations.empty(), "failure escaped the mutation boundary");
+  f.Drain();
+  Require(generations.size() == 1 && generations[0] > 0,
+          "native generation was lost or an obsolete failure was delivered");
+
+  SetMaterialOverrideCommand material(f.node.GetHandle(), 0, "missing");
+  material.SetFailureCallback(on_failure);
+  f.Execute(material);
+  f.material_loads[0]({}, "failed");
+  f.material_loads[0]({}, "duplicate failure");
+  f.Drain();
+  Require(generations.size() == 2 && generations[1] > generations[0],
+          "material failure was duplicated or assigned another generation");
+
+  SetGeometryCommand detached(f.node.GetHandle(), "detached");
+  detached.SetFailureCallback(on_failure);
+  f.Execute(detached);
+  f.Detach();
+  f.geometry_loads[2]({}, "detached failure");
+  f.Drain();
+  Require(generations.size() == 2, "detached target reported stale failure");
+}
+
 void MutationBoundary() {
   Fixture f;
   f.Geometry("A");
@@ -519,6 +560,9 @@ auto RunScenario(int scenario) -> const char * {
     case 18:
       RemovedSlotDoesNotReviveOverride();
       break;
+    case 19:
+      CorrelatedFailureDelivery();
+      break;
     default:
       throw std::runtime_error("unknown scenario");
     }
@@ -546,6 +590,11 @@ private:
   }
 
 public:
+  [TestMethod]
+  void CorrelatedFailuresRespectGenerationAndLifetime() {
+    Check(19);
+  }
+
   [TestMethod]
   void GeometryInRequestOrder() {
     Check(0);

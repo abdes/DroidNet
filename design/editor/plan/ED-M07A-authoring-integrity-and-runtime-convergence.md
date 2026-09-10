@@ -107,26 +107,26 @@ access or native input DTO construction. Existing navigation, scene mutation,
 #2-5 lifecycle/save/load regressions and sync outcome behavior remain passing.
 Run this contract migration before adding new background/supervision behavior.
 
-Implementation checkpoint (2026-09-10): the concrete facade properties are removed
-from `IEngineService`; scene sync and viewport input consume the managed command
-interfaces. Immutable requests carry run, scene/document/activation or view-generation
-identity, and results preserve acceptance/rejection/unavailability/cancellation/failure.
-Runtime owns native DTO conversion, and the WinUI bridge converts pointer positions
-to physical viewport pixels. Managed-substitute, conversion, dependency and lifecycle
-tests cover this migration. No engine source or native asset-request generation
-mechanism was changed.
+Implementation and automated gate (2026-09-10): `IEngineService` no longer
+exposes concrete world/input facades. Scene sync and viewport input use immutable
+managed requests with run, document, scene activation and view-generation identity.
+Runtime owns native DTO conversion; the UI bridge supplies physical pixel input.
 
-Automated evidence: MSBuild passed for the editor application and both affected
-test projects; VSTest passed Runtime 45/45 and WorldEditor SceneExplorer 94/94.
-Compiler SARIF reports contain no unsuppressed analyzer or IDE diagnostics in
-the files owned by this checkpoint, including tests. Existing diagnostics in
-other editor files remain outside this change. Runtime test discovery uses the
-engine install `Debug/bin` directory on the test process's `PATH`.
+Current native asset failures now carry their existing #5 generation and original
+managed request through the native command, Runtime event and scene operation-result
+surface. Native mutation-phase validation discards obsolete completions; Runtime
+and UI delivery recheck operation/target identity. Detach, scene replacement and
+shutdown invalidate old notifications. No second native generation authority or
+log-text parsing was introduced.
 
-07A.0 remains open: forward current native asynchronous asset-load failures through
-the managed result/event surface using the existing #5 correlation, and exercise
-the migrated navigation/scene-mutation paths in the running editor. This checkpoint
-does not close #10 or any milestone gate. Continue here before 07A.1.
+MSBuild passed the changed Runtime/WorldEditor projects and native/managed test
+projects. VSTest passed Runtime 48/48 (including a live native-to-managed asset-failure
+case), WorldEditor SceneExplorer 95/95 and Interop NativeTests 35/35. Collected compiler
+SARIF reports have no unsuppressed analyzer or IDE diagnostics in this slice's managed
+files. Native test discovery uses the engine install `Debug/bin` on process `PATH`.
+Existing unrelated editor diagnostics remain outside this change. Issue #10's
+implementation and automated acceptance criteria are satisfied; complete visible
+control/navigation evidence remains part of the milestone's 07A.6 gate.
 
 ### 07A.1 - Background Application And Truthful Per-Field Results
 
@@ -276,7 +276,7 @@ There is no autosave scope expansion.
 
 ## 9. Validation Gates
 
-- [ ] 07A.0 managed capability migration and boundary tests pass (#10).
+- [x] 07A.0 managed capability migration, native failure forwarding and boundary tests pass (#10).
 - [ ] 07A.1 truthful background dispatch and live behavior pass.
 - [ ] 07A.2 gesture/history/selection/cancel cases pass on the existing controls.
 - [ ] 07A.3 scoped inline diagnostics and dependent invalidation cases pass.

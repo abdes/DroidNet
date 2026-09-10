@@ -9,12 +9,16 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
 {
     private readonly Lock gate = new();
     private readonly Dictionary<ulong, RuntimeViewTarget> views = [];
+    private readonly Dictionary<(Guid nodeId, int slot), Guid> assetOperations = [];
     private IRuntimeCommandTransport? transport;
     private Task? loop;
     private TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private RuntimeSceneTarget? scene;
     private Guid runId;
     private bool sceneReady;
+
+    /// <inheritdoc/>
+    public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
 
     /// <inheritdoc/>
     public Guid RunId
@@ -40,6 +44,7 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
             this.EndRun();
             this.runId = Guid.NewGuid();
             this.transport = commandTransport;
+            this.transport.AssetLoadFailed += this.OnAssetLoadFailed;
             this.loop = loopTask;
             this.ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -50,10 +55,16 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
     {
         lock (this.gate)
         {
+            if (this.transport is { } transport)
+            {
+                transport.AssetLoadFailed -= this.OnAssetLoadFailed;
+            }
+
             this.transport = null;
             this.scene = null;
             this.sceneReady = false;
             this.views.Clear();
+            this.assetOperations.Clear();
             _ = this.ended.TrySetResult();
         }
     }
@@ -108,6 +119,27 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
     public async Task<RuntimeCommandResult> CreateNodeAsync(RuntimeWorldRequest request, CancellationToken cancellationToken = default)
         => (await this.CreateNodeCoreAsync(request, cancellationToken).ConfigureAwait(false)) with { SceneTarget = request.Target };
 
+    /// <inheritdoc/>
+    public bool IsCurrentAssetRequest(RuntimeWorldRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (this.gate)
+        {
+            return this.IsRunning && this.sceneReady && this.scene == request.Target
+                && AssetTarget(request.Command) is { } target
+                && this.assetOperations.TryGetValue(target, out var current)
+                && current == request.OperationId;
+        }
+    }
+
+    private static (Guid nodeId, int slot)? AssetTarget(RuntimeWorldCommand command)
+        => command switch
+        {
+            RuntimeSetGeometry geometry => (geometry.NodeId, -1),
+            RuntimeSetMaterialOverride material when material.SlotIndex >= 0 => (material.NodeId, material.SlotIndex),
+            _ => null,
+        };
+
     private static RuntimeCommandResult Accepted(Guid operationId, Guid runId)
         => new(operationId, runId, RuntimeCommandStatus.Accepted);
 
@@ -141,7 +173,8 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
 
             try
             {
-                this.transport!.Execute(request.Command);
+                this.TrackAssetOperation(request);
+                this.transport!.Execute(request);
                 return Accepted(request.OperationId, request.Target.RunId);
             }
             catch (Exception exception) when (IsRecoverable(exception))
@@ -199,6 +232,7 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
 
             this.scene = target;
             this.sceneReady = false;
+            this.assetOperations.Clear();
             try
             {
                 creation = this.transport!.ActivateSceneAsync(name);
@@ -295,6 +329,47 @@ internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntime
         => this.CheckRun(operationId, target.RunId, cancellationToken)
             ?? (this.scene != target ? new(operationId, target.RunId, RuntimeCommandStatus.Rejected, "The scene activation is no longer current.")
                 : !this.sceneReady ? new(operationId, target.RunId, RuntimeCommandStatus.Unavailable, "The scene is not ready.") : null);
+
+    private void TrackAssetOperation(RuntimeWorldRequest request)
+    {
+        // This only correlates delivery after a UI hop. Native SceneAssetRequests
+        // remains the sole authority that generates and accepts load generations.
+        if (AssetTarget(request.Command) is { } target)
+        {
+            this.assetOperations[target] = request.OperationId;
+        }
+        else if (request.Command is RuntimeDetachGeometry detach)
+        {
+            this.ForgetAssetOperations(detach.NodeId);
+        }
+        else if (request.Command is RuntimeRemoveSceneNode remove)
+        {
+            this.ForgetAssetOperations(remove.NodeId);
+        }
+        else if (request.Command is RuntimeRemoveSceneNodes removeMany)
+        {
+            foreach (var nodeId in removeMany.Nodes)
+            {
+                this.ForgetAssetOperations(nodeId);
+            }
+        }
+    }
+
+    private void ForgetAssetOperations(Guid nodeId)
+    {
+        foreach (var target in this.assetOperations.Keys.Where(value => value.nodeId == nodeId).ToArray())
+        {
+            _ = this.assetOperations.Remove(target);
+        }
+    }
+
+    private void OnAssetLoadFailed(object? sender, RuntimeAssetLoadFailedEventArgs args)
+    {
+        if (this.IsCurrentAssetRequest(args.Request))
+        {
+            this.AssetLoadFailed?.Invoke(this, args);
+        }
+    }
 
     private RuntimeCommandResult? CheckRun(Guid operationId, Guid requestedRun, CancellationToken cancellationToken)
         => cancellationToken.IsCancellationRequested

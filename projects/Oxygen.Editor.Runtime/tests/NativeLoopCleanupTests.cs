@@ -11,7 +11,7 @@ namespace Oxygen.Editor.Runtime.Tests;
 
 [TestClass]
 [DoNotParallelize]
-public sealed class NativeLoopCleanupTests
+public sealed partial class NativeLoopCleanupTests
 {
     public TestContext TestContext { get; set; }
 

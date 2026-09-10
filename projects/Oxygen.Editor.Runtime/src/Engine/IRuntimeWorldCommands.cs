@@ -7,8 +7,16 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Managed scene projection operations; implementations own native conversion and lifetime checks.</summary>
 public interface IRuntimeWorldCommands
 {
+    /// <summary>Occurs on the runtime thread when a current asynchronous asset request fails.</summary>
+    public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
+
     /// <summary>Gets the current run identity, or empty when unavailable.</summary>
     public Guid RunId { get; }
+
+    /// <summary>Checks request correlation again after a consumer marshals a failure to its UI thread.</summary>
+    /// <param name="request">The original asset operation.</param>
+    /// <returns>Whether this is still the current asset request for its live target.</returns>
+    public bool IsCurrentAssetRequest(RuntimeWorldRequest request);
 
     /// <summary>Replaces the live scene and invalidates earlier projection targets.</summary>
     /// <param name="operationId">The request identity.</param>

@@ -8,6 +8,7 @@
 #pragma managed(push, off)
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -41,6 +42,9 @@ public:
   using MaterialLoader =
       std::function<void(const std::string &, MaterialCompletion)>;
   using Diagnostic = std::function<void(const std::string &)>;
+  //! Reports a current failure with the native request generation.
+  using FailureCallback =
+      std::function<void(uint64_t, const std::string &)>;
 
   SceneAssetRequests(content::IAssetLoader &loader,
                      content::VirtualPathResolver &resolver);
@@ -52,11 +56,12 @@ public:
   auto operator=(const SceneAssetRequests &) -> SceneAssetRequests & = delete;
 
   //! Begin before resolving or consulting caches, so failed requests supersede.
-  auto BeginGeometry(scene::NodeHandle node, const std::string &uri)
+  auto BeginGeometry(scene::NodeHandle node, const std::string &uri,
+                     FailureCallback on_failure = {})
       -> GeometryCompletion;
   void LoadGeometry(const std::string &uri, GeometryCompletion complete);
   void SetMaterial(scene::NodeHandle node, std::size_t slot,
-                   const std::string &uri);
+                   const std::string &uri, FailureCallback on_failure = {});
   void Detach(scene::NodeHandle node);
 
   //! Drain after authoring commands. Reject dead targets and obsolete results.

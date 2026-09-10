@@ -7,9 +7,12 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Internal native conversion boundary, substitutable without constructing native facades.</summary>
 internal interface IRuntimeCommandTransport
 {
+    /// <summary>Occurs after native generation and target validation accepts a failure.</summary>
+    public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
+
     /// <summary>Performs the native Execute operation.</summary>
-    /// <param name="command">The command transport value.</param>
-    public void Execute(RuntimeWorldCommand command);
+    /// <param name="request">The command and its operation identity.</param>
+    public void Execute(RuntimeWorldRequest request);
 
     /// <summary>Performs the native ActivateSceneAsync operation.</summary>
     /// <param name="name">The name transport value.</param>

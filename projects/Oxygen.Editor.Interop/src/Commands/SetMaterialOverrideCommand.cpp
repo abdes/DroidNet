@@ -27,7 +27,8 @@ void SetMaterialOverrideCommand::Execute(CommandContext &context) {
     throw std::logic_error(
         "Material command requires scene asset request state");
   }
-  context.AssetRequests->SetMaterial(node_, slot_index_, material_uri_);
+  context.AssetRequests->SetMaterial(
+      node_, slot_index_, material_uri_, std::move(failure_callback_));
 }
 
 } // namespace oxygen::interop::module

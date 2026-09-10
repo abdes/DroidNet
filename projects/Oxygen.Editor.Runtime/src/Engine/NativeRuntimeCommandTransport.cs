@@ -15,9 +15,12 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
     private readonly OxygenInput input = new(context);
 
     /// <inheritdoc/>
-    public void Execute(RuntimeWorldCommand command)
+    public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
+
+    /// <inheritdoc/>
+    public void Execute(RuntimeWorldRequest request)
     {
-        switch (command)
+        switch (request.Command)
         {
             case RuntimeRemoveSceneNode value:
                 this.world.RemoveSceneNode(value.NodeId);
@@ -32,10 +35,10 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
                 this.world.SetProperties(value.NodeId, RuntimeTransportConversion.ToNative(value.Entries));
                 break;
             case RuntimeSetGeometry value:
-                this.world.SetGeometry(value.NodeId, value.AssetPath);
+                this.world.SetGeometry(value.NodeId, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message));
                 break;
             case RuntimeSetMaterialOverride value:
-                this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath);
+                this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message));
                 break;
             case RuntimeSetEnvironment value:
                 this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma);
@@ -62,7 +65,7 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
                 this.world.RemoveSceneNodes(value.Nodes.ToArray());
                 break;
             default:
-                this.ExecuteComponent(command);
+                this.ExecuteComponent(request.Command);
                 break;
         }
     }
@@ -113,6 +116,9 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
 
     /// <inheritdoc/>
     public void ClearCookedRoots() => this.world.ClearCookedRoots();
+
+    private void OnAssetLoadFailed(RuntimeWorldRequest request, ulong generation, string message)
+        => this.AssetLoadFailed?.Invoke(this, new RuntimeAssetLoadFailedEventArgs(request, generation, message));
 
     private void ExecuteComponent(RuntimeWorldCommand command)
     {
