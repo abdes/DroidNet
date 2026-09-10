@@ -43,6 +43,8 @@ OXGN_EI_API auto CreateEngine(const EditorEngineConfig& config)
 OXGN_EI_API auto CreateEngine(const EngineConfig& config)
   -> std::unique_ptr<EngineContext>;
 OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
+//! Request loop shutdown; safe to repeat or race with native loop teardown.
+//! A null context or a context whose engine has exited is a no-op.
 OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
 
 // Runtime configuration helpers

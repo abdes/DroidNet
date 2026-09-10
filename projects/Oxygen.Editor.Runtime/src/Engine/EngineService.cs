@@ -24,6 +24,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="hostingContext">Provides access to the UI dispatcher context.</param>
 /// <param name="loggerFactory">Optional factory used to bridge native engine logging.</param>
 /// <param name="engineSettings">Editor native engine startup settings.</param>
+/// <param name="pathFinder">Resolves editor configuration paths.</param>
 public sealed partial class EngineService(
     HostingContext hostingContext,
     ILoggerFactory? loggerFactory = null,
@@ -37,22 +38,34 @@ public sealed partial class EngineService(
     private readonly IEngineSettings engineSettings = engineSettings?.Settings ?? new EngineSettings();
     private readonly IPathFinder? pathFinder = pathFinder;
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
-    private readonly SemaphoreSlim initializationGate = new(1, 1);
-    private readonly SemaphoreSlim leaseGate = new(1, 1);
+
+    // This gate has no wait handles and remains available for concurrent/repeated cleanup.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Cleanup remains callable after disposal; SemaphoreSlim.AvailableWaitHandle is never used.")]
+    private readonly SemaphoreSlim lifecycleGate = new(1, 1);
+    private readonly Func<EngineSession> sessionFactory = () => new NativeEngineSession(hostingContext);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
     private int reservedSurfaceCount;
 
-#pragma warning disable CA2213 // Disposable fields should be disposed
-    private EngineRunner? engineRunner; // disposed in ShutDownAsync, called by DiosposeAsync
-    private EngineContext? engineContext; // disposed in TryDestroyEngineContext, called by ShutDownAsync
-#pragma warning restore CA2213 // Disposable fields should be disposed
+    private EngineSession? session;
     private Task? engineLoopTask;
-    private EngineServiceState state = EngineServiceState.NoEngine;
-    private bool disposed;
+    private volatile EngineServiceState state = EngineServiceState.NoEngine;
+    private volatile bool disposalRequested;
+
+    /// <summary>Initializes a new instance of the <see cref="EngineService"/> class with a native ownership factory.</summary>
+    /// <param name="hostingContext">The UI context.</param>
+    /// <param name="sessionFactory">Creates the native ownership boundary.</param>
+    /// <param name="loggerFactory">The optional logger factory.</param>
+    internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, ILoggerFactory? loggerFactory = null)
+        : this(hostingContext, loggerFactory)
+    {
+        this.sessionFactory = sessionFactory;
+    }
 
     /// <inheritdoc/>
-    public EngineServiceState State => this.state;
+    public EngineServiceState State => this.state is EngineServiceState.Running && this.engineLoopTask?.IsCompleted == true
+        ? EngineServiceState.Faulted
+        : this.state;
 
     /// <inheritdoc/>
     public int EngineLoggingVerbosity
@@ -60,7 +73,7 @@ public sealed partial class EngineService(
         get
         {
             var runner = this.EnsureIsReadyOrRunning();
-            var cfg = runner.GetLoggingConfig(this.engineContext);
+            var cfg = runner.GetLoggingConfig(this.EngineContext);
             return cfg.Verbosity;
         }
 
@@ -77,7 +90,7 @@ public sealed partial class EngineService(
             var runner = this.EnsureIsReadyOrRunning();
             try
             {
-                var cfg = runner.GetLoggingConfig(this.engineContext);
+                var cfg = runner.GetLoggingConfig(this.EngineContext);
                 cfg.Verbosity = value;
                 if (!runner.ConfigureLogging(cfg))
                 {
@@ -111,7 +124,7 @@ public sealed partial class EngineService(
         get
         {
             var runner = this.EnsureIsReadyOrRunning();
-            var cfg = runner.GetEngineConfig(this.engineContext);
+            var cfg = runner.GetEngineConfig(this.EngineContext);
             Debug.Assert(cfg is not null, "A ready or running engine should return a valid EngineConfig object");
             return cfg.TargetFps;
         }
@@ -120,7 +133,7 @@ public sealed partial class EngineService(
         {
             var runner = this.EnsureIsReadyOrRunning();
             var clamped = Math.Clamp(value, 0, this.MaxTargetFps);
-            runner.SetTargetFps(this.engineContext, clamped);
+            runner.SetTargetFps(this.EngineContext, clamped);
             this.LogTargetFpsSet(value, clamped);
         }
     }
@@ -151,20 +164,6 @@ public sealed partial class EngineService(
     }
     = null!; // will be initialized during engine initialization
 
-    /// <inheritdoc/>
-    public void MountProjectCookedRoot(string path)
-    {
-        _ = this.EnsureIsRunning();
-        this.World.AddLooseCookedRoot(path);
-    }
-
-    /// <inheritdoc/>
-    public void UnmountProjectCookedRoot()
-    {
-        _ = this.EnsureIsRunning();
-        this.World.ClearCookedRoots();
-    }
-
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
     public OxygenInput Input
@@ -179,236 +178,39 @@ public sealed partial class EngineService(
     }
     = null!; // will be initialized during engine initialization
 
-    /// <inheritdoc />
-    public async ValueTask<bool> InitializeAsync(CancellationToken cancellationToken = default)
+    private EngineContext? EngineContext => this.session?.Context;
+
+    /// <inheritdoc/>
+    public void MountProjectCookedRoot(string path)
     {
-        await this.initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (this.state is not (EngineServiceState.NoEngine or EngineServiceState.Faulted))
-            {
-                this.LogAlreadyInitialized();
-                return true; // No-op
-            }
-
-            if (this.State is EngineServiceState.Faulted)
-            {
-                // Clearing the faulted state is needed to allow re-initialization. We will try to
-                // shutdown the engine, because it was not done cleanly before calling
-                // InitializeAsync, but we must not fail if shutdown throws.
-                await this.TryShutdownAsync().ConfigureAwait(false);
-            }
-
-            Debug.Assert(this.engineRunner == null, "Expecting engine runner to be null before initialization starts.");
-            this.state = EngineServiceState.Initializing;
-            this.engineRunner = new EngineRunner();
-            if (loggerFactory is { } factory) // TODO: pass parameters to InitializeAsync to configure logging
-            {
-                var loggingConfig = new LoggingConfig
-                {
-                    Verbosity = 0,
-                    IsColored = false,
-                    ModuleOverrides = string.Empty, // "**/Renderer/*=0,**/*Interop/**/*=3,**/Graphics/**/Command*=0",
-                };
-                var engineLogger = factory.CreateLogger("Oxygen.Engine");
-                _ = this.engineRunner.ConfigureLogging(loggingConfig, engineLogger);
-            }
-
-            this.LogRunnerInitialized();
-
-            // Configure the engine for headless operation
-            var config = ConfigFactory.CreateDefaultEditorEngineConfig();
-            config.Engine.TargetFps = 1; // TODO: remove after editor is stable
-            config.Platform ??= new PlatformConfigManaged();
-            config.Engine ??= new EngineConfig();
-            config.Engine.Graphics ??= new GraphicsConfigManaged();
-            this.engineSettings.ApplyTo(config);
-            this.ApplyEditorRuntimePathDefaults(config);
-            config.Platform.Headless = true;
-            config.Engine.Graphics.Headless = true;
-            config.Engine.EnableAssetLoader = true;
-
-            this.engineContext = this.engineRunner.CreateEngine(config);
-            if (this.engineContext?.IsValid != true)
-            {
-                throw new InvalidOperationException("Failed to create engine context.");
-            }
-
-            var startupTargetFps = Math.Clamp(config.Engine.TargetFps, 0, EngineConfig.MaxTargetFps);
-            this.engineRunner.SetTargetFps(this.engineContext, startupTargetFps);
-            this.LogTargetFpsSet(startupTargetFps, startupTargetFps);
-
-            this.World = new OxygenWorld(this.engineContext);
-            this.Input = new OxygenInput(this.engineContext);
-
-            this.LogContextReady();
-            this.state = EngineServiceState.Ready;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            this.LogInitializationFailed(ex);
-            await this.TryShutdownAsync().ConfigureAwait(false);
-            throw;
-        }
-        finally
-        {
-            _ = this.initializationGate.Release();
-        }
+        _ = this.EnsureIsRunning();
+        this.World.AddLooseCookedRoot(path);
     }
 
-    /// <inheritdoc />
-    public async ValueTask StartAsync()
+    /// <inheritdoc/>
+    public void UnmountProjectCookedRoot()
     {
-        this.LogStartingEngineLoop();
-
-        this.EnsureInStates(
-           EngineServiceState.Ready,
-           EngineServiceState.Starting,
-           EngineServiceState.Running);
-
-        if (this.state is EngineServiceState.Starting or EngineServiceState.Running)
-        {
-            return; // No-op
-        }
-
-        var runner = this.engineRunner;
-        Debug.Assert(runner is not null, "Engine runner should be initialized when engine is ready.");
-
-        this.state = EngineServiceState.Starting;
-
-        // Spawn the engine loop task
-        this.engineLoopTask = runner.RunEngineAsync(this.engineContext);
-
-        this.state = EngineServiceState.Running;
+        _ = this.EnsureIsRunning();
+        this.World.ClearCookedRoots();
     }
 
-    /// <inheritdoc />
-    public async ValueTask ShutdownAsync()
-    {
-        this.LogShutdownRequested();
-
-        this.EnsureInStates(
-           EngineServiceState.NoEngine,
-           EngineServiceState.Ready,
-           EngineServiceState.Running,
-           EngineServiceState.Faulted);
-
-        if (this.state is EngineServiceState.NoEngine)
-        {
-            return; // No-op
-        }
-
-        this.state = EngineServiceState.ShuttingDown;
-        List<ViewportSurfaceLease> leasesSnapshot;
-        await this.leaseGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            // Snapshot current leases. Do NOT clear here; let each lease's Dispose/Release
-            // perform native unregister and internal removal. Clearing here previously could
-            // leave native surfaces registered without a managed owner.
-            leasesSnapshot = [.. this.activeLeases.Values];
-        }
-        finally
-        {
-            _ = this.leaseGate.Release();
-        }
-
-        // Dispose each lease which will attempt to unregister the native surface and
-        // remove itself from the collections in a safe, synchronized manner. DisposeAsync
-        // is implemented to never throw, so callers should not wrap it in try/catch.
-        foreach (var lease in leasesSnapshot)
-        {
-            await lease.DisposeAsync().ConfigureAwait(false);
-        }
-
-        try
-        {
-            await this.TryStopEngineAsync().ConfigureAwait(false);
-            this.TryDestroyEngineContext();
-        }
-        finally
-        {
-            this.engineRunner?.Dispose();
-            this.engineRunner = null;
-        }
-
-        this.state = EngineServiceState.NoEngine;
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        this.disposed = true;
-        await this.TryShutdownAsync().ConfigureAwait(false);
-        this.initializationGate.Dispose();
-        this.leaseGate.Dispose();
-    }
-
-    private async ValueTask TryStopEngineAsync()
-    {
-        var runner = this.EnsureIsRunning();
-
-        Debug.Assert(this.engineLoopTask is not null, "Engine loop task should be active when engine is running.");
-        Debug.Assert(this.engineContext is not null, "Engine context should be valid when engine is running.");
-
-        this.LogStoppingEngineLoop();
-        try
-        {
-            runner.StopEngine(this.engineContext);
-            if (this.engineLoopTask != null)
-            {
-                await this.engineLoopTask.ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            this.engineLoopTask = null;
-            this.state = EngineServiceState.Ready;
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "must not throw")]
-    private async ValueTask TryShutdownAsync()
-    {
-        // Defensively try to shutdown the engine. Shutdown is idempotent, can
-        // be called in any state, and will have no effect if the engine was
-        // already shutdown.
-        try
-        {
-            await this.ShutdownAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            // Swallow exceptions because we are in a best-effort cleanup path.
-        }
-        finally
-        {
-            this.state = EngineServiceState.NoEngine;
-        }
-    }
+    private static bool ShouldUseEditorCVarsArchive(string? cvarsArchivePath)
+        => string.IsNullOrWhiteSpace(cvarsArchivePath)
+            || string.Equals(
+                cvarsArchivePath.Replace('\\', '/'),
+                EngineDefaultCVarsArchivePath,
+                StringComparison.OrdinalIgnoreCase);
 
     private EngineRunner EnsureIsReadyOrRunning()
     {
-        var validStates = new EngineServiceState[] { EngineServiceState.Ready, EngineServiceState.Running };
-        this.EnsureInStates(validStates);
-
-        Debug.Assert(this.engineRunner is not null, $"Engine runner should be initialized when state is in [{string.Join(", ", validStates)}].");
-        return this.engineRunner;
+        this.EnsureInStates(EngineServiceState.Ready, EngineServiceState.Running);
+        return this.session!.Runner;
     }
 
     private EngineRunner EnsureIsRunning()
     {
-        var validStates = new EngineServiceState[] { EngineServiceState.Running };
-        this.EnsureInStates(validStates);
-
-        Debug.Assert(this.engineRunner is not null, $"Engine runner should be initialized when state is in [{string.Join(", ", validStates)}].");
-        return this.engineRunner;
+        this.EnsureInStates(EngineServiceState.Running);
+        return this.session!.Runner;
     }
 
     private void ApplyEditorRuntimePathDefaults(EditorEngineConfigManaged config)
@@ -422,32 +224,24 @@ public sealed partial class EngineService(
         config.Engine ??= new EngineConfig();
         config.Renderer ??= new RendererConfigManaged();
         config.Engine.PathFinder ??= new PathFinderConfigManaged();
-        if (this.ShouldUseEditorCVarsArchive(config.Engine.PathFinder.CVarsArchivePath))
+        if (ShouldUseEditorCVarsArchive(config.Engine.PathFinder.CVarsArchivePath))
         {
             config.Engine.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
         }
 
         config.Renderer.PathFinder ??= config.Engine.PathFinder;
-        if (this.ShouldUseEditorCVarsArchive(config.Renderer.PathFinder.CVarsArchivePath))
+        if (ShouldUseEditorCVarsArchive(config.Renderer.PathFinder.CVarsArchivePath))
         {
             config.Renderer.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Kept as an instance member to preserve local member ordering in this partial service.")]
-    private bool ShouldUseEditorCVarsArchive(string? cvarsArchivePath)
-        => string.IsNullOrWhiteSpace(cvarsArchivePath)
-            || string.Equals(
-                cvarsArchivePath.Replace('\\', '/'),
-                EngineDefaultCVarsArchivePath,
-                StringComparison.OrdinalIgnoreCase);
-
     private void EnsureInStates(params EngineServiceState[] validStates)
     {
-        if (Array.IndexOf(validStates, this.state) < 0)
+        ObjectDisposedException.ThrowIf(this.disposalRequested, this);
+        if (Array.IndexOf(validStates, this.State) < 0)
         {
-            var message = $"Engine must be in state: {string.Join(", ", validStates)}. Current state: {this.state}.";
-            Debug.Fail(message);
+            var message = $"Engine must be in state: {string.Join(", ", validStates)}. Current state: {this.State}.";
             throw new InvalidOperationException(message);
         }
     }
@@ -457,31 +251,6 @@ public sealed partial class EngineService(
         if (!this.hostingContext.Dispatcher.HasThreadAccess)
         {
             throw new InvalidOperationException("Engine operations must be performed on the UI dispatcher thread.");
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "in the dispose path, cannot throw")]
-    private void TryDestroyEngineContext()
-    {
-        if (this.engineContext == null)
-        {
-            return;
-        }
-
-        try
-        {
-            this.engineContext.Dispose();
-        }
-        catch (Exception ex)
-        {
-            this.LogInitializationFailed(ex);
-        }
-        finally
-        {
-            this.engineContext = null;
-            this.World = null!;
-            this.Input = null!;
-            this.LogContextDestroyed();
         }
     }
 }

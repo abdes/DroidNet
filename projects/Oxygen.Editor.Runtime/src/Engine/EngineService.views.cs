@@ -15,64 +15,128 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<ViewIdManaged> CreateViewAsync(ViewConfigManaged config)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogCreateView(config);
-        return await runner.TryCreateViewAsync(this.engineContext, config).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogCreateView(config);
+            return await this.AwaitRuntimeOperationAsync(runner.TryCreateViewAsync(this.EngineContext, config)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> DestroyViewAsync(ViewIdManaged viewId)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogDestroyView(viewId);
-        return await runner.TryDestroyViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogDestroyView(viewId);
+            return await this.AwaitRuntimeOperationAsync(runner.TryDestroyViewAsync(this.EngineContext, viewId)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> ShowViewAsync(ViewIdManaged viewId)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogShowView(viewId);
-        return await runner.TryShowViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogShowView(viewId);
+            return await this.AwaitRuntimeOperationAsync(runner.TryShowViewAsync(this.EngineContext, viewId)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> HideViewAsync(ViewIdManaged viewId)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogHideView(viewId);
-        return await runner.TryHideViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogHideView(viewId);
+            return await this.AwaitRuntimeOperationAsync(runner.TryHideViewAsync(this.EngineContext, viewId)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogSetViewCameraPreset(viewId, preset);
-        return await runner.TrySetViewCameraPresetAsync(this.engineContext, viewId, preset).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewCameraPreset(viewId, preset);
+            return await this.AwaitRuntimeOperationAsync(runner.TrySetViewCameraPresetAsync(this.EngineContext, viewId, preset)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogSetViewCameraControlMode(viewId, mode);
-        return await runner.TrySetViewCameraControlModeAsync(this.engineContext, viewId, mode).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewCameraControlMode(viewId, mode);
+            return await this.AwaitRuntimeOperationAsync(runner.TrySetViewCameraControlModeAsync(this.EngineContext, viewId, mode)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraMovementSpeedAsync(ViewIdManaged viewId, float speedUnitsPerSecond)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogSetViewCameraMovementSpeed(viewId, speedUnitsPerSecond);
-        return await runner.TrySetViewCameraMovementSpeedAsync(this.engineContext, viewId, speedUnitsPerSecond).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewCameraMovementSpeed(viewId, speedUnitsPerSecond);
+            return await this.AwaitRuntimeOperationAsync(runner.TrySetViewCameraMovementSpeedAsync(this.EngineContext, viewId, speedUnitsPerSecond)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraSettingsAsync(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
     {
-        var runner = this.EnsureIsRunning();
-        this.LogSetViewCameraSettings(viewId, fieldOfViewDegrees, nearPlane, farPlane);
-        return await runner.TrySetViewCameraSettingsAsync(this.engineContext, viewId, fieldOfViewDegrees, nearPlane, farPlane).ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewCameraSettings(viewId, fieldOfViewDegrees, nearPlane, farPlane);
+            return await this.AwaitRuntimeOperationAsync(runner.TrySetViewCameraSettingsAsync(this.EngineContext, viewId, fieldOfViewDegrees, nearPlane, farPlane)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
     }
 }
