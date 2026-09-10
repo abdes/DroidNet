@@ -2104,7 +2104,7 @@ public sealed partial class SceneDocumentCommandService(
             title,
             message,
             context);
-        return new(Succeeded: false, operationResultId);
+        return new(Succeeded: false, operationResultId) { ValidationCode = code, ValidationMessage = message };
     }
 
     private Guid PublishLiveSyncWarning(

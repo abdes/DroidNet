@@ -13,11 +13,11 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>
 /// ViewModel for V0.1 perspective camera inspector editing.
 /// </summary>
-public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor, IDisposable
+public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
-    private readonly ISceneDocumentCommandService? commandService;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
+    private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+
+    private readonly InspectorEditSessionCoordinator? edits;
     private readonly PropertyBinding<float> fieldOfViewBinding = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
     private readonly PropertyBinding<float> nearPlaneBinding = new(SceneDocumentCommandService.PerspectiveCamera.NearPlaneDescriptor);
     private readonly PropertyBinding<float> farPlaneBinding = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
@@ -35,8 +35,12 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
-        this.commandService = commandService;
-        this.commandContextProvider = commandContextProvider;
+        if (commandService is not null && commandContextProvider is not null)
+        {
+            this.edits = new(commandService, commandContextProvider, "Edit Camera", this.RefreshValues);
+            this.edits.Diagnostics.Relate(this.nearPlaneBinding.Id.Id, this.farPlaneBinding.Id.Id);
+        }
+
         this.fieldOfViewBinding.ValueRequested += this.OnCameraValueRequested;
         this.nearPlaneBinding.ValueRequested += this.OnCameraValueRequested;
         this.farPlaneBinding.ValueRequested += this.OnCameraValueRequested;
@@ -67,11 +71,41 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     [ObservableProperty]
     public partial float AspectRatio { get; set; }
 
+    /// <summary>Gets current diagnostics for FieldOfView.</summary>
+    public InspectorFieldDiagnostic FieldOfViewDiagnostic => this.edits?.Diagnostics.Get(this.fieldOfViewBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for NearPlane.</summary>
+    public InspectorFieldDiagnostic NearPlaneDiagnostic => this.edits?.Diagnostics.Get(this.nearPlaneBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for FarPlane.</summary>
+    public InspectorFieldDiagnostic FarPlaneDiagnostic => this.edits?.Diagnostics.Get(this.farPlaneBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for AspectRatio.</summary>
+    public InspectorFieldDiagnostic AspectRatioDiagnostic => this.edits?.Diagnostics.Get(this.aspectRatioBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <inheritdoc/>
+    public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
+
     /// <inheritdoc />
     public override string Header => "Perspective Camera";
 
     /// <inheritdoc />
     public override string Description => "Defines projection, clipping planes, and aspect ratio.";
+
+    /// <summary>Gets completion of submitted inspector edits.</summary>
+    internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public void BeginEditSession(string field, DroidNet.Controls.NumberBoxEditInteractionKind interaction)
+        => this.edits?.Begin(field, interaction);
+
+    /// <inheritdoc/>
+    public void CompleteEditSession(DroidNet.Controls.NumberBoxEditSessionEventArgs args)
+        => this.edits?.Complete(args);
+
+    /// <inheritdoc/>
+    public void EndEditSession(DroidNet.Controls.NumberBoxEditCompletionKind completion)
+        => this.edits?.End(completion);
 
     /// <inheritdoc />
     public void Dispose()
@@ -85,7 +119,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         this.nearPlaneBinding.ValueRequested -= this.OnCameraValueRequested;
         this.farPlaneBinding.ValueRequested -= this.OnCameraValueRequested;
         this.aspectRatioBinding.ValueRequested -= this.OnCameraValueRequested;
-        this.editGate.Dispose();
+        this.edits?.Dispose();
         this.disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -93,21 +127,22 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
+        this.edits?.Bind(items.Where(node => node.Components.Any(component => component is PerspectiveCamera)).Select(node => node.Id).ToArray());
         this.selectedItems = items;
         var targets = items
             .Select(static node => new { Node = node, Camera = node.Components.OfType<PerspectiveCamera>().FirstOrDefault() })
             .Where(static target => target.Camera is not null)
             .ToList();
-        var nodeIds = targets.Select(static target => target.Node.Id).ToList();
+        var nodeIds = targets.ConvertAll(static target => target.Node.Id);
         var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Camera);
 
         this.isApplyingEditorValues = true;
         try
         {
-            UpdateBinding(this.fieldOfViewBinding, nodeIds, targetsByNode, value => this.FieldOfView = value, value => this.FieldOfViewIsIndeterminate = value);
-            UpdateBinding(this.nearPlaneBinding, nodeIds, targetsByNode, value => this.NearPlane = value, value => this.NearPlaneIsIndeterminate = value);
-            UpdateBinding(this.farPlaneBinding, nodeIds, targetsByNode, value => this.FarPlane = value, value => this.FarPlaneIsIndeterminate = value);
-            UpdateBinding(this.aspectRatioBinding, nodeIds, targetsByNode, value => this.AspectRatio = value, value => this.AspectRatioIsIndeterminate = value);
+            this.UpdateBinding(this.fieldOfViewBinding, nodeIds, targetsByNode, value => this.FieldOfView = value, value => this.FieldOfViewIsIndeterminate = value);
+            this.UpdateBinding(this.nearPlaneBinding, nodeIds, targetsByNode, value => this.NearPlane = value, value => this.NearPlaneIsIndeterminate = value);
+            this.UpdateBinding(this.farPlaneBinding, nodeIds, targetsByNode, value => this.FarPlane = value, value => this.FarPlaneIsIndeterminate = value);
+            this.UpdateBinding(this.aspectRatioBinding, nodeIds, targetsByNode, value => this.AspectRatio = value, value => this.AspectRatioIsIndeterminate = value);
         }
         finally
         {
@@ -115,14 +150,29 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         }
     }
 
-    private static void UpdateBinding(
+    private void RefreshValues()
+    {
+        if (this.selectedItems is { } items)
+        {
+            this.UpdateValues(items);
+        }
+    }
+
+    private void UpdateBinding(
         PropertyBinding<float> binding,
         IReadOnlyList<Guid> nodeIds,
         Dictionary<Guid, object?> targetsByNode,
         Action<float> setValue,
         Action<bool> setIndeterminate)
     {
+        var previous = binding.HasValue ? (object?)binding.Value : null;
+        var wasMixed = binding.IsMixed;
         binding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
+        if (!Equals(previous, binding.HasValue ? binding.Value : null) || wasMixed != binding.IsMixed)
+        {
+            this.edits?.ModelChanged(binding.Id.Id);
+        }
+
         setIndeterminate(binding.IsMixed);
         setValue(binding.HasValue ? binding.Value : 0f);
     }
@@ -161,72 +211,9 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
 
     private void ApplyCameraEdit(PropertyEdit edit)
     {
-        if (this.isApplyingEditorValues || this.selectedItems is null || this.selectedItems.Count == 0)
+        if (!this.isApplyingEditorValues)
         {
-            return;
+            this.edits?.Submit(edit);
         }
-
-        if (this.commandService is null || this.commandContextProvider?.Invoke() is not { } context)
-        {
-            return;
-        }
-
-        var nodes = this.selectedItems.ToList();
-        _ = this.ApplyCameraEditAsync(context, nodes, edit);
-    }
-
-    private async Task ApplyCameraEditAsync(
-        SceneDocumentCommandContext context,
-        IReadOnlyList<SceneNode> nodes,
-        PropertyEdit edit)
-    {
-        await this.editGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            var result = await this.commandService!.EditPropertiesAsync(
-                context,
-                nodes.Select(static node => node.Id).ToList(),
-                edit,
-                "Edit Camera",
-                EditSessionToken.OneShot).ConfigureAwait(true);
-            if (!result.Succeeded || !this.SelectionMatches(nodes))
-            {
-                return;
-            }
-
-            this.isApplyingEditorValues = true;
-            try
-            {
-                this.UpdateValues(nodes.ToList());
-            }
-            finally
-            {
-                this.isApplyingEditorValues = false;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // The command layer publishes sync diagnostics. Keep the inspector
-            // usable even when a live-update command is rejected asynchronously.
-        }
-        catch (OperationCanceledException)
-        {
-            // The edit was canceled by the active document workflow.
-        }
-        finally
-        {
-            _ = this.editGate.Release();
-        }
-    }
-
-    private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
-    {
-        if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
-        {
-            return false;
-        }
-
-        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
-        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
     }
 }

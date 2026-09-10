@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -23,7 +25,28 @@ public sealed partial class EnvironmentView
 
     private void BackgroundPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
-        _ = sender;
-        this.ViewModel?.SetBackgroundColor(args.NewColor);
+        if (this.ViewModel is { } model && model.BackgroundColor != args.NewColor)
+        {
+            InspectorColorGestures.Apply(sender, owner => ((EnvironmentViewModel)owner).SetBackgroundColor(args.NewColor));
+        }
+    }
+
+    private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string field })
+        {
+            this.ViewModel?.BeginEditSession(field, args.InteractionKind);
+        }
+    }
+
+    private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
+        => this.ViewModel?.CompleteEditSession(args);
+
+    private void ColorPickerLoaded(object sender, RoutedEventArgs args)
+    {
+        if (sender is ColorPicker picker)
+        {
+            InspectorColorGestures.Attach(picker, this.ViewModel, "BackgroundColor");
+        }
     }
 }

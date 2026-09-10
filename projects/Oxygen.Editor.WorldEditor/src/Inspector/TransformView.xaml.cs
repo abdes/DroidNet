@@ -29,6 +29,7 @@ public partial class TransformView
         if (float.IsNaN(v) || float.IsInfinity(v))
         {
             e.IsValid = false;
+            this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
             return;
         }
 
@@ -36,6 +37,7 @@ public partial class TransformView
         const float min = -180f;
         const float max = 180f;
         e.IsValid = v is >= min and <= max;
+        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
     }
 
     private void ScaleBox_Validate(object? sender, ValidationEventArgs<float> e)
@@ -46,12 +48,14 @@ public partial class TransformView
         if (float.IsNaN(v) || float.IsInfinity(v))
         {
             e.IsValid = false;
+            this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
             return;
         }
 
         // Disallow near-zero scale which degenerates geometry; allow negatives.
         const float minMagnitude = 1e-3f; // tweakable threshold
         e.IsValid = MathF.Abs(v) >= minMagnitude;
+        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
     }
 
     private void PositionBox_EditSessionStarted(object? sender, VectorBoxEditSessionEventArgs e)

@@ -10,7 +10,6 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
-
     <UserControl.Resources>
         <ResourceDictionary>
             <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
@@ -30,7 +29,6 @@
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
-
     <editorcontrols:PropertiesExpander
         Padding="2"
         HorizontalAlignment="Stretch"
@@ -46,56 +44,146 @@
                 IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Position"
                 Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <controls:VectorBox
-                    ComponentLabelPosition="Left"
-                    Dimension="3"
-                    EditSessionCompleted="PositionBox_EditSessionCompleted"
-                    EditSessionStarted="PositionBox_EditSessionStarted"
-                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
-                    XIsIndeterminate="{x:Bind ViewModel.PositionXIsIndeterminate, Mode=TwoWay}"
-                    XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
-                    YIsIndeterminate="{x:Bind ViewModel.PositionYIsIndeterminate, Mode=TwoWay}"
-                    YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
-                    ZIsIndeterminate="{x:Bind ViewModel.PositionZIsIndeterminate, Mode=TwoWay}"
-                    ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
+                <StackPanel Spacing="2">
+                    <controls:VectorBox
+                        ComponentLabelPosition="Left"
+                        Dimension="3"
+                        EditSessionCompleted="PositionBox_EditSessionCompleted"
+                        EditSessionStarted="PositionBox_EditSessionStarted"
+                        LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                        XIsIndeterminate="{x:Bind ViewModel.PositionXIsIndeterminate, Mode=TwoWay}"
+                        XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
+                        YIsIndeterminate="{x:Bind ViewModel.PositionYIsIndeterminate, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
+                        ZIsIndeterminate="{x:Bind ViewModel.PositionZIsIndeterminate, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Column="0"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.PositionXDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.PositionXDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.PositionYDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.PositionYDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="2"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.PositionZDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.PositionZDiagnostic.Visibility, Mode=OneWay}" />
+                    </Grid>
+                </StackPanel>
             </editorcontrols:PropertyCard>
             <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Rotation"
                 Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <controls:VectorBox
-                    ComponentLabelPosition="Left"
-                    Dimension="3"
-                    EditSessionCompleted="RotationBox_EditSessionCompleted"
-                    EditSessionStarted="RotationBox_EditSessionStarted"
-                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
-                    Validate="RotationBox_Validate"
-                    XIsIndeterminate="{x:Bind ViewModel.RotationXIsIndeterminate, Mode=TwoWay}"
-                    XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
-                    YIsIndeterminate="{x:Bind ViewModel.RotationYIsIndeterminate, Mode=TwoWay}"
-                    YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
-                    ZIsIndeterminate="{x:Bind ViewModel.RotationZIsIndeterminate, Mode=TwoWay}"
-                    ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                <StackPanel Spacing="2">
+                    <controls:VectorBox
+                        ComponentLabelPosition="Left"
+                        Dimension="3"
+                        EditSessionCompleted="RotationBox_EditSessionCompleted"
+                        EditSessionStarted="RotationBox_EditSessionStarted"
+                        LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                        Validate="RotationBox_Validate"
+                        XIsIndeterminate="{x:Bind ViewModel.RotationXIsIndeterminate, Mode=TwoWay}"
+                        XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
+                        YIsIndeterminate="{x:Bind ViewModel.RotationYIsIndeterminate, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
+                        ZIsIndeterminate="{x:Bind ViewModel.RotationZIsIndeterminate, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Column="0"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.RotationXDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.RotationXDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.RotationYDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.RotationYDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="2"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.RotationZDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.RotationZDiagnostic.Visibility, Mode=OneWay}" />
+                    </Grid>
+                </StackPanel>
             </editorcontrols:PropertyCard>
             <editorcontrols:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Scale"
                 Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <controls:VectorBox
-                    ComponentLabelPosition="Left"
-                    Dimension="3"
-                    EditSessionCompleted="ScaleBox_EditSessionCompleted"
-                    EditSessionStarted="ScaleBox_EditSessionStarted"
-                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
-                    Validate="ScaleBox_Validate"
-                    XIsIndeterminate="{x:Bind ViewModel.ScaleXIsIndeterminate, Mode=TwoWay}"
-                    XValue="{x:Bind ViewModel.ScaleX, Mode=TwoWay}"
-                    YIsIndeterminate="{x:Bind ViewModel.ScaleYIsIndeterminate, Mode=TwoWay}"
-                    YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
-                    ZIsIndeterminate="{x:Bind ViewModel.ScaleZIsIndeterminate, Mode=TwoWay}"
-                    ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
+                <StackPanel Spacing="2">
+                    <controls:VectorBox
+                        ComponentLabelPosition="Left"
+                        Dimension="3"
+                        EditSessionCompleted="ScaleBox_EditSessionCompleted"
+                        EditSessionStarted="ScaleBox_EditSessionStarted"
+                        LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                        Validate="ScaleBox_Validate"
+                        XIsIndeterminate="{x:Bind ViewModel.ScaleXIsIndeterminate, Mode=TwoWay}"
+                        XValue="{x:Bind ViewModel.ScaleX, Mode=TwoWay}"
+                        YIsIndeterminate="{x:Bind ViewModel.ScaleYIsIndeterminate, Mode=TwoWay}"
+                        YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
+                        ZIsIndeterminate="{x:Bind ViewModel.ScaleZIsIndeterminate, Mode=TwoWay}"
+                        ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Column="0"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ScaleXDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ScaleXDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ScaleYDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ScaleYDiagnostic.Visibility, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="2"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ScaleZDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ScaleZDiagnostic.Visibility, Mode=OneWay}" />
+                    </Grid>
+                </StackPanel>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>

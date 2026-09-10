@@ -144,6 +144,11 @@ public sealed partial class SceneDocumentCommandService
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
         ArgumentNullException.ThrowIfNull(session);
 
+        if (!session.IsOneShot)
+        {
+            return await this.EditPropertiesForTargetsAsync(context, nodeIds.ToDictionary(id => id, _ => edit), label, session).ConfigureAwait(true);
+        }
+
         if (edit.Count == 0)
         {
             return SceneCommandResult.Success;
@@ -187,11 +192,9 @@ public sealed partial class SceneDocumentCommandService
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
         ArgumentNullException.ThrowIfNull(session);
 
-        _ = label;
-
-        if (SkipUncommittedSession(session) is { } sessionResult)
+        if (!session.IsOneShot)
         {
-            return sessionResult;
+            return await this.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [context.Scene.Id] = edit }, label, session).ConfigureAwait(true);
         }
 
         if (edit.Count == 0)

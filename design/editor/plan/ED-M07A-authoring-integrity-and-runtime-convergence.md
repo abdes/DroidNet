@@ -171,6 +171,17 @@ without adding history. Wheel commits after 250 ms idle. Two targets with differ
 initial values undo to their respective originals. Late callbacks cannot change
 a different selection or reopened document.
 
+Current implementation and automated evidence (2026-09-10): camera, directional
+light and environment controls now feed captured gesture sessions through the
+shared property snapshot/controller path. Commit creates one history entry;
+cancellation restores each original target. Wheel input commits after 250 ms
+idle. Per-target color edits preserve untouched channels. Rebinding, hidden
+inspectors and component replacement terminate old sessions; duplicate terminal
+callbacks cannot apply another value. Transform requests capture their phase
+before asynchronous dispatch and recheck cancelled wheel callbacks on the UI
+thread. Save/close integration remains in 07A.5; actual control coverage remains
+in 07A.6.
+
 ### 07A.3 - Scoped Current Field Diagnostics
 
 Bind rejected command results to the originating PropertyId/target/document
@@ -185,6 +196,18 @@ errors, and never leave controls pretending the invalid value is committed. A
 valid subsequent edit clears only the resolved current error; changing selection
 or deleting the target cannot attach stale diagnostics to another inspector.
 M09 consumes this same mechanism for transform tools; it adds no validation model.
+
+Current field feedback is bound by property, request ordering and document
+lifetime. Numeric inspectors refresh rejected values and show inline errors;
+camera near/far feedback is invalidated together. MSBuild compiler SARIF reports
+have no unsuppressed analyzer/IDE diagnostics in the new gesture/diagnostic
+implementation and tests. WorldEditor tests pass 110/110, including 100-sample
+camera/environment gestures, mixed-target undo/redo, wheel idle, cancellation,
+replacement components, repeated terminal delivery and stale diagnostic tickets.
+The generated XAML connections match their control types in all four modified
+inspector views. The user confirmed scene selection opens the inspector after
+the TransformView connection-ID regression was corrected. This is one observed
+UI case; the complete field/dependency and control/native table is still open.
 
 ### 07A.4 - Revision-Aware Offline Convergence
 

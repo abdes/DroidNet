@@ -170,7 +170,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     public string PendingLiveSyncMessage
         => this.PendingLiveSyncEditCount == 1
             ? "1 editor property edit will replay after the scene syncs."
-            : $"{this.PendingLiveSyncEditCount} editor property edits will replay after the scene syncs.";
+            : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{this.PendingLiveSyncEditCount} editor property edits will replay after the scene syncs.");
 
     /// <summary>
     /// Gets the <see cref="ILoggerFactory"/> used by this view model for creating loggers.
@@ -207,6 +207,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             editor.Dispose();
         }
 
+        this.environmentEditor.Dispose();
         this.editorInstances.Clear();
         this.LogDisposed();
 
@@ -248,6 +249,14 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         var keysToCheck = this.GetApplicablePropertyEditorTypes();
+
+        foreach (var (componentType, editor) in this.editorInstances)
+        {
+            if (this.items.Count == 0 || !keysToCheck.Contains(componentType))
+            {
+                editor.UpdateValues([]);
+            }
+        }
 
         if (this.items.Count == 0)
         {

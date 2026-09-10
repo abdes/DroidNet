@@ -40,6 +40,14 @@ public sealed partial class TransformViewModel(
     private readonly PropertyBinding<float> scaleYBinding = new(SceneDocumentCommandService.Transform.ScaleYDescriptor);
     private readonly PropertyBinding<float> scaleZBinding = new(SceneDocumentCommandService.Transform.ScaleZDescriptor);
 
+    private readonly InspectorFieldDiagnostics diagnostics = new();
+    private readonly HashSet<string> supersededFields = [];
+
+    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
+    private readonly Dictionary<string, TransformEditSession> activeSessions = [];
+    private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [];
+    private readonly DispatcherQueue? dispatcher = DispatcherQueue.GetForCurrentThread();
+
     // Keep track of the current selection so property-change handlers can apply edits back
     // to the selected SceneNode instances.
     private ICollection<SceneNode>? selectedItems;
@@ -47,10 +55,6 @@ public sealed partial class TransformViewModel(
     // Guard against re-entrant updates when applying changes from the view back to the model.
     private bool isApplyingEditorChanges;
 
-    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
-    private readonly Dictionary<string, TransformEditSession> activeSessions = [];
-    private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [];
-    private readonly DispatcherQueue? dispatcher = DispatcherQueue.GetForCurrentThread();
     private int inFlightEdits;
     private int editGateDisposed;
     private bool isDisposed;
@@ -121,6 +125,33 @@ public sealed partial class TransformViewModel(
     [ObservableProperty]
     public partial bool ScaleZIsIndeterminate { get; set; }
 
+    /// <summary>Gets the current PositionX diagnostic.</summary>
+    public InspectorFieldDiagnostic PositionXDiagnostic => this.diagnostics.Get(this.positionXBinding.Id.Id);
+
+    /// <summary>Gets the current PositionY diagnostic.</summary>
+    public InspectorFieldDiagnostic PositionYDiagnostic => this.diagnostics.Get(this.positionYBinding.Id.Id);
+
+    /// <summary>Gets the current PositionZ diagnostic.</summary>
+    public InspectorFieldDiagnostic PositionZDiagnostic => this.diagnostics.Get(this.positionZBinding.Id.Id);
+
+    /// <summary>Gets the current RotationX diagnostic.</summary>
+    public InspectorFieldDiagnostic RotationXDiagnostic => this.diagnostics.Get(this.rotationXBinding.Id.Id);
+
+    /// <summary>Gets the current RotationY diagnostic.</summary>
+    public InspectorFieldDiagnostic RotationYDiagnostic => this.diagnostics.Get(this.rotationYBinding.Id.Id);
+
+    /// <summary>Gets the current RotationZ diagnostic.</summary>
+    public InspectorFieldDiagnostic RotationZDiagnostic => this.diagnostics.Get(this.rotationZBinding.Id.Id);
+
+    /// <summary>Gets the current ScaleX diagnostic.</summary>
+    public InspectorFieldDiagnostic ScaleXDiagnostic => this.diagnostics.Get(this.scaleXBinding.Id.Id);
+
+    /// <summary>Gets the current ScaleY diagnostic.</summary>
+    public InspectorFieldDiagnostic ScaleYDiagnostic => this.diagnostics.Get(this.scaleYBinding.Id.Id);
+
+    /// <summary>Gets the current ScaleZ diagnostic.</summary>
+    public InspectorFieldDiagnostic ScaleZDiagnostic => this.diagnostics.Get(this.scaleZBinding.Id.Id);
+
     /// <inheritdoc />
     public override string Header => "Transform";
 
@@ -146,6 +177,18 @@ public sealed partial class TransformViewModel(
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
+        if (this.selectedItems is not null && (!this.SelectionMatches(items.ToArray())
+            || this.selectedItems.FirstOrDefault()?.Scene != items.FirstOrDefault()?.Scene))
+        {
+            foreach (var field in this.activeSessions.Keys.ToArray())
+            {
+                this.supersededFields.Add(field);
+                _ = this.CompleteActiveSessionAsync(field, NumberBoxEditCompletionKind.Cancel);
+            }
+
+            this.diagnostics.Reset();
+        }
+
         // Remember selection for two-way change propagation
         this.selectedItems = items;
 
@@ -198,24 +241,6 @@ public sealed partial class TransformViewModel(
         GC.SuppressFinalize(this);
     }
 
-    partial void OnPositionXChanged(float value) => this.ApplyTransformEdit("PositionX", NewEdit(positionX: value));
-
-    partial void OnPositionYChanged(float value) => this.ApplyTransformEdit("PositionY", NewEdit(positionY: value));
-
-    partial void OnPositionZChanged(float value) => this.ApplyTransformEdit("PositionZ", NewEdit(positionZ: value));
-
-    partial void OnRotationXChanged(float value) => this.ApplyTransformEdit("RotationX", NewEdit(rotationX: value));
-
-    partial void OnRotationYChanged(float value) => this.ApplyTransformEdit("RotationY", NewEdit(rotationY: value));
-
-    partial void OnRotationZChanged(float value) => this.ApplyTransformEdit("RotationZ", NewEdit(rotationZ: value));
-
-    partial void OnScaleXChanged(float value) => this.ApplyTransformEdit("ScaleX", NewEdit(scaleX: value));
-
-    partial void OnScaleYChanged(float value) => this.ApplyTransformEdit("ScaleY", NewEdit(scaleY: value));
-
-    partial void OnScaleZChanged(float value) => this.ApplyTransformEdit("ScaleZ", NewEdit(scaleZ: value));
-
     /// <summary>
     /// Starts an interactive transform edit session for one vector component.
     /// </summary>
@@ -229,6 +254,7 @@ public sealed partial class TransformViewModel(
         }
 
         var property = ToPropertyName(group, args.Component);
+        _ = this.supersededFields.Remove(property);
         if (this.activeSessions.ContainsKey(property))
         {
             return;
@@ -242,7 +268,7 @@ public sealed partial class TransformViewModel(
         }
 
         this.activeSessions[property] = new TransformEditSession(
-            EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.Select(static node => node.Id).ToList(), property),
+            EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.ConvertAll(static node => node.Id), property),
             nodes,
             context,
             LastEdit: null);
@@ -272,166 +298,26 @@ public sealed partial class TransformViewModel(
         _ = this.CompleteActiveSessionAsync(property, args.CompletionKind ?? NumberBoxEditCompletionKind.Commit);
     }
 
-    private async Task CompleteActiveSessionAsync(string property, NumberBoxEditCompletionKind completionKind)
+    /// <summary>Publishes field-specific feedback from VectorBox validation.</summary>
+    /// <param name="group">The edited transform group.</param>
+    /// <param name="args">The component and validation outcome.</param>
+    public void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<float> args)
     {
-        this.CancelPendingMouseWheelCommit(property);
-        if (!this.activeSessions.Remove(property, out var session))
+        if (args.Target is not Component component)
         {
             return;
         }
 
-        if (completionKind == NumberBoxEditCompletionKind.Cancel)
+        var property = this.TransformPropertyId(ToPropertyName(group, component));
+        var ticket = this.diagnostics.Begin([property], commandContextProvider?.Invoke()?.Metadata.ChangeVersion ?? 0);
+        var result = args.IsValid ? SceneCommandResult.Success : new SceneCommandResult(Succeeded: false)
         {
-            session.Token.Cancel();
-            await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
-            return;
-        }
-
-        session.Token.Commit();
-        await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
-    }
-
-    private void ScheduleMouseWheelCommit(string property)
-    {
-        this.CancelPendingMouseWheelCommit(property);
-
-        var cts = new CancellationTokenSource();
-        this.wheelIdleCommits[property] = cts;
-        var token = cts.Token;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(MouseWheelCommitDelay).ConfigureAwait(false);
-            if (token.IsCancellationRequested)
-            {
-                return;
-            }
-
-            void Complete()
-                => _ = this.CompleteActiveSessionAsync(property, NumberBoxEditCompletionKind.Commit);
-
-            if (this.dispatcher is not null)
-            {
-                _ = this.dispatcher.TryEnqueue(Complete);
-                return;
-            }
-
-            Complete();
-        });
-    }
-
-    private void CancelPendingMouseWheelCommit(string property)
-    {
-        if (!this.wheelIdleCommits.Remove(property, out var cts))
-        {
-            return;
-        }
-
-        cts.Cancel();
-        cts.Dispose();
-    }
-
-    private void ApplyTransformEdit(string property, TransformEdit edit)
-    {
-        if (this.isDisposed || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
-        {
-            return;
-        }
-
-        this.LogApplyingChange(property, ExtractValue(edit), this.selectedItems.Count);
-        if (this.activeSessions.TryGetValue(property, out var existing))
-        {
-            this.activeSessions[property] = existing with { LastEdit = edit };
-            _ = this.ApplyTransformEditAsync(property, edit, existing.Token, existing.Nodes, existing.Context);
-            return;
-        }
-
-        var nodes = this.selectedItems.ToList();
-        var context = commandContextProvider.Invoke();
-        _ = this.ApplyTransformEditAsync(property, edit, EditSessionToken.OneShot, nodes, context);
-    }
-
-    private async Task ApplyTransformEditAsync(
-        string property,
-        TransformEdit edit,
-        EditSessionToken session,
-        IReadOnlyList<SceneNode> nodes,
-        SceneDocumentCommandContext? context)
-    {
-        _ = Interlocked.Increment(ref this.inFlightEdits);
-        var entered = false;
-        try
-        {
-            await this.editGate.WaitAsync().ConfigureAwait(true);
-            entered = true;
-
-            if (nodes.Count == 0 || context is null || commandService is null)
-            {
-                return;
-            }
-
-            var result = await commandService.EditTransformAsync(
-                context,
-                nodes.Select(static node => node.Id).ToList(),
-                edit,
-                session).ConfigureAwait(true);
-            if (result.Succeeded && !this.isDisposed && this.SelectionMatches(nodes))
-            {
-                this.isApplyingEditorChanges = true;
-                try
-                {
-                    this.UpdateValues(nodes.ToList());
-                }
-                finally
-                {
-                    this.isApplyingEditorChanges = false;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (InvalidOperationException ex)
-        {
-            this.LogApplyFailed(property, ex);
-        }
-        catch (ArgumentException ex)
-        {
-            this.LogApplyFailed(property, ex);
-        }
-        finally
-        {
-            if (entered)
-            {
-                _ = this.editGate.Release();
-            }
-
-            _ = Interlocked.Decrement(ref this.inFlightEdits);
-            this.TryDisposeEditGate();
-        }
-    }
-
-    private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
-    {
-        if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
-        {
-            return false;
-        }
-
-        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
-        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
-    }
-
-    private void TryDisposeEditGate()
-    {
-        if (!this.isDisposed || Volatile.Read(ref this.inFlightEdits) != 0)
-        {
-            return;
-        }
-
-        if (Interlocked.Exchange(ref this.editGateDisposed, 1) == 0)
-        {
-            this.editGate.Dispose();
-        }
+            ValidationCode = "TRANSFORM_INVALID",
+            ValidationMessage = group == TransformEditFieldGroup.Scale
+                ? "Scale must be finite and have magnitude at least 0.001."
+                : "Rotation must be finite and between -180 and 180 degrees.",
+        };
+        this.diagnostics.Complete(ticket, result);
     }
 
     private static TransformEdit EmptyEdit()
@@ -496,6 +382,228 @@ public sealed partial class TransformViewModel(
             },
         };
 
+    private static void UpdateBindingValue(
+        PropertyBinding<float> binding,
+        ICollection<SceneNode> items,
+        Action<float> setValue,
+        Action<bool> setMixed,
+        Func<PropertyBinding<float>, float>? displayValue = null)
+    {
+        var nodeIds = items.Select(static node => node.Id).ToList();
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());
+        binding.UpdateFromModel(nodeIds, id => targets.GetValueOrDefault(id));
+
+        if (!binding.HasValue)
+        {
+            setValue(0);
+            setMixed(false);
+            return;
+        }
+
+        setValue(displayValue?.Invoke(binding) ?? binding.Value);
+        setMixed(binding.IsMixed);
+    }
+
+    partial void OnPositionXChanged(float value) => this.ApplyTransformEdit("PositionX", NewEdit(positionX: value));
+
+    partial void OnPositionYChanged(float value) => this.ApplyTransformEdit("PositionY", NewEdit(positionY: value));
+
+    partial void OnPositionZChanged(float value) => this.ApplyTransformEdit("PositionZ", NewEdit(positionZ: value));
+
+    partial void OnRotationXChanged(float value) => this.ApplyTransformEdit("RotationX", NewEdit(rotationX: value));
+
+    partial void OnRotationYChanged(float value) => this.ApplyTransformEdit("RotationY", NewEdit(rotationY: value));
+
+    partial void OnRotationZChanged(float value) => this.ApplyTransformEdit("RotationZ", NewEdit(rotationZ: value));
+
+    partial void OnScaleXChanged(float value) => this.ApplyTransformEdit("ScaleX", NewEdit(scaleX: value));
+
+    partial void OnScaleYChanged(float value) => this.ApplyTransformEdit("ScaleY", NewEdit(scaleY: value));
+
+    partial void OnScaleZChanged(float value) => this.ApplyTransformEdit("ScaleZ", NewEdit(scaleZ: value));
+
+    private async Task CompleteActiveSessionAsync(string property, NumberBoxEditCompletionKind completionKind)
+    {
+        this.CancelPendingMouseWheelCommit(property);
+        if (!this.activeSessions.Remove(property, out var session))
+        {
+            return;
+        }
+
+        if (completionKind == NumberBoxEditCompletionKind.Cancel)
+        {
+            session.Token.Cancel();
+            await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+            return;
+        }
+
+        session.Token.Commit();
+        await this.ApplyTransformEditAsync(property, session.LastEdit ?? EmptyEdit(), session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+    }
+
+    private void ScheduleMouseWheelCommit(string property)
+    {
+        this.CancelPendingMouseWheelCommit(property);
+
+        var cts = new CancellationTokenSource();
+        this.wheelIdleCommits[property] = cts;
+        _ = this.CommitAfterWheelIdleAsync(property, cts.Token);
+    }
+
+    private async Task CommitAfterWheelIdleAsync(string property, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(MouseWheelCommitDelay, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (this.dispatcher is not null)
+        {
+            _ = this.dispatcher.TryEnqueue(Complete);
+            return;
+        }
+
+        Complete();
+
+        void Complete()
+        {
+            // Recheck on the UI thread: another tick or a selection change can
+            // invalidate a timer after it has queued its completion.
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _ = this.CompleteActiveSessionAsync(property, NumberBoxEditCompletionKind.Commit);
+            }
+        }
+    }
+
+    private void CancelPendingMouseWheelCommit(string property)
+    {
+        if (!this.wheelIdleCommits.Remove(property, out var cts))
+        {
+            return;
+        }
+
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private void ApplyTransformEdit(string property, TransformEdit edit)
+    {
+        if (this.isDisposed || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
+        {
+            return;
+        }
+
+        if (this.supersededFields.Contains(property) && !this.activeSessions.ContainsKey(property))
+        {
+            this.UpdateValues(this.selectedItems);
+            return;
+        }
+
+        this.LogApplyingChange(property, ExtractValue(edit), this.selectedItems.Count);
+        if (this.activeSessions.TryGetValue(property, out var existing))
+        {
+            this.activeSessions[property] = existing with { LastEdit = edit };
+            _ = this.ApplyTransformEditAsync(property, edit, existing.Token, existing.Nodes, existing.Context);
+            return;
+        }
+
+        var nodes = this.selectedItems.ToList();
+        var context = commandContextProvider.Invoke();
+        _ = this.ApplyTransformEditAsync(property, edit, EditSessionToken.OneShot, nodes, context);
+    }
+
+    private async Task ApplyTransformEditAsync(
+        string property,
+        TransformEdit edit,
+        EditSessionToken session,
+        IReadOnlyList<SceneNode> nodes,
+        SceneDocumentCommandContext? context)
+    {
+        var requestSession = session.Capture();
+        var diagnostic = this.diagnostics.Begin([this.TransformPropertyId(property)], context?.Metadata.ChangeVersion ?? 0);
+        _ = Interlocked.Increment(ref this.inFlightEdits);
+        var entered = false;
+        try
+        {
+            await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+            entered = true;
+
+            if (nodes.Count == 0 || context is null || commandService is null)
+            {
+                return;
+            }
+
+            var result = await commandService.EditTransformAsync(
+                context,
+                nodes.Select(static node => node.Id).ToList(),
+                edit,
+                requestSession).ConfigureAwait(true);
+            if (!this.isDisposed && this.SelectionMatches(nodes))
+            {
+                this.isApplyingEditorChanges = true;
+                try
+                {
+                    this.UpdateValues(nodes.ToList());
+                    this.diagnostics.Complete(diagnostic, result);
+                }
+                finally
+                {
+                    this.isApplyingEditorChanges = false;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.LogApplyFailed(property, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            this.LogApplyFailed(property, ex);
+        }
+        finally
+        {
+            if (entered)
+            {
+                _ = this.editGate.Release();
+            }
+
+            _ = Interlocked.Decrement(ref this.inFlightEdits);
+            this.TryDisposeEditGate();
+        }
+    }
+
+    private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
+    {
+        if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
+        {
+            return false;
+        }
+
+        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
+        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
+    }
+
+    private void TryDisposeEditGate()
+    {
+        if (!this.isDisposed || Volatile.Read(ref this.inFlightEdits) != 0)
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref this.editGateDisposed, 1) == 0)
+        {
+            this.editGate.Dispose();
+        }
+    }
+
     private void UpdatePositionValues(ICollection<SceneNode> items)
     {
         UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
@@ -532,30 +640,23 @@ public sealed partial class TransformViewModel(
             this.NormalizeScaleBindingValue);
     }
 
-    private static void UpdateBindingValue(
-        PropertyBinding<float> binding,
-        ICollection<SceneNode> items,
-        Action<float> setValue,
-        Action<bool> setMixed,
-        Func<PropertyBinding<float>, float>? displayValue = null)
-    {
-        var nodeIds = items.Select(static node => node.Id).ToList();
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());
-        binding.UpdateFromModel(nodeIds, id => targets.GetValueOrDefault(id));
-
-        if (!binding.HasValue)
-        {
-            setValue(0);
-            setMixed(false);
-            return;
-        }
-
-        setValue(displayValue?.Invoke(binding) ?? binding.Value);
-        setMixed(binding.IsMixed);
-    }
-
     private float NormalizeScaleBindingValue(PropertyBinding<float> binding)
         => binding.IsMixed ? TransformConverter.NormalizeScaleValue(binding.Value) : binding.Value;
+
+    private Oxygen.Editor.Schemas.PropertyId TransformPropertyId(string property)
+        => property switch
+        {
+            "PositionX" => this.positionXBinding.Id.Id,
+            "PositionY" => this.positionYBinding.Id.Id,
+            "PositionZ" => this.positionZBinding.Id.Id,
+            "RotationX" => this.rotationXBinding.Id.Id,
+            "RotationY" => this.rotationYBinding.Id.Id,
+            "RotationZ" => this.rotationZBinding.Id.Id,
+            "ScaleX" => this.scaleXBinding.Id.Id,
+            "ScaleY" => this.scaleYBinding.Id.Id,
+            "ScaleZ" => this.scaleZBinding.Id.Id,
+            _ => throw new ArgumentOutOfRangeException(nameof(property)),
+        };
 
     private sealed record TransformEditSession(
         EditSessionToken Token,

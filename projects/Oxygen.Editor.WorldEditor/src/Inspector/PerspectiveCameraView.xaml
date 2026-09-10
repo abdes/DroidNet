@@ -6,7 +6,6 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
-
     <editorcontrols:PropertiesExpander
         Padding="2"
         HorizontalAlignment="Stretch"
@@ -22,17 +21,38 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="FOV"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="Aspect"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="FOV"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
+                            Tag="FieldOfView" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.FieldOfViewDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="Aspect"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
+                            Tag="AspectRatio" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.AspectRatioDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Clipping">
@@ -41,17 +61,38 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="Near"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="Far"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="Near"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
+                            Tag="NearPlane" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.NearPlaneDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="Far"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
+                            Tag="FarPlane" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.FarPlaneDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>

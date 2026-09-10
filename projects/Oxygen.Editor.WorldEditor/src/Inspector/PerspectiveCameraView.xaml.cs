@@ -2,7 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -19,4 +22,15 @@ public sealed partial class PerspectiveCameraView
     {
         this.InitializeComponent();
     }
+
+    private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string field })
+        {
+            this.ViewModel?.BeginEditSession(field, args.InteractionKind);
+        }
+    }
+
+    private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
+        => this.ViewModel?.CompleteEditSession(args);
 }

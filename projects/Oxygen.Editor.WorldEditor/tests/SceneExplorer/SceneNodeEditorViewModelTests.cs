@@ -11,13 +11,14 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
@@ -25,6 +26,8 @@ namespace Oxygen.Editor.World.SceneExplorer.Tests;
 [TestCategory("Inspector")]
 public sealed class SceneNodeEditorViewModelTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public void Constructor_WhenActiveSceneHasPendingPropertySyncs_ShowsEditorLevelPendingBanner()
     {
@@ -108,27 +111,24 @@ public sealed class SceneNodeEditorViewModelTests
         var node = CreateDirectionalLightNode(scene);
         var context = CreateContext(scene);
         var commandService = new Mock<ISceneDocumentCommandService>();
-        var editCompletion = new TaskCompletionSource<TransformEdit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var editCompletion = new TaskCompletionSource<IReadOnlyDictionary<Guid, PropertyEdit>>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = commandService
-            .Setup(service => service.EditTransformAsync(
+            .Setup(service => service.EditPropertiesForTargetsAsync(
                 context,
-                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && node.Id.Equals(ids[0])),
-                It.IsAny<TransformEdit>(),
+                It.IsAny<IReadOnlyDictionary<Guid, PropertyEdit>>(),
+                It.IsAny<string>(),
                 It.IsAny<EditSessionToken>()))
-            .Callback<SceneDocumentCommandContext, IReadOnlyList<Guid>, TransformEdit, EditSessionToken>(
-                (_, _, edit, _) => editCompletion.SetResult(edit))
+            .Callback<SceneDocumentCommandContext, IReadOnlyDictionary<Guid, PropertyEdit>, string, EditSessionToken>(
+                (_, edits, _, _) => editCompletion.SetResult(edits))
             .ReturnsAsync(SceneCommandResult.Success);
 
         using var sut = new DirectionalLightViewModel(commandService.Object, () => context);
         sut.UpdateValues([node]);
         sut.SunAzimuth = 45f;
-
-        var edit = await editCompletion.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-
-        _ = edit.Position.HasValue.Should().BeFalse();
-        _ = edit.RotationEulerDegrees.HasValue.Should().BeTrue();
-        _ = edit.Scale.HasValue.Should().BeFalse();
-        _ = edit.RotationEulerDegrees.Value.Should().Match<Vector3>(static value => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z));
+        var edits = await editCompletion.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var edit = edits.Should().ContainSingle().Which.Value;
+        _ = edit.Ids.Should().OnlyContain(id => id.ComponentKind == SceneDocumentCommandService.TransformKind && id.Pointer.StartsWith("/local_rotation_euler_degrees/", StringComparison.Ordinal));
+        _ = edit.Should().OnlyContain(pair => pair.Value is float && float.IsFinite((float)pair.Value));
     }
 
     private static SceneNodeEditorViewModel CreateSut(
