@@ -2,6 +2,10 @@
 
 Status: `accepted for implementation`
 
+Milestone progress: `landed`, with validation reopened in
+[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md). Plan acceptance and
+earlier partial manual evidence do not close the remaining accepted LLD gates.
+
 ## 1. Purpose
 
 Make the V0.1 scene component set authorable through production-quality
@@ -687,6 +691,8 @@ Likely test files:
 | Material slot turns into a hidden material editor. | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook. |
 | Environment schema drifts from engine concepts. | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape. |
 | Runtime not running blocks authoring. | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning. |
+| Settings changes cross persistence scopes or break startup/project loading. | Follow the settings placement matrix and validate startup/project loading when a durable setting is migrated. Scene, workspace, editor preference, project policy, and runtime-session state keep their own mutation and storage paths. |
+| Validation reruns full scans or presents duplicate failures. | Review incremental invalidation and result publication together in the ED-M04/ED-M09 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard. |
 | Unsupported engine APIs throw. | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure. |
 | Point/spot/orthographic editor scope creeps in. | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added. |
 | Tests become fake because WinUI is hard to automate. | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result. |
@@ -803,3 +809,42 @@ After implementation:
   real test evidence.
 - keep ED-M05 material editor and ED-M07 content pipeline items planned, not
   silently absorbed into ED-M04.
+
+## 13. Settings And Validation Closure
+
+The implementation slices and accepted LLDs own these ED-M04 responsibilities:
+
+- ED-M04.2, ED-M04.5, and ED-M04.6: command results, component add/remove/edit,
+  undo/redo, dirty state, validation, and text/slider edit-session batching.
+- ED-M04.3 and ED-M04.7 through ED-M04.9: all supported component/environment
+  fields, scene-only environment editing, defaults, invalid-value handling,
+  save/reopen, and material-slot identity. Orthographic/point/spot production
+  editors follow PRD `REQ-009` and property-inspector section 7.4, including
+  the PRD condition for components used by supported workflows.
+- ED-M04.4 and ED-M04.10: mutations retain authoring state on sync failure,
+  capture scoped results, and validate runtime behavior separately from saved
+  values. ED-M07 owns descriptor/cook output; ED-M08 owns standalone parity.
+- ED-M04.9 and settings-architecture sections 5-12: per-setting owner, scope,
+  storage, default, validation, mutation path, and UI surface. Scene settings
+  use commands and undo/redo; runtime-session writes do not dirty or persist
+  scene state. Startup preferences, workspace persistence, and project policy
+  remain with their existing owners. Diagnostic overrides stay temporary.
+  New durable settings require their declared settings owner and persistence
+  contract; command-line or environment-only plumbing is not that contract.
+
+Carry these evidence checks into the existing reopened ED-M04 closure sweep:
+
+- [ ] Verify every accepted property-inspector, environment-authoring, and
+  settings gate against its actual implementation and validation evidence;
+  earlier partial evidence is not proof for every setting or field.
+- [ ] Reconcile the full validation invalidation item in
+  [documents-and-commands.md section 15](../lld/documents-and-commands.md#15-open-issues):
+  document the ED-M04 component contribution and the remaining ED-M09
+  viewport/tool contribution. Preserve the incremental-validation performance
+  risk without introducing a second result model or claiming closure from
+  logging alone.
+
+Use the shared diagnostics contract for inspector messages and live-sync or
+settings failures. A full validation dashboard is a PRD non-goal; structured
+results, visible failures, and useful logs remain required. Project settings
+UI/default-preset scope is an unresolved question in ED-M07 section 11.

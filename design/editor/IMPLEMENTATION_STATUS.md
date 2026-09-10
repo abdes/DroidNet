@@ -14,10 +14,9 @@ Rules for this file:
 2. A checkbox is checked only when the implementation or document artifact
    exists and the stated evidence is recorded.
 3. Validation evidence is concise: one ledger row per milestone.
-4. Unfinished work is tracked in milestone/work-package checklists, not in a
+4. Unfinished work is tracked in milestone plan checklists, not in a
    generic gaps list.
-5. Blockers and decisions are recorded only when they block a named milestone
-   or work package.
+5. Blockers and decisions are recorded only when they block a named milestone.
 
 ## 1. Status Vocabulary
 
@@ -55,8 +54,9 @@ Current execution focus:
       validation.
 - [x] Validate `ED-M03` manually for quick-add, selection, dirty/save,
       undo/redo, save/reopen, and visible diagnostics.
-- [x] Land and manually validate `ED-M04` scene editing UX and component
-      inspectors for supported V0.1 component fields.
+- [x] Record the earlier partial `ED-M04` inspector implementation and manual
+      validation evidence. The milestone remains reopened as recorded below;
+      this item does not close all supported V0.1 component/environment gates.
 - [x] Land `ED-M05` scalar material authoring implementation and corrective
       UX/content-root pass.
 - [x] Validate `ED-M05` formally and record the validation ledger row.
@@ -608,12 +608,13 @@ Exit evidence required:
 
 ## 4. Detailed Plan Tracker
 
-Detailed plans live under [plan/](./plan/). Existing work-package plans predate
-the final milestone model and must be reconciled when their milestone becomes
-active. Each active milestone has either a single milestone plan
-(`ED-Mxx-...md`) or one or more work-package plans (`ED-WPxx.y-...md`).
-The `ED-WPxx.y` numeric prefix is historical and does not necessarily match
-the current milestone ID after the `ED-M01` insertion.
+Detailed plans live under [plan/](./plan/). Each active milestone has one
+`ED-Mxx-...md` plan with numbered implementation slices. The status column below
+tracks the owning milestone, not whether the plan text has been reorganized.
+Cross-milestone contributions and unresolved scope questions are recorded in
+the owning plans. Reorganizing those plans does not complete or defer their
+requirements. Existing validation evidence remains scoped to the workflows
+recorded in section 5.
 
 | Plan | Milestone | Status | Next Action |
 | --- | --- | --- | --- |
@@ -624,13 +625,7 @@ the current milestone ID after the `ED-M01` insertion.
 | [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md) | `ED-M05` | `validated` | No further action for ED-M05. |
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
-| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | No further action for ED-M07. |
-| [ED-WP02.1-normalize-scene-mutation-commands.md](plan/ED-WP02.1-normalize-scene-mutation-commands.md) | `ED-M03` | `deferred` | Covered by `ED-M03-authoring-foundation.md`; keep only as historical context. |
-| [ED-WP02.2-component-inspectors-and-live-sync.md](plan/ED-WP02.2-component-inspectors-and-live-sync.md) | `ED-M03` / `ED-M04` | `deferred` | Covered by `ED-M03-authoring-foundation.md` and `ED-M04-scene-editing-ux-component-inspectors.md`; keep only as historical context. |
-| [ED-WP04.1-asset-reference-model.md](plan/ED-WP04.1-asset-reference-model.md) | `ED-M05` / `ED-M06` | `deferred` | Covered by `ED-M05-scalar-material-authoring.md` and `ED-M06-asset-identity-content-browser.md`; keep only as historical context. |
-| [ED-WP05.1-manifest-driven-cooking.md](plan/ED-WP05.1-manifest-driven-cooking.md) | `ED-M07` | `deferred` | Superseded by `ED-M07-content-pipeline-and-cooking.md`; keep only as historical context. |
-| [ED-WP06.1-settings-architecture-and-editors.md](plan/ED-WP06.1-settings-architecture-and-editors.md) | `ED-M04` / `ED-M07` | `planned` | ED-M04 settings/environment scope is covered by the ED-M04 plan; re-review for ED-M07 project cook/content-root settings. |
-| [ED-WP08.1-validation-model.md](plan/ED-WP08.1-validation-model.md) | `ED-M03` / `ED-M09` | `planned` | Reconcile with `diagnostics-operation-results.md`. |
+| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 preserves two unresolved UI scope questions by user decision; they are not claims of implemented or validated behavior. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
 
 ## 5. Validation Ledger
@@ -655,8 +650,8 @@ checklist or detailed plan tracker instead.
 
 ## 6. Decision And Blocker Register
 
-Use this table only for decisions or blockers that stop a named milestone or
-work package. Do not use it to list unfinished implementation work.
+Use this table only for decisions or blockers that stop a named milestone.
+Do not use it to list unfinished implementation work.
 
 | ID | Affects | Status | Decision/Blocker | Required Action |
 | --- | --- | --- | --- | --- |

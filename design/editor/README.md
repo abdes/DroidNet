@@ -19,7 +19,7 @@ and run real Oxygen scenes.
 | [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Current state, milestone validation summaries, and known risks. |
 | [RULES.md](./RULES.md) | Non-negotiable engineering rules. |
 | [lld/README.md](./lld/README.md) | Low-level design index for active subsystems. |
-| [plan/README.md](./plan/README.md) | Detailed work-package plans. |
+| [plan/README.md](./plan/README.md) | Detailed milestone plans with implementation slices. |
 
 ## Operating Principle
 
