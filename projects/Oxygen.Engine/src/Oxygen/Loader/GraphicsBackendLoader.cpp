@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <stdexcept>
@@ -385,10 +386,10 @@ private:
         = SerializePathFinderConfigToJson(path_finder_config);
 
       // Create the configuration struct
-      SerializedBackendConfig serialized_config;
+      SerializedBackendConfig serialized_config {};
       serialized_config.json_data = config_json.c_str();
       serialized_config.size = config_json.length();
-      SerializedPathFinderConfig serialized_path_finder_config;
+      SerializedPathFinderConfig serialized_path_finder_config {};
       serialized_path_finder_config.json_data = path_finder_json.c_str();
       serialized_path_finder_config.size = path_finder_json.length();
 
@@ -458,9 +459,13 @@ auto EnforceMainModuleRestriction(
   }
 }
 
-// Shared initialization mode state (internal linkage)
-enum class LoaderInitMode { kUninitialized, kStrict, kRelaxed };
-static LoaderInitMode g_loader_init_mode = LoaderInitMode::kUninitialized;
+enum class LoaderInitMode : std::uint8_t { kUninitialized, kStrict, kRelaxed };
+
+auto GetLoaderInitMode() -> LoaderInitMode&
+{
+  static auto mode = LoaderInitMode::kUninitialized;
+  return mode;
+}
 
 } // namespace
 
@@ -503,7 +508,7 @@ auto GraphicsBackendLoader::GetInstance(
   std::shared_ptr<PlatformServices> platform_services) -> GraphicsBackendLoader&
 {
   // Enforce mutual exclusivity with relaxed variant.
-  if (g_loader_init_mode == LoaderInitMode::kRelaxed) {
+  if (GetLoaderInitMode() == LoaderInitMode::kRelaxed) {
     LOG_F(ERROR,
       "GraphicsBackendLoader already initialized in relaxed mode; cannot call "
       "GetInstance (strict) afterwards");
@@ -564,7 +569,7 @@ auto GraphicsBackendLoader::GetInstance(
       throw;
     }
     first_call = false;
-    g_loader_init_mode = LoaderInitMode::kStrict;
+    GetLoaderInitMode() = LoaderInitMode::kStrict;
   }
 
   return *instance;
@@ -629,7 +634,7 @@ auto GraphicsBackendLoader::GetInstanceRelaxed(
   //    module. If not, throw InvalidOperationError.
   //  - Allows injecting new platform services only from the original module.
 
-  if (g_loader_init_mode == LoaderInitMode::kStrict) {
+  if (GetLoaderInitMode() == LoaderInitMode::kStrict) {
     LOG_F(ERROR,
       "GraphicsBackendLoader already initialized in strict mode; cannot call "
       "GetInstanceRelaxed afterwards");
@@ -667,7 +672,7 @@ auto GraphicsBackendLoader::GetInstanceRelaxed(
   if (first_call) {
     origin_module_handle = caller_module;
     first_call = false;
-    g_loader_init_mode = LoaderInitMode::kRelaxed;
+    GetLoaderInitMode() = LoaderInitMode::kRelaxed;
     // Re-create instance now that we have a concrete origin module handle.
     instance = std::unique_ptr<GraphicsBackendLoader>(
       new GraphicsBackendLoader(origin_module_handle, services));
@@ -763,7 +768,7 @@ auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
   const GraphicsConfig& config,
   const PathFinderConfig& path_finder_config) const -> std::weak_ptr<Graphics>
 {
-  if (g_loader_init_mode == LoaderInitMode::kStrict) {
+  if (GetLoaderInitMode() == LoaderInitMode::kStrict) {
     EnforceMainModuleRestriction(
       pimpl_->GetPlatformServices(), "LoadBackend", oxygen::ReturnAddress<>());
   }
@@ -797,7 +802,7 @@ auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
 auto GraphicsBackendLoader::UnloadBackend() const noexcept -> void
 {
   try {
-    if (g_loader_init_mode == LoaderInitMode::kStrict) {
+    if (GetLoaderInitMode() == LoaderInitMode::kStrict) {
       EnforceMainModuleRestriction(pimpl_->GetPlatformServices(),
         "UnloadBackend", oxygen::ReturnAddress<>());
     }
