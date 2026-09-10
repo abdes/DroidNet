@@ -75,6 +75,9 @@ namespace Oxygen::Interop::World {
       CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
         std::size_t slotIndex, std::string materialUri);
 
+    virtual oxygen::interop::module::SetBackgroundColorCommand*
+      CreateSetBackgroundColor(glm::vec3 color);
+
     virtual oxygen::interop::module::SetEnvironmentCommand*
       CreateSetEnvironment(
         oxygen::interop::module::SkyAtmosphereParams atmosphere,

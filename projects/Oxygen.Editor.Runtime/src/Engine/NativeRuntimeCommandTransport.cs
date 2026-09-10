@@ -40,6 +40,9 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
             case RuntimeSetMaterialOverride value:
                 this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message));
                 break;
+            case RuntimeSetBackgroundColor value:
+                this.world.SetBackgroundColor(value.Color);
+                break;
             case RuntimeSetEnvironment value:
                 this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma);
                 break;
@@ -83,6 +86,13 @@ internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRu
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.world.CreateSceneNode(command.Name, command.NodeId, command.ParentId, _ => completion.TrySetResult(), command.InitializeWorldAsRoot);
         return completion.Task;
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeBackgroundState> ObserveBackgroundAsync()
+    {
+        var state = await this.world.ObserveBackgroundAsync().ConfigureAwait(false);
+        return new(state.Exists, state.Color, state.AtmosphereEnabled);
     }
 
     /// <inheritdoc/>

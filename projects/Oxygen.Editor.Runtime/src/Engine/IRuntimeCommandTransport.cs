@@ -24,6 +24,10 @@ internal interface IRuntimeCommandTransport
     /// <returns>The native acknowledgment task.</returns>
     public Task CreateNodeAsync(RuntimeCreateNode command);
 
+    /// <summary>Observes native background after earlier scene mutations.</summary>
+    /// <returns>The native background state.</returns>
+    public Task<RuntimeBackgroundState> ObserveBackgroundAsync();
+
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>
     /// <param name="input">The input transport value.</param>

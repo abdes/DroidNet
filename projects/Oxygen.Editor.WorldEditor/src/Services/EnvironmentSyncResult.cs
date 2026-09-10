@@ -9,4 +9,4 @@ namespace Oxygen.Editor.World.Services;
 /// </summary>
 public sealed record EnvironmentSyncResult(
     SyncStatus Overall,
-    IReadOnlyDictionary<string, SyncStatus> PerField);
+    IReadOnlyDictionary<string, SyncOutcome> PerField);

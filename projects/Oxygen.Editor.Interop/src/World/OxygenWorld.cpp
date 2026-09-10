@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <glm/fwd.hpp>
@@ -37,6 +38,7 @@
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetBackgroundColorCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/SetPropertiesCommand.h>
@@ -86,6 +88,35 @@ namespace Oxygen::Interop::World {
         }
         delete ptr;
         };
+    }
+
+    class BackgroundObservationCompletion final {
+    public:
+      explicit BackgroundObservationCompletion(
+        TaskCompletionSource<BackgroundStateManaged>^ completion)
+        : completion_(completion) {}
+
+      void Complete(const BackgroundObservation& observation) const {
+        BackgroundStateManaged result;
+        result.Exists = observation.exists;
+        result.Color = System::Numerics::Vector3(observation.color.x,
+          observation.color.y, observation.color.z);
+        result.AtmosphereEnabled = observation.atmosphere_enabled;
+        completion_->TrySetResult(result);
+      }
+
+    private:
+      msclr::gcroot<TaskCompletionSource<BackgroundStateManaged>^> completion_;
+    };
+
+    static std::function<void(BackgroundObservation)>
+      MakeBackgroundObservationCallback(
+        TaskCompletionSource<BackgroundStateManaged>^ completion) {
+      auto observer = std::shared_ptr<BackgroundObservationCompletion>(
+        new BackgroundObservationCompletion(completion));
+      return [observer](BackgroundObservation value) {
+        observer->Complete(value);
+      };
     }
 
     class AssetFailureObserver final {
@@ -626,6 +657,41 @@ namespace Oxygen::Interop::World {
         handle, static_cast<std::size_t>(slotIndex), native_material_uri));
     cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::SetBackgroundColor(System::Numerics::Vector3 color) {
+    if (!std::isfinite(color.X) || !std::isfinite(color.Y)
+      || !std::isfinite(color.Z)) {
+      throw gcnew ArgumentOutOfRangeException("color");
+    }
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew InvalidOperationException("Background has no engine context.");
+    }
+    auto module = native_ctx->engine->GetModule<EditorModule>();
+    if (!module) {
+      throw gcnew InvalidOperationException("Background has no editor module.");
+    }
+    auto command = std::unique_ptr<SetBackgroundColorCommand>(
+      commandFactory_->CreateSetBackgroundColor({ color.X, color.Y, color.Z }));
+    module->get().Enqueue(std::move(command));
+  }
+
+  Task<BackgroundStateManaged>^ OxygenWorld::ObserveBackgroundAsync() {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew InvalidOperationException("Background has no engine context.");
+    }
+    auto module = native_ctx->engine->GetModule<EditorModule>();
+    if (!module) {
+      throw gcnew InvalidOperationException("Background has no editor module.");
+    }
+    auto completion = gcnew TaskCompletionSource<BackgroundStateManaged>(
+      TaskCreationOptions::RunContinuationsAsynchronously);
+    auto command = std::make_unique<ObserveBackgroundCommand>(
+      MakeBackgroundObservationCallback(completion));
+    module->get().Enqueue(std::move(command));
+    return completion->Task;
   }
 
   void OxygenWorld::SetEnvironment(

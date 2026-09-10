@@ -1954,6 +1954,20 @@ public sealed partial class SceneDocumentCommandService(
             return null;
         }
 
+        if (result.PerField.Count > 0)
+        {
+            Guid? firstResult = null;
+            foreach (var fieldOutcome in result.PerField.Values
+                .Where(value => value.Status != SyncStatus.Accepted)
+                .DistinctBy(value => (value.Status, value.Code, value.Message)))
+            {
+                var published = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.EditEnvironment, fieldOutcome).ConfigureAwait(true);
+                firstResult ??= published;
+            }
+
+            return firstResult;
+        }
+
         var outcome = new SyncOutcome(
             result.Overall,
             SceneOperationKinds.EditEnvironment,

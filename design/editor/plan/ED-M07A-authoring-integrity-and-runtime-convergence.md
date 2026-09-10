@@ -141,6 +141,23 @@ value and visible change, undo/redo and save/reopen it; inject native rejection
 and verify field-specific diagnostics with authoring retained. Cooked background
 mapping is 07B.3 and final visual parity is M08.
 
+Implementation and native evidence (2026-09-10): background dispatch uses the
+engine's existing `SkySphere` solid-color system with neutral tint/intensity;
+atmosphere remains independent and retains renderer precedence. A lifetime-checked
+background observation reads native RGB after queued mutations without claiming
+presentation. Environment results now preserve each field's SyncOutcome, and the
+command service retains background-specific failures instead of labeling them as
+atmosphere errors. Native tests cover exact RGB, atmosphere toggling and non-finite
+rejection without state loss; managed tests cover stale observation rejection and
+independent field failure reporting while authoring/history survive.
+
+MSBuild passed Interop, Runtime, WorldEditor and the affected tests. VSTest passed
+Runtime 50/50, WorldEditor 99/99 and Interop NativeTests 36/36. New implementation and
+test files have no unsuppressed compiler analyzer/IDE diagnostics. Existing warnings
+in unchanged portions of the command service are retained for the final cleanup.
+The visible color-change and control save/reopen cases remain in 07A.6; this native
+observation evidence does not close the milestone's presented-state gate.
+
 ### 07A.2 - Real Gesture Sessions For Existing Inspectors
 
 Connect numeric drag, text commit, color gesture, and wheel begin/preview/commit/

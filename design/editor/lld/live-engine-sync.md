@@ -33,8 +33,9 @@ lifecycle, surface/view leases, and cooked-root mounting stay in
 The rebased source has typed SyncOutcome/EnvironmentSyncResult, property edits,
 a preview coalescer, native material override dispatch and native scene-system
 updates. Camera/light/environment controls still submit one-shot edits; background
-RGB is absent from the native environment call; managed property replay has no
-document-revision boundary. ED-M07A names those concrete gaps.
+RGB now has independent native SkySphere dispatch and observed-state validation;
+managed property replay still needs its document-revision boundary. ED-M07A owns
+the remaining gesture, diagnostic and replay work.
 
 Issue #5 is implemented: native SceneAssetRequests owns geometry/material request
 generations, scene sessions, completion inboxes and mutation-phase acceptance.
@@ -126,8 +127,13 @@ Aggregate for the environment adapter (per [environment-authoring.md](./environm
 ```csharp
 public sealed record EnvironmentSyncResult(
     SyncStatus Overall,                                // worst across fields
-    IReadOnlyDictionary<string, SyncStatus> PerField); // field key -> status
+    IReadOnlyDictionary<string, SyncOutcome> PerField); // field key -> detailed outcome
 ```
+
+Background uses its own runtime command and outcome. A failure is scoped to
+`BackgroundColor` and keeps its code/message through operation-result publication.
+Native background observation is a separate, scene-lifetime-checked request;
+observed values do not mean a frame has been presented.
 
 ### 7.3 New `ISceneEngineSync` methods
 

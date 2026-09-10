@@ -27,7 +27,7 @@ namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
 [TestClass]
 [TestCategory("Scene Commands")]
-public sealed class SceneDocumentCommandServiceTests
+public sealed partial class SceneDocumentCommandServiceTests
 {
     [TestMethod]
     public void ScenePropertyDescriptors_ShouldUseSceneSchemaOverlayAnnotations()
@@ -815,7 +815,7 @@ public sealed class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(second);
         scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = first.Id });
         var context = CreateContext(scene);
-        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
@@ -893,7 +893,7 @@ public sealed class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         scene.SetEnvironment(new SceneEnvironmentData { ExposureMode = ExposureMode.Auto, ManualExposureEv = 9.7f });
         var context = CreateContext(scene);
-        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
         fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
@@ -958,7 +958,7 @@ public sealed class SceneDocumentCommandServiceTests
             VignetteIntensity = 0.3f,
             DisplayGamma = 2.4f,
         };
-        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
         fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
@@ -997,7 +997,7 @@ public sealed class SceneDocumentCommandServiceTests
         var expected = CreatePostProcessEnvironmentData();
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureKey = 0.18f } });
         var context = CreateContext(scene);
-        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
         fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
@@ -1025,7 +1025,7 @@ public sealed class SceneDocumentCommandServiceTests
         var expected = CreateSkyAtmosphereEnvironmentData();
         scene.SetEnvironment(new SceneEnvironmentData { SkyAtmosphere = new SkyAtmosphereEnvironmentData { MieAnisotropy = 0.45f } });
         var context = CreateContext(scene);
-        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
         fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<CancellationToken>()))
