@@ -9,4 +9,8 @@ namespace Oxygen.Editor.MaterialEditor;
 /// </summary>
 /// <param name="Succeeded">Whether the descriptor was persisted.</param>
 /// <param name="OperationId">The related operation result identity, when one was published.</param>
-public sealed record MaterialSaveResult(bool Succeeded, Guid? OperationId);
+public sealed record MaterialSaveResult(bool Succeeded, Guid? OperationId)
+{
+    /// <summary>Gets a value indicating whether changes newer than the saved snapshot remain unsaved.</summary>
+    public bool HasUnsavedChanges { get; init; }
+}

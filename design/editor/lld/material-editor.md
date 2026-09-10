@@ -12,6 +12,24 @@ where engine APIs support it.
 This LLD is not an ED-M04 implementation gate. ED-M04 only creates the Geometry
 material assignment slot and leaves a clean handoff into this ED-M05 workflow.
 
+## Save Revision Contract
+
+The material document service owns authoring and saved revisions. Scalar and
+schema-property edits validate and commit under the authoring lock. Saves are
+serialized per open document and writes per destination; a queued document save
+captures its snapshot when it obtains its save gate. The existing atomic file
+replacement behavior remains in effect.
+
+Disk I/O does not hold the view model edit gate. Successful persistence updates
+the saved revision without replacing the current source or asset. If newer edits
+exist, the save succeeds with "Saved; newer changes remain unsaved" and the dirty
+indicator stays visible. A subsequent save can persist those edits. Actual write
+failure preserves the previous saved revision and current authoring data.
+
+Closing waits for in-flight persistence and rejects unsaved revisions unless
+explicit discard was authorized. View-model close preparation drains queued
+saves and edits; disposal also drains pending work before releasing its gate.
+
 ## 2. PRD Traceability
 
 | ID | Coverage |

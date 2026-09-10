@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+#pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
+
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
@@ -9,8 +11,11 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 public sealed record SceneCommandResult(bool Succeeded, Guid? OperationResultId = null)
 {
+    /// <summary>Gets a value indicating whether a successful save left newer authoring changes unsaved.</summary>
+    public bool HasUnsavedChanges { get; init; }
+
     /// <summary>
     /// Gets a successful command result.
     /// </summary>
-    public static SceneCommandResult Success { get; } = new(true);
+    public static SceneCommandResult Success { get; } = new(Succeeded: true);
 }

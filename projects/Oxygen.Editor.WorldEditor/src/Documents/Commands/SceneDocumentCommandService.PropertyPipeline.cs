@@ -5,7 +5,6 @@
 using System.Collections.Generic;
 using System.Numerics;
 using DroidNet.TimeMachine;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -13,6 +12,7 @@ using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -150,41 +150,29 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var kind = GetSingleComponentKind(edit);
-        if (kind is null)
-        {
-            return this.ValidationFailure(
+        return kind is null
+            ? this.ValidationFailure(
                 SceneOperationKinds.EditTransform,
                 "PROPERTY_MIXED_COMPONENTS",
                 "Property edit rejected",
                 "A single property edit can target only one component kind.",
-                context);
-        }
-
-        if (!string.Equals(kind, TransformKind, StringComparison.Ordinal))
-        {
-            return await this.EditComponentPropertiesThroughExistingCommandAsync(
+                context)
+            : !string.Equals(kind, TransformKind, StringComparison.Ordinal)
+            ? await this.EditComponentPropertiesThroughExistingCommandAsync(
                 context,
                 nodeIds,
                 edit,
                 kind,
-                session).ConfigureAwait(true);
-        }
-
-        if (this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult)
-        {
-            return validationResult;
-        }
-
-        if (!session.IsOneShot)
-        {
-            return await this.EditTransformSessionAsync(
+                session).ConfigureAwait(true)
+            : this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult
+            ? validationResult
+            : !session.IsOneShot
+            ? await this.EditTransformSessionAsync(
                 context,
                 session,
                 ResolveNodes(context.Scene, nodeIds),
-                BuildTransformEditFromPropertyEdit(edit)).ConfigureAwait(true);
-        }
-
-        return await this.EditTransformPropertiesOneShotAsync(context, nodeIds, edit, label).ConfigureAwait(true);
+                BuildTransformEditFromPropertyEdit(edit)).ConfigureAwait(true)
+            : await this.EditTransformPropertiesOneShotAsync(context, nodeIds, edit, label).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -223,9 +211,7 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var (environmentEdit, result) = this.TryBuildSceneEnvironmentEdit(context, edit);
-        return result is null
-            ? await this.EditSceneEnvironmentAsync(context, environmentEdit, session).ConfigureAwait(true)
-            : result;
+        return result ?? await this.EditSceneEnvironmentAsync(context, environmentEdit, session).ConfigureAwait(true);
     }
 
     private static (Dictionary<Guid, object> nodeTargets, Dictionary<Guid, SceneNode> sceneNodes) ResolveTransformPropertyTargets(
@@ -571,9 +557,10 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var resolver = new TransformPropertyTarget(this, context, sceneNodes);
-        await PropertyApply.ApplyAsync(op, ApplySide.After, resolver, descriptors).ConfigureAwait(true);
+        PropertyApply.ApplyToTargets(op, ApplySide.After, resolver, descriptors);
         this.RegisterPropertyOpHistory(context, op, resolver, descriptors);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await PropertyApply.PushToEngineAsync(op, ApplySide.After, resolver).ConfigureAwait(true);
         return SceneCommandResult.Success;
     }
 
@@ -601,14 +588,11 @@ public sealed partial class SceneDocumentCommandService
         string label,
         ApplySide inverseSide,
         string inverseLabel)
-    {
-        // The label "Restore Transform" is reused so the existing tests
-        // that observe TimeMachine labels keep passing.
-        context.History.AddChange(
+        => context.History.AddChange(
             label,
             async () =>
             {
-                await PropertyApply.ApplyAsync(op, applySide, resolver, descriptors).ConfigureAwait(true);
+                PropertyApply.ApplyToTargets(op, applySide, resolver, descriptors);
                 this.RegisterPropertyOpHistory(
                     context,
                     op,
@@ -619,32 +603,24 @@ public sealed partial class SceneDocumentCommandService
                     applySide,
                     label);
                 await this.MarkDirtyAsync(context).ConfigureAwait(true);
+                await PropertyApply.PushToEngineAsync(op, applySide, resolver).ConfigureAwait(true);
             });
-    }
 
     /// <summary>
     /// Resolves transform-component property ids to model targets and
     /// pushes engine commands via <see cref="ISceneEngineSync"/>.
     /// </summary>
-    private sealed class TransformPropertyTarget : IPropertyTarget
+    /// <param name="owner">The owning command service.</param>
+    /// <param name="context">The authoring context.</param>
+    /// <param name="nodes">The transform targets.</param>
+    private sealed class TransformPropertyTarget(
+        SceneDocumentCommandService owner,
+        SceneDocumentCommandContext context,
+        IReadOnlyDictionary<Guid, SceneNode> nodes) : IPropertyTarget
     {
-        private readonly SceneDocumentCommandService owner;
-        private readonly SceneDocumentCommandContext context;
-        private readonly IReadOnlyDictionary<Guid, SceneNode> nodes;
-
-        public TransformPropertyTarget(
-            SceneDocumentCommandService owner,
-            SceneDocumentCommandContext context,
-            IReadOnlyDictionary<Guid, SceneNode> nodes)
-        {
-            this.owner = owner;
-            this.context = context;
-            this.nodes = nodes;
-        }
-
         public bool TryGetTarget(Guid nodeId, out object? target)
         {
-            if (this.nodes.TryGetValue(nodeId, out var node))
+            if (nodes.TryGetValue(nodeId, out var node))
             {
                 target = node.Components.OfType<TransformComponent>().FirstOrDefault();
                 return target is not null;
@@ -661,18 +637,15 @@ public sealed partial class SceneDocumentCommandService
             // and dispatch through the new generic SetProperties
             // transport. This replaces the wide UpdateNodeTransformAsync
             // path for property-pipeline edits.
-            if (!this.nodes.TryGetValue(nodeId, out var node))
+            if (!nodes.TryGetValue(nodeId, out var node))
             {
                 return Task.CompletedTask;
             }
 
             var entries = BuildTransformPropertyEntries(edit);
-            if (entries.Count == 0)
-            {
-                return Task.CompletedTask;
-            }
-
-            return PushAndPublishAsync(this.owner, this.context, node, entries);
+            return entries.Count == 0
+                ? Task.CompletedTask
+                : PushAndPublishAsync(owner, context, node, entries);
         }
 
         private static async Task PushAndPublishAsync(

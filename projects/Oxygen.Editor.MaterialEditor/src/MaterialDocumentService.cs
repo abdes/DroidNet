@@ -8,6 +8,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
@@ -37,9 +38,33 @@ public sealed partial class MaterialDocumentService(
         ?? NullLoggerFactory.Instance.CreateLogger<MaterialDocumentService>();
 
     private readonly Dictionary<Guid, MaterialDocument> documents = [];
+    private readonly Dictionary<Guid, SemaphoreSlim> saveGates = [];
+    private readonly DocumentWriteCoordinator sourceWrites = new();
+    private readonly Func<string, byte[], CancellationToken, Task> writeSource = WriteBytesAsync;
     private readonly Lock sync = new();
     private MaterialSchemaValidator? cachedValidator;
     private bool validatorLoadAttempted;
+
+    /// <summary>Initializes a new instance of the <see cref="MaterialDocumentService"/> class with a controlled persistence boundary.</summary>
+    /// <param name="pathResolver">The source path resolver.</param>
+    /// <param name="cookService">The cook service.</param>
+    /// <param name="writeSource">Persists serialized source bytes.</param>
+    internal MaterialDocumentService(IMaterialSourcePathResolver pathResolver, IMaterialCookService cookService, Func<string, byte[], CancellationToken, Task> writeSource)
+        : this(pathResolver, cookService)
+    {
+        this.writeSource = writeSource;
+    }
+
+    /// <inheritdoc/>
+    public MaterialDocument GetDocument(Guid documentId)
+    {
+        lock (this.sync)
+        {
+            return this.documents.TryGetValue(documentId, out var document)
+                ? document
+                : throw new KeyNotFoundException($"Material document '{documentId}' is not open.");
+        }
+    }
 
     /// <inheritdoc />
     public async Task<MaterialDocument> CreateAsync(
@@ -89,97 +114,96 @@ public sealed partial class MaterialDocumentService(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        MaterialDocument document;
         lock (this.sync)
         {
-            if (!this.documents.TryGetValue(documentId, out document!))
+            var document = this.GetDocument(documentId);
+            if (!TryApplyEdit(document.Source, edit, out var updatedSource))
             {
-                throw new KeyNotFoundException($"Material document '{documentId}' is not open.");
+                this.LogScalarEditRejected(
+                    document.DocumentId,
+                    document.MaterialUri,
+                    edit.FieldKey,
+                    edit.NewValue?.GetType().FullName ?? "<null>",
+                    edit.NewValue);
+                var operationId = this.PublishMaterialFailure(
+                    MaterialOperationKinds.EditScalar,
+                    document,
+                    GetRejectedEditCode(edit),
+                    "Material field was not changed.",
+                    GetRejectedEditMessage(edit),
+                    FailureDomain.MaterialAuthoring);
+                return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: operationId));
             }
-        }
 
-        if (!TryApplyEdit(document.Source, edit, out var updatedSource))
-        {
-            this.LogScalarEditRejected(
-                document.DocumentId,
-                document.MaterialUri,
-                edit.FieldKey,
-                edit.NewValue?.GetType().FullName ?? "<null>",
-                edit.NewValue);
-            var operationId = this.PublishMaterialFailure(
-                MaterialOperationKinds.EditScalar,
-                document,
-                GetRejectedEditCode(edit),
-                "Material field was not changed.",
-                GetRejectedEditMessage(edit),
-                FailureDomain.MaterialAuthoring);
-            return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: operationId));
-        }
-
-        lock (this.sync)
-        {
             this.documents[documentId] = document with
             {
                 Source = updatedSource,
                 Asset = CreateAsset(document.MaterialUri, updatedSource),
                 IsDirty = true,
+                Revision = document.Revision + 1,
                 CookState = MaterialCookState.Stale,
             };
+            return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }
-
-        return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
     }
 
     /// <inheritdoc />
     public async Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        MaterialDocument document;
+        SemaphoreSlim gate;
         lock (this.sync)
         {
-            if (!this.documents.TryGetValue(documentId, out document!))
-            {
-                throw new KeyNotFoundException($"Material document '{documentId}' is not open.");
-            }
+            gate = this.saveGates[documentId];
         }
 
-        var source = WithName(document.Source, document.DisplayName);
-
-        if (this.ValidateSave(document, source) is { } failure)
-        {
-            return failure;
-        }
-
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await WriteSourceAsync(document.SourcePath, source, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            var operationId = this.PublishMaterialFailure(
-                MaterialOperationKinds.Save,
-                document,
-                DiagnosticCodes.DocumentPrefix + "MATERIAL.SaveFailed",
-                "Material was not saved",
-                ex.Message,
-                FailureDomain.Document);
-            return new MaterialSaveResult(Succeeded: false, OperationId: operationId);
-        }
+            var document = this.GetDocument(documentId);
+            var source = WithName(document.Source, document.DisplayName);
+            lock (this.sync)
+            {
+                if (this.ValidateSave(document, source) is { } failure)
+                {
+                    return failure with { HasUnsavedChanges = this.GetDocument(documentId).IsDirty };
+                }
+            }
 
-        if (!this.TryMarkSaved(document, source))
-        {
-            var operationId = this.PublishMaterialFailure(
-                MaterialOperationKinds.Save,
-                document,
-                DiagnosticCodes.DocumentPrefix + "MATERIAL.ChangedDuringSave",
-                "Material has newer changes",
-                "The material changed while saving. Save again before closing.",
-                FailureDomain.Document);
-            return new MaterialSaveResult(Succeeded: false, OperationId: operationId);
-        }
+            try
+            {
+                _ = await this.sourceWrites.RunAsync(
+                    document.SourcePath,
+                    async () =>
+                    {
+                        await this.writeSource(document.SourcePath, SerializeSource(source), cancellationToken).ConfigureAwait(false);
+                        return true;
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                var operationId = this.PublishMaterialFailure(
+                    MaterialOperationKinds.Save,
+                    document,
+                    DiagnosticCodes.DocumentPrefix + "MATERIAL.SaveFailed",
+                    "Material was not saved",
+                    ex.Message,
+                    FailureDomain.Document);
+                return new MaterialSaveResult(Succeeded: false, OperationId: operationId) { HasUnsavedChanges = this.GetDocument(documentId).IsDirty };
+            }
 
-        return new MaterialSaveResult(Succeeded: true, OperationId: null);
+            lock (this.sync)
+            {
+                var current = this.GetDocument(documentId);
+                var saved = current with { SavedRevision = document.Revision, IsDirty = current.Revision != document.Revision };
+                this.documents[documentId] = saved;
+                return new MaterialSaveResult(Succeeded: true, OperationId: null) { HasUnsavedChanges = saved.IsDirty };
+            }
+        }
+        finally
+        {
+            _ = gate.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -239,26 +263,41 @@ public sealed partial class MaterialDocumentService(
     }
 
     /// <inheritdoc />
-    public Task CloseAsync(Guid documentId, bool discard, CancellationToken cancellationToken = default)
+    public async Task CloseAsync(Guid documentId, bool discard, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
+        SemaphoreSlim gate;
         lock (this.sync)
         {
-            if (!this.documents.TryGetValue(documentId, out var document))
+            if (!this.saveGates.TryGetValue(documentId, out gate!))
             {
-                return Task.CompletedTask;
+                return;
             }
-
-            if (document.IsDirty && !discard)
-            {
-                throw new InvalidOperationException("Cannot close a dirty material document without discard.");
-            }
-
-            _ = this.documents.Remove(documentId);
         }
 
-        return Task.CompletedTask;
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            lock (this.sync)
+            {
+                if (!this.documents.TryGetValue(documentId, out var document))
+                {
+                    return;
+                }
+
+                if (document.IsDirty && !discard)
+                {
+                    throw new InvalidOperationException("Cannot close a dirty material document without discard.");
+                }
+
+                _ = this.documents.Remove(documentId);
+                _ = this.saveGates.Remove(documentId);
+            }
+        }
+        finally
+        {
+            // Queued operations retain this managed gate and check document ownership when resumed.
+            _ = gate.Release();
+        }
     }
 
     private static MaterialSource CreateDefaultSource(string displayName)
@@ -458,10 +497,10 @@ public sealed partial class MaterialDocumentService(
         return memory.ToArray();
     }
 
-    private static async Task WriteSourceAsync(
-        string sourcePath,
-        MaterialSource source,
-        CancellationToken cancellationToken)
+    private static Task WriteSourceAsync(string sourcePath, MaterialSource source, CancellationToken cancellationToken)
+        => WriteBytesAsync(sourcePath, SerializeSource(source), cancellationToken);
+
+    private static async Task WriteBytesAsync(string sourcePath, byte[] bytes, CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(sourcePath);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -469,7 +508,6 @@ public sealed partial class MaterialDocumentService(
             Directory.CreateDirectory(directory);
         }
 
-        var bytes = SerializeSource(source);
         var temporaryPath = sourcePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -634,6 +672,7 @@ public sealed partial class MaterialDocumentService(
         lock (this.sync)
         {
             this.documents[document.DocumentId] = document;
+            this.saveGates[document.DocumentId] = new SemaphoreSlim(1, 1);
         }
 
         return document;
@@ -679,26 +718,6 @@ public sealed partial class MaterialDocumentService(
         }
 
         return null;
-    }
-
-    private bool TryMarkSaved(MaterialDocument expected, MaterialSource source)
-    {
-        lock (this.sync)
-        {
-            if (!this.documents.TryGetValue(expected.DocumentId, out var current)
-                || !ReferenceEquals(current.Source, expected.Source))
-            {
-                return false;
-            }
-
-            this.documents[expected.DocumentId] = current with
-            {
-                Source = source,
-                Asset = CreateAsset(current.MaterialUri, source),
-                IsDirty = false,
-            };
-            return true;
-        }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Schema discovery is optional; preserve the documented cooker-validation fallback when discovery fails.")]

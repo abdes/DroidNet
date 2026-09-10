@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
 using DroidNet.Storage;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects;
 
@@ -74,6 +74,11 @@ public interface IProjectManagerService
     /// A task that represents the asynchronous operation. The task result is <see langword="true"/> if the scene is saved successfully; otherwise, <see langword="false"/>.
     /// </returns>
     public Task<bool> SaveSceneAsync(Scene scene);
+
+    /// <summary>Persists a coherent scene snapshot without reading the live authoring model.</summary>
+    /// <param name="snapshot">The immutable scene snapshot.</param>
+    /// <returns>Whether the snapshot was persisted successfully.</returns>
+    public Task<bool> SaveSceneSnapshotAsync(World.Serialization.SceneSaveSnapshot snapshot);
 
     /// <summary>
     /// Gets the current project's storage provider.

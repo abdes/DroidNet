@@ -8,9 +8,6 @@ using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
@@ -25,48 +22,49 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <inheritdoc />
-public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandService
+/// <param name="sceneExplorerService">The scene explorer service.</param>
+/// <param name="selectionService">The selection service.</param>
+/// <param name="sceneEngineSync">The scene engine sync.</param>
+/// <param name="projectManager">The project manager.</param>
+/// <param name="documentService">The document service.</param>
+/// <param name="windowId">The window id.</param>
+/// <param name="messenger">The messenger.</param>
+/// <param name="operationResults">The operation results.</param>
+/// <param name="statusReducer">The status reducer.</param>
+public sealed partial class SceneDocumentCommandService(
+    ISceneExplorerService sceneExplorerService,
+    ISceneSelectionService selectionService,
+    ISceneEngineSync sceneEngineSync,
+    IProjectManagerService projectManager,
+    IDocumentService documentService,
+    WindowId windowId,
+    IMessenger messenger,
+    IOperationResultPublisher operationResults,
+    IStatusReducer statusReducer) : ISceneDocumentCommandService
 {
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
     private static readonly Uri EmptyMaterialUri = new($"{AssetUris.Scheme}:///__uninitialized__");
 
-    private readonly ISceneExplorerService sceneExplorerService;
-    private readonly ISceneSelectionService selectionService;
-    private readonly ISceneEngineSync sceneEngineSync;
-    private readonly IProjectManagerService projectManager;
-    private readonly IDocumentService documentService;
-    private readonly WindowId windowId;
-    private readonly IMessenger messenger;
-    private readonly IOperationResultPublisher operationResults;
-    private readonly IStatusReducer statusReducer;
+    private readonly ISceneExplorerService sceneExplorerService = sceneExplorerService;
+    private readonly ISceneSelectionService selectionService = selectionService;
+    private readonly ISceneEngineSync sceneEngineSync = sceneEngineSync;
+    private readonly IProjectManagerService projectManager = projectManager;
+    private readonly IDocumentService documentService = documentService;
+    private readonly WindowId windowId = windowId;
+    private readonly IMessenger messenger = messenger;
+    private readonly IOperationResultPublisher operationResults = operationResults;
+    private readonly IStatusReducer statusReducer = statusReducer;
     private readonly CommitGroupController transformCommitGroups = new();
 
-    public SceneDocumentCommandService(
-        ISceneExplorerService sceneExplorerService,
-        ISceneSelectionService selectionService,
-        ISceneEngineSync sceneEngineSync,
-        IProjectManagerService projectManager,
-        IDocumentService documentService,
-        WindowId windowId,
-        IMessenger messenger,
-        IOperationResultPublisher operationResults,
-        IStatusReducer statusReducer)
-    {
-        this.sceneExplorerService = sceneExplorerService;
-        this.selectionService = selectionService;
-        this.sceneEngineSync = sceneEngineSync;
-        this.projectManager = projectManager;
-        this.documentService = documentService;
-        this.windowId = windowId;
-        this.messenger = messenger;
-        this.operationResults = operationResults;
-        this.statusReducer = statusReducer;
-    }
-
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind)
     {
         try
@@ -96,6 +94,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind)
     {
         try
@@ -104,7 +103,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             var node = new SceneNode(context.Scene) { Name = $"{normalized} Light" };
             ApplyLightTransform(node, normalized);
             var light = CreateLightComponent(normalized);
-            if (light is DirectionalLightComponent directional && CaptureDirectionalSunStates(context.Scene).Any(static state => state.IsSunLight))
+            if (light is DirectionalLightComponent directional && CaptureDirectionalSunStates(context.Scene).Exists(static state => state.IsSunLight))
             {
                 directional.IsSunLight = false;
             }
@@ -171,20 +170,17 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             return await this.EditTransformSessionAsync(
                 context,
                 session,
-                targets.Select(static target => target.Node).ToList(),
+                targets.ConvertAll(static target => target.Node),
                 edit).ConfigureAwait(true);
         }
 
         // One-shot path is schema-driven via the property pipeline.
         var propertyEdit = BuildPropertyEditFromTransformEdit(edit);
-        if (propertyEdit.Count == 0)
-        {
-            return SceneCommandResult.Success;
-        }
-
-        return await this.EditPropertiesAsync(
+        return propertyEdit.Count == 0
+            ? SceneCommandResult.Success
+            : await this.EditPropertiesAsync(
             context,
-            targets.Select(static target => target.Node.Id).ToList(),
+            targets.ConvertAll(static target => target.Node.Id),
             propertyEdit,
             "Edit Transform").ConfigureAwait(true);
     }
@@ -235,22 +231,22 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context);
         }
 
-        var before = targets.Select(static target => GeometryState.Capture(target.Node, target.Geometry!)).ToList();
+        var before = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
         foreach (var target in targets)
         {
             target.Geometry!.Geometry = new AssetReference<GeometryAsset>(edit.GeometryUri.Value);
         }
 
-        var after = targets.Select(static target => GeometryState.Capture(target.Node, target.Geometry!)).ToList();
+        var after = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
         if (GeometryStatesEqual(before, after))
         {
             return SceneCommandResult.Success;
         }
 
         this.RecordGeometryHistory(context, before, after);
-        var operationResultId = await this.SyncGeometryStatesAsync(context, after, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+        var operationResultId = await this.SyncGeometryStatesAsync(context, after, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -294,26 +290,26 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context);
         }
 
-        var before = targets.Select(static target => MaterialSlotState.Capture(target.Node, target.Geometry!)).ToList();
+        var before = targets.ConvertAll(static target => MaterialSlotState.Capture(target.Node, target.Geometry!));
         foreach (var target in targets)
         {
             ApplyMaterialSlotEdit(target.Geometry!, newMaterialUri);
         }
 
-        var after = targets.Select(static target => MaterialSlotState.Capture(target.Node, target.Geometry!)).ToList();
+        var after = targets.ConvertAll(static target => MaterialSlotState.Capture(target.Node, target.Geometry!));
         if (MaterialSlotStatesEqual(before, after))
         {
             return SceneCommandResult.Success;
         }
 
         this.RecordMaterialSlotHistory(context, before, after);
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         var operationResultId = await this.SyncEditedNodesAsync(
             context,
-            targets.Select(static target => target.Node).ToList(),
+            targets.ConvertAll(static target => target.Node),
             SceneOperationKinds.EditMaterialSlot,
             node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, slotIndex, newMaterialUri)).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -358,22 +354,22 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context);
         }
 
-        var before = targets.Select(static target => CameraState.Capture(target.Node, target.Camera!)).ToList();
+        var before = targets.ConvertAll(static target => CameraState.Capture(target.Node, target.Camera!));
         foreach (var target in targets)
         {
             ApplyPerspectiveCameraEdit(target.Camera!, edit);
         }
 
-        var after = targets.Select(static target => CameraState.Capture(target.Node, target.Camera!)).ToList();
+        var after = targets.ConvertAll(static target => CameraState.Capture(target.Node, target.Camera!));
         this.RecordCameraHistory(context, before, after);
         var propertyEntries = BuildPerspectiveCameraPropertyEntries(edit);
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         var operationResultId = await this.SyncEditedNodesAsync(
             context,
-            targets.Select(static target => target.Node).ToList(),
+            targets.ConvertAll(static target => target.Node),
             SceneOperationKinds.EditPerspectiveCamera,
             node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, propertyEntries)).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -405,53 +401,17 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         var targets = ResolveNodes(context.Scene, nodeIds)
-            .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
-            .Where(static target => target.Light is not null)
+            .Select(static node => (node, light: node.Components.OfType<DirectionalLightComponent>().FirstOrDefault()))
+            .Where(static target => target.light is not null)
             .ToList();
-        if (targets.Count == 0)
-        {
-            return this.ValidationFailure(
+        return targets.Count == 0
+            ? this.ValidationFailure(
                 SceneOperationKinds.EditDirectionalLight,
                 SceneDiagnosticCodes.ComponentRemoveDenied,
                 "Light was not edited",
                 "No selected node has a directional light component.",
-                context);
-        }
-
-        var allSunStates = CaptureDirectionalSunStates(context.Scene);
-        var before = targets.Select(static target => DirectionalLightState.Capture(target.Node, target.Light!)).ToList();
-        foreach (var target in targets)
-        {
-            ApplyDirectionalLightEdit(target.Light!, edit);
-        }
-
-        if (edit.IsSunLight.HasValue && edit.IsSunLight.Value == true)
-        {
-            ApplyExclusiveSun(context.Scene, targets[0].Node.Id);
-        }
-
-        var after = targets.Select(static target => DirectionalLightState.Capture(target.Node, target.Light!)).ToList();
-        var afterSunStates = CaptureDirectionalSunStates(context.Scene);
-        this.RecordDirectionalLightHistory(context, before, after, allSunStates, afterSunStates);
-        var syncNodes = IncludeDirectionalSunChangedNodes(
-            targets.Select(static target => target.Node),
-            allSunStates,
-            afterSunStates);
-        var targetNodeIds = targets.Select(static target => target.Node.Id).ToHashSet();
-        var operationResultId = await this.SyncEditedNodesAsync(
-            context,
-            syncNodes,
-            SceneOperationKinds.EditDirectionalLight,
-            node =>
-            {
-                var light = node.Components.OfType<DirectionalLightComponent>().First();
-                var entries = targetNodeIds.Contains(node.Id)
-                    ? BuildDirectionalLightPropertyEntries(edit, light)
-                    : new List<EnginePropertyValueEntry> { BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight) };
-                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries);
-            }).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+                context)
+            : await this.ApplyDirectionalLightTargetsAsync(context, targets, edit).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -499,15 +459,16 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         context.History.AddChange(
             $"Remove Component ({component.Name})",
             async () => await this.RemoveComponentForUndoAsync(context, node, component, defaultTransformBefore, defaultTransformAfter).ConfigureAwait(true));
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         var operationResultIdFromSync = await this.SyncComponentAddAsync(context, node, component).ConfigureAwait(true);
         if (defaultTransformAfter is not null)
         {
             _ = await this.SyncEditedNodesAsync(context, [node], SceneOperationKinds.EditTransform, syncNode => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, syncNode)).ConfigureAwait(true);
         }
 
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = this.messenger.Send(new ComponentAddedMessage(node, component, added: true));
-        return new SceneValueCommandResult<GameComponent>(true, component, operationResultIdFromSync);
+        return new SceneValueCommandResult<GameComponent>(Succeeded: true, component, operationResultIdFromSync);
     }
 
     /// <inheritdoc />
@@ -544,10 +505,10 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         context.History.AddChange(
             $"Restore Component ({component.Name})",
             async () => await this.AddComponentForRedoAsync(context, node, component, defaultTransformBefore: null, defaultTransformAfter: null).ConfigureAwait(true));
-        var operationResultId = await this.SyncComponentRemoveAsync(context, node, component).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        var operationResultId = await this.SyncComponentRemoveAsync(context, node, component).ConfigureAwait(true);
         _ = this.messenger.Send(new ComponentRemovedMessage(node, component, removed: true));
-        return new SceneCommandResult(true, operationResultId);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -571,7 +532,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         var validation = ValidateEnvironmentEdit(context.Scene, edit);
-        if (validation is not null && validation.Value.IsFailure)
+        if (validation?.IsFailure == true)
         {
             return this.ValidationFailure(SceneOperationKinds.EditEnvironment, validation.Value.Code, validation.Value.Title, validation.Value.Message, context);
         }
@@ -583,6 +544,8 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         ApplyEnvironmentSunBinding(context.Scene, after.SunNodeId);
         var afterSunStates = CaptureDirectionalSunStates(context.Scene);
         this.RecordEnvironmentHistory(context, before, after, beforeSunStates, afterSunStates);
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         var operationResultId = await this.PublishEnvironmentSyncAsync(context, after).ConfigureAwait(true);
         if (validation is not null)
         {
@@ -594,16 +557,20 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context);
         }
 
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneCommandResult> SaveSceneAsync(SceneDocumentCommandContext context)
     {
+        var gate = SaveGates.GetValue(context.Scene, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync().ConfigureAwait(true);
         try
         {
-            var success = await this.projectManager.SaveSceneAsync(context.Scene).ConfigureAwait(true);
+            var version = context.Metadata.ChangeVersion;
+            var snapshot = SceneSaveSnapshot.Capture(context.Scene);
+            var success = await this.projectManager.SaveSceneSnapshotAsync(snapshot).ConfigureAwait(true);
             if (!success)
             {
                 var operationResultId = this.PublishSceneFailure(
@@ -613,13 +580,16 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                     "The scene data could not be saved.",
                     context,
                     domain: FailureDomain.Document);
-                return new SceneCommandResult(false, operationResultId);
+                return new SceneCommandResult(Succeeded: false, operationResultId);
             }
 
-            context.Metadata.IsDirty = false;
+            context.Metadata.MarkSaved(version);
             _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
             _ = this.messenger.Send(new AssetsChangedMessage());
-            return SceneCommandResult.Success;
+            var notice = context.Metadata.IsDirty
+                ? this.PublishSceneWarning(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "NEWER_CHANGES_UNSAVED", "Scene snapshot saved", "Saved; newer changes remain unsaved", context, domain: FailureDomain.Document)
+                : (Guid?)null;
+            return new SceneCommandResult(Succeeded: true, notice) { HasUnsavedChanges = context.Metadata.IsDirty };
         }
         catch (Exception ex)
         {
@@ -631,11 +601,16 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 context,
                 ex,
                 FailureDomain.Document);
-            return new SceneCommandResult(false, operationResultId);
+            return new SceneCommandResult(Succeeded: false, operationResultId);
+        }
+        finally
+        {
+            _ = gate.Release();
         }
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneCommandResult> RenameItemAsync(
         SceneDocumentCommandContext context,
         ITreeItem item,
@@ -655,12 +630,12 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 "Item was not renamed",
                 "Scene item names cannot be empty.",
                 context);
-            return new SceneCommandResult(false, operationResultId);
+            return new SceneCommandResult(Succeeded: false, operationResultId);
         }
 
         try
         {
-            await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
+            await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(true);
             context.History.AddChange(
                 $"Rename({oldName} -> {newName})",
                 async () => await this.RenameItemAsync(context, item, oldName).ConfigureAwait(false));
@@ -676,7 +651,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 $"The item '{oldName}' could not be renamed.",
                 context,
                 ex);
-            return new SceneCommandResult(false, operationResultId);
+            return new SceneCommandResult(Succeeded: false, operationResultId);
         }
     }
 
@@ -740,77 +715,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             _ => throw new NotSupportedException($"Light kind '{kind}' is not supported."),
         };
 
-    private async Task AddRootNodeAsync(
-        SceneDocumentCommandContext context,
-        SceneNode node,
-        string operationKind,
-        string undoLabel)
-    {
-        context.Scene.RootNodes.Add(node);
-        context.History.AddChange($"Remove {undoLabel}", async () => await this.RemoveRootNodeForUndoAsync(context, node, operationKind).ConfigureAwait(true));
-        await this.TrySyncCreateAsync(context, node, operationKind).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        this.PublishNodeAdded(context, node);
-    }
-
-    private async Task RemoveRootNodeForUndoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
-    {
-        _ = context.Scene.RootNodes.Remove(node);
-        context.History.AddChange($"Restore {node.Name}", async () => await this.RestoreRootNodeForRedoAsync(context, node, operationKind).ConfigureAwait(true));
-        await this.TrySyncRemoveAsync(context, node, operationKind).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        this.PublishNodeRemoved(context, node);
-    }
-
-    private async Task RestoreRootNodeForRedoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
-    {
-        if (!context.Scene.RootNodes.Contains(node))
-        {
-            context.Scene.RootNodes.Add(node);
-        }
-
-        context.History.AddChange($"Remove {node.Name}", async () => await this.RemoveRootNodeForUndoAsync(context, node, operationKind).ConfigureAwait(true));
-        await this.TrySyncCreateAsync(context, node, operationKind).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        this.PublishNodeAdded(context, node);
-    }
-
-    private async Task TrySyncCreateAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
-    {
-        try
-        {
-            await this.sceneEngineSync.CreateNodeAsync(node, parentGuid: null).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.PublishLiveSyncWarning(operationKind, DiagnosticCodes.LiveSyncPrefix + "CREATE_NODE_FAILED", "Scene was updated but live preview was not", context, node, ex);
-        }
-    }
-
-    private async Task TrySyncRemoveAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
-    {
-        try
-        {
-            await this.sceneEngineSync.RemoveNodeHierarchyAsync(node.Id).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.PublishLiveSyncWarning(operationKind, DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED", "Scene was updated but live preview was not", context, node, ex);
-        }
-    }
-
-    private async Task MarkDirtyAsync(SceneDocumentCommandContext context)
-    {
-        if (context.Metadata.IsDirty)
-        {
-            return;
-        }
-
-        context.Metadata.IsDirty = true;
-        _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-    }
-
-    private static IReadOnlyList<SceneNode> ResolveNodes(Scene scene, IReadOnlyList<Guid> nodeIds)
+    private static List<SceneNode> ResolveNodes(Scene scene, IReadOnlyList<Guid> nodeIds)
         => nodeIds.Select(id => FindNode(scene, id)).OfType<SceneNode>().ToList();
 
     private static SceneNode? FindNode(Scene scene, Guid nodeId)
@@ -888,8 +793,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
     private static T Get<T>(OptionalEditValue<T> optional) => optional.Value!;
 
     private static ValidationIssue? ValidateTransformEdit(TransformEdit edit)
-    {
-        if ((edit.Position.HasValue && !IsFinite(Get(edit.Position))) ||
+        => (edit.Position.HasValue && !IsFinite(Get(edit.Position))) ||
             (edit.RotationEulerDegrees.HasValue && !IsFinite(Get(edit.RotationEulerDegrees))) ||
             (edit.Scale.HasValue && !IsFinite(Get(edit.Scale))) ||
             (edit.PositionX.HasValue && !float.IsFinite(Get(edit.PositionX))) ||
@@ -900,37 +804,27 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             (edit.RotationZDegrees.HasValue && !float.IsFinite(Get(edit.RotationZDegrees))) ||
             (edit.ScaleX.HasValue && !float.IsFinite(Get(edit.ScaleX))) ||
             (edit.ScaleY.HasValue && !float.IsFinite(Get(edit.ScaleY))) ||
-            (edit.ScaleZ.HasValue && !float.IsFinite(Get(edit.ScaleZ))))
-        {
-            return new(
+            (edit.ScaleZ.HasValue && !float.IsFinite(Get(edit.ScaleZ)))
+            ? new(
                 SceneDiagnosticCodes.TransformFieldNotFinite,
                 "Transform was not edited",
                 "Transform values must be finite numbers.",
-                IsFailure: true);
-        }
-
-        if (edit.Scale.HasValue && Get(edit.Scale) is { } scale && (scale.X == 0f || scale.Y == 0f || scale.Z == 0f))
-        {
-            return new(
+                IsFailure: true)
+            : edit.Scale.HasValue && Get(edit.Scale) is { } scale && (scale.X == 0f || scale.Y == 0f || scale.Z == 0f)
+            ? new(
                 SceneDiagnosticCodes.TransformScaleZeroAxis,
                 "Transform was not edited",
                 "Scale cannot contain a zero axis.",
-                IsFailure: true);
-        }
-
-        if ((edit.ScaleX.HasValue && Get(edit.ScaleX) == 0f) ||
+                IsFailure: true)
+            : (edit.ScaleX.HasValue && Get(edit.ScaleX) == 0f) ||
             (edit.ScaleY.HasValue && Get(edit.ScaleY) == 0f) ||
-            (edit.ScaleZ.HasValue && Get(edit.ScaleZ) == 0f))
-        {
-            return new(
+            (edit.ScaleZ.HasValue && Get(edit.ScaleZ) == 0f)
+            ? new(
                 SceneDiagnosticCodes.TransformScaleZeroAxis,
                 "Transform was not edited",
                 "Scale cannot contain a zero axis.",
-                IsFailure: true);
-        }
-
-        return null;
-    }
+                IsFailure: true)
+            : null;
 
     private static ValidationIssue? ValidatePerspectiveCameraEdit(Scene scene, IReadOnlyList<Guid> nodeIds, PerspectiveCameraEdit edit)
     {
@@ -966,8 +860,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
     }
 
     private static ValidationIssue? ValidateDirectionalLightEdit(DirectionalLightEdit edit)
-    {
-        if ((edit.Color.HasValue && !IsFinite(Get(edit.Color))) ||
+        => (edit.Color.HasValue && !IsFinite(Get(edit.Color))) ||
             (edit.IntensityLux.HasValue && !float.IsFinite(Get(edit.IntensityLux))) ||
             (edit.AngularSizeRadians.HasValue && !float.IsFinite(Get(edit.AngularSizeRadians))) ||
             (edit.ExposureCompensation.HasValue && !float.IsFinite(Get(edit.ExposureCompensation))) ||
@@ -980,28 +873,21 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             (edit.CascadeDistance3.HasValue && !float.IsFinite(Get(edit.CascadeDistance3))) ||
             (edit.DistributionExponent.HasValue && !float.IsFinite(Get(edit.DistributionExponent))) ||
             (edit.TransitionFraction.HasValue && !float.IsFinite(Get(edit.TransitionFraction))) ||
-            (edit.DistanceFadeoutFraction.HasValue && !float.IsFinite(Get(edit.DistanceFadeoutFraction))))
-        {
-            return new(
+            (edit.DistanceFadeoutFraction.HasValue && !float.IsFinite(Get(edit.DistanceFadeoutFraction)))
+            ? new(
                 SceneDiagnosticCodes.DirectionalLightFieldNotFinite,
                 "Light was not edited",
                 "Directional light values must be finite numbers.",
-                IsFailure: true);
-        }
-
-        if ((edit.Mobility.HasValue && !Enum.IsDefined(Get(edit.Mobility))) ||
+                IsFailure: true)
+            : (edit.Mobility.HasValue && !Enum.IsDefined(Get(edit.Mobility))) ||
             (edit.ShadowResolutionHint.HasValue && !Enum.IsDefined(Get(edit.ShadowResolutionHint))) ||
-            (edit.SplitMode.HasValue && !Enum.IsDefined(Get(edit.SplitMode))))
-        {
-            return new(
+            (edit.SplitMode.HasValue && !Enum.IsDefined(Get(edit.SplitMode)))
+            ? new(
                 SceneDiagnosticCodes.DirectionalLightFieldNotFinite,
                 "Light was not edited",
                 "Directional light enum values must be valid.",
-                IsFailure: true);
-        }
-
-        return null;
-    }
+                IsFailure: true)
+            : null;
 
     private static ValidationIssue? ValidateEnvironmentEdit(Scene scene, SceneEnvironmentEdit edit)
     {
@@ -1363,7 +1249,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
     }
 
-    private static IReadOnlyList<DirectionalSunState> CaptureDirectionalSunStates(Scene scene)
+    private static List<DirectionalSunState> CaptureDirectionalSunStates(Scene scene)
         => scene.RootNodes
             .SelectMany(static root => SceneTraversal.CollectNodes(root))
             .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
@@ -1379,7 +1265,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
     }
 
-    private static IReadOnlyList<SceneNode> IncludeDirectionalSunChangedNodes(
+    private static List<SceneNode> IncludeDirectionalSunChangedNodes(
         IEnumerable<SceneNode> primaryNodes,
         IReadOnlyList<DirectionalSunState> before,
         IReadOnlyList<DirectionalSunState> after)
@@ -1430,6 +1316,251 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         return targets;
     }
 
+    private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
+    {
+        if (before.Count != after.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < before.Count; i++)
+        {
+            if (before[i].Node.Id != after[i].Node.Id ||
+                !UriValuesEqual(before[i].GeometryUri, after[i].GeometryUri))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MaterialSlotStatesEqual(IReadOnlyList<MaterialSlotState> before, IReadOnlyList<MaterialSlotState> after)
+    {
+        if (before.Count != after.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < before.Count; i++)
+        {
+            if (before[i].Node.Id != after[i].Node.Id ||
+                before[i].HasSlot != after[i].HasSlot ||
+                !UriValuesEqual(before[i].MaterialUri, after[i].MaterialUri))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool UriValuesEqual(Uri? left, Uri? right)
+        => left == right || (left is not null && right is not null && string.Equals(left.ToString(), right.ToString(), StringComparison.Ordinal));
+
+    private static bool IsEmptyMaterialUri(Uri? uri)
+        => UriValuesEqual(uri, EmptyMaterialUri);
+
+    private static Uri? ToMaterialSyncUri(Uri? uri)
+        => IsEmptyMaterialUri(uri) ? null : uri;
+
+    private static bool CanAddComponent(SceneNode node, Type componentType, out string reason)
+    {
+        if (componentType == typeof(TransformComponent))
+        {
+            reason = "Transform is locked and already present on every scene node.";
+            return false;
+        }
+
+        if (componentType == typeof(GeometryComponent))
+        {
+            reason = "This node already has a geometry component.";
+            return !node.Components.OfType<GeometryComponent>().Any();
+        }
+
+        if (componentType == typeof(PerspectiveCamera) ||
+            componentType == typeof(OrthographicCamera))
+        {
+            reason = "This node already has a camera component.";
+            return !node.Components.OfType<CameraComponent>().Any();
+        }
+
+        if (componentType == typeof(DirectionalLightComponent) ||
+            componentType == typeof(PointLightComponent) ||
+            componentType == typeof(SpotLightComponent))
+        {
+            reason = "This node already has a light component.";
+            return !node.Components.OfType<LightComponent>().Any();
+        }
+
+        reason = $"Component type '{componentType.Name}' is not supported by ED-M04.";
+        return false;
+    }
+
+    private static GameComponent CreateComponent(Type componentType)
+        => componentType switch
+        {
+            _ when componentType == typeof(GeometryComponent) => new GeometryComponent
+            {
+                Name = "Geometry",
+                Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+            },
+            _ when componentType == typeof(PerspectiveCamera) => new PerspectiveCamera { Name = "Perspective Camera" },
+            _ when componentType == typeof(OrthographicCamera) => new OrthographicCamera { Name = "Orthographic Camera" },
+            _ when componentType == typeof(DirectionalLightComponent) => new DirectionalLightComponent { Name = "Directional Light", IsSunLight = false },
+            _ when componentType == typeof(PointLightComponent) => new PointLightComponent
+            {
+                Name = "Point Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 10f,
+            },
+            _ when componentType == typeof(SpotLightComponent) => new SpotLightComponent
+            {
+                Name = "Spot Light",
+                LuminousFluxLumens = 1_600f,
+                Range = 15f,
+            },
+            _ => throw new NotSupportedException($"Component type '{componentType.Name}' is not supported."),
+        };
+
+    private static TransformState? CaptureDirectionalLightDefaultTransformBefore(SceneNode node, GameComponent component)
+    {
+        if (component is not DirectionalLightComponent)
+        {
+            return null;
+        }
+
+        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+        return transform is not null && transform.LocalRotation == Quaternion.Identity
+            ? TransformState.Capture(node, transform)
+            : null;
+    }
+
+    private static AffectedScope Scope(SceneDocumentCommandContext context, SceneNode? node = null)
+        => new()
+        {
+            DocumentId = context.DocumentId,
+            DocumentName = context.Metadata.Title,
+            SceneId = context.Scene.Id,
+            SceneName = context.Scene.Name,
+            NodeId = node?.Id,
+            NodeName = node?.Name,
+        };
+
+    private async Task<SceneCommandResult> ApplyDirectionalLightTargetsAsync(
+        SceneDocumentCommandContext context,
+        List<(SceneNode node, DirectionalLightComponent? light)> targets,
+        DirectionalLightEdit edit)
+    {
+        var allSunStates = CaptureDirectionalSunStates(context.Scene);
+        var before = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
+        foreach (var (_, light) in targets)
+        {
+            ApplyDirectionalLightEdit(light!, edit);
+        }
+
+        if (edit.IsSunLight.HasValue && edit.IsSunLight.Value)
+        {
+            ApplyExclusiveSun(context.Scene, targets[0].node.Id);
+        }
+
+        var after = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
+        var afterSunStates = CaptureDirectionalSunStates(context.Scene);
+        this.RecordDirectionalLightHistory(context, before, after, allSunStates, afterSunStates);
+        var syncNodes = IncludeDirectionalSunChangedNodes(
+            targets.Select(static target => target.node),
+            allSunStates,
+            afterSunStates);
+        var targetNodeIds = targets.Select(static target => target.node.Id).ToHashSet();
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        var operationResultId = await this.SyncEditedNodesAsync(
+            context,
+            syncNodes,
+            SceneOperationKinds.EditDirectionalLight,
+            node =>
+            {
+                var light = node.Components.OfType<DirectionalLightComponent>().First();
+                IReadOnlyList<EnginePropertyValueEntry> entries = targetNodeIds.Contains(node.Id)
+                    ? BuildDirectionalLightPropertyEntries(edit, light)
+                    : [BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight)];
+                return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries);
+            }).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
+    }
+
+    private async Task AddRootNodeAsync(
+        SceneDocumentCommandContext context,
+        SceneNode node,
+        string operationKind,
+        string undoLabel)
+    {
+        context.Scene.RootNodes.Add(node);
+        context.History.AddChange($"Remove {undoLabel}", async () => await this.RemoveRootNodeForUndoAsync(context, node, operationKind).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.TrySyncCreateAsync(context, node, operationKind).ConfigureAwait(true);
+        this.PublishNodeAdded(context, node);
+    }
+
+    private async Task RemoveRootNodeForUndoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
+    {
+        _ = context.Scene.RootNodes.Remove(node);
+        context.History.AddChange($"Restore {node.Name}", async () => await this.RestoreRootNodeForRedoAsync(context, node, operationKind).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.TrySyncRemoveAsync(context, node, operationKind).ConfigureAwait(true);
+        this.PublishNodeRemoved(context, node);
+    }
+
+    private async Task RestoreRootNodeForRedoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
+    {
+        if (!context.Scene.RootNodes.Contains(node))
+        {
+            context.Scene.RootNodes.Add(node);
+        }
+
+        context.History.AddChange($"Remove {node.Name}", async () => await this.RemoveRootNodeForUndoAsync(context, node, operationKind).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.TrySyncCreateAsync(context, node, operationKind).ConfigureAwait(true);
+        this.PublishNodeAdded(context, node);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    private async Task TrySyncCreateAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
+    {
+        try
+        {
+            await this.sceneEngineSync.CreateNodeAsync(node, parentGuid: null).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _ = this.PublishLiveSyncWarning(operationKind, DiagnosticCodes.LiveSyncPrefix + "CREATE_NODE_FAILED", "Scene was updated but live preview was not", context, node, ex);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    private async Task TrySyncRemoveAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
+    {
+        try
+        {
+            await this.sceneEngineSync.RemoveNodeHierarchyAsync(node.Id).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _ = this.PublishLiveSyncWarning(operationKind, DiagnosticCodes.LiveSyncPrefix + "REMOVE_NODE_FAILED", "Scene was updated but live preview was not", context, node, ex);
+        }
+    }
+
+    private async Task MarkDirtyAsync(SceneDocumentCommandContext context)
+    {
+        var wasDirty = context.Metadata.IsDirty;
+        context.Metadata.IsDirty = true;
+        if (wasDirty)
+        {
+            return;
+        }
+
+        _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
+    }
+
     private async Task<SceneCommandResult> EditTransformSessionAsync(
         SceneDocumentCommandContext context,
         EditSessionToken session,
@@ -1466,7 +1597,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
         var after = PropertySnapshot.Capture(nodeTargets, descriptors);
         this.transformCommitGroups.RecordPreview(key, after);
-
         if (session.State == EditSessionState.Open)
         {
             await this.PreviewTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
@@ -1475,16 +1605,20 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
         var closed = this.transformCommitGroups.Close(key, after) ?? group;
         var op = new PropertyOp(closed.Nodes, closed.Before, after, closed.Label);
+        if (op.EffectiveEdit().Count > 0)
+        {
+            await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        }
+
         var operationResultId = await this.CompleteTerminalTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
         if (op.EffectiveEdit().Count == 0)
         {
-            return new SceneCommandResult(true, operationResultId);
+            return new SceneCommandResult(Succeeded: true, operationResultId);
         }
 
         var resolver = new TransformPropertyTarget(this, context, sceneNodes);
-        RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        return new SceneCommandResult(true, operationResultId);
+        this.RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     private async Task<SceneCommandResult> CancelTransformEditSessionAsync(
@@ -1535,7 +1669,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
     private async Task PreviewTransformSessionAsync(
         SceneDocumentCommandContext context,
-        IReadOnlyDictionary<Guid, SceneNode> nodes,
+        Dictionary<Guid, SceneNode> nodes,
         PropertySnapshot snapshot)
     {
         var observedAt = DateTimeOffset.UtcNow;
@@ -1562,7 +1696,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
 
     private async Task<Guid?> CompleteTerminalTransformSessionAsync(
         SceneDocumentCommandContext context,
-        IReadOnlyDictionary<Guid, SceneNode> nodes,
+        Dictionary<Guid, SceneNode> nodes,
         PropertySnapshot snapshot)
     {
         Guid? firstOperationResultId = null;
@@ -1589,54 +1723,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         return firstOperationResultId;
     }
 
-    private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
-    {
-        if (before.Count != after.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < before.Count; i++)
-        {
-            if (before[i].Node.Id != after[i].Node.Id ||
-                !UriValuesEqual(before[i].GeometryUri, after[i].GeometryUri))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool MaterialSlotStatesEqual(IReadOnlyList<MaterialSlotState> before, IReadOnlyList<MaterialSlotState> after)
-    {
-        if (before.Count != after.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < before.Count; i++)
-        {
-            if (before[i].Node.Id != after[i].Node.Id ||
-                before[i].HasSlot != after[i].HasSlot ||
-                !UriValuesEqual(before[i].MaterialUri, after[i].MaterialUri))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool UriValuesEqual(Uri? left, Uri? right)
-        => left == right || (left is not null && right is not null && string.Equals(left.ToString(), right.ToString(), StringComparison.Ordinal));
-
-    private static bool IsEmptyMaterialUri(Uri? uri)
-        => UriValuesEqual(uri, EmptyMaterialUri);
-
-    private static Uri? ToMaterialSyncUri(Uri? uri)
-        => IsEmptyMaterialUri(uri) ? null : uri;
-
     private void RecordGeometryHistory(SceneDocumentCommandContext context, IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
         => context.History.AddChange("Restore Geometry", async () => await this.ApplyGeometryStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
 
@@ -1648,8 +1734,8 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         context.History.AddChange("Reapply Geometry", async () => await this.ApplyGeometryStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        _ = await this.SyncGeometryStatesAsync(context, states, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        _ = await this.SyncGeometryStatesAsync(context, states, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
     }
 
     private void RecordMaterialSlotHistory(SceneDocumentCommandContext context, IReadOnlyList<MaterialSlotState> before, IReadOnlyList<MaterialSlotState> after)
@@ -1663,8 +1749,8 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         context.History.AddChange("Reapply Material Slot", async () => await this.ApplyMaterialSlotStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        _ = await this.SyncEditedNodesAsync(context, states.Select(static state => state.Node).ToList(), SceneOperationKinds.EditMaterialSlot, node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, 0, ToMaterialSyncUri(states.First(state => state.Node == node).MaterialUri))).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        _ = await this.SyncEditedNodesAsync(context, states.Select(static state => state.Node).ToList(), SceneOperationKinds.EditMaterialSlot, node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, 0, ToMaterialSyncUri(states.First(state => state.Node == node).MaterialUri))).ConfigureAwait(true);
     }
 
     private void RecordCameraHistory(SceneDocumentCommandContext context, IReadOnlyList<CameraState> before, IReadOnlyList<CameraState> after)
@@ -1678,6 +1764,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         }
 
         context.History.AddChange("Reapply Camera", async () => await this.ApplyCameraStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = await this.SyncEditedNodesAsync(
             context,
             states.Select(static state => state.Node).ToList(),
@@ -1687,7 +1774,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 var camera = node.Components.OfType<PerspectiveCamera>().First();
                 return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildPerspectiveCameraPropertyEntries(camera));
             }).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
     }
 
     private void RecordDirectionalLightHistory(
@@ -1713,6 +1799,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, inverse, states, inverseSunStates, sunStates).ConfigureAwait(true));
         var syncNodes = IncludeDirectionalSunChangedNodes(states.Select(static state => state.Node), inverseSunStates, sunStates);
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = await this.SyncEditedNodesAsync(
             context,
             syncNodes,
@@ -1722,7 +1809,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
                 var light = node.Components.OfType<DirectionalLightComponent>().First();
                 return this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, BuildDirectionalLightPropertyEntries(light));
             }).ConfigureAwait(true);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
     }
 
     private void RecordEnvironmentHistory(
@@ -1743,103 +1829,8 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         context.Scene.SetEnvironment(environment);
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Environment", async () => await this.ApplyEnvironmentForHistoryAsync(context, inverse, environment, inverseSunStates, sunStates).ConfigureAwait(true));
-        _ = await this.PublishEnvironmentSyncAsync(context, environment).ConfigureAwait(true);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-    }
-
-    private static bool CanAddComponent(SceneNode node, Type componentType, out string reason)
-    {
-        if (componentType == typeof(TransformComponent))
-        {
-            reason = "Transform is locked and already present on every scene node.";
-            return false;
-        }
-
-        if (componentType == typeof(GeometryComponent))
-        {
-            reason = "This node already has a geometry component.";
-            return !node.Components.OfType<GeometryComponent>().Any();
-        }
-
-        if (componentType == typeof(PerspectiveCamera) ||
-            componentType == typeof(OrthographicCamera))
-        {
-            reason = "This node already has a camera component.";
-            return !node.Components.OfType<CameraComponent>().Any();
-        }
-
-        if (componentType == typeof(DirectionalLightComponent) ||
-            componentType == typeof(PointLightComponent) ||
-            componentType == typeof(SpotLightComponent))
-        {
-            reason = "This node already has a light component.";
-            return !node.Components.OfType<LightComponent>().Any();
-        }
-
-        reason = $"Component type '{componentType.Name}' is not supported by ED-M04.";
-        return false;
-    }
-
-    private static GameComponent CreateComponent(Type componentType)
-    {
-        if (componentType == typeof(GeometryComponent))
-        {
-            return new GeometryComponent
-            {
-                Name = "Geometry",
-                Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
-            };
-        }
-
-        if (componentType == typeof(PerspectiveCamera))
-        {
-            return new PerspectiveCamera { Name = "Perspective Camera" };
-        }
-
-        if (componentType == typeof(OrthographicCamera))
-        {
-            return new OrthographicCamera { Name = "Orthographic Camera" };
-        }
-
-        if (componentType == typeof(DirectionalLightComponent))
-        {
-            return new DirectionalLightComponent { Name = "Directional Light", IsSunLight = false };
-        }
-
-        if (componentType == typeof(PointLightComponent))
-        {
-            return new PointLightComponent
-            {
-                Name = "Point Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 10f,
-            };
-        }
-
-        if (componentType == typeof(SpotLightComponent))
-        {
-            return new SpotLightComponent
-            {
-                Name = "Spot Light",
-                LuminousFluxLumens = 1_600f,
-                Range = 15f,
-            };
-        }
-
-        throw new NotSupportedException($"Component type '{componentType.Name}' is not supported.");
-    }
-
-    private static TransformState? CaptureDirectionalLightDefaultTransformBefore(SceneNode node, GameComponent component)
-    {
-        if (component is not DirectionalLightComponent)
-        {
-            return null;
-        }
-
-        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
-        return transform is not null && transform.LocalRotation == Quaternion.Identity
-            ? TransformState.Capture(node, transform)
-            : null;
+        _ = await this.PublishEnvironmentSyncAsync(context, environment).ConfigureAwait(true);
     }
 
     private async Task<Guid?> SyncComponentAddAsync(SceneDocumentCommandContext context, SceneNode node, GameComponent component)
@@ -1884,13 +1875,14 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         context.History.AddChange(
             $"Restore Component ({component.Name})",
             async () => await this.AddComponentForRedoAsync(context, node, component, defaultTransformBefore, defaultTransformAfter).ConfigureAwait(true));
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = await this.SyncComponentRemoveAsync(context, node, component).ConfigureAwait(true);
         if (defaultTransformBefore is not null)
         {
             _ = await this.SyncEditedNodesAsync(context, [node], SceneOperationKinds.EditTransform, syncNode => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, syncNode)).ConfigureAwait(true);
         }
 
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = this.messenger.Send(new ComponentRemovedMessage(node, component, removed: true));
     }
 
@@ -1910,13 +1902,14 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
         context.History.AddChange(
             $"Remove Component ({component.Name})",
             async () => await this.RemoveComponentForUndoAsync(context, node, component, defaultTransformBefore, defaultTransformAfter).ConfigureAwait(true));
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = await this.SyncComponentAddAsync(context, node, component).ConfigureAwait(true);
         if (defaultTransformAfter is not null)
         {
             _ = await this.SyncEditedNodesAsync(context, [node], SceneOperationKinds.EditTransform, syncNode => this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, syncNode)).ConfigureAwait(true);
         }
 
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = this.messenger.Send(new ComponentAddedMessage(node, component, added: true));
     }
 
@@ -2003,7 +1996,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             OperationId = operationId,
             Domain = FailureDomain.LiveSync,
             Severity = severity,
-            Code = outcome.Code ?? DiagnosticCodes.LiveSyncPrefix + "Unknown",
+            Code = outcome.Code ?? (DiagnosticCodes.LiveSyncPrefix + "Unknown"),
             Message = outcome.Message ?? "Live sync did not fully apply the authored edit.",
             TechnicalMessage = outcome.Exception?.Message,
             ExceptionType = outcome.Exception?.GetType().FullName,
@@ -2097,7 +2090,7 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             title,
             message,
             context);
-        return new(false, operationResultId);
+        return new(Succeeded: false, operationResultId);
     }
 
     private Guid PublishLiveSyncWarning(
@@ -2117,17 +2110,6 @@ public sealed partial class SceneDocumentCommandService : ISceneDocumentCommandS
             $"The scene node '{node.Name}' was changed in the authoring model, but the live preview did not update.",
             Scope(context, node),
             exception);
-
-    private static AffectedScope Scope(SceneDocumentCommandContext context, SceneNode? node = null)
-        => new()
-        {
-            DocumentId = context.DocumentId,
-            DocumentName = context.Metadata.Title,
-            SceneId = context.Scene.Id,
-            SceneName = context.Scene.Name,
-            NodeId = node?.Id,
-            NodeName = node?.Name,
-        };
 
     private readonly record struct ValidationIssue(string Code, string Title, string Message, bool IsFailure);
 

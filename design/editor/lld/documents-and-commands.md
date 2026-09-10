@@ -201,7 +201,7 @@ ED-M03 command surface:
 | `Scene.ExplorerFolder.Rename` | Rename a layout-only scene explorer folder. |
 | `Scene.ExplorerFolder.Delete` | Delete a layout-only scene explorer folder and reconcile contained layout items. |
 | `Scene.ExplorerLayout.MoveNode` | Move a node projection into/out of a folder; scene reparent is a separate `Scene.Node.Reparent` command when lineage changes. |
-| `Scene.Save` | Save active scene authoring data and clear dirty state only on success. |
+| `Scene.Save` | Persist a coherent snapshot and acknowledge its revision; newer changes remain dirty. |
 
 Adapters:
 
@@ -226,6 +226,30 @@ ED-M03 surfaces:
 - output/log/result surfaces: command/save/sync failures.
 
 ## 10. Persistence And Round Trip
+
+### Saving While Editing
+
+A successful save acknowledges the revision captured with its immutable source
+snapshot. It does not clear newer edits or replace current authoring state.
+Ordinary save reports "Saved; newer changes remain unsaved" when appropriate;
+save-and-close additionally requires that no newer revision remains dirty.
+
+Scene commands record authoring changes before live synchronization awaits,
+including changes to an already-dirty document and undo/redo. Multi-node property
+application updates all model targets synchronously before pushing engine work.
+Scene Explorer services emit their authoring-change notification before live
+sync; deletion updates scene graph and explorer layout before synchronization.
+Transform previews retain their existing commit/cancel semantics.
+
+Scene saves are serialized per scene across command-service instances. Snapshot
+capture serializes the graph, environment, and explorer layout into an owned
+JSON string before resolving storage folders or awaiting writes. Project-level
+writes are also serialized per destination. Successful completion advances only
+the captured saved version; failure preserves authoring state and the previous
+saved version. Save gates for destinations are removed after all users finish.
+
+See [issue #4 implementation plan](../plan/issue-004-save-revisions.md) for the
+deterministic storage-gated validation scenarios.
 
 ### Unsaved Document Closure
 

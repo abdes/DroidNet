@@ -13,6 +13,9 @@ namespace Oxygen.Editor.World.SceneExplorer.Services;
 /// </summary>
 public interface ISceneExplorerService
 {
+    /// <summary>Raised synchronously after an authoring mutation and before engine synchronization.</summary>
+    public event EventHandler<SceneAuthoringChangedEventArgs>? AuthoringChanged;
+
     /// <summary>
     /// Creates a new scene node under the specified parent.
     /// </summary>

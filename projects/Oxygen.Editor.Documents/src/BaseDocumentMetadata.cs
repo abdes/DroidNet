@@ -15,8 +15,6 @@ namespace Oxygen.Editor.Documents;
 /// </param>
 public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentMetadata
 {
-    private bool isDirty;
-
     /// <summary>
     /// Gets the document identifier.
     /// </summary>
@@ -31,19 +29,25 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
     /// <inheritdoc/>
     public bool IsDirty
     {
-        get => this.isDirty;
+        get => this.ChangeVersion != this.SavedVersion;
         set
         {
-            this.isDirty = value;
             if (value)
             {
                 this.ChangeVersion++;
+            }
+            else
+            {
+                this.SavedVersion = this.ChangeVersion;
             }
         }
     }
 
     /// <summary>Gets the authoring version used to detect edits arriving during a save.</summary>
     public long ChangeVersion { get; private set; }
+
+    /// <summary>Gets the latest successfully persisted authoring version.</summary>
+    public long SavedVersion { get; private set; }
 
     /// <inheritdoc/>
     public bool IsPinnedHint { get; set; }
@@ -55,4 +59,12 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
     ///     Gets the type of document (e.g., "Scene", "Asset", "Render", etc.)
     /// </summary>
     public abstract string DocumentType { get; }
+
+    /// <summary>Acknowledges a persisted snapshot without clearing newer changes.</summary>
+    /// <param name="version">The version captured with the persisted snapshot.</param>
+    public void MarkSaved(long version)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(version, this.ChangeVersion);
+        this.SavedVersion = Math.Max(this.SavedVersion, version);
+    }
 }

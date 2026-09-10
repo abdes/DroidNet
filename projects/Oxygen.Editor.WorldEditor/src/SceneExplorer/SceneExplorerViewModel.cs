@@ -47,8 +47,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Dictionary<ITreeItem, string> trackedItemLabels = [];
     private readonly HashSet<ITreeItem> trackedTreeItems = [];
 
-    private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
-
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
     private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = [];
     private int nextEntityIndex;
@@ -71,6 +69,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="windowId">The window identifier for the associated window.</param>
     /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
     /// <param name="sceneExplorerService">The scene explorer service.</param>
+    /// <param name="selectionService">The document selection service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -96,6 +95,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.windowId = windowId;
         this.sceneEngineSync = sceneEngineSync;
         this.sceneExplorerService = sceneExplorerService;
+        this.sceneExplorerService.AuthoringChanged += this.OnAuthoringChanged;
         this.selectionService = selectionService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
@@ -152,6 +152,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [ObservableProperty]
     public partial ReadOnlyObservableCollection<IChange> RedoStack { get; set; }
 
+    private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
+
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
     public override async Task RemoveSelectedItems()
@@ -206,8 +208,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.History.AddChange(
             $"Rename({oldName} -> {trimmed})",
             async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
-
-        await this.MarkDirtyAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -233,6 +233,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// </summary>
     /// <param name="args">Event arguments.</param>
     /// <returns>A <see cref="Task"/> that completes when the item has been handled.</returns>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
     {
         if (this.suppressTreeCommandHandling)
@@ -248,36 +249,22 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
 
-        this.History.AddChange(
-            $"RemoveItem({args.TreeItem.Label})",
-            async () =>
-            {
-                try
-                {
-                    await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(true);
-                }
-                catch (Exception ex)
-                {
-                    this.LogUndoRemoveFailed(ex, args.TreeItem.Label);
-                }
-            });
+        this.RecordAddedItemUndo(args);
 
         try
         {
             if (addedAdapter != null)
             {
-                await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
+                _ = await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
             }
             else if (args.TreeItem is FolderAdapter folderAdapter)
             {
-                await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
+                _ = await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
             }
-
-            await this.MarkDirtyAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to apply scene explorer add for {Item}.", args.TreeItem.Label);
+            this.LogAuthoringAddFailed(ex, args.TreeItem.Label);
         }
 
         this.LogItemAdded(args.TreeItem.Label);
@@ -294,9 +281,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
             this.TrackTreeItem(addedAdapter);
         }
-        catch
+        catch (Exception exception)
         {
-            // FIXME: ignore indexing errors
+            this.LogAuthoringAddFailed(exception, args.TreeItem.Label);
         }
     }
 
@@ -365,6 +352,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.ClearTrackedTreeItems();
         }
 
+        this.sceneExplorerService.AuthoringChanged -= this.OnAuthoringChanged;
         this.isDisposed = true;
         base.Dispose(disposing);
     }
@@ -376,15 +364,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (this.SelectionMode == SelectionMode.Single)
         {
-            if (oldValue is not null)
-            {
-                oldValue.PropertyChanged -= this.OnSingleSelectionChanged;
-            }
+            oldValue?.PropertyChanged -= this.OnSingleSelectionChanged;
 
-            if (this.SelectionModel is not null)
-            {
-                this.SelectionModel.PropertyChanged += this.OnSingleSelectionChanged;
-            }
+            this.SelectionModel?.PropertyChanged += this.OnSingleSelectionChanged;
         }
         else if (this.SelectionMode == SelectionMode.Multiple)
         {
@@ -542,6 +524,22 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Undo errors are reported without terminating the editor command loop.")]
+    private void RecordAddedItemUndo(TreeItemAddedEventArgs args)
+        => this.History.AddChange(
+            $"RemoveItem({args.TreeItem.Label})",
+            async () =>
+            {
+                try
+                {
+                    await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    this.LogUndoRemoveFailed(ex, args.TreeItem.Label);
+                }
+            });
+
     private bool CanRenameSelected()
         => this.SelectionModel is SingleSelectionModel { SelectedItem.IsLocked: false }
             || (this.SelectionModel is MultipleSelectionModel<ITreeItem> m
@@ -550,11 +548,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     [RelayCommand]
     private async Task Undo()
-        => await this.History.UndoAsync().ConfigureAwait(false);
+        => await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
 
     [RelayCommand]
     private async Task Redo()
-        => await this.History.RedoAsync().ConfigureAwait(false);
+        => await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
 
     private bool CanAddEntity()
     {
@@ -696,20 +694,47 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    private async Task InitializeLoadedSceneAsync(Scene loadedScene)
+    {
+        // Build the scene layout from the loaded scene
+        this.Scene = new SceneAdapter(loadedScene)
+        {
+            IsExpanded = true,
+            IsLocked = true,
+            IsRoot = true,
+            UseLayoutAdapters = true,
+        };
+
+        // Update Undo/Redo stacks for the new scene
+        this.UndoStack = this.History.UndoStack;
+        this.RedoStack = this.History.RedoStack;
+
+        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+        this.nodeAdapterIndex.Clear();
+        await this.IndexAdaptersForSceneAsync(this.Scene).ConfigureAwait(true);
+        this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
+    }
+
+    private async Task<CancellationToken> BeginSceneLoadAsync()
+    {
+        if (this.loadSceneCts is { IsCancellationRequested: false })
+        {
+            await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
+        }
+
+        this.loadSceneCts?.Dispose();
+        this.loadSceneCts = new CancellationTokenSource();
+        return this.loadSceneCts.Token;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene loading reports failures without terminating the editor.")]
     private async Task LoadSceneAsync(Scene scene)
     {
         this.loadingDocumentId = scene.Id;
         try
         {
-            // Cancel any previous loading operation
-            if (this.loadSceneCts is { IsCancellationRequested: false })
-            {
-                await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
-                this.loadSceneCts.Dispose();
-            }
-
-            this.loadSceneCts = new CancellationTokenSource();
-            var ct = this.loadSceneCts.Token;
+            var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
 
             var loadedScene = await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
             if (loadedScene is null)
@@ -727,23 +752,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 return;
             }
 
-            // Build the scene layout from the loaded scene
-            this.Scene = new SceneAdapter(loadedScene)
-            {
-                IsExpanded = true,
-                IsLocked = true,
-                IsRoot = true,
-                UseLayoutAdapters = true,
-            };
-
-            // Update Undo/Redo stacks for the new scene
-            this.UndoStack = this.History.UndoStack;
-            this.RedoStack = this.History.RedoStack;
-
-            await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
-            this.nodeAdapterIndex.Clear();
-            await this.IndexAdaptersForSceneAsync(this.Scene).ConfigureAwait(true);
-            this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
+            await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
 
             if (ct.IsCancellationRequested)
             {
@@ -768,7 +777,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to load scene {SceneId} ({SceneName}).", scene.Id, scene.Name);
+            this.LogAuthoringLoadFailed(ex, scene.Id, scene.Name);
         }
         finally
         {
@@ -806,14 +815,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             async () => await this.InsertItemAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
 
         _ = this.RemoveItemFromBackendAsync(args.TreeItem);
-        _ = this.MarkDirtyAsync();
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
 
     private async Task RemoveItemFromBackendAsync(ITreeItem item)
     {
-        await this.sceneExplorerService.DeleteItemsAsync([item]).ConfigureAwait(false);
+        _ = await this.sceneExplorerService.DeleteItemsAsync([item]).ConfigureAwait(false);
 
         if (AsSceneNodeAdapter(item) is { } adapter)
         {
@@ -846,8 +854,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             this.RecordMoveUndo(args);
             _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
-            _ = this.MarkDirtyAsync();
-        }
+            }
         finally
         {
             if (args.IsBatch)
@@ -975,11 +982,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
             var parent = node.Parent is null
                 ? this.Scene
-                : this.nodeAdapterIndex.GetValueOrDefault(node.Parent.Id) as ITreeItem;
-            if (parent is null)
-            {
-                parent = this.Scene;
-            }
+                : this.nodeAdapterIndex.GetValueOrDefault(node.Parent.Id) as ITreeItem ?? this.Scene;
 
             var adapter = new SceneNodeAdapter(node);
             await this.ApplyExternalTreeChangeAsync(async () => await this.InsertItemAsync(adapter, parent, 0).ConfigureAwait(false)).ConfigureAwait(true);
@@ -1080,23 +1083,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     private bool CanCreateFolder()
-    {
-        // Allow creation if nothing is selected (root), or if a single item is selected.
-        // We don't check types strictly here to avoid disabling the button when the user expects it to work.
-        // The CreateFolder command will default to Root if the selection is invalid.
-        if (this.SelectionModel is null)
-        {
-            return true;
-        }
-
-        if (this.SelectionModel is MultipleSelectionModel<ITreeItem> multiple)
-        {
-            return multiple.SelectedIndices.Count <= 1;
-        }
-
-        // SingleSelectionModel always has 0 or 1 item selected.
-        return true;
-    }
+        => this.SelectionModel is not MultipleSelectionModel<ITreeItem> multiple || multiple.SelectedIndices.Count <= 1;
 
     private void NotifySelectionDependentCommands()
     {
@@ -1107,7 +1094,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private string GetNextEntityName()
     {
         var index = Interlocked.Increment(ref this.nextEntityIndex);
-        return $"New Entity {index}";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"New Entity {index}");
     }
 
     private SceneDocumentCommandContext? CreateCommandContext()
@@ -1121,22 +1108,33 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var metadata = this.documentService.GetOpenDocuments(this.windowId)
             .OfType<SceneDocumentMetadata>()
             .FirstOrDefault(document => document.DocumentId == scene.Id);
-        if (metadata is null)
-        {
-            return null;
-        }
+        return metadata is null
+            ? null
+            : new SceneDocumentCommandContext(scene.Id, metadata, scene, this.History);
+    }
 
-        return new SceneDocumentCommandContext(scene.Id, metadata, scene, this.History);
+    private void OnAuthoringChanged(object? sender, SceneAuthoringChangedEventArgs args)
+    {
+        if (ReferenceEquals(this.Scene?.AttachedObject, args.Scene))
+        {
+            _ = this.MarkDirtyAsync();
+        }
     }
 
     private async Task MarkDirtyAsync()
     {
-        if (this.CreateCommandContext() is not { } context || context.Metadata.IsDirty)
+        if (this.CreateCommandContext() is not { } context)
         {
             return;
         }
 
+        var wasDirty = context.Metadata.IsDirty;
         context.Metadata.IsDirty = true;
+        if (wasDirty)
+        {
+            return;
+        }
+
         _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
     }
 
@@ -1224,6 +1222,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.trackedItemLabels.Clear();
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     private async void OnTrackedTreeItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!string.Equals(args.PropertyName, nameof(TreeItemAdapter.Label), StringComparison.Ordinal)
@@ -1258,11 +1257,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         try
         {
             await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
-            await this.MarkDirtyAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to apply in-place rename for {Item}.", newName);
+            this.LogAuthoringRenameFailed(ex, newName);
         }
     }
 }
