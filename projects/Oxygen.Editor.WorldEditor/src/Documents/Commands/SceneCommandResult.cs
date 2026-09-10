@@ -11,6 +11,12 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 public sealed record SceneCommandResult(bool Succeeded, Guid? OperationResultId = null)
 {
+    /// <summary>Gets the originating validation code without reading the operation history.</summary>
+    public string? ValidationCode { get; init; }
+
+    /// <summary>Gets the validation message for the originating control.</summary>
+    public string? ValidationMessage { get; init; }
+
     /// <summary>Gets a value indicating whether a successful save left newer authoring changes unsaved.</summary>
     public bool HasUnsavedChanges { get; init; }
 

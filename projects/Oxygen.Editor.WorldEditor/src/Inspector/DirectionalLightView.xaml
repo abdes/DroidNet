@@ -6,7 +6,6 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
-
     <editorcontrols:PropertiesExpander
         Padding="2"
         HorizontalAlignment="Stretch"
@@ -35,6 +34,7 @@
                                     IsAlphaEnabled="False"
                                     IsColorChannelTextInputVisible="True"
                                     IsHexInputVisible="True"
+                                    Loaded="ColorPickerLoaded"
                                     Color="{x:Bind ViewModel.ColorValue, Mode=OneWay}" />
                             </Flyout>
                         </Button.Flyout>
@@ -46,67 +46,136 @@
                             BorderThickness="1"
                             CornerRadius="2" />
                     </Button>
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="R"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.ColorR, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="2"
-                        Label="G"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.ColorG, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="3"
-                        Label="B"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.ColorB, Mode=TwoWay}" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="R"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
+                            Tag="ColorR" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ColorRDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ColorRDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="G"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
+                            Tag="ColorG" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ColorGDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ColorGDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="B"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.ColorB, Mode=TwoWay}"
+                            Tag="ColorB" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.ColorBDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.ColorBDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Emission">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="lux"
-                        LabelPosition="Right"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="rad"
-                        LabelPosition="Right"
-                        Mask="~.####"
-                        NumberValue="{x:Bind ViewModel.AngularSizeRadians, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="lux"
+                            LabelPosition="Right"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}"
+                            Tag="IntensityLux" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.IntensityLuxDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.IntensityLuxDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="rad"
+                            LabelPosition="Right"
+                            Mask="~.####"
+                            NumberValue="{x:Bind ViewModel.AngularSizeRadians, Mode=TwoWay}"
+                            Tag="AngularSizeRadians" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Direction">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="azimuth °"
-                        LabelPosition="Left"
-                        Mask="~.#"
-                        NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="elevation °"
-                        LabelPosition="Left"
-                        Mask="~.#"
-                        NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="azimuth °"
+                            LabelPosition="Left"
+                            Mask="~.#"
+                            NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}"
+                            Tag="SunAzimuth" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.SunAzimuthDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.SunAzimuthDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="elevation °"
+                            LabelPosition="Left"
+                            Mask="~.#"
+                            NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}"
+                            Tag="SunElevation" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.SunElevationDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.SunElevationDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Environment">
                 <Grid ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
@@ -120,7 +189,6 @@
                         IsOn="{x:Bind ViewModel.EnvironmentContribution, Mode=TwoWay}" />
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Common">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -135,15 +203,24 @@
                         SelectedItem="{x:Bind ViewModel.Mobility, Mode=TwoWay}" />
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Exposure">
-                <controls:NumberBox
-                    Label="EV"
-                    LabelPosition="Right"
-                    Mask="~.###"
-                    NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}" />
+                <StackPanel Spacing="2">
+                    <controls:NumberBox
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        Label="EV"
+                        LabelPosition="Right"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                        Tag="ExposureCompensation" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.ExposureCompensationDiagnostic.Visibility, Mode=OneWay}" />
+                </StackPanel>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Shadows">
                 <Grid ColumnSpacing="8" RowSpacing="8">
                     <Grid.RowDefinitions>
@@ -172,21 +249,41 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <controls:NumberBox
-                            Label="bias"
-                            LabelPosition="Left"
-                            Mask="~.####"
-                            NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}" />
-                        <controls:NumberBox
-                            Grid.Column="1"
-                            Label="normal"
-                            LabelPosition="Left"
-                            Mask="~.####"
-                            NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}" />
+                        <StackPanel Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="bias"
+                                LabelPosition="Left"
+                                Mask="~.####"
+                                NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}"
+                                Tag="ShadowBias" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.ShadowBiasDiagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.ShadowBiasDiagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="normal"
+                                LabelPosition="Left"
+                                Mask="~.####"
+                                NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}"
+                                Tag="ShadowNormalBias" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Cascades">
                 <Grid ColumnSpacing="8" RowSpacing="8">
                     <Grid.RowDefinitions>
@@ -198,29 +295,62 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="count"
-                        LabelPosition="Left"
-                        Mask="#."
-                        NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="count"
+                            LabelPosition="Left"
+                            Mask="#."
+                            NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}"
+                            Tag="CascadeCount" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.CascadeCountDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.CascadeCountDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                     <ComboBox
                         Grid.Column="1"
                         HorizontalAlignment="Stretch"
                         ItemsSource="{x:Bind ViewModel.SplitModeOptions}"
                         SelectedItem="{x:Bind ViewModel.SplitMode, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Row="1"
-                        Label="max m"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}" />
-                    <controls:NumberBox
+                    <StackPanel Grid.Row="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="max m"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}"
+                            Tag="MaxShadowDistance" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel
                         Grid.Row="1"
                         Grid.Column="1"
-                        Label="dist"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}" />
+                        Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="dist"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}"
+                            Tag="DistributionExponent" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.DistributionExponentDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.DistributionExponentDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                     <Grid
                         Grid.Row="2"
                         Grid.ColumnSpan="2"
@@ -231,50 +361,111 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <controls:NumberBox
-                            Label="1"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}" />
-                        <controls:NumberBox
-                            Grid.Column="1"
-                            Label="2"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}" />
-                        <controls:NumberBox
-                            Grid.Column="2"
-                            Label="3"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}" />
-                        <controls:NumberBox
-                            Grid.Column="3"
-                            Label="4"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}" />
+                        <StackPanel Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="1"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}"
+                                Tag="CascadeDistance1" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.CascadeDistance1Diagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.CascadeDistance1Diagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="2"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}"
+                                Tag="CascadeDistance2" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.CascadeDistance2Diagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.CascadeDistance2Diagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="3"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}"
+                                Tag="CascadeDistance3" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.CascadeDistance3Diagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.CascadeDistance3Diagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="2">
+                            <controls:NumberBox
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="4"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}"
+                                Tag="CascadeDistance4" />
+                            <TextBlock
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.CascadeDistance4Diagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.CascadeDistance4Diagnostic.Visibility, Mode=OneWay}" />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </editorcontrols:PropertyCard>
-
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Cascade Blend">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <controls:NumberBox
-                        Label="transition"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}" />
-                    <controls:NumberBox
-                        Grid.Column="1"
-                        Label="fade"
-                        LabelPosition="Left"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="transition"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}"
+                            Tag="TransitionFraction" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.TransitionFractionDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.TransitionFractionDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <controls:NumberBox
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="fade"
+                            LabelPosition="Left"
+                            Mask="~.###"
+                            NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}"
+                            Tag="DistanceFadeoutFraction" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>

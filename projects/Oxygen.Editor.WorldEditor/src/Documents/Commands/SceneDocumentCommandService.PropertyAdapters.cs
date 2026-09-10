@@ -104,11 +104,9 @@ public sealed partial class SceneDocumentCommandService
 
     private static T? GetNullableReference<T>(PropertyEdit edit, PropertyId<T?> id)
         where T : class
-    {
-        return edit.TryGetRaw(id.Id, out var value)
+        => edit.TryGetRaw(id.Id, out var value)
             ? (T?)value
             : null;
-    }
 
     private async Task<SceneCommandResult> EditComponentPropertiesThroughExistingCommandAsync(
         SceneDocumentCommandContext context,
@@ -116,18 +114,11 @@ public sealed partial class SceneDocumentCommandService
         PropertyEdit edit,
         string kind,
         EditSessionToken session)
-    {
-        if (SkipUncommittedSession(session) is { } sessionResult)
-        {
-            return sessionResult;
-        }
-
-        if (this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult)
-        {
-            return validationResult;
-        }
-
-        return kind switch
+        => SkipUncommittedSession(session) is { } sessionResult
+            ? sessionResult
+            : this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult
+            ? validationResult
+            : kind switch
         {
             GeometryKind => await this.EditGeometryPropertiesAsync(context, nodeIds, edit, session).ConfigureAwait(true),
             PerspectiveCameraKind => await this.EditPerspectiveCameraAsync(
@@ -147,7 +138,6 @@ public sealed partial class SceneDocumentCommandService
                 $"Unknown component kind: {kind}.",
                 context),
         };
-    }
 
     private SceneCommandResult? ValidateComponentPropertyEdit(
         SceneDocumentCommandContext context,
@@ -290,7 +280,7 @@ public sealed partial class SceneDocumentCommandService
                 backgroundColor,
                 skyAtmosphere,
                 postProcess),
-            null);
+            Result: null);
 
         static SceneEnvironmentEdit EmptyEnvironmentEdit()
             => new(

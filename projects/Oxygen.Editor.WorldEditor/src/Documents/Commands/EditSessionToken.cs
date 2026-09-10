@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+#pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
+
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
@@ -81,6 +83,11 @@ public sealed class EditSessionToken
         string fieldKey)
         => new(Guid.NewGuid(), operationKind, nodeIds, fieldKey, isOneShot: false);
 
+    /// <summary>Captures the phase before an asynchronous producer can observe a later commit or cancellation.</summary>
+    /// <returns>A token with the same identity and the current immutable request phase.</returns>
+    public EditSessionToken Capture()
+        => this.IsOneShot ? this : new(this.SessionId, this.OperationKind, this.NodeIds, this.FieldKey, isOneShot: false) { State = this.State };
+
     /// <summary>
     /// Marks the session as committed.
     /// </summary>
@@ -106,25 +113,4 @@ public sealed class EditSessionToken
 
         this.State = EditSessionState.Cancelled;
     }
-}
-
-/// <summary>
-/// State of an inspector edit session.
-/// </summary>
-public enum EditSessionState
-{
-    /// <summary>
-    /// The session is open.
-    /// </summary>
-    Open,
-
-    /// <summary>
-    /// The session was committed.
-    /// </summary>
-    Committed,
-
-    /// <summary>
-    /// The session was cancelled.
-    /// </summary>
-    Cancelled,
 }

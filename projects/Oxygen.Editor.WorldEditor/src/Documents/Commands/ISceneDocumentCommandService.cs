@@ -7,6 +7,8 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
+#pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
+
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <summary>
@@ -165,6 +167,18 @@ public interface ISceneDocumentCommandService
     public Task<SceneCommandResult> EditSceneEnvironmentPropertiesAsync(
         SceneDocumentCommandContext context,
         PropertyEdit edit,
+        string label,
+        EditSessionToken session);
+
+    /// <summary>Applies target-specific property values as one validated transaction or gesture.</summary>
+    /// <param name="context">The document and its lifetime.</param>
+    /// <param name="edits">Immutable values identified by authored target.</param>
+    /// <param name="label">The undo label.</param>
+    /// <param name="session">The control's edit session.</param>
+    /// <returns>The authoring and synchronization outcome.</returns>
+    public Task<SceneCommandResult> EditPropertiesForTargetsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyDictionary<Guid, PropertyEdit> edits,
         string label,
         EditSessionToken session);
 

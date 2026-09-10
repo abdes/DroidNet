@@ -20,16 +20,16 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>
 /// ViewModel for directional light inspector editing.
 /// </summary>
-public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor, IDisposable
+public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private const float RadToDeg = 180f / MathF.PI;
     private const float DegToRad = MathF.PI / 180f;
     private static readonly Vector3 EngineForward = new(0f, -1f, 0f);
     private static readonly Vector3 EngineUp = new(0f, 0f, 1f);
 
-    private readonly ISceneDocumentCommandService? commandService;
-    private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
-    private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
+    private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+
+    private readonly InspectorEditSessionCoordinator? edits;
     private readonly PropertyBinding<Vector3> colorBinding = new(SceneDocumentCommandService.DirectionalLight.ColorDescriptor);
     private readonly PropertyBinding<float> intensityLuxBinding = new(SceneDocumentCommandService.DirectionalLight.IntensityLuxDescriptor);
     private readonly PropertyBinding<bool> isSunLightBinding = new(SceneDocumentCommandService.DirectionalLight.IsSunLightDescriptor);
@@ -66,8 +66,11 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
-        this.commandService = commandService;
-        this.commandContextProvider = commandContextProvider;
+        if (commandService is not null && commandContextProvider is not null)
+        {
+            this.edits = new(commandService, commandContextProvider, "Edit Directional Light", this.RefreshValues);
+        }
+
         this.colorBinding.ValueRequested += this.OnLightVectorValueRequested;
         this.intensityLuxBinding.ValueRequested += this.OnLightFloatValueRequested;
         this.angularSizeRadiansBinding.ValueRequested += this.OnLightFloatValueRequested;
@@ -199,11 +202,110 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// </summary>
     public Color ColorValue => Color.FromArgb(255, ToByte(this.ColorR), ToByte(this.ColorG), ToByte(this.ColorB));
 
+    /// <summary>Gets current diagnostics for ColorR.</summary>
+    public InspectorFieldDiagnostic ColorRDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ColorG.</summary>
+    public InspectorFieldDiagnostic ColorGDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ColorB.</summary>
+    public InspectorFieldDiagnostic ColorBDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for SunAzimuth.</summary>
+    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for SunElevation.</summary>
+    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for IntensityLux.</summary>
+    public InspectorFieldDiagnostic IntensityLuxDiagnostic => this.edits?.Diagnostics.Get(this.intensityLuxBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for IsSunLight.</summary>
+    public InspectorFieldDiagnostic IsSunLightDiagnostic => this.edits?.Diagnostics.Get(this.isSunLightBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for EnvironmentContribution.</summary>
+    public InspectorFieldDiagnostic EnvironmentContributionDiagnostic => this.edits?.Diagnostics.Get(this.environmentContributionBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CastsShadows.</summary>
+    public InspectorFieldDiagnostic CastsShadowsDiagnostic => this.edits?.Diagnostics.Get(this.castsShadowsBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for AffectsWorld.</summary>
+    public InspectorFieldDiagnostic AffectsWorldDiagnostic => this.edits?.Diagnostics.Get(this.affectsWorldBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for AngularSizeRadians.</summary>
+    public InspectorFieldDiagnostic AngularSizeRadiansDiagnostic => this.edits?.Diagnostics.Get(this.angularSizeRadiansBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ExposureCompensation.</summary>
+    public InspectorFieldDiagnostic ExposureCompensationDiagnostic => this.edits?.Diagnostics.Get(this.exposureCompensationBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for Mobility.</summary>
+    public InspectorFieldDiagnostic MobilityDiagnostic => this.edits?.Diagnostics.Get(this.mobilityBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ShadowBias.</summary>
+    public InspectorFieldDiagnostic ShadowBiasDiagnostic => this.edits?.Diagnostics.Get(this.shadowBiasBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ShadowNormalBias.</summary>
+    public InspectorFieldDiagnostic ShadowNormalBiasDiagnostic => this.edits?.Diagnostics.Get(this.shadowNormalBiasBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ContactShadows.</summary>
+    public InspectorFieldDiagnostic ContactShadowsDiagnostic => this.edits?.Diagnostics.Get(this.contactShadowsBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for ShadowResolutionHint.</summary>
+    public InspectorFieldDiagnostic ShadowResolutionHintDiagnostic => this.edits?.Diagnostics.Get(this.shadowResolutionHintBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CascadeCount.</summary>
+    public InspectorFieldDiagnostic CascadeCountDiagnostic => this.edits?.Diagnostics.Get(this.cascadeCountBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for SplitMode.</summary>
+    public InspectorFieldDiagnostic SplitModeDiagnostic => this.edits?.Diagnostics.Get(this.splitModeBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for MaxShadowDistance.</summary>
+    public InspectorFieldDiagnostic MaxShadowDistanceDiagnostic => this.edits?.Diagnostics.Get(this.maxShadowDistanceBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CascadeDistance1.</summary>
+    public InspectorFieldDiagnostic CascadeDistance1Diagnostic => this.edits?.Diagnostics.Get(this.cascadeDistance0Binding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CascadeDistance2.</summary>
+    public InspectorFieldDiagnostic CascadeDistance2Diagnostic => this.edits?.Diagnostics.Get(this.cascadeDistance1Binding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CascadeDistance3.</summary>
+    public InspectorFieldDiagnostic CascadeDistance3Diagnostic => this.edits?.Diagnostics.Get(this.cascadeDistance2Binding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for CascadeDistance4.</summary>
+    public InspectorFieldDiagnostic CascadeDistance4Diagnostic => this.edits?.Diagnostics.Get(this.cascadeDistance3Binding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for DistributionExponent.</summary>
+    public InspectorFieldDiagnostic DistributionExponentDiagnostic => this.edits?.Diagnostics.Get(this.distributionExponentBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for TransitionFraction.</summary>
+    public InspectorFieldDiagnostic TransitionFractionDiagnostic => this.edits?.Diagnostics.Get(this.transitionFractionBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets current diagnostics for DistanceFadeoutFraction.</summary>
+    public InspectorFieldDiagnostic DistanceFadeoutFractionDiagnostic => this.edits?.Diagnostics.Get(this.distanceFadeoutFractionBinding.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <inheritdoc/>
+    public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
+
     /// <inheritdoc />
     public override string Header => "Directional Light";
 
     /// <inheritdoc />
     public override string Description => "Authored sun, shadow, and environment light data.";
+
+    /// <summary>Gets completion of submitted inspector edits.</summary>
+    internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public void BeginEditSession(string field, DroidNet.Controls.NumberBoxEditInteractionKind interaction)
+        => this.edits?.Begin(field, interaction);
+
+    /// <inheritdoc/>
+    public void CompleteEditSession(DroidNet.Controls.NumberBoxEditSessionEventArgs args)
+        => this.edits?.Complete(args);
+
+    /// <inheritdoc/>
+    public void EndEditSession(DroidNet.Controls.NumberBoxEditCompletionKind completion)
+        => this.edits?.End(completion);
 
     /// <inheritdoc />
     public void Dispose()
@@ -236,7 +338,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         this.mobilityBinding.ValueRequested -= this.OnLightMobilityValueRequested;
         this.shadowResolutionHintBinding.ValueRequested -= this.OnLightShadowResolutionHintValueRequested;
         this.splitModeBinding.ValueRequested -= this.OnLightSplitModeValueRequested;
-        this.editGate.Dispose();
+        this.edits?.Dispose();
         this.disposed = true;
         GC.SuppressFinalize(this);
     }
@@ -244,12 +346,13 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
+        this.edits?.Bind(items.Where(node => node.Components.Any(component => component is DirectionalLightComponent)).Select(node => node.Id).ToArray());
         this.selectedItems = items;
         var targets = items
             .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
             .Where(static target => target.Light is not null)
             .ToList();
-        var nodeIds = targets.Select(static target => target.Node.Id).ToList();
+        var nodeIds = targets.ConvertAll(static target => target.Node.Id);
         var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Light);
 
         this.isApplyingEditorValues = true;
@@ -260,29 +363,29 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             this.ColorR = color.X;
             this.ColorG = color.Y;
             this.ColorB = color.Z;
-            UpdateBinding(this.intensityLuxBinding, nodeIds, targetsByNode, value => this.IntensityLux = value);
-            UpdateBinding(this.isSunLightBinding, nodeIds, targetsByNode, value => this.IsSunLight = value);
-            UpdateBinding(this.environmentContributionBinding, nodeIds, targetsByNode, value => this.EnvironmentContribution = value);
-            UpdateBinding(this.castsShadowsBinding, nodeIds, targetsByNode, value => this.CastsShadows = value);
-            UpdateBinding(this.affectsWorldBinding, nodeIds, targetsByNode, value => this.AffectsWorld = value);
-            UpdateBinding(this.angularSizeRadiansBinding, nodeIds, targetsByNode, value => this.AngularSizeRadians = value);
-            UpdateBinding(this.exposureCompensationBinding, nodeIds, targetsByNode, value => this.ExposureCompensation = value);
-            UpdateBinding(this.mobilityBinding, nodeIds, targetsByNode, value => this.Mobility = value);
-            UpdateBinding(this.shadowBiasBinding, nodeIds, targetsByNode, value => this.ShadowBias = value);
-            UpdateBinding(this.shadowNormalBiasBinding, nodeIds, targetsByNode, value => this.ShadowNormalBias = value);
-            UpdateBinding(this.contactShadowsBinding, nodeIds, targetsByNode, value => this.ContactShadows = value);
-            UpdateBinding(this.shadowResolutionHintBinding, nodeIds, targetsByNode, value => this.ShadowResolutionHint = value);
-            UpdateBinding(this.cascadeCountBinding, nodeIds, targetsByNode, value => this.CascadeCount = value);
-            UpdateBinding(this.splitModeBinding, nodeIds, targetsByNode, value => this.SplitMode = value);
-            UpdateBinding(this.maxShadowDistanceBinding, nodeIds, targetsByNode, value => this.MaxShadowDistance = value);
-            UpdateBinding(this.cascadeDistance0Binding, nodeIds, targetsByNode, value => this.CascadeDistance1 = value);
-            UpdateBinding(this.cascadeDistance1Binding, nodeIds, targetsByNode, value => this.CascadeDistance2 = value);
-            UpdateBinding(this.cascadeDistance2Binding, nodeIds, targetsByNode, value => this.CascadeDistance3 = value);
-            UpdateBinding(this.cascadeDistance3Binding, nodeIds, targetsByNode, value => this.CascadeDistance4 = value);
-            UpdateBinding(this.distributionExponentBinding, nodeIds, targetsByNode, value => this.DistributionExponent = value);
-            UpdateBinding(this.transitionFractionBinding, nodeIds, targetsByNode, value => this.TransitionFraction = value);
-            UpdateBinding(this.distanceFadeoutFractionBinding, nodeIds, targetsByNode, value => this.DistanceFadeoutFraction = value);
-            this.UpdateSunDirectionValues(targets.Select(static target => target.Node).ToList());
+            this.UpdateBinding(this.intensityLuxBinding, nodeIds, targetsByNode, value => this.IntensityLux = value);
+            this.UpdateBinding(this.isSunLightBinding, nodeIds, targetsByNode, value => this.IsSunLight = value);
+            this.UpdateBinding(this.environmentContributionBinding, nodeIds, targetsByNode, value => this.EnvironmentContribution = value);
+            this.UpdateBinding(this.castsShadowsBinding, nodeIds, targetsByNode, value => this.CastsShadows = value);
+            this.UpdateBinding(this.affectsWorldBinding, nodeIds, targetsByNode, value => this.AffectsWorld = value);
+            this.UpdateBinding(this.angularSizeRadiansBinding, nodeIds, targetsByNode, value => this.AngularSizeRadians = value);
+            this.UpdateBinding(this.exposureCompensationBinding, nodeIds, targetsByNode, value => this.ExposureCompensation = value);
+            this.UpdateBinding(this.mobilityBinding, nodeIds, targetsByNode, value => this.Mobility = value);
+            this.UpdateBinding(this.shadowBiasBinding, nodeIds, targetsByNode, value => this.ShadowBias = value);
+            this.UpdateBinding(this.shadowNormalBiasBinding, nodeIds, targetsByNode, value => this.ShadowNormalBias = value);
+            this.UpdateBinding(this.contactShadowsBinding, nodeIds, targetsByNode, value => this.ContactShadows = value);
+            this.UpdateBinding(this.shadowResolutionHintBinding, nodeIds, targetsByNode, value => this.ShadowResolutionHint = value);
+            this.UpdateBinding(this.cascadeCountBinding, nodeIds, targetsByNode, value => this.CascadeCount = value);
+            this.UpdateBinding(this.splitModeBinding, nodeIds, targetsByNode, value => this.SplitMode = value);
+            this.UpdateBinding(this.maxShadowDistanceBinding, nodeIds, targetsByNode, value => this.MaxShadowDistance = value);
+            this.UpdateBinding(this.cascadeDistance0Binding, nodeIds, targetsByNode, value => this.CascadeDistance1 = value);
+            this.UpdateBinding(this.cascadeDistance1Binding, nodeIds, targetsByNode, value => this.CascadeDistance2 = value);
+            this.UpdateBinding(this.cascadeDistance2Binding, nodeIds, targetsByNode, value => this.CascadeDistance3 = value);
+            this.UpdateBinding(this.cascadeDistance3Binding, nodeIds, targetsByNode, value => this.CascadeDistance4 = value);
+            this.UpdateBinding(this.distributionExponentBinding, nodeIds, targetsByNode, value => this.DistributionExponent = value);
+            this.UpdateBinding(this.transitionFractionBinding, nodeIds, targetsByNode, value => this.TransitionFraction = value);
+            this.UpdateBinding(this.distanceFadeoutFractionBinding, nodeIds, targetsByNode, value => this.DistanceFadeoutFraction = value);
+            this.UpdateSunDirectionValues(targets.ConvertAll(static target => target.Node));
         }
         finally
         {
@@ -322,22 +425,6 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         this.colorBinding.Value = new Vector3(r, g, b);
     }
 
-    private static void UpdateBinding<T>(
-        PropertyBinding<T> binding,
-        IReadOnlyList<Guid> nodeIds,
-        Dictionary<Guid, object?> targetsByNode,
-        Action<T> setValue)
-    {
-        binding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
-        setValue(binding.HasValue ? binding.Value : default!);
-    }
-
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
-
-    private static bool NearlyEqual(float left, float right)
-        => MathF.Abs(left - right) <= 0.0001f;
-
     private static Quaternion BuildLocalRotationForSunDirection(SceneNode node, float azimuthDegrees, float elevationDegrees)
     {
         var desiredWorldRotation = BuildWorldRotationForSunDirection(azimuthDegrees, elevationDegrees);
@@ -368,12 +455,9 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     private static Quaternion ResolveWorldRotation(SceneNode node)
     {
         var local = node.Components.OfType<TransformComponent>().FirstOrDefault()?.LocalRotation ?? Quaternion.Identity;
-        if (node.Parent is null || node.IgnoreParentTransform)
-        {
-            return NormalizeOrIdentity(local);
-        }
-
-        return NormalizeOrIdentity(ResolveWorldRotation(node.Parent) * local);
+        return node.Parent is null || node.IgnoreParentTransform
+            ? NormalizeOrIdentity(local)
+            : NormalizeOrIdentity(ResolveWorldRotation(node.Parent) * local);
     }
 
     private static Quaternion CreateRotationFromForward(Vector3 targetDirection)
@@ -410,11 +494,42 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             : Quaternion.Identity;
     }
 
-    partial void OnColorRChanged(float value) => this.ApplyColorAxisEdit(value, this.ColorG, this.ColorB);
+    private static byte ToByte(float value)
+        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
 
-    partial void OnColorGChanged(float value) => this.ApplyColorAxisEdit(this.ColorR, value, this.ColorB);
+    private static bool NearlyEqual(float left, float right)
+        => MathF.Abs(left - right) <= 0.0001f;
 
-    partial void OnColorBChanged(float value) => this.ApplyColorAxisEdit(this.ColorR, this.ColorG, value);
+    private void RefreshValues()
+    {
+        if (this.selectedItems is { } items)
+        {
+            this.UpdateValues(items);
+        }
+    }
+
+    private void UpdateBinding<T>(
+        PropertyBinding<T> binding,
+        IReadOnlyList<Guid> nodeIds,
+        Dictionary<Guid, object?> targetsByNode,
+        Action<T> setValue)
+    {
+        var previous = binding.HasValue ? (object?)binding.Value : null;
+        var wasMixed = binding.IsMixed;
+        binding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
+        if (!Equals(previous, binding.HasValue ? binding.Value : null) || wasMixed != binding.IsMixed)
+        {
+            this.edits?.ModelChanged(binding.Id.Id);
+        }
+
+        setValue(binding.HasValue ? binding.Value : default!);
+    }
+
+    partial void OnColorRChanged(float value) => this.ApplyColorAxisEdit(0, value);
+
+    partial void OnColorGChanged(float value) => this.ApplyColorAxisEdit(1, value);
+
+    partial void OnColorBChanged(float value) => this.ApplyColorAxisEdit(2, value);
 
     partial void OnIntensityLuxChanged(float value) => this.RequestLightValue(this.intensityLuxBinding, value);
 
@@ -464,10 +579,28 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     partial void OnSunElevationChanged(float value) => this.ApplySunDirectionEdit(this.SunAzimuth, value);
 
-    private void ApplyColorAxisEdit(float r, float g, float b)
+    private void ApplyColorAxisEdit(int axis, float value)
     {
         this.NotifyColorChanged();
-        this.RequestLightValue(this.colorBinding, new Vector3(r, g, b));
+        if (this.isApplyingEditorValues || this.selectedItems is null)
+        {
+            return;
+        }
+
+        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        foreach (var node in this.selectedItems)
+        {
+            if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
+            {
+                continue;
+            }
+
+            var color = light.Color;
+            color[axis] = value;
+            perTarget[node.Id] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.Color, color);
+        }
+
+        this.edits?.Submit(perTarget);
     }
 
     private void RequestLightValue<T>(PropertyBinding<T> binding, T value)
@@ -538,157 +671,30 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     private void ApplyLightEdit(PropertyEdit edit)
     {
-        if (this.isApplyingEditorValues || this.selectedItems is null || this.selectedItems.Count == 0)
+        if (!this.isApplyingEditorValues)
         {
-            return;
+            this.edits?.Submit(edit);
         }
-
-        if (this.commandService is null || this.commandContextProvider?.Invoke() is not { } context)
-        {
-            return;
-        }
-
-        var nodes = this.selectedItems.ToList();
-        _ = this.ApplyLightEditAsync(context, nodes, edit);
     }
 
     private void ApplySunDirectionEdit(float azimuth, float elevation)
     {
-        if (this.isApplyingEditorValues || this.selectedItems is null || this.selectedItems.Count == 0)
+        if (this.isApplyingEditorValues || this.selectedItems is null || !float.IsFinite(azimuth) || !float.IsFinite(elevation))
         {
             return;
         }
 
-        if (!float.IsFinite(azimuth) || !float.IsFinite(elevation))
+        var perTarget = new Dictionary<Guid, PropertyEdit>();
+        foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
-            return;
+            var angles = TransformConverter.QuaternionToEulerDegrees(BuildLocalRotationForSunDirection(node, azimuth, elevation));
+            var edit = PropertyEdit.Single(SceneDocumentCommandService.Transform.RotationX, angles.X);
+            edit.Set(SceneDocumentCommandService.Transform.RotationY, angles.Y);
+            edit.Set(SceneDocumentCommandService.Transform.RotationZ, angles.Z);
+            perTarget[node.Id] = edit;
         }
 
-        if (this.commandService is null || this.commandContextProvider?.Invoke() is not { } context)
-        {
-            return;
-        }
-
-        var nodes = this.selectedItems
-            .Where(static node => node.Components.OfType<DirectionalLightComponent>().Any())
-            .ToList();
-        _ = this.ApplySunDirectionEditAsync(context, nodes, azimuth, elevation);
-    }
-
-    private async Task ApplyLightEditAsync(
-        SceneDocumentCommandContext context,
-        IReadOnlyList<SceneNode> nodes,
-        PropertyEdit edit)
-    {
-        await this.editGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            var result = await this.commandService!.EditPropertiesAsync(
-                context,
-                nodes.Select(static node => node.Id).ToList(),
-                edit,
-                "Edit Directional Light",
-                EditSessionToken.OneShot).ConfigureAwait(true);
-            if (!result.Succeeded || !this.SelectionMatches(nodes))
-            {
-                return;
-            }
-
-            this.isApplyingEditorValues = true;
-            try
-            {
-                this.UpdateValues(nodes.ToList());
-            }
-            finally
-            {
-                this.isApplyingEditorValues = false;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // Live-sync failures are published by the command service. Keep the
-            // property editor alive if an async command path rejects or throws.
-        }
-        catch (OperationCanceledException)
-        {
-            // The edit was canceled by the active document workflow.
-        }
-        finally
-        {
-            _ = this.editGate.Release();
-        }
-    }
-
-    private async Task ApplySunDirectionEditAsync(
-        SceneDocumentCommandContext context,
-        IReadOnlyList<SceneNode> nodes,
-        float azimuth,
-        float elevation)
-    {
-        await this.editGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            foreach (var node in nodes)
-            {
-                if (node.Components.OfType<TransformComponent>().FirstOrDefault() is null)
-                {
-                    continue;
-                }
-
-                var localRotation = BuildLocalRotationForSunDirection(node, azimuth, elevation);
-                var euler = TransformConverter.QuaternionToEulerDegrees(localRotation);
-                var result = await this.commandService!.EditTransformAsync(
-                    context,
-                    [node.Id],
-                    new TransformEdit(
-                        OptionalEditValues.Unspecified<Vector3>(),
-                        OptionalEditValues.Supplied<Vector3>(euler),
-                        OptionalEditValues.Unspecified<Vector3>()),
-                    EditSessionToken.OneShot).ConfigureAwait(true);
-                if (!result.Succeeded)
-                {
-                    return;
-                }
-            }
-
-            if (!this.SelectionMatches(nodes))
-            {
-                return;
-            }
-
-            this.isApplyingEditorValues = true;
-            try
-            {
-                this.UpdateValues(nodes.ToList());
-            }
-            finally
-            {
-                this.isApplyingEditorValues = false;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // The command service publishes live-sync failures; keep the editor responsive.
-        }
-        catch (OperationCanceledException)
-        {
-            // The edit was canceled by the active document workflow.
-        }
-        finally
-        {
-            _ = this.editGate.Release();
-        }
-    }
-
-    private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
-    {
-        if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
-        {
-            return false;
-        }
-
-        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
-        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
+        this.edits?.Submit(perTarget);
     }
 
     private void UpdateSunDirectionValues(IReadOnlyList<SceneNode> nodes)
