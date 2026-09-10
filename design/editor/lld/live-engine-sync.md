@@ -1,10 +1,10 @@
 # Live Engine Sync LLD
 
-Status: `ED-M04 implementation-ready`
+Status: `V0.1 contract; named gaps execute in ED-M07A`
 
 ## 1. Purpose
 
-Concrete design for the ED-M04 live-sync adapter that projects committed
+Concrete design for the ED-M07A live-sync adapter that projects committed
 authoring edits onto the embedded Oxygen Engine. This LLD owns the
 `SyncResult` shape, per-operation adapter mapping, runtime-readiness handling,
 unsupported-operation behavior, and `OperationResult` propagation. Engine
@@ -108,7 +108,7 @@ Invariants:
 | `Oxygen.Editor.Runtime.IEngineService` | Expose `State` and `World`. |
 | `Oxygen.Editor.Interop.OxygenWorld` | Native engine surface. |
 
-ED-M04 keeps `SceneEngineSync` as the single adapter. Per-component sub-
+ED-M07A keeps `SceneEngineSync` as the single adapter. Per-component sub-
 adapters are an optional refactor and not a closure gate.
 
 ## 7. Data Contracts
@@ -135,7 +135,7 @@ public sealed record SyncOutcome(
     Exception? Exception = null);
 ```
 
-`Accepted` does **not** imply a presented frame. ED-M04 does not add a
+`Accepted` does **not** imply a presented frame. ED-M07A does not add a
 presented-frame contract; visual proof is manual.
 
 ### 7.2 `EnvironmentSyncResult`
@@ -170,7 +170,7 @@ Task<SyncOutcome> UpdateMaterialSlotAsync(Scene scene, SceneNode node, int slotI
 Task<EnvironmentSyncResult> UpdateEnvironmentAsync(Scene scene, SceneEnvironmentData environment, CancellationToken ct = default);
 ```
 
-## 8. Adapter Mapping (ED-M04)
+## 8. Adapter Mapping (ED-M07A)
 
 ### 8.1 Per-operation table
 
@@ -351,7 +351,7 @@ Forbidden:
 
 ## 14. Validation Gates
 
-1. Each ED-M04 operation in §8.1 has a unit/integration test covering
+1. Each ED-M07A operation in §8.1 has a unit/integration test covering
    `Accepted`, `SkippedNotRunning`, and either `Unsupported` or `Rejected`
    paths (mocked `IEngineService`).
 2. `EditMaterialSlot` maps descriptor URIs to cooked `.omat` engine paths,
@@ -365,21 +365,25 @@ Forbidden:
 5. Environment edit with engine `Running` queues native `SkyAtmosphere` and
    full native-parity `PostProcessVolume` updates, preserving native enum
    ordinals and authored scalar values, and reports those fields as `Accepted`.
-   Fields without a native API, such as background color, return
-   `Unsupported`. The command publishes a `SucceededWithWarnings` result only
-   for unsupported or rejected fields.
+   BackgroundColor also requires native application in ED-M07A.1. A missing
+   required field reports its failure truthfully and fails the release gate;
+   another field being accepted cannot make that field accepted.
 6. No sync method throws `NotImplementedException` or any exception that
    escapes the adapter; verified by exception-tape test that calls every
    method against an in-process mock world.
 7. Static check: no inspector view-model project references
    `SceneEngineSync` or `ISceneEngineSync`.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Whether to extract per-component sub-adapters (`TransformSyncAdapter`,
-  `LightSyncAdapter`, …). Default: no, keep one adapter for ED-M04; revisit
-  if ED-M07/M08 introduce more diverse engine APIs.
-- Whether engine should expose a presented-frame completion hook. Out of
-  ED-M04. Visual validation remains manual.
-- Coalescing window default (16 ms) may need tuning for slower machines.
-  Confirm during implementation.
+Keep one scene sync orchestrator with specialized native payload adapters; no
+mandatory per-component service extraction. Use the existing 16 ms preview and
+one terminal sync policy, with 250 ms wheel idle commit. Native accepted/queued
+completion is not presentation proof; ED-M08 uses observed state and rendered
+captures. Offline convergence and stale-work rejection follow property-pipeline
+section 11 and are implemented in ED-M07A.4.
+
+The canonical [property-pipeline.md](./property-pipeline.md) governs typed
+property entry points, shared sessions/history, current field diagnostics and
+revision-aware runtime convergence. Existing record adapters implement the same
+contract; they are not an alternative architecture.

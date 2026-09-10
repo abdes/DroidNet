@@ -1,12 +1,12 @@
 # Settings Architecture LLD
 
-Status: `ED-M04 implementation-ready`
+Status: `V0.1 contract; named gaps execute in ED-M07A`
 
 ## 1. Purpose
 
-Concrete placement and mutation design for every setting touched by ED-M04.
+Concrete placement and mutation design for every setting touched by ED-M07A.
 This LLD is not a survey of all future settings: it locks down where each
-ED-M04 setting lives, how it is mutated, what marks dirty, what does not, and
+ED-M07A setting lives, how it is mutated, what marks dirty, what does not, and
 which mutation path is forbidden. ED-M07 re-reviews project cook/content
 settings; this document stays out of that scope.
 
@@ -33,19 +33,19 @@ settings; this document stays out of that scope.
   `ISettingsService<IEngineSettings>` from DroidNet hosting.
 - `IEngineService` exposes `TargetFps : uint`, `MaxTargetFps : uint`,
   `EngineLoggingVerbosity : int` (read/write valid in `Ready`/`Running`).
-- `Scene` / `SceneNode` / components store authored values; ED-M04 adds
+- `Scene` / `SceneNode` / components store authored values; ED-M07A adds
   `Scene.Environment` (see env LLD).
 - Workspace / docking layout is persisted by existing editor data services
-  (out of ED-M04 scope; ED-M01 owns this).
+  (out of ED-M07A scope; ED-M01 owns this).
 
 Brownfield gap: nothing defines, in writing, that `TargetFps` is a runtime
 session setting (not a project setting), that environment is scene scope (not
 editor scope), and that workspace activation may not call settings paths
 that environment editing might trip over.
 
-## 5. ED-M04 Setting Placement Matrix
+## 5. ED-M07A Setting Placement Matrix
 
-For every ED-M04 setting, this matrix is normative. Implementation must reject
+For every ED-M07A setting, this matrix is normative. Implementation must reject
 storing a setting outside its row.
 
 | Setting | Scope | Owning service | Storage | Mutation API | Dirties scene? | Live-applied? |
@@ -59,7 +59,7 @@ storing a setting outside its row.
 | `IEngineService.TargetFps` | Runtime session | `IEngineService` setter | in-memory only | property setter (no command) | no | yes (immediate) |
 | `IEngineService.EngineLoggingVerbosity` | Runtime session | `IEngineService` setter | in-memory only | property setter (no command) | no | yes (immediate) |
 | `IEngineSettings` (startup) | Editor preference | `ISettingsService<IEngineSettings>` | DroidNet user-local settings | `ISettingsService.Save` | no | only on next engine init |
-| Workspace docking, recent docs | Workspace | existing editor data services | user-local | (not ED-M04) | no | n/a |
+| Workspace docking, recent docs | Workspace | existing editor data services | user-local | (not ED-M07A) | no | n/a |
 | Project content roots, cook scope | Project | `Oxygen.Editor.Projects` | project metadata | (ED-M07) | n/a | n/a |
 
 This table is the dispute-settler: any pull request that mutates one of these
@@ -78,7 +78,7 @@ command implementation.
 // allowed
 await commandService.EditTransformAsync(ctx, [nodeId], edit, session);
 
-// forbidden in ED-M04
+// forbidden in ED-M07A
 node.Components.OfType<TransformComponent>().First().LocalPosition = newPos;
 ```
 
@@ -101,17 +101,17 @@ write in a `Runtime.Settings.Apply` `OperationResult`:
 - attempt setter,
 - on `InvalidOperationException` (wrong state) or any other failure, the
   setter throws — the wrapper catches, restores the displayed value, publishes
-  `Failed` result with `FailureDomain.Settings` and code `OXE.SETTINGS.RuntimeRejected`.
+  `Failed` result with `FailureDomain.Settings` and code `OXE.SETTINGS.TARGET_FPS_REJECTED`.
 - on success, publishes `Succeeded` (no `OperationResult` UI, only a log entry).
 
 These writes never dirty any scene or document. They are not persisted by
-ED-M04. (Whether they become durable preferences is in §15.)
+ED-M07A. (They remain session-only for V0.1.)
 
 ### 6.3 Editor preferences (`IEngineSettings`)
 
 Read once at engine `InitializeAsync`. Editing the preference between
 sessions is allowed via existing `ISettingsService` pathways but is not part
-of ED-M04 inspector UX. ED-M04 does not surface a settings panel for these.
+of ED-M07A inspector UX. ED-M07A does not surface a settings panel for these.
 
 ### 6.4 Forbidden cross-scope writes
 
@@ -123,9 +123,9 @@ of ED-M04 inspector UX. ED-M04 does not surface a settings panel for these.
 | Project policy fields (cook scope, content roots) being edited from the inspector. | Owned by `Oxygen.Editor.Projects` and re-reviewed in ED-M07. |
 | Diagnostic overrides (log level via env var, runtime DLL path override) becoming durable settings. | Bootstrap/diagnostic only. |
 
-## 7. UI Surfaces (ED-M04)
+## 7. UI Surfaces (ED-M07A)
 
-Settings reach the user only through these surfaces in ED-M04:
+Settings reach the user only through these surfaces in ED-M07A:
 
 - Inspector component sections — scene-scope fields per
   [property-inspector.md](./property-inspector.md).
@@ -136,7 +136,7 @@ Settings reach the user only through these surfaces in ED-M04:
 - Output/log panel + inline error placement — for `Settings`-domain
   diagnostics.
 
-ED-M04 does **not** introduce a generic "Settings" panel.
+ED-M07A does **not** introduce a generic "Settings" panel.
 
 ## 8. Persistence Behavior
 
@@ -146,7 +146,7 @@ ED-M04 does **not** introduce a generic "Settings" panel.
 | Runtime-session | no | session-only |
 | Editor preference (`IEngineSettings`) | yes | by `ISettingsService` save |
 | Diagnostic override | no | command-line / env var |
-| Workspace layout | yes | by existing editor data services (not ED-M04) |
+| Workspace layout | yes | by existing editor data services (not ED-M07A) |
 
 Round-trip rule for scene-scope: every field in §5 deserialized through
 `SceneJsonContext` re-emits its in-memory value byte-for-byte (within
@@ -173,7 +173,7 @@ Per-setting validation lives in the command/setter, not in the UI control:
 | --- | --- | --- |
 | Scene-scope value invalid | `SceneAuthoring` | `OXE.SCENE.*.Invalid` |
 | Cross-field constraint | `SceneAuthoring` | `OXE.SCENE.*.<Constraint>` |
-| Runtime setter rejected | `Settings` | `OXE.SETTINGS.RuntimeRejected` |
+| Runtime setter rejected | `Settings` | `OXE.SETTINGS.TARGET_FPS_REJECTED` |
 | Runtime not in `Ready`/`Running` | `Settings` | `OXE.SETTINGS.RuntimeStateInvalid` |
 | Editor preference save failed | `Settings` | `OXE.SETTINGS.PreferenceSaveFailed` |
 | Live sync rejected/unsupported | `LiveSync` | `OXE.LIVESYNC.*` (env LLD) |
@@ -197,7 +197,7 @@ Forbidden:
 - Inspector ↔ `IEngineService` direct read/write of any setting.
 - Inspector ↔ `ISettingsService` for any scope.
 - Scene-scope write paths bypassing `ISceneDocumentCommandService`.
-- Project-scope mutation from any ED-M04 module.
+- Project-scope mutation from any ED-M07A module.
 
 ## 12. Validation Gates
 
@@ -208,14 +208,20 @@ Forbidden:
    `Oxygen.Editor.Runtime.Engine.EngineService` or `IEngineSettings` types.
 3. Scene save → reopen does not introduce any `Settings`-prefixed JSON outside
    the explicit scene authoring DTOs.
-4. Mutating `TargetFps` in `Faulted` state surfaces `OXE.SETTINGS.RuntimeRejected`
+4. Mutating `TargetFps` in `Faulted` state surfaces `OXE.SETTINGS.TARGET_FPS_REJECTED`
    in the operation log; viewport keeps showing previous value.
-5. No ED-M04 PR adds project/cook settings.
+5. No ED-M07A PR adds project/cook settings.
 
-## 13. Open Issues
+## 13. Closed V0.1 Decisions
 
-- Whether `TargetFps` and `EngineLoggingVerbosity` should become durable
-  editor preferences post-ED-M04. Default for ED-M04: session-only.
-- Whether to expose a centralized "Scene Settings" entry-point in the
-  inspector breadcrumb in addition to the Environment section. Default: only
-  the Environment section in ED-M04.
+TargetFps and logging verbosity remain session-only; no persistence toggle or
+project renderer preset is introduced. Scene settings use the existing empty-
+selection Environment surface. There is no generic project settings panel.
+Projects supplies mount/cook facts to ContentPipeline; native startup preferences
+remain editor-local and must match the qualified artifact set. The schema-property
+path and scene/runtime scope separation are qualified in ED-M07A.2/3/6.
+
+The canonical [property-pipeline.md](./property-pipeline.md) governs typed
+property entry points, shared sessions/history, current field diagnostics and
+revision-aware runtime convergence. Existing record adapters implement the same
+contract; they are not an alternative architecture.

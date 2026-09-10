@@ -73,6 +73,10 @@ Out of V0.1 scope:
 - physics scene sidecar editing or physics simulation authoring
 - animation, prefab, terrain, gameplay, and particle editors
 - a full validation dashboard with filters and fix actions
+- a generic project settings editor, user-selectable project renderer presets,
+  a dedicated batch-recook-stale command, or dedicated descriptor/manifest
+  editor/launcher actions; section 8 defines the supported replacement workflows
+- autosave or crash recovery of changes after the last explicit successful Save
 - treating logs as a substitute for operation results where the user initiated
   an editor action
 
@@ -92,12 +96,12 @@ recorded by the owning LLD/milestone plan.
 | `REQ-006` | New V0.1 scene-authoring work uses command-based mutation paths that update dirty state. |
 | `REQ-007` | Scene data save/reopen round trips supported V0.1 component and environment values. |
 | `REQ-008` | Supported scene mutations request live sync when the embedded engine is available. |
-| `REQ-009` | V0.1 scene components are Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, and Material assignment/override. Orthographic cameras, point lights, and spot lights are not V0.1 completion gates unless used by supported workflows. |
+| `REQ-009` | V0.1 scene authoring comprises Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, and Material assignment/override as bounded by section 8. Orthographic cameras, point lights, and spot lights are outside the supported V0.1 authoring/import qualification set; their existing domain data may be preserved but cannot be advertised as supported workflows. |
 | `REQ-010` | Users can create and open scalar material assets through a real material editor. |
 | `REQ-011` | Users can inspect and edit scalar material properties through material editor/property UI. |
 | `REQ-012` | Users can assign material assets to geometry. |
 | `REQ-013` | Users can select material assets from the content browser, with thumbnails or clear visual identity. |
-| `REQ-014` | Material values save, reopen, cook, and preview in the embedded engine where supported by engine APIs. |
+| `REQ-014` | Editable V0.1 material values save, reopen, cook, and appear in embedded preview after explicit successful Save/Cook publication. A CPU swatch is an approximation, not runtime parity evidence. |
 | `REQ-015` | Content workflow supports procedural geometry descriptors. |
 | `REQ-016` | Content workflow supports scoped source import for geometry and scalar material assets. |
 | `REQ-017` | The editor generates descriptors/manifests for supported V0.1 scenes and referenced assets. |
@@ -109,7 +113,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-023` | Engine/runtime and pipeline failures produce useful logs. |
 | `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
 | `REQ-025` | Embedded preview renders visible scene content through Vortex. |
-| `REQ-026` | Embedded preview syncs authored V0.1 scene content, materials, and environment where supported by engine APIs. |
+| `REQ-026` | Embedded preview applies every required editable V0.1 scene/environment field. Material source changes use explicit Save/Cook publication. Unavailable runtime retains authoring state and visibly pending sync; reconnect converges to the current document revision. Unsupported required fields block release. |
 | `REQ-027` | The supported V0.1 live viewport layout remains stable and does not abort; multi-viewport layouts are deferred engine/editor work. |
 | `REQ-028` | Each supported visible viewport presents to the correct surface/view; V0.1 support is single live viewport unless multi-viewport is explicitly re-scoped. |
 | `REQ-029` | Users can navigate the editor camera and frame all/selected. |
@@ -121,6 +125,11 @@ recorded by the owning LLD/milestone plan.
 | `REQ-035` | Late V0.1 viewport UX must not block earlier authoring, sync, cook, and runtime parity work. |
 | `REQ-036` | The PRD requires round-trip behavior, not one universal persistence schema. Each subsystem LLD decides whether to use engine descriptors directly, augment engine schemas, generate engine descriptors from editor data, or use a hybrid model. |
 | `REQ-037` | Supported V0.1 data saves, reopens, cooks, and loads without manual repair. |
+| `REQ-038` | Scene/material saves preserve the last valid saved file, acknowledge only their captured revision, retain newer edits, serialize writes, and reject external-write conflicts. Crash recovery is limited to the last explicit successful Save. |
+| `REQ-039` | Cook consumes a coherent saved dependency snapshot, validates staged output, and publishes it with a brief preview suspension and rollback protection. Failed/cancelled work cannot corrupt the previously published cook or falsely report it current. |
+| `REQ-040` | The qualified static/scalar import subset is reproducible from retained sources and configuration on a clean project copy. Unsupported authored/imported content fails visibly before publication; source data is never silently discarded or overwritten. |
+| `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the matched Windows x64 editor/runtime/cooker/schema build and performance conditions in section 9. Larger projects are unqualified, not subject to an artificial hard cap. |
+| `REQ-042` | Standalone validation loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. |
 
 ## 6. Success Metrics
 
@@ -149,3 +158,106 @@ Manual workflow validation is acceptable when automation is disproportionately
 expensive, especially for WinUI and embedded-engine integration flows. Milestone
 validation must reference the relevant `REQ-XXX` and `SUCCESS-XXX` IDs and be
 summarized once in [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
+
+## 8. Closed V0.1 Capability And UI Scope
+
+This matrix is the release boundary. The linked field tables define the exact
+editable fields within each row; engine/schema additions do not silently expand
+V0.1. Read-only identity, diagnostics, and editor metadata do not require runtime
+projection. All editable authored fields below require commands, validation,
+undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
+
+| Capability | Authoritative field/interaction contract | Preview and release condition |
+| --- | --- | --- |
+| Scene hierarchy and Transform | `scene-authoring-model.md`; `property-inspector.md` Transform table; `property-pipeline.md` | Create/delete/rename/reparent and transforms synchronize; hierarchy/IDs survive cook/load. |
+| Geometry and material slot 0 | `property-inspector.md` Geometry table; `asset-primitives.md` | Cube, sphere, plane, and the qualified imported static geometry subset resolve after validated cook; identity changes synchronize. Other override-slot metadata may remain read-only. |
+| Perspective camera | `property-inspector.md` PerspectiveCamera table | All editable fields synchronize and cook; validation uses an explicitly chosen authored camera, separately from editor navigation. |
+| Directional light and sun | `property-inspector.md` DirectionalLight table | All editable fields synchronize and cook, including coherent exclusive sun binding. |
+| Scene environment and post-processing | `environment-authoring.md` editable SkyAtmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background tables | All editable fields, including background and post-processing, must have live and cooked runtime mappings. A missing native API/schema is implementation work, not a release exception. |
+| Scalar material | `material-editor.md` editable V0.1 field table | Swatch responds while editing; the scene shows the last published material until explicit Save/Cook succeeds. Stale/pending state is visible. Texture references may be preserved read-only; texture authoring is excluded. |
+| Viewport authoring | `viewport-and-tools.md` V0.1 interaction contract | One live viewport, navigation, frame selected/all, picking, selection feedback, transform gestures, icons, and bounded overlays. Multi-viewport stability is explicitly deferred. |
+| Content import and browsing | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md` | Identity-based browsing/picking and explicit scoped import/cook. File rename/move/reference-repair UI is outside V0.1; unsupported actions are hidden or disabled with a reason. |
+
+Unsupported required capabilities may produce safe diagnostics during
+development; they cannot satisfy release completion. The only deferred feature
+inside the supported matrix is multi-viewport stability. PRD non-goals and the
+explicit unsupported component/import set are exclusions, not incomplete
+implementations that can be advertised as supported.
+
+ED-M07 UI decisions:
+
+1. No generic project-settings panel or default renderer-preset selector in
+   V0.1. Project manifests/mounts supply cook scope; `Projects` owns those facts.
+   Supported creation uses existing templates and target selectors. Scene
+   render intent uses the scene inspector; FPS/logging remain runtime-session
+   controls; startup preferences stay editor-local. Cook and validation use the
+   matched runtime profile, not an undeclared project renderer policy.
+2. Re-cooking stale content uses the existing Cook Selected Asset, Cook Folder,
+   Cook Current Scene, or Cook Project action. A stale badge identifies the
+   need; the selected scope is rebuilt under the normal cook contract. No
+   separate stale-only batch scheduler is required.
+3. Descriptor/manifest inspection uses the existing content details/path-copy
+   and cook result diagnostics, plus Inspect Cooked Output for runtime products.
+   Dedicated Open Descriptor/Open Manifest commands and an embedded raw editor
+   are excluded. Generated file paths needed for diagnostics remain discoverable
+   and copyable; users never have to edit them to complete supported workflows.
+4. Cooking does not silently save documents. Dirty participating scene/material
+   documents must be saved explicitly before snapshot capture; a later edit
+   remains dirty and makes the resulting cook stale, without invalidating a
+   successful cook of the captured saved revision.
+5. Cook runs against staging while authoring continues. Preview briefly pauses
+   for validated publication and resumes from the current authoring scene.
+   The pause and any failure are visible; fixed `.cooked/<Mount>` output paths
+   remain the published project layout.
+
+## 9. Compatibility And Qualification Envelope
+
+V0.1 supports Windows 11 x64 with the repository's .NET/WinUI runtime and an
+Oxygen-supported D3D12 adapter. Qualify a matched editor, interop/native runtime,
+RenderScene, cooker tools, engine schemas, and editor overlays from the same
+source revision and build configuration. Record their hashes and schema IDs in
+the qualification manifest. Independent component upgrades are unsupported;
+missing/mismatched artifacts must disable native work with a visible diagnostic
+before an unsafe native call. Project Browser and safe authoring/save remain
+available when native qualification fails. Project manifest schema version 1 is
+the supported version; unsupported versions are rejected without rewriting.
+
+The qualification report names CPU, RAM, GPU/VRAM, driver, OS/runtime versions,
+build configuration, and exact fixture hashes. This establishes support on the
+recorded configuration, not a claim about all hardware satisfying a GPU name.
+
+User-selected scale: 100 scene nodes and 1,000 logical authored catalog entries.
+Derived companions must not inflate logical row counts. The fixture includes
+hierarchy, 98 geometry nodes, one perspective camera, one directional sun,
+environment settings, cube/sphere/plane and a small imported mesh, shared and
+distinct scalar materials. Pad the catalog with valid scalar descriptors to
+exactly 1,000 entries. Keep visible geometry at or below 250,000 triangles.
+
+Qualification uses Release, a 1920x1080 live viewport, conventional directional
+shadows, and the controlled settings in the standalone-validation LLD:
+
+| Measurement | Required result on the recorded qualification machine |
+| --- | --- |
+| Command/selection/field feedback | p95 at most 100 ms across 100 interactions after warm-up. |
+| Warm catalog folder/filter update | p95 at most 250 ms across 100 queries. |
+| Cold 1,000-entry catalog and 100-node scene opening | Each at most 5 seconds from request to usable UI, excluding explicit user decisions and first native initialization. |
+| Live rendering after 120 warm-up frames | p95 frame time at most 33.3 ms over the next 600 frames, with no debug capture or validation layers. |
+| Save/cook/validation operation start | Busy/progress state visible within 100 ms; UI remains responsive. |
+| Repeated open/close and scene activation | 30 cycles without crash, orphaned document/runtime ownership, or monotonic growth of outstanding scene/view/surface leases. |
+
+Measure CPU interaction timings separately from GPU frame time. Report all
+failures rather than weakening the workload. Larger projects remain unqualified;
+they may open if resources permit and must fail visibly without corrupting saved
+data. No autosave/recovery of unsaved edits is promised; the last successful
+explicit Save must remain valid after a crash or interrupted later write.
+
+## 10. Release Acceptance
+
+ED-M10 closes only after all non-deferred capability gates have fresh evidence
+for the qualified build. ED-M08 proves the saved/published authoring slice;
+ED-M09 adds viewport-tool gates; neither depends on completion of a later
+milestone. The detailed ED-M08/09/10 plans own execution and evidence collection.
+No prototype warning, prior milestone row, issue fix, or newly written document
+substitutes for proof of a changed contract. Earlier evidence remains historical
+evidence at its original scope; newly required guarantees are owned by explicit gap-closing milestones.
+Previously closed milestone statuses and their original evidence remain intact.

@@ -1,12 +1,12 @@
 # Environment Authoring LLD
 
-Status: `ED-M04 implementation-ready`
+Status: `V0.1 contract; named gaps execute in ED-M07A`
 
 ## 1. Purpose
 
 Concrete design for V0.1 scene environment authoring: sky atmosphere, sun
 binding, and background intent, plus the adjacent scene-level post-processing
-controls that affect preview and descriptor output. ED-M04 owns authoring data,
+controls that affect preview and descriptor output. ED-M07A owns authoring data,
 scene-level inspector sections, persistence, validation, command/undo, and the
 live-sync request boundary. Cook output and runtime parity are validated by
 ED-M07 / ED-M08 and consume the data shape defined here.
@@ -50,8 +50,8 @@ Concrete state of the code:
 - `SceneEngineSync.UpdateEnvironmentAsync` owns the live-sync boundary. V0.1
   syncs sun binding through existing light paths and queues scene-level updates
   for native `SkyAtmosphere` and `PostProcessVolume` systems. Background color
-  remains authored/persisted intent until a native clear/background API is
-  exposed.
+  is not carried by the current native environment call; ED-M07A.1 fixes this
+  omission and its falsely inherited per-field success status.
 - `IEngineSettings` / `EngineSettingsService` remain process-startup engine
   config only. They do not store scene environment data.
 
@@ -62,7 +62,7 @@ block. The editor authoring model mirrors the V0.1 scalar subset needed to
 produce that native block without inventing an editor-only JSON schema. The
 Oxygen material descriptor (`oxygen.material.v1`) is unrelated.
 
-Decision (recorded for ED-M04):
+Decision (recorded for ED-M07A):
 
 1. **Augment editor scene authoring** with a new `SceneEnvironmentData`
    record persisted inside `SceneData`. This is the editor authoring source of
@@ -284,8 +284,8 @@ Implementation in `SceneEngineSync` calls per-field engine APIs:
 | --- | --- | --- |
 | `AtmosphereEnabled` + `SkyAtmosphere` | queued native `SkyAtmosphere` scene-system update | `Unsupported` warning, value persisted and cooked |
 | `SunNodeId` | propagate via existing `AttachLightAsync` for the new sun light, or by re-applying `IsSunLight`/`EnvironmentContribution` | falls through existing light sync |
-| `PostProcess` | queued native `PostProcessVolume` update. ED-M04 maps every authored field with native enum ordinals and names: exposure mode, enabled flag, key, manual EV, compensation EV, auto-exposure range/speeds/metering/histogram/window/target/spot radius, tone mapper, bloom, saturation, contrast, vignette, display gamma. | `Unsupported` warning only when the runtime API is unavailable |
-| `BackgroundColor` | renderer clear-color call | `Unsupported` warning |
+| `PostProcess` | queued native `PostProcessVolume` update. ED-M07A maps every authored field with native enum ordinals and names: exposure mode, enabled flag, key, manual EV, compensation EV, auto-exposure range/speeds/metering/histogram/window/target/spot radius, tone mapper, bloom, saturation, contrast, vignette, display gamma. | `Unsupported` warning only when the runtime API is unavailable |
+| `BackgroundColor` | engine-owned scene background update, implemented in ED-M07A.1 | Field-specific failure; required release gate remains unmet |
 
 The adapter never throws when an API is missing. It returns a result aggregating
 per-field statuses (see [live-engine-sync.md](./live-engine-sync.md) §7).
@@ -404,7 +404,7 @@ UI rules:
   `ManualExposureEv = 9.7`, `ExposureKey = 10.0`,
   `ExposureCompensationEv = 0`, `ToneMapper = AcesFitted`),
   `BackgroundColor = (0,0,0)`.
-- Cook descriptor generation is ED-M07 scope. ED-M04 must persist the
+- Cook descriptor generation is ED-M07 scope. ED-M07A must persist the
   authored data unchanged.
 
 ## 11. Live Sync / Cook / Runtime Behavior
@@ -424,9 +424,9 @@ Scene.Environment.Edit
 
 Cook: ED-M07 reads `Scene.Environment` and emits the native scene descriptor
 `environment.sky_atmosphere` block for the supported sky-atmosphere subset.
-ED-M04 must not embed cook policy.
+ED-M07A must not embed cook policy.
 
-Standalone parity: ED-M08 validates the cooked descriptor. ED-M04 only
+Standalone parity: ED-M08 validates the cooked descriptor. ED-M07A only
 guarantees authored data is present.
 
 ## 12. Operation Results And Diagnostics
@@ -462,7 +462,7 @@ Forbidden:
 
 ## 14. Validation Gates
 
-ED-M04 environment closure requires:
+ED-M07A environment closure requires:
 
 1. New scene → scene-level settings show defaults (Atmosphere on, default sky
    atmosphere scalar/vector rows, no sun, Auto/manual EV 9.7/compensation
@@ -473,12 +473,14 @@ ED-M04 environment closure requires:
 4. Delete the sun node externally → Environment section shows stale-warning row;
    binding survives reopen.
 5. Set `ManualExposureEv` to a non-finite value → rejected with
-   `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid`; set `ExposureCompensation`
-   to `+15` → clamped to `+10` silently; no error.
+   `OXE.SCENE.ENVIRONMENT.ManualExposure.Invalid`; finite
+   `PostProcess.ExposureCompensationEv = +15` is retained. Do not apply the
+   directional-light compensation range to this different scene field.
 6. With engine `Running`, edits to sky-atmosphere and post-processing fields
    queue native scene-system updates and show a visible viewport change for
-   visually observable values. Fields without a native API, such as background
-   color, return `Unsupported`; authored value persists.
+   visually observable values. BackgroundColor with atmosphere disabled must
+   apply natively; missing native coverage fails this gate while retaining
+   authoring state and a truthful field-specific diagnostic.
 7. With engine not `Running`, edits succeed authoring-side, surface
    `LiveSync.SkippedNotRunning` warning.
 8. Round-trip JSON test: load `SceneData`, mutate every environment field
@@ -490,10 +492,16 @@ ED-M04 environment closure requires:
 11. No `SceneEnvironmentData` reference appears in `Oxygen.Editor` settings,
    project, or runtime modules.
 
-## 15. Open Issues
+## 15. Closed Design Decisions
 
-- Whether `BackgroundColor` should also accept HDR (`> 1.0`) values for
-  non-atmosphere clear. Default ED-M04: clamped `[0,1]`; revisit when engine
-  HDR clear API is exposed.
-- Background native descriptor/API coverage is deferred. V0.1 persists that
-  value and reports unsupported cook/live-sync coverage where applicable.
+BackgroundColor is linear LDR RGB in [0,1]; HDR background editing is outside
+V0.1. Live background application is a required ED-M07A.1 fix and native
+Background/PostProcess descriptor/load mapping is ED-M07B.3. Unsupported required
+fields are development failures, not accepted release exceptions. The canonical
+PostProcess record owns exposure/tone values; compatibility mirror fields may
+load/normalize existing source but cannot become independent editable state.
+
+The canonical [property-pipeline.md](./property-pipeline.md) governs typed
+property entry points, shared sessions/history, current field diagnostics and
+revision-aware runtime convergence. Existing record adapters implement the same
+contract; they are not an alternative architecture.

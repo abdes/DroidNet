@@ -2,9 +2,10 @@
 
 Status: `accepted for implementation`
 
-Milestone progress: `landed`, with validation reopened in
-[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md). Plan acceptance and
-earlier partial manual evidence do not close the remaining accepted LLD gates.
+This records the original M04 implementation plan. Its delivery/status/evidence
+remain recorded in [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
+Remaining implementation defects and missing evidence execute in ED-M07A/07B;
+there is no new M04 implementation or closure sweep.
 
 ## 1. Purpose
 
@@ -792,59 +793,23 @@ ED-M04 cannot be called landed until these are true:
 11. Manual validation script above is completed by the user, with failures
     recorded before closure.
 
-## 12. Status Ledger Hook
+## 12. Delivery Record And Gap Ownership
 
-Before implementation:
+Keep M04's recorded delivery and partial validation evidence at their original
+scope. Do not supersede the milestone, re-run its planning, or turn an unproven
+field into a completed claim. The following concrete gaps execute under new IDs:
 
-- mark ED-M04 required LLDs accepted only after review acceptance.
-- mark this detailed plan accepted in `IMPLEMENTATION_STATUS.md` as a
-  separate ledger row before any ED-M04.2 code lands. ED-M04.1's exit gate
-  does not bind without this row.
-- mark this detailed plan accepted only after review acceptance.
+| Remaining behavior/evidence | Execution owner |
+| --- | --- |
+| BackgroundColor is marked with the environment sync result although the native SetEnvironment call carries no background RGB. | [ED-M07A.1](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a1---background-application-and-truthful-per-field-results) |
+| Camera/light/environment callbacks use OneShot rather than a complete gesture session. | [ED-M07A.2](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a2---real-gesture-sessions-for-existing-inspectors) |
+| Rejected camera edits lack field-result binding and refresh of committed values; current field errors need revision/target ownership. | [ED-M07A.3](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a3---scoped-current-field-diagnostics) |
+| Offline replay lacks document-lifetime/revision identity and drains failed work. | [ED-M07A.4](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a4---revision-aware-offline-convergence) |
+| Complete control/native field evidence, including defaults, empty-selection environment, sun deletion, settings rejection and material identity behavior, was not established by the partial M04 manual record. | [ED-M07A.6](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a6---complete-the-missing-workflow-evidence) |
+| PostProcess/Background descriptor/native-load mapping is missing from the later content path. This is a cook-path gap, not evidence that the Environment inspector is absent. | [ED-M07B.3](./ED-M07B-safe-content-publication-and-compatibility.md#07b3---complete-native-descriptorload-mappings) |
 
-After implementation:
-
-- update the ED-M04 checklist in `IMPLEMENTATION_STATUS.md`.
-- record one ED-M04 validation ledger row after user visual validation and
-  real test evidence.
-- keep ED-M05 material editor and ED-M07 content pipeline items planned, not
-  silently absorbed into ED-M04.
-
-## 13. Settings And Validation Closure
-
-The implementation slices and accepted LLDs own these ED-M04 responsibilities:
-
-- ED-M04.2, ED-M04.5, and ED-M04.6: command results, component add/remove/edit,
-  undo/redo, dirty state, validation, and text/slider edit-session batching.
-- ED-M04.3 and ED-M04.7 through ED-M04.9: all supported component/environment
-  fields, scene-only environment editing, defaults, invalid-value handling,
-  save/reopen, and material-slot identity. Orthographic/point/spot production
-  editors follow PRD `REQ-009` and property-inspector section 7.4, including
-  the PRD condition for components used by supported workflows.
-- ED-M04.4 and ED-M04.10: mutations retain authoring state on sync failure,
-  capture scoped results, and validate runtime behavior separately from saved
-  values. ED-M07 owns descriptor/cook output; ED-M08 owns standalone parity.
-- ED-M04.9 and settings-architecture sections 5-12: per-setting owner, scope,
-  storage, default, validation, mutation path, and UI surface. Scene settings
-  use commands and undo/redo; runtime-session writes do not dirty or persist
-  scene state. Startup preferences, workspace persistence, and project policy
-  remain with their existing owners. Diagnostic overrides stay temporary.
-  New durable settings require their declared settings owner and persistence
-  contract; command-line or environment-only plumbing is not that contract.
-
-Carry these evidence checks into the existing reopened ED-M04 closure sweep:
-
-- [ ] Verify every accepted property-inspector, environment-authoring, and
-  settings gate against its actual implementation and validation evidence;
-  earlier partial evidence is not proof for every setting or field.
-- [ ] Reconcile the full validation invalidation item in
-  [documents-and-commands.md section 15](../lld/documents-and-commands.md#15-open-issues):
-  document the ED-M04 component contribution and the remaining ED-M09
-  viewport/tool contribution. Preserve the incremental-validation performance
-  risk without introducing a second result model or claiming closure from
-  logging alone.
-
-Use the shared diagnostics contract for inspector messages and live-sync or
-settings failures. A full validation dashboard is a PRD non-goal; structured
-results, visible failures, and useful logs remain required. Project settings
-UI/default-preset scope is an unresolved question in ED-M07 section 11.
+The field controls, scene-level Environment host, material override API path,
+command validators, undo machinery and coalescer already exist. The new plans
+repair the named gaps and exercise existing behavior; they do not prescribe a
+wholesale inspector rewrite. Shared diagnostic invalidation is the concrete
+revision-scoped mechanism in 07A.3, consumed by M09 tools without another model.

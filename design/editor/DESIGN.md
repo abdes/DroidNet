@@ -48,7 +48,7 @@ flowchart TB
     Diagnostics[Operation Results and Diagnostics]
 
     Shell --> Authoring
-    Authoring --> FeatureUI
+    FeatureUI --> Authoring
     FeatureUI --> Pipeline
     FeatureUI -- runtime service contracts --> Runtime
     Pipeline --> Runtime
@@ -75,6 +75,7 @@ owner.
 | Scene authoring domain | [scene-authoring-model.md](lld/scene-authoring-model.md) | Scene graph, components, scene persistence, component completion matrix. |
 | Scene explorer | [scene-explorer.md](lld/scene-explorer.md) | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics. |
 | Property inspector | [property-inspector.md](lld/property-inspector.md) | Component editors, field controls, validation presentation, multi-selection behavior. |
+| Property pipeline | [property-pipeline.md](lld/property-pipeline.md) | Shared schema identity, validation, mixed values, revision-aware transactions, undo/edit sessions, and runtime projection. |
 | Material editor | [material-editor.md](lld/material-editor.md) | Scalar material documents, property UI, previews, assignment, save/cook/preview contract. |
 | Environment authoring | [environment-authoring.md](lld/environment-authoring.md) | Atmosphere, sun, exposure, tone mapping, scene render intent. |
 | Content browser and asset identity | [content-browser-asset-identity.md](lld/content-browser-asset-identity.md) | Source/generated/cooked browsing, asset identity, asset picker, missing references. |
@@ -109,8 +110,9 @@ project-workspace-shell
 Design contract:
 
 - Project Browser remains the startup experience.
-- Process bootstrap performs native runtime discovery before any runtime or
-  interop call; failure surfaces before workspace activation.
+- Process bootstrap performs native discovery/compatibility checks before native
+  calls. Failure keeps Project Browser and safe authoring/save available and
+  disables native work with visible diagnostics.
 - Project open/create establishes active project context before workspace
   activation.
 - Workspace restoration is best effort and failure-visible.
@@ -132,8 +134,10 @@ property-inspector / viewport-and-tools / scene-explorer
 Design contract:
 
 - User edits become commands or command-equivalent service calls.
-- Commands mutate authoring state, update dirty state, participate in
-  undo/redo, invalidate diagnostics, and request live sync where supported.
+- Commands validate the complete edit and commit authoring/revision/history
+  before async work, then invalidate scoped diagnostics and request sync under
+  [property-pipeline.md](lld/property-pipeline.md). Unsupported required fields
+  cannot satisfy release completion.
 - Direct UI mutation of authoring objects is migration debt.
 
 ### 4.3 Save, Cook, Mount
@@ -156,6 +160,10 @@ Design contract:
 - A single user action may invoke multiple phases, but the result must show
   where success or failure occurred.
 - Cooked output is never edited as source authoring data.
+- Cook snapshots saved dependencies, stages/validates output, and briefly pauses
+  preview for rollback-protected publication to fixed cooked roots. Save/cook
+  completion names captured revisions/hashes; later edits remain distinguishable.
+  Content-pipeline section 16 defines the publication transaction.
 
 ### 4.4 Live Preview
 
@@ -243,13 +251,15 @@ domain model
   -> inspector or explicit no-editor decision
   -> command mutation
   -> diagnostics
-  -> live sync where supported
+  -> live projection per the PRD capability matrix
   -> cook/runtime behavior where applicable
 ```
 
-The detailed matrix lives in `scene-authoring-model.md`; inspectors,
-environment, material, sync, and content pipeline LLDs own their part of the
-same matrix.
+The release capability matrix lives in PRD section 8. Inspector, environment,
+material, property-pipeline, sync, and content-pipeline LLDs own its detailed
+fields and behavior. Required editable fields complete every applicable phase;
+read-only/editor-only metadata is explicit. Missing native coverage remains
+implementation work until the required capability is implemented and validated.
 
 ### 5.3 Runtime Boundary
 
@@ -311,7 +321,12 @@ intent:
 - workspace
 - document
 - scene
-- runtime
+
+Runtime-session state is transient, not a durable scope. Effective FPS/logging
+controls do not modify scene/project storage. Native startup preferences are
+editor-local. V0.1 has no generic project-settings UI or renderer-preset selector;
+project mounts supply cook facts, scene inspectors supply render intent, and the
+matched build supplies the qualification profile.
 
 Diagnostic overrides are temporary and must not become product configuration.
 
@@ -331,10 +346,10 @@ redefine their ownership or duplicate reusable infrastructure locally.
 
 ## 6. LLD Definition Of Done
 
-The authoritative LLD template is [lld/README.md](lld/README.md). An LLD is
-ready for implementation when each section in that template is answered or
-marked as a deliberate open issue. A missing answer is not acceptable as an
-implicit implementation choice.
+The authoritative LLD template is [lld/README.md](lld/README.md). An LLD is ready
+for implementation when its V0.1 scope, ownership, contracts, failure behavior,
+and validation gates are decided. Unresolved gating decisions prevent readiness.
+Incomplete implementation/validation is recorded separately from design decisions.
 
 ## 7. Design Governance
 

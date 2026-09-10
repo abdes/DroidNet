@@ -421,7 +421,10 @@ ED-M06/ED-M07 gates:
 - ED-M07: runtime mount refresh consumes validated cooked roots; mount state is
   still an editor/runtime overlay, not an `Oxygen.Managed.Assets` primitive fact.
 
-## 15. Open Issues
+## 15. Closed V0.1 Decisions
 
-- Whether `AssetRecord` should later carry asset type/state metadata directly
-  or remain intentionally minimal with editor-side enrichment.
+AssetRecord remains minimal; ContentBrowser owns state enrichment. No type/state
+fields or runtime mount policy move into primitive catalog records. URI identity
+and missing-reference preservation remain the contract; file rename/move repair
+UI is outside V0.1. Import/source regeneration and fixed-root publication are
+qualified by ED-M07B without introducing another identity model.

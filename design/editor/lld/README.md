@@ -17,6 +17,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [scene-authoring-model.md](./scene-authoring-model.md) | Authoring scene, component completion, commands, dirty state, persistence. |
 | [scene-explorer.md](./scene-explorer.md) | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics. |
 | [property-inspector.md](./property-inspector.md) | Inspector architecture, component editors, field controls, multi-selection behavior. |
+| [property-pipeline.md](./property-pipeline.md) | Canonical schema-property contract, validation, revision/history, mixed values, sessions, and runtime convergence. |
 | [material-editor.md](./material-editor.md) | Scalar material documents, property editing, assignment, save/cook/preview baseline. |
 | [environment-authoring.md](./environment-authoring.md) | Atmosphere, lights, exposure, tone mapping, renderer settings. |
 | [content-browser-asset-identity.md](./content-browser-asset-identity.md) | Content browser states, asset identity, asset picker, missing/broken references. |

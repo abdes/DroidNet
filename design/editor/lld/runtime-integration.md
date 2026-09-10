@@ -319,7 +319,8 @@ ED-M07 mount contract:
   refresh messages; only a validated content-pipeline result may trigger
   runtime mount refresh in ED-M07.
 - Workspace/runtime code still owns the actual `IEngineService` calls:
-  `UnmountProjectCookedRoot()` followed by `MountProjectCookedRoot(path)`.
+  the runtime mount calls. ED-M07B adds pause/drain, transaction coordination
+  and rollback around these capabilities per content-pipeline section 16.
 - The path passed to runtime is the validated cooked root for the active
   project/mount, not an authored asset path or a browser display path.
 - Validated cook-result refresh mounts only the roots carried by that validated
@@ -328,8 +329,9 @@ ED-M07 mount contract:
 - `EditorModule` applies root changes at frame start through its existing
   `AddLooseCookedRoot` / `ClearCookedRoots` path; ED-M07 must not manipulate
   native asset-loader mounts mid-frame.
-- Mount refresh failure is reported under `AssetMount` and does not rewrite
-  cook success/failure state.
+- Mount refresh failure is reported under `AssetMount`; staged cook and
+  publication outcomes are distinct. ED-M07B restores prior roots or leaves
+  preview explicitly unavailable with rollback output retained.
 
 ## 9. Commands, Services, Or Adapters
 
@@ -451,9 +453,10 @@ activation, not inspector edits.
 1. Inspector view-models and command services MUST NOT call
    `IEngineService.StartAsync` / `StopAsync` / `RestartAsync`. Engine lifecycle
    stays owned by workspace activation / scene editor controls.
-2. Inspector commands MUST NOT subscribe to `IEngineService` state changes to
-   retry sync. A skipped sync stays skipped; the next user edit produces the
-   next attempt.
+2. Inspector commands do not own lifecycle subscriptions. The scene sync
+   orchestrator owns visibly pending work and revision-aware reconnect under
+   property-pipeline section 11. Full current-scene sync supersedes older queued
+   values; stale document lifetimes never replay into a later scene.
 3. Inspector commands MUST treat any thrown exception from
    `ISceneEngineSync` as `SyncOutcome.Failed` and continue. They MUST NOT
    re-throw to the UI.
@@ -562,12 +565,32 @@ Tests are useful for state-machine and lease bookkeeping. Final ED-M02 closure
 also requires manual visual validation because frame-presented completion is not
 yet a managed contract.
 
-## 16. Open Issues
+## 16. Closed V0.1 Decisions
 
-- Whether a future runtime API should expose "presented frame observed" instead
-  of only accepted/staged operation completion.
-- Engine view lifecycle remains coordinated by WorldEditor viewport code in
-  ED-M02. Possible extraction behind a runtime view adapter is post-ED-M02
-  cleanup.
-- Whether runtime diagnostics should grow a compact workspace status surface in
-  addition to output/log panel entries.
+Existing operation completion continues to mean accepted/queued where stated.
+ED-M08 adds explicit observed-state/capture completion for qualification; callers
+cannot reinterpret accepted as presented. Runtime status uses the existing
+workspace/viewport pending/failure surface plus operation/output details. No
+new diagnostics dashboard is required.
+
+## 17. V0.1 Qualification And Publication Boundary
+
+ED-M07B implements matched-build preflight before interop/native work, using the
+PRD's artifact/schema fingerprint. Missing/mismatched native artifacts disable
+native operations visibly while Project Browser and safe authoring/save remain
+available. The public managed boundary must be loadable without initializing
+interop merely to open the Project Browser.
+
+Publication briefly pauses preview and drains affected content reads before
+fixed cooked-root replacement. The runtime exposes the required pause/drain/
+remount/resume capabilities; ContentPipeline owns journal, paths and policy.
+Standalone validation holds an output read lease. ED-M08 captures native observed
+state and rendered frames through stable capabilities; existing accepted/queued
+responses remain insufficient for presented-frame proof. The full publication
+transaction and recovery behavior are in content-pipeline section 16.
+
+Only one scene is live. Activation establishes document lifetime and current
+revision before scene sync; late operations from an earlier activation cannot
+change it. Pending edits remain visible until their actual current-state sync
+succeeds. These guarantees are qualified in ED-M07A.4 and ED-M07B.2/4, with
+standalone rendered evidence in ED-M08.

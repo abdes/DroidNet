@@ -70,7 +70,8 @@ A folder under the project root is not authored content unless it is:
 
 - under a declared `AuthoringMounts` entry.
 - under a declared `LocalFolderMounts` entry.
-- classified by this LLD as project configuration or derived output.
+
+Project configuration and derived output are explicitly not authored asset roots.
 
 ## 5. Target Design
 
@@ -676,3 +677,21 @@ Project layout/template work is complete when these checks pass:
 ## 15. Open Issues
 
 None.
+
+## 16. Reproduction And Publication Files
+
+`.pipeline` is a derived descriptor cache alongside `.imported`, `.cooked`,
+`.build` and `.oxygen`; it is never an authored mount or creation target.
+Project version-control metadata excludes those derived/local roots while
+retaining Project.oxy, Content/SourceMedia, authored descriptors/import settings
+and Config. Absolute local mounts are nonportable and reported as dependencies;
+the release fixture uses project-relative mounts.
+
+ED-M07B stages inputs/output and retains its publication journal/backups beneath
+`.build/cook/<OperationId>`. Successful publication preserves fixed
+`.cooked/<Mount>/container.index.bin` paths and writes derived
+`.cooked/publication.json`. These files describe a published cook, not authored
+identity. Interrupted transactions are recovered before mounting. ED-M08 report
+artifacts live under `.oxygen/validation/<OperationId>`. No template must ship
+cooked or validation artifacts. Native/code/schema compatibility belongs to the
+qualified build manifest, not an editable project renderer preset.

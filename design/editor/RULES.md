@@ -89,4 +89,14 @@ These rules apply to all Oxygen Editor design and implementation work.
    update [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
 5. Consolidating or superseding a plan does not implement, validate, or defer
    its requirements. Preserve requirement destinations and existing evidence;
-   record unresolved scope questions in the owning milestone plan.
+   record explicit scope decisions and assign implementation gaps to named
+   gap-closing milestones. Preserve historical milestone statuses and evidence.
+
+6. PRD sections 8-10 define the closed V0.1 capability and qualification boundary.
+   A missing required native API or field mapping is implementation work; an
+   unsupported warning does not complete the capability. Shared property,
+   snapshot/save, cook publication and validation contracts follow their LLDs.
+7. Previously delivered milestones are not reopened or superseded to absorb new
+   fixes. Identify missing behavior from source/evidence, assign a concrete task
+   and pass/fail cases to a gap-closing milestone, and retain earlier evidence
+   at its original scope. Do not rewrite historical claims into new proof.

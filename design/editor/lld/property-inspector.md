@@ -1,10 +1,10 @@
 # Property Inspector LLD
 
-Status: `ED-M04 implementation-ready`
+Status: `V0.1 contract; named gaps execute in ED-M07A`
 
 ## 1. Purpose
 
-Concrete editor design for the V0.1 property inspector. ED-M04 must turn the
+Concrete editor design for the V0.1 property inspector. ED-M07A must turn the
 current `SceneNodeEditorViewModel` / `TransformViewModel` / `GeometryViewModel`
 baseline into a command-backed, undoable, dirty-aware, multi-selection-aware
 inspector for the V0.1 component set: `TransformComponent`,
@@ -50,53 +50,13 @@ viewport gizmos.
 
 ## 4. Current Baseline
 
-Concrete code in scope:
-
-- `Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeEditorViewModel.cs` — host
-  for component editors. Currently selects per-type editors via a static
-  `AllPropertyEditorFactories` dictionary, registers undo entries directly
-  through `HistoryKeeper`, and dispatches sync via `ISceneEngineSync` from
-  message handlers.
-- `Inspector/TransformViewModel.cs` — exposes `PositionX/Y/Z`, `RotationX/Y/Z`,
-  `ScaleX/Y/Z` (all `float`) plus matching `*IsIndeterminate` booleans for
-  multi-selection mixed-value display. Sends `SceneNodeTransformAppliedMessage`.
-- `Inspector/Geometry/GeometryViewModel.cs` — populates `Groups : AssetGroup[]`
-  ("Engine"/"Content") via `IAssetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All))`
-  and reacts to `IAssetCatalog.Changes`. Sends
-  `SceneNodeGeometryAppliedMessage`.
-- `Inspector/SceneNodeDetailsViewModel.cs` — owns `Add*Command` /
-  `DeleteComponentCommand` for Geometry, Perspective/Orthographic camera, and
-  Directional/Point/Spot light, plus node `Name` editing.
-- Domain types in `Oxygen.Editor.World/src/Components/`: `TransformComponent`,
-  `GeometryComponent`, `PerspectiveCamera`, `OrthographicCamera`,
-  `DirectionalLightComponent`, `PointLightComponent`, `SpotLightComponent`.
-- Slot types in `Oxygen.Editor.World/src/Slots/`: `MaterialsSlot` (holds
-  `AssetReference<MaterialAsset> Material`), `RenderingSlot`, `LightingSlot`,
-  `LevelOfDetailSlot`.
-- ED-M03 command surface in `WorldEditor/src/Documents/Commands/`:
-  `ISceneDocumentCommandService`, `SceneCommandResult`,
-  `SceneDocumentCommandContext(DocumentId, Metadata, Scene, History)`,
-  `SceneOperationKinds` (string constants).
-- ED-M03 selection in `WorldEditor/src/Documents/Selection/`:
-  `ISceneSelectionService.GetSelectedNodes(Guid documentId, Scene scene)`.
-
-Concrete gaps ED-M04 closes:
-
-1. No editor exists for `PerspectiveCamera`, `DirectionalLightComponent`, or
-   scene-level Environment beyond default-construction defaults.
-2. `MaterialsSlot` is not surfaced in the Geometry editor at all; today the
-   Geometry editor only edits `GeometryComponent.Geometry`.
-3. Edits flow through `*AppliedMessage` types and `HistoryKeeper` directly;
-   `ISceneDocumentCommandService` does not yet expose component-edit operations.
-4. Sync failures from message handlers log only; ED-M04 must route them to
-   `OperationResult` with `FailureDomain.LiveSync`.
-5. Multi-selection support exists for Transform via `MixedValues` /
-   `*IsIndeterminate` flags. The same pattern must be extended to camera/light
-   editors. Geometry/material editors must define explicit mixed-value
-   semantics.
-6. Drag/text-edit interactions commit per-keystroke in the current
-   `TransformViewModel`. ED-M04 introduces a single coalesced undo entry per
-   interaction.
+The committed source has Transform, Geometry/material slot, PerspectiveCamera,
+DirectionalLight and Environment views, a scene-level empty-selection host,
+schema-property command entry points, and mixed-value bindings. The concrete
+remaining omissions are background dispatch/results, one-shot gesture wiring,
+rejected-value field feedback, lifetime/revision-aware replay, and complete UI/
+native evidence, as identified in ED-M07A's source-backed gap table. These are
+bounded fixes; an inspector rewrite or another baseline audit is not required.
 
 ## 5. Target Design
 
@@ -128,9 +88,9 @@ Invariants:
    per-component value.
 6. Locked components (`GameComponent.IsLocked == true`, e.g.,
    `TransformComponent`) hide remove/replace affordances.
-7. Material assignment editing in ED-M04 is identity-only: the slot stores an
-   `AssetReference<MaterialAsset>` URI; opening/creating/picking real material
-   assets is ED-M05.
+7. Material assignment stores an `AssetReference<MaterialAsset>` URI and
+   consumes the existing real material picker delivered by ED-M05/06. ED-M07A
+   fixes gesture/result/native behavior, not a replacement picker.
 
 ### UI Quality Bar
 
@@ -227,13 +187,14 @@ edited Euler component during the interaction; commit re-derives quaternion.
 | Field | Tier | Type | Notes |
 | --- | --- | --- | --- |
 | `Geometry` | Primary | `AssetReference<GeometryAsset>` | Asset field, populated from `IAssetCatalog`; unresolved URI shown with warning badge. |
-| Material slot 0 | Primary | `AssetReference<MaterialAsset>` (via `MaterialsSlot.Material`) | Identity only in ED-M04. Picker is a flat list from `IAssetCatalog` filtered to `MaterialAsset`. |
-| Override slot summary | Advanced | counts of `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot` | Read-only count + "Open in scene authoring" stub. |
+| Material slot 0 | Primary | `AssetReference<MaterialAsset>` (via `MaterialsSlot.Material`) | Use the existing IMaterialPickerService, constrained to material identity. |
+| Override slot summary | Advanced | counts of `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot` | Read-only count; do not expose an unimplemented action. |
 | Submesh / LOD count | Advanced | `int`, `int` | Read-only from resolved `GeometryAsset.Lods`. |
 | `GeometryUri` raw | Raw | `string` | The persisted URI; copy-friendly diagnostic. |
 
-ED-M04 closure does not include creating/picking material assets, only storing
-identity. See ED-M04 ↔ ED-M05 seam in §7.6.
+ED-M05 already owns real material creation/picking. ED-M07A fixes and proves
+consumption of that picker and the runtime override path; it does not restore
+the earlier raw-identity-only milestone limitation.
 
 #### `PerspectiveCamera` (`SelectionPolicy.CommonComponent`)
 
@@ -297,8 +258,8 @@ the grouped axis layout.
 #### Best-effort, non-gating editors
 
 `OrthographicCamera`, `PointLightComponent`, `SpotLightComponent` keep their
-existing add/remove affordances. ED-M04 does not block on production-quality
-inspectors for them. If an editor is missing, the inspector shows a
+existing add/remove affordances. ED-M07A does not block on production-quality
+inspectors for them; they are outside the PRD-qualified authoring/import set. If an editor is missing, the inspector shows a
 "Editing not implemented in V0.1" raw block listing persisted fields.
 
 ### 7.5 Mixed-Value Semantics
@@ -310,9 +271,9 @@ inspectors for them. If an editor is missing, the inspector shows a
 - `AssetReference<T>`: indeterminate when URIs differ. The field shows
   "(multiple)"; committing replaces URI on every selected component.
 
-### 7.6 Material Slot — ED-M04 ↔ ED-M05 Seam
+### 7.6 Material Slot — ED-M07A ↔ ED-M05 Seam
 
-ED-M04 owns:
+ED-M07A owns:
 
 - Surfacing the first `MaterialsSlot` (component-scope, index 0) inside the
   Geometry section as an asset reference field.
@@ -320,26 +281,25 @@ ED-M04 owns:
   `GeometryComponentData.OverrideSlots` round trip.
 - Showing unresolved / placeholder / missing state in the field. Unresolved is
   a valid authoring state; the URI is preserved verbatim.
-- The picker menu surface compatible with the ED-M05 Content Browser picker.
-  In ED-M04 the menu lists `MaterialAsset` records returned by
-  `IAssetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All))` filtered to
-  asset type `MaterialAsset`; entries authored manually as `*.omat.json`
-  (`oxygen.material.v1`) appear naturally.
+- Consume the existing `IMaterialPickerService` and shared Content Browser
+  provider with material filtering, current unresolved row, clear and create/open
+  delegation to the owning material workflow. Do not restore an older raw-list
+  picker merely because its original implementation plan described one.
 
-ED-M04 does NOT own:
+ED-M07A does NOT own:
 
 - Creating new material assets from the inspector.
 - Editing material scalar properties anywhere in the inspector.
 - Showing thumbnails generated from runtime preview.
 
-If a user tries to clear the material slot, ED-M04 stores the empty/sentinel
+If a user tries to clear the material slot, ED-M07A stores the empty/sentinel
 URI defined by `MaterialsSlot` defaults. There is no inspector-side fallback
 to a generated default.
 
 ### 7.6.1 Schema Decision
 
 `MaterialsSlot` already persists a `MaterialUri` via `MaterialsSlotData`. The
-slot does not embed material data. ED-M04 introduces no new editor-side schema:
+slot does not embed material data. ED-M07A introduces no new editor-side schema:
 the authored material identity is the persisted contract. Material descriptor
 schema (`oxygen.material.v1`) remains the authoring source of truth and is
 owned by ED-M05 / `Oxygen.Managed.Assets`. Decision: **no editor schema; reuse engine
@@ -349,7 +309,7 @@ descriptor**.
 
 For every persisted field present in `*Data` records:
 
-1. If ED-M04 wires a primary editor, the field appears in Primary or Advanced.
+1. If ED-M07A wires a primary editor, the field appears in Primary or Advanced.
 2. Otherwise, the inspector renders a Raw row showing the persisted value as
    read-only text.
 3. Derived runtime state (resolved asset, computed AABB) is not editable; it
@@ -522,7 +482,7 @@ UI rules:
 
 ## 10. Persistence And Round Trip
 
-All ED-M04 edits round-trip through existing `*Data` DTOs in
+All ED-M07A edits round-trip through existing `*Data` DTOs in
 `Oxygen.Editor.World/src/Serialization/` via `SceneJsonContext`:
 
 | Edit | DTO Field |
@@ -540,7 +500,7 @@ Round-trip rules:
    bit-for-bit (within float ULP for `float`/`Vector3`/`Quaternion`).
 2. Unresolved `MaterialUri` / `GeometryUri` strings are preserved verbatim.
 3. Add/remove operations remove the component DTO entry. Cardinality is
-   enforced by the command service for ED-M04-authored changes. Current hydrate
+   enforced by the command service for ED-M07A-authored changes. Current hydrate
    behavior guarantees exactly one `TransformComponent`; duplicate camera,
    light, or geometry components in pre-existing malformed scene JSON are a
    validation/repair concern, not something the inspector silently fixes.
@@ -562,7 +522,7 @@ Mapping (consumed by [live-engine-sync.md](./live-engine-sync.md)):
 | `RemoveComponent` | matching detach | `SkippedNotRunning` | `Unsupported` for unmapped types |
 | `EditEnvironment` | scene settings adapter (see env LLD) | `SkippedNotRunning` | `Unsupported` per field without native API |
 
-Cook behavior is out of ED-M04. Inspector edits must produce persisted
+Cook behavior is out of ED-M07A. Inspector edits must produce persisted
 authoring state that ED-M07 can cook unchanged.
 
 ## 12. Operation Results And Diagnostics
@@ -612,7 +572,7 @@ Forbidden:
 
 ## 14. Validation Gates
 
-ED-M04 inspector closure requires:
+ED-M07A inspector closure requires:
 
 1. For each of Transform, Geometry, PerspectiveCamera, DirectionalLight,
    Environment, and the Geometry material slot: a primary edit, an advanced
@@ -637,16 +597,19 @@ ED-M04 inspector closure requires:
 9. A material-slot edit produces no exception, persists the authoring value,
    and maps descriptor URIs to cooked `.omat` paths for live runtime override
    sync.
-10. Inspector references no `Oxygen.Editor.Runtime` / `Interop` types
-    (verified via project references / static check).
+10. Inspector VMs issue authoring/property commands and do not call runtime
+    behavior or interop directly. Check the VM classes/call sites; the containing
+    WorldEditor project legitimately references Runtime for viewport services.
 
-## 15. Open Issues
+## 15. Closed Design Decisions
 
-- Should the component-editor descriptor registry move to a shared static
-  registry (replacing `AllPropertyEditorFactories`) or remain composed inside
-  `SceneNodeEditorViewModel` for ED-M04? Default: keep inside the host;
-  re-evaluate when ED-M05/ED-M06 add editors.
-- Whether to add a dedicated Scene tab later. Default ED-M04: scene settings
-  remain visible only in the empty/no-node selection state.
-- Mouse-wheel coalescing window (default 250 ms) — confirm during
-  implementation against actual UX feel.
+Component editor factories remain composed by SceneNodeEditorViewModel; shared
+property descriptors/mechanics belong to Schemas. Scene settings appear for
+empty/no-node selection; no separate Scene tab is required. Wheel idle commit
+is 250 ms. V0.1 uses the existing reusable controls with property-pipeline
+sessions and field diagnostics; additional public registries are not required.
+
+The canonical [property-pipeline.md](./property-pipeline.md) governs typed
+property entry points, shared sessions/history, current field diagnostics and
+revision-aware runtime convergence. Existing record adapters implement the same
+contract; they are not an alternative architecture.
