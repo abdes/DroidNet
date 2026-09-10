@@ -479,8 +479,8 @@ Trace: `REQ-005` through `REQ-009`, `REQ-011`, `REQ-012`, `REQ-014`, `REQ-022`,
 
 Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 
-- [ ] 07A.0 managed world/input capabilities and facade conversion (#10): migration
-      implemented; native asset-failure forwarding and running-editor checks remain.
+- [x] 07A.0 managed world/input capabilities, native asset-failure forwarding and
+      automated boundary/lifecycle coverage (#10); visible workflow evidence is 07A.6.
 - [ ] 07A.1 native background application and truthful field results.
 - [ ] 07A.2 camera/light/environment gesture sessions and cancellation.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation.
@@ -609,7 +609,7 @@ recorded in section 5.
 | [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md) | `ED-M06` | `validated` | No further action for ED-M06. |
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
-| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `active` | Complete 07A.0 native asset-failure forwarding and running-editor checks, then continue the named repair/evidence tasks. |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `active` | Continue 07A.1 background application and the remaining repair/evidence tasks. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | Implement saved snapshots, safe publication, mappings and qualification. |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
@@ -634,7 +634,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06` | `validated` | 2026-04-28 | User manually validated asset identity and Content Browser behavior after ED-M06A: folder navigation refreshes rows, material picker shows one project material entry per material instead of arbitrary files, descriptor/cooked state badges remain user-facing identity facts, new material saves refresh browser/picker state without restart, and authored data remains under the accepted `Content` layout. |
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
-| `ED-M07A` | `pending` | - | No validation evidence yet for the new authoring-integrity/runtime-convergence gates. |
+| `ED-M07A` | `pending` | - | Milestone validation remains pending; implemented slice evidence is recorded in the ED-M07A plan. |
 | `ED-M07B` | `pending` | - | No validation evidence yet for the new publication/compatibility gates. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |

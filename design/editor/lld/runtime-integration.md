@@ -643,8 +643,11 @@ pending creation waits. `NativeRuntimeCommandTransport` owns both concrete
 facades; `RuntimeTransportConversion` owns native input/property DTO conversion.
 The feature's WinUI input bridge interprets keys and scales positions/deltas into
 physical viewport pixels. Scene sync keeps authoring policy and reduces managed
-results to its existing per-operation outcomes. The separate asynchronous
-asset-failure notification work below remains required before closing 07A.0.
+results to its existing per-operation outcomes. Asynchronous asset failures retain their native generation and original immutable
+request. Native generation validation precedes the Runtime event; the feature
+rechecks request/scene/node validity after dispatching to the UI and publishes a
+LiveSync operation result. Runtime operation correlation only rejects stale
+notification delivery; it does not allocate or accept native load generations.
 
 ### Active Run Observer (#6, ED-M07A.7)
 

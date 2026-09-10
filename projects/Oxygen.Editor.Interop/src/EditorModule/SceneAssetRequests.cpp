@@ -51,11 +51,13 @@ struct SceneAssetRequests::State {
     Material material;
     bool ready = false;
     bool apply = false;
+    FailureCallback on_failure;
   };
   struct Target {
     uint64_t geometry_generation = 0;
     std::string geometry_uri;
     bool geometry_pending = false;
+    FailureCallback geometry_failure;
     std::unordered_map<std::size_t, Slot> slots;
   };
 
@@ -69,10 +71,14 @@ struct SceneAssetRequests::State {
 
   void Report(scene::NodeHandle node, const std::string &uri,
               const std::string &error, bool geometry,
+              uint64_t generation, const FailureCallback &on_failure,
               std::size_t slot = 0) const {
     diagnostic(fmt::format("{} request '{}' on node {} slot {}: {}",
                            geometry ? "Geometry" : "Material", uri,
                            nostd::to_string(node), slot, error));
+    if (on_failure) {
+      on_failure(generation, error);
+    }
   }
 };
 
@@ -123,13 +129,15 @@ SceneAssetRequests::SceneAssetRequests(GeometryLoader geometry_loader,
 SceneAssetRequests::~SceneAssetRequests() = default;
 
 auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
-                                       const std::string &uri)
+                                       const std::string &uri,
+                                       FailureCallback on_failure)
     -> GeometryCompletion {
   auto &target = state_->targets[node];
   const auto generation = ++state_->generation;
   target.geometry_generation = generation;
   target.geometry_uri = uri;
   target.geometry_pending = true;
+  target.geometry_failure = std::move(on_failure);
   return [inbox = std::weak_ptr(state_->inbox), node,
           generation](Geometry asset, std::string error) {
     if (auto queue = inbox.lock()) {
@@ -154,10 +162,12 @@ void SceneAssetRequests::LoadGeometry(const std::string &uri,
 }
 
 void SceneAssetRequests::SetMaterial(scene::NodeHandle node, std::size_t slot,
-                                     const std::string &uri) {
+                                     const std::string &uri,
+                                     FailureCallback on_failure) {
   const auto generation = ++state_->generation;
   state_->targets[node].slots[slot] =
-      State::Slot{.generation = generation, .uri = uri};
+      State::Slot{.generation = generation, .uri = uri,
+                  .on_failure = std::move(on_failure)};
   auto complete = [inbox = std::weak_ptr(state_->inbox), node, slot,
                    generation](Material asset, std::string error) {
     if (auto queue = inbox.lock()) {
@@ -207,7 +217,8 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
       if (!result.geometry_asset || !result.error.empty()) {
         state_->Report(
             result.node, target.geometry_uri,
-            result.error.empty() ? "asset load failed" : result.error, true);
+            result.error.empty() ? "asset load failed" : result.error, true,
+            result.generation, target.geometry_failure);
         return;
       }
       node->GetRenderable().SetGeometry(std::move(result.geometry_asset));
@@ -223,10 +234,11 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
       auto &slot = slot_found->second;
       if (!result.error.empty() ||
           (!result.material_asset && !slot.uri.empty())) {
+        slot.ready = true;
         state_->Report(result.node, slot.uri,
                        result.error.empty() ? "asset load failed"
                                             : result.error,
-                       false, result.slot);
+                       false, result.generation, slot.on_failure, result.slot);
         return;
       }
       slot.material = std::move(result.material_asset);
@@ -256,7 +268,7 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
         // must not resurface if a later geometry happens to reuse this index.
         if (slot.material) {
           state_->Report(handle, slot.uri, "material slot is unavailable",
-                         false, index);
+                         false, slot.generation, slot.on_failure, index);
         }
         slot.material.reset();
         continue;

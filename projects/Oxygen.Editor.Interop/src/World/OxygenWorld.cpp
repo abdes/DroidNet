@@ -46,6 +46,7 @@
 #include <EditorModule/CommandFactory.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SceneAssetRequests.h>
 #include <World/OxygenWorld.h>
 
 using namespace System::Threading::Tasks;
@@ -85,6 +86,38 @@ namespace Oxygen::Interop::World {
         }
         delete ptr;
         };
+    }
+
+    class AssetFailureObserver final {
+    public:
+      explicit AssetFailureObserver(Action<System::UInt64, String^>^ callback)
+        : callback_(callback) {}
+
+      void Invoke(uint64_t generation, const std::string& message) const {
+        try {
+          callback_->Invoke(generation, gcnew String(message.c_str()));
+        } catch (System::Exception^ exception) {
+          System::Diagnostics::Trace::TraceError(
+            "Runtime asset failure observer threw: " + exception->Message);
+        }
+      }
+
+    private:
+      msclr::gcroot<Action<System::UInt64, String^>^> callback_;
+    };
+
+    // Keep CLR types out of constrained shared_ptr forwarding constructors.
+    // The native owner releases its gcroot on supersession or scene destruction.
+    static SceneAssetRequests::FailureCallback MakeAssetFailureCallback(
+      Action<System::UInt64, String^>^ on_failure) {
+      if (on_failure == nullptr) {
+        throw gcnew ArgumentNullException("onFailure");
+      }
+      auto callback = std::shared_ptr<AssetFailureObserver>(
+        new AssetFailureObserver(on_failure));
+      return [callback](uint64_t generation, const std::string& message) {
+        callback->Invoke(generation, message);
+      };
     }
 
     static void EnqueueAttachLight(EngineContext^ context,
@@ -528,14 +561,17 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
-  void OxygenWorld::SetGeometry(System::Guid nodeId, String^ assetUri) {
+  void OxygenWorld::SetGeometry(System::Guid nodeId, String^ assetUri,
+    Action<System::UInt64, String^>^ onFailure) {
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew InvalidOperationException("Runtime asset command has no engine context.");
+    }
 
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
+    if (!editor_module) {
+      throw gcnew InvalidOperationException("Runtime asset command has no editor module.");
+    }
 
     auto b = nodeId.ToByteArray();
     std::array<uint8_t, 16> key{};
@@ -543,25 +579,30 @@ namespace Oxygen::Interop::World {
       key[i] = b[i];
 
     auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
-      return;
+    if (!opt.has_value()) {
+      throw gcnew InvalidOperationException("Runtime asset target is no longer registered.");
+    }
 
     const auto& handle = opt.value();
     auto native_asset_uri = msclr::interop::marshal_as<std::string>(assetUri);
     auto cmd = std::unique_ptr<SetGeometryCommand>(
       commandFactory_->CreateSetGeometry(handle, native_asset_uri));
+    cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
   void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, int slotIndex, String^ materialUri) {
+    System::Guid nodeId, int slotIndex, String^ materialUri,
+    Action<System::UInt64, String^>^ onFailure) {
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
+    if (!native_ctx || !native_ctx->engine) {
+      throw gcnew InvalidOperationException("Runtime asset command has no engine context.");
+    }
 
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
+    if (!editor_module) {
+      throw gcnew InvalidOperationException("Runtime asset command has no editor module.");
+    }
 
     auto b = nodeId.ToByteArray();
     std::array<uint8_t, 16> key{};
@@ -569,9 +610,13 @@ namespace Oxygen::Interop::World {
       key[i] = b[i];
 
     auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
-      return;
+    if (!opt.has_value()) {
+      throw gcnew InvalidOperationException("Runtime asset target is no longer registered.");
+    }
 
+    if (slotIndex < 0) {
+      throw gcnew ArgumentOutOfRangeException("slotIndex");
+    }
     const auto& handle = opt.value();
     auto native_material_uri = materialUri == nullptr
       ? std::string{}
@@ -579,6 +624,7 @@ namespace Oxygen::Interop::World {
     auto cmd = std::unique_ptr<SetMaterialOverrideCommand>(
       commandFactory_->CreateSetMaterialOverride(
         handle, static_cast<std::size_t>(slotIndex), native_material_uri));
+    cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     editor_module->get().Enqueue(std::move(cmd));
   }
 

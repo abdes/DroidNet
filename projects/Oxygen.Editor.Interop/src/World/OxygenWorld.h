@@ -75,9 +75,11 @@ namespace Oxygen::Interop::World {
       array<PropertyValueEntry>^ entries);
 
     // Geometry management
-    void SetGeometry(System::Guid nodeId, String^ assetUri);
+    //! Queues geometry with a generation-correlated asynchronous failure sink.
+    void SetGeometry(System::Guid nodeId, String^ assetUri,
+      Action<System::UInt64, String^>^ onFailure);
     void SetMaterialOverride(System::Guid nodeId, int slotIndex,
-      String^ materialUri);
+      String^ materialUri, Action<System::UInt64, String^>^ onFailure);
     void SetEnvironment(
       bool atmosphereEnabled,
       bool sunDiskEnabled,

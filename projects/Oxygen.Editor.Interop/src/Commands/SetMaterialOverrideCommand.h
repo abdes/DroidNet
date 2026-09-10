@@ -15,6 +15,7 @@
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <EditorModule/EditorCommand.h>
+#include <EditorModule/SceneAssetRequests.h>
 
 namespace oxygen::interop::module {
 
@@ -31,10 +32,16 @@ namespace oxygen::interop::module {
 
     void Execute(CommandContext& context) override;
 
+    //! Installs the observer carried by this specific material-slot intent.
+    void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {
+      failure_callback_ = std::move(callback);
+    }
+
   private:
     oxygen::scene::NodeHandle node_;
     std::size_t slot_index_ { 0 };
     std::string material_uri_;
+    SceneAssetRequests::FailureCallback failure_callback_;
   };
 
 } // namespace oxygen::interop::module

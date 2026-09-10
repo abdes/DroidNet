@@ -47,7 +47,7 @@ public sealed class RuntimeCommandDispatcherTests
 
         _ = completion.Status.Should().Be(RuntimeCommandStatus.Rejected);
         _ = mutation.Status.Should().Be(RuntimeCommandStatus.Rejected);
-        native.Verify(value => value.Execute(It.IsAny<RuntimeWorldCommand>()), Times.Never);
+        native.Verify(value => value.Execute(It.IsAny<RuntimeWorldRequest>()), Times.Never);
     }
 
     [TestMethod]
@@ -90,6 +90,7 @@ public sealed class RuntimeCommandDispatcherTests
         _ = activation.Status.Should().Be(RuntimeCommandStatus.Cancelled);
         _ = mutation.Status.Should().Be(RuntimeCommandStatus.Cancelled);
         _ = input.Status.Should().Be(RuntimeCommandStatus.Cancelled);
+        native.VerifyAdd(value => value.AssetLoadFailed += It.IsAny<EventHandler<RuntimeAssetLoadFailedEventArgs>>(), Times.Once);
         native.VerifyNoOtherCalls();
     }
 
@@ -99,7 +100,7 @@ public sealed class RuntimeCommandDispatcherTests
         RuntimeWorldCommand? dispatched = null;
         var native = new Mock<IRuntimeCommandTransport>();
         _ = native.Setup(value => value.ActivateSceneAsync(It.IsAny<string>())).ReturnsAsync(value: true);
-        _ = native.Setup(value => value.Execute(It.IsAny<RuntimeWorldCommand>())).Callback<RuntimeWorldCommand>(value => dispatched = value);
+        _ = native.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>())).Callback<RuntimeWorldRequest>(value => dispatched = value.Command);
         var sut = Start(native.Object);
         var target = Scene(sut);
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Fixture", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -131,7 +132,7 @@ public sealed class RuntimeCommandDispatcherTests
         };
         var native = new Mock<IRuntimeCommandTransport>();
         _ = native.Setup(value => value.ActivateSceneAsync(It.IsAny<string>())).ReturnsAsync(value: true);
-        _ = native.Setup(value => value.Execute(It.IsAny<RuntimeWorldCommand>())).Throws(failure);
+        _ = native.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>())).Throws(failure);
         _ = native.Setup(value => value.ExecuteInput(It.IsAny<ulong>(), It.IsAny<RuntimeInputEvent>())).Throws(failure);
         var sut = Start(native.Object);
         var target = Scene(sut);

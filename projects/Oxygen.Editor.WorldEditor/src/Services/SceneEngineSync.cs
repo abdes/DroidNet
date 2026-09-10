@@ -21,7 +21,13 @@ namespace Oxygen.Editor.World.Services;
 /// </summary>
 /// <param name="engineService">The managed runtime boundary.</param>
 /// <param name="loggerFactory">The optional diagnostic logger factory.</param>
-public sealed partial class SceneEngineSync(IEngineService engineService, ILoggerFactory? loggerFactory = null) : ISceneEngineSync, IDisposable
+/// <param name="operationResults">The shared operation-result publisher.</param>
+/// <param name="hostingContext">The application's UI dispatcher context.</param>
+public sealed partial class SceneEngineSync(
+    IEngineService engineService,
+    ILoggerFactory? loggerFactory = null,
+    IOperationResultPublisher? operationResults = null,
+    DroidNet.Hosting.WinUI.HostingContext? hostingContext = null) : ISceneEngineSync, IDisposable
 {
     private static readonly TimeSpan NodeCreationTimeout = TimeSpan.FromSeconds(10);
 
@@ -40,7 +46,17 @@ public sealed partial class SceneEngineSync(IEngineService engineService, ILogge
 
     /// <inheritdoc/>
     public void Dispose()
-        => this.sceneSyncGate.Dispose();
+    {
+        this.activeWorld = null;
+        this.activeScene = null;
+        if (this.observedWorld is { } observedWorld)
+        {
+            observedWorld.AssetLoadFailed -= this.OnAssetLoadFailed;
+            this.observedWorld = null;
+        }
+
+        this.sceneSyncGate.Dispose();
+    }
 
     /// <inheritdoc/>
     public async Task<bool> SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default)
@@ -1219,6 +1235,11 @@ public sealed partial class SceneEngineSync(IEngineService engineService, ILogge
         try
         {
             var commands = this.engineService.WorldCommands;
+            if (commands is not null)
+            {
+                this.ObserveWorld(commands);
+            }
+
             return commands is null ? null : this.activeWorld is { } active && ReferenceEquals(active.Commands, commands)
                 ? active with { CancellationToken = CancellationToken.None } : new WorldDispatch(commands, default, CancellationToken.None);
         }
