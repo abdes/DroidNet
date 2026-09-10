@@ -198,6 +198,13 @@ void* CreateBackend(const SerializedBackendConfig& config,
 
 ## Testing & Resets
 
+The first-access tests run strict and relaxed initialization with default and
+injected services in separate processes, without loading a graphics backend.
+Both accessors use explicit branches for static service initialization: MSVC
+14.51.36231 miscompiles the equivalent conditional expression into a self-move,
+leaving the shared pointer empty. Preserve the explicit branches when changing
+these initializers.
+
 Both modes allow injecting a custom `PlatformServices` instance on subsequent
 calls for test isolation, subject to their mode-specific module origin rules.
 Resetting recreates the internal implementation and discards any previously
