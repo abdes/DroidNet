@@ -29,6 +29,7 @@ class SetPropertiesCommand;
 struct PropertyEntry;
 enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
+class SetBackgroundColorCommand;
 class SetMaterialOverrideCommand;
 class SetVisibilityCommand;
 class ReparentSceneNodeCommand;
@@ -70,6 +71,9 @@ namespace Oxygen::Interop::World {
     oxygen::interop::module::SetMaterialOverrideCommand*
       CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
         std::size_t slotIndex, std::string materialUri);
+
+    oxygen::interop::module::SetBackgroundColorCommand*
+      CreateSetBackgroundColor(glm::vec3 color);
 
     oxygen::interop::module::SetEnvironmentCommand*
       CreateSetEnvironment(

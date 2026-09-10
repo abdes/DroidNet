@@ -9,8 +9,11 @@
 #include "pch.h"
 
 #include <memory>
+#include <cmath>
+#include <stdexcept>
 
 #include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetBackgroundColorCommand.h>
 
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -19,6 +22,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
@@ -215,6 +219,60 @@ auto EnsureDisabledFog(oxygen::scene::SceneEnvironment& environment) -> void
 } // namespace
 
 namespace oxygen::interop::module {
+
+  /*!
+   Applies the authored background through the engine-owned sky system.
+   Atmosphere keeps precedence in the renderer; this command does not change
+   that independent authored setting. No tone mapping is applied here.
+
+   @param context The scene-mutation context.
+   @throw std::invalid_argument If any color channel is non-finite.
+   @throw std::logic_error If there is no active scene.
+  */
+  void SetBackgroundColorCommand::Execute(CommandContext& context)
+  {
+    if (!std::isfinite(color_.x) || !std::isfinite(color_.y)
+      || !std::isfinite(color_.z)) {
+      throw std::invalid_argument("Background color must be finite.");
+    }
+    if (!context.Scene) {
+      throw std::logic_error("Background requires an active scene.");
+    }
+    auto* environment = EnsureEnvironment(*context.Scene);
+    auto* sphere
+      = EnsureSystem<scene::environment::SkySphere>(*environment);
+    sphere->SetSource(scene::environment::SkySphereSource::kSolidColor);
+    sphere->SetSolidColorRgb(color_);
+    sphere->SetIntensity(1.0F);
+    sphere->SetTintRgb({ 1.0F, 1.0F, 1.0F });
+    sphere->SetEnabled(true);
+    context.Scene->Update(false);
+  }
+
+  /*!
+   Reads native background state after preceding scene mutations.
+
+   @param context The scene-mutation context.
+   @note A captured value does not establish that a frame was presented.
+  */
+  void ObserveBackgroundCommand::Execute(CommandContext& context)
+  {
+    BackgroundObservation observation;
+    if (context.Scene) {
+      if (auto environment = context.Scene->GetEnvironment()) {
+        if (auto sphere
+          = environment->TryGetSystem<scene::environment::SkySphere>()) {
+          observation.exists = sphere->IsEnabled();
+          observation.color = sphere->GetSolidColorRgb();
+        }
+        if (auto atmosphere
+          = environment->TryGetSystem<scene::environment::SkyAtmosphere>()) {
+          observation.atmosphere_enabled = atmosphere->IsEnabled();
+        }
+      }
+    }
+    complete_(observation);
+  }
 
   void SetEnvironmentCommand::Execute(CommandContext& context)
   {

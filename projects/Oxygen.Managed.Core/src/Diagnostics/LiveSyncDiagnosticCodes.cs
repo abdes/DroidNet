@@ -69,6 +69,12 @@ public static class LiveSyncDiagnosticCodes
     /// <summary>Environment background live sync is unsupported.</summary>
     public const string EnvironmentBackgroundUnsupported = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Background.Unsupported";
 
+    /// <summary>Environment background application was rejected.</summary>
+    public const string EnvironmentBackgroundRejected = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Background.Rejected";
+
+    /// <summary>Environment background application failed.</summary>
+    public const string EnvironmentBackgroundFailed = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Background.Failed";
+
     /// <summary>Environment live sync was rejected.</summary>
     public const string EnvironmentRejected = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Rejected";
 

@@ -27,6 +27,7 @@
 #include <Commands/AttachCameraCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetBackgroundColorCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
@@ -87,6 +88,11 @@ namespace Oxygen::Interop::World {
     CommandFactory::CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
       std::size_t slotIndex, std::string materialUri) {
     return new SetMaterialOverrideCommand(handle, slotIndex, materialUri);
+  }
+
+  SetBackgroundColorCommand* CommandFactory::CreateSetBackgroundColor(
+    glm::vec3 color) {
+    return new SetBackgroundColorCommand(color);
   }
 
   SetEnvironmentCommand* CommandFactory::CreateSetEnvironment(

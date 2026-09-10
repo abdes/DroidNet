@@ -12,8 +12,11 @@ namespace Oxygen.Editor.Runtime.Tests;
 public sealed partial class NativeLoopCleanupTests
 {
     [TestMethod]
+    public Task AssetFailure_CrossesNativeFacadeWithRequestIdentityAndGeneration()
+        => this.RunNativeCommandsAsync(this.CheckNativeAssetFailureAsync);
+
     [SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "Finally stops and awaits the native loop and dispatcher cleanup before disposing native owners.")]
-    public async Task AssetFailure_CrossesNativeFacadeWithRequestIdentityAndGeneration()
+    private async Task RunNativeCommandsAsync(Func<RuntimeCommandDispatcher, Task> check)
     {
         var ui = new QueuedContext();
         var previous = SynchronizationContext.Current;
@@ -42,7 +45,7 @@ public sealed partial class NativeLoopCleanupTests
             commands.BeginRun(new NativeRuntimeCommandTransport(context), loop);
             try
             {
-                await this.CheckNativeAssetFailureAsync(commands).ConfigureAwait(false);
+                await check(commands).ConfigureAwait(false);
             }
             finally
             {

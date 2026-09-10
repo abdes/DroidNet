@@ -34,6 +34,13 @@ namespace Oxygen::Interop::World {
     float Value;
   };
 
+  //! Native scene background values observed at the mutation boundary.
+  public value struct BackgroundStateManaged {
+    bool Exists;
+    System::Numerics::Vector3 Color;
+    bool AtmosphereEnabled;
+  };
+
   public
   ref class OxygenWorld {
   public:
@@ -80,6 +87,11 @@ namespace Oxygen::Interop::World {
       Action<System::UInt64, String^>^ onFailure);
     void SetMaterialOverride(System::Guid nodeId, int slotIndex,
       String^ materialUri, Action<System::UInt64, String^>^ onFailure);
+    //! Queues a scene-owned solid background without changing atmosphere.
+    void SetBackgroundColor(System::Numerics::Vector3 color);
+    //! Observes native background state after preceding queued mutations.
+    System::Threading::Tasks::Task<BackgroundStateManaged>^
+      ObserveBackgroundAsync();
     void SetEnvironment(
       bool atmosphereEnabled,
       bool sunDiskEnabled,

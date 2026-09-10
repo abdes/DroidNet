@@ -389,25 +389,13 @@ public sealed partial class SceneEngineSync(
                 cancellationToken,
                 out var readinessOutcome))
         {
-            return new EnvironmentSyncResult(readinessOutcome.Status, new Dictionary<string, SyncStatus>(StringComparer.Ordinal));
+            return new EnvironmentSyncResult(readinessOutcome.Status, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         }
 
         var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken).ConfigureAwait(false);
         var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken).ConfigureAwait(false);
-        var perField = new Dictionary<string, SyncStatus>(StringComparer.Ordinal)
-        {
-            [nameof(SceneEnvironmentData.AtmosphereEnabled)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.SunNodeId)] = sunOutcome.Status,
-            [nameof(SceneEnvironmentData.ExposureMode)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.ManualExposureEv)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.ExposureCompensation)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.ToneMapping)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.BackgroundColor)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.SkyAtmosphere)] = environmentOutcome.Status,
-            [nameof(SceneEnvironmentData.PostProcess)] = environmentOutcome.Status,
-        };
-
-        return new EnvironmentSyncResult(Worst(perField.Values), perField);
+        var backgroundOutcome = await this.SyncBackgroundAsync(scene, environment, cancellationToken).ConfigureAwait(false);
+        return EnvironmentResult(sunOutcome, environmentOutcome, backgroundOutcome);
     }
 
     /// <inheritdoc/>
@@ -857,6 +845,13 @@ public sealed partial class SceneEngineSync(
             this.LogFailedToSyncSceneWithEngine(
                 new InvalidOperationException($"Initial environment sync returned {environmentOutcome.Status}: {environmentOutcome.Message}"),
                 scene);
+            return false;
+        }
+
+        var backgroundOutcome = await this.SyncBackgroundAsync(scene, scene.Environment, cancellationToken).ConfigureAwait(false);
+        if (backgroundOutcome.Status != SyncStatus.Accepted)
+        {
+            this.LogFailedToSyncSceneWithEngine(new InvalidOperationException(backgroundOutcome.Message), scene);
             return false;
         }
 

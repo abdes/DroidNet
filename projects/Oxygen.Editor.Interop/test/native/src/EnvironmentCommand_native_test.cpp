@@ -6,7 +6,9 @@
 
 #include <cstring>
 #include <exception>
+#include <stdexcept>
 #include <memory>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -16,6 +18,7 @@
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetBackgroundColorCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -24,6 +27,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -501,6 +505,63 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
   });
 }
 
+struct BackgroundSnapshot {
+  NativeStatus status {};
+  bool exists = false;
+  bool solid_source = false;
+  bool atmosphere_disabled = false;
+  bool preserved_after_atmosphere_cycle = false;
+  bool invalid_rejected = false;
+  float red = 0.0F;
+  float green = 0.0F;
+  float blue = 0.0F;
+};
+
+// Exercises background values, independent atmosphere toggling and rejection
+// through the same mutation commands used by the managed editor.
+void RunBackgroundContract(BackgroundSnapshot& result) {
+  CaptureNative(result, [&result] {
+    auto scene = CreateTestScene("Background");
+    auto context = BuildContext(*scene);
+    SkyAtmosphereParams atmosphere;
+    atmosphere.enabled = false;
+    SetEnvironmentCommand environment(atmosphere, PostProcessParams {});
+    environment.Execute(context);
+    SetBackgroundColorCommand color({ 0.25F, 0.5F, 0.75F });
+    color.Execute(context);
+    BackgroundObservation observed;
+    ObserveBackgroundCommand observe([&observed](BackgroundObservation value) {
+      observed = value;
+    });
+    observe.Execute(context);
+    result.exists = observed.exists;
+    result.red = observed.color.x;
+    result.green = observed.color.y;
+    result.blue = observed.color.z;
+    result.atmosphere_disabled = !observed.atmosphere_enabled;
+    auto sphere = scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::SkySphere>();
+    result.solid_source = sphere->GetSource()
+      == oxygen::scene::environment::SkySphereSource::kSolidColor;
+    atmosphere.enabled = true;
+    SetEnvironmentCommand reenable(atmosphere, PostProcessParams {});
+    reenable.Execute(context);
+    observe.Execute(context);
+    result.preserved_after_atmosphere_cycle = observed.atmosphere_enabled
+      && observed.color == oxygen::Vec3(0.25F, 0.5F, 0.75F);
+    try {
+      SetBackgroundColorCommand invalid(
+        { std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F });
+      invalid.Execute(context);
+    } catch (const std::invalid_argument&) {
+      result.invalid_rejected = true;
+    }
+    observe.Execute(context);
+    result.invalid_rejected = result.invalid_rejected
+      && observed.color == oxygen::Vec3(0.25F, 0.5F, 0.75F);
+  });
+}
+
 } // namespace
 
 #pragma managed
@@ -527,6 +588,22 @@ namespace InteropTests {
 [TestClass]
 public ref class EnvironmentCommandCliTests {
 public:
+  [TestMethod]
+  void SolidBackgroundPreservesColorAndAtmosphereIndependence()
+  {
+    BackgroundSnapshot snapshot;
+    RunBackgroundContract(snapshot);
+    AssertSucceeded(snapshot.status);
+    Assert::IsTrue(snapshot.exists);
+    Assert::IsTrue(snapshot.solid_source);
+    Assert::IsTrue(snapshot.atmosphere_disabled);
+    Assert::IsTrue(snapshot.preserved_after_atmosphere_cycle);
+    Assert::IsTrue(snapshot.invalid_rejected);
+    Assert::AreEqual(0.25F, snapshot.red, 0.0001F);
+    Assert::AreEqual(0.5F, snapshot.green, 0.0001F);
+    Assert::AreEqual(0.75F, snapshot.blue, 0.0001F);
+  }
+
   [TestMethod]
   void ExecuteWithMissingSceneIsNoOp()
   {

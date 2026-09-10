@@ -165,6 +165,7 @@
     <ClInclude Include="Commands\HideViewCommand.h" />
     <ClInclude Include="Commands\SetGeometryCommand.h" />
     <ClInclude Include="Commands\SetEnvironmentCommand.h" />
+    <ClInclude Include="Commands\SetBackgroundColorCommand.h" />
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />

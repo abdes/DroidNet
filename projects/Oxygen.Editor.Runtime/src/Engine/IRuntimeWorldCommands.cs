@@ -37,4 +37,11 @@ public interface IRuntimeWorldCommands
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <returns>The correlated acknowledgment, rejected if the activation is no longer current.</returns>
     public Task<RuntimeCommandResult> CreateNodeAsync(RuntimeWorldRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Observes stored background values without treating them as presented pixels.</summary>
+    /// <param name="operationId">The observation identity.</param>
+    /// <param name="target">The scene activation to observe.</param>
+    /// <param name="cancellationToken">Cancels the observation wait.</param>
+    /// <returns>The native state only if the requested activation remains current.</returns>
+    public Task<RuntimeBackgroundObservation> ObserveBackgroundAsync(Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default);
 }

@@ -16,6 +16,8 @@ public sealed partial class SceneEngineSync
         {
             RuntimeCommandStatus.Accepted => Accepted(operationKind, scope),
             RuntimeCommandStatus.Cancelled => Cancelled(operationKind, scope),
+            RuntimeCommandStatus.Unavailable when result.Exception is NotSupportedException or NotImplementedException
+                => Unsupported(operationKind, scope, rejectedCode, result.Message ?? "The runtime capability is unavailable.", result.Exception),
             RuntimeCommandStatus.Unavailable => RuntimeWorldUnavailable(operationKind, scope, result.Exception),
             RuntimeCommandStatus.Rejected => Rejected(operationKind, scope, rejectedCode, result.Message ?? "Runtime rejected the command.", result.Exception),
             _ => Failed(operationKind, scope, failedCode, result.Message ?? "Runtime command failed.", result.Exception),

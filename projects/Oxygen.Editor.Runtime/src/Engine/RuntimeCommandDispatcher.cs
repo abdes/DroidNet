@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Serializes dispatch with lifetime invalidation; never blocks on native frame progress.</summary>
-internal sealed class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntimeInputCommands
+internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntimeInputCommands
 {
     private readonly Lock gate = new();
     private readonly Dictionary<ulong, RuntimeViewTarget> views = [];
