@@ -186,6 +186,12 @@ implementations that can be advertised as supported.
 
 ED-M07 UI decisions:
 
+ED-M07B's [content workflow refinement](lld/content-cooking-workflows.md) and
+[UI review](validation/ED-M07B-ux-review.md) add concrete browsing, picking,
+incremental execution and recovery requirements. Its proposed automatic trigger
+policy D1 is pending product approval; explicit-only trigger clauses below and
+in `REQ-014/026` remain effective until that decision is recorded and reconciled.
+
 1. No generic project-settings panel or default renderer-preset selector in
    V0.1. Project manifests/mounts supply cook scope; `Projects` owns those facts.
    Supported creation uses existing templates and target selectors. Scene

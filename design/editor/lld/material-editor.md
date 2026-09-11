@@ -9,6 +9,11 @@ material documents, scalar PBR property editing, descriptor persistence, content
 browser selection, assignment to geometry, minimum cook, and embedded preview
 after explicit successful Save/Cook publication.
 
+ED-M07B's [content workflow contract](content-cooking-workflows.md) adds shared
+browser/document/picker state, usable Cook/Save layouts, and save/cook recovery.
+Its D1 automatic-trigger proposal requires product approval before replacing
+this document's explicit-only publication policy.
+
 This LLD is not an ED-M04 implementation gate. ED-M04 only creates the Geometry
 material assignment slot and leaves a clean handoff into this ED-M05 workflow.
 

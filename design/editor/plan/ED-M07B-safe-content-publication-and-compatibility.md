@@ -4,18 +4,28 @@ Status: `planned; no implementation or validation completion claimed`
 
 ## 1. Purpose
 
-Close concrete descriptor, cook/publication, import and matched-build gaps before
-standalone parity. Preserve ED-M07's completed delivery record and original
-validation; this milestone owns the additional work and evidence.
+Make supported content discoverable and usable before and after cooking, with
+clear progress, freshness, and recovery. Close descriptor, cook/publication,
+import and matched-build gaps before standalone parity. Preserve ED-M07's
+completed delivery record; this milestone owns the additional work and evidence.
+
+Users should be able to import or create content, find it in one consistent
+browser, assign it through typed pickers, understand what the viewport is using,
+and update it without managing generated files or mounts. The
+[UI review](../validation/ED-M07B-ux-review.md) and
+[workflow LLD](../lld/content-cooking-workflows.md) define the concrete changes.
 
 ## 2. PRD Traceability
 
-`REQ-014` through `REQ-024`, `REQ-026`, `REQ-037`, `REQ-039` through `REQ-042`;
+`REQ-013` through `REQ-024`, `REQ-026`, `REQ-036` through `REQ-042`;
 `SUCCESS-004`, `SUCCESS-006`, `SUCCESS-007`.
 
 ## 3. Required LLDs
 
-[content-pipeline.md](../lld/content-pipeline.md) sections 16-17,
+[content-pipeline.md](../lld/content-pipeline.md) sections 16-19,
+[content-cooking-workflows.md](../lld/content-cooking-workflows.md),
+[content-browser-asset-identity.md](../lld/content-browser-asset-identity.md),
+[material-editor.md](../lld/material-editor.md),
 [runtime-integration.md](../lld/runtime-integration.md),
 [environment-authoring.md](../lld/environment-authoring.md),
 [asset-primitives.md](../lld/asset-primitives.md),
@@ -30,7 +40,11 @@ validation; this milestone owns the additional work and evidence.
 | `SceneDescriptorGenerator.CreateEnvironment` produces only NativeSkyAtmosphereEnvironment; earlier code emits warnings for non-default exposure/tone/background. | Required PostProcess/Background values survive cooking and native loading, rather than being omitted. | 07B.3 |
 | `ContentImportManifestBuilder` writes directly to GetCookedMountRoot; ContentCookScope/Result have no input revision/hash or publication transaction. | Coherent saved input, private staging, safe fixed-root replacement and provenance. | 07B.1/2 |
 | Runtime mount contract is UnmountProjectCookedRoot followed by MountProjectCookedRoot. | Pause/drain, all-root rollback and interrupted-publication recovery. | 07B.2 |
-| ProjectCookScopeProvider derives project/root/output facts; existing Content Browser exposes Cook Asset/Folder/Project. | UI completion must use the closed PRD scope, not invent settings/preset/batch schedulers. | 07B.5 |
+| ProjectCookScopeProvider derives project/root/output facts; existing Content Browser exposes Cook Asset/Folder/Project. | Define automatic versus explicit triggers, incremental reuse, and visible scope through existing surfaces. | 07B.0/1/5 |
+| AssetIdentityReducer uses file timestamps; opening M_ShinyRed shows NotCooked while its browser row shows COOK. | One dependency/publication status authority across browser, document, picker, and viewport. | 07B.1/5a |
+| Running-editor review: Materials breadcrumb can retain geometry tiles; Filter has no effect; selected rows expose no details. | Correct navigation/query lifetime, working filters, actionable state and source/output details. | 07B.5b |
+| Running-editor review: built-ins and Engine_Generated_BasicShapes outputs appear as separate picker choices; material Cook clips at the current dock width. | Provenance-aware grouping, consistent typed picking, and usable command layouts. | 07B.5c/e/7 |
+| Import UI permits all file types and source copying uses overwrite; Inspect reports only counts/path. | Safe and understandable import decisions, useful result inspection and recovery. | 07B.4/5d/e |
 | Native discovery locates installed tooling; no qualified artifact-set fingerprint is established by the existing design. | Detect mismatched editor/native/cooker/schema artifacts before unsafe calls. | 07B.4 |
 | [#8](https://github.com/abdes/DroidNet/issues/8): ContentPipelineProcessRunner cancels stream reads/WaitForExitAsync without terminating the child; ImportToolContentPipelineApi cleans the manifest in finally. | Owned worker termination, descendant handling, reader drain and cleanup ordering. | 07B.6 |
 | [#11](https://github.com/abdes/DroidNet/issues/11): SetGeometryCommand constructs built-ins/default material and pak geometry fields, while ProceduralGeometryDescriptorService separately defines generator parameters/bounds/defaults and supports only Cube/Sphere/Plane. The UI exposes eight built-ins. | One engine/content authority for all exposed procedural geometry and live/cooked semantics. | 07B.7 |
@@ -38,13 +52,31 @@ validation; this milestone owns the additional work and evidence.
 ## 5. Scope And Non-Scope
 
 Implement the content-pipeline LLD's saved-input and journaled publication
-transaction, required descriptor mapping, qualified static/scalar import,
-reproduction, matched-build preflight, and existing-surface result feedback.
+transaction, dependency-aware incremental cooking, required descriptor mapping,
+qualified static/scalar import, reproduction, matched-build preflight, and the
+complete browser/picker/material/cook workflows in the workflow LLD. Automatic
+triggers and a session pause control are proposed in D1, pending product approval.
 No generic project-settings panel, renderer-preset selector, dedicated recook-
 stale scheduler, descriptor/manifest editor, autosave, multi-viewport support,
-or standalone parity claim belongs here. Existing published paths stay fixed.
+new drag/drop placement system, or standalone parity claim belongs here. Request
+coalescing belongs to the existing project coordinator. Published paths stay fixed.
 
 ## 6. Implementation Sequence
+
+### 07B.0 - Review And Settle The User Workflow
+
+Review the running browser, authored/engine-provided/cooked content, both typed
+pickers, material editing, and cook/import entry points. Record screenshots and
+source-backed gaps. Settle workflow LLD decision D1 before implementing trigger
+behavior; reconcile its affected PRD and LLD clauses together after approval.
+The proposed policy cooks incrementally after Import/Save and when content is
+needed for assignment/active-scene preview, with explicit broad scope actions and
+session pause. Browsing and transient edits never cook; external reimport stays
+explicit. Source saves remain explicit, independent operations.
+
+Pass: before/during/after states, trigger table, dirty-input handling, recovery,
+and narrow-pane/keyboard behavior are reviewable and the product decision is
+recorded. The current explicit-only policy is not silently superseded.
 
 ### 07B.1 - Saved Dependency Snapshot And Single Cook Writer
 
@@ -53,9 +85,20 @@ coordinator. Reject dirty participating documents, capture/hash saved inputs and
 import settings under coordinated reads, and pass snapshot paths to native jobs.
 Serialize overlapping requests and scope callbacks to project lifetime.
 
+Implement the workflow LLD section 5 incremental planner: persisted dependency
+fingerprints and validated-output reuse, missing/corrupt product invalidation,
+changed-subasset reconciliation, request coalescing and caller cancellation.
+Distinguish an asset's inputs from dirty consuming scenes. Carry trigger, scope,
+changed/reused counts, and captured/current state through the shared operation
+contract. Wire only the triggers selected in 07B.0; automatic requests cannot
+bypass snapshot validation or publish directly.
+
 Pass: a later edit does not change captured bytes or clear dirty state; a queued
 cook captures only after its gate; source mutation during discovery retries or
-fails visibly; cancelled/closed-project work cannot publish.
+fails visibly; cancelled/closed-project work cannot publish. Repeating a current
+cook performs no native worker, output rewrite, or preview pause. One changed
+dependency rebuilds only affected products in the requested closure. Queued saves
+coalesce to the latest saved revision; cancelled/failed work does not self-retry.
 
 ### 07B.2 - Staging, Preview Pause, Publication And Recovery
 
@@ -91,24 +134,102 @@ hashes. Validate it before loading interop or spawning native tools. Keep Projec
 Browser and safe saves available on mismatch. Implement the qualified glTF/FBX
 static/scalar validation and retained import settings from pipeline section 17.
 
+Route Import/Reimport through the same snapshot/publication coordinator. Retain
+source media and settings before derived processing; expose destination and
+supported formats, handle collisions explicitly, and protect dirty authored
+assets. Report retained-source success separately from failed cooking so Retry
+does not require reselecting/copying the source.
+
 Pass: wrong/missing artifact or schema fails safely; small unit/axis/handedness
 fixtures import consistently; unsupported animated/skinned/texture-bearing
 qualified imports fail before publishing without destroying sources. Delete
 derived data from a copied project and regenerate identical logical asset
 identities and semantically equivalent descriptors/loaded values.
 
-### 07B.5 - Existing UI Workflows And Freshness
+### 07B.5 - Content Discovery, Use, Cooking And Recovery
 
-Use Cook Selected Asset/Folder/Scene/Project to rebuild a selected stale scope.
-Show busy/phase state, captured input identity, publication pause, result and
-freshness. Content/result details expose copyable source/generated/cooked paths;
-Inspect/Validate remain the cooked-product tools. Material swatches are labeled
-approximate, with scene stale state until explicit Save/Cook publishes.
+Implement [content-cooking-workflows.md](../lld/content-cooking-workflows.md)
+through the following independently reviewable tasks. Establish the shared
+request/state contracts alongside 07B.1, then complete the visible workflows
+against the real coordinator and runtime; UI integration is not a final badge pass.
 
-Pass: each scope cooks through the same coordinator; selecting stale content
-and choosing Cook rebuilds it; no generated-file editing or new settings/preset
-panel is needed. Published material changes appear on all scene uses after
-resume. Failed publication has a distinct result from a successful staged cook.
+#### 07B.5a - Shared Asset Status
+
+Consume provenance/freshness/publication from ContentPipeline and readiness from
+Runtime in browser, material editor, and typed pickers. Separate unsaved source,
+Needs cooking, Out of date, queued/active work, prior usable output, and native
+unavailability. A new uncooked asset is not a broken asset. Opening a material
+must not reset its known cook state. Keep technical identifiers in details.
+
+Pass: the same identity has consistent facts on all surfaces before/after save,
+cook, reopen, failure, and native activation; no timestamp-only Ready or false
+NotCooked state. A newer edit remains visibly unsaved/out of date.
+
+#### 07B.5b - Browser Navigation And Before/After Presentation
+
+Fix folder/query lifetime and list/tile state so breadcrumb, rows, selection,
+and action scope agree. Provide working Type/Status filters and useful empty
+states. Keep one logical row per asset with source/output details and contextual
+Cook/Open/Inspect actions. Show built-ins clearly; Cooked is a read-only derived
+view with source links and technical output inspection.
+
+Pass: repeat the recorded navigation/view-switch defect, Back/Forward, rapid
+query changes, and publication refresh. Selection/focus stay scoped; unrelated
+or superseded results cannot change the target of a cook. Uncooked, stale,
+missing, and cooked-only content have clear, distinct actions.
+
+#### 07B.5c - Typed Picking And Runtime Use
+
+Make geometry/material pickers consume the same identity/status projections.
+Include valid saved uncooked content and explain pending/previous runtime output.
+Apply the selected D1 demand behavior through the coordinator. Use 07B.7 mapping
+to group proven generated companions with their built-in origin; preserve
+independent assets and existing authored identities. Retain None/Default semantics.
+
+Pass: assign before first cook, use already cooked content, update a shared
+material, and preserve assignment/history through cancellation, Undo/Redo,
+Save/reopen, and scene switches. Completion cannot revive an undone assignment.
+All current uses refresh without restarting or manual mount commands.
+
+#### 07B.5d - Import, Save And Explicit Cook Entry Points
+
+Complete the visible import/reimport destination, format, collision and retained
+source/result flow from 07B.4. All four explicit Cook scopes use incremental
+planning and explain the actual affected scope. Handle dirty inputs with the
+ordinary save/conflict workflow and the D1 decision on Save listed and Cook.
+Wire the approved automatic triggers and session pause/resume without implicit
+saves or independent writers. Automatic failures remain actionable and quiet
+successes do not steal focus.
+
+Pass: import/create/save/use is a continuous workflow; unchanged cooks are no-ops;
+dirty dependencies name the blocking documents; import/cook failure can be retried
+from retained source. Inspect/Validate and browse/hover do not trigger cooking.
+
+#### 07B.5e - Progress, Recovery And Accessible Layout
+
+Expose queued/phase state, affected asset/scope, cancellation and publication
+pause on existing surfaces; detailed results show changed/reused counts and
+asset-linked errors. Inspect provides browsable read-only output facts. Layouts
+must keep Cook/Save/Cancel/status usable at supported dock widths and scaling,
+with meaningful names, text beyond color, proper asset glyphs, and stable focus.
+
+Pass: first-cook failure, failure with prior output, rollback failure, offline
+runtime, and mismatch each have the right recovery action. The material toolbar
+does not clip. Keyboard and 100%/150%/200% scale walkthroughs pass; controls that
+are unsupported have a visible reason or are absent.
+
+#### 07B.5f - End-To-End Workflow Qualification
+
+Execute every journey in workflow LLD section 7 with production services and
+the packaged editor controls. Repeat the captured review cases after fixes and
+record user validation of before/during/after behavior. Cover supported imports,
+all eight built-ins, authored and cooked-only content, dirty/shared dependencies,
+coalesced requests, failures, cancellation, and offline/reopen behavior.
+
+Pass: users complete supported workflows without generated-file edits, raw path
+assignment, manual mounting, or losing their working context. The PRD 1,000-entry
+browser and operation-feedback timing gates apply. Runtime visual parity remains
+ED-M08; usability and correct state transitions are required in ED-M07B.
 
 ### 07B.6 - Own And Drain Native Worker Processes (#8)
 
@@ -149,6 +270,21 @@ overrides through supported APIs; use the same parameter cases for live and
 cooked output. No pak format constants remain in interop procedural construction.
 Source/unit tests are separate from the ED-M08 visual/loaded parity evidence.
 
+Expose origin/recipe/version and stable source-to-cooked identity mapping to
+07B.5 consumers. This prevents generated cook companions from appearing as
+unexplained extra authored shapes/default materials. The UI must not infer that
+relationship from a name prefix or silently rewrite existing references.
+
+### Integration And Commit Order
+
+Finish 07B.0 before coding. Establish matched-artifact preflight and owned-worker
+lifetime before enabling new native work. Build 07B.1 provenance/incremental
+contracts with 07B.5a state projections, then the remaining 07B.3/4/7 native/import
+contracts and 07B.2 publication transaction. Integrate 07B.5b-e as those contracts
+become available; 07B.5f closes the combined workflow. Keep each numbered task
+or cohesive contract change separately reviewable in commits. Use Fixes #8 and
+Fixes #11 only when their complete behavior and validation are delivered.
+
 ## 7. Project/File Touch Points
 
 - `ContentPipeline/src`: ContentPipelineService, ContentImportManifestBuilder,
@@ -157,7 +293,9 @@ Source/unit tests are separate from the ED-M08 visual/loaded parity evidence.
 - `Runtime/src/Engine`, `Interop/src/EditorModule`: runtime pause/drain/remount
   capability and typed output leases; no policy in native bridge code.
 - `WorldEditor` scene commands, `MaterialEditor` cook requests, ContentBrowser
-  existing command/results surfaces: consume the coordinator's outcomes.
+  provider/reducer, list/tile layouts, navigation, typed pickers, and command/result
+  surfaces: consume shared state, preserve interaction scope, and implement the
+  approved triggers and recovery. Existing WinUI controls/theme resources apply.
 - `Projects` project context/paths and `Managed.Assets` supported catalog/index
   adapters; neither executes editor workflow policy.
 - Engine scene descriptor schemas/import builders/runtime scene systems for
@@ -168,19 +306,26 @@ Source/unit tests are separate from the ED-M08 visual/loaded parity evidence.
 Multi-root publication must have one recoverable outcome. Native read handles
 must drain before fixed paths move. A saved snapshot cannot reference mutable
 external inputs. Field names/units/ordinals come from engine-owned contracts.
-Source/runtime changes require their owning team and validation; no engine build
-is run implicitly by this documentation task.
+Navigation and publication callbacks must preserve project/document/query scope.
+Automatic cooking must remain bounded to saved/demanded content and cancellable;
+its product semantics are settled in 07B.0 before implementation.
 
 ## 9. Validation Gates
 
-- [ ] 07B.1 input/revision/concurrency cases pass.
+- [ ] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
+- [ ] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
+  coalescing and cancellation cases pass.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [ ] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [ ] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [ ] 07B.7 all eight procedural assets use one semantic authority (#11).
-- [ ] 07B.5 all four cook scopes, stale material feedback and resumed preview pass
-  through the visible editor workflow, with user validation evidence.
+- [ ] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
+  presentation and typed assignment before/after cooking pass.
+- [ ] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
+  points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
+- [ ] 07B.5f all workflow journeys and recorded UI defects pass through the
+  visible editor, including resumed preview and user validation evidence.
 
 ## 10. Status Ledger Hook
 
