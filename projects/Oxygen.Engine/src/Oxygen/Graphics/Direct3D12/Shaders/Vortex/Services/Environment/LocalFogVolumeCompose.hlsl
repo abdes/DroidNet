@@ -89,7 +89,7 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)
     {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     StructuredBuffer<LocalFogComposePassConstants> pass_constants_buffer
@@ -101,7 +101,7 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
         || pass.tile_resolution_x == 0u
         || pass.tile_resolution_y == 0u)
     {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     const SceneTextureBindingData bindings
@@ -109,7 +109,7 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
     if (IsFarBackgroundPixel(raw_depth))
     {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
     const float3 world_position = ReconstructWorldPosition(
         input.uv, raw_depth, inverse_view_projection_matrix);
@@ -121,7 +121,8 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     Texture2DArray<uint> tile_data_texture
         = ResourceDescriptorHeap[pass.tile_data_texture_slot];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return GetLocalFogVolumeContribution(
+    const float4 fog = GetLocalFogVolumeContribution(
         instances, tile_data_texture, pass, tile_coord, linear_sampler,
         camera_position, translated_world_position);
+    return float4(fog.rgb, 1.0f - fog.a);
 }

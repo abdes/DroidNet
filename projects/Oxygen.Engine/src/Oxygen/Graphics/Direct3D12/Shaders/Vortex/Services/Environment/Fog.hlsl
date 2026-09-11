@@ -334,30 +334,30 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
     if (!LoadEnvironmentStaticData(env_data)) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     const GpuFogParams fog = env_data.fog;
     if (!FogFlagEnabled(fog.flags, GPU_FOG_FLAG_ENABLED)) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
     if (!FogFlagEnabled(fog.flags, GPU_FOG_FLAG_RENDER_IN_MAIN_PASS)) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
     const bool reflection_capture =
         (environment_view.flags & (1u << 1u)) != 0u;
     if (reflection_capture
         && !FogFlagEnabled(fog.flags, GPU_FOG_FLAG_VISIBLE_IN_REFLECTION_CAPTURES)) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     const SceneTextureBindingData bindings =
         LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
     if (EvaluateFarBackgroundMask(raw_depth) > 0.999f) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return 0.0f.xxxx;
     }
 
     const float3 world_position = ReconstructWorldPosition(
@@ -378,5 +378,6 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         env_data.volumetric_fog,
         input.uv,
         ray_length_m);
-    return ComposeFogResults(height_fog, volumetric_fog);
+    const float4 fog_result = ComposeFogResults(height_fog, volumetric_fog);
+    return float4(fog_result.rgb, 1.0f - fog_result.a);
 }

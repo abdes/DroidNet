@@ -160,8 +160,8 @@ namespace {
       .src_blend = graphics::BlendFactor::kSrcAlpha,
       .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
       .blend_op = graphics::BlendOp::kAdd,
-      .src_blend_alpha = graphics::BlendFactor::kZero,
-      .dest_blend_alpha = graphics::BlendFactor::kOne,
+      .src_blend_alpha = graphics::BlendFactor::kOne,
+      .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
       .blend_op_alpha = graphics::BlendOp::kAdd,
       .write_mask = graphics::ColorWriteMask::kAll,
     };

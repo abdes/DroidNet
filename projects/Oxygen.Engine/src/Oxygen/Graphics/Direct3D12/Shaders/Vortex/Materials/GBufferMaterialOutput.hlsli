@@ -44,7 +44,8 @@ static inline GBufferOutput PackGBufferOutput(
             1.0f, alpha_test.alpha, alpha_test.cutoff, 0.0f);
     }
 #endif
-    output.emissive_scene_color = float4(surface.emissive, surface.base_a);
+    // Surviving opaque/masked fragments have full foreground coverage.
+    output.emissive_scene_color = float4(surface.emissive, 1.0f);
 #if defined(HAS_VELOCITY)
     output.velocity = float2(0.0f, 0.0f);
 #endif
