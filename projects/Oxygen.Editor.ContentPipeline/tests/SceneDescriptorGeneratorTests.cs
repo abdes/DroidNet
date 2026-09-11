@@ -2,25 +2,33 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
+/// <summary>Checks the supported scene descriptor and dependency contract.</summary>
 [TestClass]
-public sealed class SceneDescriptorGeneratorTests
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed partial class SceneDescriptorGeneratorTests
 {
+    /// <summary>Gets or sets cancellation for the current test.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Writes deterministic basic-shape descriptors and their material dependencies.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task EnsureDescriptorsAsync_ShouldWriteDeterministicDescriptorsForSupportedBasicShapes()
+    public async Task EnsureDescriptorsAsyncShouldWriteDeterministicDescriptorsForSupportedBasicShapes()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -33,7 +41,7 @@ public sealed class SceneDescriptorGeneratorTests
                 AssetUris.BuildGeneratedUri("BasicShapes/Sphere"),
                 AssetUris.BuildGeneratedUri("BasicShapes/Plane"),
             ],
-            CancellationToken.None).ConfigureAwait(false);
+            this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = inputs.Should().HaveCount(4);
         _ = inputs.Should().Contain(input => input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
@@ -49,15 +57,17 @@ public sealed class SceneDescriptorGeneratorTests
         _ = File.Exists(sphereDescriptor).Should().BeTrue();
         _ = File.Exists(planeDescriptor).Should().BeTrue();
         _ = File.Exists(Path.Combine(workspace.Root, ".pipeline", "Materials", "OxygenEditor_Default.omat.json")).Should().BeTrue();
-        _ = (await File.ReadAllTextAsync(cubeDescriptor).ConfigureAwait(false)).Should().Contain("\"generator\": \"Cube\"");
-        _ = (await File.ReadAllTextAsync(sphereDescriptor).ConfigureAwait(false)).Should().Contain("\"generator\": \"Sphere\"");
-        _ = (await File.ReadAllTextAsync(planeDescriptor).ConfigureAwait(false)).Should().Contain("\"generator\": \"Plane\"");
-        _ = (await File.ReadAllTextAsync(cubeDescriptor).ConfigureAwait(false)).Should()
+        _ = (await File.ReadAllTextAsync(cubeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Cube\"");
+        _ = (await File.ReadAllTextAsync(sphereDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Sphere\"");
+        _ = (await File.ReadAllTextAsync(planeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Plane\"");
+        _ = (await File.ReadAllTextAsync(cubeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should()
             .Contain("\"material_ref\": \"/Content/Materials/OxygenEditor_Default.omat\"");
     }
 
+    /// <summary>Emits the supported scene fields and geometry/material dependencies.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsync_ShouldEmitSceneDescriptorAndDependenciesForSupportedScene()
+    public async Task GenerateAsyncShouldEmitSceneDescriptorAndDependenciesForSupportedScene()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -80,7 +90,7 @@ public sealed class SceneDescriptorGeneratorTests
         scene.RootNodes.Add(node);
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
-        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
         _ = result.DescriptorVirtualPath.Should().Be("/Content/Scenes/Main.oscene");
@@ -99,7 +109,7 @@ public sealed class SceneDescriptorGeneratorTests
         _ = result.Dependencies.Should().Contain(input =>
             input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
 
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath).ConfigureAwait(false));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
         _ = root.GetProperty("version").GetInt32().Should().Be(3);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
@@ -113,8 +123,10 @@ public sealed class SceneDescriptorGeneratorTests
         _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
     }
 
+    /// <summary>Emits authored atmosphere values in native units.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsync_ShouldEmitAuthoredSkyAtmosphereValues()
+    public async Task GenerateAsyncShouldEmitAuthoredSkyAtmosphereValues()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -129,6 +141,8 @@ public sealed class SceneDescriptorGeneratorTests
         scene.SetEnvironment(new SceneEnvironmentData
         {
             AtmosphereEnabled = true,
+            ExposureMode = ExposureMode.Auto,
+            PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto },
             SkyAtmosphere = new SkyAtmosphereEnvironmentData
             {
                 PlanetRadiusMeters = 6_400_000.0f,
@@ -147,10 +161,10 @@ public sealed class SceneDescriptorGeneratorTests
         });
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
-        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath).ConfigureAwait(false));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var atmosphere = document.RootElement.GetProperty("environment").GetProperty("sky_atmosphere");
         _ = atmosphere.GetProperty("planet_radius_m").GetSingle().Should().Be(6_400_000.0f);
         _ = atmosphere.GetProperty("atmosphere_height_m").GetSingle().Should().Be(90_000.0f);
@@ -166,8 +180,10 @@ public sealed class SceneDescriptorGeneratorTests
         _ = atmosphere.GetProperty("sun_disk_enabled").GetBoolean().Should().BeFalse();
     }
 
+    /// <summary>Reports omitted manual exposure with a field-specific diagnostic.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsync_ShouldWarnForUnsupportedManualExposureField()
+    public async Task GenerateAsyncShouldWarnForUnsupportedManualExposureField()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -189,15 +205,17 @@ public sealed class SceneDescriptorGeneratorTests
         });
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
-        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().Contain(diagnostic =>
             diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField
             && diagnostic.Message.Contains("Environment.ManualExposureEv", StringComparison.Ordinal));
     }
 
+    /// <summary>Includes authored geometry descriptors in the dependency set.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsync_ShouldAddAuthoredGeometryDescriptorDependency()
+    public async Task GenerateAsyncShouldAddAuthoredGeometryDescriptorDependency()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -211,7 +229,7 @@ public sealed class SceneDescriptorGeneratorTests
         scene.RootNodes.Add(node);
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
-        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
         _ = result.Dependencies.Should().ContainSingle(input =>
@@ -220,20 +238,22 @@ public sealed class SceneDescriptorGeneratorTests
             && input.SourceRelativePath == "Content/Geometry/Foo.ogeo.json"
             && input.OutputVirtualPath == "/Content/Geometry/Foo.ogeo");
 
-        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath).ConfigureAwait(false));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = document.RootElement.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Foo.ogeo");
     }
 
+    /// <summary>Rejects a scene with no nodes.</summary>
+    /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsync_WhenSceneHasNoNodes_ShouldReturnDescriptorDiagnostic()
+    public async Task GenerateAsyncWhenSceneHasNoNodesShouldReturnDescriptorDiagnostic()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene(workspace.Project);
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
 
-        var result = await generator.GenerateAsync(scene, scope, CancellationToken.None).ConfigureAwait(false);
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().ContainSingle(diagnostic =>
             diagnostic.Code == ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed
@@ -242,11 +262,19 @@ public sealed class SceneDescriptorGeneratorTests
     }
 
     private static Scene CreateScene(IProject project)
-        => new(project)
+    {
+        var scene = new Scene(project)
         {
             Name = "Main",
-            Id = Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            Id = new Guid(0x10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
         };
+        scene.SetEnvironment(new SceneEnvironmentData
+        {
+            ExposureMode = ExposureMode.Auto,
+            PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto },
+        });
+        return scene;
+    }
 
     private static ContentCookScope CreateScope(TempWorkspace workspace)
     {
@@ -270,7 +298,7 @@ public sealed class SceneDescriptorGeneratorTests
             CookTargetKind.CurrentScene);
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {
