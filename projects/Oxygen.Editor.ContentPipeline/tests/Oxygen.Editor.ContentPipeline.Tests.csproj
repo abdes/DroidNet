@@ -10,9 +10,23 @@
         <ProjectReference Include="..\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
+    <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents" />
+        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">
+            <Output TaskParameter="TargetOutputs" ItemName="_ContentWorkerProbeAssembly" />
+        </MSBuild>
+        <PropertyGroup>
+            <_ContentWorkerProbeDirectory>@(_ContentWorkerProbeAssembly->'%(RootDir)%(Directory)')</_ContentWorkerProbeDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_ContentWorkerProbeFiles Include="$(_ContentWorkerProbeDirectory)*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_ContentWorkerProbeFiles)" DestinationFolder="$(OutDir)WorkerProbe" SkipUnchangedFiles="true" />
+    </Target>
 </Project>

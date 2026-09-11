@@ -896,6 +896,14 @@ a descendant writer, large output on both streams, startup failure, natural exit
 races and failed termination. After successful cancellation, no writer survives
 and no additional writes occur.
 
+The managed runner uses CreateProcessW startup job/handle attributes so ownership
+exists before child execution, while request arguments remain structured until
+native command-line encoding. Both output readers run without the request's
+cancellation token. A failed termination throws
+`ContentPipelineTerminationException` with `DrainCompletion`; the manifest
+adapter retains input until that task finishes. The project coordinator must
+likewise retain its operation gate and staging until this drain completes.
+
 ## 19. One Procedural Asset Authority (#11)
 
 ED-M07B.7 adds a supported engine/content procedural-definition capability shared

@@ -532,7 +532,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
-- [ ] 07B.6 owned native worker/descendant termination and I/O drain (#8).
+- [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
+      19 new worker/manifest cases pass; ContentPipeline is 64/64. Source/test
+      diagnostic collection and cleanup passed for changed files. Evidence:
+      `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
 - [ ] 07B.7 single procedural authority for the full engine generator catalog
       and aliases; Cylinder and every picker choice pass scene/project cook (#11).
 

@@ -252,6 +252,13 @@ Include these cases in 07B.5f; keep M07A property/history semantics intact.
 
 ### 07B.6 - Own And Drain Native Worker Processes (#8)
 
+Worker/manifest lifetime implementation is validated: 19 new subprocess/lifetime
+cases pass in the 64/64 ContentPipeline suite. Evidence:
+`artifacts/m07b-worker-final-tests.log` and
+`artifacts/TestResults/m07b-worker-final`. Changed worker/adapter/probe/test files
+have no unsuppressed analyzer or IDE diagnostics. Staged publication integration
+is exercised with 07B.1/2.
+
 Preserve structured ArgumentList and concurrent stdout/stderr reads. Run native
 cook workers in an operation-owned Windows job with descendant ownership and
 kill-on-close containment. On cancellation, stop the launched worker/job (the
@@ -353,7 +360,7 @@ its product semantics are settled in 07B.0 before implementation.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [ ] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
-- [ ] 07B.6 cancellation owns/drains native workers and descendants (#8).
+- [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [ ] 07B.7 all eleven engine generator names, including the sphere alias, use
   one semantic authority; every selectable shape passes scene/project cook (#11).
 - [ ] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in

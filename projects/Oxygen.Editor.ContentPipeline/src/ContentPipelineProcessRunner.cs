@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using Oxygen.Editor.ContentPipeline.Processes;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -11,7 +13,23 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed class ContentPipelineProcessRunner : IContentPipelineProcessRunner
 {
+    private readonly Func<ProcessStartInfo, IContentPipelineWorker> startWorker;
+
+    /// <summary>Initializes a new instance of the <see cref="ContentPipelineProcessRunner"/> class.</summary>
+    public ContentPipelineProcessRunner()
+        : this(WindowsContentPipelineWorker.Start)
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="ContentPipelineProcessRunner"/> class with a worker factory.</summary>
+    /// <param name="startWorker">The factory transferring ownership of each launched worker.</param>
+    internal ContentPipelineProcessRunner(Func<ProcessStartInfo, IContentPipelineWorker> startWorker)
+    {
+        this.startWorker = startWorker;
+    }
+
     /// <inheritdoc />
+    [SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "The drain owns the worker until completion and is transferred with termination failures; it does not use the cancellation registration disposed on return.")]
     public async Task<ContentPipelineProcessResult> RunAsync(
         ContentPipelineProcessRequest request,
         CancellationToken cancellationToken)
@@ -33,18 +51,64 @@ public sealed class ContentPipelineProcessRunner : IContentPipelineProcessRunner
             startInfo.ArgumentList.Add(argument);
         }
 
-        using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        if (!process.Start())
+        var worker = this.startWorker(startInfo);
+        var readerFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var drained = DrainAsync(worker, readerFailure);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registration = cancellationToken.Register(static state => ((TaskCompletionSource)state!).TrySetResult(), cancelled);
+        await using var registrationLifetime = registration.ConfigureAwait(false);
+
+        _ = await Task.WhenAny(drained, cancelled.Task, readerFailure.Task).ConfigureAwait(false);
+        var terminated = false;
+        if (!drained.IsCompleted)
         {
-            throw new InvalidOperationException($"Failed to start content-pipeline tool '{request.ExecutablePath}'.");
+            try
+            {
+                terminated = worker.Terminate();
+            }
+            catch (Exception ex)
+            {
+                // DrainAsync retains the worker and all handles. The caller must
+                // retain its inputs/gate too; it must not report Cancelled.
+                throw new ContentPipelineTerminationException(ex, drained);
+            }
         }
 
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var output = await outputTask.ConfigureAwait(false);
-        var error = await errorTask.ConfigureAwait(false);
+        var result = await drained.ConfigureAwait(false);
+        return terminated && cancellationToken.IsCancellationRequested
+            ? throw new OperationCanceledException(cancellationToken)
+            : result;
+    }
 
-        return new ContentPipelineProcessResult(process.ExitCode, output, error);
+    private static async Task<ContentPipelineProcessResult> DrainAsync(
+        IContentPipelineWorker worker,
+        TaskCompletionSource readerFailure)
+    {
+        using (worker)
+        {
+            var output = ObserveReaderAsync(worker.StandardOutput, readerFailure);
+            var error = ObserveReaderAsync(worker.StandardError, readerFailure);
+
+            // WhenAll observes BOTH readers even if one fails. None is cancelled:
+            // cancellation acts on the owned process tree, then reads reach EOF.
+            await Task.WhenAll(worker.Exit, output, error).ConfigureAwait(false);
+            return new ContentPipelineProcessResult(
+                await worker.Exit.ConfigureAwait(false),
+                await output.ConfigureAwait(false),
+                await error.ConfigureAwait(false));
+        }
+    }
+
+    private static async Task<string> ObserveReaderAsync(Task<string> reader, TaskCompletionSource failure)
+    {
+        try
+        {
+            return await reader.ConfigureAwait(false);
+        }
+        catch
+        {
+            _ = failure.TrySetResult();
+            throw;
+        }
     }
 }
