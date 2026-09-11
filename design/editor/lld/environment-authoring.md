@@ -261,9 +261,14 @@ Task<SceneCommandResult> EditSceneEnvironmentAsync(
 When `SunNodeId` changes:
 
 - Within the same command, set `IsSunLight = true` on the new sun node's
-  `DirectionalLightComponent` and `IsSunLight = false` on every other
+  `DirectionalLightComponent`, enable its `EnvironmentContribution`, and set
+  `IsSunLight = false` on every other
   `DirectionalLightComponent` in the scene. This produces a single undo entry.
 - Setting `SunNodeId = null` clears `IsSunLight` on all directional lights.
+- Enabling a light's Sun switch applies the same binding rule. Disabling its
+  Contributes switch clears Sun and any scene binding to that light in one edit.
+- Sync clears the previous native sun before enabling the next one. Undo/Redo
+  restores both light flags and the scene binding.
 - A stale `SunNodeId` (node deleted) is preserved as-is until the user clears
   or rebinds it; the inspector renders an unresolved warning row.
 
