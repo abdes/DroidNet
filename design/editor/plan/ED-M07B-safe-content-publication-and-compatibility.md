@@ -24,6 +24,7 @@ and update it without managing generated files or mounts. The
 
 [content-pipeline.md](../lld/content-pipeline.md) sections 16-19,
 [content-cooking-workflows.md](../lld/content-cooking-workflows.md),
+[cooking-panel.md](../lld/cooking-panel.md),
 [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md),
 [material-editor.md](../lld/material-editor.md),
 [property-inspector.md](../lld/property-inspector.md) section 9.1,
@@ -136,6 +137,11 @@ hashes. Validate it before loading interop or spawning native tools. Keep Projec
 Browser and safe saves available on mismatch. Implement the qualified glTF/FBX
 static/scalar validation and retained import settings from pipeline section 17.
 
+Decision D2, accepted on 2026-09-11: Debug and Release both use a fixed
+qualification manifest. A build must not regenerate the accepted manifest to
+make its new outputs pass. Qualifying and promoting a new artifact set is an
+explicit operation, separate from ordinary compilation.
+
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and
 supported formats, handle collisions explicitly, and protect dirty authored
@@ -199,6 +205,8 @@ Complete the visible import/reimport destination, format, collision and retained
 source/result flow from 07B.4. All four explicit Cook scopes use incremental
 planning and explain the actual affected scope. Handle dirty inputs with the
 ordinary save/conflict workflow and the D1 decision on Save listed and Cook.
+Route all scopes to the Cooking panel; dirty participating documents and the
+explicit Save listed & Cook action remain inline with the selected request.
 Wire the approved automatic triggers and session pause/resume without implicit
 saves or independent writers. Automatic failures remain actionable and quiet
 successes do not steal focus.
@@ -209,11 +217,52 @@ from retained source. Inspect/Validate and browse/hover do not trigger cooking.
 
 #### 07B.5e - Progress, Recovery And Accessible Layout
 
-Expose queued/phase state, affected asset/scope, cancellation and publication
-pause on existing surfaces; detailed results show changed/reused counts and
-asset-linked errors. Inspect provides browsable read-only output facts. Layouts
-must keep Cook/Save/Cancel/status usable at supported dock widths and scaling,
-with meaningful names, text beyond color, proper asset glyphs, and stable focus.
+Implement the [Cooking panel](../lld/cooking-panel.md) using the existing docking,
+coordinator, document commands, operation results, and logging infrastructure. Its
+layout and interactions were approved on 2026-09-12 for all four scopes,
+including entire projects. Default docking is at the bottom beside
+Content Browser and Logs. Use a compact run list and one selected run's details,
+with asset-grouped issues beneath stage/counts, an initially expanded Output
+section for that run's live and completed messages, and an expandable asset list.
+Keep native/managed progress and technical output inside Cooking. Reuse logging
+capture/storage, but do not send users to the global Logs panel to understand a
+cook. Preserve the reading position while messages arrive and retain transcripts
+with session history, independently of unrelated editor log traffic.
+Use a single-line name/type, status pill, and adjacent recovery actions. Keep
+routine updated/reused counts and publication confirmations in Assets/Output;
+extra status text is reserved for actionable exceptions such as warnings or
+preview unavailability.
+Hide Retry entirely after success or an already-current result. The expanded
+asset list keeps each status icon beside the asset name and type, with accessible
+state labels, rather than requiring users to scan a remote status column.
+Apply the same status icons and name/type hierarchy to the cook list. Omit
+routine Explicit labels and repeated status badges; keep explanations and
+applicable actions in the selected run's details.
+Use DroidNet's compact toolbar above the side list for Show all. Remove the
+panel-wide project-name toolbar and new-cook commands; initial cook requests
+remain in the existing editor entry points. Native Expanders label issue groups
+by asset and count, with InfoBars keeping messages and recovery actions inline
+when space permits. The details body scrolls, and expanded Output/Assets retain
+minimum content heights of 160/120 DIP instead of being clipped in short docks.
+Both sections expand to fit their full content and have no internal scrollbars;
+only the surrounding details body scrolls.
+
+Provide session history, Show all for routine automatic successes, quiet automatic
+work, selected-run cancellation, inline unsaved inputs and Save listed & Cook,
+latest-saved-scope Retry, and Go to property that keeps Cooking visible and the
+failed run selected. Continue independent batch work after asset failures, skip
+dependents, collect issues, and preserve published output on failed cooks. These
+behaviors use cook-specific observable run state, not a second scheduler.
+
+The first recovery gate is Main's negative Aerial Start: show the actual property
+error and captured value, focus the field, apply the native schema's finite
+minimum-0 bound through shared editor/preflight validation, then save 100 and
+publish successfully. Preserve invalid saved values visibly on load and previous
+output on failure; never clear stale status merely because the request ended.
+
+Inspect provides browsable read-only output facts. Layouts must keep
+Cook/Save/Cancel/status usable at supported dock widths and scaling, with
+meaningful names, text beyond color, proper asset glyphs, and stable focus.
 
 Pass: first-cook failure, failure with prior output, rollback failure, offline
 runtime, and mismatch each have the right recovery action. The material toolbar
@@ -226,7 +275,9 @@ Execute every journey in workflow LLD section 7 with production services and
 the packaged editor controls. Repeat the captured review cases after fixes and
 record user validation of before/during/after behavior. Cover supported imports,
 the complete engine generator set, authored and cooked-only content, dirty/shared dependencies,
-coalesced requests, failures, cancellation, and offline/reopen behavior.
+coalesced requests, failures, cancellation, and offline/reopen behavior. Include
+the Cooking panel's Main repair journey and every additional gate in its section 6;
+a review wireframe is not implementation or editor-validation evidence.
 
 Pass: users complete supported workflows without generated-file edits, raw path
 assignment, manual mounting, or losing their working context. The PRD 1,000-entry
