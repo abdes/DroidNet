@@ -19,7 +19,7 @@ public sealed partial class MaterialDocumentServiceTests
     {
         using var workspace = new TempWorkspace();
         var results = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), CreateFileStore(), results);
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), results);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Conflict.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(document.DocumentId, new(MaterialFieldKeys.RoughnessFactor, 0.8f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var external = await File.ReadAllTextAsync(document.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false) + "\n ";
