@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
@@ -12,9 +13,14 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
+/// <summary>Verifies native import, inspection, and operation input ownership.</summary>
 [TestClass]
-public sealed class ImportToolContentPipelineApiTests
+[SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed partial class ImportToolContentPipelineApiTests
 {
+    /// <summary>Verifies the workflow can invoke Import Tool With Temporary Manifest Under Project Pipeline Folder.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task ImportAsync_ShouldInvokeImportToolWithTemporaryManifestUnderProjectPipelineFolder()
     {
@@ -47,6 +53,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = File.Exists(manifestPath).Should().BeFalse("the fallback adapter owns and cleans up its temporary manifest");
     }
 
+    /// <summary>Verifies the workflow can return Single Import Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task ImportAsync_WhenToolFails_ShouldReturnSingleImportDiagnostic()
     {
@@ -66,6 +74,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("stderr");
     }
 
+    /// <summary>Verifies the workflow can read Loose Cooked Index.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectLooseCookedRootAsync_ShouldReadLooseCookedIndex()
     {
@@ -85,6 +95,8 @@ public sealed class ImportToolContentPipelineApiTests
             file.RelativePath == "materials.bin" && file.Size == 8);
     }
 
+    /// <summary>Verifies the workflow can return Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
     {
@@ -101,6 +113,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
     }
 
+    /// <summary>Verifies the workflow can return Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task ValidateLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
     {
@@ -117,6 +131,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
     }
 
+    /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectLooseCookedRootAsync_WhenIndexMissing_ShouldReturnSynthesizedDiagnostic()
     {
@@ -133,6 +149,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].AffectedPath.Should().Be(cookedRoot);
     }
 
+    /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task ValidateLooseCookedRootAsync_WhenIndexMissing_ShouldReturnSynthesizedDiagnostic()
     {
@@ -149,6 +167,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].AffectedPath.Should().Be(cookedRoot);
     }
 
+    /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectLooseCookedRootAsync_WhenIndexVersionIsUnsupported_ShouldReturnSynthesizedDiagnostic()
     {
@@ -165,6 +185,8 @@ public sealed class ImportToolContentPipelineApiTests
         _ = result.Diagnostics[0].ExceptionType.Should().Be(typeof(NotSupportedException).FullName);
     }
 
+    /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task ValidateLooseCookedRootAsync_WhenIndexVersionIsUnsupported_ShouldReturnSynthesizedDiagnostic()
     {
@@ -277,7 +299,7 @@ public sealed class ImportToolContentPipelineApiTests
         public string GetImportToolPath() => toolPath;
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {
