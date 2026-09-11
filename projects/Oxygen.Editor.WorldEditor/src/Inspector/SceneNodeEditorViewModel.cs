@@ -534,6 +534,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.componentPropertyNotifiers.Clear();
+        this.UnsubscribeMaterialSlots();
     }
 
     private void OnNodeComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -568,6 +569,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
             component.PropertyChanged += this.OnSelectedComponentPropertyChanged;
             this.componentPropertyNotifiers[component] = node;
+            if (component is GeometryComponent geometry)
+            {
+                this.SubscribeMaterialSlots(geometry);
+            }
         }
     }
 
