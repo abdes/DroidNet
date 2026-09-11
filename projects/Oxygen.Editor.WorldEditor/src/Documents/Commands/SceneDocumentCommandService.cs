@@ -14,6 +14,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.SceneExplorer.Services;
@@ -66,6 +67,12 @@ public sealed partial class SceneDocumentCommandService(
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
         try
         {
             var normalized = NormalizePrimitiveKind(kind);
@@ -96,6 +103,12 @@ public sealed partial class SceneDocumentCommandService(
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
         try
         {
             var normalized = NormalizeLightKind(kind);
@@ -132,6 +145,12 @@ public sealed partial class SceneDocumentCommandService(
         TransformEdit edit,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(edit);
@@ -191,61 +210,8 @@ public sealed partial class SceneDocumentCommandService(
         GeometryEdit edit,
         EditSessionToken session)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(nodeIds);
-        ArgumentNullException.ThrowIfNull(edit);
-        ArgumentNullException.ThrowIfNull(session);
-
-        if (SkipUncommittedSession(session) is { } sessionResult)
-        {
-            return sessionResult;
-        }
-
-        if (!edit.GeometryUri.HasValue)
-        {
-            return SceneCommandResult.Success;
-        }
-
-        if (edit.GeometryUri.Value is null)
-        {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditGeometry,
-                SceneDiagnosticCodes.GeometryReferenceRequired,
-                "Geometry was not edited",
-                "A geometry component must reference a geometry asset. Remove the component to detach geometry.",
-                context);
-        }
-
-        var targets = ResolveNodes(context.Scene, nodeIds)
-            .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
-            .Where(static target => target.Geometry is not null)
-            .ToList();
-        if (targets.Count == 0)
-        {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditGeometry,
-                SceneDiagnosticCodes.ComponentRemoveDenied,
-                "Geometry was not edited",
-                "No selected node has a geometry component.",
-                context);
-        }
-
-        var before = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
-        foreach (var target in targets)
-        {
-            target.Geometry!.Geometry = new AssetReference<GeometryAsset>(edit.GeometryUri.Value);
-        }
-
-        var after = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
-        if (GeometryStatesEqual(before, after))
-        {
-            return SceneCommandResult.Success;
-        }
-
-        this.RecordGeometryHistory(context, before, after);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operationResultId = await this.SyncGeometryStatesAsync(context, after, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
-        return new SceneCommandResult(Succeeded: true, operationResultId);
+        using var authoring = EnterAuthoring(context);
+        return authoring is null ? new(Succeeded: false) : await this.EditGeometryCoreAsync(context, nodeIds, edit, session).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -256,6 +222,12 @@ public sealed partial class SceneDocumentCommandService(
         Uri? newMaterialUri,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(session);
@@ -318,6 +290,12 @@ public sealed partial class SceneDocumentCommandService(
         PerspectiveCameraEdit edit,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(edit);
@@ -378,6 +356,12 @@ public sealed partial class SceneDocumentCommandService(
         DirectionalLightEdit edit,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(edit);
@@ -419,6 +403,12 @@ public sealed partial class SceneDocumentCommandService(
         Guid nodeId,
         Type componentType)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<GameComponent>();
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(componentType);
 
@@ -476,6 +466,12 @@ public sealed partial class SceneDocumentCommandService(
         Guid nodeId,
         Guid componentId)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
 
         var node = FindNode(context.Scene, nodeId);
@@ -516,6 +512,12 @@ public sealed partial class SceneDocumentCommandService(
         SceneEnvironmentEdit edit,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(edit);
         ArgumentNullException.ThrowIfNull(session);
@@ -564,66 +566,10 @@ public sealed partial class SceneDocumentCommandService(
     }
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneCommandResult> SaveSceneAsync(SceneDocumentCommandContext context)
     {
-        await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
-        var gate = SaveGates.GetValue(context.Scene, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
-            var version = context.Metadata.ChangeVersion;
-            var snapshot = SceneSaveSnapshot.Capture(context.Scene);
-            var success = await this.projectManager.SaveSceneSnapshotAsync(snapshot).ConfigureAwait(true);
-            if (!success)
-            {
-                var operationResultId = this.PublishSceneFailure(
-                    SceneOperationKinds.Save,
-                    DiagnosticCodes.DocumentPrefix + "SAVE_FAILED",
-                    "Scene was not saved",
-                    "The scene data could not be saved.",
-                    context,
-                    domain: FailureDomain.Document);
-                return new SceneCommandResult(Succeeded: false, operationResultId);
-            }
-
-            context.Metadata.MarkSaved(version);
-            _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsChangedMessage());
-            var notice = context.Metadata.IsDirty
-                ? this.PublishSceneWarning(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "NEWER_CHANGES_UNSAVED", "Scene snapshot saved", "Saved; newer changes remain unsaved", context, domain: FailureDomain.Document)
-                : (Guid?)null;
-            return new SceneCommandResult(Succeeded: true, notice) { HasUnsavedChanges = context.Metadata.IsDirty };
-        }
-        catch (DroidNet.Storage.StorageWriteConflictException exception)
-        {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.Save,
-                DiagnosticCodes.DocumentPrefix + "Conflict",
-                "Scene changed outside this document",
-                exception.Message,
-                context,
-                exception,
-                FailureDomain.Document);
-            return new SceneCommandResult(Succeeded: false, operationResultId) { IsConflict = true, HasUnsavedChanges = context.Metadata.IsDirty };
-        }
-        catch (Exception ex)
-        {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.Save,
-                DiagnosticCodes.DocumentPrefix + "SAVE_EXCEPTION",
-                "Scene was not saved",
-                "The scene save operation failed.",
-                context,
-                ex,
-                FailureDomain.Document);
-            return new SceneCommandResult(Succeeded: false, operationResultId);
-        }
-        finally
-        {
-            _ = gate.Release();
-        }
+        using var authoring = EnterAuthoring(context);
+        return authoring is null ? new(Succeeded: false) : await this.SaveSceneCoreAsync(context).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -633,6 +579,12 @@ public sealed partial class SceneDocumentCommandService(
         ITreeItem item,
         string newName)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         var oldName = item.Label;
         if (string.Equals(oldName, newName, StringComparison.Ordinal))
         {
@@ -653,6 +605,11 @@ public sealed partial class SceneDocumentCommandService(
         try
         {
             await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(true);
+            if (SceneAuthoringGate.IsRetired(context.Scene))
+            {
+                return new(Succeeded: false);
+            }
+
             context.History.AddChange(
                 $"Rename({oldName} -> {newName})",
                 async () => await this.RenameItemAsync(context, item, oldName).ConfigureAwait(false));
@@ -670,6 +627,12 @@ public sealed partial class SceneDocumentCommandService(
                 ex);
             return new SceneCommandResult(Succeeded: false, operationResultId);
         }
+    }
+
+    private static SceneAuthoringGate.Operation? EnterAuthoring(SceneDocumentCommandContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return SceneAuthoringGate.TryEnter(context.Scene);
     }
 
     private static async Task CompletePublicationAsync(Task metadata, Task projection)
@@ -1445,6 +1408,141 @@ public sealed partial class SceneDocumentCommandService(
             NodeName = node?.Name,
         };
 
+    private async Task<SceneCommandResult> EditGeometryCoreAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        GeometryEdit edit,
+        EditSessionToken session)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        ArgumentNullException.ThrowIfNull(edit);
+        ArgumentNullException.ThrowIfNull(session);
+
+        if (SkipUncommittedSession(session) is { } sessionResult)
+        {
+            return sessionResult;
+        }
+
+        if (!edit.GeometryUri.HasValue)
+        {
+            return SceneCommandResult.Success;
+        }
+
+        if (edit.GeometryUri.Value is null)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.EditGeometry,
+                SceneDiagnosticCodes.GeometryReferenceRequired,
+                "Geometry was not edited",
+                "A geometry component must reference a geometry asset. Remove the component to detach geometry.",
+                context);
+        }
+
+        var targets = ResolveNodes(context.Scene, nodeIds)
+            .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
+            .Where(static target => target.Geometry is not null)
+            .ToList();
+        if (targets.Count == 0)
+        {
+            return this.ValidationFailure(
+                SceneOperationKinds.EditGeometry,
+                SceneDiagnosticCodes.ComponentRemoveDenied,
+                "Geometry was not edited",
+                "No selected node has a geometry component.",
+                context);
+        }
+
+        var before = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
+        foreach (var target in targets)
+        {
+            target.Geometry!.Geometry = new AssetReference<GeometryAsset>(edit.GeometryUri.Value);
+        }
+
+        var after = targets.ConvertAll(static target => GeometryState.Capture(target.Node, target.Geometry!));
+        if (GeometryStatesEqual(before, after))
+        {
+            return SceneCommandResult.Success;
+        }
+
+        this.RecordGeometryHistory(context, before, after);
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        var operationResultId = await this.SyncGeometryStatesAsync(context, after, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    private async Task<SceneCommandResult> SaveSceneCoreAsync(SceneDocumentCommandContext context)
+    {
+        await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
+        var gate = SaveGates.GetValue(context.Scene, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
+            var version = context.Metadata.ChangeVersion;
+            var snapshot = SceneSaveSnapshot.Capture(context.Scene);
+            var success = await this.projectManager.SaveSceneSnapshotAsync(snapshot).ConfigureAwait(true);
+            if (!success)
+            {
+                var operationResultId = this.PublishSceneFailure(
+                    SceneOperationKinds.Save,
+                    DiagnosticCodes.DocumentPrefix + "SAVE_FAILED",
+                    "Scene was not saved",
+                    "The scene data could not be saved.",
+                    context,
+                    domain: FailureDomain.Document);
+                return new SceneCommandResult(Succeeded: false, operationResultId);
+            }
+
+            return await this.AcknowledgeSceneSaveAsync(context, version).ConfigureAwait(true);
+        }
+        catch (DroidNet.Storage.StorageWriteConflictException exception)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.Save,
+                DiagnosticCodes.DocumentPrefix + "Conflict",
+                "Scene changed outside this document",
+                exception.Message,
+                context,
+                exception,
+                FailureDomain.Document);
+            return new SceneCommandResult(Succeeded: false, operationResultId) { IsConflict = true, HasUnsavedChanges = context.Metadata.IsDirty };
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.Save,
+                DiagnosticCodes.DocumentPrefix + "SAVE_EXCEPTION",
+                "Scene was not saved",
+                "The scene save operation failed.",
+                context,
+                ex,
+                FailureDomain.Document);
+            return new SceneCommandResult(Succeeded: false, operationResultId);
+        }
+        finally
+        {
+            _ = gate.Release();
+        }
+    }
+
+    private async Task<SceneCommandResult> AcknowledgeSceneSaveAsync(SceneDocumentCommandContext context, long version)
+    {
+        if (SceneAuthoringGate.IsRetired(context.Scene))
+        {
+            return new(Succeeded: true) { HasUnsavedChanges = context.Metadata.IsDirty };
+        }
+
+        context.Metadata.MarkSaved(version);
+        _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
+        _ = this.messenger.Send(new AssetsChangedMessage());
+        var notice = context.Metadata.IsDirty
+            ? this.PublishSceneWarning(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "NEWER_CHANGES_UNSAVED", "Scene snapshot saved", "Saved; newer changes remain unsaved", context, domain: FailureDomain.Document)
+            : (Guid?)null;
+        return new SceneCommandResult(Succeeded: true, notice) { HasUnsavedChanges = context.Metadata.IsDirty };
+    }
+
     private async Task<SceneCommandResult> ApplyDirectionalLightTargetsAsync(
         SceneDocumentCommandContext context,
         List<(SceneNode node, DirectionalLightComponent? light)> targets,
@@ -1501,6 +1599,12 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task RemoveRootNodeForUndoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         _ = context.Scene.RootNodes.Remove(node);
         context.History.AddChange($"Restore {node.Name}", async () => await this.RestoreRootNodeForRedoAsync(context, node, operationKind).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
@@ -1510,6 +1614,12 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task RestoreRootNodeForRedoAsync(SceneDocumentCommandContext context, SceneNode node, string operationKind)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         if (!context.Scene.RootNodes.Contains(node))
         {
             context.Scene.RootNodes.Add(node);
@@ -1566,6 +1676,12 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task ApplyGeometryStatesForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<GeometryState> states, IReadOnlyList<GeometryState> inverse)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         foreach (var state in states)
         {
             state.Apply();
@@ -1581,6 +1697,12 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task ApplyMaterialSlotStatesForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<MaterialSlotState> states, IReadOnlyList<MaterialSlotState> inverse)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         foreach (var state in states)
         {
             state.Apply();
@@ -1596,6 +1718,12 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task ApplyCameraStatesForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<CameraState> states, IReadOnlyList<CameraState> inverse)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         foreach (var state in states)
         {
             state.Apply();
@@ -1626,6 +1754,12 @@ public sealed partial class SceneDocumentCommandService(
         IReadOnlyList<DirectionalSunState> sunStates,
         IReadOnlyList<DirectionalSunState> inverseSunStates)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         foreach (var state in states)
         {
             state.Apply();
@@ -1658,6 +1792,12 @@ public sealed partial class SceneDocumentCommandService(
         IReadOnlyList<DirectionalSunState> sunStates,
         IReadOnlyList<DirectionalSunState> inverseSunStates)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
         context.Scene.SetEnvironment(environment);
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Environment", async () => await this.ApplyEnvironmentForHistoryAsync(context, inverse, environment, inverseSunStates, sunStates).ConfigureAwait(true));
@@ -1873,7 +2013,7 @@ public sealed partial class SceneDocumentCommandService(
 
     private void PublishNodeAdded(SceneDocumentCommandContext context, SceneNode node)
     {
-        if (!ReferenceEquals(FindNode(context.Scene, node.Id), node))
+        if (SceneAuthoringGate.IsRetired(context.Scene) || !ReferenceEquals(FindNode(context.Scene, node.Id), node))
         {
             return;
         }
@@ -1885,6 +2025,11 @@ public sealed partial class SceneDocumentCommandService(
 
     private void PublishNodeRemoved(SceneDocumentCommandContext context, SceneNode node)
     {
+        if (SceneAuthoringGate.IsRetired(context.Scene))
+        {
+            return;
+        }
+
         var selection = this.selectionService.Reconcile(context.DocumentId, context.Scene);
         _ = this.messenger.Send(new SceneNodeRemovedMessage([node]));
         _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selection]));

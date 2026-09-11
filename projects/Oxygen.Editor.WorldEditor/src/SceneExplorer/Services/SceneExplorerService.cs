@@ -6,6 +6,7 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core.Diagnostics;
@@ -43,6 +44,12 @@ public partial class SceneExplorerService(
     public async Task<SceneNodeChangeRecord?> CreateNodeAsync(ITreeItem parent, string name)
     {
         var scene = this.GetScene(parent) ?? throw new InvalidOperationException("Could not resolve scene from parent.");
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return null;
+        }
+
         var newNode = new SceneNode(scene) { Name = name };
         return await this.AddNodeAsync(parent, newNode).ConfigureAwait(false);
     }
@@ -52,6 +59,12 @@ public partial class SceneExplorerService(
     public async Task<SceneNodeChangeRecord?> AddNodeAsync(ITreeItem parent, SceneNode node)
     {
         var scene = this.GetScene(parent) ?? throw new InvalidOperationException("Could not resolve scene from parent.");
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return null;
+        }
+
         SceneNodeChangeRecord? change = null;
 
         if (parent is SceneAdapter)
@@ -104,6 +117,12 @@ public partial class SceneExplorerService(
     public Task<Guid> CreateFolderAsync(ITreeItem parent, string name, Guid? folderId = null)
     {
         var scene = this.GetScene(parent) ?? throw new InvalidOperationException("Could not resolve scene from parent.");
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return Task.FromResult(Guid.Empty);
+        }
+
         LayoutChangeRecord record;
         if (parent is SceneAdapter)
         {
@@ -148,6 +167,12 @@ public partial class SceneExplorerService(
             return null;
         }
 
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return null;
+        }
+
         if (item is SceneNodeAdapter nodeAdapter)
         {
             return await this.MoveNodeAsync(scene, nodeAdapter, newParent).ConfigureAwait(true);
@@ -176,6 +201,17 @@ public partial class SceneExplorerService(
     /// <inheritdoc />
     public async Task UpdateMovedItemsAsync(TreeItemsMovedEventArgs args)
     {
+        if (args.Moves.Count == 0 || this.GetScene(args.Moves[0].Item) is not { } scene)
+        {
+            return;
+        }
+
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return;
+        }
+
         foreach (var move in args.Moves)
         {
             var item = move.Item;
@@ -206,6 +242,12 @@ public partial class SceneExplorerService(
 
         var scene = this.GetScene(itemsList[0]);
         if (scene == null)
+        {
+            return changes;
+        }
+
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
         {
             return changes;
         }
@@ -243,6 +285,12 @@ public partial class SceneExplorerService(
     /// <inheritdoc />
     public Task RenameItemAsync(ITreeItem item, string newName)
     {
+        using var authoring = this.GetScene(item) is { } owner ? SceneAuthoringGate.TryEnter(owner) : null;
+        if (authoring is null)
+        {
+            return Task.CompletedTask;
+        }
+
         if (item is SceneNodeAdapter nodeAdapter)
         {
             nodeAdapter.AttachedObject.Name = newName;

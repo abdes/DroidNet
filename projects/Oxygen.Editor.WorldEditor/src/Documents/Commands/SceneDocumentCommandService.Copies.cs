@@ -17,6 +17,12 @@ public sealed partial class SceneDocumentCommandService
     /// <inheritdoc/>
     public async Task<SceneValueCommandResult<Scene>> SaveSceneCopyAsync(SceneDocumentCommandContext context, string name)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<Scene>();
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
         var gate = SaveGates.GetValue(context.Scene, static _ => new SemaphoreSlim(1, 1));
