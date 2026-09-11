@@ -71,7 +71,7 @@ public sealed partial class SceneDocumentCommandService
             && active.Context.DocumentId == context.DocumentId
             && string.Equals(active.Kind, kind, StringComparison.Ordinal)
             && active.Nodes.ToHashSet().SetEquals(requested.Nodes)
-            && active.Descriptors.Select(value => value.Id).ToHashSet().SetEquals(properties)
+            && active.EditedProperties.SetEquals(properties)
             && (string.Equals(kind, SceneEnvironmentKind, StringComparison.Ordinal)
                 || models.All(pair => active.Targets.TryGetValue(pair.Key, out var original) && ReferenceEquals(original, pair.Value)));
 
@@ -176,7 +176,7 @@ public sealed partial class SceneDocumentCommandService
             return Task.FromResult(this.ValidationFailure(OperationKindForPropertyKind(kind), "PROPERTY_GESTURE_TARGET_CHANGED", "Property edit rejected", "The gesture's document, target set, or property set changed.", context));
         }
 
-        var touched = ids.Select(id => descriptors[id]).ToArray();
+        var touched = GetAffectedPropertyIds(ids).Select(id => descriptors[id]).ToArray();
         var before = PropertySnapshot.Capture(models, touched);
         active = this.GetOrBeginPropertyGesture(context, requested, label, token, kind, touched, before, models, active);
 
@@ -203,7 +203,10 @@ public sealed partial class SceneDocumentCommandService
         {
             var key = token.IsOneShot ? Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) : token.SessionId.ToString("N", CultureInfo.InvariantCulture);
             var group = this.propertyCommitGroups.Begin(key, requested.Nodes.ToArray(), before, label);
-            active = new(context, token, kind, group.Key, group.Nodes, touched, before, label, models);
+            active = new(context, token, kind, group.Key, group.Nodes, touched, before, label, models)
+            {
+                EditedProperties = requested.PerNode.Values.SelectMany(edit => edit.Ids).ToHashSet(),
+            };
             if (!token.IsOneShot)
             {
                 this.propertyGestures[token.SessionId] = active;
@@ -405,6 +408,8 @@ public sealed partial class SceneDocumentCommandService
         public IReadOnlyList<Guid> Nodes { get; } = nodes;
 
         public IReadOnlyList<PropertyDescriptor> Descriptors { get; } = descriptors;
+
+        public HashSet<PropertyId> EditedProperties { get; init; } = descriptors.Select(descriptor => descriptor.Id).ToHashSet();
 
         public PropertySnapshot Before { get; } = before;
 
