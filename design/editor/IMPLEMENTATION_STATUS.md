@@ -522,6 +522,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [x] 07B.0 settle trigger policy and reconcile PRD/LLDs after the UX review.
 - [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
       coalescing and serialized project cooks.
+      The shared writer and saved-input capture primitives pass 87/87
+      ContentPipeline tests. Document save-gate adapters, dependency discovery,
+      incremental reuse and publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
@@ -538,6 +541,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
 - [ ] 07B.7 single procedural authority for the full engine generator catalog
       and aliases; Cylinder and every picker choice pass scene/project cook (#11).
+
+Startup correction: workspace commands now wait for native module registration.
+Runtime 75/75; the user confirmed project opening without the access violation.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
