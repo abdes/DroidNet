@@ -12,6 +12,7 @@
     </UserControl.Resources>
     <StackPanel Spacing="8">
         <editorcontrols:PropertiesExpander
+            x:Name="SkyAtmosphereSection"
             Padding="2"
             HorizontalAlignment="Stretch"
             HorizontalContentAlignment="Stretch"
@@ -187,16 +188,21 @@
                             Visibility="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.Visibility, Mode=OneWay}" />
                     </StackPanel>
                 </editorcontrols:PropertyCard>
-                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Aerial Start">
+                <editorcontrols:PropertyCard
+                    x:Name="AerialStartCard"
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Aerial Start">
                     <StackPanel Spacing="2">
                         <controls:NumberBox
+                            x:Name="AerialStartInput"
                             EditSessionCompleted="NumberEditCompleted"
                             EditSessionStarted="NumberEditStarted"
                             Label="m"
                             LabelPosition="Right"
                             Mask="~.###"
                             NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}"
-                            Tag="AerialPerspectiveStartDepthMeters" />
+                            Tag="AerialPerspectiveStartDepthMeters"
+                            Validate="AerialStartValidate" />
                         <TextBlock
                             AutomationProperties.LiveSetting="Polite"
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"

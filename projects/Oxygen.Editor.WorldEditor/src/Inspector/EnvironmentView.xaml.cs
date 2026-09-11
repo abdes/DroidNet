@@ -15,12 +15,62 @@ namespace Oxygen.Editor.World.Inspector;
 [ViewModel(typeof(EnvironmentViewModel))]
 public sealed partial class EnvironmentView
 {
+    private EnvironmentViewModel? observedModel;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="EnvironmentView"/> class.
     /// </summary>
     public EnvironmentView()
     {
         this.InitializeComponent();
+        this.Loaded += this.OnLoaded;
+        this.Unloaded += this.OnUnloaded;
+        this.AerialStartInput.Loaded += (_, _) => this.TryFocusAerialStart();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        this.observedModel = this.ViewModel;
+        if (this.observedModel is { } model)
+        {
+            model.FieldFocusRequested += this.OnFieldFocusRequested;
+            this.FocusPendingField();
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs args)
+    {
+        if (this.observedModel is { } model)
+        {
+            model.FieldFocusRequested -= this.OnFieldFocusRequested;
+            this.observedModel = null;
+        }
+    }
+
+    private void OnFieldFocusRequested(object? sender, EventArgs args) => this.FocusPendingField();
+
+    private void FocusPendingField()
+    {
+        if (!string.Equals(this.observedModel?.PendingFieldFocus, Oxygen.Editor.Schemas.SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = this.SkyAtmosphereSection.BringItemIntoView(this.AerialStartCard);
+        _ = this.DispatcherQueue.TryEnqueue(this.TryFocusAerialStart);
+    }
+
+    private void TryFocusAerialStart()
+    {
+        if (this.IsLoaded && this.AerialStartInput.IsLoaded && this.observedModel is { } model
+            && string.Equals(model.PendingFieldFocus, Oxygen.Editor.Schemas.SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal))
+        {
+            this.AerialStartInput.StartBringIntoView();
+            if (this.AerialStartInput.Focus(FocusState.Programmatic))
+            {
+                model.AcknowledgeFieldFocus();
+            }
+        }
     }
 
     private void BackgroundPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
@@ -41,6 +91,9 @@ public sealed partial class EnvironmentView
 
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(args);
+
+    private void AerialStartValidate(object? sender, ValidationEventArgs<float> args)
+        => args.IsValid = this.ViewModel?.ValidateAerialStart(args.NewValue) == true;
 
     private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
     {

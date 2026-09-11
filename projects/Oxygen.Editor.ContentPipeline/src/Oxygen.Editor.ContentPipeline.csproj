@@ -23,5 +23,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Schemas\src\Oxygen.Editor.Schemas.csproj" />
     </ItemGroup>
 </Project>
