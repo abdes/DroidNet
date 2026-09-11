@@ -914,6 +914,14 @@ scope, not duplicate generator defaults. A definition yields the live asset and
 schema-valid cook contribution through the same engine-owned generation helpers.
 The cooker remains the native format authority.
 
+`Oxygen.Data` exposes the built-in catalog, canonical URI/descriptor identity,
+and cached geometry resolution. Its procedural parameter defaults are shared by
+direct mesh factories, binary-parameter generation and the descriptor importer.
+Bounds come from the generated mesh, and material parameters come from
+`MaterialAsset::CreateDefault`. `Oxygen.Cooker` emits the schema-valid descriptor
+contributions and the catalog artifact consumed by the editor. The editor supplies
+the project output mount; it does not reconstruct geometry or material defaults.
+
 The required set covers every named generator currently exposed by
 `Oxygen/Data/ProceduralMeshes.h` and the engine geometry descriptor schema:
 Cube, SubdividedCube, Sphere, IcoSphere, GeodesicSphere, Plane, Cylinder, Cone,

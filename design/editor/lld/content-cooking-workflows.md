@@ -1,6 +1,6 @@
 # Content Cooking Workflows LLD
 
-Status: `ED-M07B implementation contract; D1 accepted 2026-09-11`
+Status: `ED-M07B implementation contract; D1 accepted 2026-09-11; Cooking panel decisions accepted 2026-09-12`
 
 ## 1. Purpose And Ownership
 
@@ -14,13 +14,16 @@ publication. ContentBrowser owns shared asset presentation and typed pickers.
 MaterialEditor and WorldEditor own document saves and undoable assignments;
 they submit requests through ContentPipeline. Runtime owns readiness and asset
 load acceptance. Projects owns roots and retained source locations. Existing
-operation results carry progress and recovery; there is no second job system.
+operation results carry finalized outcomes and recovery. Cook-specific coordinator
+state supplies live progress to the [Cooking panel](cooking-panel.md); there is
+no second job system.
 
 Related contracts: [content-pipeline.md](content-pipeline.md) sections 16-19,
 [content-browser-asset-identity.md](content-browser-asset-identity.md),
 [material-editor.md](material-editor.md),
 [documents-and-commands.md](documents-and-commands.md),
-[diagnostics-operation-results.md](diagnostics-operation-results.md), and
+[diagnostics-operation-results.md](diagnostics-operation-results.md),
+[cooking-panel.md](cooking-panel.md), and
 [runtime-integration.md](runtime-integration.md). These follow
 [ARCHITECTURE.md](../ARCHITECTURE.md) and [DESIGN.md](../DESIGN.md).
 
@@ -52,11 +55,13 @@ coverage; [property-inspector section 9.1](property-inspector.md#91-ed-m07b-comp
 owns compact component selection and filtered editors in 07B.5g.
 
 Use the existing WinUI browser, inspector pickers, material document, scene
-toolbar, and output/results surfaces. Required work includes their empty states,
+toolbar, and output/results surfaces, with a dockable Cooking panel as the common
+cook progress and recovery surface. Required work includes their empty states,
 action labels, disabled reasons, progress, and keyboard/accessibility behavior.
 Full material thumbnails, a new asset management application, a generic settings
-panel, raw generated-file editing, bulk scheduling UI, rename/move/reference
-repair, and a new drag/drop placement system are outside this slice. Qualified
+panel, raw generated-file editing, scheduling beyond the existing cook queue,
+rename/move/reference repair, and a new drag/drop placement system are outside
+this slice. Qualified
 formats/components remain those in PRD section 8 and pipeline section 17.
 
 ## 3. One Asset Before And After Cooking
@@ -273,6 +278,15 @@ existing generation/lifetime guards, without reassigning or restarting.
 
 ### Progress, Results, And Recovery
 
+The [Cooking panel contract](cooking-panel.md) owns detailed progress, session
+history, asset-grouped issues, run-scoped progress/technical output, cancellation,
+Retry, and Save listed & Cook for
+all scopes. Explicit Cook opens/selects its run; automatic work never opens the
+panel or moves focus. The accepted compact split layout and filtering keep the
+default view focused on active work and actionable outcomes.
+The selected run's Output section shows its messages live and after completion
+inside Cooking; users do not need to search or navigate the global Logs panel.
+
 Use a persistent compact status near the cook action and affected row/slot:
 Queued, Checking dependencies, Cooking, Validating, Updating preview, Ready.
 Show asset/scope, completed/total items when known, and Cancel. Use indeterminate
@@ -285,7 +299,9 @@ Finishing update when it must wait for commit/rollback. A cancellation report
 follows actual worker drain or transaction completion. Multiple saves produce a
 coalesced status, not stacked notifications. Routine automatic success does not
 open a modal or steal focus. Failure remains actionable after transient messages
-are dismissed and is visible from the asset and results panel.
+are dismissed and is visible from the asset and Cooking panel. For asset failures
+inside a folder/project cook, continue independent work, skip dependents, and
+collect issues; a failed cook does not replace published output.
 
 Publication failure says whether previous content was restored; failed recovery
 keeps preview visibly unavailable and offers Retry recovery after the cause is

@@ -758,12 +758,19 @@ ED-M07 diagnostics are complete when:
 
 ## 15. Closed V0.1 Decisions
 
-Long-running save/cook/validation uses feature-local busy/phase/cancel state and
-finalized shared operation results. No separate progress bus is required. Project
+Long-running save/validation uses feature-local busy/phase/cancel state and
+finalized shared operation results. ED-M07B cooking uses cook-specific observable
+run state owned by its coordinator and the dockable
+[Cooking panel](cooking-panel.md) for progress and recovery; finalized outcomes
+remain shared operation results. Cooking also presents the selected run's ordered
+progress messages and technical output directly, using shared logging capture
+where applicable; it does not require navigating the global Logs view.
+No general progress bus is required. Project
 Browser uses existing inline details; workspace/viewport show pending/failure
 state and output details. ED-M07A.3 owns current field diagnostic replacement by
 revision/target; historical operation results remain separate. There is no full
-validation dashboard with filters/fix actions in V0.1.
+validation dashboard in V0.1; the scoped Cooking panel provides the accepted
+run filtering and asset/property recovery actions.
 
 ED-M07B distinguishes staged cook, publication, rollback and mount outcomes, with
 input/output/build identities and freshness. An unsupported required field is an

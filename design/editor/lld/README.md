@@ -24,6 +24,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [asset-primitives.md](./asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
 | [content-pipeline.md](./content-pipeline.md) | Import, descriptors, manifests, cooking, pak, inspect, mount refresh requests. |
 | [content-cooking-workflows.md](./content-cooking-workflows.md) | M07B before/after-cook browsing and picking, shared status, incremental requests, accepted automatic/explicit triggers, progress and recovery. |
+| [cooking-panel.md](./cooking-panel.md) | Dockable cooking progress, session runs, asset-grouped issues, cancellation, save/retry recovery, and property navigation. |
 | [live-engine-sync.md](./live-engine-sync.md) | Managed-to-native live scene synchronization. |
 | [runtime-integration.md](./runtime-integration.md) | Embedded engine lifecycle, runtime settings, surface leases, views, cooked-root mounts, input bridge, threading/frame phases. |
 | [standalone-runtime-validation.md](./standalone-runtime-validation.md) | Cooked-output launch/load validation in standalone runtime and parity evidence. |

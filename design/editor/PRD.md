@@ -224,7 +224,9 @@ V0.1 supports Windows 11 x64 with the repository's .NET/WinUI runtime and an
 Oxygen-supported D3D12 adapter. Qualify a matched editor, interop/native runtime,
 RenderScene, cooker tools, engine schemas, and editor overlays from the same
 source revision and build configuration. Record their hashes and schema IDs in
-the qualification manifest. Independent component upgrades are unsupported;
+the qualification manifest. Debug and Release both require a fixed,
+configuration-specific qualification manifest. Ordinary builds do not refresh or
+requalify that manifest. Independent component upgrades are unsupported;
 missing/mismatched artifacts must disable native work with a visible diagnostic
 before an unsafe native call. Project Browser and safe authoring/save remain
 available when native qualification fails. Project manifest schema version 1 is
