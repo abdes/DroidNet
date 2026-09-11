@@ -903,12 +903,27 @@ scope, not duplicate generator defaults. A definition yields the live asset and
 schema-valid cook contribution through the same engine-owned generation helpers.
 The cooker remains the native format authority.
 
-The required exposed set is Cube, Sphere, Plane, Cylinder, Cone, Quad, Torus and
-ArrowGizmo. Existing URIs remain authored identity. The current native interop
-branch handles all eight but constructs pak geometry descriptors/defaults itself;
-the managed descriptor service only handles three and separately specifies bounds,
-sphere segments and default material values. These are the source-identified
-ownership/coverage gaps; differing rendered results are not presumed without proof.
+The required set covers every named generator currently exposed by
+`Oxygen/Data/ProceduralMeshes.h` and the engine geometry descriptor schema:
+Cube, SubdividedCube, Sphere, IcoSphere, GeodesicSphere, Plane, Cylinder, Cone,
+Torus, Quad, and ArrowGizmo. GeodesicSphere is the engine's alias for IcoSphere:
+support both names/identities without presenting them as unrelated shapes.
+Use engine-owned defaults; this does not add a raw generator-parameter editor.
+Future engine additions require an explicit catalog/qualification update rather
+than silently expanding the matched release's capabilities.
+
+Existing URIs remain authored identity. The current native interop branch handles
+the eight existing picker entries but constructs pak descriptors/defaults itself;
+the managed descriptor service only handles Cube/Sphere/Plane. It skips Cylinder,
+which then fails scene descriptor resolution as unsupported geometry. M07B covers
+the additional SubdividedCube and IcoSphere/GeodesicSphere capabilities as well
+as cooking every existing picker choice.
+
+The review also found different default cylinder/cone segment counts in the
+public mesh factory and descriptor importer (32 versus 16). The shared engine
+definition must choose and expose the authoritative recipe once, then use that
+exact recipe for immediate preview and cook generation; the editor must not
+copy either branch's constants. Compare effective defaults as part of parity.
 
 Remove generator selection/defaults/cache policy and manually maintained pak
 fields from SetGeometryCommand. It calls the supported resolver through the
@@ -923,3 +938,12 @@ vertex attributes, default material and explicit overrides using supported engin
 APIs. Save/reopen preserves its URI and values. Include thin/zero-thickness bounds
 and sphere segment defaults. ED-M08 records actual loaded/visual parity separately;
 source implementation and unit tests alone do not establish rendered equivalence.
+
+Required regression: assign Cylinder to a scene node, explicitly save, then Cook
+Current Scene and Cook Project. Both succeed and preserve the authored identity;
+repeat for every named generator and alias. Do not fix coverage by hiding valid
+engine-supported choices or downgrading their failure to a successful warning.
+Failure diagnostics carry captured scene identity, node ID/path/name, geometry
+identity, and saved revision, and can navigate to the matching current node.
+If the node has been renamed/deleted since capture, explain that relationship
+instead of selecting a different node with a similar display name.

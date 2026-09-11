@@ -530,8 +530,11 @@ D1 awaits product approval. No M07B implementation or validation is claimed.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, progress/recovery,
       useful Inspect/Validate and accessible command layouts.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
+- [ ] 07B.5g compact single/multi-node inspector with component filtering and
+      deselect/All behavior, preserving existing edit/history contracts.
 - [ ] 07B.6 owned native worker/descendant termination and I/O drain (#8).
-- [ ] 07B.7 single procedural authority for all eight exposed assets (#11).
+- [ ] 07B.7 single procedural authority for the full engine generator catalog
+      and aliases; Cylinder and every picker choice pass scene/project cook (#11).
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
