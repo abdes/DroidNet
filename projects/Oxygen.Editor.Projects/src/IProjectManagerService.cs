@@ -59,8 +59,9 @@ public interface IProjectManagerService
 
     /// <summary>Reads a possible reload without replacing the model or adopting a new save baseline.</summary>
     /// <param name="scene">The open scene whose source should be read.</param>
+    /// <param name="cancellationToken">Cancels the read before accepting a replacement.</param>
     /// <returns>An owned replacement, or null when loading or identity validation fails.</returns>
-    public Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene);
+    public Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene, CancellationToken cancellationToken = default);
 
     /// <summary>Installs a reload after the caller confirms discard and checks the document's revision and lifetime.</summary>
     /// <param name="snapshot">The owned read from this service for the still-current scene.</param>
