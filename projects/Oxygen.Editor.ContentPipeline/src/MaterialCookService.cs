@@ -3,37 +3,30 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Managed.Core;
-using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
 /// Default editor material cook service for the ED-M05 scalar material slice.
 /// </summary>
-public sealed partial class MaterialCookService : IMaterialCookService
+/// <param name="importService">The asset import service.</param>
+/// <param name="cookCoordinator">The shared project writer and lifetime coordinator.</param>
+/// <param name="logger">The logger.</param>
+/// <param name="projectContextService">Optional active project context service used for state queries.</param>
+public sealed partial class MaterialCookService(
+    IImportService importService,
+    IContentCookCoordinator cookCoordinator,
+    ILogger<MaterialCookService> logger,
+    IProjectContextService? projectContextService = null) : IMaterialCookService
 {
-    private readonly IImportService importService;
-    private readonly ILogger<MaterialCookService> logger;
-    private readonly IProjectContextService? projectContextService;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MaterialCookService"/> class.
-    /// </summary>
-    /// <param name="importService">The asset import service.</param>
-    /// <param name="logger">The logger.</param>
-    /// <param name="projectContextService">Optional active project context service used for state queries.</param>
-    public MaterialCookService(
-        IImportService importService,
-        ILogger<MaterialCookService> logger,
-        IProjectContextService? projectContextService = null)
-    {
-        this.importService = importService ?? throw new ArgumentNullException(nameof(importService));
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        this.projectContextService = projectContextService;
-    }
+    private readonly IImportService importService = importService ?? throw new ArgumentNullException(nameof(importService));
+    private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
+    private readonly ILogger<MaterialCookService> logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IProjectContextService? projectContextService = projectContextService;
 
     /// <inheritdoc />
     public async Task<MaterialCookResult> CookMaterialAsync(
@@ -55,28 +48,21 @@ public sealed partial class MaterialCookService : IMaterialCookService
                 OperationId: null);
         }
 
-        var cookedUri = GetCookedUri(request.MaterialSourceUri);
-        var virtualPath = "/" + GetCookedRelativePath(cookedUri);
-        this.LogMaterialCookStarted(request.MaterialSourceUri, request.ProjectRoot, request.MountName, request.SourceRelativePath, virtualPath);
+        return await this.cookCoordinator.RunAsync(
+            async (operation, token) =>
+            {
+                if (!string.Equals(
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.ProjectRoot)),
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(operation.Project.ProjectRoot)),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return new MaterialCookResult(request.MaterialSourceUri, CookedMaterialUri: null, MaterialCookState.Rejected, operation.OperationId);
+                }
 
-        try
-        {
-            var result = await this.ImportMaterialAsync(request, virtualPath, cancellationToken).ConfigureAwait(false);
-            return this.CreateCookResult(request, result);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            this.LogMaterialCookException(request.MaterialSourceUri, ex);
-            return new MaterialCookResult(
-                request.MaterialSourceUri,
-                CookedMaterialUri: null,
-                MaterialCookState.Failed,
-                OperationId: null);
-        }
+                var result = await this.CookMaterialCoreAsync(request, token).ConfigureAwait(false);
+                return result with { OperationId = operation.OperationId };
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -114,17 +100,10 @@ public sealed partial class MaterialCookService : IMaterialCookService
         => sourceRelativePath.Replace('\\', '/').TrimStart('/');
 
     private static string SummarizeDiagnostics(IReadOnlyList<ImportDiagnostic> diagnostics)
-    {
-        if (diagnostics.Count == 0)
-        {
-            return "<none>";
-        }
-
-        return string.Join(
+        => diagnostics.Count == 0 ? "<none>" : string.Join(
             "; ",
             diagnostics.Select(static diagnostic =>
                 $"{diagnostic.Severity}:{diagnostic.Code} source='{diagnostic.SourcePath ?? string.Empty}' virtual='{diagnostic.VirtualPath ?? string.Empty}' message='{diagnostic.Message}'"));
-    }
 
     private static MaterialCookResult Failed(MaterialCookRequest request)
         => new(
@@ -218,6 +197,37 @@ public sealed partial class MaterialCookService : IMaterialCookService
         sourceRelativePath = Path.Combine(mount.RelativePath, mountRelativePath).Replace('\\', '/');
         sourcePath = Path.GetFullPath(Path.Combine(project.ProjectRoot, sourceRelativePath));
         return true;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The editor cook boundary reports importer failures; cancellation and retained native worker ownership are rethrown above.")]
+    private async Task<MaterialCookResult> CookMaterialCoreAsync(MaterialCookRequest request, CancellationToken cancellationToken)
+    {
+        var cookedUri = GetCookedUri(request.MaterialSourceUri);
+        var virtualPath = "/" + GetCookedRelativePath(cookedUri);
+        this.LogMaterialCookStarted(request.MaterialSourceUri, request.ProjectRoot, request.MountName, request.SourceRelativePath, virtualPath);
+
+        try
+        {
+            var result = await this.ImportMaterialAsync(request, virtualPath, cancellationToken).ConfigureAwait(false);
+            return this.CreateCookResult(request, result);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (ContentPipelineTerminationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.LogMaterialCookException(request.MaterialSourceUri, ex);
+            return new MaterialCookResult(
+                request.MaterialSourceUri,
+                CookedMaterialUri: null,
+                MaterialCookState.Failed,
+                OperationId: null);
+        }
     }
 
     private async Task<ImportResult> ImportMaterialAsync(

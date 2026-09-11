@@ -6,6 +6,8 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
@@ -28,7 +30,7 @@ public sealed partial class MaterialCookServiceTests
         var source = Path.Combine(workspace.Root, "Content", "Materials", "Wood.omat.json");
         await WriteMaterialAsync(source, CreateMaterial("Wood", metallicFactor: 0.0f, roughnessFactor: 0.7f)).ConfigureAwait(false);
 
-        var service = CreateService();
+        var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
                 new Uri("asset:///Content/Materials/Wood.omat.json"),
@@ -61,7 +63,7 @@ public sealed partial class MaterialCookServiceTests
         var source = Path.Combine(workspace.Root, "Content", "Materials", "Wood.omat.json");
         await WriteMaterialAsync(source, CreateMaterial("Wood", metallicFactor: 0.1f, roughnessFactor: 0.7f)).ConfigureAwait(false);
 
-        var service = CreateService();
+        var service = CreateService(workspace);
         var request = new MaterialCookRequest(
             new Uri("asset:///Content/Materials/Wood.omat.json"),
             workspace.Root,
@@ -94,7 +96,8 @@ public sealed partial class MaterialCookServiceTests
     [TestMethod]
     public async Task CookMaterialAsync_WhenRequestMissingProjectFacts_ShouldReject()
     {
-        var service = CreateService();
+        using var workspace = new TempWorkspace();
+        var service = CreateService(workspace);
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
@@ -112,11 +115,11 @@ public sealed partial class MaterialCookServiceTests
     [TestMethod]
     public async Task CookMaterialAsync_WhenMountNameDiffersFromFolder_ShouldWriteUnderMountCookedRoot()
     {
-        using var workspace = new TempWorkspace();
+        using var workspace = new TempWorkspace("Authoring");
         var source = Path.Combine(workspace.Root, "Authoring", "Materials", "Gold.omat.json");
         await WriteMaterialAsync(source, CreateMaterial("Gold", metallicFactor: 1.0f, roughnessFactor: 0.25f)).ConfigureAwait(false);
 
-        var service = CreateService();
+        var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
                 new Uri("asset:///Content/Materials/Gold.omat.json"),
@@ -131,12 +134,12 @@ public sealed partial class MaterialCookServiceTests
         _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Authoring", "Materials", "Gold.omat")).Should().BeFalse();
     }
 
-    private static MaterialCookService CreateService()
+    private static MaterialCookService CreateService(TempWorkspace workspace)
     {
         var registry = new ImporterRegistry();
         registry.Register(new MaterialSourceImporter());
         var importService = new ImportService(registry);
-        return new MaterialCookService(importService, NullLogger<MaterialCookService>.Instance);
+        return new MaterialCookService(importService, workspace.CookCoordinator, NullLogger<MaterialCookService>.Instance, workspace.ContextService);
     }
 
     private static async Task WriteMaterialAsync(string path, MaterialSource material)
@@ -174,16 +177,28 @@ public sealed partial class MaterialCookServiceTests
 
     private sealed partial class TempWorkspace : IDisposable
     {
-        public TempWorkspace()
+        public TempWorkspace(string authoringFolder = "Content")
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(this.Root);
+            var project = new ProjectInfo("TestProject", Category.Games, this.Root)
+            {
+                AuthoringMounts = [new ProjectMountPoint("Content", authoringFolder)],
+            };
+            this.ContextService.Activate(ProjectContext.FromProjectInfo(project));
+            this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 
         public string Root { get; }
 
+        public ProjectContextService ContextService { get; } = new();
+
+        public ContentCookCoordinator CookCoordinator { get; }
+
         public void Dispose()
         {
+            this.ContextService.Close();
+            this.CookCoordinator.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

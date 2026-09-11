@@ -2,17 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Managed.Core.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
+/// <summary>Verifies cook scope, descriptor preparation, validation, and inspection workflows.</summary>
 [TestClass]
-public sealed class ContentPipelineServiceTests
+[SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed partial class ContentPipelineServiceTests
 {
+    /// <summary>Generates, imports, inspects, and validates a scene cook in order.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookCurrentSceneAsync_ShouldGenerateImportValidateAndInspect()
     {
@@ -48,6 +55,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
     }
 
+    /// <summary>Stops before import when scene descriptor generation fails.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookCurrentSceneAsync_WhenDescriptorHasError_ShouldNotImport()
     {
@@ -81,6 +90,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ImportedManifest.Should().BeNull();
     }
 
+    /// <summary>Projects authored material data into the native descriptor before import.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_ShouldCookMaterialDescriptor()
     {
@@ -116,6 +127,8 @@ public sealed class ContentPipelineServiceTests
         _ = generatedDescriptor.Should().NotContain("AlphaMode");
     }
 
+    /// <summary>Reports a missing source without starting native import.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_WhenSourceIsMissing_ShouldReturnDiagnosticWithoutImport()
     {
@@ -135,6 +148,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ImportedManifest.Should().BeNull();
     }
 
+    /// <summary>Preserves diagnostics from a failed native import.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_WhenNativeImportFails_ShouldReturnImportDiagnostic()
     {
@@ -167,6 +182,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ValidatedRoot.Should().BeNull();
     }
 
+    /// <summary>Reports validation failures after inspecting the output.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_WhenValidationFails_ShouldInspectThenReturnValidationDiagnostic()
     {
@@ -200,6 +217,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
     }
 
+    /// <summary>Skips validation when cooked output inspection fails.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_WhenInspectionFails_ShouldNotValidate()
     {
@@ -237,6 +256,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ValidatedRoot.Should().BeNull();
     }
 
+    /// <summary>Rejects invalid manifests before invoking the native tool.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookAssetAsync_WhenManifestValidationFails_ShouldNotImport()
     {
@@ -246,7 +267,8 @@ public sealed class ContentPipelineServiceTests
             validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = new ContentPipelineService(
-            new FixedProjectContextService(workspace.ProjectContext),
+            workspace.ContextService,
+            workspace.CookCoordinator,
             new FixedCookScopeProvider(workspace.Root),
             new CapturingSceneDescriptorGenerator(workspace, diagnostics: []),
             new InvalidManifestBuilder(),
@@ -262,6 +284,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ImportedManifest.Should().BeNull();
     }
 
+    /// <summary>Retains scene descriptor warnings in a successful cook result.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookCurrentSceneAsync_WhenDescriptorHasWarning_ShouldReturnWarningDiagnostic()
     {
@@ -294,6 +318,8 @@ public sealed class ContentPipelineServiceTests
             diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField);
     }
 
+    /// <summary>Includes only supported descriptors when cooking a folder.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookFolderAsync_ShouldExpandCookableDescriptorFilesOnly()
     {
@@ -315,6 +341,8 @@ public sealed class ContentPipelineServiceTests
             ".pipeline/Materials/Content/Materials/Red.omat.json");
     }
 
+    /// <summary>Generates native scene descriptors for scene files in a folder.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookFolderAsync_ShouldGenerateDescriptorsForSceneFiles()
     {
@@ -336,6 +364,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job => job.Type == "scene-descriptor");
     }
 
+    /// <summary>Cooks each authoring mount that contains supported inputs.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookProjectAsync_ShouldCookEveryAuthoringMountWithInputs()
     {
@@ -355,6 +385,8 @@ public sealed class ContentPipelineServiceTests
             job.Source == ".pipeline/Materials/Content/Materials/Red.omat.json");
     }
 
+    /// <summary>Resolves the selected cooked mount from a cooked virtual folder.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectCookedOutputAsync_WhenScopeIsCookedVirtualFolder_ShouldResolveSelectedCookedMount()
     {
@@ -370,6 +402,8 @@ public sealed class ContentPipelineServiceTests
         _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
     }
 
+    /// <summary>Skips derived mounts when choosing the default inspection root.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InspectCookedOutputAsync_WhenScopeIsNull_ShouldSkipLeadingDerivedAuthoringMount()
     {
@@ -394,7 +428,8 @@ public sealed class ContentPipelineServiceTests
         ISceneDescriptorGenerator generator,
         IEngineContentPipelineApi api)
         => new(
-            new FixedProjectContextService(workspace.ProjectContext),
+            workspace.ContextService,
+            workspace.CookCoordinator,
             new FixedCookScopeProvider(workspace.Root),
             generator,
             new ContentImportManifestBuilder(),
@@ -437,11 +472,9 @@ public sealed class ContentPipelineServiceTests
         CookInspectionResult inspection,
         NativeImportResult? importResult = null) : IEngineContentPipelineApi
     {
-        private readonly List<ContentImportManifest> importedManifests = [];
-
         public ContentImportManifest? ImportedManifest { get; private set; }
 
-        public List<ContentImportManifest> ImportedManifests => this.importedManifests;
+        public List<ContentImportManifest> ImportedManifests { get; } = [];
 
         public string? InspectedRoot { get; private set; }
 
@@ -452,7 +485,7 @@ public sealed class ContentPipelineServiceTests
             CancellationToken cancellationToken)
         {
             this.ImportedManifest = manifest;
-            this.importedManifests.Add(manifest);
+            this.ImportedManifests.Add(manifest);
             return Task.FromResult(importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []));
         }
 
@@ -496,28 +529,13 @@ public sealed class ContentPipelineServiceTests
                 Jobs: []);
     }
 
-    private sealed class FixedProjectContextService(ProjectContext context) : IProjectContextService
-    {
-        public ProjectContext? ActiveProject => context;
-
-        public IObservable<ProjectContext?> ProjectChanged => throw new NotSupportedException();
-
-        public void Activate(ProjectContext context)
-        {
-        }
-
-        public void Close()
-        {
-        }
-    }
-
     private sealed class FixedCookScopeProvider(string projectRoot) : IProjectCookScopeProvider
     {
         public ProjectCookScope CreateScope(ProjectContext context)
             => new(context.ProjectId, projectRoot, Path.Combine(projectRoot, ".cooked"));
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace(IReadOnlyList<ProjectMountPoint>? authoringMounts = null)
         {
@@ -531,6 +549,8 @@ public sealed class ContentPipelineServiceTests
             };
             this.Project = new Project(projectInfo) { Name = "TestProject" };
             this.ProjectContext = ProjectContext.FromProject(this.Project);
+            this.ContextService.Activate(this.ProjectContext);
+            this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
             this.Scene = new Scene(this.Project) { Name = "Main" };
         }
 
@@ -539,6 +559,10 @@ public sealed class ContentPipelineServiceTests
         public Project Project { get; }
 
         public ProjectContext ProjectContext { get; }
+
+        public ProjectContextService ContextService { get; } = new();
+
+        public ContentCookCoordinator CookCoordinator { get; }
 
         public Scene Scene { get; }
 
@@ -550,9 +574,8 @@ public sealed class ContentPipelineServiceTests
         }
 
         public void WriteMaterial(string relativePath, string name)
-            => this.WriteText(
-                relativePath,
-                $$"""
+        {
+            var source = $$"""
                 {
                   "Schema": "oxygen.material.v1",
                   "Type": "PBR",
@@ -565,7 +588,9 @@ public sealed class ContentPipelineServiceTests
                   "AlphaMode": "OPAQUE",
                   "DoubleSided": false
                 }
-                """);
+                """;
+            this.WriteText(relativePath, source);
+        }
 
         public string ReadText(string relativePath)
         {
@@ -577,12 +602,15 @@ public sealed class ContentPipelineServiceTests
         {
             var path = Path.Combine(this.Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            using var stream = File.Create(path);
+            var stream = File.Create(path);
+            await using var lifetime = stream.ConfigureAwait(false);
             await new SceneSerializer(this.Project).SerializeAsync(stream, this.Scene).ConfigureAwait(false);
         }
 
         public void Dispose()
         {
+            this.ContextService.Close();
+            this.CookCoordinator.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);
