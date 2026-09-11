@@ -45,6 +45,9 @@
     <ClCompile Include="World\EnvironmentObservation.cpp">
       <Filter>World</Filter>
     </ClCompile>
+    <ClCompile Include="World\NodeObservation.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="EngineRunner_surfaces.cpp" />
@@ -296,6 +299,9 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\ObserveEnvironmentCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ObserveNodeCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="World\EnvironmentStateManaged.h">

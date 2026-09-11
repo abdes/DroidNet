@@ -42,6 +42,18 @@ namespace Oxygen::Interop::World {
     bool AtmosphereEnabled;
   };
 
+  //! Stored component values and resolved LOD-zero assets for a native node.
+  public value struct NodeStateManaged {
+    bool Exists;
+    bool IsPrimarySun;
+    array<PropertyValueEntry>^ Properties;
+    System::String^ GeometryKey;
+    System::String^ GeometryName;
+    System::UInt64 VertexCount;
+    System::UInt64 IndexCount;
+    array<System::String^>^ MaterialKeys;
+  };
+
   public
   ref class OxygenWorld {
   public:
@@ -97,6 +109,10 @@ namespace Oxygen::Interop::World {
     //! Reads native atmosphere and post-process values after preceding mutations.
     System::Threading::Tasks::Task<EnvironmentStateManaged>^
       ObserveEnvironmentAsync();
+
+    //! Reads node properties and currently resolved assets after earlier mutations.
+    System::Threading::Tasks::Task<NodeStateManaged>^
+      ObserveNodeAsync(System::Guid nodeId);
 
     void SetEnvironment(
       bool atmosphereEnabled,
