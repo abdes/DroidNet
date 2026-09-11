@@ -115,9 +115,9 @@ Cover:
 - The application shutdown caller observing failure and running before required
   dispatcher teardown; canceled document close leaves the engine running.
 
-Build with `MSBuild.exe` using the repository's existing output paths. Do not
-build `Oxygen.Engine` without explicit authorization. Check compiler, analyzer,
-and IDE diagnostics in every changed C# file, including informational results.
+Build the editor with `MSBuild.exe` using the repository's existing output paths
+and installed engine binaries. Check compiler, analyzer, and IDE diagnostics in
+every changed C# file, including informational results.
 Report automated validation separately from manual editor shutdown validation.
 
 ## Verified Results

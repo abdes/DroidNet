@@ -164,12 +164,14 @@ EngineService and real SceneEngineSync. One hundred picker samples produce one
 color history entry. Native background reads confirm RGB `(100/255, 64/255,
 128/255)` with atmosphere off, the previous RGB after undo, and the chosen RGB
 after redo and atomic Save/reopen into a new document lifetime. The headless test
-does not present a viewport. The user-visible check failed: with atmosphere off,
-the color is hidden under the default manual EV100 13 exposure, and disabling
-exposure reveals it. The existing solid-color sky path treats the authored LDR
-value as HDR radiance. 07A.1 remains incomplete until the background presentation
-contract is corrected and verified with exposure enabled; native RGB readback
-alone does not satisfy that gate.
+does not present a viewport. In the editor, default EV100 13 exposure hides the
+background because the solid-color sky path treats LDR color as HDR radiance.
+Disabling exposure reveals it.
+
+Remaining work: composite Background independently of exposure and tone mapping,
+preserving the picked color and opaque/translucent foreground coverage. Convert
+between display and linear RGB at the picker boundary. Verify the visible color
+with exposure on/off, different tone mappers, Undo/Redo and Save/reopen.
 
 ### 07A.2 - Real Gesture Sessions For Existing Inspectors
 
