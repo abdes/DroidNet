@@ -531,8 +531,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
-- [ ] 07B.5d-e approved triggers, safe import/save/cook flows, progress/recovery,
-      useful Inspect/Validate and accessible command layouts.
+- [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
+      progress/recovery, useful Inspect/Validate and accessible command layouts.
+      [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped
+      issues, cancellation, explicit save/resume, and Aerial Start navigation and
+      bounds are implemented. ContentPipeline 107/107, MaterialEditor 44/44, and
+      focused packaged controls 7/7 pass. Automatic triggers and publication
+      integration remain.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
