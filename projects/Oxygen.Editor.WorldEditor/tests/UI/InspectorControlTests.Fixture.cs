@@ -56,8 +56,8 @@ public sealed partial class InspectorControlTests
             _ = this.Node.AddComponent(this.Camera);
             _ = this.Node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
             this.Scene.RootNodes.Add(this.Node);
-            this.Context = new(this.Scene.Id, new SceneDocumentMetadata(this.Scene.Id), this.Scene, new HistoryKeeper(this.Scene));
-            var sync = new Mock<ISceneEngineSync>();
+            this.Context = new(this.Scene.Id, new SceneDocumentMetadata(this.Scene.Id), this.Scene, UndoRedo.GetHistory(this.Scene.Id));
+            var sync = this.Sync;
             var accepted = new SyncOutcome(SyncStatus.Accepted, "UI control command", AffectedScope.Empty);
             _ = sync.Setup(value => value.UpdatePropertiesAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
             _ = sync.Setup(value => value.UpdateEnvironmentAsync(It.IsAny<Scene>(), It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
@@ -66,7 +66,7 @@ public sealed partial class InspectorControlTests
                 .Returns(async (Guid _, Guid _, DateTimeOffset _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => (SyncOutcome?)await action(token).ConfigureAwait(true));
             _ = sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
                 .Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => action(token));
-            var documents = new Mock<IDocumentService>();
+            var documents = this.Documents;
             _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
             this.Commands = new SceneDocumentCommandService(
                 Mock.Of<ISceneExplorerService>(),
@@ -75,7 +75,7 @@ public sealed partial class InspectorControlTests
                 Mock.Of<IProjectManagerService>(),
                 documents.Object,
                 default,
-                new StrongReferenceMessenger(),
+                this.Messenger,
                 Mock.Of<IOperationResultPublisher>(),
                 new OperationStatusReducer());
         }
@@ -89,6 +89,12 @@ public sealed partial class InspectorControlTests
         public SceneDocumentCommandContext Context { get; }
 
         public SceneDocumentCommandService Commands { get; }
+
+        public Mock<ISceneEngineSync> Sync { get; } = new();
+
+        public Mock<IDocumentService> Documents { get; } = new();
+
+        public StrongReferenceMessenger Messenger { get; } = new();
 
         public void Dispose() => this.Context.History.Clear();
     }
