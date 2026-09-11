@@ -355,8 +355,8 @@ public class EditorSettingsManagerTests : DatabaseTests
             var lastUpdated = await settingsManager.GetLastUpdatedTimeAsync(settingKey, ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = lastUpdated.Should().NotBeNull();
-            _ = lastUpdated.Value.Should().BeAfter(beforeSave.AddSeconds(-1));
-            _ = lastUpdated.Value.Should().BeBefore(DateTime.UtcNow.AddSeconds(1));
+            _ = lastUpdated.GetValueOrDefault().Should().BeAfter(beforeSave.AddSeconds(-1));
+            _ = lastUpdated.GetValueOrDefault().Should().BeBefore(DateTime.UtcNow.AddSeconds(1));
         }
     }
 
@@ -383,7 +383,7 @@ public class EditorSettingsManagerTests : DatabaseTests
 
             _ = t1.Should().NotBeNull();
             _ = t2.Should().NotBeNull();
-            _ = t2.Value.Should().BeAfter(t1.Value);
+            _ = t2.GetValueOrDefault().Should().BeAfter(t1.GetValueOrDefault());
         }
     }
 

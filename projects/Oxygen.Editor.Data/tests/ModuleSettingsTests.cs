@@ -241,7 +241,7 @@ public class ModuleSettingsTests : DatabaseTests
             var lastUpdated = await moduleSettings.GetLastUpdatedTimeAsync(nameof(moduleSettings.TestProperty), settingsManager, ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = lastUpdated.Should().NotBeNull();
-            _ = lastUpdated.Value.Should().BeBefore(DateTime.UtcNow.AddSeconds(1));
+            _ = lastUpdated.GetValueOrDefault().Should().BeBefore(DateTime.UtcNow.AddSeconds(1));
         }
     }
 
