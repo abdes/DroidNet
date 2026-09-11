@@ -45,11 +45,15 @@ internal sealed partial class InspectorEditSessionCoordinator(
         }
 
         this.supersededProperties = this.active?.Properties;
-        this.End(this.active?.Interaction == NumberBoxEditInteractionKind.Text ? NumberBoxEditCompletionKind.Commit : NumberBoxEditCompletionKind.Cancel);
+        var completion = this.active?.Interaction == NumberBoxEditInteractionKind.Text ? NumberBoxEditCompletionKind.Commit : NumberBoxEditCompletionKind.Cancel;
+
+        // Cancellation changes the old model and can synchronously reenter Bind
+        // through the inspector host. Publish the new scope before that callback.
         this.boundContext = context;
         this.targets = nodeIds.ToArray();
         this.ScopeId = Guid.NewGuid();
         this.Diagnostics.Reset();
+        this.End(completion);
     }
 
     /// <summary>Begins a control-owned gesture with stable document and target identities.</summary>
