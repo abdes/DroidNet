@@ -211,6 +211,20 @@ public sealed partial class CookInputSnapshotCaptureTests
         _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
     }
 
+    /// <summary>Rejects relative asset identity before moving any captured input into its final directory.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task RelativeAssetIdentityCannotLeaveAnUnownedSnapshot()
+    {
+        using var workspace = new CaptureWorkspace();
+        var input = workspace.WriteInput("Content/source.bin", "saved source") with { AssetUri = new Uri("source.bin", UriKind.Relative) };
+
+        var capture = () => workspace.CaptureAsync([input]);
+        _ = await capture.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
+
+        _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
+    }
+
     private static CookDocumentState State(CookSnapshotInput input)
         => new(Guid.NewGuid(), input.SourcePath, "Material", 1, 1, IsDirty: false, input.DiscoveryHash);
 
