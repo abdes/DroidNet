@@ -17,6 +17,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="DroidNet.Storage.Tests" />
+        <InternalsVisibleTo Include="DroidNet.Storage.AtomicWriteProbe" />
     </ItemGroup>
 
     <ItemGroup>

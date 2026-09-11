@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>DroidNet.Storage.AtomicWriteProbe</AssemblyName>
+        <RootNamespace>DroidNet.Storage.AtomicWriteProbe</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\src\Storage.csproj" />
+    </ItemGroup>
+</Project>

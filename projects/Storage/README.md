@@ -30,6 +30,44 @@ The storage layer follows a contract-based design pattern with clear separation 
 
 ## Getting Started
 
+### Atomic authored-file saves
+
+`IStorageProvider.AtomicFiles` exposes `IAtomicFileStore`. Read a `FileSnapshot`
+when opening a file and retain its `FileVersion`. Pass that version on subsequent
+writes; use `FileVersion.Missing` to create a new destination without overwriting
+an existing asset. Versions describe the existence and SHA-256 digest of the
+complete bytes. Document revisions, history and dirty state remain the caller's
+responsibility.
+
+The native implementation copies the submitted bytes before its first await,
+acquires an exclusive destination write lease, and compares the baseline before
+writing. It creates a unique `.oxygen-*.tmp` file in the destination directory,
+writes and flushes the complete payload to disk, closes the temporary handle,
+rechecks the baseline, and publishes with a same-directory rename. Concurrent
+editor writes, changed/inaccessible baselines and target collisions raise
+`StorageWriteConflictException`. External tools must not race an editor's final
+replacement; this contract does not support collaborative simultaneous writes.
+
+On local Windows filesystems with atomic same-directory rename, process loss
+before publication leaves the previous destination intact (or still missing for
+a first save). After publication, the complete new file is authoritative. This
+contract covers process interruption; it does not promise universal hardware
+power-loss durability or equivalent behavior on remote/custom filesystems.
+Cancellation is checked before publication and never rolls back a successful
+rename.
+
+Ordinary write, flush and replacement failures remove only the temporary file
+owned by that attempt. A process interruption can leave an orphan `.tmp`; it is
+never an authored asset, and a later save uses another unique temporary name.
+The OS releases the exclusive `.oxygen-write.lock` handle when the process ends.
+No autosave or unsaved-content recovery is provided.
+
+Storage tests exercise existing and first saves, injected I/O failures,
+cancellation, real replacement denial, baseline changes and competing writers.
+The `Storage.AtomicWriteProbe` child process terminates without cleanup during a
+partial write, before flush, before replacement, and after publication; the
+parent verifies the reopened bytes and a subsequent successful save.
+
 ### Prerequisites
 
 - .NET 9.0 SDK or later

@@ -14,6 +14,20 @@
 
     <ItemGroup>
       <ProjectReference Include="..\src\Storage.csproj" />
+      <ProjectReference Include="..\testhost\Storage.AtomicWriteProbe.csproj" ReferenceOutputAssembly="false" />
     </ItemGroup>
+
+    <Target Name="CopyAtomicWriteProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+            <Output TaskParameter="TargetOutputs" ItemName="_AtomicWriteProbeAssembly" />
+        </MSBuild>
+        <PropertyGroup>
+            <_AtomicWriteProbeDirectory>@(_AtomicWriteProbeAssembly->'%(RootDir)%(Directory)')</_AtomicWriteProbeDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_AtomicWriteProbeFiles Include="$(_AtomicWriteProbeDirectory)*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_AtomicWriteProbeFiles)" DestinationFolder="$(OutDir)AtomicWriteProbe" SkipUnchangedFiles="true" />
+    </Target>
 
 </Project>
