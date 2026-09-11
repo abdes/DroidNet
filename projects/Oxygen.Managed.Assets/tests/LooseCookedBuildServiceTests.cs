@@ -60,7 +60,7 @@ public sealed class LooseCookedBuildServiceTests
         _ = entry.VirtualPath.Should().Be("/Content/Materials/Wood.omat");
         _ = entry.DescriptorRelativePath.Should().Be("Materials/Wood.omat");
         _ = entry.AssetType.Should().Be(1);
-        _ = entry.DescriptorSize.Should().Be(256);
+        _ = entry.DescriptorSize.Should().Be(357);
 
         _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out var cookedBytes).Should().BeTrue();
         _ = entry.DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));

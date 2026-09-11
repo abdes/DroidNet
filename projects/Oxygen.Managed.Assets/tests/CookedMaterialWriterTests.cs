@@ -14,7 +14,7 @@ namespace Oxygen.Managed.Assets.Tests;
 public sealed class CookedMaterialWriterTests
 {
     [TestMethod]
-    public void Write_ShouldProduce256ByteDescriptorWithExpectedLayout()
+    public void WriteShouldProduceCurrentRuntimeDescriptorWithExpectedLayout()
     {
         var material = new MaterialSource(
             schema: "oxygen.material.v1",
@@ -42,36 +42,37 @@ public sealed class CookedMaterialWriterTests
             bytes = ms.ToArray();
         }
 
-        _ = bytes.Should().HaveCount(256);
+        _ = bytes.Should().HaveCount(357);
         _ = bytes[0x00].Should().Be(1);
         _ = ReadNullTerminatedUtf8(bytes.AsSpan(0x01, 64)).Should().Be("Test Material");
         _ = bytes[0x41].Should().Be(1);
 
         // material_domain
-        _ = bytes[0x5F].Should().Be(3);
+        _ = bytes[0x67].Should().Be(3);
 
         // flags: bit1 double-sided, bit2 alpha test
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x60, 4));
+        var flags = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x68, 4));
         _ = flags.Should().Be((1u << 1) | (1u << 2));
 
         // scalar offsets match runtime tests (little-endian floats)
-        _ = ReadSingle(bytes, 0x68).Should().BeApproximately(0.1f, 0.0001f);
-        _ = ReadSingle(bytes, 0x6C).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadSingle(bytes, 0x70).Should().BeApproximately(0.3f, 0.0001f);
-        _ = ReadSingle(bytes, 0x74).Should().BeApproximately(0.4f, 0.0001f);
-        _ = ReadSingle(bytes, 0x78).Should().BeApproximately(1.5f, 0.0001f);
-        _ = ReadUnorm16(bytes, 0x7C).Should().BeApproximately(0.7f, 0.0001f);
-        _ = ReadUnorm16(bytes, 0x7E).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadUnorm16(bytes, 0x80).Should().BeApproximately(0.9f, 0.0001f);
+        _ = ReadSingle(bytes, 0x70).Should().BeApproximately(0.1f, 0.0001f);
+        _ = ReadSingle(bytes, 0x74).Should().BeApproximately(0.2f, 0.0001f);
+        _ = ReadSingle(bytes, 0x78).Should().BeApproximately(0.3f, 0.0001f);
+        _ = ReadSingle(bytes, 0x7C).Should().BeApproximately(0.4f, 0.0001f);
+        _ = ReadSingle(bytes, 0x80).Should().BeApproximately(1.5f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x84).Should().BeApproximately(0.7f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0x88).Should().BeApproximately(0.9f, 0.0001f);
 
         // MVP: texture indices are 0.
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x82, 4)).Should().Be(0);
-        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x86, 4)).Should().Be(0);
         _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x8A, 4)).Should().Be(0);
         _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x8E, 4)).Should().Be(0);
         _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x92, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x96, 4)).Should().Be(0);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0x9A, 4)).Should().Be(0);
 
-        _ = ReadUnorm16(bytes, 0xB8).Should().BeApproximately(0.5f, 0.0001f);
+        _ = ReadUnorm16(bytes, 0xC0).Should().BeApproximately(0.5f, 0.0001f);
+        AssertRuntimeDefaults(bytes);
     }
 
     [TestMethod]
@@ -143,6 +144,17 @@ public sealed class CookedMaterialWriterTests
         _ = output.PbrMetallicRoughness.MetallicFactor.Should().BeApproximately(0.1f, 0.0001f);
         _ = output.PbrMetallicRoughness.RoughnessFactor.Should().BeApproximately(0.9f, 0.0001f);
         _ = output.PbrMetallicRoughness.BaseColorTexture!.Value.Source.Should().Be("asset:///Content/Textures/BaseColor.png");
+    }
+
+    private static void AssertRuntimeDefaults(byte[] bytes)
+    {
+        _ = ReadSingle(bytes, 0xC2).Should().Be(1.5f);
+        _ = ReadUnorm16(bytes, 0xC6).Should().Be(1f);
+        _ = BinaryPrimitives.ReadHalfLittleEndian(bytes.AsSpan(0xD6, 2)).Should().Be((Half)1);
+        _ = ReadSingle(bytes, 0xE0).Should().Be(1f);
+        _ = ReadSingle(bytes, 0xE4).Should().Be(1f);
+        _ = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0xFD, 4)).Should().Be(10);
+        _ = ReadSingle(bytes, 0x161).Should().Be(1f);
     }
 
     private static float ReadSingle(byte[] bytes, int offset)

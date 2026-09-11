@@ -11,9 +11,9 @@ namespace Oxygen.Managed.Assets.Cook;
 /// <summary>
 /// Writes cooked <c>.omat</c> binary descriptors compatible with the runtime <c>MaterialAssetDesc</c>.
 /// </summary>
-public static class CookedMaterialWriter
+public static partial class CookedMaterialWriter
 {
-    private const int DescriptorSize = 256;
+    private const int DescriptorSize = 357;
 
     private const byte AssetTypeMaterial = 1;
 
@@ -27,25 +27,25 @@ public static class CookedMaterialWriter
     private const int HeaderVersionOffset = 0x41;
     private const int HeaderStreamingPriorityOffset = 0x42;
     private const int HeaderContentHashOffset = 0x43;
-    private const int HeaderVariantFlagsOffset = 0x4B;
+    private const int HeaderVariantFlagsOffset = 0x63;
 
-    private const int MaterialDomainOffset = 0x5F;
-    private const int FlagsOffset = 0x60;
-    private const int ShaderStagesOffset = 0x64;
+    private const int MaterialDomainOffset = 0x67;
+    private const int FlagsOffset = 0x68;
+    private const int ShaderStagesOffset = 0x6C;
 
-    private const int BaseColorOffset = 0x68;
-    private const int NormalScaleOffset = 0x78;
-    private const int MetalnessOffset = 0x7C;
-    private const int RoughnessOffset = 0x7E;
-    private const int AmbientOcclusionOffset = 0x80;
+    private const int BaseColorOffset = 0x70;
+    private const int NormalScaleOffset = 0x80;
+    private const int MetalnessOffset = 0x84;
+    private const int RoughnessOffset = 0x86;
+    private const int AmbientOcclusionOffset = 0x88;
 
-    private const int BaseColorTextureOffset = 0x82;
-    private const int NormalTextureOffset = 0x86;
-    private const int MetallicTextureOffset = 0x8A;
-    private const int RoughnessTextureOffset = 0x8E;
-    private const int AmbientOcclusionTextureOffset = 0x92;
+    private const int BaseColorTextureOffset = 0x8A;
+    private const int NormalTextureOffset = 0x8E;
+    private const int MetallicTextureOffset = 0x92;
+    private const int RoughnessTextureOffset = 0x96;
+    private const int AmbientOcclusionTextureOffset = 0x9A;
 
-    private const int AlphaCutoffOffset = 0xB8;
+    private const int AlphaCutoffOffset = 0xC0;
 
     /// <summary>
     /// Writes a cooked <c>.omat</c> descriptor for the given material source.
@@ -65,7 +65,7 @@ public static class CookedMaterialWriter
         WriteName(desc.Slice(HeaderNameOffset, HeaderNameSize), material.Name ?? "Material");
         desc[HeaderVersionOffset] = 1;
         desc[HeaderStreamingPriorityOffset] = 0;
-        BinaryPrimitives.WriteUInt64LittleEndian(desc.Slice(HeaderContentHashOffset, 8), 0);
+        desc.Slice(HeaderContentHashOffset, 32).Clear();
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(HeaderVariantFlagsOffset, 4), 0);
 
         // MaterialAssetDesc
@@ -73,7 +73,7 @@ public static class CookedMaterialWriter
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(FlagsOffset, 4), ToFlags(material));
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(ShaderStagesOffset, 4), 0);
 
-        var pbr = material.PbrMetallicRoughness ?? new MaterialPbrMetallicRoughness(1, 1, 1, 1, 1, 1, null, null);
+        var pbr = material.PbrMetallicRoughness ?? new MaterialPbrMetallicRoughness(1, 1, 1, 1, 1, 1, baseColorTexture: null, metallicRoughnessTexture: null);
 
         WriteSingle(desc.Slice(BaseColorOffset + 0, 4), Clamp01(pbr.BaseColorR));
         WriteSingle(desc.Slice(BaseColorOffset + 4, 4), Clamp01(pbr.BaseColorG));
@@ -94,6 +94,7 @@ public static class CookedMaterialWriter
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(RoughnessTextureOffset, 4), 0);
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(AmbientOcclusionTextureOffset, 4), 0);
 
+        WriteRuntimeDefaults(desc);
         output.Write(desc);
     }
 

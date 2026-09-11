@@ -50,7 +50,7 @@ public sealed class ImportServiceTests
         _ = result.Imported[0].VirtualPath.Should().Be("/Content/Materials/Wood.omat");
 
         _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out var cooked).Should().BeTrue();
-        _ = cooked.Should().HaveCount(256);
+        _ = cooked.Should().HaveCount(357);
 
         _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
         var ms = new MemoryStream(indexBytes);
@@ -211,15 +211,16 @@ public sealed class ImportServiceTests
         _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_INPUT_FAILED");
 
         _ = files.TryGet(indexPath, out var repairedIndexBytes).Should().BeTrue();
-        using var msRepaired = new MemoryStream(repairedIndexBytes);
+        var msRepaired = new MemoryStream(repairedIndexBytes);
+        await using var repairedLifetime = msRepaired.ConfigureAwait(false);
         var repairedDoc = LooseCookedIndex.Read(msRepaired);
 
         var buffersRecord = repairedDoc.Files.Should()
             .ContainSingle(f => f.RelativePath == buffersTableRelativePath)
             .Which;
 
-        buffersRecord.Size.Should().Be((ulong)newBytes.Length);
-        buffersRecord.Sha256.IsEmpty.Should().BeTrue();
+        _ = buffersRecord.Size.Should().Be((ulong)newBytes.Length);
+        _ = buffersRecord.Sha256.IsEmpty.Should().BeTrue();
     }
 
     private static async Task<byte[]> SeedStaleIndexAsync(
@@ -249,7 +250,8 @@ public sealed class ImportServiceTests
                     Sha256: LooseCookedIndex.ComputeSha256(oldBytes)),
             ]);
 
-        using var ms = new MemoryStream();
+        var ms = new MemoryStream();
+        await using var streamLifetime = ms.ConfigureAwait(false);
         LooseCookedIndex.Write(ms, doc);
         await files.WriteAllBytesAsync(indexPath, ms.ToArray(), CancellationToken.None).ConfigureAwait(false);
         return newBytes;
