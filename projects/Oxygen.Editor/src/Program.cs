@@ -410,6 +410,7 @@ public static partial class Program
         container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
         container.Register<IEngineContentPipelineApi, ImportToolContentPipelineApi>(Reuse.Singleton);
+        container.Register<IContentCookCoordinator, ContentCookCoordinator>(Reuse.Singleton);
         container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);

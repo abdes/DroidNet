@@ -662,7 +662,11 @@ public sealed partial class MaterialDocumentServiceTests
         registry.Register(new MaterialSourceImporter());
         return new MaterialDocumentService(
             new TestResolver(workspace.Root),
-            new MaterialCookService(new ImportService(registry), NullLogger<MaterialCookService>.Instance),
+            new MaterialCookService(
+                new ImportService(registry),
+                workspace.CookCoordinator,
+                NullLogger<MaterialCookService>.Instance,
+                workspace.ContextService),
             CreateFileStore());
     }
 
@@ -736,12 +740,23 @@ public sealed partial class MaterialDocumentServiceTests
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-material-editor-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(this.Root);
+            this.ContextService.Activate(ProjectContext.FromProjectInfo(new ProjectInfo("Material tests", Category.Games, this.Root)
+            {
+                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            }));
+            this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 
         public string Root { get; }
 
+        public ProjectContextService ContextService { get; } = new();
+
+        public ContentCookCoordinator CookCoordinator { get; }
+
         public void Dispose()
         {
+            this.ContextService.Close();
+            this.CookCoordinator.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);
