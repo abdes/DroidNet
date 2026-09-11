@@ -20,6 +20,14 @@ public sealed partial class SceneDocumentCommandService
     private readonly Dictionary<Guid, PropertyGesture> propertyGestures = [];
 
     /// <inheritdoc/>
+    public Task CompleteEditSessionsAsync(SceneDocumentCommandContext context, bool commit)
+    {
+        var sessions = this.propertyGestures.Values.Where(gesture => ReferenceEquals(gesture.Context.Scene, context.Scene)
+            && ReferenceEquals(gesture.Context.Metadata, context.Metadata)).ToArray();
+        return Task.WhenAll(sessions.Select(gesture => this.EndPropertyGestureAsync(context, gesture, commit ? EditSessionState.Committed : EditSessionState.Cancelled)));
+    }
+
+    /// <inheritdoc/>
     public Task<SceneCommandResult> EditPropertiesForTargetsAsync(
         SceneDocumentCommandContext context,
         IReadOnlyDictionary<Guid, PropertyEdit> edits,
@@ -117,6 +125,11 @@ public sealed partial class SceneDocumentCommandService
         EditSessionToken token,
         EditSessionState phase)
     {
+        if (token.IsConsumed)
+        {
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+
         _ = this.propertyGestures.TryGetValue(token.SessionId, out var active);
         if (!token.IsOneShot && phase != EditSessionState.Open)
         {
@@ -156,6 +169,27 @@ public sealed partial class SceneDocumentCommandService
 
         var touched = ids.Select(id => descriptors[id]).ToArray();
         var before = PropertySnapshot.Capture(models, touched);
+        active = this.GetOrBeginPropertyGesture(context, requested, label, token, kind, touched, before, models, active);
+
+        ApplyGestureSnapshot(context, kind, requested, descriptors);
+        var after = PropertySnapshot.Capture(GestureTargets(context, kind, active.Nodes), active.Descriptors);
+        this.propertyCommitGroups.RecordPreview(active.Key, after);
+        return phase == EditSessionState.Open
+            ? this.PreviewPropertyGestureAsync(active, after)
+            : this.EndPropertyGestureAsync(context, active, EditSessionState.Committed);
+    }
+
+    private PropertyGesture GetOrBeginPropertyGesture(
+        SceneDocumentCommandContext context,
+        PropertySnapshot requested,
+        string label,
+        EditSessionToken token,
+        string kind,
+        PropertyDescriptor[] touched,
+        PropertySnapshot before,
+        Dictionary<Guid, object> models,
+        PropertyGesture? active)
+    {
         if (active is null)
         {
             var key = token.IsOneShot ? Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) : token.SessionId.ToString("N", CultureInfo.InvariantCulture);
@@ -167,12 +201,7 @@ public sealed partial class SceneDocumentCommandService
             }
         }
 
-        ApplyGestureSnapshot(context, kind, requested, descriptors);
-        var after = PropertySnapshot.Capture(GestureTargets(context, kind, active.Nodes), active.Descriptors);
-        this.propertyCommitGroups.RecordPreview(active.Key, after);
-        return phase == EditSessionState.Open
-            ? this.PreviewPropertyGestureAsync(active, after)
-            : this.EndPropertyGestureAsync(context, active, EditSessionState.Committed);
+        return active;
     }
 
     private SceneCommandResult? ValidateGesture(SceneDocumentCommandContext context, string kind, PropertySnapshot requested)
@@ -232,6 +261,7 @@ public sealed partial class SceneDocumentCommandService
         }
 
         _ = this.propertyGestures.Remove(gesture.Token.SessionId);
+        gesture.Token.Consume();
         var models = GestureTargets(context, gesture.Kind, gesture.Nodes);
         var targetsChanged = !string.Equals(gesture.Kind, SceneEnvironmentKind, StringComparison.Ordinal)
             && (models.Count != gesture.Targets.Count

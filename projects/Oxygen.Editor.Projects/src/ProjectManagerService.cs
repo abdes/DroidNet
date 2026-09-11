@@ -22,7 +22,8 @@ namespace Oxygen.Editor.Projects;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null)
+/// <param name="atomicFiles">An optional atomic store override for this storage provider.</param>
+public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null, IAtomicFileStore? atomicFiles = null)
     : IProjectManagerService
 {
     [SuppressMessage(
@@ -33,9 +34,12 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
                                       NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
 
     private readonly DocumentWriteCoordinator sceneWrites = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, FileVersion> sceneVersions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public IProject? CurrentProject { get; private set; }
+
+    private IAtomicFileStore AtomicFiles => atomicFiles ?? storage.AtomicFiles;
 
     /// <inheritdoc />
     public IStorageProvider GetCurrentProjectStorageProvider() => storage;
@@ -125,25 +129,14 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     public async Task<Scene?> LoadSceneAsync(Scene scene)
     {
         var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(true);
-        if (loadedScene is null)
-        {
-            return null;
-        }
+        return ReplaceLoadedScene(scene, loadedScene);
+    }
 
-        // Replace the scene in the project's list
-        var index = scene.Project.Scenes.IndexOf(scene);
-        if (index != -1)
-        {
-            scene.Project.Scenes[index] = loadedScene;
-        }
-
-        // Update ActiveScene if it was pointing to the old scene
-        if (ReferenceEquals(scene.Project.ActiveScene, scene))
-        {
-            scene.Project.ActiveScene = loadedScene;
-        }
-
-        return loadedScene;
+    /// <inheritdoc/>
+    public async Task<Scene?> ReloadSceneAsync(Scene scene)
+    {
+        var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project, scene.Id).ConfigureAwait(true);
+        return ReplaceLoadedScene(scene, loadedScene);
     }
 
     /// <inheritdoc />
@@ -217,6 +210,37 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot));
     }
 
+    /// <inheritdoc/>
+    public Task<bool> CreateSceneSnapshotAsync(SceneSaveSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var path = Path.Combine(snapshot.ProjectLocation, snapshot.SceneName + Constants.SceneFileExtension);
+        return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot, createNew: true));
+    }
+
+    private static Scene? ReplaceLoadedScene(Scene scene, Scene? loadedScene)
+    {
+        if (loadedScene is null)
+        {
+            return null;
+        }
+
+        // Replace the scene in the project's list
+        var index = scene.Project.Scenes.IndexOf(scene);
+        if (index != -1)
+        {
+            scene.Project.Scenes[index] = loadedScene;
+        }
+
+        // Update ActiveScene if it was pointing to the old scene
+        if (ReferenceEquals(scene.Project.ActiveScene, scene))
+        {
+            scene.Project.ActiveScene = loadedScene;
+        }
+
+        return loadedScene;
+    }
+
     private static async Task<DroidNet.Storage.IFolder> GetScenesFolderAsync(DroidNet.Storage.IFolder projectFolder)
     {
         var contentFolder = await projectFolder.GetFolderAsync(Constants.ContentFolderName).ConfigureAwait(true);
@@ -235,15 +259,21 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The persistence boundary reports all storage failures to the calling authoring command.")]
-    private async Task<bool> WriteSceneSnapshotAsync(SceneSaveSnapshot snapshot)
+    private async Task<bool> WriteSceneSnapshotAsync(SceneSaveSnapshot snapshot, bool createNew = false)
     {
         try
         {
             var projectFolder = await storage.GetFolderFromPathAsync(snapshot.ProjectLocation).ConfigureAwait(true);
             var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
             var sceneFile = await scenesFolder.GetDocumentAsync(snapshot.SceneName + Constants.SceneFileExtension).ConfigureAwait(true);
-            await sceneFile.WriteAllTextAsync(snapshot.Json).ConfigureAwait(true);
+            var version = createNew ? FileVersion.Missing : this.sceneVersions.GetValueOrDefault(sceneFile.Location, FileVersion.Missing);
+            var written = await this.AtomicFiles.WriteAsync(sceneFile.Location, System.Text.Encoding.UTF8.GetBytes(snapshot.Json), version).ConfigureAwait(true);
+            this.sceneVersions[sceneFile.Location] = written;
             return true;
+        }
+        catch (StorageWriteConflictException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -292,7 +322,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "all failures are logged and propagated as null return value")]
-    private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project)
+    private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project, Guid? expectedId = null)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
 
@@ -311,10 +341,24 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
 
             // Use SceneSerializer for high-performance deserialization
             var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
-            var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(true);
-            var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            var snapshot = await this.AtomicFiles.ReadAsync(sceneFile.Location).ConfigureAwait(true);
+            if (!snapshot.Version.Exists)
+            {
+                throw new FileNotFoundException("The scene disappeared while it was being opened.", sceneFile.Location);
+            }
+
+            var stream = new System.IO.MemoryStream(snapshot.Content.ToArray());
             await using var streamLifetime = stream.ConfigureAwait(true);
             var loadedScene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
+            if (expectedId is { } identity && loadedScene?.Id != identity)
+            {
+                throw new InvalidDataException("The source identifies a different scene asset and cannot replace this open document.");
+            }
+
+            if (loadedScene is not null)
+            {
+                this.sceneVersions[sceneFile.Location] = snapshot.Version;
+            }
 
             return loadedScene;
         }

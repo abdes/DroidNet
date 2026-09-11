@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
@@ -20,11 +21,13 @@ namespace Oxygen.Editor.MaterialEditor;
 /// </summary>
 /// <param name="pathResolver">The material source path resolver.</param>
 /// <param name="cookService">The material cook service.</param>
+/// <param name="atomicFiles">The shared atomic file store.</param>
 /// <param name="operationResults">Optional operation-result publisher.</param>
 /// <param name="loggerFactory">Optional logger factory.</param>
 public sealed partial class MaterialDocumentService(
     IMaterialSourcePathResolver pathResolver,
     IMaterialCookService cookService,
+    IAtomicFileStore atomicFiles,
     IOperationResultPublisher? operationResults = null,
     ILoggerFactory? loggerFactory = null) : IMaterialDocumentService, IMaterialPropertyEditService
 {
@@ -40,20 +43,11 @@ public sealed partial class MaterialDocumentService(
     private readonly Dictionary<Guid, MaterialDocument> documents = [];
     private readonly Dictionary<Guid, SemaphoreSlim> saveGates = [];
     private readonly DocumentWriteCoordinator sourceWrites = new();
-    private readonly Func<string, byte[], CancellationToken, Task> writeSource = WriteBytesAsync;
+    private readonly IAtomicFileStore atomicFiles = atomicFiles;
+    private readonly Dictionary<Guid, FileVersion> fileVersions = [];
     private readonly Lock sync = new();
     private MaterialSchemaValidator? cachedValidator;
     private bool validatorLoadAttempted;
-
-    /// <summary>Initializes a new instance of the <see cref="MaterialDocumentService"/> class with a controlled persistence boundary.</summary>
-    /// <param name="pathResolver">The source path resolver.</param>
-    /// <param name="cookService">The cook service.</param>
-    /// <param name="writeSource">Persists serialized source bytes.</param>
-    internal MaterialDocumentService(IMaterialSourcePathResolver pathResolver, IMaterialCookService cookService, Func<string, byte[], CancellationToken, Task> writeSource)
-        : this(pathResolver, cookService)
-    {
-        this.writeSource = writeSource;
-    }
 
     /// <inheritdoc/>
     public MaterialDocument GetDocument(Guid documentId)
@@ -75,16 +69,17 @@ public sealed partial class MaterialDocumentService(
         cancellationToken.ThrowIfCancellationRequested();
 
         var location = this.pathResolver.Resolve(targetUri);
-        if (File.Exists(location.SourcePath))
-        {
-            throw new IOException($"Material source '{location.SourcePath}' already exists.");
-        }
-
         var assetName = GetMaterialDisplayName(location.MaterialUri);
         var source = CreateDefaultSource(assetName);
-        await WriteSourceAsync(location.SourcePath, source, cancellationToken).ConfigureAwait(false);
+        var version = await this.atomicFiles.WriteAsync(location.SourcePath, SerializeSource(source), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
 
-        return this.Track(location, source, assetName, MaterialCookState.NotCooked, isDirty: false);
+        var document = this.Track(location, source, assetName, MaterialCookState.NotCooked, isDirty: false);
+        lock (this.sync)
+        {
+            this.fileVersions[document.DocumentId] = version;
+        }
+
+        return document;
     }
 
     /// <inheritdoc />
@@ -94,16 +89,27 @@ public sealed partial class MaterialDocumentService(
         cancellationToken.ThrowIfCancellationRequested();
 
         var location = this.pathResolver.Resolve(sourceUri);
-        var json = await File.ReadAllBytesAsync(location.SourcePath, cancellationToken).ConfigureAwait(false);
-        var displayName = GetMaterialDisplayName(location.MaterialUri);
-        var source = WithName(MaterialSourceReader.Read(json), displayName);
+        var snapshot = await this.atomicFiles.ReadAsync(location.SourcePath, cancellationToken).ConfigureAwait(false);
+        if (!snapshot.Version.Exists)
+        {
+            throw new FileNotFoundException("The material source does not exist.", location.SourcePath);
+        }
 
-        return this.Track(
+        var displayName = GetMaterialDisplayName(location.MaterialUri);
+        var source = WithName(MaterialSourceReader.Read(snapshot.Content.ToArray()), displayName);
+
+        var document = this.Track(
             location,
             source,
             displayName,
             MaterialCookState.NotCooked,
             isDirty: false);
+        lock (this.sync)
+        {
+            this.fileVersions[document.DocumentId] = snapshot.Version;
+        }
+
+        return document;
     }
 
     /// <inheritdoc />
@@ -116,6 +122,7 @@ public sealed partial class MaterialDocumentService(
 
         lock (this.sync)
         {
+            this.FinishMaterialGesture(documentId, commit: true);
             var document = this.GetDocument(documentId);
             if (!TryApplyEdit(document.Source, edit, out var updatedSource))
             {
@@ -135,14 +142,12 @@ public sealed partial class MaterialDocumentService(
                 return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: operationId));
             }
 
-            this.documents[documentId] = document with
+            if (this.ValidateEditedSource(document, updatedSource) is { } invalid)
             {
-                Source = updatedSource,
-                Asset = CreateAsset(document.MaterialUri, updatedSource),
-                IsDirty = true,
-                Revision = document.Revision + 1,
-                CookState = MaterialCookState.Stale,
-            };
+                return Task.FromResult(invalid);
+            }
+
+            this.CommitMaterialSource(document, updatedSource, "Edit Material");
             return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }
     }
@@ -153,49 +158,36 @@ public sealed partial class MaterialDocumentService(
         SemaphoreSlim gate;
         lock (this.sync)
         {
+            this.FinishMaterialGesture(documentId, commit: true);
             gate = this.saveGates[documentId];
         }
 
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var document = this.GetDocument(documentId);
-            var source = WithName(document.Source, document.DisplayName);
+            MaterialDocument document;
+            MaterialSource source;
             lock (this.sync)
             {
+                this.FinishMaterialGesture(documentId, commit: true);
+                document = this.GetDocument(documentId);
+                source = WithName(document.Source, document.DisplayName);
                 if (this.ValidateSave(document, source) is { } failure)
                 {
                     return failure with { HasUnsavedChanges = this.GetDocument(documentId).IsDirty };
                 }
             }
 
-            try
+            if (await this.PersistMaterialSnapshotAsync(document, source, cancellationToken).ConfigureAwait(false) is { } saveFailure)
             {
-                _ = await this.sourceWrites.RunAsync(
-                    document.SourcePath,
-                    async () =>
-                    {
-                        await this.writeSource(document.SourcePath, SerializeSource(source), cancellationToken).ConfigureAwait(false);
-                        return true;
-                    },
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                var operationId = this.PublishMaterialFailure(
-                    MaterialOperationKinds.Save,
-                    document,
-                    DiagnosticCodes.DocumentPrefix + "MATERIAL.SaveFailed",
-                    "Material was not saved",
-                    ex.Message,
-                    FailureDomain.Document);
-                return new MaterialSaveResult(Succeeded: false, OperationId: operationId) { HasUnsavedChanges = this.GetDocument(documentId).IsDirty };
+                return saveFailure;
             }
 
             lock (this.sync)
             {
                 var current = this.GetDocument(documentId);
-                var saved = current with { SavedRevision = document.Revision, IsDirty = current.Revision != document.Revision };
+                this.histories[documentId].SavedSource = source;
+                var saved = current with { SavedRevision = document.Revision, IsDirty = !SameSource(current.Source, source) };
                 this.documents[documentId] = saved;
                 return new MaterialSaveResult(Succeeded: true, OperationId: null) { HasUnsavedChanges = saved.IsDirty };
             }
@@ -214,6 +206,7 @@ public sealed partial class MaterialDocumentService(
         MaterialDocument document;
         lock (this.sync)
         {
+            this.FinishMaterialGesture(documentId, commit: true);
             if (!this.documents.TryGetValue(documentId, out document!))
             {
                 throw new KeyNotFoundException($"Material document '{documentId}' is not open.");
@@ -284,12 +277,17 @@ public sealed partial class MaterialDocumentService(
                     return;
                 }
 
+                this.FinishMaterialGesture(documentId, commit: !discard);
+                document = this.GetDocument(documentId);
                 if (document.IsDirty && !discard)
                 {
                     throw new InvalidOperationException("Cannot close a dirty material document without discard.");
                 }
 
                 _ = this.documents.Remove(documentId);
+                this.histories[documentId].Keeper.Clear();
+                _ = this.histories.Remove(documentId);
+                _ = this.fileVersions.Remove(documentId);
                 _ = this.saveGates.Remove(documentId);
             }
         }
@@ -497,30 +495,6 @@ public sealed partial class MaterialDocumentService(
         return memory.ToArray();
     }
 
-    private static Task WriteSourceAsync(string sourcePath, MaterialSource source, CancellationToken cancellationToken)
-        => WriteBytesAsync(sourcePath, SerializeSource(source), cancellationToken);
-
-    private static async Task WriteBytesAsync(string sourcePath, byte[] bytes, CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(sourcePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        var temporaryPath = sourcePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporaryPath, sourcePath, overwrite: true);
-        }
-        finally
-        {
-            File.Delete(temporaryPath);
-        }
-    }
-
     private static MaterialSource WithName(MaterialSource source, string? name)
         => new(
             source.Schema,
@@ -672,6 +646,7 @@ public sealed partial class MaterialDocumentService(
         lock (this.sync)
         {
             this.documents[document.DocumentId] = document;
+            this.histories[document.DocumentId] = new(source);
             this.saveGates[document.DocumentId] = new SemaphoreSlim(1, 1);
         }
 

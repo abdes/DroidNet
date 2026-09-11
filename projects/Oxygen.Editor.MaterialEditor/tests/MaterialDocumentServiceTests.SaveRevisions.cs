@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Import.Materials;
 
@@ -22,12 +24,11 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), async (path, bytes, token) =>
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), new ControlledFileStore(async (path, bytes, token) =>
         {
             _ = captured.TrySetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);
-            await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);
-        });
+        }));
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Revision.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken);
@@ -59,16 +60,14 @@ public sealed partial class MaterialDocumentServiceTests
         var firstWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var writes = 0;
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), async (path, bytes, token) =>
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), new ControlledFileStore(async (path, bytes, token) =>
         {
             if (Interlocked.Increment(ref writes) == 1)
             {
                 firstWrite.SetResult();
                 await release.Task.WaitAsync(token).ConfigureAwait(false);
             }
-
-            await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);
-        });
+        }));
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Queued.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var first = service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken);
@@ -93,12 +92,12 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), async (_, _, token) =>
+        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), new ControlledFileStore(async (_, _, token) =>
         {
             captured.SetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);
             throw new IOException("Injected write failure");
-        });
+        }));
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/FailedRevision.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken);
         await captured.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -111,5 +110,24 @@ public sealed partial class MaterialDocumentServiceTests
         _ = current.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
         var persisted = MaterialSourceReader.Read(await File.ReadAllBytesAsync(document.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = persisted.PbrMetallicRoughness.MetallicFactor.Should().Be(0);
+    }
+
+    private sealed class ControlledFileStore(Func<string, byte[], CancellationToken, Task> beforeSave) : IAtomicFileStore
+    {
+        private readonly NativeAtomicFileStore inner = CreateFileStore();
+
+        public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+            => this.inner.ReadAsync(path, cancellationToken);
+
+        public async Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+        {
+            var bytes = content.ToArray();
+            if (expected.Exists)
+            {
+                await beforeSave(path, bytes, cancellationToken).ConfigureAwait(false);
+            }
+
+            return await this.inner.WriteAsync(path, bytes, expected, cancellationToken).ConfigureAwait(false);
+        }
     }
 }

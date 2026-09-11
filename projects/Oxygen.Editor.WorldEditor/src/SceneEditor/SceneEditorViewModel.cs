@@ -55,6 +55,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
     private readonly ISceneEngineSync sceneEngineSync;
+    private readonly IDocumentInputCommitter inputCommitter;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ISceneDocumentCommandService commandService;
@@ -78,6 +79,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="sceneEngineSync">Tracks the scene's runtime projection lifetime.</param>
+    /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="commandService">The scene authoring command service.</param>
@@ -92,6 +94,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         WindowId windowId,
         IEngineService engineService,
         ISceneEngineSync sceneEngineSync,
+        IDocumentInputCommitter inputCommitter,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
         ISceneDocumentCommandService commandService,
@@ -103,6 +106,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         this.engineService = engineService;
         this.sceneEngineSync = sceneEngineSync;
+        this.inputCommitter = inputCommitter;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.commandService = commandService;
@@ -291,6 +295,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <inheritdoc/>
     public async Task PrepareForCloseAsync()
     {
+        await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        if (this.scene is not null)
+        {
+            await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: true).ConfigureAwait(true);
+        }
+
         this.isClosing = true;
         if (this.pendingSave is { } save)
         {
@@ -302,7 +312,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public void ResumeEditing() => this.isClosing = false;
 
     /// <inheritdoc/>
-    public Task CloseAsync(bool discard)
+    public async Task CloseAsync(bool discard)
     {
         if (this.Metadata.IsDirty && !discard)
         {
@@ -310,9 +320,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         // Histories contain delegates over scene objects which must not survive a reload.
+        if (this.scene is not null)
+        {
+            await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: false).ConfigureAwait(true);
+        }
+
         this.sceneEngineSync.CloseDocument(this.Metadata);
         UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -570,6 +584,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<bool> SaveCoreAsync()
     {
+        await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
         if (this.scene is null)
         {
             this.LogSaveRequestedButSceneNotReady();

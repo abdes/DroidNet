@@ -144,6 +144,23 @@ public partial class NumberBox : Control
 
     private bool IsMouseCaptured => this.capturePoint is not null;
 
+    /// <summary>Completes pending text input before an owning document saves or closes.</summary>
+    /// <remarks>Valid text is committed; invalid text is cancelled using the control's normal validation behavior.</remarks>
+    public void CompletePendingTextEdit()
+    {
+        if (this.isEditing)
+        {
+            if (this.valueIsValid)
+            {
+                this.CommitEdit();
+            }
+            else
+            {
+                this.CancelEdit();
+            }
+        }
+    }
+
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
@@ -511,6 +528,11 @@ public partial class NumberBox : Control
 
     private void OnEditBoxLostFocus(object sender, RoutedEventArgs routedEventArgs)
     {
+        if (!this.isEditing)
+        {
+            return;
+        }
+
         if (this.valueIsValid)
         {
             this.CommitEdit();

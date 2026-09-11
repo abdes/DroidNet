@@ -13,4 +13,7 @@ public sealed record MaterialSaveResult(bool Succeeded, Guid? OperationId)
 {
     /// <summary>Gets a value indicating whether changes newer than the saved snapshot remain unsaved.</summary>
     public bool HasUnsavedChanges { get; init; }
+
+    /// <summary>Gets a value indicating whether an external change or another writer prevented saving.</summary>
+    public bool IsConflict { get; init; }
 }

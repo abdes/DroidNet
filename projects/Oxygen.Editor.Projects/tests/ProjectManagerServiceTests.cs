@@ -5,11 +5,11 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
+using DroidNet.Storage;
 using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Oxygen.Editor.World;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -188,7 +188,8 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         // Provide valid scene JSON via the real serializer (keeps the test aligned with the schema)
         var sceneToSerialize = new Scene(new Project(projectInfo) { Name = projectInfo.Name }) { Name = "scene1" };
         var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(sceneToSerialize.Project);
-        using var stream = new System.IO.MemoryStream();
+        var stream = new System.IO.MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
         await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
         var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
@@ -267,7 +268,8 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var sceneToSerialize = new Scene(project) { Name = "scene" };
         sceneToSerialize.RootNodes.Add(new SceneNode(sceneToSerialize) { Name = "node1" });
         var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
-        using var stream = new System.IO.MemoryStream();
+        var stream = new System.IO.MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
         await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
         var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         var documentMock = new Mock<IDocument>();
@@ -279,8 +281,11 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         SetupScenesFolder(projectFolderMock, scenesFolderMock);
         _ = scenesFolderMock.Setup(f => f.GetDocumentAsync(It.IsAny<string>(), CancellationToken.None))
             .ReturnsAsync(documentMock.Object);
-        _ = documentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(sceneJson);
+        _ = documentMock.SetupGet(value => value.Location).Returns("valid/path/Content/Scenes/scene.oscene.json");
+        var atomic = new Mock<IAtomicFileStore>();
+        _ = this.mockStorage.SetupGet(value => value.AtomicFiles).Returns(atomic.Object);
+        _ = atomic.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FileSnapshot(System.Collections.Immutable.ImmutableArray.CreateRange(System.Text.Encoding.UTF8.GetBytes(sceneJson)), new FileVersion(Exists: true, "opened")));
         _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
 
         // Act
@@ -289,7 +294,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         // Assert
         _ = result.Should().NotBeNull();
         _ = result!.RootNodes.Should().ContainSingle();
-        _ = result.RootNodes.ElementAt(0).Name.Should().Be("node1");
+        _ = result.RootNodes[0].Name.Should().Be("node1");
     }
 
     [TestMethod]

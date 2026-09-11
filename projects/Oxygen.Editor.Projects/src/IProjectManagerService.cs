@@ -57,6 +57,11 @@ public interface IProjectManagerService
     /// </returns>
     public Task<Scene?> LoadSceneAsync(Scene scene);
 
+    /// <summary>Reloads a scene only if the source still identifies the same authored asset.</summary>
+    /// <param name="scene">The scene whose unsaved changes the caller has explicitly agreed to discard.</param>
+    /// <returns>The reloaded scene, or null when loading or identity validation fails.</returns>
+    public Task<Scene?> ReloadSceneAsync(Scene scene);
+
     /// <summary>
     /// Creates a new scene in the current project asynchronously.
     /// </summary>
@@ -79,6 +84,11 @@ public interface IProjectManagerService
     /// <param name="snapshot">The immutable scene snapshot.</param>
     /// <returns>Whether the snapshot was persisted successfully.</returns>
     public Task<bool> SaveSceneSnapshotAsync(World.Serialization.SceneSaveSnapshot snapshot);
+
+    /// <summary>Creates a scene snapshot at a new destination without overwriting any existing source.</summary>
+    /// <param name="snapshot">The new asset identity, name and complete serialized content.</param>
+    /// <returns>Whether the snapshot was created successfully.</returns>
+    public Task<bool> CreateSceneSnapshotAsync(World.Serialization.SceneSaveSnapshot snapshot);
 
     /// <summary>
     /// Gets the current project's storage provider.

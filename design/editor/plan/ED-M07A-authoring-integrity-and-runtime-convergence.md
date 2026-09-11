@@ -265,6 +265,29 @@ as assets or clobber a concurrent save. Repeat for scene/material owners, retain
 #4 edit/save and save/save tests, and exercise external modification, Save Copy,
 interrupted replacement and save-and-close with newer unsaved revisions.
 
+Storage and authoring-owner implementation (2026-09-11): scene and material
+snapshots now use the shared `IAtomicFileStore`. The native implementation owns
+an exclusive destination write lease, compares complete-content baselines,
+flushes and closes a unique same-directory temporary file, and publishes through
+rename. Changed/inaccessible destinations and collisions report Document.Conflict.
+Normal failures clean only the attempt's temporary file; process interruption
+can leave an orphan `.tmp`, which is not an authored asset. Recovery remains
+limited to the last successful Save; no hardware power-loss guarantee is claimed.
+
+Storage tests pass 193/193, including existing/first-save write, flush, replacement
+and cancellation failures, external changes, competing writers, real replacement
+denial and eight abrupt child-process exits before/after publication. Project
+persistence tests pass 48/48. Scene command tests retain #4 revision/snapshot cases
+and cover gesture completion before Save, late callback rejection, conflicts and
+distinct-identity Save Copy; WorldEditor tests pass 134/134. Material save/reload/
+copy tests run with the history cases below. The editor app builds, and changed
+files have no unsuppressed compiler analyzer or IDE diagnostics.
+
+Conflict UI and the scene reload workflow remain open. The save-and-close conflict
+presentation is awaiting the user's UX choice; no nested dialog is launched from
+the serialized close-dialog save callback. This checkpoint does not close #7 or
+the 07A.5 gate.
+
 ### 07A.6 - Complete The Missing Workflow Evidence
 
 Run concrete cases through actual controls/commands: Transform primary axes;
@@ -331,6 +354,29 @@ edits produce none. Document switching and close/reopen isolate history and
 queued gestures. Tests exercise the material service and UI command routing,
 not just generic PropertyOp inversion.
 
+Implementation and automated gate (2026-09-11): each open material document owns
+its TimeMachine history, immutable source snapshots and shared commit-group
+controller. Scalar and four-channel edits, previews, cancellation and history
+replay use the validated authoring path under the same lock. History validation
+happens before popping the stack. Saved-content identity determines dirty state;
+undo/redo advance authoring revision and invalidate cooked state while preserving
+the captured saved revision. Close/reload retire old history and gesture tokens.
+
+Material controls now begin/end document-bound numeric and color sessions; wheel
+samples commit after 250 ms idle. Undo/redo buttons and scoped keyboard commands
+route through the material view model. Deactivation terminates pending gestures
+and blocks late hidden-control edits. Save/close flush focused numeric text and
+finish pending sessions before snapshot capture. Rejected values refresh from
+the authoring model.
+
+MaterialEditor tests pass 38/38, including 100-sample sessions, exact scalar and
+four-channel history, no-op/rejected/cancelled edits, wheel idle, document
+isolation, saved-content dirty state, save during newer edits, focused input at
+close, and actual view-model undo/redo routing. MSBuild passes the material editor,
+its tests and the editor app with no unsuppressed analyzer/IDE diagnostics in
+changed files. This satisfies #9's implementation and automated acceptance gate;
+the milestone's separate visible field/workflow qualification remains in 07A.6.
+
 ## 7. Project/File Touch Points
 
 - `WorldEditor/src/Inspector`: existing camera/light/environment/geometry/host
@@ -363,7 +409,7 @@ There is no autosave scope expansion.
 - [x] 07A.4 offline/reconnect/lifetime convergence cases pass.
 - [ ] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
 - [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
-- [ ] 07A.8 document-owned material history and session tests pass (#9).
+- [x] 07A.8 document-owned material history and session tests pass (#9).
 - [ ] 07A.6 field/workflow evidence is complete and the user has validated the
   visible behavior; native acceptance alone is not presented-state proof.
 

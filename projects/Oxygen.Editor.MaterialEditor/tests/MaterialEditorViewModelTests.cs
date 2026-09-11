@@ -224,6 +224,25 @@ public sealed class MaterialEditorViewModelTests
 
         public int ScalarEditCalls { get; private set; }
 
+        public MaterialEditSession BeginEditSession(Guid documentId, string field) => new(documentId, Guid.NewGuid());
+
+        public Task<MaterialEditResult> PreviewPropertiesAsync(MaterialEditSession session, PropertyEdit edit, CancellationToken cancellationToken = default)
+            => this.EditPropertiesAsync(session.DocumentId, edit, cancellationToken);
+
+        public MaterialEditResult CompleteEditSession(MaterialEditSession session, bool commit) => new(Succeeded: true, OperationId: null);
+
+        public bool CanUndo(Guid documentId) => false;
+
+        public bool CanRedo(Guid documentId) => false;
+
+        public MaterialEditResult Undo(Guid documentId) => new(Succeeded: true, OperationId: null);
+
+        public MaterialEditResult Redo(Guid documentId) => new(Succeeded: true, OperationId: null);
+
+        public Task<MaterialDocument> ReloadAsync(Guid documentId, CancellationToken cancellationToken = default) => Task.FromResult(this.Document);
+
+        public Task<Uri> SaveCopyAsync(Guid documentId, Uri targetUri, CancellationToken cancellationToken = default) => Task.FromResult(targetUri);
+
         public MaterialDocument GetDocument(Guid documentId) => this.Document;
 
         public Task<MaterialDocument> CreateAsync(Uri targetUri, CancellationToken cancellationToken = default)
@@ -262,7 +281,9 @@ public sealed class MaterialEditorViewModelTests
             lock (this.sync)
             {
                 this.propertyEdits.Add(edit.Clone());
-                this.Document = this.Document with { Revision = this.Document.Revision + 1, IsDirty = true };
+                var state = new MaterialEditState(this.Document.Source);
+                PropertyApply.ApplyToTarget(state, edit, MaterialDescriptors.Catalog.ById);
+                this.Document = this.Document with { Source = state.Source, Revision = this.Document.Revision + 1, IsDirty = true, CookState = MaterialCookState.Stale };
             }
 
             return this.PendingEdit ?? Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));

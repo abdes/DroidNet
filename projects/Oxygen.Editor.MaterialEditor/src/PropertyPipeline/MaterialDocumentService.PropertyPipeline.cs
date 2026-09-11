@@ -25,6 +25,7 @@ public sealed partial class MaterialDocumentService
 
         lock (this.sync)
         {
+            this.FinishMaterialGesture(documentId, commit: true);
             var document = this.GetDocument(documentId);
             if (this.ValidatePropertyEdit(document, edit) is { } rejected)
             {
@@ -43,14 +44,7 @@ public sealed partial class MaterialDocumentService
                 return Task.FromResult(invalidSource);
             }
 
-            this.documents[documentId] = document with
-            {
-                Source = state.Source,
-                Asset = CreateAsset(document.MaterialUri, state.Source),
-                IsDirty = true,
-                Revision = document.Revision + 1,
-                CookState = MaterialCookState.Stale,
-            };
+            this.CommitMaterialSource(document, state.Source, "Edit Material");
             this.LogPropertiesApplied(documentId, document.MaterialUri, edit.Count);
             return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }

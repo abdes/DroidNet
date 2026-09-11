@@ -295,6 +295,7 @@ public static partial class Program
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
         container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
+        container.RegisterDelegate<IAtomicFileStore>(context => context.Resolve<IStorageProvider>().AtomicFiles, Reuse.Singleton);
 
         // Register the universal template source with NO key, so it gets selected when injected an
         // instance of ITemplateSource. Register specific template source implementations KEYED.
@@ -318,6 +319,7 @@ public static partial class Program
         container.RegisterMapping<IEditorDocumentService, EditorDocumentService>();
         container.Register<DocumentCloseCoordinator>(Reuse.Singleton);
         container.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
+        container.Register<IDocumentInputCommitter, DocumentInputCommitter>(Reuse.Singleton);
     }
 
     private static void RegisterDiagnosticsServices(IContainer container)

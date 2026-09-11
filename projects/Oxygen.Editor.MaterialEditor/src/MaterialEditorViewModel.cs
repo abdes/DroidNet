@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,6 +16,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Import.Materials;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
+using WindowId = Microsoft.UI.WindowId;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -27,6 +29,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly IMaterialDocumentService documentService;
     private readonly ILogger logger;
     private readonly Action<Uri>? assetChanged;
+    private readonly IDocumentInputCommitter? inputCommitter;
+    private readonly WindowId windowId;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private readonly Task loadTask;
     private Task<bool>? pendingSave;
@@ -43,16 +47,22 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="documentService">The material document service.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="assetChanged">Optional callback used by the host to refresh content-browser projections.</param>
+    /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
+    /// <param name="windowId">The owner window.</param>
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
         ILoggerFactory? loggerFactory = null,
-        Action<Uri>? assetChanged = null)
+        Action<Uri>? assetChanged = null,
+        IDocumentInputCommitter? inputCommitter = null,
+        WindowId windowId = default)
     {
         this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
         this.assetChanged = assetChanged;
+        this.inputCommitter = inputCommitter;
+        this.windowId = windowId;
         this.MaterialUriText = metadata.MaterialUri.ToString();
 
         this.loadTask = this.LoadAsync();
@@ -142,6 +152,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.isDisposed = true;
+        this.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         _ = this.DisposeGateAsync();
     }
 
@@ -151,6 +162,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <inheritdoc />
     public async Task PrepareForCloseAsync()
     {
+        if (this.inputCommitter is not null)
+        {
+            await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        }
+
+        this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         this.isClosing = true;
         await this.loadTask.ConfigureAwait(true);
         if (this.pendingSave is { } save)
@@ -158,8 +175,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             _ = await save.ConfigureAwait(true);
         }
 
-        await this.editGate.WaitAsync().ConfigureAwait(true);
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         _ = this.editGate.Release();
+        this.RefreshHistoryCommands();
     }
 
     /// <inheritdoc />
@@ -171,13 +189,17 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         await this.loadTask.ConfigureAwait(true);
         if (this.document is { } current)
         {
-            await this.documentService.CloseAsync(current.DocumentId, discard).ConfigureAwait(true);
+            await this.documentService.CloseAsync(current.DocumentId, discard, CancellationToken.None).ConfigureAwait(true);
             this.document = null;
         }
     }
 
     /// <inheritdoc />
-    public void ResumeEditing() => this.isClosing = false;
+    public void ResumeEditing()
+    {
+        this.isClosing = false;
+        this.RefreshHistoryCommands();
+    }
 
     /// <summary>
     /// Applies a picker-selected base color to the scalar descriptor channels.
@@ -261,7 +283,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             this.LogPendingWorkFailedDuringDispose(exception);
         }
 
-        await this.editGate.WaitAsync().ConfigureAwait(true);
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         _ = this.editGate.Release();
         this.editGate.Dispose();
     }
@@ -310,8 +332,14 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private async Task<bool> SaveSnapshotAsync()
     {
+        if (this.inputCommitter is not null)
+        {
+            await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        }
+
+        this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await this.loadTask.ConfigureAwait(true);
-        await this.editGate.WaitAsync().ConfigureAwait(true);
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         var current = this.document;
         _ = this.editGate.Release();
         if (current is null)
@@ -320,7 +348,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             return false;
         }
 
-        var result = await this.documentService.SaveAsync(current.DocumentId).ConfigureAwait(true);
+        var result = await this.documentService.SaveAsync(current.DocumentId, CancellationToken.None).ConfigureAwait(true);
         if (this.isDisposed)
         {
             return result.Succeeded && !result.HasUnsavedChanges;
@@ -332,9 +360,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             return false;
         }
 
-        this.document = this.documentService.GetDocument(current.DocumentId);
-        this.metadata.IsDirty = this.document.IsDirty;
-        this.IsDirty = this.document.IsDirty;
+        this.RefreshDocument(current.DocumentId);
         this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : "Saved";
         this.assetChanged?.Invoke(this.metadata.MaterialUri);
         return !this.IsDirty;
@@ -348,7 +374,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             return;
         }
 
-        var result = await this.documentService.CookAsync(this.document.DocumentId).ConfigureAwait(true);
+        var result = await this.documentService.CookAsync(this.document.DocumentId, CancellationToken.None).ConfigureAwait(true);
         this.CookState = result.State;
         this.StatusText = result.State == MaterialCookState.Rejected
             ? "Save the material before cooking."
@@ -380,7 +406,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         try
         {
             this.isLoading = true;
-            this.document = await this.documentService.OpenAsync(this.metadata.MaterialUri).ConfigureAwait(true);
+            this.document = await this.documentService.OpenAsync(this.metadata.MaterialUri, CancellationToken.None).ConfigureAwait(true);
             this.ReadFromDocument(this.document);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -414,6 +440,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.StatusText = $"Cook: {value.CookState}";
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));
+        this.RefreshHistoryCommands();
     }
 
     private void ApplyColorEdit(PropertyEdit edit)
@@ -430,15 +457,15 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private void ApplyEdit(PropertyEdit edit)
     {
-        if (this.isLoading || this.isClosing || this.isDisposed || this.document is null)
+        if (this.isLoading || this.isClosing || this.isDisposed || !this.acceptsInput || this.document is null)
         {
             return;
         }
 
-        _ = this.ApplyEditAsync(edit);
+        _ = this.ApplyEditAsync(edit, this.activeGesture);
     }
 
-    private async Task ApplyEditAsync(PropertyEdit edit)
+    private async Task ApplyEditAsync(PropertyEdit edit, MaterialGesture? gesture)
     {
         var current = this.document;
         if (current is null)
@@ -446,20 +473,29 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             return;
         }
 
-        await this.editGate.WaitAsync().ConfigureAwait(true);
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            var result = await this.documentService
-                .EditPropertiesAsync(current.DocumentId, edit)
-                .ConfigureAwait(true);
-            if (result.Succeeded)
+            if (this.isDisposed || this.document?.DocumentId != current.DocumentId)
             {
-                this.document = this.documentService.GetDocument(current.DocumentId);
-                this.metadata.IsDirty = true;
-                this.IsDirty = true;
-                this.CookState = MaterialCookState.Stale;
-                this.StatusText = "Unsaved changes";
+                return;
             }
+
+            MaterialEditResult result;
+            if (gesture is not null)
+            {
+                gesture.Session ??= this.documentService.BeginEditSession(current.DocumentId, gesture.Field);
+                result = await this.documentService.PreviewPropertiesAsync(gesture.Session.Value, edit, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                result = await this.documentService.EditPropertiesAsync(current.DocumentId, edit, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            this.RefreshDocument(current.DocumentId, refreshValues: !result.Succeeded);
+            this.StatusText = result.Succeeded
+                ? (gesture is not null ? "Editing" : this.IsDirty ? "Unsaved changes" : "Unmodified")
+                : "The value was rejected. The previous value has been restored.";
         }
         finally
         {

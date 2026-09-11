@@ -1345,7 +1345,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 node.Id,
                 It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(),
                 It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Exactly(3)); // Gesture commit, undo and redo each publish one terminal state.
         fixture.Sync.Verify(
             sync => sync.UpdatePropertiesAsync(
                 scene,
@@ -1415,7 +1415,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
         long sequence = 0;
@@ -1430,7 +1430,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
             synchronization ?? sync.Object,
-            new Mock<IProjectManagerService>(MockBehavior.Strict).Object,
+            projectManager ?? new Mock<IProjectManagerService>(MockBehavior.Strict).Object,
             documentService.Object,
             default,
             WeakReferenceMessenger.Default,

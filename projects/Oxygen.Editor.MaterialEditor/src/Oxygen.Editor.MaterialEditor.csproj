@@ -15,6 +15,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
