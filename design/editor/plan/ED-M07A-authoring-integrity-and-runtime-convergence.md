@@ -455,11 +455,11 @@ There is no autosave scope expansion.
 ## 9. Validation Gates
 
 - [x] 07A.0 managed capability migration, native failure forwarding and boundary tests pass (#10).
-- [ ] 07A.1 truthful background dispatch and live behavior pass.
+- [x] 07A.1 truthful background dispatch and live behavior pass.
 - [ ] 07A.2 gesture/history/selection/cancel cases pass on the existing controls.
 - [ ] 07A.3 scoped inline diagnostics and dependent invalidation cases pass.
 - [x] 07A.4 offline/reconnect/lifetime convergence cases pass.
-- [ ] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
+- [x] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
 - [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
 - [x] 07A.8 document-owned material history and session tests pass (#9).
 - [ ] 07A.6 field/workflow evidence is complete and the user has validated the
