@@ -66,8 +66,8 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
 
                 cancellationToken.ThrowIfCancellationRequested();
                 coordinator.VerifyWriter(operation);
-                Directory.Move(attemptRoot, inputRoot);
                 var identity = ComputeIdentity(buildFingerprint, inputs);
+                Directory.Move(attemptRoot, inputRoot);
                 return new(new(operation, inputRoot, buildFingerprint, identity, inputs, reads.Documents), [], []);
             }
             finally
@@ -142,6 +142,7 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
         {
             var relative = input.RelativePath.Replace('\\', '/');
             if (!Path.IsPathFullyQualified(input.SourcePath)
+                || input.AssetUri is { IsAbsoluteUri: false }
                 || Path.IsPathRooted(relative)
                 || relative.Split('/').Any(static part => part is ".." or "." or ""
                     || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
