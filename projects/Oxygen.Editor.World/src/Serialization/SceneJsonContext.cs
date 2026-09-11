@@ -33,7 +33,5 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(QuaternionJsonConverter) })]
-public partial class SceneJsonContext : JsonSerializerContext
-{
-}
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(Vector4JsonConverter), typeof(QuaternionJsonConverter) })]
+public partial class SceneJsonContext : JsonSerializerContext;
