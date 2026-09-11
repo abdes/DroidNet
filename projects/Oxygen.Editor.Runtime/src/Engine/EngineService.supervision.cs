@@ -63,7 +63,7 @@ public sealed partial class EngineService
     private async Task ObserveLoopAsync(EngineRun run)
     {
         var completion = await run.Completion.ConfigureAwait(false);
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(false);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             this.ObserveLoopCompletion(run, completion);

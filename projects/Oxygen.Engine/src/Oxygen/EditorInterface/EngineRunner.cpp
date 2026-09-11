@@ -104,7 +104,8 @@ auto RegisterEngineModules(oxygen::engine::interop::EngineContext& ctx) -> void
   }
 }
 
-auto AsyncMain(oxygen::engine::interop::EngineContext& ctx)
+auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
+  const std::function<void()>& on_started)
   -> oxygen::co::Co<int>
 {
   using namespace oxygen;
@@ -129,6 +130,12 @@ auto AsyncMain(oxygen::engine::interop::EngineContext& ctx)
 
     // Everything is started, now register modules
     RegisterEngineModules(ctx);
+
+    if (ctx.stop_requested.load(std::memory_order_acquire)) {
+      ctx.engine->Stop();
+    } else if (on_started) {
+      on_started();
+    }
 
     co_await ctx.engine->Completed();
 
@@ -220,7 +227,13 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
 
 auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
 {
-  const auto rc = co::Run(*ctx, AsyncMain(*ctx));
+  RunEngine(std::move(ctx), {});
+}
+
+auto RunEngine(std::shared_ptr<EngineContext> ctx,
+  std::function<void()> on_started) -> void
+{
+  const auto rc = co::Run(*ctx, AsyncMain(*ctx, on_started));
 
   try {
     ctx->platform->Stop();
@@ -256,8 +269,11 @@ auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
 auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
 {
   const std::scoped_lock lock(engine_owner_mutex);
-  if (ctx && ctx->engine) {
-    ctx->engine->Stop();
+  if (ctx) {
+    ctx->stop_requested.store(true, std::memory_order_release);
+    if (ctx->engine) {
+      ctx->engine->Stop();
+    }
   }
 }
 

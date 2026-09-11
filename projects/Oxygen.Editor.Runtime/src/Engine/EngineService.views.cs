@@ -15,7 +15,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<ViewIdManaged> CreateViewAsync(ViewConfigManaged config)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -41,7 +41,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> DestroyViewAsync(ViewIdManaged viewId)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -58,7 +58,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> ShowViewAsync(ViewIdManaged viewId)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -74,7 +74,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> HideViewAsync(ViewIdManaged viewId)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -90,7 +90,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -106,7 +106,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -122,7 +122,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraMovementSpeedAsync(ViewIdManaged viewId, float speedUnitsPerSecond)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
@@ -138,7 +138,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async Task<bool> SetViewCameraSettingsAsync(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();

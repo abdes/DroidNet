@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -38,6 +39,7 @@
 #include <EngineRunner.h>
 #include <LogHandler.h>
 #include <Utils/TokenHelpers.h>
+#include <msclr/gcroot.h>
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325"))
@@ -57,6 +59,13 @@ using oxygen::engine::interop::LogInfoMessage;
 namespace Oxygen::Interop {
 
   namespace {
+
+    auto MakeEngineReadyCallback(TaskCompletionSource<bool>^ ready)
+      -> std::function<void()>
+    {
+      msclr::gcroot<TaskCompletionSource<bool>^> owner(ready);
+      return [owner]() { owner->TrySetResult(true); };
+    }
 
     auto MakeEditorVortexCapabilities(const oxygen::RendererConfig& config)
       -> oxygen::vortex::CapabilitySet
@@ -86,6 +95,7 @@ namespace Oxygen::Interop {
     this->render_thread_context_ = gcnew RenderThreadContext();
     this->engine_task_ = nullptr;
     this->engine_completion_source_ = nullptr;
+    this->engine_ready_source_ = nullptr;
     this->active_context_ = nullptr;
     this->state_lock_ = gcnew Object();
     // token map is implemented as a native map with managed gcroot values in
@@ -275,6 +285,8 @@ namespace Oxygen::Interop {
         TaskCreationOptions::RunContinuationsAsynchronously);
       engine_completion_source_ = gcnew TaskCompletionSource<bool>(
         TaskCreationOptions::RunContinuationsAsynchronously);
+      engine_ready_source_ = gcnew TaskCompletionSource<bool>(
+        TaskCreationOptions::RunContinuationsAsynchronously);
       engine_task_ = engine_completion_source_->Task;
       try {
         render_thread_context_->Start(
@@ -287,6 +299,8 @@ namespace Oxygen::Interop {
         engine_task_ = nullptr;
         active_context_ = nullptr;
         engine_completion_source_ = nullptr;
+        engine_ready_source_->TrySetCanceled();
+        engine_ready_source_ = nullptr;
         loop_cleanup_source_->TrySetResult(true);
         throw;
       }
@@ -323,6 +337,19 @@ namespace Oxygen::Interop {
     return cleanup;
   }
 
+  auto EngineRunner::WaitForEngineReadyAsync() -> Task^ {
+    Monitor::Enter(state_lock_);
+    try {
+      if (engine_ready_source_ == nullptr) {
+        throw gcnew InvalidOperationException("The engine loop has not started.");
+      }
+      return engine_ready_source_->Task;
+    }
+    finally {
+      Monitor::Exit(state_lock_);
+    }
+  }
+
   auto EngineRunner::StopEngine(EngineContext^ ctx) -> void {
     if (ctx == nullptr) {
       return;
@@ -354,10 +381,12 @@ namespace Oxygen::Interop {
   void EngineRunner::EngineLoopAdapter(System::Object^ state) {
     auto ctx = safe_cast<EngineContext^>(state);
     TaskCompletionSource<bool>^ completion = nullptr;
+    TaskCompletionSource<bool>^ ready = nullptr;
 
     Monitor::Enter(state_lock_);
     try {
       completion = engine_completion_source_;
+      ready = engine_ready_source_;
     }
     finally {
       Monitor::Exit(state_lock_);
@@ -375,7 +404,8 @@ namespace Oxygen::Interop {
       catch (...) { /* swallow logging failures */
       }
 
-      oxygen::engine::interop::RunEngine(ctx->NativeShared());
+      oxygen::engine::interop::RunEngine(
+        ctx->NativeShared(), MakeEngineReadyCallback(ready));
 
       try {
         auto endMsg =
@@ -390,9 +420,11 @@ namespace Oxygen::Interop {
       if (completion != nullptr) {
         completion->TrySetResult(true);
       }
+      ready->TrySetCanceled();
     }
     catch (const std::exception& ex) {
       auto message = gcnew String(ex.what());
+      ready->TrySetException(gcnew InvalidOperationException(message));
 #if defined(_DEBUG) || !defined(NDEBUG)
       Debug::WriteLine(message);
 #endif
@@ -404,6 +436,8 @@ namespace Oxygen::Interop {
 #if defined(_DEBUG) || !defined(NDEBUG)
       Debug::WriteLine("Unknown exception in EngineRunner::EngineLoopAdapter");
 #endif
+      ready->TrySetException(gcnew InvalidOperationException(
+        "Native engine startup or execution failed."));
       if (completion != nullptr) {
         completion->TrySetException(gcnew InvalidOperationException(
           "Engine loop terminated due to an unknown native exception."));
@@ -580,6 +614,7 @@ namespace Oxygen::Interop {
         engine_task_ = nullptr;
         engine_completion_source_ = nullptr;
         active_context_ = nullptr;
+        engine_ready_source_ = nullptr;
       }
       finally {
         Monitor::Exit(state_lock_);

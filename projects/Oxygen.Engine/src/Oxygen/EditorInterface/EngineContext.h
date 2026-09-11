@@ -46,6 +46,9 @@ struct EngineContext {
 
   //! Flag toggled to request loop continue/stop
   std::atomic_bool running { false };
+
+  //! Retains a stop request that arrives before native startup has completed.
+  std::atomic_bool stop_requested { false };
 };
 
 } // namespace oxygen::engine::interop

@@ -11,6 +11,11 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Serialized initialization and ownership-aware teardown.</summary>
 public sealed partial class EngineService
 {
+    private readonly Lock startupGate = new();
+    [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Non-owning reference: StartAsync disposes the token before releasing lifecycleGate, which DisposeAsync awaits.")]
+    private CancellationTokenSource? startupCancellation;
+    private int shutdownRequests;
+
     /// <inheritdoc/>
     public async ValueTask<bool> InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -36,20 +41,35 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async ValueTask StartAsync()
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            this.EnsureInStates(EngineServiceState.Ready, EngineServiceState.Running);
-            if (this.State is EngineServiceState.Running)
+            CancellationTokenSource startup;
+            lock (this.startupGate)
             {
-                return;
+                this.EnsureInStates(EngineServiceState.Ready, EngineServiceState.Running);
+                if (this.shutdownRequests != 0)
+                {
+                    throw new OperationCanceledException("Engine shutdown has been requested.");
+                }
+
+                if (this.State is EngineServiceState.Running)
+                {
+                    return;
+                }
+
+                startup = new CancellationTokenSource();
+                this.startupCancellation = startup;
             }
 
-            this.ChangeState(EngineServiceState.Starting);
-            this.LogStartingEngineLoop();
             try
             {
+                this.ChangeState(EngineServiceState.Starting);
+                this.LogStartingEngineLoop();
+                startup.Token.ThrowIfCancellationRequested();
                 this.engineLoopTask = this.session!.RunAsync();
+                await this.session.WaitForStartupAsync().WaitAsync(startup.Token).ConfigureAwait(true);
+                startup.Token.ThrowIfCancellationRequested();
                 var runId = this.commandDispatcher.BeginRun(this.session.Commands, this.engineLoopTask);
                 this.currentRun = new(runId, this.engineLoopTask);
                 this.ChangeState(EngineServiceState.Running);
@@ -60,6 +80,14 @@ public sealed partial class EngineService
                 this.ChangeState(EngineServiceState.Faulted);
                 _ = await this.ShutdownCoreAsync().ConfigureAwait(true);
                 throw;
+            }
+            finally
+            {
+                lock (this.startupGate)
+                {
+                    this.startupCancellation = null;
+                    startup.Dispose();
+                }
             }
         }
         finally
@@ -72,7 +100,8 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async ValueTask ShutdownAsync()
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        this.RequestShutdown();
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             ThrowCleanupFailures(await this.ShutdownCoreAsync().ConfigureAwait(true));
@@ -80,6 +109,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.CompleteShutdownRequest();
             this.PublishStateChanges();
         }
     }
@@ -88,7 +118,8 @@ public sealed partial class EngineService
     public async ValueTask DisposeAsync()
     {
         this.disposalRequested = true;
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        this.RequestShutdown();
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             _ = await this.ShutdownCoreAsync().ConfigureAwait(true);
@@ -96,6 +127,7 @@ public sealed partial class EngineService
         finally
         {
             _ = this.lifecycleGate.Release();
+            this.CompleteShutdownRequest();
             this.PublishStateChanges();
         }
     }
@@ -210,6 +242,23 @@ public sealed partial class EngineService
 
         this.engineLoopTask = null;
         return true;
+    }
+
+    private void RequestShutdown()
+    {
+        lock (this.startupGate)
+        {
+            this.shutdownRequests++;
+            this.startupCancellation?.Cancel();
+        }
+    }
+
+    private void CompleteShutdownRequest()
+    {
+        lock (this.startupGate)
+        {
+            this.shutdownRequests--;
+        }
     }
 
     private async Task AwaitLoopForShutdownAsync()

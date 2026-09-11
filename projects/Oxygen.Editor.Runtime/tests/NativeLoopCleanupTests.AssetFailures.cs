@@ -15,6 +15,10 @@ public sealed partial class NativeLoopCleanupTests
     public Task AssetFailure_CrossesNativeFacadeWithRequestIdentityAndGeneration()
         => this.RunNativeCommandsAsync(this.CheckNativeAssetFailureAsync);
 
+    [TestMethod]
+    public Task StartupReadiness_AllowsImmediateCookedRootUnmount()
+        => this.RunNativeCommandsAsync(_ => Task.CompletedTask);
+
     [SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "Finally stops and awaits the native loop and dispatcher cleanup before disposing native owners.")]
     private async Task RunNativeCommandsAsync(Func<RuntimeCommandDispatcher, Task> check)
     {
@@ -42,9 +46,12 @@ public sealed partial class NativeLoopCleanupTests
             var loop = runner.RunEngineAsync(context);
             var cleanup = runner.WaitForLoopCleanupAsync();
             var commands = new RuntimeCommandDispatcher();
-            _ = commands.BeginRun(new NativeRuntimeCommandTransport(context), loop);
             try
             {
+                await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
+                var transport = new NativeRuntimeCommandTransport(context);
+                transport.ClearCookedRoots();
+                _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }
             finally

@@ -18,6 +18,7 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
     private EngineRunner? runner;
     private EngineContext? context;
     private IRuntimeCommandTransport commands = null!;
+    private Task? startup;
 
     /// <inheritdoc/>
     public override EngineRunner Runner => this.runner ?? throw new InvalidOperationException("Engine runner is unavailable.");
@@ -61,14 +62,26 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
     }
 
     /// <inheritdoc/>
-    public override Task RunAsync() => this.Runner.RunEngineAsync(this.context);
+    public override Task RunAsync()
+    {
+        var loop = this.Runner.RunEngineAsync(this.context);
+        this.startup = this.Runner.WaitForEngineReadyAsync();
+        return loop;
+    }
+
+    /// <inheritdoc/>
+    public override Task WaitForStartupAsync()
+        => this.startup ?? throw new InvalidOperationException("The engine loop has not started.");
 
     /// <inheritdoc/>
     public override void Stop() => this.Runner.StopEngine(this.context);
 
     /// <inheritdoc/>
-    public override Task CompleteLoopCleanupAsync()
-        => hostingContext.Dispatcher.DispatchAsync(this.Runner.WaitForLoopCleanupAsync);
+    public override async Task CompleteLoopCleanupAsync()
+    {
+        await hostingContext.Dispatcher.DispatchAsync(this.Runner.WaitForLoopCleanupAsync).ConfigureAwait(false);
+        _ = this.startup?.Exception;
+    }
 
     /// <inheritdoc/>
     public override async Task<bool> RegisterSurfaceAsync(ViewportSurfaceKey key, SwapChainPanel panel)

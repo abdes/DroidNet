@@ -35,6 +35,10 @@ internal abstract class EngineSession
     /// <returns>The operation completion task.</returns>
     public abstract Task RunAsync();
 
+    /// <summary>Waits until native subsystem startup and module registration are complete.</summary>
+    /// <returns>The startup acknowledgement, cancellation, or startup failure.</returns>
+    public abstract Task WaitForStartupAsync();
+
     /// <summary>Requests loop termination.</summary>
     public abstract void Stop();
 
