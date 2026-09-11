@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core.Diagnostics;
+
+#pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 

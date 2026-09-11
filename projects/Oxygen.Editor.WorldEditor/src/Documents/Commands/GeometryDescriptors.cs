@@ -2,11 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Diagnostics;
+
+#pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 

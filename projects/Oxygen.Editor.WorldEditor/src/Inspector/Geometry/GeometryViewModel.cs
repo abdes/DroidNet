@@ -8,14 +8,13 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -37,9 +36,9 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
     private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
-    private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly ObservableCollection<MaterialPickerItem> contentMaterialItems = [];
-    private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly DispatcherQueue dispatcherQueue;
 
     private IDisposable? assetChangesSubscription;
@@ -221,7 +220,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.GeometryUri, newUri);
         var result = await this.commandService.EditPropertiesAsync(
             context,
-            nodes.Select(static node => node.Id).ToList(),
+            nodes.ConvertAll(static node => node.Id),
             edit,
             "Edit Geometry",
             EditSessionToken.OneShot).ConfigureAwait(true);
@@ -275,7 +274,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, item.Uri);
         var result = await this.commandService.EditPropertiesAsync(
             context,
-            nodes.Select(static node => node.Id).ToList(),
+            nodes.ConvertAll(static node => node.Id),
             edit,
             "Edit Material Slot",
             EditSessionToken.OneShot).ConfigureAwait(true);
@@ -316,7 +315,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
             .Where(static target => target.Geometry is not null)
             .ToList();
-        var nodeIds = targets.Select(static target => target.Node.Id).ToList();
+        var nodeIds = targets.ConvertAll(static target => target.Node.Id);
         var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Geometry);
 
         this.geometryUriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
@@ -438,8 +437,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     }
 
     private static AssetPickerItem CreateEngineItem(string name, Uri uri, string displayPath)
-    {
-        return new AssetPickerItem(
+        => new(
             Name: name,
             Uri: uri,
             DisplayType: "Static Mesh",
@@ -447,7 +445,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: "\uE7C3");
-    }
 
     private static bool IsSelectableCookedMesh(Uri uri)
     {
@@ -510,17 +507,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         var candidateExt = Path.GetExtension(AssetUriHelper.GetRelativePath(candidate)).ToUpperInvariant();
         var existingExt = Path.GetExtension(AssetUriHelper.GetRelativePath(existing)).ToUpperInvariant();
 
-        if (string.Equals(candidateExt, existingExt, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (string.Equals(candidateExt, ".OGEO", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return false;
+        return !string.Equals(candidateExt, existingExt, StringComparison.Ordinal)
+            && string.Equals(candidateExt, ".OGEO", StringComparison.Ordinal);
     }
 
     private static MaterialPickerItem CreateNoMaterialItem()
@@ -686,10 +674,9 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             ? item.Name
             : ExtractMaterialNameFromUriString(uri.ToString());
 
+    // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
     private void DispatchOnUi(Action action)
-    {
-        // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
-        _ = this.dispatcherQueue.DispatchAsync(action)
+        => _ = this.dispatcherQueue.DispatchAsync(action)
             .ContinueWith(
                 t =>
                 {
@@ -701,7 +688,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
-    }
 
     private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)
     {

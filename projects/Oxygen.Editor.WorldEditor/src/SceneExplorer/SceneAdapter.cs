@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -14,7 +14,8 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// <param name="scene">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
 public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scene>
 {
-    internal bool UseLayoutAdapters { get; init; }
+    // Cache root items to avoid blocking .Result calls on the base Children task
+    private readonly List<ITreeItem> rootItemsCache = [];
 
     /// <inheritdoc />
     public override string Label
@@ -35,11 +36,63 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     /// <inheritdoc />
     public Scene AttachedObject => scene;
 
+    /// <summary>Gets a value indicating whether the tree uses the authored explorer layout.</summary>
+    internal bool UseLayoutAdapters { get; init; }
+
     /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    // Cache root items to avoid blocking .Result calls on the base Children task
-    private readonly List<ITreeItem> rootItemsCache = [];
+    /// <summary>Rebuilds the tree while restoring the supplied expansion state.</summary>
+    /// <param name="expandedFolderIds">The folders to expand after rebuilding.</param>
+    /// <param name="preserveNodeExpansion">Whether to retain node expansion from the model.</param>
+    /// <returns>The asynchronous rebuild task.</returns>
+    public async Task ReloadChildrenAsync(ISet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    {
+        this.ClearChildren();
+        this.rootItemsCache.Clear();
+        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Retrieves the IDs of all currently expanded folders in the UI tree.
+    /// Uses the internal cache to avoid deadlocks on the UI thread.
+    /// </summary>
+    /// <returns>The identities of expanded folders.</returns>
+    public ISet<Guid> GetExpandedFolderIds()
+    {
+        var expanded = new HashSet<Guid>();
+
+        // Use the cache! No more .Result deadlocks.
+        var stack = new Stack<ITreeItem>(this.rootItemsCache);
+
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            if (item is FolderAdapter folder)
+            {
+                if (folder.IsExpanded)
+                {
+                    expanded.Add(folder.Id);
+                }
+
+                // LayoutItemAdapter exposes CurrentChildren synchronously
+                foreach (var child in folder.CurrentChildren)
+                {
+                    stack.Push(child);
+                }
+            }
+            else if (item is SceneNodeAdapter node)
+            {
+                // Nodes can also contain folders now
+                foreach (var child in node.CurrentChildren)
+                {
+                    stack.Push(child);
+                }
+            }
+        }
+
+        return expanded;
+    }
 
     /// <inheritdoc />
     protected override int DoGetChildrenCount() => scene.RootNodes.Count;
@@ -53,7 +106,19 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         await this.RebuildTreeAsync().ConfigureAwait(false);
     }
 
-    private async Task RebuildTreeAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    private static void PopulateMissingChildren(SceneNodeAdapter parentAdapter)
+    {
+        // If a node is created from fallback, it might have children that are also not in the layout.
+        // We need to show them.
+        foreach (var childNode in parentAdapter.AttachedObject.Children)
+        {
+            var childAdapter = new SceneNodeAdapter(childNode);
+            PopulateMissingChildren(childAdapter); // Recurse
+            parentAdapter.AddContent(childAdapter);
+        }
+    }
+
+    private async Task RebuildTreeAsync(ISet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
     {
         var layout = this.AttachedObject.ExplorerLayout;
         var seenNodeIds = new HashSet<Guid>();
@@ -73,7 +138,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             if (seenNodeIds.Add(node.Id))
             {
                 var adapter = new SceneNodeAdapter(node);
-                this.PopulateMissingChildren(adapter);
+                PopulateMissingChildren(adapter);
                 this.AddChildSafe(adapter);
             }
         }
@@ -83,7 +148,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         ExplorerEntryData entry,
         ITreeItem parent,
         HashSet<Guid> seenNodeIds,
-        HashSet<Guid>? expandedFolderIds,
+        ISet<Guid>? expandedFolderIds,
         bool preserveNodeExpansion)
     {
         // Case A: Folder
@@ -166,65 +231,5 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     {
         this.AddChildInternal(item);
         this.rootItemsCache.Add(item);
-    }
-
-    private void PopulateMissingChildren(SceneNodeAdapter parentAdapter)
-    {
-        // If a node is created from fallback, it might have children that are also not in the layout.
-        // We need to show them.
-        foreach (var childNode in parentAdapter.AttachedObject.Children)
-        {
-            var childAdapter = new SceneNodeAdapter(childNode);
-            this.PopulateMissingChildren(childAdapter); // Recurse
-            parentAdapter.AddContent(childAdapter);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task ReloadChildrenAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
-    {
-        this.ClearChildren();
-        this.rootItemsCache.Clear();
-        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Retrieves the IDs of all currently expanded folders in the UI tree.
-    /// Uses the internal cache to avoid deadlocks on the UI thread.
-    /// </summary>
-    public HashSet<Guid> GetExpandedFolderIds()
-    {
-        var expanded = new HashSet<Guid>();
-
-        // Use the cache! No more .Result deadlocks.
-        var stack = new Stack<ITreeItem>(this.rootItemsCache);
-
-        while (stack.Count > 0)
-        {
-            var item = stack.Pop();
-            if (item is FolderAdapter folder)
-            {
-                if (folder.IsExpanded)
-                {
-                    expanded.Add(folder.Id);
-                }
-
-                // LayoutItemAdapter exposes CurrentChildren synchronously
-                foreach (var child in folder.CurrentChildren)
-                {
-                    stack.Push(child);
-                }
-            }
-            else if (item is SceneNodeAdapter node)
-            {
-                // Nodes can also contain folders now
-                foreach (var child in node.CurrentChildren)
-                {
-                    stack.Push(child);
-                }
-            }
-        }
-
-        return expanded;
     }
 }

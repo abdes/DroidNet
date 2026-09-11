@@ -15,7 +15,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
@@ -23,6 +22,7 @@ using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspector;
 
