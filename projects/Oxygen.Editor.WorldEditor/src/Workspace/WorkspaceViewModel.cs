@@ -17,6 +17,7 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
@@ -45,7 +46,7 @@ namespace Oxygen.Editor.World.Workspace;
 ///     inside the workspace must always use the child container, and that navigations, even the absolute
 ///     ones, will always be relative to the workspace.
 /// </remarks>
-public partial class WorkspaceViewModel : DockingWorkspaceViewModel
+public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWorkspaceActions
 {
     private readonly IContainer container;
     private readonly IProjectContextService projectContextService;
@@ -134,6 +135,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 {
                     Outlet = "log", Path = "log", MatchMethod = PathMatch.Full, ViewModelType = typeof(OutputViewModel),
                 },
+                new Route
+                {
+                    Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
+                },
             ]),
         },
     ]);
@@ -142,6 +147,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     public override async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         await base.OnNavigatedToAsync(route, navigationContext).ConfigureAwait(true);
+        if (DroidNet.Docking.Dockable.FromId("cook") is { } cookingDock)
+        {
+            cookingDock.Title = "Cooking";
+        }
 
         // Ensure messenger is available (resolve from container as fallback)
         this.messenger ??= this.container.Resolve<IMessenger>();
@@ -203,8 +212,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
-        childContainer.Register<OutputViewModel>(Reuse.Singleton);
-        childContainer.Register<OutputView>(Reuse.Transient);
+        this.RegisterOutputPanels(childContainer);
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
@@ -226,13 +234,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=400//log:log;with=cb)");
+            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb)");
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            if (this.cookingPanel is not null)
+            {
+                this.cookingPanel.RevealRequested -= this.OnCookingRevealRequested;
+                this.cookingPanel.Dispose();
+                this.cookingPanel = null;
+            }
+
             if (this.engineService.State == EngineServiceState.Running)
             {
                 this.engineService.UnmountProjectCookedRoot();
@@ -332,6 +347,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                || normalizedCandidate.StartsWith(
                    normalizedRoot + System.IO.Path.AltDirectorySeparatorChar,
                    StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RegisterOutputPanels(IContainer childContainer)
+    {
+        childContainer.Register<OutputViewModel>(Reuse.Singleton);
+        childContainer.Register<OutputView>(Reuse.Transient);
+        childContainer.RegisterInstance<ICookingWorkspaceActions>(this);
+        childContainer.Register<CookingPanelViewModel>(Reuse.Singleton);
+        childContainer.Register<CookingPanelView>(Reuse.Transient);
+        this.cookingPanel = childContainer.Resolve<CookingPanelViewModel>();
+        this.cookingPanel.RevealRequested += this.OnCookingRevealRequested;
     }
 
     private async Task RefreshCookedRootsAsync()

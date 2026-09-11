@@ -105,6 +105,31 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     [ObservableProperty]
     public partial object? ActiveEditorView { get; private set; }
 
+    /// <summary>Saves an explicit list through the ordinary document commands and conflict UI.</summary>
+    /// <param name="documentIds">The exact document identities the user authorized.</param>
+    /// <returns>Whether no listed open document remains unsaved.</returns>
+    public async Task<bool> SaveDocumentsAsync(IReadOnlyList<Guid> documentIds)
+    {
+        foreach (var id in documentIds)
+        {
+            if (this.activeEditors.TryGetValue(id, out var editor) && editor is IAsyncSaveable saveable)
+            {
+                await saveable.SaveAsync().ConfigureAwait(true);
+                if (this.DocumentService.GetOpenDocuments(this.windowId).Any(document => document.DocumentId == id && document.IsDirty))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Activates an existing document for an explicit recovery action.</summary>
+    /// <param name="documentId">The document identity.</param>
+    /// <returns>Whether the document was activated.</returns>
+    public Task<bool> SelectDocumentAsync(Guid documentId) => this.DocumentService.SelectDocumentAsync(this.windowId, documentId);
+
     /// <inheritdoc/>
     public void Dispose()
     {
