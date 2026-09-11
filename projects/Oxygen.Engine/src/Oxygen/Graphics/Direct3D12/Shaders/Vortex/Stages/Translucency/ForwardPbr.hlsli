@@ -28,22 +28,7 @@ float3 SafeNormalize(float3 v)
     return v * rsqrt(len_sq);
 }
 
-float3 SrgbToLinear(float3 c)
-{
-    // IEC 61966-2-1:1999
-    c = saturate(c);
-    const float3 lo = c / 12.92;
-    const float3 hi = pow((c + 0.055) / 1.055, 2.4);
-    return lerp(hi, lo, step(c, 0.04045));
-}
-
-float3 LinearToSrgb(float3 c)
-{
-    c = max(c, 0.0);
-    const float3 lo = c * 12.92;
-    const float3 hi = 1.055 * pow(c, 1.0 / 2.4) - 0.055;
-    return saturate(lerp(hi, lo, step(c, 0.0031308)));
-}
+#include "Vortex/Shared/ColorSpace.hlsli"
 
 float DistributionGGX(float NdotH, float roughness)
 {
