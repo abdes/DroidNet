@@ -98,6 +98,7 @@ public sealed partial class InspectorControlTests
         button.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var flyout = (Flyout)button.Flyout;
+        flyout.AreOpenCloseAnimationsEnabled = false;
         var picker = (ColorPicker)flyout.Content;
         var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnLoaded(object sender, RoutedEventArgs args) => loaded.TrySetResult();
@@ -128,6 +129,11 @@ public sealed partial class InspectorControlTests
 
     private static async Task CloseColorFlyoutAsync(Flyout flyout)
     {
+        if (!flyout.IsOpen)
+        {
+            return;
+        }
+
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnClosed(object? sender, object args) => closed.TrySetResult();
         flyout.Closed += OnClosed;
