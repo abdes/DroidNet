@@ -9,9 +9,7 @@ using DroidNet.Controls;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.World.Inspector;
-using Windows.Foundation;
 using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.World.Tests;
@@ -66,7 +64,7 @@ public sealed partial class InspectorControlTests
     public Task EnvironmentFieldControlHistoryAndReopenReachNativeState(string fieldName) => EnqueueAsync(async () =>
     {
         var field = NativeEnvironmentFields.Single(value => string.Equals(value.Field, fieldName, StringComparison.Ordinal));
-        var fixture = new NativeEnvironmentFixture(field.Automatic);
+        var fixture = new NativeSceneFixture(field.Automatic);
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -95,7 +93,7 @@ public sealed partial class InspectorControlTests
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
     });
 
-    private static async Task AssertEnvironmentFieldValuesAsync(NativeEnvironmentFixture fixture, Dictionary<string, object> expected, CancellationToken cancellationToken)
+    private static async Task AssertEnvironmentFieldValuesAsync(NativeSceneFixture fixture, Dictionary<string, object> expected, CancellationToken cancellationToken)
     {
         var native = await fixture.ReadNativeAsync(cancellationToken).ConfigureAwait(true);
         foreach (var field in NativeEnvironmentFields)
@@ -139,55 +137,7 @@ public sealed partial class InspectorControlTests
             section.IsExpanded = true;
         }
 
-        var offset = 0d;
-        FrameworkElement? previous = null;
-        var stableFrames = 0;
-        for (var step = 0; step <= 200; step++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var control = FindEnvironmentControl(view, model, field);
-            if (control is { IsLoaded: true })
-            {
-                if (control is NumberBox number)
-                {
-                    _ = number.ApplyTemplate();
-                    var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, "PartValueTextBlock", StringComparison.Ordinal));
-                    if (label is { IsLoaded: true })
-                    {
-                        var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        if (VisualTreeHelper.FindElementsInHostCoordinates(center, scroller).Contains(label))
-                        {
-                            stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
-                            previous = number;
-                            if (stableFrames >= 3)
-                            {
-                                return number;
-                            }
-                        }
-                        else
-                        {
-                            stableFrames = 0;
-                            offset = Math.Clamp(scroller.VerticalOffset + center.Y - (scroller.ViewportHeight / 2), 0, scroller.ScrollableHeight);
-                            _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
-                        }
-                    }
-                }
-                else
-                {
-                    return control;
-                }
-            }
-            else
-            {
-                offset = offset >= scroller.ScrollableHeight ? 0 : Math.Min(scroller.ScrollableHeight, offset + (scroller.ViewportHeight / 3));
-                _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
-            }
-
-            await Task.Delay(20, cancellationToken).ConfigureAwait(true);
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        }
-
-        throw new InvalidOperationException($"Environment field {field.Field} was not realized.");
+        return await FindInspectorControlAsync(scroller, () => FindEnvironmentControl(view, model, field), field.Field, cancellationToken).ConfigureAwait(true);
     }
 
     private static ToggleSwitch? FindEnvironmentToggle(EnvironmentView view, string section)
