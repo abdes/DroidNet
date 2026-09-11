@@ -255,6 +255,11 @@ The service publishes `ForwardLightFrameBindings` through
 Consumers access the forward-light family only through the published per-view
 binding stack.
 
+The current `LightingFrameBindings` wire layout is 208 bytes. Its directional
+light starts at byte 112, after 12 explicitly reserved alignment bytes, and the
+trailing eight bytes are reserved. C++ and HLSL must declare those bytes explicitly;
+implicit C++ alignment is not reproduced by HLSL structured-buffer packing.
+
 Phase 4 replaces the current Phase 3 interim lighting-binding shape with the
 target contract in Section 2.5. The CPU struct, the HLSL-side counterpart, and
 the `ViewFrameBindings` slot-routing update must land together; this is not an

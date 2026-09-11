@@ -56,10 +56,12 @@ struct LightingFrameBindings
     uint reserved_flags;
 
     float4 pre_view_translation_offset;
+    uint3 reserved_directional_alignment;
     DirectionalLightForwardData directional;
 
     uint directional_lights_slot;
     uint positional_lights_slot;
+    uint2 reserved_tail;
 };
 
 static LightingFrameBindings LoadLightingFrameBindings(uint slot)
