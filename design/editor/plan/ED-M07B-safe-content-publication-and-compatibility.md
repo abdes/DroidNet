@@ -1,6 +1,6 @@
 # ED-M07B - Safe Content Publication And Compatibility
 
-Status: `planned; no implementation or validation completion claimed`
+Status: `in_progress; workflow review and D1 complete; implementation underway`
 
 ## 1. Purpose
 
@@ -57,7 +57,7 @@ Implement the content-pipeline LLD's saved-input and journaled publication
 transaction, dependency-aware incremental cooking, required descriptor mapping,
 qualified static/scalar import, reproduction, matched-build preflight, and the
 complete browser/picker/material/cook workflows in the workflow LLD. Automatic
-triggers and a session pause control are proposed in D1, pending product approval.
+triggers and a session pause control follow the accepted D1 policy.
 No generic project-settings panel, renderer-preset selector, dedicated recook-
 stale scheduler, descriptor/manifest editor, autosave, multi-viewport support,
 new drag/drop placement system, or standalone parity claim belongs here. Request
@@ -69,16 +69,16 @@ coalescing belongs to the existing project coordinator. Published paths stay fix
 
 Review the running browser, authored/engine-provided/cooked content, both typed
 pickers, material editing, and cook/import entry points. Record screenshots and
-source-backed gaps. Settle workflow LLD decision D1 before implementing trigger
-behavior; reconcile its affected PRD and LLD clauses together after approval.
-The proposed policy cooks incrementally after Import/Save and when content is
+source-backed gaps. Workflow LLD decision D1 was accepted on 2026-09-11 with the
+instruction to proceed with revised M07B; its PRD/LLD clauses are reconciled.
+The policy cooks incrementally after Import/Save and when content is
 needed for assignment/active-scene preview, with explicit broad scope actions and
 session pause. Browsing and transient edits never cook; external reimport stays
 explicit. Source saves remain explicit, independent operations.
 
 Pass: before/during/after states, trigger table, dirty-input handling, recovery,
 and narrow-pane/keyboard behavior are reviewable and the product decision is
-recorded. The current explicit-only policy is not silently superseded.
+recorded. This review/contract gate is complete; implementation gates follow.
 
 ### 07B.1 - Saved Dependency Snapshot And Single Cook Writer
 
@@ -347,7 +347,7 @@ its product semantics are settled in 07B.0 before implementation.
 
 ## 9. Validation Gates
 
-- [ ] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
+- [x] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
 - [ ] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
   coalescing and cancellation cases pass.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.

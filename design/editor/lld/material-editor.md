@@ -7,12 +7,12 @@ Status: `ED-M05 implementation-ready`
 Define the V0.1 scalar material editor baseline: material asset identity,
 material documents, scalar PBR property editing, descriptor persistence, content
 browser selection, assignment to geometry, minimum cook, and embedded preview
-after explicit successful Save/Cook publication.
+after saved content is successfully cooked and published.
 
 ED-M07B's [content workflow contract](content-cooking-workflows.md) adds shared
 browser/document/picker state, usable Cook/Save layouts, and save/cook recovery.
-Its D1 automatic-trigger proposal requires product approval before replacing
-this document's explicit-only publication policy.
+Its accepted D1 policy schedules incremental cooking after Save/import and
+when an assigned material is needed, with session pause and explicit Cook actions.
 
 This LLD is not an ED-M04 implementation gate. ED-M04 only creates the Geometry
 material assignment slot and leaves a clean handoff into this ED-M05 workflow.
@@ -393,13 +393,14 @@ ED-M05 does not introduce a managed material preview API. Preview is:
 2. **In the scene**: the slot assignment is recorded in scene data and the
    geometry material slot sync maps the descriptor URI to the cooked `.omat`
    virtual path before queuing the runtime material override. The editor does
-   not force a cook from assignment. If the material is not published/mounted,
+   not force a cook from assignment in ED-M05. If the material is not published/mounted,
    authoring remains valid and the scene shows a pending/missing-material state
    with a visible operation diagnostic; logs alone are insufficient.
 
-No engine cooked-root remount is forced from the material editor. The user
-triggers cook explicitly; project-level mount/refresh is owned by
-`content-pipeline.md`.
+In ED-M07B, successful Save and assignment of a material needed by preview submit
+incremental requests under `content-cooking-workflows.md`. Explicit Cook remains
+available. The material editor never publishes or remounts directly; project-level
+publication is owned by `content-pipeline.md`.
 
 ## 12. Operation Results And Diagnostics
 
@@ -466,7 +467,8 @@ Forbidden:
 ## 15. Closed V0.1 Decisions
 
 Keep the deterministic CPU swatch, visibly labeled approximate. Runtime material
-updates require explicit Save/Cook publication. Existing texture references are
+updates require successful publication of saved content under the accepted D1
+trigger policy. Existing texture references are
 preserved read-only; first-class texture pickers/authoring are excluded. Reuse
 the engine material descriptor schema; no parallel editor material schema is
 introduced. Required missing native field support is an implementation task in
@@ -488,12 +490,14 @@ ED-M07A, independently of the earlier ED-M05 evidence and issue-fix tests.
 
 The material swatch updates immediately and is labeled as an approximation.
 The embedded scene uses the last validated published material. Editing the
-source marks its scene use stale and offers the existing Save/Cook workflow.
+source marks its scene use stale. Successful explicit Save schedules incremental
+cooking; session pause and explicit Cook remain available.
 After explicit save and successful publication, all instances using that material
 identity refresh without restarting the editor. Assigning an unpublished material
-preserves identity, reports pending/missing runtime content visibly, and offers
-Cook; it must not pretend the current source is rendered. Offline publication
-records NotMounted and converges on activation. No automatic save/cook is added.
+preserves identity and submits a saved-dependency cook request. Pending/missing
+runtime content stays visible with progress and explicit Cook available; it must
+not pretend the current source is rendered. Offline publication records NotMounted and converges on
+activation. Source saves remain explicit and complete independently of cooking.
 
 The fixed-root publication transaction, including material-only cook, is owned
 by ContentPipeline section 16 and qualified in ED-M07B. All editable V0.1 scalar
