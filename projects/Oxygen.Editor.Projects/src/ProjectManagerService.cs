@@ -133,10 +133,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc/>
-    public async Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene)
+    public async Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var read = await this.ReadSceneFromStorageAsync(scene.Name, scene.Project, scene.Id).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        var read = await this.ReadSceneFromStorageAsync(scene.Name, scene.Project, scene.Id, cancellationToken).ConfigureAwait(true);
         return read is null ? null : new(this, scene, read.Scene, read.SourcePath, read.Version);
     }
 
@@ -349,16 +350,16 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene reads report storage/serialization failures without replacing authoring or its baseline.")]
-    private async Task<SceneRead?> ReadSceneFromStorageAsync(string sceneName, IProject project, Guid? expectedId = null)
+    private async Task<SceneRead?> ReadSceneFromStorageAsync(string sceneName, IProject project, Guid? expectedId = null, CancellationToken cancellationToken = default)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
 
         try
         {
-            var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location!)
+            var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location!, cancellationToken)
                 .ConfigureAwait(true);
             var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
-            var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
+            var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension, cancellationToken)
                 .ConfigureAwait(true);
             if (!await sceneFile.ExistsAsync().ConfigureAwait(true))
             {
@@ -368,7 +369,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
 
             // Use SceneSerializer for high-performance deserialization
             var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
-            var snapshot = await this.AtomicFiles.ReadAsync(sceneFile.Location).ConfigureAwait(true);
+            var snapshot = await this.AtomicFiles.ReadAsync(sceneFile.Location, cancellationToken).ConfigureAwait(true);
             if (!snapshot.Version.Exists)
             {
                 throw new FileNotFoundException("The scene disappeared while it was being opened.", sceneFile.Location);
@@ -377,9 +378,15 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var stream = new System.IO.MemoryStream(snapshot.Content.ToArray());
             await using var streamLifetime = stream.ConfigureAwait(true);
             var loadedScene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
-            return expectedId is { } identity && loadedScene?.Id != identity
-                ? throw new InvalidDataException("The source identifies a different scene asset and cannot replace this open document.")
-                : loadedScene is null ? null : new(loadedScene, sceneFile.Location, snapshot.Version);
+            cancellationToken.ThrowIfCancellationRequested();
+            return expectedId is { } identity && (loadedScene.Id != identity
+                || !string.Equals(loadedScene.Name, sceneName, StringComparison.OrdinalIgnoreCase))
+                ? throw new InvalidDataException("The source identifies a different scene asset or source file and cannot replace this open document.")
+                : new(loadedScene, sceneFile.Location, snapshot.Version);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

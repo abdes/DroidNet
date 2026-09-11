@@ -26,7 +26,7 @@ public partial class ProjectManagerServiceTests
         _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
         await WriteExternalSceneAsync(scene, positionX: 4, this.CancellationToken).ConfigureAwait(false);
 
-        var read = await service.ReadSceneForReloadAsync(scene).ConfigureAwait(false);
+        var read = await service.ReadSceneForReloadAsync(scene, this.CancellationToken).ConfigureAwait(false);
 
         _ = read.Should().NotBeNull();
         _ = read!.Scene.RootNodes[0].Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(4);
@@ -48,7 +48,7 @@ public partial class ProjectManagerServiceTests
         scene.Project.ActiveScene = scene;
         _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
         await WriteExternalSceneAsync(scene, positionX: 4, this.CancellationToken).ConfigureAwait(false);
-        var read = await service.ReadSceneForReloadAsync(scene).ConfigureAwait(false);
+        var read = await service.ReadSceneForReloadAsync(scene, this.CancellationToken).ConfigureAwait(false);
 
         var replacement = service.AcceptSceneReload(read!);
 
@@ -73,7 +73,7 @@ public partial class ProjectManagerServiceTests
         var path = Path.Combine(workspace.Root, "Content", "Scenes", scene.Name + Constants.SceneFileExtension);
         await File.WriteAllTextAsync(path, SceneSaveSnapshot.Capture(foreign).Json, this.CancellationToken).ConfigureAwait(false);
 
-        _ = (await service.ReadSceneForReloadAsync(scene).ConfigureAwait(false)).Should().BeNull();
+        _ = (await service.ReadSceneForReloadAsync(scene, this.CancellationToken).ConfigureAwait(false)).Should().BeNull();
 
         _ = scene.Project.Scenes.Should().ContainSingle().Which.Should().BeSameAs(scene);
         var save = () => service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene));
@@ -90,12 +90,48 @@ public partial class ProjectManagerServiceTests
         var scene = CreateAtomicScene(workspace.Root);
         scene.Project.Scenes.Add(scene);
         _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
-        var read = await service.ReadSceneForReloadAsync(scene).ConfigureAwait(false);
+        var read = await service.ReadSceneForReloadAsync(scene, this.CancellationToken).ConfigureAwait(false);
 
         var accept = () => other.AcceptSceneReload(read!);
 
         _ = accept.Should().ThrowExactly<InvalidOperationException>();
         _ = scene.Project.Scenes.Should().ContainSingle().Which.Should().BeSameAs(scene);
+    }
+
+    [TestMethod]
+    public async Task ReloadWithDifferentSourceName_PreservesTheOriginalDestination()
+    {
+        using var workspace = new AtomicWorkspace();
+        var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
+        var scene = CreateAtomicScene(workspace.Root);
+        scene.Project.Scenes.Add(scene);
+        _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
+        var external = Scene.CreateAndHydrate(scene.Project, scene.Dehydrate());
+        external.Name = "AnotherDestination";
+        var path = Path.Combine(workspace.Root, "Content", "Scenes", scene.Name + Constants.SceneFileExtension);
+        await File.WriteAllTextAsync(path, SceneSaveSnapshot.Capture(external).Json, this.CancellationToken).ConfigureAwait(false);
+
+        _ = (await service.ReadSceneForReloadAsync(scene, this.CancellationToken).ConfigureAwait(false)).Should().BeNull();
+        _ = scene.Project.Scenes.Should().ContainSingle().Which.Should().BeSameAs(scene);
+        var save = () => service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene));
+        _ = await save.Should().ThrowExactlyAsync<StorageWriteConflictException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    public async Task CancelledReloadRead_PreservesTheModelAndBaseline()
+    {
+        using var workspace = new AtomicWorkspace();
+        var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
+        var scene = CreateAtomicScene(workspace.Root);
+        scene.Project.Scenes.Add(scene);
+        _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync().ConfigureAwait(false);
+
+        var read = () => service.ReadSceneForReloadAsync(scene, cancellation.Token);
+        _ = await read.Should().ThrowExactlyAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = scene.Project.Scenes.Should().ContainSingle().Which.Should().BeSameAs(scene);
+        _ = (await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false)).Should().BeTrue();
     }
 
     private static Task WriteExternalSceneAsync(Scene scene, float positionX, CancellationToken cancellationToken)
