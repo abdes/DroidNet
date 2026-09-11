@@ -704,6 +704,11 @@ ED-M07 is complete when:
 
 ## 15. Closed Scope Decisions
 
+ED-M07B's [content workflow contract](content-cooking-workflows.md) specifies
+shared status, incremental reuse, browser/picker behavior, and recovery through
+the existing surfaces. The D1 automatic-trigger proposal awaits product approval;
+the explicit-only trigger policy below remains effective until reconciliation.
+
 V0.1 uses existing Cook Asset/Folder/Scene/Project actions to rebuild stale
 content. No separate stale-only scheduler, generic project-settings panel,
 project renderer-preset selector, or descriptor/manifest editor/launcher is

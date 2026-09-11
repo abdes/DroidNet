@@ -509,16 +509,27 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 
 Status: `planned`
 
-Trace: `REQ-014` through `REQ-024`, `REQ-026`, `REQ-037`, `REQ-039` through
-`REQ-042`; `SUCCESS-004`, `SUCCESS-006`, `SUCCESS-007`.
+Trace: `REQ-013` through `REQ-024`, `REQ-026`, `REQ-036` through `REQ-042`;
+`SUCCESS-004`, `SUCCESS-006`, `SUCCESS-007`.
 
 Plan: [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md).
 
-- [ ] 07B.1 coherent saved dependency snapshots and serialized project cooks.
+The [2026-09-11 UI/source review](validation/ED-M07B-ux-review.md) is recorded;
+the [workflow contract](lld/content-cooking-workflows.md) adds before/after
+browsing, picking, incremental execution and recovery. Automatic trigger policy
+D1 awaits product approval. No M07B implementation or validation is claimed.
+
+- [ ] 07B.0 settle trigger policy and reconcile PRD/LLDs after the UX review.
+- [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
+      coalescing and serialized project cooks.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
-- [ ] 07B.5 existing-surface freshness/publication feedback for all cook scopes.
+- [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
+      authored/built-in/cooked presentation and typed picking.
+- [ ] 07B.5d-e approved triggers, safe import/save/cook flows, progress/recovery,
+      useful Inspect/Validate and accessible command layouts.
+- [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.6 owned native worker/descendant termination and I/O drain (#8).
 - [ ] 07B.7 single procedural authority for all eight exposed assets (#11).
 
@@ -625,7 +636,7 @@ recorded in section 5.
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
-| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | Implement saved snapshots, safe publication, mappings and qualification. |
+| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `planned` | UI/source review recorded; trigger decision pending. Complete content workflows, incremental cooking, safe publication, mappings and qualification. |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |

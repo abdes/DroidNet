@@ -9,6 +9,13 @@ typed picker behavior, and missing/broken reference presentation for ED-M06.
 ED-M05 delivered the scalar material picker slice; ED-M06 turns that slice into
 the reusable content browser identity workflow.
 
+ED-M07B extends the delivered baseline through
+[content-cooking-workflows.md](content-cooking-workflows.md): correct navigation
+and query lifetime, shared freshness/readiness, plain-language states, working
+filters/details, and authored/built-in/cooked picking. Its
+[running-editor review](../validation/ED-M07B-ux-review.md) identifies concrete
+gaps without changing ED-M06's historical validation scope.
+
 ## 2. PRD Traceability
 
 | ID | Coverage |
