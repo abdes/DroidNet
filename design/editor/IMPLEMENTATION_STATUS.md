@@ -484,9 +484,9 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 - [x] 07A.1 native background application and truthful field results: native/UI
       tests pass; the user verified picker matching, exposure/tone-map independence,
       Undo/Redo and Save/reopen in the rebuilt editor.
-- [ ] 07A.2 camera/light/environment gesture sessions and cancellation: current
-      packaged controls pass numeric/picker, history, wheel and selection cases;
-      Escape and complete workflow qualification remain.
+- [x] 07A.2 camera/light/environment gesture sessions and cancellation: packaged
+      controls pass numeric/picker, history, wheel, selection and real Escape cases;
+      inspector tests 40/40 and shared controls 50/50.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:
       inline near/far/aspect and selection tests pass; final dependency coverage remains.
 - [x] 07A.4 offline/reconnect/lifetime convergence with failed work retained;

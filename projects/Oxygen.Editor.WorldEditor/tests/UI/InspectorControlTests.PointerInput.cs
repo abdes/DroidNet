@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace Oxygen.Editor.World.Tests;
@@ -16,6 +17,30 @@ public sealed partial class InspectorControlTests
 {
     private static partial class PointerInput
     {
+        public static async Task WaitForTargetAsync(FrameworkElement element, CancellationToken cancellationToken)
+        {
+            var root = VisualUserInterfaceTestsApp.ContentRoot!;
+            Point? previous = null;
+            var stableFrames = 0;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            while (stableFrames < 3)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                var center = element.TransformToVisual(root).TransformPoint(new Point(element.ActualWidth / 2, element.ActualHeight / 2));
+                var hit = VisualTreeHelper.FindElementsInHostCoordinates(center, root).Contains(element);
+                stableFrames = hit && previous == center ? stableFrames + 1 : 0;
+                previous = center;
+                if (!hit)
+                {
+                    element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+                }
+
+                await Task.Delay(20, timeout.Token).ConfigureAwait(true);
+                _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            }
+        }
+
         public static IDisposable Capture()
         {
             var window = WinRT.Interop.WindowNative.GetWindowHandle(VisualUserInterfaceTestsApp.MainWindow);
@@ -45,6 +70,15 @@ public sealed partial class InspectorControlTests
         public static async Task ButtonAsync(bool down)
         {
             var input = new NativeInput { Flags = down ? 0x0002u : 0x0004u };
+            _ = SendInput(1, in input, Marshal.SizeOf<NativeInput>()).Should().Be(1);
+            await SettleAsync().ConfigureAwait(true);
+        }
+
+        public static async Task KeyAsync(ushort key)
+        {
+            var input = new NativeInput { Type = 1, VirtualKey = key };
+            _ = SendInput(1, in input, Marshal.SizeOf<NativeInput>()).Should().Be(1);
+            input.KeyboardFlags = 0x0002;
             _ = SendInput(1, in input, Marshal.SizeOf<NativeInput>()).Should().Be(1);
             await SettleAsync().ConfigureAwait(true);
         }
@@ -94,11 +128,20 @@ public sealed partial class InspectorControlTests
         [StructLayout(LayoutKind.Explicit, Size = 40)]
         private struct NativeInput
         {
+            [FieldOffset(0)]
+            public uint Type;
+
             [FieldOffset(8)]
             public int X;
 
+            [FieldOffset(8)]
+            public ushort VirtualKey;
+
             [FieldOffset(12)]
             public int Y;
+
+            [FieldOffset(12)]
+            public uint KeyboardFlags;
 
             [FieldOffset(20)]
             public uint Flags;
