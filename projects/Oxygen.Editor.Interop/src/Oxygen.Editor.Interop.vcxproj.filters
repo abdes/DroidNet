@@ -42,6 +42,9 @@
     <ClCompile Include="World\OxygenWorld.cpp">
       <Filter>World</Filter>
     </ClCompile>
+    <ClCompile Include="World\EnvironmentObservation.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="EngineRunner_surfaces.cpp" />
@@ -291,6 +294,12 @@
     </ClInclude>
     <ClInclude Include="Commands\SetEnvironmentCommand.h">
       <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ObserveEnvironmentCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="World\EnvironmentStateManaged.h">
+      <Filter>World</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h">
       <Filter>Commands</Filter>

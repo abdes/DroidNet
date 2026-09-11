@@ -15,21 +15,21 @@
 
 namespace oxygen::interop::module {
 
-//! Scene-owned solid sky state sampled during the mutation phase.
+//! Scene-owned presentation background sampled during the mutation phase.
 struct BackgroundObservation {
   bool exists = false;
   Vec3 color { 0.0F, 0.0F, 0.0F };
   bool atmosphere_enabled = false;
 };
 
-//! Applies authored linear RGB through the engine's public SkySphere API.
+//! Applies authored linear SDR RGB through the engine's public Background API.
 class SetBackgroundColorCommand final : public EditorCommand {
 public:
   //! Captures the immutable color payload for mutation-phase application.
   explicit SetBackgroundColorCommand(Vec3 color)
     : EditorCommand(core::PhaseId::kSceneMutation), color_(color) {}
 
-  //! Updates the scene's solid sky without changing atmosphere selection.
+  //! Updates the presentation background without changing atmosphere selection.
   void Execute(CommandContext& context) override;
 
 private:

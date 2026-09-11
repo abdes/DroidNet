@@ -9,6 +9,7 @@
 
 #include <EditorModule/ICommandFactory.h>
 #include <EngineContext.h>
+#include <World/EnvironmentStateManaged.h>
 
 using namespace System;
 using namespace System::Numerics;
@@ -92,6 +93,11 @@ namespace Oxygen::Interop::World {
     //! Observes native background state after preceding queued mutations.
     System::Threading::Tasks::Task<BackgroundStateManaged>^
       ObserveBackgroundAsync();
+
+    //! Reads native atmosphere and post-process values after preceding mutations.
+    System::Threading::Tasks::Task<EnvironmentStateManaged>^
+      ObserveEnvironmentAsync();
+
     void SetEnvironment(
       bool atmosphereEnabled,
       bool sunDiskEnabled,
