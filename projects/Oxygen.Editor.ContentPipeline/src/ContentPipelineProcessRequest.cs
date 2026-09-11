@@ -10,7 +10,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="ExecutablePath">The executable path.</param>
 /// <param name="Arguments">The process arguments, already split into tokens.</param>
 /// <param name="WorkingDirectory">The working directory.</param>
+/// <param name="Output">Optional synchronous observer of the owned worker's output lines.</param>
 public sealed record ContentPipelineProcessRequest(
     string ExecutablePath,
     IReadOnlyList<string> Arguments,
-    string WorkingDirectory);
+    string WorkingDirectory,
+    IProgress<ContentPipelineProcessOutput>? Output = null);

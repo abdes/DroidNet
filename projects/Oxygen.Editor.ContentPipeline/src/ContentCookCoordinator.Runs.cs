@@ -1,0 +1,301 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core.Diagnostics;
+
+namespace Oxygen.Editor.ContentPipeline;
+
+/// <summary>Retains scoped cooking results and progress for the current editor session.</summary>
+public sealed partial class ContentCookCoordinator
+{
+    private readonly Dictionary<Guid, RunEntry> runs = [];
+
+    /// <inheritdoc />
+    public event EventHandler<CookRunChangedEventArgs>? RunChanged;
+
+    /// <inheritdoc />
+    public IReadOnlyList<CookRunSnapshot> Runs
+    {
+        get
+        {
+            lock (this.stateLock)
+            {
+                return this.runs.Values.Select(static entry => entry.Snapshot).ToArray();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public Task CancelAsync(Guid operationId)
+    {
+        Task cancelled;
+        CookRunSnapshot snapshot;
+        lock (this.stateLock)
+        {
+            if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
+            {
+                return Task.CompletedTask;
+            }
+
+            run.Snapshot = snapshot = Append(run.Snapshot, new(Message: "Cancellation requested.", State: CookRunState.Cancelling));
+            cancelled = run.Cancellation.CancelAsync();
+        }
+
+        this.PublishRun(snapshot);
+        return cancelled;
+    }
+
+    /// <inheritdoc />
+    public bool ResumeAfterSave(Guid operationId)
+    {
+        CookRunSnapshot snapshot;
+        TaskCompletionSource resume;
+        lock (this.stateLock)
+        {
+            if (!this.runs.TryGetValue(operationId, out var run)
+                || run.Snapshot.State != CookRunState.NeedsSave || run.Resume is null)
+            {
+                return false;
+            }
+
+            resume = run.Resume;
+            run.Resume = null;
+            run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = [] }, new(Message: "Rechecking saved inputs.", State: CookRunState.Queued));
+        }
+
+        this.PublishRun(snapshot);
+        _ = resume.TrySetResult();
+        return true;
+    }
+
+    private static CookRunSnapshot Append(CookRunSnapshot snapshot, CookRunProgress progress)
+    {
+        var messages = snapshot.Messages;
+        if (!string.IsNullOrWhiteSpace(progress.Message))
+        {
+            messages = messages.Add(new(messages.Count + 1L, DateTimeOffset.UtcNow, progress.Severity, progress.Message, progress.Asset?.AssetUri));
+        }
+
+        return snapshot with
+        {
+            Revision = snapshot.Revision + 1,
+            State = snapshot.State == CookRunState.Cancelling ? snapshot.State : progress.State ?? snapshot.State,
+            Messages = messages,
+            Assets = progress.Asset is { } asset ? snapshot.Assets.SetItem(asset.AssetUri, asset) : snapshot.Assets,
+            Diagnostics = progress.Diagnostic is { } diagnostic ? snapshot.Diagnostics.Add(diagnostic) : snapshot.Diagnostics,
+        };
+    }
+
+    private static string GetScopeName(ContentCookOperation operation, CookRunRequest request)
+    {
+        if (request.TargetKind == CookTargetKind.Project || request.ScopeUri is null)
+        {
+            return operation.Project.Name;
+        }
+
+        var name = Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/');
+        name = name[(name.LastIndexOf('/') + 1)..];
+        return request.TargetKind == CookTargetKind.Folder ? name : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(name));
+    }
+
+    private Task BlockRun(Guid operationId, ImmutableArray<CookDocumentState> documents)
+    {
+        CookRunSnapshot snapshot;
+        Task resume;
+        lock (this.stateLock)
+        {
+            var run = this.runs[operationId];
+            run.Resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            resume = run.Resume.Task;
+            run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
+        }
+
+        this.PublishRun(snapshot);
+        return resume;
+    }
+
+    private RunProgress AddRun(ContentCookOperation operation, CookRunRequest request, CancellationTokenSource cancellation)
+    {
+        var snapshot = new CookRunSnapshot
+        {
+            OperationId = operation.OperationId,
+            ProjectId = operation.Project.ProjectId,
+            ProjectRoot = operation.Project.ProjectRoot,
+            DisplayName = GetScopeName(operation, request),
+            Request = request,
+        };
+        if (request.ScopeUri is { } assetUri && request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene)
+        {
+            var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
+                ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+                    ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
+                        ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Unknown;
+            snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
+        }
+
+        snapshot = Append(snapshot, new(Message: "Cook queued."));
+        lock (this.stateLock)
+        {
+            this.runs.Add(operation.OperationId, new(snapshot, cancellation));
+        }
+
+        this.PublishRun(snapshot, reveal: !request.IsAutomatic);
+        return new RunProgress(this, operation.OperationId);
+    }
+
+    private void ReportRun(Guid operationId, CookRunProgress progress)
+    {
+        CookRunSnapshot snapshot;
+        lock (this.stateLock)
+        {
+            if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
+            {
+                return;
+            }
+
+            run.Snapshot = snapshot = Append(run.Snapshot, progress);
+        }
+
+        this.PublishRun(snapshot);
+    }
+
+    private void CompleteRun<T>(Guid operationId, T result)
+    {
+        var state = CookRunState.Succeeded;
+        IEnumerable<DiagnosticRecord> diagnostics = [];
+        IEnumerable<CookRunAsset> assets = [];
+        if (result is ContentCookResult content)
+        {
+            state = content.Status switch
+            {
+                OperationStatus.Succeeded => CookRunState.Succeeded,
+                OperationStatus.SucceededWithWarnings => CookRunState.SucceededWithWarnings,
+                OperationStatus.Cancelled => CookRunState.Cancelled,
+                _ => CookRunState.Failed,
+            };
+            diagnostics = content.Diagnostics;
+            assets = content.CookedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Updated));
+        }
+        else if (result is MaterialCookResult material)
+        {
+            state = material.State == MaterialCookState.Cooked ? CookRunState.Succeeded : CookRunState.Failed;
+        }
+
+        this.FinishRun(operationId, state, diagnostics, assets);
+    }
+
+    private void FailRun(Guid operationId, Exception exception)
+    {
+        var state = exception is OperationCanceledException ? CookRunState.Cancelled : CookRunState.Failed;
+        var diagnostics = state == CookRunState.Cancelled ? Array.Empty<DiagnosticRecord>() :
+        [
+            new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetCookDiagnosticCodes.CookFailed,
+                Message = exception.Message,
+                ExceptionType = exception.GetType().FullName,
+            },
+        ];
+        this.FinishRun(operationId, state, diagnostics, []);
+    }
+
+    private void FinishRun(Guid operationId, CookRunState state, IEnumerable<DiagnosticRecord> diagnostics, IEnumerable<CookRunAsset> assets)
+    {
+        CookRunSnapshot snapshot;
+        lock (this.stateLock)
+        {
+            if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
+            {
+                return;
+            }
+
+            snapshot = run.Snapshot;
+            foreach (var diagnostic in diagnostics)
+            {
+                if (snapshot.Diagnostics.Any(existing => existing.DiagnosticId == diagnostic.DiagnosticId))
+                {
+                    continue;
+                }
+
+                snapshot = Append(snapshot, new(diagnostic.Message, diagnostic.Severity, Diagnostic: diagnostic));
+                if (!string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage))
+                {
+                    snapshot = Append(snapshot, new(diagnostic.TechnicalMessage, diagnostic.Severity));
+                }
+            }
+
+            foreach (var asset in assets)
+            {
+                snapshot = Append(snapshot, new(Asset: asset));
+            }
+
+            foreach (var asset in snapshot.Assets.Values.Where(static asset => asset.State is CookAssetState.Preparing or CookAssetState.Cooking))
+            {
+                var issue = snapshot.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal
+                    && string.Equals(diagnostic.AffectedVirtualPath, asset.AssetUri.AbsolutePath, StringComparison.Ordinal));
+                var assetState = issue is not null ? CookAssetState.Failed
+                    : state == CookRunState.Cancelled ? CookAssetState.Cancelled
+                    : asset.State == CookAssetState.Preparing ? CookAssetState.Skipped : CookAssetState.Unresolved;
+                snapshot = Append(snapshot, new(Asset: asset with
+                {
+                    State = assetState,
+                    Reason = issue?.Message ?? (assetState == CookAssetState.Skipped ? "Preparation stopped before this asset was cooked." : "No individual completion was reported. See the cook output."),
+                }));
+            }
+
+            var message = state switch
+            {
+                CookRunState.Succeeded => "Cook complete.",
+                CookRunState.SucceededWithWarnings => "Cook completed with warnings.",
+                CookRunState.Cancelled => "Cook cancelled. Owned work has stopped.",
+                _ => "Cook failed.",
+            };
+            snapshot = Append(snapshot, new(message));
+            run.Snapshot = snapshot = snapshot with { State = state, CompletedAt = DateTimeOffset.UtcNow };
+        }
+
+        this.PublishRun(snapshot);
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A presentation subscriber must not interrupt cook ownership, worker drain, or publication.")]
+    private void PublishRun(CookRunSnapshot snapshot, bool reveal = false)
+    {
+        foreach (var handler in this.RunChanged?.GetInvocationList() ?? [])
+        {
+            try
+            {
+                ((EventHandler<CookRunChangedEventArgs>)handler)(this, new(snapshot, reveal));
+            }
+            catch (Exception ex)
+            {
+                this.LogRunObserverFailure(ex);
+            }
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A cooking presentation subscriber failed.")]
+    private partial void LogRunObserverFailure(Exception exception);
+
+    private sealed class RunEntry(CookRunSnapshot snapshot, CancellationTokenSource cancellation)
+    {
+        internal CookRunSnapshot Snapshot { get; set; } = snapshot;
+
+        internal CancellationTokenSource Cancellation { get; } = cancellation;
+
+        internal TaskCompletionSource? Resume { get; set; }
+    }
+
+    private sealed class RunProgress(ContentCookCoordinator owner, Guid operationId) : IProgress<CookRunProgress>
+    {
+        public void Report(CookRunProgress value) => owner.ReportRun(operationId, value);
+    }
+}

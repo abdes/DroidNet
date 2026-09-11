@@ -410,7 +410,9 @@ public static partial class Program
         container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
         container.Register<IEngineContentPipelineApi, ImportToolContentPipelineApi>(Reuse.Singleton);
-        container.Register<IContentCookCoordinator, ContentCookCoordinator>(Reuse.Singleton);
+        container.Register<ContentCookCoordinator>(Reuse.Singleton);
+        container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
+        container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
         container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
         container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
         container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);

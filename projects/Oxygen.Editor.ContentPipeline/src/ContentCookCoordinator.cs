@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Serializes cook writers and drains cancelled project lifetimes before releasing ownership.</summary>
-public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IObserver<ProjectContext?>, IDisposable
+public sealed partial class ContentCookCoordinator : IContentCookCoordinator, ICookRunService, IObserver<ProjectContext?>, IDisposable
 {
     private readonly Lock stateLock = new();
     private readonly SemaphoreSlim writer = new(1, 1);
@@ -34,50 +35,14 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IO
     }
 
     /// <inheritdoc />
-    public async Task<T> RunAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(work);
-        cancellationToken.ThrowIfCancellationRequested();
-        var (operation, requestCancellation) = this.CreateRequest(cancellationToken);
-        var acquired = false;
-        var retained = false;
-        try
-        {
-            await this.writer.WaitAsync(requestCancellation.Token).ConfigureAwait(false);
-            acquired = true;
-            lock (this.stateLock)
-            {
-                this.activeOperation = operation;
-            }
+    public Task<T> RunAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
+        => this.RunCoreAsync(work, request: null, cancellationToken);
 
-            requestCancellation.Token.ThrowIfCancellationRequested();
-            this.VerifyCurrent(operation);
-            var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
-            requestCancellation.Token.ThrowIfCancellationRequested();
-            this.VerifyCurrent(operation);
-            return result;
-        }
-        catch (ContentPipelineTerminationException ex) when (acquired)
-        {
-            retained = true;
-            _ = ex.DrainCompletion.ContinueWith(
-                completed =>
-                {
-                    _ = completed.Exception;
-                    this.CompleteRequest(acquired: true, requestCancellation);
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            throw;
-        }
-        finally
-        {
-            if (!retained)
-            {
-                this.CompleteRequest(acquired, requestCancellation);
-            }
-        }
+    /// <inheritdoc />
+    public Task<T> RunCookAsync<T>(CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return this.RunCoreAsync(work, request, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -165,6 +130,79 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IO
         ((IObserver<ProjectContext?>)this).OnNext(value: null);
     }
 
+    private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        cancellationToken.ThrowIfCancellationRequested();
+        var (operation, requestCancellation) = this.CreateRequest(cancellationToken);
+        IProgress<CookRunProgress>? progress = null;
+        var acquired = false;
+        var retained = false;
+        try
+        {
+            progress = request is null ? null : this.AddRun(operation, request, requestCancellation);
+            using var reporting = CookRunContext.Enter(progress);
+            while (true)
+            {
+                await this.writer.WaitAsync(requestCancellation.Token).ConfigureAwait(false);
+                acquired = true;
+                lock (this.stateLock)
+                {
+                    this.activeOperation = operation;
+                }
+
+                requestCancellation.Token.ThrowIfCancellationRequested();
+                this.VerifyCurrent(operation);
+                progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
+                try
+                {
+                    var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
+                    requestCancellation.Token.ThrowIfCancellationRequested();
+                    this.VerifyCurrent(operation);
+                    this.CompleteRun(operation.OperationId, result);
+                    return result;
+                }
+                catch (CookInputsNeedSaveException ex) when (progress is not null)
+                {
+                    acquired = false;
+                    this.ReleaseWriter();
+                    await this.BlockRun(operation.OperationId, ex.Documents).WaitAsync(requestCancellation.Token).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (ContentPipelineTerminationException ex) when (acquired)
+        {
+            retained = true;
+            progress?.Report(new(Message: "Unable to stop owned work yet. Waiting for it to drain.", State: CookRunState.Cancelling));
+            this.ReleaseAfterDrain(operation, requestCancellation, ex);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.FailRun(operation.OperationId, ex);
+            throw;
+        }
+        finally
+        {
+            if (!retained)
+            {
+                this.CompleteRequest(acquired, requestCancellation);
+            }
+        }
+    }
+
+    private void ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, ContentPipelineTerminationException failure)
+        => _ = failure.DrainCompletion.ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                this.FailRun(operation.OperationId, failure);
+                this.CompleteRequest(acquired: true, cancellation);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
     private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken)
     {
         lock (this.stateLock)
@@ -182,12 +220,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IO
         requestCancellation.Dispose();
         if (acquired)
         {
-            lock (this.stateLock)
-            {
-                this.activeOperation = null;
-            }
-
-            _ = this.writer.Release();
+            this.ReleaseWriter();
         }
 
         lock (this.stateLock)
@@ -198,6 +231,16 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IO
                 this.writer.Dispose();
             }
         }
+    }
+
+    private void ReleaseWriter()
+    {
+        lock (this.stateLock)
+        {
+            this.activeOperation = null;
+        }
+
+        _ = this.writer.Release();
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Observe and log cancellation callback failures while always releasing the retired project token.")]

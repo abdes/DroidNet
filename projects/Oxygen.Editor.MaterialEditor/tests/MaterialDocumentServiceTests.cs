@@ -194,17 +194,23 @@ public sealed partial class MaterialDocumentServiceTests
     }
 
     /// <summary>
-    /// Verifies dirty documents are rejected before the cook service is called.
+    /// Verifies dirty documents remain visible as blocked cooks until explicitly saved.
     /// </summary>
     /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task CookAsyncRejectsDirtyDocumentWithoutCallingCookService()
+    public async Task CookAsyncWaitsForExplicitSaveThenResumesLatestSource()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
-        var cook = new RecordingCookService();
-        var publisher = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore(), publisher);
+        var service = CreateCookingService(workspace);
+        var blocked = new TaskCompletionSource<Oxygen.Editor.ContentPipeline.Cooking.CookRunSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        workspace.CookCoordinator.RunChanged += (_, args) =>
+        {
+            if (args.Run.State == Oxygen.Editor.ContentPipeline.Cooking.CookRunState.NeedsSave)
+            {
+                _ = blocked.TrySetResult(args.Run);
+            }
+        };
 
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(
@@ -212,12 +218,16 @@ public sealed partial class MaterialDocumentServiceTests
             new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var result = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = result.State.Should().Be(MaterialCookState.Rejected);
-        _ = result.OperationId.Should().NotBeNull();
-        _ = cook.LastRequest.Should().BeNull();
-        _ = publisher.Published.Should().ContainSingle(r => r.Diagnostics.Single().Code == MaterialDiagnosticCodes.DescriptorDirty);
+        var cooking = service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken);
+        var run = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = run.UnsavedDocuments.Single().DocumentId.Should().Be(created.DocumentId);
+        _ = cooking.IsCompleted.Should().BeFalse();
+        _ = service.GetDocument(created.DocumentId).IsDirty.Should().BeTrue();
+        _ = (await service.SaveAsync(created.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = workspace.CookCoordinator.ResumeAfterSave(run.OperationId).Should().BeTrue();
+        var result = await cooking.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.State.Should().Be(MaterialCookState.Cooked);
+        _ = result.OperationId.Should().Be(run.OperationId);
     }
 
     /// <summary>
@@ -665,6 +675,7 @@ public sealed partial class MaterialDocumentServiceTests
             new MaterialCookService(
                 new ImportService(registry),
                 workspace.CookCoordinator,
+                workspace.CookDocuments,
                 NullLogger<MaterialCookService>.Instance,
                 workspace.ContextService),
             workspace.CookDocuments,

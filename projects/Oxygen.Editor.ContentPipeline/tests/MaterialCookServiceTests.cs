@@ -139,7 +139,7 @@ public sealed partial class MaterialCookServiceTests
         var registry = new ImporterRegistry();
         registry.Register(new MaterialSourceImporter());
         var importService = new ImportService(registry);
-        return new MaterialCookService(importService, workspace.CookCoordinator, NullLogger<MaterialCookService>.Instance, workspace.ContextService);
+        return new MaterialCookService(importService, workspace.CookCoordinator, new Snapshots.CookDocumentRegistry(), NullLogger<MaterialCookService>.Instance, workspace.ContextService);
     }
 
     private static async Task WriteMaterialAsync(string path, MaterialSource material)

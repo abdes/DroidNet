@@ -14,7 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Verifies writer serialization, project cancellation, and retained worker ownership.</summary>
 [TestClass]
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class ContentCookCoordinatorTests
+public sealed partial class ContentCookCoordinatorTests
 {
     /// <summary>Prevents queued work from reading inputs before it owns the writer.</summary>
     /// <returns>The asynchronous test operation.</returns>

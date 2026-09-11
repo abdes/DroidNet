@@ -273,7 +273,8 @@ public sealed partial class ContentPipelineServiceTests
             new CapturingSceneDescriptorGenerator(workspace, diagnostics: []),
             new InvalidManifestBuilder(),
             new ContentImportManifestValidator(),
-            api);
+            api,
+            new Snapshots.CookDocumentRegistry());
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -434,7 +435,8 @@ public sealed partial class ContentPipelineServiceTests
             generator,
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
-            api);
+            api,
+            new Snapshots.CookDocumentRegistry());
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(

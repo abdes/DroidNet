@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -46,7 +47,10 @@ public sealed partial class ImportToolContentPipelineApi(
         try
         {
             await WriteManifestAsync(manifest, manifestPath, cancellationToken).ConfigureAwait(false);
-            var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, projectRoot);
+            var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, projectRoot) with
+            {
+                Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
+            };
 
             this.LogImportToolInvoked(toolPath, manifestPath, projectRoot);
             var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
@@ -207,7 +211,7 @@ public sealed partial class ImportToolContentPipelineApi(
     private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, string output, string manifestPath, string projectRoot)
         => new(
             toolPath,
-            ["--no-tui", "--no-color", "--quiet", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", projectRoot],
+            ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", projectRoot],
             projectRoot);
 
     [SuppressMessage(
@@ -404,4 +408,9 @@ public sealed partial class ImportToolContentPipelineApi(
         Level = LogLevel.Information,
         Message = "Invoking ImportTool '{ToolPath}' with manifest '{ManifestPath}' in '{WorkingDirectory}'.")]
     private partial void LogImportToolInvoked(string toolPath, string manifestPath, string workingDirectory);
+
+    private sealed class CookOutput(IProgress<CookRunProgress> progress) : IProgress<ContentPipelineProcessOutput>
+    {
+        public void Report(ContentPipelineProcessOutput value) => progress.Report(new(Message: value.Text));
+    }
 }

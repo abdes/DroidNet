@@ -13,7 +13,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed class ContentPipelineProcessRunner : IContentPipelineProcessRunner
 {
-    private readonly Func<ProcessStartInfo, IContentPipelineWorker> startWorker;
+    private readonly Func<ProcessStartInfo, IProgress<ContentPipelineProcessOutput>?, IContentPipelineWorker> startWorker;
 
     /// <summary>Initializes a new instance of the <see cref="ContentPipelineProcessRunner"/> class.</summary>
     public ContentPipelineProcessRunner()
@@ -24,6 +24,13 @@ public sealed class ContentPipelineProcessRunner : IContentPipelineProcessRunner
     /// <summary>Initializes a new instance of the <see cref="ContentPipelineProcessRunner"/> class with a worker factory.</summary>
     /// <param name="startWorker">The factory transferring ownership of each launched worker.</param>
     internal ContentPipelineProcessRunner(Func<ProcessStartInfo, IContentPipelineWorker> startWorker)
+        : this((info, _) => startWorker(info))
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="ContentPipelineProcessRunner"/> class with an output-aware worker factory.</summary>
+    /// <param name="startWorker">The factory transferring worker ownership and observing its output.</param>
+    internal ContentPipelineProcessRunner(Func<ProcessStartInfo, IProgress<ContentPipelineProcessOutput>?, IContentPipelineWorker> startWorker)
     {
         this.startWorker = startWorker;
     }
@@ -51,7 +58,7 @@ public sealed class ContentPipelineProcessRunner : IContentPipelineProcessRunner
             startInfo.ArgumentList.Add(argument);
         }
 
-        var worker = this.startWorker(startInfo);
+        var worker = this.startWorker(startInfo, request.Output);
         var readerFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var drained = DrainAsync(worker, readerFailure);
         var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
