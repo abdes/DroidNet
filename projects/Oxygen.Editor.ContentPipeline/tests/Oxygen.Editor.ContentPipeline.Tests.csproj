@@ -11,15 +11,16 @@
         <ProjectReference Include="..\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
-        <ProjectReference Include="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="ErrorLog" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <None Update="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
-        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents" />
-        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">
+        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog" />
+        <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog">
             <Output TaskParameter="TargetOutputs" ItemName="_ContentWorkerProbeAssembly" />
         </MSBuild>
         <PropertyGroup>

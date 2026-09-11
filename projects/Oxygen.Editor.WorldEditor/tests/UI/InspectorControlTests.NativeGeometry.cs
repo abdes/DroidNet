@@ -18,6 +18,39 @@ namespace Oxygen.Editor.World.Tests;
 /// <summary>Exercises asset picker assignments against resolved native geometry.</summary>
 public sealed partial class InspectorControlTests
 {
+    /// <summary>Every engine built-in resolves with drawable buffers and retains its URI across Save/reopen.</summary>
+    /// <param name="shape">The built-in generator name or supported alias.</param>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    [DataRow("Cube")]
+    [DataRow("SubdividedCube")]
+    [DataRow("Sphere")]
+    [DataRow("IcoSphere")]
+    [DataRow("GeodesicSphere")]
+    [DataRow("Plane")]
+    [DataRow("Cylinder")]
+    [DataRow("Cone")]
+    [DataRow("Torus")]
+    [DataRow("Quad")]
+    [DataRow("ArrowGizmo")]
+    public Task BuiltinGeometryResolvesAndReopensThroughNativeRuntime(string shape) => EnqueueAsync(async () =>
+    {
+        var fixture = new NativeSceneFixture(automatic: false, scene => AddGeometryNode(scene, shape));
+        await using var lifetime = fixture.ConfigureAwait(true);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
+        var nodeId = fixture.Source.RootNodes.Single().Id;
+        var original = await AssertGeometryAsync(fixture, nodeId, shape, timeout.Token).ConfigureAwait(true);
+
+        await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
+        var reopened = await AssertGeometryAsync(fixture, nodeId, shape, timeout.Token).ConfigureAwait(true);
+
+        _ = reopened.GeometryKey.Should().Be(original.GeometryKey);
+        _ = reopened.VertexCount.Should().Be(original.VertexCount);
+        _ = reopened.IndexCount.Should().Be(original.IndexCount);
+    });
+
     /// <summary>A mixed geometry selection converges through the picker, history and saved source.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

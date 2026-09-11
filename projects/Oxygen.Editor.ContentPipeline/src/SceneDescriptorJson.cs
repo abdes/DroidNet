@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // This file intentionally groups the private DTOs that mirror the native JSON schema.
-#pragma warning disable SA1402
-#pragma warning disable SA1600
+#pragma warning disable SA1402, SA1600
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -135,41 +134,3 @@ internal sealed record NativeSkyAtmosphereEnvironment(
 internal sealed record NativeReferences(
     [property: JsonPropertyName("materials")] IReadOnlyList<string>? Materials,
     [property: JsonPropertyName("extra_assets")] IReadOnlyList<string>? ExtraAssets);
-
-internal sealed record NativeGeometryDescriptor(
-    [property: JsonPropertyName("$schema")] string Schema,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("bounds")] NativeBounds Bounds,
-    [property: JsonPropertyName("lods")] IReadOnlyList<NativeGeometryLod> Lods);
-
-internal sealed record NativeBounds(
-    [property: JsonPropertyName("min")] float[] Min,
-    [property: JsonPropertyName("max")] float[] Max);
-
-internal sealed record NativeGeometryLod(
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("mesh_type")] string MeshType,
-    [property: JsonPropertyName("bounds")] NativeBounds Bounds,
-    [property: JsonPropertyName("procedural")] NativeProceduralDescriptor Procedural,
-    [property: JsonPropertyName("submeshes")] IReadOnlyList<NativeSubmeshDescriptor> Submeshes);
-
-internal sealed record NativeProceduralDescriptor(
-    [property: JsonPropertyName("generator")] string Generator,
-    [property: JsonPropertyName("mesh_name")] string MeshName,
-    [property: JsonPropertyName("params")] object? Params);
-
-internal sealed record NativeSubmeshDescriptor(
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("material_ref")] string MaterialRef,
-    [property: JsonPropertyName("views")] IReadOnlyList<NativeSubmeshView> Views);
-
-internal sealed record NativeSubmeshView([property: JsonPropertyName("view_ref")] string ViewRef);
-
-internal sealed record NativeSphereParams(
-    [property: JsonPropertyName("latitude_segments")] int LatitudeSegments,
-    [property: JsonPropertyName("longitude_segments")] int LongitudeSegments);
-
-internal sealed record NativePlaneParams(
-    [property: JsonPropertyName("x_segments")] int XSegments,
-    [property: JsonPropertyName("z_segments")] int ZSegments,
-    [property: JsonPropertyName("size")] float Size);

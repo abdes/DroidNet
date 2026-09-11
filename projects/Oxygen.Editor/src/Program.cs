@@ -409,7 +409,9 @@ public static partial class Program
         container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
         container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
-        container.Register<IEngineContentPipelineApi, ImportToolContentPipelineApi>(Reuse.Singleton);
+        container.Register<ImportToolContentPipelineApi>(Reuse.Singleton);
+        container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
+        container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
