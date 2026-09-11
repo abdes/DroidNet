@@ -84,7 +84,7 @@ public sealed partial class ContentPipelineServiceTests
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api);
         var result = projectCook
             ? await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
-            : await pipeline.CookCurrentSceneAsync(workspace.Scene, new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            : await pipeline.CookCurrentSceneAsync(new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().BeOneOf(OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings);
         _ = result.Validation.Should().NotBeNull();

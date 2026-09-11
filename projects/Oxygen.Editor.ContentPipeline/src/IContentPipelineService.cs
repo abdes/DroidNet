@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
-
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -12,14 +10,12 @@ namespace Oxygen.Editor.ContentPipeline;
 public interface IContentPipelineService
 {
     /// <summary>
-    /// Cooks the current scene and its ED-M07 dependencies.
+    /// Cooks the current scene's saved source and required dependencies.
     /// </summary>
-    /// <param name="scene">The scene document.</param>
     /// <param name="sceneAssetUri">The scene asset URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The cook result.</returns>
     public Task<ContentCookResult> CookCurrentSceneAsync(
-        Scene scene,
         Uri sceneAssetUri,
         CancellationToken cancellationToken);
 
