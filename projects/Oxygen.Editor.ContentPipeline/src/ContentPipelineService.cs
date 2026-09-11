@@ -777,7 +777,7 @@ public sealed partial class ContentPipelineService(
                 Validation: null);
         }
 
-        var importResult = await this.ImportManifestAsync(scope, manifest, cancellationToken)
+        var importResult = await this.ImportManifestAsync(operationId, scope, manifest, cancellationToken)
             .ConfigureAwait(false);
         var allDiagnostics = diagnostics.Concat(importResult.Diagnostics).ToList();
         if (!importResult.Succeeded)
@@ -823,7 +823,7 @@ public sealed partial class ContentPipelineService(
             validation);
     }
 
-    private Task<NativeImportResult> ImportManifestAsync(ContentCookScope scope, ContentImportManifest manifest, CancellationToken cancellationToken)
+    private Task<NativeImportResult> ImportManifestAsync(Guid operationId, ContentCookScope scope, ContentImportManifest manifest, CancellationToken cancellationToken)
     {
         foreach (var input in scope.Inputs)
         {
@@ -831,7 +831,12 @@ public sealed partial class ContentPipelineService(
         }
 
         CookRunContext.Report(new(Message: "Cooking content.", State: CookRunState.Cooking));
-        return this.engineContentPipelineApi.ImportAsync(manifest, cancellationToken);
+        var execution = new ContentImportExecution(
+            operationId,
+            scope.Project.ProjectRoot,
+            Path.Combine(scope.Project.ProjectRoot, ".build", "cook", operationId.ToString("N")),
+            manifest);
+        return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 
     private ContentCookScope CreateSceneScope(ProjectContext project, Uri sceneAssetUri)

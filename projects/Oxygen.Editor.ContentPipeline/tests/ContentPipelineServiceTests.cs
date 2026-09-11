@@ -494,9 +494,10 @@ public sealed partial class ContentPipelineServiceTests
         public string? ValidatedRoot { get; private set; }
 
         public Task<NativeImportResult> ImportAsync(
-            ContentImportManifest manifest,
+            ContentImportExecution execution,
             CancellationToken cancellationToken)
         {
+            var manifest = execution.Manifest;
             this.ImportedManifest = manifest;
             this.ImportedManifests.Add(manifest);
             return Task.FromResult(importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []));

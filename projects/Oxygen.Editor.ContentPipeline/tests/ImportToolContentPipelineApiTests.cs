@@ -19,10 +19,10 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed partial class ImportToolContentPipelineApiTests
 {
-    /// <summary>Verifies the workflow can invoke Import Tool With Temporary Manifest Under Project Pipeline Folder.</summary>
+    /// <summary>Verifies the workflow can invoke Import Tool With Temporary Manifest Under Operation Directory.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task ImportAsync_ShouldInvokeImportToolWithTemporaryManifestUnderProjectPipelineFolder()
+    public async Task ImportAsync_ShouldInvokeImportToolWithTemporaryManifestUnderOperationDirectory()
     {
         using var workspace = new TempWorkspace();
         var manifest = CreateManifest(workspace);
@@ -32,7 +32,8 @@ public sealed partial class ImportToolContentPipelineApiTests
             runner,
             NullLogger<ImportToolContentPipelineApi>.Instance);
 
-        var result = await api.ImportAsync(manifest, CancellationToken.None).ConfigureAwait(false);
+        var execution = CreateExecution(workspace, manifest);
+        var result = await api.ImportAsync(execution, CancellationToken.None).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = runner.Request.Should().NotBeNull();
@@ -46,7 +47,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             "--manifest");
         _ = runner.Request.Arguments.Should().ContainInOrder("--manifest", runner.ManifestPath!, "--root", workspace.Root);
         var manifestPath = runner.ManifestPath!;
-        _ = manifestPath.Should().StartWith(Path.Combine(workspace.Root, ".pipeline", "Manifests"));
+        _ = manifestPath.Should().StartWith(Path.Combine(execution.OperationRoot, "manifests"));
         _ = runner.ManifestJson.Should().Contain("\"jobs\"");
         _ = runner.ManifestJson.Should().NotContain("\"output\":null");
         _ = File.Exists(manifestPath).Should().BeFalse("the fallback adapter owns and cleans up its temporary manifest");
@@ -64,10 +65,12 @@ public sealed partial class ImportToolContentPipelineApiTests
             runner,
             NullLogger<ImportToolContentPipelineApi>.Instance);
 
-        var result = await api.ImportAsync(CreateManifest(workspace), CancellationToken.None).ConfigureAwait(false);
+        var execution = CreateExecution(workspace, CreateManifest(workspace));
+        var result = await api.ImportAsync(execution, CancellationToken.None).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle();
+        _ = result.Diagnostics[0].OperationId.Should().Be(execution.OperationId);
         _ = result.Diagnostics[0].Code.Should().Be(AssetImportDiagnosticCodes.ImportFailed);
         _ = result.Diagnostics[0].Domain.Should().Be(FailureDomain.AssetImport);
         _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("stderr");
@@ -207,6 +210,12 @@ public sealed partial class ImportToolContentPipelineApiTests
             new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
             new CapturingRunner(new ContentPipelineProcessResult(0, string.Empty, string.Empty)),
             NullLogger<ImportToolContentPipelineApi>.Instance);
+
+    private static ContentImportExecution CreateExecution(TempWorkspace workspace, ContentImportManifest manifest)
+    {
+        var operationId = Guid.NewGuid();
+        return new(operationId, workspace.Root, Path.Combine(workspace.Root, ".build", "cook", operationId.ToString("N")), manifest);
+    }
 
     private static ContentImportManifest CreateManifest(TempWorkspace workspace)
         => new(
