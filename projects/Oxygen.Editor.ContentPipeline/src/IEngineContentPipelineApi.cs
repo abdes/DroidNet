@@ -12,11 +12,11 @@ public interface IEngineContentPipelineApi
     /// <summary>
     /// Imports using a native manifest or a bounded ImportTool fallback.
     /// </summary>
-    /// <param name="manifest">The content import manifest.</param>
+    /// <param name="execution">The manifest and explicit physical execution paths.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The native import result.</returns>
     public Task<NativeImportResult> ImportAsync(
-        ContentImportManifest manifest,
+        ContentImportExecution execution,
         CancellationToken cancellationToken);
 
     /// <summary>

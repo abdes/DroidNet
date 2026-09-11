@@ -31,32 +31,33 @@ public sealed partial class ImportToolContentPipelineApi(
 
     /// <inheritdoc />
     public async Task<NativeImportResult> ImportAsync(
-        ContentImportManifest manifest,
+        ContentImportExecution execution,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(execution);
+        ArgumentNullException.ThrowIfNull(execution.Manifest, nameof(execution));
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateExecutionPaths(execution);
 
-        var operationId = Guid.NewGuid();
         var toolPath = this.toolLocator.GetImportToolPath();
-        var projectRoot = InferProjectRoot(manifest.Output);
-        var manifestPath = Path.Combine(projectRoot, ".pipeline", "Manifests", $"import-{operationId:N}.json");
+        var manifest = execution.Manifest;
+        var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         Task? retainedWorkerDrain = null;
 
         try
         {
             await WriteManifestAsync(manifest, manifestPath, cancellationToken).ConfigureAwait(false);
-            var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, projectRoot) with
+            var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, execution.InputRoot) with
             {
                 Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
             };
 
-            this.LogImportToolInvoked(toolPath, manifestPath, projectRoot);
+            this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
             var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
             return result.ExitCode == 0
                 ? new NativeImportResult(Succeeded: true, Diagnostics: [])
-                : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(operationId, result)]);
+                : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
         }
         catch (ContentPipelineTerminationException ex)
         {
@@ -208,11 +209,11 @@ public sealed partial class ImportToolContentPipelineApi(
         }
     }
 
-    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, string output, string manifestPath, string projectRoot)
+    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, string output, string manifestPath, string inputRoot)
         => new(
             toolPath,
-            ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", projectRoot],
-            projectRoot);
+            ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", inputRoot],
+            inputRoot);
 
     [SuppressMessage(
         "Design",
@@ -375,15 +376,15 @@ public sealed partial class ImportToolContentPipelineApi(
         };
     }
 
-    private static string InferProjectRoot(string cookedMountRoot)
+    private static void ValidateExecutionPaths(ContentImportExecution execution)
     {
-        var mountDirectory = new DirectoryInfo(cookedMountRoot);
-        var cookedDirectory = mountDirectory.Parent;
-        return cookedDirectory is not null
-            && string.Equals(cookedDirectory.Name, ".cooked", StringComparison.OrdinalIgnoreCase)
-            && cookedDirectory.Parent is { } projectRoot
-            ? projectRoot.FullName
-            : throw new InvalidOperationException($"Cooked mount root '{cookedMountRoot}' must be under '<ProjectRoot>\\.cooked\\<MountName>'.");
+        if (execution.OperationId == Guid.Empty
+            || !Path.IsPathFullyQualified(execution.InputRoot)
+            || !Path.IsPathFullyQualified(execution.OperationRoot)
+            || !Path.IsPathFullyQualified(execution.Manifest.Output))
+        {
+            throw new ArgumentException("Native import requires an operation identity and absolute input, operation, and output paths.", nameof(execution));
+        }
     }
 
     private static ContentCookAssetKind MapAssetKind(byte assetType)

@@ -26,7 +26,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var api = new ImportToolContentPipelineApi(
             new FixedToolLocator("worker.exe"), runner, NullLogger<ImportToolContentPipelineApi>.Instance);
 
-        var import = async () => await api.ImportAsync(CreateManifest(workspace), CancellationToken.None).ConfigureAwait(false);
+        var import = async () => await api.ImportAsync(CreateExecution(workspace, CreateManifest(workspace)), CancellationToken.None).ConfigureAwait(false);
         _ = await import.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = File.Exists(runner.ManifestPath).Should().BeTrue();
         if (readerFailed)
@@ -54,7 +54,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var runner = new FailingWorkerRunner(new Win32Exception(2));
         var api = new ImportToolContentPipelineApi(
             new FixedToolLocator("missing.exe"), runner, NullLogger<ImportToolContentPipelineApi>.Instance);
-        var import = async () => await api.ImportAsync(CreateManifest(workspace), CancellationToken.None).ConfigureAwait(false);
+        var import = async () => await api.ImportAsync(CreateExecution(workspace, CreateManifest(workspace)), CancellationToken.None).ConfigureAwait(false);
         _ = await import.Should().ThrowAsync<Win32Exception>().ConfigureAwait(false);
         _ = File.Exists(runner.ManifestPath).Should().BeFalse();
     }

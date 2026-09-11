@@ -746,6 +746,10 @@ The transaction is a required ED-M07B contract, not a claim of current code.
   mount-relative relationships. Record document saved revisions where known,
   source hashes, import settings, schema/build fingerprint, project lifetime,
   target scope, and operation identity. Native jobs read this private snapshot.
+  `ContentImportExecution` supplies the input root, operation directory and
+  coordinator operation ID separately from the native manifest's output root.
+  The adapter must not infer input paths from the published directory layout.
+  Temporary manifests remain in the operation directory until its worker drains.
 - Authoring may continue after capture. A later edit or source change marks the
   result stale relative to current authoring, while a successful cook of the
   captured input remains a successful, identifiable historical result.
