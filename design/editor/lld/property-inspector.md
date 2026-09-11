@@ -222,8 +222,11 @@ shows the diagnostic from `OXE.SCENE.PerspectiveCamera.NearFar.Invalid`.
 | `ExposureCompensation` | Advanced | `float`, EV stops `[-10, 10]` | Clamp | Indeterminate | yes |
 
 Sun exclusivity rule: setting `IsSunLight = true` clears the flag on every
-other `DirectionalLightComponent` in the scene as part of the same command
-(single undo entry). See [environment-authoring.md](./environment-authoring.md).
+other `DirectionalLightComponent`, enables `EnvironmentContribution` on the
+selected light and binds it as the scene sun. Disabling `EnvironmentContribution`
+also disables `IsSunLight` and clears the scene binding when it points to that
+light. Each action is one undo entry, including all related values.
+See [environment-authoring.md](./environment-authoring.md).
 
 #### Scene Settings (scene-level, `SelectionPolicy.SceneOnly`)
 
