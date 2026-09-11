@@ -1,6 +1,6 @@
 # ED-M07A - Authoring Integrity And Runtime Convergence
 
-Status: `active; 07A.0 managed boundary migration implemented; milestone validation pending`
+Status: `validated` (2026-09-11)
 
 ## 1. Purpose
 
@@ -372,8 +372,10 @@ completed cases. All 40 atmosphere/post-process and 38 component fields pass
 source/native comparison, Undo/Redo, Save/reopen and clear inline feedback.
 Geometry/material, sun consistency, component transitions, default loading and
 runtime-setting rejection cases also pass. Packaged inspector tests pass 137/137
-and Runtime tests 71/71. Final viewport qualification of composed rotations,
-geometry/material changes and coupled sun controls remains.
+and Runtime tests 71/71. On 2026-09-11, the user confirmed composed XYZ rotations,
+Cube/Sphere changes with a newly cooked material, None and Default, and coupled
+sun controls in the restarted Debug editor through Undo/Redo and Save/reopen.
+The 07A.6 gate passes.
 
 Run concrete cases through actual controls/commands: Transform primary axes;
 Geometry pick/missing URI and material slot pick/clear/mixed values; camera FOV,
@@ -495,7 +497,7 @@ There is no autosave scope expansion.
 - [x] 07A.5 shared atomic-save and conflict cases pass (#7), preserving #4.
 - [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
 - [x] 07A.8 document-owned material history and session tests pass (#9).
-- [ ] 07A.6 field/workflow evidence is complete and the user has validated the
+- [x] 07A.6 field/workflow evidence is complete and the user has validated the
   visible behavior; native acceptance alone is not presented-state proof.
 
 ## 10. Status Ledger Hook

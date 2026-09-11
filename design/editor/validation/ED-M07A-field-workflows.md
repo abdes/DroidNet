@@ -132,7 +132,13 @@ managed material writer now emits the engine's 357-byte descriptor, including
 its 103-byte asset header and extension defaults. Managed.Assets tests pass 89/89;
 World serialization tests pass 67/67; SceneExplorer tests pass 161/161.
 
-## Remaining M07A.6 gate
+## Viewport qualification
 
-Final viewport qualification of composed rotations, geometry/material changes
-and the coupled sun controls. Background presentation has already been verified.
+On 2026-09-11, the user confirmed all three checks in the restarted Debug editor
+through Undo/Redo and Save/reopen:
+
+- Combined XYZ rotation.
+- Cube/Sphere changes with a newly cooked material, None and Default.
+- Sun/Contributes automatically staying consistent.
+
+Background presentation was verified earlier. All M07A.6 gates pass.
