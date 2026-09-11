@@ -485,9 +485,10 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
       tests pass; the user verified picker matching, exposure/tone-map independence,
       Undo/Redo and Save/reopen in the rebuilt editor.
 - [ ] 07A.2 camera/light/environment gesture sessions and cancellation: current
-      implementation has managed regression coverage; save/close and control gates remain.
+      packaged controls pass numeric/picker, history, wheel and selection cases;
+      Escape and complete workflow qualification remain.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:
-      numeric feedback and ordering tests pass; complete dependent/control evidence remains.
+      inline near/far/aspect and selection tests pass; final dependency coverage remains.
 - [x] 07A.4 offline/reconnect/lifetime convergence with failed work retained;
       WorldEditor 131/131 and Runtime 61/61 regressions pass.
 - [x] 07A.5 shared atomic writes and inline scene/material conflict recovery (#7),
