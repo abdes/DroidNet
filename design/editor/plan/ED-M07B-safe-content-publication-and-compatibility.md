@@ -279,6 +279,10 @@ coalesced requests, failures, cancellation, and offline/reopen behavior. Include
 the Cooking panel's Main repair journey and every additional gate in its section 6;
 a review wireframe is not implementation or editor-validation evidence.
 
+The earlier report that Project cooking required cooking Materials first is no
+longer an active defect or completion blocker, as confirmed by the user. Retain
+the normal first-project-cook dependency regression test.
+
 Pass: users complete supported workflows without generated-file edits, raw path
 assignment, manual mounting, or losing their working context. The PRD 1,000-entry
 browser and operation-feedback timing gates apply. Runtime visual parity remains
