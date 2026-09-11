@@ -386,17 +386,17 @@ public sealed partial class MaterialDocumentServiceTests
 
         var cookedBytes = await File.ReadAllBytesAsync(
             Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = cookedBytes.Should().HaveCount(256);
-        _ = ReadSingle(cookedBytes, 0x68).Should().BeApproximately(0.25f, 0.0001f);
-        _ = ReadSingle(cookedBytes, 0x6C).Should().BeApproximately(0.5f, 0.0001f);
-        _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.75f, 0.0001f);
-        _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(1.0f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0x7C).Should().BeApproximately(0.8f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0x7E).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0xB8).Should().BeApproximately(0.4f, 0.0001f);
-        _ = cookedBytes[0x5F].Should().Be(3);
+        _ = cookedBytes.Should().HaveCount(357);
+        _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.25f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(0.5f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x78).Should().BeApproximately(0.75f, 0.0001f);
+        _ = ReadSingle(cookedBytes, 0x7C).Should().BeApproximately(1.0f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0xC0).Should().BeApproximately(0.4f, 0.0001f);
+        _ = cookedBytes[0x67].Should().Be(3);
 
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x60, 4));
+        var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x68, 4));
         _ = flags.Should().Be((1u << 1) | (1u << 2));
     }
 
