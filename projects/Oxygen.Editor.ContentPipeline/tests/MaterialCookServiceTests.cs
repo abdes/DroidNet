@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Managed.Assets.Import;
@@ -12,9 +13,14 @@ using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
+/// <summary>Verifies material recooking and stable published identity.</summary>
 [TestClass]
-public sealed class MaterialCookServiceTests
+[SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed partial class MaterialCookServiceTests
 {
+    /// <summary>Verifies the workflow can import Build And Verify Loose Cooked Output.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookMaterialAsync_ShouldImportBuildAndVerifyLooseCookedOutput()
     {
@@ -37,7 +43,8 @@ public sealed class MaterialCookServiceTests
 
         var indexPath = Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin");
         _ = File.Exists(indexPath).Should().BeTrue();
-        using var index = File.OpenRead(indexPath);
+        var index = File.OpenRead(indexPath);
+        await using var indexLifetime = index.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(index);
         _ = document.Assets.Should().ContainSingle(asset => string.Equals(asset.VirtualPath, "/Content/Materials/Wood.omat", StringComparison.Ordinal));
         var asset = document.Assets.Single(asset => string.Equals(asset.VirtualPath, "/Content/Materials/Wood.omat", StringComparison.Ordinal));
@@ -45,6 +52,8 @@ public sealed class MaterialCookServiceTests
         _ = asset.DescriptorSize.Should().Be((ulong)new FileInfo(cookedPath).Length);
     }
 
+    /// <summary>Verifies the workflow can keep Single Virtual Path Mapping And Refresh Descriptor.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookMaterialAsync_WhenRecooked_ShouldKeepSingleVirtualPathMappingAndRefreshDescriptor()
     {
@@ -67,18 +76,21 @@ public sealed class MaterialCookServiceTests
         _ = second.State.Should().Be(MaterialCookState.Cooked);
 
         var indexPath = Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin");
-        using var index = File.OpenRead(indexPath);
+        var index = File.OpenRead(indexPath);
+        await using var indexLifetime = index.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(index);
         _ = document.Assets
             .Where(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/Wood.omat", StringComparison.Ordinal))
             .Should()
             .ContainSingle();
 
-        var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat")).ConfigureAwait(false);
-        _ = ReadUnorm16(cookedBytes, 0x7C).Should().BeApproximately(0.8f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0x7E).Should().BeApproximately(0.2f, 0.0001f);
+        var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat"), CancellationToken.None).ConfigureAwait(false);
+        _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
+        _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
     }
 
+    /// <summary>Verifies the workflow can reject.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookMaterialAsync_WhenRequestMissingProjectFacts_ShouldReject()
     {
@@ -95,6 +107,8 @@ public sealed class MaterialCookServiceTests
         _ = result.State.Should().Be(MaterialCookState.Rejected);
     }
 
+    /// <summary>Verifies the workflow can write Under Mount Cooked Root.</summary>
+    /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task CookMaterialAsync_WhenMountNameDiffersFromFolder_ShouldWriteUnderMountCookedRoot()
     {
@@ -158,7 +172,7 @@ public sealed class MaterialCookServiceTests
     private static float ReadUnorm16(byte[] bytes, int offset)
         => BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2)) / 65535.0f;
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {
