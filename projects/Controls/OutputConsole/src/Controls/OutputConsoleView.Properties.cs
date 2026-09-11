@@ -14,6 +14,14 @@ namespace DroidNet.Controls.OutputConsole;
 /// </summary>
 public partial class OutputConsoleView
 {
+    /// <summary>Identifies whether the console owns scrolling or expands within a scrolling host.</summary>
+    public static readonly DependencyProperty IsScrollEnabledProperty = DependencyProperty.Register(
+        nameof(IsScrollEnabled), typeof(bool), typeof(OutputConsoleView), new PropertyMetadata(defaultValue: true, OnScrollEnabledChanged));
+
+    /// <summary>Identifies visibility of the optional console command bar.</summary>
+    public static readonly DependencyProperty ToolbarVisibilityProperty = DependencyProperty.Register(
+        nameof(ToolbarVisibility), typeof(Visibility), typeof(OutputConsoleView), new PropertyMetadata(Visibility.Visible));
+
     /// <summary>
     ///     Identifies the <see cref="TextFilter" /> dependency property.
     ///     Holds the substring used to filter displayed log messages.
@@ -94,6 +102,20 @@ public partial class OutputConsoleView
         typeof(OutputConsoleView),
         new PropertyMetadata(defaultValue: false, OnViewOptionChanged));
 
+    /// <summary>Gets or sets a value indicating whether the console scrolls internally; disable when its host owns scrolling.</summary>
+    public bool IsScrollEnabled
+    {
+        get => (bool)this.GetValue(IsScrollEnabledProperty);
+        set => this.SetValue(IsScrollEnabledProperty, value);
+    }
+
+    /// <summary>Gets or sets whether the host displays the console's command bar.</summary>
+    public Visibility ToolbarVisibility
+    {
+        get => (Visibility)this.GetValue(ToolbarVisibilityProperty);
+        set => this.SetValue(ToolbarVisibilityProperty, value);
+    }
+
     /// <summary>
     ///     Gets or sets the substring used to filter displayed log messages.
     ///     Bound to <see cref="TextFilterProperty" />.
@@ -172,6 +194,19 @@ public partial class OutputConsoleView
     {
         get => (bool)this.GetValue(WordWrapProperty);
         set => this.SetValue(WordWrapProperty, value);
+    }
+
+    /// <summary>Configures whether the console or its host owns scrolling.</summary>
+    /// <param name="sender">The console whose setting changed.</param>
+    /// <param name="args">The new scrolling setting.</param>
+    private static void OnScrollEnabledChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        var view = (OutputConsoleView)sender;
+        var enabled = (bool)args.NewValue;
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollMode(view.List, enabled ? Microsoft.UI.Xaml.Controls.ScrollMode.Auto : Microsoft.UI.Xaml.Controls.ScrollMode.Disabled);
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollBarVisibility(view.List, enabled ? Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto : Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled);
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetHorizontalScrollMode(view.List, enabled ? Microsoft.UI.Xaml.Controls.ScrollMode.Auto : Microsoft.UI.Xaml.Controls.ScrollMode.Disabled);
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetHorizontalScrollBarVisibility(view.List, enabled ? Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto : Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled);
     }
 
     /// <summary>

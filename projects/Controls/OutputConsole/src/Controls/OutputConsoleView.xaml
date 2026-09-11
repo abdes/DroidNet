@@ -33,7 +33,10 @@
         </Grid.RowDefinitions>
 
         <!--  Toolbar  -->
-        <CommandBar DefaultLabelPosition="Right" IsDynamicOverflowEnabled="False">
+        <CommandBar
+            DefaultLabelPosition="Right"
+            IsDynamicOverflowEnabled="False"
+            Visibility="{x:Bind ToolbarVisibility, Mode=OneWay}">
             <AppBarToggleButton
                 x:Name="PauseToggle"
                 Icon="Pause"
