@@ -148,3 +148,35 @@ The complete trigger and recovery tables are workflow LLD sections 4-6.
 Approve or revise that policy before implementation and reconcile the existing
 explicit-only PRD/material/pipeline clauses. Independent UI correctness and
 incremental-reuse requirements are necessary with either trigger policy.
+
+## 6. Follow-Up Reports And Source Review
+
+The user reported a project-cook failure after choosing Cylinder:
+
+> Cook failed for the active project. Scene node `New Entity 5` references unsupported geometry `asset://Engine/Generated/BasicShapes/Cylinder`.
+
+The described edit was to New Entity 6. `ProceduralGeometryDescriptorService`
+recognizes only Cube/Sphere/Plane and skips Cylinder; `SceneDescriptorGenerator`
+then emits the reported unsupported-geometry error. This proves a coverage gap,
+not that either node name in the report is wrong. The regression must identify
+the captured saved node ID/revision and keep diagnostic navigation accurate.
+
+The engine's `Data/ProceduralMeshes.h` and geometry descriptor schema support
+eleven generator names: the eight existing picker entries plus SubdividedCube,
+IcoSphere, and its GeodesicSphere alias. M07B.7 now covers the complete set and
+alias handling, including Save -> Cook Current Scene / Cook Project for each.
+The native public factories and importer also differ on Cylinder/Cone default
+segment counts (32 versus 16), reinforcing the need for one shared recipe.
+
+The user also reported that the node inspector's component list stretches,
+component selection does not filter editors, and single/multi-node layouts waste
+vertical space. Source confirms `TopPaneHeight = 2*`, `PropertyPaneHeight = 3*`,
+and a hidden component list in multi-node mode. The selection handler only sets
+the details view-model's deletion target; the host editor filter ignores it.
+
+M07B.5g and property-inspector section 9.1 now require content-sized component
+selection, a compact multi-node summary, component-only filtering, and deselect/
+All to restore every applicable editor. Filter changes remain view state and
+preserve gesture/history/validation behavior. The follow-up editor process was
+closed; these additions use the user report and current source, with single/
+multi-node interaction and sizing checks assigned to implementation validation.

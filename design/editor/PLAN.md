@@ -372,8 +372,11 @@ All four existing cook scopes execute incrementally with honest freshness and
 publication results. Shared state, correct list/tile navigation, useful filters
 and details, typed picking before/after cooking, import/save recovery, and usable
 command layouts pass the recorded UI journeys. Settle the proposed automatic
-trigger policy in 07B.0 before coding. Native worker lifetime (#8) and all eight
-procedural assets' shared authority (#11) pass their concrete tasks before parity.
+trigger policy in 07B.0 before coding. Native worker lifetime (#8) and the complete
+engine procedural catalog's shared authority (#11) pass their concrete tasks
+before parity, including Cylinder scene/project cooking and engine sphere aliases.
+07B.5g also closes compact single/multi-node inspector layout and component
+filtering, with deselection restoring all applicable property editors.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
@@ -547,7 +550,7 @@ plan tasks and LLDs.
 | [#8](https://github.com/abdes/DroidNet/issues/8) | Own/terminate/drain worker job and descendants before cleanup/cancel completion; controlled subprocess and stream tests. | ED-M07B.6; pipeline section 18. |
 | [#9](https://github.com/abdes/DroidNet/issues/9) | Material-document undo/redo, gesture history, dirty/cook state and document isolation. | ED-M07A.8; material section 17. |
 | [#10](https://github.com/abdes/DroidNet/issues/10) | Injectable managed world/input capabilities, Runtime-owned facade/DTO conversion, full consumer migration and boundary tests. | ED-M07A.0; Runtime section 18. |
-| [#11](https://github.com/abdes/DroidNet/issues/11) | Engine/content procedural definition authority for eight exposed assets, no interop pak policy, shared live/cook semantic tests. | ED-M07B.7; pipeline section 19; visual parity in ED-M08. |
+| [#11](https://github.com/abdes/DroidNet/issues/11) | Engine/content authority for the full named generator catalog and aliases, every selectable shape cookable, no interop pak policy, shared live/cook semantic tests. | ED-M07B.7; pipeline section 19; visual parity in ED-M08. |
 
 No earlier milestone is reopened or superseded by this map. New proof belongs
 to the gap-closing milestones. The issue #2-5 plans retain their recorded limits,

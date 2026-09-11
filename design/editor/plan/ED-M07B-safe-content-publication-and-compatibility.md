@@ -26,6 +26,7 @@ and update it without managing generated files or mounts. The
 [content-cooking-workflows.md](../lld/content-cooking-workflows.md),
 [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md),
 [material-editor.md](../lld/material-editor.md),
+[property-inspector.md](../lld/property-inspector.md) section 9.1,
 [runtime-integration.md](../lld/runtime-integration.md),
 [environment-authoring.md](../lld/environment-authoring.md),
 [asset-primitives.md](../lld/asset-primitives.md),
@@ -45,6 +46,7 @@ and update it without managing generated files or mounts. The
 | Running-editor review: Materials breadcrumb can retain geometry tiles; Filter has no effect; selected rows expose no details. | Correct navigation/query lifetime, working filters, actionable state and source/output details. | 07B.5b |
 | Running-editor review: built-ins and Engine_Generated_BasicShapes outputs appear as separate picker choices; material Cook clips at the current dock width. | Provenance-aware grouping, consistent typed picking, and usable command layouts. | 07B.5c/e/7 |
 | Import UI permits all file types and source copying uses overwrite; Inspect reports only counts/path. | Safe and understandable import decisions, useful result inspection and recovery. | 07B.4/5d/e |
+| User report and source: the node inspector reserves a 2*:3* header/property split; component selection only controls deletion, and multi-node mode hides the list. | Content-sized compact header/list, functional component filtering and All reset, efficient single/multi-node layouts. | 07B.5g |
 | Native discovery locates installed tooling; no qualified artifact-set fingerprint is established by the existing design. | Detect mismatched editor/native/cooker/schema artifacts before unsafe calls. | 07B.4 |
 | [#8](https://github.com/abdes/DroidNet/issues/8): ContentPipelineProcessRunner cancels stream reads/WaitForExitAsync without terminating the child; ImportToolContentPipelineApi cleans the manifest in finally. | Owned worker termination, descendant handling, reader drain and cleanup ordering. | 07B.6 |
 | [#11](https://github.com/abdes/DroidNet/issues/11): SetGeometryCommand constructs built-ins/default material and pak geometry fields, while ProceduralGeometryDescriptorService separately defines generator parameters/bounds/defaults and supports only Cube/Sphere/Plane. The UI exposes eight built-ins. | One engine/content authority for all exposed procedural geometry and live/cooked semantics. | 07B.7 |
@@ -223,13 +225,30 @@ are unsupported have a visible reason or are absent.
 Execute every journey in workflow LLD section 7 with production services and
 the packaged editor controls. Repeat the captured review cases after fixes and
 record user validation of before/during/after behavior. Cover supported imports,
-all eight built-ins, authored and cooked-only content, dirty/shared dependencies,
+the complete engine generator set, authored and cooked-only content, dirty/shared dependencies,
 coalesced requests, failures, cancellation, and offline/reopen behavior.
 
 Pass: users complete supported workflows without generated-file edits, raw path
 assignment, manual mounting, or losing their working context. The PRD 1,000-entry
 browser and operation-feedback timing gates apply. Runtime visual parity remains
 ED-M08; usability and correct state transitions are required in ED-M07B.
+
+#### 07B.5g - Compact Node Inspector And Component Filtering
+
+Implement property-inspector section 9.1. Replace the proportional header/list
+allocation with content-sized, bounded component selection and give properties
+the remaining height. Remove the empty list allocation in multi-node mode and
+reduce repetitive header prose, padding, and absent-control space. The component
+selector filters the property sections; no component selected means All components.
+Provide a clear, keyboard-accessible reset and consistent behavior across node
+selection changes. Multi-node filters respect existing applicability/mixed values.
+
+Pass: selecting Geometry shows only its editor; selecting Transform switches
+sections; clearing selection/All restores all applicable editors. Two components
+occupy two compact rows rather than a fraction of the dock. Single/multi-node,
+short/narrow docks, DPI, add/remove, no-node selection, active edit cancellation,
+and selection lifetime cases pass without extra history, dirty state, or cooks.
+Include these cases in 07B.5f; keep M07A property/history semantics intact.
 
 ### 07B.6 - Own And Drain Native Worker Processes (#8)
 
@@ -258,9 +277,12 @@ built-in policy switch, generated-content cache policy and hardcoded pak fields.
 Managed descriptor generation consumes the same engine definition rather than
 maintaining independent parameters/bounds/material constants.
 
-Cover the existing authorable picker set: Cube, Sphere, Plane, Cylinder, Cone,
-Quad, Torus and ArrowGizmo. Preserve their URIs and immediate preview without
-requiring an explicit cook first. An authored ArrowGizmo asset is geometry;
+Cover all named generators in the current engine API/schema: Cube,
+SubdividedCube, Sphere, IcoSphere, GeodesicSphere, Plane, Cylinder, Cone, Quad,
+Torus and ArrowGizmo. GeodesicSphere is an IcoSphere alias; support both identities
+and explain their relationship in discovery. Add the missing capabilities to
+the picker through the shared engine catalog. Preserve existing URIs and immediate
+preview without requiring an explicit cook first. An authored ArrowGizmo asset is geometry;
 editor-only gizmo overlays remain transient. Preserve #5 request-generation and
 scene-mutation acceptance for all cached/procedural/async paths.
 
@@ -269,6 +291,15 @@ bounds, topology/index counts, vertex semantics, default material and authored
 overrides through supported APIs; use the same parameter cases for live and
 cooked output. No pak format constants remain in interop procedural construction.
 Source/unit tests are separate from the ED-M08 visual/loaded parity evidence.
+
+Required reported regression: select Cylinder, Save, then Cook Current Scene and
+Cook Project. Neither may reject this supported generator. Repeat across the
+complete set and aliases with default/assigned material and Save/reopen. Audit
+factory versus importer defaults (including Cylinder/Cone segment counts) and
+make the engine's shared recipe authoritative. Unknown generators still fail
+with the exact saved scene/node/geometry scope and an actionable diagnostic.
+The report names New Entity 5 although the user describes editing New Entity 6;
+check captured node ID/revision rather than assuming either name is wrong.
 
 Expose origin/recipe/version and stable source-to-cooked identity mapping to
 07B.5 consumers. This prevents generated cook companions from appearing as
@@ -281,7 +312,8 @@ Finish 07B.0 before coding. Establish matched-artifact preflight and owned-worke
 lifetime before enabling new native work. Build 07B.1 provenance/incremental
 contracts with 07B.5a state projections, then the remaining 07B.3/4/7 native/import
 contracts and 07B.2 publication transaction. Integrate 07B.5b-e as those contracts
-become available; 07B.5f closes the combined workflow. Keep each numbered task
+become available and complete 07B.5g inspector behavior; 07B.5f closes the combined
+workflow. Keep each numbered task
 or cohesive contract change separately reviewable in commits. Use Fixes #8 and
 Fixes #11 only when their complete behavior and validation are delivered.
 
@@ -296,6 +328,9 @@ Fixes #11 only when their complete behavior and validation are delivered.
   provider/reducer, list/tile layouts, navigation, typed pickers, and command/result
   surfaces: consume shared state, preserve interaction scope, and implement the
   approved triggers and recovery. Existing WinUI controls/theme resources apply.
+- `WorldEditor/src/Inspector`: SceneNodeEditorView/ViewModel,
+  SceneNodeDetailsView/ViewModel, section templates/theme resources, and inspector
+  packaged UI tests: compact sizing, component filter ownership and presentation.
 - `Projects` project context/paths and `Managed.Assets` supported catalog/index
   adapters; neither executes editor workflow policy.
 - Engine scene descriptor schemas/import builders/runtime scene systems for
@@ -319,11 +354,14 @@ its product semantics are settled in 07B.0 before implementation.
 - [ ] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [ ] 07B.6 cancellation owns/drains native workers and descendants (#8).
-- [ ] 07B.7 all eight procedural assets use one semantic authority (#11).
+- [ ] 07B.7 all eleven engine generator names, including the sphere alias, use
+  one semantic authority; every selectable shape passes scene/project cook (#11).
 - [ ] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
   presentation and typed assignment before/after cooking pass.
 - [ ] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
   points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
+- [ ] 07B.5g compact single/multi-node inspector, functional component selection
+  and All reset pass without changing property/history/gesture semantics.
 - [ ] 07B.5f all workflow journeys and recorded UI defects pass through the
   visible editor, including resumed preview and user validation evidence.
 

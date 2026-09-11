@@ -483,6 +483,65 @@ UI rules:
   Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background
   sections visible.
 
+### 9.1 ED-M07B Compact Layout And Component Filtering
+
+ED-M07B.5g owns the user-reported component-list sizing and filtering defects.
+`SceneNodeEditorViewModel` currently requests a 2*:3* split between the header/
+component area and properties; multi-node mode reserves the same area while
+hiding the list. `SceneNodeDetailsViewModel.SelectedComponent` only controls
+deletion availability, and the host's editor filter does not consume it.
+
+The node header and component selector must size to their content. The property
+editors receive the remaining height. Show up to four compact component rows
+without a separate scroll area; longer lists get a bounded scroll/overflow that
+keeps properties usable. Small/short docks may reduce the visible selector rows.
+Remove the default proportional split and its need for manual correction. An
+existing splitter position must not recreate empty reserved space. Multi-node
+selection gets a compact count/type summary and applicable component filters,
+without a blank single-node-list placeholder.
+
+Use these selection semantics for both single-node and multi-node inspection:
+
+| Interaction | Visible editors |
+| --- | --- |
+| No component selected / All components | All editors applicable to the current scene-node selection, under section 7.3. |
+| Select a component/type | Only that component's applicable editor section. Selecting the same entry again clears the filter. |
+| Choose All components | Clear component selection and restore all applicable sections; the action is keyboard reachable. |
+| Change selected nodes, scene, or document | Reset to All components for the new selection; no stale component instance crosses the selection boundary. |
+| Add/remove a component in the current node selection | Recompute availability. Preserve a still-applicable filter; if its component was removed, return to All components. |
+| Select the scene / clear all scene-node selection | Show scene-level environment settings under the existing contract; no leftover node component filter or reserved header space. |
+
+Multi-node filtering operates on component types, never an arbitrary component
+instance from the first node. It must respect existing editor applicability and
+mixed-value rules. A type unavailable for the selected set has an explanation;
+filtering cannot implicitly add components, change the edit target set, or enable
+bulk remove/add actions. Preserve the existing single-node cardinality and locked
+Transform rules. All components is a view choice, never a deletion target.
+
+The host owns the active filter and projects applicable editor instances into
+visible sections. Switching filters must use the normal edit-session boundary
+for a focused field, preserving M07A gesture ownership, Escape cancellation,
+validation, and accepted history. Do not recreate document models, clear values,
+or lose errors because an editor becomes hidden. Keep errors discoverable from
+the affected component entry. A filter change itself does not dirty the document,
+create undo history, synchronize values, or request a cook.
+
+Use friendly type labels such as Transform, Geometry, Camera, and Directional
+Light. Keep the node summary, component actions, and filter compact. Reduce
+repeated header/description blocks and padding; put explanatory prose in
+expandable help while leaving field labels, units, mixed values, and actionable
+diagnostics readable. No blank row is reserved for absent controls. Primary
+geometry/material controls must fit supported widths without horizontal clipping.
+Preserve keyboard target sizes, focus visibility, and the existing theme tokens.
+
+Validation covers single-node and multi-node selections with two/four components,
+common and non-common types, All -> Geometry -> Transform -> All, deselection,
+component removal, Undo/Redo, scene switching and no-node selection. Exercise
+filter changes during numeric/text/color edits and pending native work. Measure
+header/list desired height versus rendered height: extra inspector height must
+go to properties, not empty component-list space. Qualify narrow/short docks and
+100%/150%/200% scaling with the real packaged controls and visible walkthroughs.
+
 ## 10. Persistence And Round Trip
 
 All ED-M07A edits round-trip through existing `*Data` DTOs in

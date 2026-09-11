@@ -46,6 +46,11 @@ Filter has no effect; Cook is clipped in the material document; source/cooked
 details are absent on selection; generated companions appear as separate picker
 choices. These are required 07B.5 fixes, not optional visual polish.
 
+The follow-up reports add Cylinder project-cook rejection and node-inspector
+space/filtering defects. Pipeline section 19 owns full engine generator/alias
+coverage; [property-inspector section 9.1](property-inspector.md#91-ed-m07b-compact-layout-and-component-filtering)
+owns compact component selection and filtered editors in 07B.5g.
+
 Use the existing WinUI browser, inspector pickers, material document, scene
 toolbar, and output/results surfaces. Required work includes their empty states,
 action labels, disabled reasons, progress, and keyboard/accessibility behavior.
@@ -321,6 +326,8 @@ for these cases. D1 cases become gates for the selected policy after its decisio
 | Browse/search/filter/open picker with 1,000 logical entries | No cook launches; focus/selection remain stable during catalog updates; PRD browser timing gates hold. |
 | Navigate Materials/Geometry/Scenes, switch list/tiles, Back/Forward, then act | Breadcrumb, rows, selection, and operation scope agree; old asynchronous results cannot repopulate the wrong folder. Filters actually change the result set. |
 | Browse built-ins and their cooked companions | Proven generated outputs stay attached to their originating identity; legitimate authored assets and existing references remain distinct and usable. |
+| Select Cylinder, save, Cook Current Scene / Cook Project; repeat the full engine generator catalog and aliases | Every supported choice cooks and loads with its shared recipe. Diagnostics identify the captured scene/node/asset when another reference fails. |
+| Single/multi-node component filter and compact inspector | Geometry/Transform selection restricts editors; deselection/All restores applicable sections. The header/list consumes only needed space; filtering creates no authored changes or cooks. |
 | Uncooked vs missing vs stale vs cooked-only assets | Distinct actions and state; typed identity survives Save/reopen; cooked-only editing stays read-only. |
 | Save shared material used on several nodes | Exactly the affected products rebuild; all current uses update after publication, with no additional history entry. |
 | Assign uncooked material into a dirty scene | Asset-only cook can run when its own inputs are saved; consuming scene need not be saved. |
