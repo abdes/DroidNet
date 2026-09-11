@@ -612,7 +612,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         try
         {
             var sceneUri = GetSceneAssetUri(this.scene);
-            var result = await this.contentPipelineService.CookCurrentSceneAsync(this.scene, sceneUri, CancellationToken.None)
+            var result = await this.contentPipelineService.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
             result = await this.RefreshCatalogAfterCookAsync(result, sceneUri).ConfigureAwait(true);
             this.PublishCookResult(result, sceneUri);

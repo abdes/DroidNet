@@ -24,6 +24,7 @@ public sealed partial class ContentPipelineServiceTests
     public async Task CookCurrentSceneAsync_ShouldGenerateImportValidateAndInspect()
     {
         using var workspace = new TempWorkspace();
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
         var generator = new CapturingSceneDescriptorGenerator(workspace, diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(
@@ -37,7 +38,7 @@ public sealed partial class ContentPipelineServiceTests
                 Diagnostics: []));
         var service = CreateService(workspace, generator, api);
 
-        var result = await service.CookCurrentSceneAsync(workspace.Scene, sceneUri, CancellationToken.None)
+        var result = await service.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
@@ -61,6 +62,7 @@ public sealed partial class ContentPipelineServiceTests
     public async Task CookCurrentSceneAsync_WhenDescriptorHasError_ShouldNotImport()
     {
         using var workspace = new TempWorkspace();
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var generator = new CapturingSceneDescriptorGenerator(
             workspace,
             [
@@ -79,7 +81,6 @@ public sealed partial class ContentPipelineServiceTests
         var service = CreateService(workspace, generator, api);
 
         var result = await service.CookCurrentSceneAsync(
-                workspace.Scene,
                 new Uri("asset:///Content/Scenes/Main.oscene.json"),
                 CancellationToken.None)
             .ConfigureAwait(false);
@@ -274,7 +275,7 @@ public sealed partial class ContentPipelineServiceTests
             new InvalidManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            new Snapshots.CookDocumentRegistry());
+            workspace.Documents);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -291,6 +292,7 @@ public sealed partial class ContentPipelineServiceTests
     public async Task CookCurrentSceneAsync_WhenDescriptorHasWarning_ShouldReturnWarningDiagnostic()
     {
         using var workspace = new TempWorkspace();
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var generator = new CapturingSceneDescriptorGenerator(
             workspace,
             [
@@ -309,7 +311,6 @@ public sealed partial class ContentPipelineServiceTests
         var service = CreateService(workspace, generator, api);
 
         var result = await service.CookCurrentSceneAsync(
-                workspace.Scene,
                 new Uri("asset:///Content/Scenes/Main.oscene.json"),
                 CancellationToken.None)
             .ConfigureAwait(false);
@@ -436,7 +437,7 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            new Snapshots.CookDocumentRegistry());
+            workspace.Documents);
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(
@@ -453,19 +454,29 @@ public sealed partial class ContentPipelineServiceTests
     {
         public ContentCookScope? Scope { get; private set; }
 
-        public Task<SceneDescriptorGenerationResult> GenerateAsync(
+        public Scene? Scene { get; private set; }
+
+        public Func<CancellationToken, Task>? BeforeGenerate { get; init; }
+
+        public async Task<SceneDescriptorGenerationResult> GenerateAsync(
             Scene scene,
             ContentCookScope scope,
             CancellationToken cancellationToken)
         {
             this.Scope = scope;
+            this.Scene = scene;
+            if (this.BeforeGenerate is { } beforeGenerate)
+            {
+                await beforeGenerate(cancellationToken).ConfigureAwait(false);
+            }
+
             var descriptorPath = Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
-            return Task.FromResult(new SceneDescriptorGenerationResult(
+            return new SceneDescriptorGenerationResult(
                 new Uri("asset:///Content/Scenes/Main.oscene.json"),
                 descriptorPath,
                 "/Content/Scenes/Main.oscene",
                 Dependencies: [],
-                diagnostics));
+                diagnostics);
         }
     }
 
@@ -567,6 +578,8 @@ public sealed partial class ContentPipelineServiceTests
         public ContentCookCoordinator CookCoordinator { get; }
 
         public Scene Scene { get; }
+
+        public Snapshots.CookDocumentRegistry Documents { get; } = new();
 
         public void WriteText(string relativePath, string content)
         {

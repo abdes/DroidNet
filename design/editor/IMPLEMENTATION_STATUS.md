@@ -523,9 +523,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
       coalescing and serialized project cooks.
       Shared writer, snapshot capture and scene/material save-gate adapters are
-      implemented. ContentPipeline 88/88, MaterialEditor 44/44, Projects 57/57,
-      SceneExplorer 165/165, and affected packaged UI cases 5/5 pass. Dependency
-      discovery, incremental reuse and publication integration remain.
+      implemented. Current Scene now uses the same saved-file path as other scene
+      scopes; scene/material preparation rechecks dirty state and acknowledged
+      hashes under save leases. ContentPipeline tests pass 112/112,
+      including queued saves, later authoring, external changes, save/resume and
+      native scene/project cooks. Dependency discovery, incremental reuse and
+      publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
