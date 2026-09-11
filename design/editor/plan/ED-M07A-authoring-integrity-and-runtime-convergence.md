@@ -367,6 +367,12 @@ builds pass; changed managed files have no analyzer or IDE diagnostics.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 
+The [field/workflow table](../validation/ED-M07A-field-workflows.md) records
+completed cases. All 40 atmosphere/post-process controls pass source/native
+comparison, Undo/Redo, Save/reopen and clear inline feedback. Packaged inspector
+tests pass 82/82 and Runtime tests 66/66. The remaining component, asset,
+runtime-setting and viewport cases are listed in the table.
+
 Run concrete cases through actual controls/commands: Transform primary axes;
 Geometry pick/missing URI and material slot pick/clear/mixed values; camera FOV,
 near/far/aspect; directional color/intensity/sun/environment/shadows/affects-world/
