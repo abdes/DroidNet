@@ -146,6 +146,9 @@
     <ClCompile Include="World\EnvironmentObservation.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="World\NodeObservation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(OxygenEditorInterfaceProject)">
@@ -169,6 +172,7 @@
     <ClInclude Include="Commands\SetGeometryCommand.h" />
     <ClInclude Include="Commands\SetEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveEnvironmentCommand.h" />
+    <ClInclude Include="Commands\ObserveNodeCommand.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />
     <ClInclude Include="Commands\SetBackgroundColorCommand.h" />
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
