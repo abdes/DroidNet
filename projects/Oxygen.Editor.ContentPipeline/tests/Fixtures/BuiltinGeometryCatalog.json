@@ -1,0 +1,645 @@
+{
+  "default_material": {
+    "descriptor": {
+      "$schema": "oxygen.material-descriptor.v1",
+      "alpha_mode": "opaque",
+      "domain": "opaque",
+      "name": "OxygenEditor_Default",
+      "parameters": {
+        "alpha_cutoff": 0.5000076293945313,
+        "ambient_occlusion": 1.0,
+        "base_color": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "double_sided": false,
+        "metalness": 0.0,
+        "normal_scale": 1.0,
+        "roughness": 0.800000011920929
+      }
+    },
+    "virtual_path": "/Content/Materials/OxygenEditor_Default.omat"
+  },
+  "geometries": [
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Cube",
+      "canonical_name": "Cube",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Cube",
+              "mesh_name": "Cube",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Cube"
+      },
+      "name": "Cube",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/SubdividedCube",
+      "canonical_name": "SubdividedCube",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "SubdividedCube",
+              "mesh_name": "SubdividedCube",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_SubdividedCube"
+      },
+      "name": "SubdividedCube",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_SubdividedCube.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Sphere",
+      "canonical_name": "Sphere",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Sphere",
+              "mesh_name": "Sphere",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Sphere"
+      },
+      "name": "Sphere",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Sphere.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/IcoSphere",
+      "canonical_name": "IcoSphere",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "IcoSphere",
+              "mesh_name": "IcoSphere",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_IcoSphere"
+      },
+      "name": "IcoSphere",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/GeodesicSphere",
+      "canonical_name": "IcoSphere",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "IcoSphere",
+              "mesh_name": "GeodesicSphere",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_GeodesicSphere"
+      },
+      "name": "GeodesicSphere",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_GeodesicSphere.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Plane",
+      "canonical_name": "Plane",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.0
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            0.0
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.0
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                0.0
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Plane",
+              "mesh_name": "Plane",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Plane"
+      },
+      "name": "Plane",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Plane.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Cylinder",
+      "canonical_name": "Cylinder",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Cylinder",
+              "mesh_name": "Cylinder",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Cylinder"
+      },
+      "name": "Cylinder",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cylinder.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Cone",
+      "canonical_name": "Cone",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -0.5
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Cone",
+              "mesh_name": "Cone",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Cone"
+      },
+      "name": "Cone",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cone.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Torus",
+      "canonical_name": "Torus",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            1.25,
+            1.25,
+            0.25
+          ],
+          "min": [
+            -1.25,
+            -1.25,
+            -0.25
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                1.25,
+                1.25,
+                0.25
+              ],
+              "min": [
+                -1.25,
+                -1.25,
+                -0.25
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Torus",
+              "mesh_name": "Torus",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Torus"
+      },
+      "name": "Torus",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Torus.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Quad",
+      "canonical_name": "Quad",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            0.0
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            0.0
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                0.0
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                0.0
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Quad",
+              "mesh_name": "Quad",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Quad"
+      },
+      "name": "Quad",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Quad.ogeo"
+    },
+    {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/ArrowGizmo",
+      "canonical_name": "ArrowGizmo",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.05999999865889549,
+            0.05999999865889549,
+            0.7799999713897705
+          ],
+          "min": [
+            -0.05999999865889549,
+            -0.05999999865889549,
+            -0.10000000149011612
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.05999999865889549,
+                0.05999999865889549,
+                0.7799999713897705
+              ],
+              "min": [
+                -0.05999999865889549,
+                -0.05999999865889549,
+                -0.10000000149011612
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "ArrowGizmo",
+              "mesh_name": "ArrowGizmo",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_ArrowGizmo"
+      },
+      "name": "ArrowGizmo",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_ArrowGizmo.ogeo"
+    }
+  ],
+  "mount": "Content",
+  "schema": "oxygen.builtin-geometry-catalog.v1"
+}

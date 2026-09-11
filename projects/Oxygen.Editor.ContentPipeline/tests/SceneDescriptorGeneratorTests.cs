@@ -32,7 +32,7 @@ public sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
-        var service = new ProceduralGeometryDescriptorService();
+        var service = new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture());
 
         var inputs = await service.EnsureDescriptorsAsync(
             scope,
@@ -89,7 +89,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun", IsSunLight = true });
         scene.RootNodes.Add(node);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -160,7 +160,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             },
         });
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -204,7 +204,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             },
         });
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().Contain(diagnostic =>
@@ -228,7 +228,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         scene.RootNodes.Add(node);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -251,7 +251,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene(workspace.Project);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService());
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
