@@ -411,6 +411,8 @@ public static partial class Program
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
         container.Register<IEngineContentPipelineApi, ImportToolContentPipelineApi>(Reuse.Singleton);
         container.Register<IContentCookCoordinator, ContentCookCoordinator>(Reuse.Singleton);
+        container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
+        container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
         container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
@@ -436,4 +438,3 @@ public static partial class Program
         _ = container.Resolve<object>("AutoRegisterImporters");
     }
 }
-        container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);

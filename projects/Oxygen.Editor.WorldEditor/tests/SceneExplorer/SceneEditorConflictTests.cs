@@ -136,6 +136,10 @@ public sealed partial class SceneEditorConflictTests
                 Mock.Of<IContentBrowserAssetProvider>(),
                 this.container,
                 this.Messenger,
+                new SceneCookInputRegistrar(
+                    new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
+                    Mock.Of<IProjectManagerService>(),
+                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! }),
                 conflictPrompt: this.Prompt.Object);
         }
 

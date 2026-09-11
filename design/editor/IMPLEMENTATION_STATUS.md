@@ -522,9 +522,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [x] 07B.0 settle trigger policy and reconcile PRD/LLDs after the UX review.
 - [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
       coalescing and serialized project cooks.
-      The shared writer and saved-input capture primitives pass 87/87
-      ContentPipeline tests. Document save-gate adapters, dependency discovery,
-      incremental reuse and publication integration remain.
+      Shared writer, snapshot capture and scene/material save-gate adapters are
+      implemented. ContentPipeline 88/88, MaterialEditor 44/44, Projects 57/57,
+      SceneExplorer 165/165, and affected packaged UI cases 5/5 pass. Dependency
+      discovery, incremental reuse and publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.

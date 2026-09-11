@@ -61,9 +61,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ISceneDocumentCommandService commandService;
     private readonly IContentPipelineService contentPipelineService;
     private readonly IContentBrowserAssetProvider assetProvider;
+    private readonly SceneCookInputRegistrar cookInputs;
     private readonly IDocumentService documentService;
     private readonly WindowId windowId;
     private readonly IContainer container;
+    private IDisposable? cookInputRegistration;
     private IMenuSource? quickAddMenu;
     private SceneViewLayout? previousLayout;
     private Oxygen.Editor.World.Scene? scene;
@@ -88,6 +90,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="assetProvider">The content-browser asset provider.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
+    /// <param name="cookInputs">Registers saved scene inputs for coordinated cooking.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
     public SceneEditorViewModel(
@@ -104,6 +107,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IContentBrowserAssetProvider assetProvider,
         IContainer container,
         IMessenger messenger,
+        SceneCookInputRegistrar cookInputs,
         ILoggerFactory? loggerFactory = null,
         IDocumentConflictPrompt? conflictPrompt = null)
     {
@@ -116,6 +120,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.commandService = commandService;
         this.contentPipelineService = contentPipelineService;
         this.assetProvider = assetProvider;
+        this.cookInputs = cookInputs;
         this.documentService = documentService;
         this.windowId = windowId;
         this.loggerFactory = loggerFactory;
@@ -134,6 +139,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // actual layout restoration. This avoids creating engine views before
         // the scene exists (prevents "frame context has no scene").
         this.RegisterMessages();
+        this.RefreshCookInputRegistration();
 
         // Track mutations via the undo stack
 
@@ -365,6 +371,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (disposing)
         {
             this.isDisposed = true;
+            this.cookInputRegistration?.Dispose();
+            this.cookInputRegistration = null;
             if (this.scene is not null)
             {
                 SceneAuthoringGate.Retire(this.scene);
@@ -411,9 +419,17 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             {
                 this.scene = message.Scene;
                 this.sceneReady = false;
+                this.RefreshCookInputRegistration();
             }
         });
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
+    }
+
+    private void RefreshCookInputRegistration()
+    {
+        this.cookInputRegistration?.Dispose();
+        this.cookInputRegistration = this.scene is null || this.isDisposed
+            ? null : this.cookInputs.Register(this.CreateCommandContext(), this.commandService);
     }
 
     partial void OnCurrentLayoutChanging(SceneViewLayout value)
@@ -637,6 +653,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.HasSaveConflict = !result.Succeeded && (this.HasSaveConflict || result.IsConflict);
         if (result.Succeeded)
         {
+            this.RefreshCookInputRegistration();
             this.LogSaveSuccessful();
         }
         else

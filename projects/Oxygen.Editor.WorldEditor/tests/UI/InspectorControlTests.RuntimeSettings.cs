@@ -104,7 +104,21 @@ public sealed partial class InspectorControlTests
         {
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-            return new(this.Context.Metadata, this.documents.Object, default, this.engine, this.sync, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), this.Commands, Mock.Of<IContentPipelineService>(), Mock.Of<IContentBrowserAssetProvider>(), container, this.messenger);
+            return new(
+                this.Context.Metadata,
+                this.documents.Object,
+                default,
+                this.engine,
+                this.sync,
+                Mock.Of<IDocumentInputCommitter>(),
+                publisher.Object,
+                new OperationStatusReducer(),
+                this.Commands,
+                Mock.Of<IContentPipelineService>(),
+                Mock.Of<IContentBrowserAssetProvider>(),
+                container,
+                this.messenger,
+                new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting));
         }
     }
 }
