@@ -574,7 +574,7 @@ public sealed partial class OutputConsoleView
 
     private bool ShouldAutoScroll()
     {
-        if (!this.FollowTail)
+        if (!this.FollowTail || !this.IsScrollEnabled)
         {
             return false;
         }
@@ -592,7 +592,7 @@ public sealed partial class OutputConsoleView
     {
         try
         {
-            if (!this.isLoaded || !this.List.IsLoaded)
+            if (!this.isLoaded || !this.List.IsLoaded || !this.IsScrollEnabled)
             {
                 return;
             }
@@ -612,7 +612,7 @@ public sealed partial class OutputConsoleView
 
             // Try the deterministic approach first when we can.
             this.List.UpdateLayout();
-            if (this.scrollViewer is not null && this.scrollViewer.ScrollableHeight > 0)
+            if (this.scrollViewer?.ScrollableHeight > 0)
             {
                 _ = this.scrollViewer.ChangeView(
                     horizontalOffset: null,
