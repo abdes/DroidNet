@@ -1,6 +1,6 @@
 # Content Cooking Workflows LLD
 
-Status: `ED-M07B design; trigger policy D1 proposed for product approval`
+Status: `ED-M07B implementation contract; D1 accepted 2026-09-11`
 
 ## 1. Purpose And Ownership
 
@@ -37,7 +37,7 @@ specific gaps:
 | `ContentBrowser/src/Panes/Assets/AssetsViewModel.cs`, `AssetsView.xaml` | Cook results describe output counts/paths; the interaction needs scoped progress, cancellation, useful empty states, and clear recovery. Import copies external files with overwrite enabled and has early failures visible only in debug output. |
 | `ContentBrowser/src/AssetIdentity/ContentBrowserAssetProvider.cs`; WorldEditor geometry/material pickers | Browser and picker projections need a common publication/freshness authority and consistent pre-cook availability. |
 | `MaterialEditor/src/MaterialDocumentService.cs`, `MaterialEditorViewModel.cs` | Dirty Cook rejection must lead to an ordinary save/retry workflow; source save, approximate swatch, and actual scene material need distinct feedback. |
-| PRD section 8; material/pipeline LLDs | Current policy requires explicit cooking. Automatic triggers need the D1 amendment below. |
+| PRD section 8; material/pipeline LLDs | The implemented baseline requires explicit cooking. M07B implements the accepted D1 trigger policy below. |
 
 The [2026-09-11 running-editor review](../validation/ED-M07B-ux-review.md)
 adds observed defects: list/tile navigation can display assets from the wrong
@@ -136,21 +136,20 @@ copyable source/generated/cooked paths under technical details. Paths for cleane
 temporary artifacts must be labeled no longer retained. A thumbnail or material
 swatch is labeled approximate and never implies the current material is rendered.
 
-## 4. Trigger Policy D1 - Proposed Hybrid Default
+## 4. Trigger Policy D1 - Hybrid Default
 
-Decision required: replace the current explicit-only cook policy with the table
-below. Approval also authorizes the explicit Save listed and Cook action in
-section 6. Until D1 is decided, PRD section 8 and the material LLD's explicit-only
-policy remain authoritative; the other workflow requirements in this LLD apply
-to either trigger policy.
+Accepted on 2026-09-11 when the user directed implementation of the revised
+M07B plan. The table below replaces the explicit-only cook policy and includes
+the explicit Save listed and Cook action in section 6. Source saving remains an
+independent, explicit user operation.
 
 Rationale: Import and Save express intent to produce usable content. Assignment
 and scene opening express demand for preview. Browsing expresses discovery only.
 Automatic work should follow those intents and rebuild only affected products.
-Saving a shared material would update all its scene uses after publication;
-Save would continue to complete independently of subsequent cook success.
+Saving a shared material updates all its scene uses after publication;
+Save completes independently of subsequent cook success.
 
-| User interaction | Proposed cooking behavior |
+| User interaction | Cooking behavior |
 | --- | --- |
 | Import / explicit Reimport | After supported inputs/settings are accepted and retained, cook changed outputs and required dependencies automatically, then publish. One visible workflow with separate source-import and publication outcomes. |
 | Successful Save of a material, scene, or supported authored import settings | Queue incremental cooking for that saved scope. Save failure/conflict queues nothing. New document creation that successfully saves uses the same trigger once. Saving unchanged content is a no-op for cooking. |
@@ -218,7 +217,7 @@ directly from a save, watcher, picker, or catalog callback.
   scenes invalidates its demand observer. Completion may populate the catalog
   but cannot restore an undone assignment or update a different document.
 
-Incremental planning/reuse is testable independently of D1: explicit Cook scopes
+Incremental planning/reuse is testable independently of triggers: explicit Cook scopes
 must also skip verified current products. Full-root validation and recoverable
 publication remain mandatory even when only one product is rebuilt.
 
@@ -316,7 +315,7 @@ docks. Enforce a documented minimum pane width or provide a usable overflow.
 ## 7. Qualification Journeys
 
 ED-M07B.5 records packaged UI/integration evidence and user-visible walkthroughs
-for these cases. D1 cases become gates for the selected policy after its decision.
+for these cases, including the accepted D1 triggers.
 
 | Case | Required observation |
 | --- | --- |
@@ -345,20 +344,17 @@ new before/during/after cooking cases, to verify discoverability, legibility, an
 interaction behavior. The planning review records current defects; milestone
 validation requires the corrected workflows. M08 owns rendered standalone parity.
 
-## 8. Decision And Contract Reconciliation
+## 8. Decision Record
 
-D1 recommends the hybrid trigger table and session pause control in section 4,
-including explicit Save listed and Cook. Approval changes the current meaning of
-Save for derived output: source saving remains explicit and independent, while a
-successful saved revision schedules cooking and can refresh every shared use.
-
-Once selected, reconcile PRD `REQ-014/026` and section 8, material-editor sections
-1/11/15/16, and content-pipeline sections 2/9/11/15/16 with that policy in one
-focused change. Keep ED-M05/06/07/07A evidence historical. Do not add independent
-automatic publication paths or weaken saved-input, rollback, or lifetime rules.
+D1 adopts the hybrid trigger table and session pause control in section 4,
+including explicit Save listed and Cook. A successful saved revision schedules
+cooking and can refresh every shared use. Source saving stays explicit and
+independent. PRD `REQ-014/026`, section 8, and the material/pipeline contracts use
+this policy. ED-M05/06/07/07A evidence remains historical; the new behavior is
+qualified in M07B through the same saved-input, rollback, and lifetime contracts.
 
 Dependency-aware incremental processing is established in
 [Unity's asset database workflow](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html),
 which tracks dependency changes to determine reimport. This informs reuse and
-invalidation here; the proposed Oxygen trigger policy is a product decision,
+invalidation here; the Oxygen trigger policy is a product decision,
 not a claim that another editor's refresh and Oxygen cooking are equivalent.

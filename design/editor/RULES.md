@@ -56,7 +56,11 @@ These rules apply to all Oxygen Editor design and implementation work.
    performed by the engine owner unless requested otherwise.
 4. A milestone is not complete because the project compiles. It must close the
    relevant workflow validation gate.
-5. [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) records one concise
+5. Reserve the build/fix pass for analyzer and IDE diagnostics for commit
+   preparation. During implementation, build as needed for testing; do not add
+   repeated diagnostic-cleanup cycles. Collect all severities, including IDE
+   recommendations, and fix the relevant diagnostics before committing code.
+6. [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) records one concise
    validation summary per milestone. It must not become an append-only
    execution log.
 

@@ -136,7 +136,7 @@ matrix; they were not simulated by mutating this project. Their acceptance tests
 must exercise real workflows in the M07B implementation. This review does not
 claim M07B validation or reopen M07A.
 
-## 5. Product Decision To Close
+## 5. Product Decision
 
 The recommended hybrid policy automatically cooks changed saved content after
 Import/Save and supplies missing/stale content on assignment or active-scene
@@ -145,9 +145,8 @@ reimport distinct, with a session Pause automatic cooking control. Saving shared
 material content can consequently refresh every scene use after publication.
 The complete trigger and recovery tables are workflow LLD sections 4-6.
 
-Approve or revise that policy before implementation and reconcile the existing
-explicit-only PRD/material/pipeline clauses. Independent UI correctness and
-incremental-reuse requirements are necessary with either trigger policy.
+The user directed implementation of revised M07B on 2026-09-11. D1 is accepted
+and the PRD/material/pipeline clauses are reconciled before implementation.
 
 ## 6. Follow-Up Reports And Source Review
 

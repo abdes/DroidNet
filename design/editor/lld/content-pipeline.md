@@ -23,7 +23,7 @@ editor-only JSON schemas for runtime content.
 | `GOAL-006` | Pipeline failures are structured, actionable operation results. |
 | `REQ-014` | Scalar material values save, reopen, cook, and remain assignable by identity. |
 | `REQ-015` | Editor generates or updates engine descriptor inputs for supported authored content. |
-| `REQ-016` | Import/cook workflows are explicit user actions, not hidden save side effects. |
+| `REQ-016` | Scoped import/reimport uses retained sources; accepted Save/import/demand triggers and explicit Cook actions share the incremental coordinator and visible results. |
 | `REQ-017` | Cooked output and catalog state refresh after cook. |
 | `REQ-018` | Cooked output is validated before runtime mount refresh. |
 | `REQ-019` | Project cook scope and authored mount policy are honored. |
@@ -593,7 +593,8 @@ material slots, project manifests, or recent documents.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
-- Cook is explicit and stages output while runtime/authoring may continue. Preview
+- Automatic and explicit cooks use the same coordinator and stage output while
+  runtime/authoring may continue. Preview
   briefly pauses for the publication transaction in section 16.
 - Runtime cooked-root refresh happens only after cooked output validation
   succeeds.
@@ -706,11 +707,12 @@ ED-M07 is complete when:
 
 ED-M07B's [content workflow contract](content-cooking-workflows.md) specifies
 shared status, incremental reuse, browser/picker behavior, and recovery through
-the existing surfaces. The D1 automatic-trigger proposal awaits product approval;
-the explicit-only trigger policy below remains effective until reconciliation.
+the existing surfaces. Its accepted D1 policy schedules cooking after successful
+Save/import and on asset/active-scene demand, with session pause. Browse and
+transient-edit events do not cook; external-source reimport stays explicit.
 
-V0.1 uses existing Cook Asset/Folder/Scene/Project actions to rebuild stale
-content. No separate stale-only scheduler, generic project-settings panel,
+V0.1 retains existing Cook Asset/Folder/Scene/Project actions to rebuild stale
+content explicitly through the same coordinator. No separate stale-only scheduler, generic project-settings panel,
 project renderer-preset selector, or descriptor/manifest editor/launcher is
 required. Source/generated paths are visible and copyable in content/result
 information; Inspect and Validate operate on cooked products. Project mounts
@@ -732,7 +734,8 @@ The transaction is a required ED-M07B contract, not a claim of current code.
   when it obtains the project operation gate.
 - Complete/cancel an active edit gesture first. Reject a cook if any open scene
   or material document in the dependency closure is dirty. Name the documents
-  and offer the ordinary Save workflow; never save implicitly.
+  and offer the ordinary Save workflow, including explicit Save listed and Cook;
+  never save implicitly. Automatic requests surface Needs save without a modal.
 - Resolve the saved dependency closure, including importer settings and source
   media, then capture a coherent byte snapshot under document/read coordination.
   Read participating files through handles that exclude concurrent writes while

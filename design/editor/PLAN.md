@@ -102,7 +102,7 @@ ED-M02's evidence is collected, but M08 cannot close without that evidence.
 | `ED-M06A` | Game project layout and template standardization | Newly created projects, predefined templates, scene/material creation targets, content-root navigation, source-media placement, and derived-root presentation match the accepted game-project filesystem contract. | `project-layout-and-templates`, `project-services`, `project-workspace-shell`, `content-browser-asset-identity`, `material-editor`, `scene-authoring-model`, `diagnostics-operation-results` | required before implementation |
 | `ED-M07` | Content pipeline and cooking | Descriptor/manifest generation, cook, inspect, cooked validation, catalog refresh, and mount refresh work as explicit workflows. | `content-pipeline`, `project-services`, `asset-primitives`, `runtime-integration`, `diagnostics-operation-results` | required before implementation |
 | `ED-M07A` | Authoring integrity and runtime convergence | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence. | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync` | detailed plan exists |
-| `ED-M07B` | Safe content publication and compatibility | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work. | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives` | UX review recorded; trigger decision pending |
+| `ED-M07B` | Safe content publication and compatibility | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work. | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives` | UX review and D1 accepted; implementation in progress |
 | `ED-M08` | Runtime parity and standalone validation | A minimum authored content slice proves embedded preview, cooked output, mounted content, and standalone runtime load agree. | `standalone-runtime-validation`, `live-engine-sync`, `runtime-integration`, `content-pipeline`, `environment-authoring` | required before implementation |
 | `ED-M09` | Viewport authoring tools and overlays | Camera navigation, frame selected/all, selection highlight, transform gizmos, node icons, and overlays are usable in supported viewport layouts. | `viewport-and-tools`, `documents-and-commands`, `scene-explorer`, `runtime-integration` | required before implementation |
 | `ED-M10` | V0.1 acceptance | The full PRD V0.1 workflow completes end-to-end without manual repair. | all V0.1 LLDs | required before validation |
@@ -371,8 +371,8 @@ preflight and portable static/scalar import pass their specified failure cases.
 All four existing cook scopes execute incrementally with honest freshness and
 publication results. Shared state, correct list/tile navigation, useful filters
 and details, typed picking before/after cooking, import/save recovery, and usable
-command layouts pass the recorded UI journeys. Settle the proposed automatic
-trigger policy in 07B.0 before coding. Native worker lifetime (#8) and the complete
+command layouts pass the recorded UI journeys. Implement the automatic trigger
+policy accepted in 07B.0. Native worker lifetime (#8) and the complete
 engine procedural catalog's shared authority (#11) pass their concrete tasks
 before parity, including Cylinder scene/project cooking and engine sphere aliases.
 07B.5g also closes compact single/multi-node inspector layout and component

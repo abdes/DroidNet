@@ -101,7 +101,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-011` | Users can inspect and edit scalar material properties through material editor/property UI. |
 | `REQ-012` | Users can assign material assets to geometry. |
 | `REQ-013` | Users can select material assets from the content browser, with thumbnails or clear visual identity. |
-| `REQ-014` | Editable V0.1 material values save, reopen, cook, and appear in embedded preview after explicit successful Save/Cook publication. A CPU swatch is an approximation, not runtime parity evidence. |
+| `REQ-014` | Editable V0.1 material values save, reopen, cook, and appear in embedded preview after successful publication. Explicit Save schedules incremental cooking under the content workflow policy; source-save success is independent of cook success. A CPU swatch is an approximation, not runtime parity evidence. |
 | `REQ-015` | Content workflow supports procedural geometry descriptors. |
 | `REQ-016` | Content workflow supports scoped source import for geometry and scalar material assets. |
 | `REQ-017` | The editor generates descriptors/manifests for supported V0.1 scenes and referenced assets. |
@@ -113,7 +113,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-023` | Engine/runtime and pipeline failures produce useful logs. |
 | `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
 | `REQ-025` | Embedded preview renders visible scene content through Vortex. |
-| `REQ-026` | Embedded preview applies every required editable V0.1 scene/environment field. Material source changes use explicit Save/Cook publication. Unavailable runtime retains authoring state and visibly pending sync; reconnect converges to the current document revision. Unsupported required fields block release. |
+| `REQ-026` | Embedded preview applies every required editable V0.1 scene/environment field. Material source changes appear after successful publication under the accepted Save/import/demand cooking policy. Unavailable runtime retains authoring state and visibly pending sync; reconnect converges to the current document revision. Unsupported required fields block release. |
 | `REQ-027` | The supported V0.1 live viewport layout remains stable and does not abort; multi-viewport layouts are deferred engine/editor work. |
 | `REQ-028` | Each supported visible viewport presents to the correct surface/view; V0.1 support is single live viewport unless multi-viewport is explicitly re-scoped. |
 | `REQ-029` | Users can navigate the editor camera and frame all/selected. |
@@ -174,9 +174,9 @@ undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
 | Perspective camera | `property-inspector.md` PerspectiveCamera table | All editable fields synchronize and cook; validation uses an explicitly chosen authored camera, separately from editor navigation. |
 | Directional light and sun | `property-inspector.md` DirectionalLight table | All editable fields synchronize and cook, including coherent exclusive sun binding. |
 | Scene environment and post-processing | `environment-authoring.md` editable SkyAtmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background tables | All editable fields, including background and post-processing, must have live and cooked runtime mappings. A missing native API/schema is implementation work, not a release exception. |
-| Scalar material | `material-editor.md` editable V0.1 field table | Swatch responds while editing; the scene shows the last published material until explicit Save/Cook succeeds. Stale/pending state is visible. Texture references may be preserved read-only; texture authoring is excluded. |
+| Scalar material | `material-editor.md` editable V0.1 field table | Swatch responds while editing; the scene shows the last published material until saved content is successfully cooked/published. Save schedules incremental cooking, with visible stale/pending state and session pause. Texture references may be preserved read-only; texture authoring is excluded. |
 | Viewport authoring | `viewport-and-tools.md` V0.1 interaction contract | One live viewport, navigation, frame selected/all, picking, selection feedback, transform gestures, icons, and bounded overlays. Multi-viewport stability is explicitly deferred. |
-| Content import and browsing | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md` | Identity-based browsing/picking and explicit scoped import/cook. File rename/move/reference-repair UI is outside V0.1; unsupported actions are hidden or disabled with a reason. |
+| Content import and browsing | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md`; `content-cooking-workflows.md` | Identity-based browsing/picking, explicit scoped import/reimport and Cook actions, plus incremental cooking after Save/import and on active-scene/asset demand. Browsing and transient edits do not cook. File rename/move/reference-repair UI is outside V0.1; unsupported actions are hidden or disabled with a reason. |
 
 Unsupported required capabilities may produce safe diagnostics during
 development; they cannot satisfy release completion. The only deferred feature
@@ -188,9 +188,8 @@ ED-M07 UI decisions:
 
 ED-M07B's [content workflow refinement](lld/content-cooking-workflows.md) and
 [UI review](validation/ED-M07B-ux-review.md) add concrete browsing, picking,
-incremental execution and recovery requirements. Its proposed automatic trigger
-policy D1 is pending product approval; explicit-only trigger clauses below and
-in `REQ-014/026` remain effective until that decision is recorded and reconciled.
+incremental execution and recovery requirements. The user accepted its hybrid
+trigger policy D1 on 2026-09-11 when directing implementation of revised M07B.
 
 1. No generic project-settings panel or default renderer-preset selector in
    V0.1. Project manifests/mounts supply cook scope; `Projects` owns those facts.
@@ -198,10 +197,13 @@ in `REQ-014/026` remain effective until that decision is recorded and reconciled
    render intent uses the scene inspector; FPS/logging remain runtime-session
    controls; startup preferences stay editor-local. Cook and validation use the
    matched runtime profile, not an undeclared project renderer policy.
-2. Re-cooking stale content uses the existing Cook Selected Asset, Cook Folder,
-   Cook Current Scene, or Cook Project action. A stale badge identifies the
-   need; the selected scope is rebuilt under the normal cook contract. No
-   separate stale-only batch scheduler is required.
+2. Import and successful Save schedule incremental cooking of their saved scope;
+   assignment and active-scene preview request required missing/stale assets.
+   Existing Cook Selected Asset, Cook Folder, Cook Current Scene, and Cook Project
+   remain explicit incremental actions. The existing Cook menu provides session
+   Pause automatic cooking / Resume. Browsing and unsaved edits never cook;
+   external-source reimport remains explicit. One project coordinator coalesces
+   requests; no separate stale-only batch scheduler is introduced.
 3. Descriptor/manifest inspection uses the existing content details/path-copy
    and cook result diagnostics, plus Inspect Cooked Output for runtime products.
    Dedicated Open Descriptor/Open Manifest commands and an embedded raw editor
