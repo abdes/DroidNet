@@ -22,7 +22,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
-#include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
@@ -239,13 +239,10 @@ namespace oxygen::interop::module {
       throw std::logic_error("Background requires an active scene.");
     }
     auto* environment = EnsureEnvironment(*context.Scene);
-    auto* sphere
-      = EnsureSystem<scene::environment::SkySphere>(*environment);
-    sphere->SetSource(scene::environment::SkySphereSource::kSolidColor);
-    sphere->SetSolidColorRgb(color_);
-    sphere->SetIntensity(1.0F);
-    sphere->SetTintRgb({ 1.0F, 1.0F, 1.0F });
-    sphere->SetEnabled(true);
+    auto* background
+      = EnsureSystem<scene::environment::Background>(*environment);
+    background->SetColorRgb(color_);
+    background->SetEnabled(true);
     context.Scene->Update(false);
   }
 
@@ -260,10 +257,10 @@ namespace oxygen::interop::module {
     BackgroundObservation observation;
     if (context.Scene) {
       if (auto environment = context.Scene->GetEnvironment()) {
-        if (auto sphere
-          = environment->TryGetSystem<scene::environment::SkySphere>()) {
-          observation.exists = sphere->IsEnabled();
-          observation.color = sphere->GetSolidColorRgb();
+        if (auto background
+          = environment->TryGetSystem<scene::environment::Background>()) {
+          observation.exists = background->IsEnabled();
+          observation.color = background->GetColorRgb();
         }
         if (auto atmosphere
           = environment->TryGetSystem<scene::environment::SkyAtmosphere>()) {
