@@ -10,7 +10,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>
 ///     Settings service for native engine startup configuration.
 /// </summary>
-public sealed class EngineSettingsService(SettingsManager manager, ILoggerFactory? factory = null)
+public sealed partial class EngineSettingsService(SettingsManager manager, ILoggerFactory? factory = null)
     : SettingsService<IEngineSettings>(manager, factory), IEngineSettings
 {
     private PlatformSettings platform = new();

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
-
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
@@ -29,7 +27,7 @@ public sealed class PathFinderSettings
     /// <summary>
     ///     Gets the script source roots.
     /// </summary>
-    public ICollection<string> ScriptSourceRoots { get; } = new Collection<string>();
+    public ICollection<string> ScriptSourceRoots { get; } = [];
 
     /// <summary>
     ///     Gets or sets the script bytecode cache path.
