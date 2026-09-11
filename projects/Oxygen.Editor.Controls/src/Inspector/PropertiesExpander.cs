@@ -16,6 +16,7 @@ namespace Oxygen.Editor.Controls;
 [TemplatePart(Name = HeaderPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = DescriptionPresenterPartName, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = HeaderIconPresenterHolderPartName, Type = typeof(Viewbox))]
+[TemplatePart(Name = ItemsRepeaterPartName, Type = typeof(ItemsRepeater))]
 
 [TemplateVisualState(Name = RightState, GroupName = ContentAlignmentStates)]
 [TemplateVisualState(Name = RightWrappedState, GroupName = ContentAlignmentStates)]
@@ -48,6 +49,7 @@ public partial class PropertiesExpander : Control
     private const string HeaderPresenterPartName = "PartHeaderPresenter";
     private const string DescriptionPresenterPartName = "PartDescriptionPresenter";
     private const string HeaderIconPresenterHolderPartName = "PartHeaderIconPresenterHolder";
+    private const string ItemsRepeaterPartName = "PartItemsRepeater";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PropertiesExpander"/> class.
@@ -57,6 +59,30 @@ public partial class PropertiesExpander : Control
         this.DefaultStyleKey = typeof(PropertiesExpander);
 
         this.Items = [];
+    }
+
+    /// <summary>Expands and realizes a property item before bringing it into its scrolling host's view.</summary>
+    /// <param name="item">An item owned by this expander.</param>
+    /// <returns>Whether the item was found and realized.</returns>
+    public bool BringItemIntoView(object item)
+    {
+        var index = this.Items.IndexOf(item);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        this.IsExpanded = true;
+        _ = this.ApplyTemplate();
+        if (this.GetTemplateChild(ItemsRepeaterPartName) is not ItemsRepeater repeater)
+        {
+            return false;
+        }
+
+        var element = repeater.GetOrCreateElement(index);
+        repeater.UpdateLayout();
+        element.StartBringIntoView();
+        return true;
     }
 
     /// <inheritdoc />

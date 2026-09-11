@@ -28,6 +28,9 @@ public partial class EnvironmentViewModel(
     private Scene? scene;
     private bool isApplyingEditorValues;
 
+    /// <summary>Occurs when explicit diagnostic navigation requests focus in this inspector.</summary>
+    public event EventHandler? FieldFocusRequested;
+
     [ObservableProperty]
     public partial bool AtmosphereEnabled { get; set; }
 
@@ -347,8 +350,26 @@ public partial class EnvironmentViewModel(
     /// <inheritdoc />
     public override string Description => "Scene atmosphere, sun, exposure, tone mapping, and background intent.";
 
+    /// <summary>Gets a field awaiting view creation or layout.</summary>
+    internal string? PendingFieldFocus { get; private set; }
+
     /// <summary>Gets completion of submitted inspector edits.</summary>
     internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;
+
+    /// <summary>Validates an Aerial Start candidate and exposes feedback on its field.</summary>
+    /// <param name="value">The proposed distance in meters.</param>
+    /// <returns>Whether the field can accept the candidate.</returns>
+    public bool ValidateAerialStart(float value)
+    {
+        var validation = SceneEnvironmentConstraints.ValidateAerialStart(value);
+        var ticket = this.fieldDiagnostics.Begin([SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id], revision: 0);
+        this.fieldDiagnostics.Complete(ticket, new(validation.IsValid)
+        {
+            ValidationCode = validation.Code,
+            ValidationMessage = validation.Message,
+        });
+        return validation.IsValid;
+    }
 
     /// <inheritdoc/>
     public void BeginEditSession(string field, DroidNet.Controls.NumberBoxEditInteractionKind interaction)
@@ -430,6 +451,17 @@ public partial class EnvironmentViewModel(
         this.NotifyBackgroundChanged();
         this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, new Vector3(r, g, b));
     }
+
+    /// <summary>Requests focus after the field is realized.</summary>
+    /// <param name="property">The stable property identifier.</param>
+    internal void RequestFieldFocus(string property)
+    {
+        this.PendingFieldFocus = property;
+        this.FieldFocusRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Clears a completed focus request.</summary>
+    internal void AcknowledgeFieldFocus() => this.PendingFieldFocus = null;
 
     /// <summary>Releases the active environment edit session.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -740,6 +772,7 @@ public partial class EnvironmentViewModel(
         this.AerialPerspectiveDistanceScale = value.AerialPerspectiveDistanceScale;
         this.AerialScatteringStrength = value.AerialScatteringStrength;
         this.AerialPerspectiveStartDepthMeters = value.AerialPerspectiveStartDepthMeters;
+        _ = this.ValidateAerialStart(value.AerialPerspectiveStartDepthMeters);
         this.HeightFogContribution = value.HeightFogContribution;
         this.SunDiskEnabled = value.SunDiskEnabled;
     }

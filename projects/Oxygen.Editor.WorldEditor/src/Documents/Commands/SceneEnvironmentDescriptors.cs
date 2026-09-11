@@ -366,7 +366,9 @@ internal sealed class SceneEnvironmentDescriptors
             id: new PropertyId<float>(SceneDocumentCommandService.SceneEnvironmentKind, pointer),
             reader: target => read(GetValue(target)),
             writer: (target, value) => SetValue(target, write(GetValue(target), value)),
-            validator: value => float.IsFinite(value)
+            validator: value => string.Equals(pointer, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
+                ? SceneEnvironmentConstraints.ValidateAerialStart(value)
+                : float.IsFinite(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(diagnosticCode, diagnosticMessage),
             annotation: Annotation(pointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 }),

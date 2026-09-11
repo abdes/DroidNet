@@ -273,6 +273,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     public Task<TreeItemAdapter?> FindAdapterByNodeIdAsync(Guid nodeId)
         => Task.FromResult<TreeItemAdapter?>(this.nodeAdapterIndex.TryGetValue(nodeId, out var a) ? a : null);
 
+    /// <summary>Selects scene-level properties for an explicit diagnostic navigation.</summary>
+    /// <param name="sceneId">The scene whose stored node selection is cleared.</param>
+    public void SelectEnvironment(Guid sceneId)
+    {
+        this.selectionService.Clear(sceneId);
+        if (this.Scene?.AttachedObject.Id == sceneId)
+        {
+            this.SelectionModel?.ClearSelection();
+            this.PublishSelection([]);
+        }
+    }
+
     /// <summary>
     /// Handles document-open actions once the target scene has been resolved.
     /// Kept protected for testability; does no UI-thread dispatching.

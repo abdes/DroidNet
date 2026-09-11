@@ -44,6 +44,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
     private readonly Dictionary<GameComponent, SceneNode> componentPropertyNotifiers = [];
     private readonly EnvironmentViewModel environmentEditor;
+    private (Guid sceneId, string property)? pendingEnvironmentFocus;
 
     private bool isDisposed;
     private ICollection<SceneNode> items;
@@ -225,6 +226,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.isDisposed = true;
     }
 
+    /// <summary>Focuses a scene environment property once its document is active and loaded.</summary>
+    /// <param name="sceneId">The exact scene to inspect.</param>
+    /// <param name="property">The stable environment property path.</param>
+    public void FocusEnvironmentField(Guid sceneId, string property)
+    {
+        this.pendingEnvironmentFocus = (sceneId, property);
+        this.ApplyPendingEnvironmentFocus();
+    }
+
     /// <inheritdoc/>
     protected override void RefreshOwnProperties()
     {
@@ -380,6 +390,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
                 this.UpdateItemsCollection(this.items);
                 this.SubscribeToComponentCollections();
+                this.ApplyPendingEnvironmentFocus();
             }));
 
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
@@ -402,6 +413,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.environmentEditor.SetScene(this.items.Count == 0 ? message.Scene : null);
                 this.OnPropertyChanged(nameof(this.HasInspectorContent));
                 this.UpdateItemsCollection(this.items);
+                this.ApplyPendingEnvironmentFocus();
             }));
     }
 
@@ -415,6 +427,20 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentRemoveRequested(message)));
 
         // Component collection changes are observed per-node via CollectionChanged subscriptions.
+    }
+
+    private void ApplyPendingEnvironmentFocus()
+    {
+        if (this.pendingEnvironmentFocus is not { } target || this.activeScene?.Id != target.sceneId)
+        {
+            return;
+        }
+
+        this.pendingEnvironmentFocus = null;
+        this.items = [];
+        this.environmentEditor.SetScene(this.activeScene);
+        this.UpdateItemsCollection(this.items);
+        this.environmentEditor.RequestFieldFocus(target.property);
     }
 
     private SceneDocumentCommandContext? CreateCommandContext()

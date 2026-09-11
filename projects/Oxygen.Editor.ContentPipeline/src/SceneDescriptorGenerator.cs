@@ -2,14 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
-using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -18,17 +20,11 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Generates native Oxygen scene descriptors from editor scene documents.
 /// </summary>
-public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
+/// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
+public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private readonly IProceduralGeometryDescriptorService proceduralGeometryDescriptors;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SceneDescriptorGenerator"/> class.
-    /// </summary>
-    /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
-    public SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors)
-        => this.proceduralGeometryDescriptors = proceduralGeometryDescriptors
-           ?? throw new ArgumentNullException(nameof(proceduralGeometryDescriptors));
+    private readonly IProceduralGeometryDescriptorService proceduralGeometryDescriptors = proceduralGeometryDescriptors
+        ?? throw new ArgumentNullException(nameof(proceduralGeometryDescriptors));
 
     /// <inheritdoc />
     public async Task<SceneDescriptorGenerationResult> GenerateAsync(
@@ -45,6 +41,43 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
         var descriptorVirtualPath = ContentPipelinePaths.ToNativeDescriptorPath(sceneInput.AssetUri, ".oscene");
         var diagnostics = new List<DiagnosticRecord>();
         var operationId = Guid.NewGuid();
+        var aerialStart = scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters;
+        var aerialValidation = SceneEnvironmentConstraints.ValidateAerialStart(aerialStart);
+        if (!aerialValidation.IsValid)
+        {
+            diagnostics.Add(new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                Code = ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                Message = aerialValidation.Message,
+                TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"Scene '{scene.Name}': environment.sky_atmosphere.aerial_perspective_start_depth_m = {aerialStart}."),
+                AffectedPath = sceneInput.SourceAbsolutePath,
+                AffectedVirtualPath = sceneInput.AssetUri.AbsolutePath,
+                AffectedEntity = new AffectedScope
+                {
+                    ProjectId = scope.Project.ProjectId,
+                    SceneId = scene.Id,
+                    SceneName = scene.Name,
+                    AssetVirtualPath = sceneInput.AssetUri.AbsolutePath,
+                    ComponentName = "Environment",
+                },
+                SuggestedAction = new PrimaryAction
+                {
+                    ActionId = "Cook.GoToProperty",
+                    Label = "Go to property",
+                    Kind = PrimaryActionKind.Custom,
+                    Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["AssetUri"] = sceneInput.AssetUri.AbsoluteUri,
+                        ["PropertyPath"] = SceneEnvironmentConstraints.AerialStartPropertyPath,
+                    },
+                },
+            });
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
+        }
+
         if (!scene.RootNodes.Any())
         {
             diagnostics.Add(CreateDiagnostic(
@@ -108,7 +141,8 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
             References: materialRefs.Count == 0 ? null : new NativeReferences(materialRefs.ToArray(), ExtraAssets: null));
 
         Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
-        using (var stream = File.Create(descriptorPath))
+        var stream = File.Create(descriptorPath);
+        await using (stream.ConfigureAwait(false))
         {
             await JsonSerializer.SerializeAsync(
                 stream,
@@ -391,34 +425,18 @@ public sealed class SceneDescriptorGenerator : ISceneDescriptorGenerator
     }
 
     private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
-    {
-        if (ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri))
-        {
-            return generatedGeometryInputs
-                .FirstOrDefault(input => input.AssetUri == geometryUri)
-                ?.OutputVirtualPath;
-        }
-
-        return ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, ".ogeo");
-    }
+        => ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri)
+            ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
+            : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, ".ogeo");
 
     private static string? ResolveMaterialRef(Uri? materialUri)
-    {
-        if (materialUri is null || IsEmptyAssetUri(materialUri))
-        {
-            return null;
-        }
-
-        if (string.Equals(
+        => materialUri is null || IsEmptyAssetUri(materialUri)
+            ? null : string.Equals(
                 materialUri.ToString(),
                 AssetUris.BuildGeneratedUri("Materials/Default").ToString(),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return "/Engine/Generated/Materials/Default.omat";
-        }
-
-        return ContentPipelinePaths.ToNativeDescriptorPath(materialUri, ".omat");
-    }
+                StringComparison.OrdinalIgnoreCase)
+            ? "/Engine/Generated/Materials/Default.omat"
+            : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, ".omat");
 
     private static bool IsEmptyAssetUri(Uri uri)
         => string.Equals(uri.ToString(), $"{AssetUris.Scheme}:///__uninitialized__", StringComparison.OrdinalIgnoreCase);
