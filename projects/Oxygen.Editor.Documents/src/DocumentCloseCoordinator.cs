@@ -48,7 +48,7 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
         {
             await this.PrepareParticipantsAsync(windowId, documents, prepared).ConfigureAwait(true);
             var dirty = prepared.Where(entry => entry.Metadata.IsDirty)
-                .Select(entry => new DocumentCloseItem(entry.Metadata, () => this.SaveAsync(entry)))
+                .Select(entry => new DocumentCloseItem(entry.Metadata, () => this.SaveAsync(entry), entry.Participant as IDocumentConflictParticipant))
                 .ToArray();
             if (!force && dirty.Length > 0
                 && !await prompt.ConfirmAsync(windowId, dirty, isWorkspaceClose).ConfigureAwait(true))

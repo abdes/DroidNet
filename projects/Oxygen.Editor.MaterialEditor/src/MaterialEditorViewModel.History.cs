@@ -19,7 +19,7 @@ public sealed partial class MaterialEditorViewModel
     /// <param name="interaction">The input interaction.</param>
     public void BeginEditSession(string field, NumberBoxEditInteractionKind interaction)
     {
-        if (this.isDisposed || this.isClosing || !this.acceptsInput || this.document is null)
+        if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput || this.document is null)
         {
             return;
         }
@@ -88,9 +88,9 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && this.document is { } current && this.documentService.CanUndo(current.DocumentId);
+    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.document is { } current && this.documentService.CanUndo(current.DocumentId);
 
-    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && this.document is { } current && this.documentService.CanRedo(current.DocumentId);
+    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && !this.isResolvingConflict && this.document is { } current && this.documentService.CanRedo(current.DocumentId);
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private Task UndoAsync() => this.ApplyHistoryAsync(undo: true);
@@ -106,7 +106,7 @@ public sealed partial class MaterialEditorViewModel
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            if (this.isDisposed || this.isClosing || !this.acceptsInput || this.document is not { } current)
+            if (this.isDisposed || this.isClosing || this.isResolvingConflict || !this.acceptsInput || this.document is not { } current)
             {
                 return;
             }

@@ -23,7 +23,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <summary>
 /// View model for the scalar material editor document.
 /// </summary>
-public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
+public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
 {
     private readonly MaterialDocumentMetadata metadata;
     private readonly IMaterialDocumentService documentService;
@@ -31,6 +31,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly Action<Uri>? assetChanged;
     private readonly IDocumentInputCommitter? inputCommitter;
     private readonly WindowId windowId;
+    private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private readonly Task loadTask;
     private Task<bool>? pendingSave;
@@ -49,13 +50,15 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="assetChanged">Optional callback used by the host to refresh content-browser projections.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
     /// <param name="windowId">The owner window.</param>
+    /// <param name="conflictPrompt">Presents recovery actions after an ordinary Save conflict.</param>
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
         ILoggerFactory? loggerFactory = null,
         Action<Uri>? assetChanged = null,
         IDocumentInputCommitter? inputCommitter = null,
-        WindowId windowId = default)
+        WindowId windowId = default,
+        IDocumentConflictPrompt? conflictPrompt = null)
     {
         this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
@@ -63,6 +66,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.assetChanged = assetChanged;
         this.inputCommitter = inputCommitter;
         this.windowId = windowId;
+        this.conflictPrompt = conflictPrompt;
         this.MaterialUriText = metadata.MaterialUri.ToString();
 
         this.loadTask = this.LoadAsync();
@@ -169,6 +173,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         this.isClosing = true;
+        await this.pendingConflict.ConfigureAwait(true);
         await this.loadTask.ConfigureAwait(true);
         if (this.pendingSave is { } save)
         {
@@ -186,6 +191,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <inheritdoc />
     public async Task CloseAsync(bool discard)
     {
+        await this.pendingConflict.ConfigureAwait(true);
         await this.loadTask.ConfigureAwait(true);
         if (this.document is { } current)
         {
@@ -277,6 +283,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             {
                 _ = await save.ConfigureAwait(true);
             }
+
+            await this.pendingConflict.ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -312,6 +320,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         if (!this.isClosing && !this.isDisposed)
         {
             _ = await this.SaveCoreAsync().ConfigureAwait(true);
+            if (this.HasSaveConflict && !this.isClosing && !this.isDisposed && this.conflictPrompt is not null)
+            {
+                await this.conflictPrompt.ShowAsync(this.windowId, this.metadata, this).ConfigureAwait(true);
+            }
         }
     }
 
@@ -332,6 +344,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private async Task<bool> SaveSnapshotAsync()
     {
+        await this.pendingConflict.ConfigureAwait(true);
         if (this.inputCommitter is not null)
         {
             await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
@@ -356,11 +369,13 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         if (!result.Succeeded)
         {
-            this.StatusText = "Save failed. Your changes are still open.";
+            this.HasSaveConflict |= result.IsConflict;
+            this.StatusText = result.IsConflict ? "The file changed outside this document. Reload it or save a separate copy." : "Save failed. Your changes are still open.";
             return false;
         }
 
         this.RefreshDocument(current.DocumentId);
+        this.HasSaveConflict = false;
         this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : "Saved";
         this.assetChanged?.Invoke(this.metadata.MaterialUri);
         return !this.IsDirty;
@@ -457,7 +472,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private void ApplyEdit(PropertyEdit edit)
     {
-        if (this.isLoading || this.isClosing || this.isDisposed || !this.acceptsInput || this.document is null)
+        if (this.isLoading || this.isClosing || this.isDisposed || this.isResolvingConflict || !this.acceptsInput || this.document is null)
         {
             return;
         }

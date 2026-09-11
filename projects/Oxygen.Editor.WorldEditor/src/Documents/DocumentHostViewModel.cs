@@ -206,7 +206,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                     _ = messenger.Send(new AssetsChangedMessage(uri));
                 },
                 inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
-                windowId: this.windowId);
+                windowId: this.windowId,
+                conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
         }
         else
         {
