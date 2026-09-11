@@ -28,7 +28,7 @@ public sealed partial class SceneDocumentCommandService
     }
 
     /// <inheritdoc/>
-    public Task<SceneCommandResult> EditPropertiesForTargetsAsync(
+    public async Task<SceneCommandResult> EditPropertiesForTargetsAsync(
         SceneDocumentCommandContext context,
         IReadOnlyDictionary<Guid, PropertyEdit> edits,
         string label,
@@ -38,9 +38,15 @@ public sealed partial class SceneDocumentCommandService
         ArgumentNullException.ThrowIfNull(edits);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new(Succeeded: false);
+        }
+
         var phase = session.State;
         var snapshot = new PropertySnapshot(edits);
-        return this.ApplyPropertyGestureAsync(context, snapshot, label, session, phase);
+        return await this.ApplyPropertyGestureAsync(context, snapshot, label, session, phase).ConfigureAwait(true);
     }
 
     private static IReadOnlyDictionary<PropertyId, PropertyDescriptor>? GestureDescriptors(string kind)
@@ -306,6 +312,12 @@ public sealed partial class SceneDocumentCommandService
     private void RegisterGestureHistory(SceneDocumentCommandContext context, string kind, PropertyOp op)
         => context.History.AddChange(op.Label, async () =>
         {
+            using var authoring = EnterAuthoring(context);
+            if (authoring is null)
+            {
+                return;
+            }
+
             ApplyGestureSnapshot(context, kind, op.Before, GestureDescriptors(kind)!);
             this.RegisterGestureHistory(context, kind, op.Inverse());
             var gesture = new PropertyGesture(context, EditSessionToken.OneShot, kind, string.Empty, op.Nodes, [], op.Before, op.Label, GestureTargets(context, kind, op.Nodes));

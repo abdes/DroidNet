@@ -133,6 +133,12 @@ public sealed partial class SceneDocumentCommandService
         string label,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentNullException.ThrowIfNull(edit);
@@ -176,6 +182,12 @@ public sealed partial class SceneDocumentCommandService
         string label,
         EditSessionToken session)
     {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(edit);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
@@ -592,6 +604,12 @@ public sealed partial class SceneDocumentCommandService
             label,
             async () =>
             {
+                using var authoring = EnterAuthoring(context);
+                if (authoring is null)
+                {
+                    return;
+                }
+
                 PropertyApply.ApplyToTargets(op, applySide, resolver, descriptors);
                 this.RegisterPropertyOpHistory(
                     context,

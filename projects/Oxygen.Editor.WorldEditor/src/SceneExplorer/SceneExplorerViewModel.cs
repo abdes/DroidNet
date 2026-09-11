@@ -155,11 +155,42 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
 
+    /// <inheritdoc/>
+    public override Task InsertItemAsync(ITreeItem item, ITreeItem parent, int relativeIndex)
+        => this.RunTreeMutationAsync(parent, () => base.InsertItemAsync(item, parent, relativeIndex));
+
+    /// <inheritdoc/>
+    public override Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
+        => this.RunTreeMutationAsync(item, () => base.RemoveItemAsync(item, updateSelection));
+
+    /// <inheritdoc/>
+    public override Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
+        => this.RunTreeMutationAsync(newParent, () => base.MoveItemAsync(item, newParent, newIndex));
+
+    /// <inheritdoc/>
+    public override Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
+        => this.RunTreeMutationAsync(newParent, () => base.MoveItemsAsync(items, newParent, startIndex));
+
+    /// <inheritdoc/>
+    public override Task ReorderItemAsync(ITreeItem item, int newIndex)
+        => this.RunTreeMutationAsync(item, () => base.ReorderItemAsync(item, newIndex));
+
+    /// <inheritdoc/>
+    public override Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
+        => items.Count == 0 ? Task.CompletedTask : this.RunTreeMutationAsync(items[0], () => base.ReorderItemsAsync(items, startIndex));
+
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
     public override async Task RemoveSelectedItems()
     {
-        this.History.BeginChangeSet("Remove Selected Items");
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is null)
+        {
+            return;
+        }
+
+        var history = this.History;
+        history.BeginChangeSet("Remove Selected Items");
         try
         {
             // Delegate to base to update UI (this will trigger OnItemRemoved)
@@ -167,7 +198,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         finally
         {
-            this.History.EndChangeSet();
+            history.EndChangeSet();
         }
     }
 
@@ -181,6 +212,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     public async Task RenameItemAsync(ITreeItem item, string newName)
     {
         ArgumentNullException.ThrowIfNull(item);
+        using var authoring = this.EnterTreeAuthoring(item);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        var scene = this.Scene!.AttachedObject;
+        var history = this.History;
 
         var trimmed = (newName ?? string.Empty).Trim();
         if (!item.ValidateItemName(trimmed))
@@ -206,7 +245,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.suppressTreeItemLabelHandling = false;
         }
 
-        this.History.AddChange(
+        if (this.isDisposed || !ReferenceEquals(this.Scene?.AttachedObject, scene))
+        {
+            return;
+        }
+
+        history.AddChange(
             $"Rename({oldName} -> {trimmed})",
             async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
     }
@@ -227,65 +271,23 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="scene">Scene to load.</param>
     /// <returns>Task that completes after the scene has been loaded.</returns>
     protected internal virtual async Task HandleDocumentOpenedAsync(Scene scene)
-        => await this.LoadSceneAsync(scene).ConfigureAwait(true);
+        => _ = await this.LoadSceneAsync(scene).ConfigureAwait(true);
 
     /// <summary>
     /// Core logic for handling an item added event. Separated for testability.
     /// </summary>
     /// <param name="args">Event arguments.</param>
     /// <returns>A <see cref="Task"/> that completes when the item has been handled.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
     {
-        if (this.suppressTreeCommandHandling)
+        using var authoring = this.EnterTreeAuthoring(args.Parent);
+        if (authoring is null)
         {
-            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
-            {
-                this.nodeAdapterIndex[suppressedAdapter.AttachedObject.Id] = suppressedAdapter;
-            }
-
-            this.TrackTreeItem(args.TreeItem);
             return;
         }
 
-        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
-
-        this.RecordAddedItemUndo(args);
-
-        try
-        {
-            if (addedAdapter != null)
-            {
-                _ = await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
-            }
-            else if (args.TreeItem is FolderAdapter folderAdapter)
-            {
-                _ = await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            this.LogAuthoringAddFailed(ex, args.TreeItem.Label);
-        }
-
-        this.LogItemAdded(args.TreeItem.Label);
-
-        if (addedAdapter is null)
-        {
-            this.TrackTreeItem(args.TreeItem);
-            return;
-        }
-
-        // Register adapter for quick lookup
-        try
-        {
-            this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
-            this.TrackTreeItem(addedAdapter);
-        }
-        catch (Exception exception)
-        {
-            this.LogAuthoringAddFailed(exception, args.TreeItem.Label);
-        }
+        var scene = this.Scene!.AttachedObject;
+        await this.HandleItemAddedCoreAsync(args, scene).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -480,6 +482,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private async Task Paste()
     {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is null)
+        {
+            return;
+        }
+
         if (this.clipboard.Count == 0)
         {
             return;
@@ -550,11 +558,23 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     [RelayCommand]
     private async Task Undo()
-        => await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+    {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is not null)
+        {
+            await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+        }
+    }
 
     [RelayCommand]
     private async Task Redo()
-        => await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+    {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is not null)
+        {
+            await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+        }
+    }
 
     private bool CanAddEntity()
     {
@@ -593,6 +613,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanAddEntity))]
     private async Task AddEntity()
     {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is null)
+        {
+            return;
+        }
+
         var sceneAdapter = this.Scene;
         if (sceneAdapter is null)
         {
@@ -731,14 +757,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene loading reports failures without terminating the editor.")]
-    private async Task LoadSceneAsync(Scene scene)
+    private async Task<bool> LoadSceneAsync(Scene scene)
     {
         var documentMetadata = this.documentService.GetOpenDocuments(this.windowId)
             .OfType<SceneDocumentMetadata>()
             .FirstOrDefault(document => document.DocumentId == scene.Id);
         if (documentMetadata is null)
         {
-            return;
+            return false;
         }
 
         this.loadingDocumentId = scene.Id;
@@ -750,7 +776,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 ?? await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
             if (loadedScene is null)
             {
-                return;
+                return false;
             }
 
             // Trace: scene data successfully loaded from project storage
@@ -758,32 +784,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
             this.nextEntityIndex = loadedScene.AllNodes.Count();
 
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (!this.sceneEngineSync.RegisterDocument(loadedScene, documentMetadata))
-            {
-                return;
-            }
-
-            await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
-
-            if (ct.IsCancellationRequested)
-            {
-                return;
-            }
-
-            _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, documentMetadata));
-            _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
+            return !ct.IsCancellationRequested
+                && await this.InstallLoadedSceneAsync(loadedScene, documentMetadata, ct).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
+            return false;
         }
         catch (Exception ex)
         {
             this.LogAuthoringLoadFailed(ex, scene.Id, scene.Name);
+            return false;
         }
         finally
         {
@@ -817,6 +828,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
+        using var authoring = this.EnterTreeAuthoring(args.Parent);
+        if (authoring is null)
+        {
+            return;
+        }
 
         if (this.suppressTreeCommandHandling)
         {
@@ -834,14 +850,24 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             $"InsertItemAsync({args.TreeItem.Label})",
             async () => await this.InsertItemAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
 
-        _ = this.RemoveItemFromBackendAsync(args.TreeItem);
+        _ = this.RemoveItemFromBackendAsync(args.TreeItem, this.Scene!.AttachedObject);
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
 
-    private async Task RemoveItemFromBackendAsync(ITreeItem item)
+    private async Task RemoveItemFromBackendAsync(ITreeItem item, Scene scene)
     {
+        using var authoring = SceneAuthoringGate.TryEnter(scene);
+        if (authoring is null)
+        {
+            return;
+        }
+
         _ = await this.sceneExplorerService.DeleteItemsAsync([item]).ConfigureAwait(false);
+        if (!ReferenceEquals(this.Scene?.AttachedObject, scene))
+        {
+            return;
+        }
 
         if (AsSceneNodeAdapter(item) is { } adapter)
         {
@@ -856,6 +882,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = sender; // unused
 
         if (args.Moves.Count == 0)
+        {
+            return;
+        }
+
+        using var authoring = this.EnterTreeAuthoring(args.Moves[0].Item);
+        if (authoring is null)
         {
             return;
         }
@@ -1032,8 +1064,73 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    private async Task HandleItemAddedCoreAsync(TreeItemAddedEventArgs args, Scene scene)
+    {
+        if (this.suppressTreeCommandHandling)
+        {
+            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
+            {
+                this.nodeAdapterIndex[suppressedAdapter.AttachedObject.Id] = suppressedAdapter;
+            }
+
+            this.TrackTreeItem(args.TreeItem);
+            return;
+        }
+
+        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
+
+        this.RecordAddedItemUndo(args);
+
+        try
+        {
+            if (addedAdapter != null)
+            {
+                _ = await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
+            }
+            else if (args.TreeItem is FolderAdapter folderAdapter)
+            {
+                _ = await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.LogAuthoringAddFailed(ex, args.TreeItem.Label);
+        }
+
+        if (!ReferenceEquals(this.Scene?.AttachedObject, scene))
+        {
+            return;
+        }
+
+        this.LogItemAdded(args.TreeItem.Label);
+
+        if (addedAdapter is null)
+        {
+            this.TrackTreeItem(args.TreeItem);
+            return;
+        }
+
+        // Register adapter for quick lookup
+        try
+        {
+            this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
+            this.TrackTreeItem(addedAdapter);
+        }
+        catch (Exception exception)
+        {
+            this.LogAuthoringAddFailed(exception, args.TreeItem.Label);
+        }
+    }
+
     private async Task ApplyExternalTreeChangeAsync(Func<Task> action)
     {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is null)
+        {
+            return;
+        }
+
         this.suppressTreeCommandHandling = true;
         try
         {
@@ -1071,6 +1168,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanCreateFolder))]
     private async Task CreateFolder()
     {
+        using var authoring = this.EnterTreeAuthoring();
+        if (authoring is null)
+        {
+            return;
+        }
+
         this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItemsCount);
 
         var sceneAdapter = this.Scene;
@@ -1131,6 +1234,60 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return metadata is null
             ? null
             : new SceneDocumentCommandContext(scene.Id, metadata, scene, this.History);
+    }
+
+    private SceneAuthoringGate.Operation? EnterTreeAuthoring(ITreeItem? item = null)
+    {
+        if (this.isDisposed || this.Scene?.AttachedObject is not { } scene)
+        {
+            return null;
+        }
+
+        if (item is not null)
+        {
+            var root = item;
+            while (root.Parent is { } parent)
+            {
+                root = parent;
+            }
+
+            var owner = AsSceneNodeAdapter(item)?.AttachedObject.Scene ?? (root as SceneAdapter)?.AttachedObject;
+            if (!ReferenceEquals(owner, scene))
+            {
+                return null;
+            }
+        }
+
+        return SceneAuthoringGate.TryEnter(scene);
+    }
+
+    private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, SceneDocumentMetadata documentMetadata, CancellationToken ct)
+    {
+        if (!this.sceneEngineSync.RegisterDocument(loadedScene, documentMetadata))
+        {
+            return false;
+        }
+
+        await this.InitializeLoadedSceneAsync(loadedScene).ConfigureAwait(true);
+
+        if (ct.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, documentMetadata));
+        _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
+        return true;
+    }
+
+
+    private async Task RunTreeMutationAsync(ITreeItem item, Func<Task> mutation)
+    {
+        using var authoring = this.EnterTreeAuthoring(item);
+        if (authoring is not null)
+        {
+            await mutation().ConfigureAwait(true);
+        }
     }
 
     private void OnAuthoringChanged(object? sender, SceneAuthoringChangedEventArgs args)
@@ -1266,6 +1423,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.trackedItemLabels[item] = newName;
         if (this.suppressTreeItemLabelHandling)
+        {
+            return;
+        }
+
+        using var authoring = this.EnterTreeAuthoring(item);
+        if (authoring is null)
         {
             return;
         }
