@@ -34,6 +34,8 @@ internal sealed class FakeEngineSession : EngineSession
 
     public Task Cleanup { get; set; } = Task.CompletedTask;
 
+    public Task Startup { get; set; } = Task.CompletedTask;
+
     public string? FailAt { get; set; }
 
     public bool CompleteOnStop { get; set; } = true;
@@ -51,6 +53,8 @@ internal sealed class FakeEngineSession : EngineSession
         this.Step("Run");
         return this.Loop.Task;
     }
+
+    public override Task WaitForStartupAsync() => this.Startup;
 
     public override void Stop()
     {

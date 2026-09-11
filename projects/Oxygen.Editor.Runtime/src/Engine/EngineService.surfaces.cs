@@ -24,7 +24,7 @@ public sealed partial class EngineService
     /// <inheritdoc/>
     public async ValueTask ReleaseDocumentSurfacesAsync(Guid documentId)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             List<Exception> failures = [];
@@ -141,7 +141,7 @@ public sealed partial class EngineService
 
     private async ValueTask ReleaseLeaseAsync(ViewportSurfaceLease lease)
     {
-        await this.lifecycleGate.WaitAsync().ConfigureAwait(true);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             List<Exception> failures = [];

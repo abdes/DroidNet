@@ -142,6 +142,9 @@ native engine frame loop. The ordering contract is:
 
 1. Workspace activation serializes `InitializeAsync` and `StartAsync`.
    Cooked-root refresh is awaited only after the service reaches `Running`.
+   `StartAsync` awaits native readiness after platform, graphics, and startup
+   module registration complete; starting the loop thread alone does not admit
+   workspace commands.
 2. `SwapChainPanel` access and the surface attach entry point originate on the
    UI thread.
 3. Runtime services own engine state transitions and reject invalid-state calls
@@ -213,6 +216,9 @@ Rules:
   `WaitForLoopCleanupAsync` signal additionally covers posted UI cleanup.
 - Native `StopEngine` must tolerate repeated calls and synchronize with removal
   of the engine owner. The stop request flag crosses threads and is atomic.
+- Shutdown/disposal cancels a pending startup wait before acquiring the lifecycle
+  gate. Native stop requests made before activation completes remain effective;
+  teardown still drains the loop and posted UI cleanup before destroying owners.
 - `ShutdownAsync` reports accumulated failures after establishing final ownership
   state. An intermediate error can be reported even if eventual cleanup released
   everything. `NoEngine` is never reported while native ownership remains.
@@ -340,7 +346,7 @@ ED-M02 service operations:
 | Operation | Owner | Completion Meaning |
 | --- | --- | --- |
 | Runtime initialize | `IEngineService.InitializeAsync` | Engine context created and service is `Ready`. |
-| Runtime start | `IEngineService.StartAsync` | Frame loop startup call returned and service is `Running`. |
+| Runtime start | `IEngineService.StartAsync` | Native startup and module registration acknowledged; service is `Running`. |
 | Runtime shutdown | `IEngineService.ShutdownAsync` | Engine resources released or service faulted. |
 | Apply startup settings | `EngineSettingsExtensions` | Settings copied into config before context creation. |
 | Apply FPS/logging | `IEngineService` properties | Native service accepted the value. |

@@ -169,6 +169,9 @@ namespace Oxygen::Interop {
     /// <summary>Completes after the exited loop's UI cleanup has finished.</summary>
     auto WaitForLoopCleanupAsync() -> System::Threading::Tasks::Task^;
 
+    /// <summary>Completes after native startup has finished registering modules.</summary>
+    auto WaitForEngineReadyAsync() -> System::Threading::Tasks::Task^;
+
     // Async variants that return a processed acknowledgement once the engine
     // module has executed the requested work (processed during the next
     // engine frame). These are non-blocking on the UI thread and complete
@@ -283,6 +286,8 @@ namespace Oxygen::Interop {
     System::Threading::Tasks::Task^ engine_task_;
     System::Threading::Tasks::TaskCompletionSource<bool>^
       engine_completion_source_;
+    System::Threading::Tasks::TaskCompletionSource<bool>^
+      engine_ready_source_;
     System::Threading::Tasks::TaskCompletionSource<bool>^ loop_cleanup_source_;
     EngineContext^ active_context_;
     System::Object^ state_lock_;

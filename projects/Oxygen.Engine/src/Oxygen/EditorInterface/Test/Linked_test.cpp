@@ -28,6 +28,7 @@ NOLINT_TEST(LinkedEditorApiTest, StopWithoutEngineIsRepeatable)
   const auto context = std::make_shared<EngineContext>();
   EXPECT_NO_THROW(StopEngine(context));
   EXPECT_NO_THROW(StopEngine(context));
+  EXPECT_TRUE(context->stop_requested.load());
 }
 
 } // namespace

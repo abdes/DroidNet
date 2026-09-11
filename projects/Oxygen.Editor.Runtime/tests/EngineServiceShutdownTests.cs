@@ -12,7 +12,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Runtime.Tests;
 
 [TestClass]
-public sealed class EngineServiceShutdownTests
+public sealed partial class EngineServiceShutdownTests
 {
     public TestContext TestContext { get; set; }
 
