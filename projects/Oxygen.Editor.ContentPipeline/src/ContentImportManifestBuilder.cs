@@ -134,12 +134,9 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
         var primaryInput = scope.Inputs[0];
         var mountName = primaryInput.MountName;
-        if (scope.Inputs.Any(input => !string.Equals(input.MountName, mountName, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.");
-        }
-
-        return mountName;
+        return scope.Inputs.Any(input => !string.Equals(input.MountName, mountName, StringComparison.OrdinalIgnoreCase))
+            ? throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.")
+            : mountName;
     }
 
     private static ContentImportJob CreateJob(ContentCookInput input, IReadOnlyList<string> dependsOn)
