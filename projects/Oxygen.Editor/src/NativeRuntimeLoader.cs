@@ -29,7 +29,7 @@ internal static class NativeRuntimeLoader
 
     private static string ResolveEngineRuntimeDirectory()
     {
-        var configuration =
+        const string configuration =
 #if DEBUG
             "Debug";
 #else

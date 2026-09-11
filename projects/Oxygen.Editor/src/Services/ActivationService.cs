@@ -9,7 +9,8 @@ namespace Oxygen.Editor.Services;
 /// <summary>
 /// Handle registration and chain invocation during activation.
 /// </summary>
-public sealed partial class ActivationService : IActivationService, IDisposable
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+internal sealed partial class ActivationService : IActivationService, IDisposable
 {
     private readonly Func<object, Task> afterActivation = (activationData) =>
     {

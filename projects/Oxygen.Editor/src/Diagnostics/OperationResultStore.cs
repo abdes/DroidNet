@@ -9,7 +9,8 @@ namespace Oxygen.Editor.Diagnostics;
 /// <summary>
 /// Host-level in-memory operation result store.
 /// </summary>
-public sealed class OperationResultStore : IOperationResultStore
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+internal sealed partial class OperationResultStore : IOperationResultStore
 {
     private readonly Lock syncLock = new();
     private readonly List<OperationResult> results = [];
@@ -98,20 +99,10 @@ public sealed class OperationResultStore : IOperationResultStore
     }
 
     private static bool Matches(OperationResult result, OperationResultScopeFilter filter)
-    {
-        if (filter.ProjectId is { } projectId && result.AffectedScope.ProjectId != projectId)
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.OperationKind)
-            && !string.Equals(result.OperationKind, filter.OperationKind, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return filter.Domain is not { } domain || result.Diagnostics.Any(diagnostic => diagnostic.Domain == domain);
-    }
+        => (filter.ProjectId is not { } projectId || result.AffectedScope.ProjectId == projectId)
+            && (string.IsNullOrWhiteSpace(filter.OperationKind)
+                || string.Equals(result.OperationKind, filter.OperationKind, StringComparison.Ordinal))
+            && (filter.Domain is not { } domain || result.Diagnostics.Any(diagnostic => diagnostic.Domain == domain));
 
     private void Unsubscribe(IObserver<OperationResult> observer)
     {
@@ -121,13 +112,13 @@ public sealed class OperationResultStore : IOperationResultStore
         }
     }
 
-    private sealed class Subscription(OperationResultStore store, IObserver<OperationResult> observer) : IDisposable
+    private sealed partial class Subscription(OperationResultStore store, IObserver<OperationResult> observer) : IDisposable
     {
         private OperationResultStore? store = store;
 
         public void Dispose()
         {
-            var target = Interlocked.Exchange(ref this.store, null);
+            var target = Interlocked.Exchange(ref this.store, value: null);
             target?.Unsubscribe(observer);
         }
     }
