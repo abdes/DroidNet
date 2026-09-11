@@ -91,6 +91,7 @@ set(
   "Passes/ImGuiOverlayPass.h"
   "Passes/RenderPass.h"
   "Environment/EnvironmentLightingService.h"
+  "Environment/SceneBackground.h"
   "Environment/Internal/SkyRenderer.h"
   "Environment/Internal/AtmosphereRenderer.h"
   "Environment/Internal/AtmosphereState.h"

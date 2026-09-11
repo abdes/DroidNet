@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Shared/ColorSpace.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -23,6 +24,8 @@ struct TonemapPassConstants
     float gamma;
     float bloom_intensity;
     float _pad0;
+    float3 background_color;
+    uint background_enabled;
 };
 
 static float3 ACESFitted(float3 color)
@@ -84,6 +87,17 @@ static float DitherBayer4x4(uint2 pixel_pos)
     return (kBayer4x4[index] / 16.0) - 0.5;
 }
 
+static float3 MapForeground(float3 color, uint tone_mapper, float gamma)
+{
+    switch (tone_mapper) {
+        case 1u: color = ACESFitted(color); break;
+        case 2u: color = Filmic(color); break;
+        case 3u: color = Reinhard(color); break;
+        default: color = saturate(color); break;
+    }
+    return pow(max(color, 0.0f), 1.0f / max(gamma, 1.0e-4f));
+}
+
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexTonemapVS(uint vertex_id : SV_VertexID)
 {
@@ -112,11 +126,14 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
         uint2(input.uv * float2(width, height)),
         uint2(max(width, 1u) - 1u, max(height, 1u) - 1u));
 
-    float3 color = scene_signal.Load(int3(pixel, 0)).rgb;
+    const float4 scene = scene_signal.Load(int3(pixel, 0));
+    const float coverage = pass.background_enabled != 0u ? saturate(scene.a) : 1.0f;
+    const float3 foreground = scene.rgb / max(coverage, 1.0e-6f);
+    float3 bloom = 0.0f.xxx;
 
     if (pass.bloom_texture_index != K_INVALID_BINDLESS_INDEX && pass.bloom_intensity > 0.0f) {
         Texture2D<float4> bloom_texture = ResourceDescriptorHeap[pass.bloom_texture_index];
-        color += bloom_texture.Load(int3(pixel, 0)).rgb * pass.bloom_intensity;
+        bloom = bloom_texture.Load(int3(pixel, 0)).rgb * pass.bloom_intensity;
     }
 
     float exposure = max(pass.exposure, 0.0f);
@@ -124,25 +141,15 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
         ByteAddressBuffer exposure_buffer = ResourceDescriptorHeap[pass.exposure_buffer_index];
         exposure = max(asfloat(exposure_buffer.Load(4)), 0.0f);
     }
-    color *= exposure;
-
-    switch (pass.tone_mapper) {
-        case 1u:
-            color = ACESFitted(color);
-            break;
-        case 2u:
-            color = Filmic(color);
-            break;
-        case 3u:
-            color = Reinhard(color);
-            break;
-        case 0u:
-        default:
-            color = saturate(color);
-            break;
+    float3 color = MapForeground((foreground + bloom) * exposure, pass.tone_mapper, pass.gamma);
+    if (pass.background_enabled != 0u) {
+        const float3 base = MapForeground(foreground * exposure, pass.tone_mapper, pass.gamma);
+        // Composite coverage in display-linear space. Bloom remains additive,
+        // including its halo outside foreground geometry.
+        const float3 composed = SrgbToLinear(color)
+            + (saturate(pass.background_color) - SrgbToLinear(base)) * (1.0f - coverage);
+        color = LinearToSrgb(composed);
     }
-
-    color = pow(max(color, 0.0f), 1.0f / max(pass.gamma, 1.0e-4f));
     color = saturate(color + (DitherBayer4x4(pixel) / 255.0f));
     return float4(color, 1.0f);
 }

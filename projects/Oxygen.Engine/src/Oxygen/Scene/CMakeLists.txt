@@ -73,6 +73,7 @@ set(
   "Camera/Orthographic.h"
   "Camera/Perspective.h"
   "Environment/EnvironmentSystem.h"
+  "Environment/Background.h"
   "Environment/Fog.h"
   "Environment/LocalFogVolume.h"
   "Environment/PostProcessVolume.h"
