@@ -3,6 +3,7 @@
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <RootNamespace>Oxygen.Editor.ContentPipeline</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
 
         <Title>Oxygen editor content pipeline orchestration.</Title>
@@ -14,6 +15,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
     </ItemGroup>
 
     <ItemGroup>

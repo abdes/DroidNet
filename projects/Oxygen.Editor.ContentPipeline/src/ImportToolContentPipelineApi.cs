@@ -41,6 +41,7 @@ public sealed partial class ImportToolContentPipelineApi(
         var projectRoot = InferProjectRoot(manifest.Output);
         var manifestPath = Path.Combine(projectRoot, ".pipeline", "Manifests", $"import-{operationId:N}.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        Task? retainedWorkerDrain = null;
 
         try
         {
@@ -53,9 +54,21 @@ public sealed partial class ImportToolContentPipelineApi(
                 ? new NativeImportResult(Succeeded: true, Diagnostics: [])
                 : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(operationId, result)]);
         }
+        catch (ContentPipelineTerminationException ex)
+        {
+            retainedWorkerDrain = ex.DrainCompletion;
+            throw;
+        }
         finally
         {
-            TryDeleteFile(manifestPath);
+            if (retainedWorkerDrain is null)
+            {
+                TryDeleteFile(manifestPath);
+            }
+            else
+            {
+                _ = DeleteAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath);
+            }
         }
     }
 
@@ -170,6 +183,17 @@ public sealed partial class ImportToolContentPipelineApi(
                 .ToList(),
             Diagnostics: []);
     }
+
+    private static Task DeleteAfterWorkerDrainAsync(Task drain, string manifestPath)
+        => drain.ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                TryDeleteFile(manifestPath);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static async Task WriteManifestAsync(ContentImportManifest manifest, string path, CancellationToken cancellationToken)
     {

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>Oxygen.Editor.ContentPipeline.WorkerProbe</AssemblyName>
+        <RootNamespace>Oxygen.Editor.ContentPipeline.WorkerProbe</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+</Project>
