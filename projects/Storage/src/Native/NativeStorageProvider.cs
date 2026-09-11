@@ -13,6 +13,9 @@ namespace DroidNet.Storage.Native;
 /// </summary>
 public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
 {
+    /// <inheritdoc/>
+    public IAtomicFileStore AtomicFiles { get; } = new NativeAtomicFileStore(fs);
+
     /// <summary>
     /// Gets the file system abstraction used by this storage provider.
     /// </summary>

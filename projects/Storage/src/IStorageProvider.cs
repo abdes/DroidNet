@@ -9,6 +9,9 @@ namespace DroidNet.Storage;
 /// </summary>
 public interface IStorageProvider
 {
+    /// <summary>Gets atomic file publication and content-baseline services for this provider.</summary>
+    public IAtomicFileStore AtomicFiles { get; }
+
     /// <summary>
     /// Normalize the specified <paramref name="path"/> by transforming it into an absolute path if it's relative, removing
     /// redundant segments and trimming any trailing path separators from the end. It uses the current location to fully qualify
