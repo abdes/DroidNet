@@ -192,7 +192,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.container.Resolve<IContentBrowserAssetProvider>(),
                 this.container,
                 messenger,
-                this.loggerFactory);
+                this.loggerFactory,
+                conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
         }
         else if (metadata is MaterialDocumentMetadata materialMeta)
         {

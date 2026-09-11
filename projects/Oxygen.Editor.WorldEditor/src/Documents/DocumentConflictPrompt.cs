@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.CompilerServices;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
@@ -16,8 +17,20 @@ namespace Oxygen.Editor.World.Documents;
 /// <param name="windows">The owner-window resolver.</param>
 public sealed class DocumentConflictPrompt(IDialogService dialogs, IWindowManagerService windows) : IDocumentConflictPrompt
 {
+    private readonly ConditionalWeakTable<IDocumentConflictParticipant, PendingPrompt> pending = [];
+
     /// <inheritdoc/>
     public Task ShowAsync(WindowId windowId, IDocumentMetadata metadata, IDocumentConflictParticipant participant)
+    {
+        var prompt = this.pending.GetValue(participant, _ => new());
+        lock (prompt)
+        {
+            return prompt.Task is { IsCompleted: false } current
+                ? current : prompt.Task = this.ShowCoreAsync(windowId, metadata, participant);
+        }
+    }
+
+    private Task ShowCoreAsync(WindowId windowId, IDocumentMetadata metadata, IDocumentConflictParticipant participant)
     {
         var window = windows.GetWindow(windowId) ?? throw new InvalidOperationException("The document window is unavailable.");
         return window.DispatcherQueue.EnqueueAsync(async () =>
@@ -34,5 +47,10 @@ public sealed class DocumentConflictPrompt(IDialogService dialogs, IWindowManage
                 await item.Pending.ConfigureAwait(true);
             }
         });
+    }
+
+    private sealed class PendingPrompt
+    {
+        public Task? Task { get; set; }
     }
 }

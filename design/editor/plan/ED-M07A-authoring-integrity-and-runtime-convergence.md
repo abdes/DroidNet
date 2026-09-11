@@ -317,34 +317,28 @@ Normal failures clean only the attempt's temporary file; process interruption
 can leave an orphan `.tmp`, which is not an authored asset. Recovery remains
 limited to the last successful Save; no hardware power-loss guarantee is claimed.
 
-Storage tests pass 193/193, including existing/first-save write, flush, replacement
-and cancellation failures, external changes, competing writers, real replacement
-denial and eight abrupt child-process exits before/after publication. Project
-persistence tests pass 48/48. Scene command tests retain #4 revision/snapshot cases
-and cover gesture completion before Save, late callback rejection, conflicts and
-distinct-identity Save Copy; WorldEditor tests pass 134/134. Material save/reload/
-copy tests run with the history cases below. The editor app builds, and changed
-files have no unsuppressed compiler analyzer or IDE diagnostics.
-
 Save conflicts keep the close dialog open with inline Reload and Save Copy.
-Reload requires explicit confirmation to discard unsaved changes and history.
-Material documents support both actions and use the same recovery panel after
-ordinary Save. Save Copy creates a distinct asset and leaves the original dirty;
-queued actions and close preparation wait for pending recovery I/O. Malformed
-reloads and copy collisions retain the original document and history.
+Both scene and material documents use these actions, including after ordinary
+Save. Reload requires explicit discard confirmation; Save Copy creates a distinct
+asset and retains the original document's dirty state and history. Recovery
+requests and close preparation wait for pending work, and overlapping ordinary
+Save requests share one conflict dialog.
 
-Tests pass: Documents 66/66, MaterialEditor 41/41, WorldEditor 141/141 and packaged
-UI 22/22, including the actual inline confirmation controls. Editor builds pass;
-changed files have no analyzer or IDE diagnostics.
+Scene reload suspends new mutations, drains admitted commands and tree updates,
+and checks revision, history and document lifetime before accepting the disk
+snapshot. Acceptance replaces the model and baseline, retires old callbacks and
+history, and rebinds the active tree and inspector. Inactive reloads do not change
+the active inspector. Malformed source, identity/name mismatches, cancellation,
+newer revisions and closed lifetimes retain the original model and baseline.
 
-Reload storage preparation (2026-09-11): scene reload now separates an owned
-disk read from acceptance. Reading preserves the current project model and its
-save-conflict baseline; only the document owner's subsequent acceptance adopts
-the replacement and baseline. Reads validate scene identity, and acceptance
-rejects another service's result or a source model already replaced in the
-project. Project tests pass 52/52. Remaining work: integrate scene reload with
-the authoring owner's revision, pending-command and lifetime checks, then connect
-its Reload and Save Copy actions to the conflict panel.
+Validation: Storage 193/193 includes write/flush/replace failures, cancellation,
+competing writers, real replacement denial and eight abrupt child-process exits.
+Projects 54/54, Documents 66/66, MaterialEditor 41/41 and WorldEditor 156/156 cover
+owner state, conflicts, source reload, copy identity, history and revision races.
+Packaged UI 23/23 covers inline discard confirmation, pending copy behavior,
+dialog deduplication and inspector regressions. DynamicTree 145/145 and
+TimeMachine 76/76 verify the supporting mutation and history contracts. Editor
+builds pass; changed managed files have no analyzer or IDE diagnostics.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 

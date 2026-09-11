@@ -36,7 +36,7 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
 {
     // A small palette of candidate clear colors shared by viewports. We wrap the
     // palette here so the Scene Editor decides the per-viewport colors.
@@ -55,6 +55,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IEngineService engineService;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly IDocumentInputCommitter inputCommitter;
+    private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ISceneDocumentCommandService commandService;
@@ -68,6 +69,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
     private bool isClosing;
+    private bool isDisposed;
     private Task<bool>? pendingSave;
 
     /// <summary>
@@ -87,6 +89,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
     public SceneEditorViewModel(
         SceneDocumentMetadata metadata,
         IDocumentService documentService,
@@ -101,11 +104,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IContentBrowserAssetProvider assetProvider,
         IContainer container,
         IMessenger messenger,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        IDocumentConflictPrompt? conflictPrompt = null)
     {
         this.engineService = engineService;
         this.sceneEngineSync = sceneEngineSync;
         this.inputCommitter = inputCommitter;
+        this.conflictPrompt = conflictPrompt;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.commandService = commandService;
@@ -285,9 +290,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <inheritdoc/>
     public async Task SaveAsync()
     {
-        if (!this.isClosing)
+        if (!this.isClosing && !this.isDisposed)
         {
             _ = await this.SaveForCloseAsync().ConfigureAwait(true);
+            if (this.HasSaveConflict && !this.isClosing && !this.isDisposed && this.conflictPrompt is not null)
+            {
+                await this.conflictPrompt.ShowAsync(this.windowId, this.Metadata, this).ConfigureAwait(true);
+            }
         }
     }
 
@@ -301,6 +310,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         this.isClosing = true;
+        await this.pendingConflict.ConfigureAwait(true);
         if (this.pendingSave is { } save)
         {
             _ = await save.ConfigureAwait(true);
@@ -313,6 +323,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <inheritdoc/>
     public async Task CloseAsync(bool discard)
     {
+        await this.pendingConflict.ConfigureAwait(true);
         if (this.Metadata.IsDirty && !discard)
         {
             throw new InvalidOperationException("The scene has unsaved changes.");
@@ -324,8 +335,21 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: false).ConfigureAwait(true);
         }
 
+        using var replacement = this.scene is null ? null
+            : await SceneAuthoringGate.BeginReplacementAsync(this.scene, CancellationToken.None).ConfigureAwait(true);
+        if (this.scene is not null && replacement is null)
+        {
+            throw new InvalidOperationException("A scene operation is still finishing. Try closing again.");
+        }
+
+        if ((this.Metadata.IsDirty && !discard) || UndoRedo.GetHistory(this.Metadata.DocumentId).IsBusy)
+        {
+            throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.");
+        }
+
         this.sceneEngineSync.CloseDocument(this.Metadata);
         UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
+        replacement?.Retire();
     }
 
     /// <inheritdoc/>
@@ -340,6 +364,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         if (disposing)
         {
+            this.isDisposed = true;
+            if (this.scene is not null)
+            {
+                SceneAuthoringGate.Retire(this.scene);
+            }
+
             this.sceneEngineSync.CloseDocument(this.Metadata);
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
@@ -583,6 +613,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<bool> SaveCoreAsync()
     {
+        await this.pendingConflict.ConfigureAwait(true);
         await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
         if (this.scene is null)
         {
@@ -603,6 +634,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         this.LogSaveRequested();
         var result = await this.commandService.SaveSceneAsync(this.CreateCommandContext()).ConfigureAwait(true);
+        this.HasSaveConflict = !result.Succeeded && (this.HasSaveConflict || result.IsConflict);
         if (result.Succeeded)
         {
             this.LogSaveSuccessful();

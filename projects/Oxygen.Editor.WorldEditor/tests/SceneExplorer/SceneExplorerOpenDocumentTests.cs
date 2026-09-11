@@ -11,6 +11,7 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -21,6 +22,45 @@ namespace Oxygen.Editor.World.SceneExplorer.Tests;
 [TestClass]
 public sealed class SceneExplorerOpenDocumentTests
 {
+    [TestMethod]
+    public async Task ReloadMessageReplacesTreeAdaptersWithoutReadingDiskOrRequiringRuntime()
+    {
+        var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png")) { Name = "Reload" };
+        var original = new Scene(project) { Name = "Scene" };
+        var originalNode = new SceneNode(original) { Name = "Original node" };
+        original.RootNodes.Add(originalNode);
+        project.Scenes.Add(original);
+        var metadata = new SceneDocumentMetadata(original.Id);
+        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
+        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
+        var documents = new Mock<IDocumentService>();
+        _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
+        _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+        var current = original;
+        var sync = new Mock<ISceneEngineSync>();
+        _ = sync.Setup(value => value.GetDocumentScene(metadata)).Returns(() => current);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
+        var messenger = new StrongReferenceMessenger();
+        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService());
+        await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
+        var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
+        var replacement = Scene.CreateAndHydrate(project, original.Dehydrate());
+        replacement.RootNodes[0].Name = "Reloaded node";
+        current = replacement;
+
+        var request = messenger.Send(new SceneReloadedMessage(replacement, metadata, default));
+
+        _ = request.HasReceivedResponse.Should().BeTrue();
+        _ = (await request.Response.ConfigureAwait(false)).Should().BeTrue();
+        _ = explorer.Scene!.AttachedObject.Should().BeSameAs(replacement);
+        var adapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
+        _ = adapter.Should().NotBeSameAs(previousAdapter);
+        _ = ((SceneNodeAdapter)adapter!).AttachedObject.Should().BeSameAs(replacement.RootNodes[0]);
+        _ = adapter.Label.Should().Be("Reloaded node");
+        manager.Verify(value => value.LoadSceneAsync(It.IsAny<Scene>()), Times.Never);
+    }
+
     [TestMethod]
     public async Task SwitchingBackToAnOpenScenePreservesUnsavedModelAndAvoidsDiskReload()
     {

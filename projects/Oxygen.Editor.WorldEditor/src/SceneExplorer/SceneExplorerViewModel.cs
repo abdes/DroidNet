@@ -115,6 +115,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
         messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
         messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
+        messenger.Register<SceneReloadedMessage>(this, (_, message) =>
+        {
+            if (!this.isDisposed && message.WindowId == this.windowId
+                && this.documentService.GetActiveDocumentId(this.windowId) == message.Metadata.DocumentId
+                && !message.HasReceivedResponse)
+            {
+                message.Reply(this.ApplyReloadedSceneAsync(message));
+            }
+        });
 
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
@@ -1280,6 +1289,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return true;
     }
 
+    private async Task<bool> ApplyReloadedSceneAsync(SceneReloadedMessage message)
+        => ReferenceEquals(this.sceneEngineSync.GetDocumentScene(message.Metadata), message.Scene)
+            && await this.LoadSceneAsync(message.Scene).ConfigureAwait(true)
+            && ReferenceEquals(this.Scene?.AttachedObject, message.Scene);
 
     private async Task RunTreeMutationAsync(ITreeItem item, Func<Task> mutation)
     {

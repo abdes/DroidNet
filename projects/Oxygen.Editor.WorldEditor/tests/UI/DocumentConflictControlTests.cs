@@ -4,7 +4,10 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
+using DroidNet.Aura.Dialogs;
+using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -21,6 +24,35 @@ namespace Oxygen.Editor.World.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
 public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
 {
+    /// <summary>Overlapping Save requests share one dialog and later conflicts can open another.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task ConcurrentConflictPromptsShareTheCurrentDialog() => EnqueueAsync(async () =>
+    {
+        var windowId = new WindowId(1);
+        var window = new Mock<IManagedWindow>();
+        _ = window.SetupGet(value => value.DispatcherQueue).Returns(VisualUserInterfaceTestsApp.DispatcherQueue);
+        var windows = new Mock<IWindowManagerService>();
+        _ = windows.Setup(value => value.GetWindow(windowId)).Returns(window.Object);
+        var closed = new TaskCompletionSource<DialogButton>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dialogs = new Mock<IDialogService>();
+        _ = dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), windowId, It.IsAny<CancellationToken>())).Returns(closed.Task);
+        var prompt = new DocumentConflictPrompt(dialogs.Object, windows.Object);
+        var metadata = new SceneDocumentMetadata(Guid.NewGuid());
+        var participant = Mock.Of<IDocumentConflictParticipant>();
+
+        var first = prompt.ShowAsync(windowId, metadata, participant);
+        var second = prompt.ShowAsync(windowId, metadata, participant);
+        _ = second.Should().BeSameAs(first);
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), windowId, It.IsAny<CancellationToken>()), Times.Once);
+        closed.SetResult(DialogButton.Close);
+        await first.ConfigureAwait(true);
+        await second.ConfigureAwait(true);
+        await prompt.ShowAsync(windowId, metadata, participant).ConfigureAwait(true);
+        dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), windowId, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    });
+
     /// <summary>Reload requires a second explicit discard action before touching the document.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
