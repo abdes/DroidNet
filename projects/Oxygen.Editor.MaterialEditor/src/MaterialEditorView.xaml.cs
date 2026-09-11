@@ -57,6 +57,7 @@ public sealed partial class MaterialEditorView
         picker.AddHandler(PointerPressedEvent, new PointerEventHandler(this.ColorPressed), handledEventsToo: true);
         picker.AddHandler(PointerReleasedEvent, new PointerEventHandler(this.ColorReleased), handledEventsToo: true);
         picker.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(this.ColorCaptureLost), handledEventsToo: true);
+        picker.AddHandler(PointerCanceledEvent, new PointerEventHandler(this.ColorCanceled), handledEventsToo: true);
         picker.AddHandler(KeyDownEvent, new KeyEventHandler(this.ColorKeyDown), handledEventsToo: true);
     }
 
@@ -68,6 +69,7 @@ public sealed partial class MaterialEditorView
         picker.RemoveHandler(PointerPressedEvent, new PointerEventHandler(this.ColorPressed));
         picker.RemoveHandler(PointerReleasedEvent, new PointerEventHandler(this.ColorReleased));
         picker.RemoveHandler(PointerCaptureLostEvent, new PointerEventHandler(this.ColorCaptureLost));
+        picker.RemoveHandler(PointerCanceledEvent, new PointerEventHandler(this.ColorCanceled));
         picker.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ColorKeyDown));
     }
 
@@ -93,7 +95,11 @@ public sealed partial class MaterialEditorView
 
     private void ColorReleased(object sender, PointerRoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Commit);
 
-    private void ColorCaptureLost(object sender, PointerRoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Cancel);
+    // The spectrum releases capture before PointerReleased bubbles here.
+    private void ColorCaptureLost(object sender, PointerRoutedEventArgs args)
+        => this.EndColorGesture(args.Pointer.IsInContact ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
+
+    private void ColorCanceled(object sender, PointerRoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Cancel);
 
     private void ColorLostFocus(object sender, RoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Commit);
 

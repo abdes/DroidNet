@@ -164,7 +164,12 @@ EngineService and real SceneEngineSync. One hundred picker samples produce one
 color history entry. Native background reads confirm RGB `(100/255, 64/255,
 128/255)` with atmosphere off, the previous RGB after undo, and the chosen RGB
 after redo and atomic Save/reopen into a new document lifetime. The headless test
-does not present a viewport; the user-visible background check remains pending.
+does not present a viewport. The user-visible check failed: with atmosphere off,
+the color is hidden under the default manual EV100 13 exposure, and disabling
+exposure reveals it. The existing solid-color sky path treats the authored LDR
+value as HDR radiance. 07A.1 remains incomplete until the background presentation
+contract is corrected and verified with exposure enabled; native RGB readback
+alone does not satisfy that gate.
 
 ### 07A.2 - Real Gesture Sessions For Existing Inspectors
 
@@ -189,6 +194,24 @@ callbacks cannot apply another value. Transform requests capture their phase
 before asynchronous dispatch and recheck cancelled wheel callbacks on the UI
 thread. Save/close integration remains in 07A.5; actual control coverage remains
 in 07A.6.
+
+Pointer regression and qualification (2026-09-11): the user found that releasing
+a picker drag restored its original color. Our capture-loss handler cancelled
+the gesture before the normal release reached the picker. WinUI's ColorSpectrum
+releases its child capture within its release handler; the editor now commits
+when that pointer is no longer in contact, and cancels capture lost while it is
+still pressed or explicitly cancelled. This applies to environment, light and
+material pickers. Nine packaged tests inject real Windows clicks, drags and
+interrupted capture into the actual flyout controls, checking selected color,
+one-entry Undo/Redo and cancellation without history. The prior programmatic
+color-sample test did not exercise pointer-release ordering.
+
+The full packaged inspector suite passes 20/20, including native RGB/save/reopen
+coverage. MSBuild rebuilt the affected views, UI test host and Debug editor;
+changed picker/test files have no unsuppressed analyzer or IDE diagnostics,
+including SARIF notes. The user also confirmed that the picker works after the
+fix. This closes the reported picker reset, not the separate exposure failure
+or all remaining 07A.2/07A.6 gates.
 
 ### 07A.3 - Scoped Current Field Diagnostics
 
