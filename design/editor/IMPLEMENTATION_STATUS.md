@@ -482,7 +482,9 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 - [x] 07A.0 managed world/input capabilities, native asset-failure forwarding and
       automated boundary/lifecycle coverage (#10); visible workflow evidence is 07A.6.
 - [ ] 07A.1 native background application and truthful field results: implemented
-      with native/managed tests passing; visible field workflow evidence is 07A.6.
+      with native/managed tests passing; visible qualification failed under default
+      exposure (disabling exposure reveals the color). LDR background presentation
+      and exposure-enabled verification remain required in 07A.6.
 - [ ] 07A.2 camera/light/environment gesture sessions and cancellation: current
       implementation has managed regression coverage; save/close and control gates remain.
 - [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:

@@ -54,6 +54,7 @@ internal static class InspectorColorGestures
             picker.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(this.Pressed), handledEventsToo: true);
             picker.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(this.Released), handledEventsToo: true);
             picker.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(this.CaptureLost), handledEventsToo: true);
+            picker.AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(this.Canceled), handledEventsToo: true);
             picker.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(this.KeyDown), handledEventsToo: true);
             picker.LostFocus += this.LostFocus;
             picker.Unloaded += this.Unloaded;
@@ -101,7 +102,13 @@ internal static class InspectorColorGestures
 
         private void Released(object sender, PointerRoutedEventArgs args) => this.End(NumberBoxEditCompletionKind.Commit);
 
-        private void CaptureLost(object sender, PointerRoutedEventArgs args) => this.End(NumberBoxEditCompletionKind.Cancel);
+        // ColorSpectrum releases capture inside its PointerReleased handler,
+        // before that handled event reaches the picker. A released pointer
+        // commits; losing capture while still pressed cancels the preview.
+        private void CaptureLost(object sender, PointerRoutedEventArgs args)
+            => this.End(args.Pointer.IsInContact ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
+
+        private void Canceled(object sender, PointerRoutedEventArgs args) => this.End(NumberBoxEditCompletionKind.Cancel);
 
         private void LostFocus(object sender, RoutedEventArgs args) => this.End(NumberBoxEditCompletionKind.Commit);
 
