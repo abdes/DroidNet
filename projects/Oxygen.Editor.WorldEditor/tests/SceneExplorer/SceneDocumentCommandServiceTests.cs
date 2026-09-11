@@ -815,6 +815,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(second);
         scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = first.Id });
         var context = CreateContext(scene);
+        _ = ConfigureGestureSync(fixture, scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         _ = fixture.Sync
             .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
