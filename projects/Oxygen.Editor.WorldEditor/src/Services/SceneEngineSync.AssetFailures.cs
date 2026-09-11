@@ -73,7 +73,11 @@ public sealed partial class SceneEngineSync
         }
 
         this.LogAssetLoadFailed(request.OperationId, args.Generation, nodeId, args.Message);
-        var scope = Scope(scene, node, componentType: nameof(GeometryComponent), assetVirtualPath: assetPath);
+        if (this.GetAssetFailureScope(scene, node, assetPath, request.Target.DocumentLifetime) is not { } scope)
+        {
+            return;
+        }
+
         operationResults?.Publish(new OperationResult
         {
             OperationId = request.OperationId,
@@ -99,6 +103,20 @@ public sealed partial class SceneEngineSync
                 },
             ],
         });
+    }
+
+    private AffectedScope? GetAssetFailureScope(Scene scene, SceneNode node, string? assetPath, Guid documentLifetime)
+    {
+        lock (this.documentGate)
+        {
+            return this.TryGetDocument(scene, out var lifetime) && lifetime.Id == documentLifetime
+                ? Scope(scene, node, componentType: nameof(GeometryComponent), assetVirtualPath: assetPath) with
+                {
+                    DocumentId = lifetime.Metadata.DocumentId,
+                    DocumentLifetime = lifetime.Id,
+                }
+                : null;
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Runtime asset operation {OperationId}, native generation {Generation}, node {NodeId} failed: {Message}")]
