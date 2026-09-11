@@ -11,6 +11,7 @@
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -134,6 +135,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       .exposure_value = exposure.exposure_value,
       .gamma = config_.gamma,
       .bloom_intensity = config_.bloom_intensity,
+      .background_color = environment::ResolveSceneBackground(ctx),
     });
 
   last_execution_state_ = {

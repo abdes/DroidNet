@@ -45,9 +45,11 @@ namespace {
     float gamma;
     float bloom_intensity;
     float _pad0;
+    std::array<float, 3> background_color;
+    std::uint32_t background_enabled;
   };
 
-  static_assert(sizeof(TonemapPassConstants) == 32U);
+  static_assert(sizeof(TonemapPassConstants) == 48U);
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -376,6 +378,7 @@ auto TonemapPass::UpdatePassConstants(const Inputs& inputs)
   EnsurePassConstantsBuffer();
   CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
 
+  const auto background_color = inputs.background_color.value_or(Vec3 { 0.0F });
   const auto constants = TonemapPassConstants {
     .source_texture_index = inputs.scene_signal_srv.get(),
     .exposure_buffer_index = inputs.exposure_buffer_srv.get(),
@@ -385,6 +388,12 @@ auto TonemapPass::UpdatePassConstants(const Inputs& inputs)
     .gamma = std::max(inputs.gamma, 1.0e-4F),
     .bloom_intensity = std::max(inputs.bloom_intensity, 0.0F),
     ._pad0 = 0.0F,
+    .background_color = {
+      background_color.x,
+      background_color.y,
+      background_color.z,
+    },
+    .background_enabled = inputs.background_color.has_value() ? 1U : 0U,
   };
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;

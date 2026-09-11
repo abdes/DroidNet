@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 
 #include <limits>
 #include <vector>
@@ -210,6 +211,9 @@ auto IsSkyRenderingEnabled(const RenderContext& ctx) -> bool
       }();
   if (atmosphere_active) {
     return true;
+  }
+  if (ResolveSceneBackground(ctx).has_value()) {
+    return false;
   }
   if (const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
     sphere != nullptr && sphere->IsEnabled()) {

@@ -9,9 +9,11 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -42,6 +44,7 @@ public:
     float exposure_value { 1.0F };
     float gamma { 2.2F };
     float bloom_intensity { 0.0F };
+    std::optional<Vec3> background_color;
   };
 
   struct ExecutionState {
