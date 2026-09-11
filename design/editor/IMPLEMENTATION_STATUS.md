@@ -490,7 +490,8 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
       numeric feedback and ordering tests pass; complete dependent/control evidence remains.
 - [x] 07A.4 offline/reconnect/lifetime convergence with failed work retained;
       WorldEditor 131/131 and Runtime 61/61 regressions pass.
-- [ ] 07A.5 shared atomic write/conflict safety (#7), preserving landed #4 revisions.
+- [x] 07A.5 shared atomic writes and inline scene/material conflict recovery (#7),
+      with revision, cancellation, history and reload-lifetime regressions passing.
 - [x] 07A.7 active loop supervision/state diagnostics and restart isolation (#6),
       with Runtime direct-service and native regressions passing 59/59.
 - [x] 07A.8 material document history and edit sessions (#9); MaterialEditor 38/38,

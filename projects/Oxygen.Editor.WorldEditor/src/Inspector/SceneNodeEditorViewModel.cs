@@ -364,7 +364,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) =>
             _ = hosting.Dispatcher.DispatchAsync(() =>
             {
-                if (!this.documentService.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, message.Metadata)))
+                if (this.documentService.GetActiveDocumentId(this.windowId) != message.Metadata.DocumentId
+                    || !this.documentService.GetOpenDocuments(this.windowId).Any(document => ReferenceEquals(document, message.Metadata)))
                 {
                     return;
                 }
