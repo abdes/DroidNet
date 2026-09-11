@@ -195,7 +195,7 @@ public partial class EnvironmentViewModel(
     /// <summary>
     /// Gets the background color as a WinUI color.
     /// </summary>
-    public Color BackgroundColor => Color.FromArgb(255, ToByte(this.BackgroundR), ToByte(this.BackgroundG), ToByte(this.BackgroundB));
+    public Color BackgroundColor => Color.FromArgb(255, ToSrgbByte(this.BackgroundR), ToSrgbByte(this.BackgroundG), ToSrgbByte(this.BackgroundB));
 
     /// <summary>
     /// Gets a value indicating whether manual exposure controls apply to the current mode.
@@ -412,9 +412,9 @@ public partial class EnvironmentViewModel(
     /// <param name="color">The selected background color.</param>
     public void SetBackgroundColor(Color color)
     {
-        var r = color.R / 255f;
-        var g = color.G / 255f;
-        var b = color.B / 255f;
+        var r = FromSrgbByte(color.R);
+        var g = FromSrgbByte(color.G);
+        var b = FromSrgbByte(color.B);
         this.isApplyingEditorValues = true;
         try
         {
@@ -442,8 +442,18 @@ public partial class EnvironmentViewModel(
         }
     }
 
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
+    private static byte ToSrgbByte(float value)
+    {
+        var linear = Math.Clamp(value, 0f, 1f);
+        var encoded = linear <= 0.0031308f ? linear * 12.92f : (1.055f * MathF.Pow(linear, 1f / 2.4f)) - 0.055f;
+        return (byte)Math.Clamp(MathF.Round(encoded * 255f), 0f, 255f);
+    }
+
+    private static float FromSrgbByte(byte value)
+    {
+        var encoded = value / 255f;
+        return encoded <= 0.04045f ? encoded / 12.92f : MathF.Pow((encoded + 0.055f) / 1.055f, 2.4f);
+    }
 
     [RelayCommand]
     private void ClearSun()

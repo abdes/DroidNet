@@ -141,37 +141,21 @@ value and visible change, undo/redo and save/reopen it; inject native rejection
 and verify field-specific diagnostics with authoring retained. Cooked background
 mapping is 07B.3 and final visual parity is M08.
 
-Implementation and native evidence (2026-09-10): background dispatch uses the
-engine's existing `SkySphere` solid-color system with neutral tint/intensity;
-atmosphere remains independent and retains renderer precedence. A lifetime-checked
-background observation reads native RGB after queued mutations without claiming
-presentation. Environment results now preserve each field's SyncOutcome, and the
-command service retains background-specific failures instead of labeling them as
-atmosphere errors. Native tests cover exact RGB, atmosphere toggling and non-finite
-rejection without state loss; managed tests cover stale observation rejection and
-independent field failure reporting while authoring/history survive.
+Implementation: the native `Background` environment system supplies linear SDR
+color for composition after foreground exposure and tone mapping. Scene color
+alpha records opaque/masked coverage and accumulated translucent coverage;
+compositing preserves foreground shading and bloom. Atmosphere takes precedence,
+reflection captures exclude the presentation background, and HDR sky settings
+remain independent. The picker converts between display sRGB and linear source
+values. Per-field dispatch results retain background-specific failures.
 
-MSBuild passed Interop, Runtime, WorldEditor and the affected tests. VSTest passed
-Runtime 50/50, WorldEditor 99/99 and Interop NativeTests 36/36. New implementation and
-test files have no unsuppressed compiler analyzer/IDE diagnostics. Existing warnings
-in unchanged portions of the command service are retained for the final cleanup.
-The visible color-change and control save/reopen cases remain in 07A.6; this native
-observation evidence does not close the milestone's presented-state gate.
-
-Control-to-native qualification (2026-09-11): a packaged WinUI test now drives the
-actual environment toggle and color picker through scene commands, the public
-EngineService and real SceneEngineSync. One hundred picker samples produce one
-color history entry. Native background reads confirm RGB `(100/255, 64/255,
-128/255)` with atmosphere off, the previous RGB after undo, and the chosen RGB
-after redo and atomic Save/reopen into a new document lifetime. The headless test
-does not present a viewport. In the editor, default EV100 13 exposure hides the
-background because the solid-color sky path treats LDR color as HDR radiance.
-Disabling exposure reveals it.
-
-Remaining work: composite Background independently of exposure and tone mapping,
-preserving the picked color and opaque/translucent foreground coverage. Convert
-between display and linear RGB at the picker boundary. Verify the visible color
-with exposure on/off, different tone mappers, Undo/Redo and Save/reopen.
+Validation: Interop native tests pass 36/36 and packaged inspector tests pass
+22/22. They cover native RGB, atmosphere precedence, reflection exclusion, HDR
+sky preservation, invalid input, real picker gestures, Undo/Redo and atomic
+Save/reopen. Lighting and post-process tests pass 4/4 and 6/6. Editor builds pass,
+and changed C# files have no analyzer or IDE diagnostics. The user verified that
+the rebuilt editor matches the picker, retains that color across exposure and
+tone-mapper changes, and restores it through Undo/Redo and Save/reopen.
 
 ### 07A.2 - Real Gesture Sessions For Existing Inspectors
 

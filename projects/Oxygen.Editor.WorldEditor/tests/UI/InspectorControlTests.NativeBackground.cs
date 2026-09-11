@@ -85,7 +85,7 @@ public sealed partial class InspectorControlTests
         sync.CloseDocument(metadata);
         var reopened = await manager.LoadSceneAsync(scene).ConfigureAwait(true);
         _ = reopened.Should().NotBeNull();
-        _ = reopened!.Environment.BackgroundColor.Should().Be(new Vector3(100f / 255, 64f / 255, 128f / 255));
+        AssertColorClose(reopened!.Environment.BackgroundColor, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
         _ = reopened.Environment.AtmosphereEnabled.Should().BeFalse();
         metadata = new SceneDocumentMetadata(reopened.Id);
         ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -134,7 +134,8 @@ public sealed partial class InspectorControlTests
             _ = original.AtmosphereEnabled.Should().BeFalse();
             await EditBackgroundPickerAsync(view, scroller, cancellationToken).ConfigureAwait(true);
             await model.PendingEdits.ConfigureAwait(true);
-            var expected = new Vector3(100f / 255, 64f / 255, 128f / 255);
+            var expected = scene.Environment.BackgroundColor;
+            AssertColorClose(expected, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
             _ = context.History.UndoStack.Should().HaveCount(2);
             _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Color.Should().Be(expected);
             await context.History.UndoAsync(cancellationToken).ConfigureAwait(true);

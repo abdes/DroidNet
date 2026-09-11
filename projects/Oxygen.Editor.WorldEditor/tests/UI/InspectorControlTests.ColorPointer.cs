@@ -46,15 +46,16 @@ public sealed partial class InspectorControlTests
         {
             var preview = await DriveSpectrumAsync((ColorPicker)flyout.Content, drag, cancel).ConfigureAwait(true);
             await PendingColorEdits(model).ConfigureAwait(true);
-            var expected = cancel ? before : new Vector3(preview.R / 255f, preview.G / 255f, preview.B / 255f);
-            _ = ReadSceneColor(fixture, kind).Should().Be(expected);
+            var expected = cancel ? before : string.Equals(kind, "Environment", StringComparison.Ordinal)
+                ? DecodeSrgb(preview) : new Vector3(preview.R / 255f, preview.G / 255f, preview.B / 255f);
+            AssertColorClose(ReadSceneColor(fixture, kind), expected);
             _ = fixture.Context.History.UndoStack.Should().HaveCount(cancel ? 0 : 1);
             if (!cancel)
             {
                 await fixture.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
                 _ = ReadSceneColor(fixture, kind).Should().Be(before);
                 await fixture.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-                _ = ReadSceneColor(fixture, kind).Should().Be(expected);
+                AssertColorClose(ReadSceneColor(fixture, kind), expected);
             }
         }
         finally
@@ -65,6 +66,24 @@ public sealed partial class InspectorControlTests
 
     private static Vector3 ReadSceneColor(Fixture fixture, string kind) => string.Equals(kind, "Environment", StringComparison.Ordinal)
         ? fixture.Scene.Environment.BackgroundColor : fixture.Node.Components.OfType<DirectionalLightComponent>().Single().Color;
+
+    private static Vector3 DecodeSrgb(Color color)
+    {
+        static float Decode(byte channel)
+        {
+            var encoded = channel / 255.0;
+            return (float)(encoded <= 0.04045 ? encoded / 12.92 : Math.Pow((encoded + 0.055) / 1.055, 2.4));
+        }
+
+        return new(Decode(color.R), Decode(color.G), Decode(color.B));
+    }
+
+    private static void AssertColorClose(Vector3 actual, Vector3 expected)
+    {
+        _ = actual.X.Should().BeApproximately(expected.X, 0.000001f);
+        _ = actual.Y.Should().BeApproximately(expected.Y, 0.000001f);
+        _ = actual.Z.Should().BeApproximately(expected.Z, 0.000001f);
+    }
 
     private static Task PendingColorEdits(IDisposable model) => model is EnvironmentViewModel environment ? environment.PendingEdits : ((DirectionalLightViewModel)model).PendingEdits;
 

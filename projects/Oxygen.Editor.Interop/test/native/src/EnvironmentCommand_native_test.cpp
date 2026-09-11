@@ -31,6 +31,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 
 #pragma unmanaged
 
@@ -508,7 +509,10 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
 struct BackgroundSnapshot {
   NativeStatus status {};
   bool exists = false;
-  bool solid_source = false;
+  bool presentation_source = false;
+  bool hdr_sky_preserved = false;
+  bool excluded_from_reflections = false;
+  bool atmosphere_takes_precedence = false;
   bool atmosphere_disabled = false;
   bool preserved_after_atmosphere_cycle = false;
   bool invalid_rejected = false;
@@ -527,6 +531,11 @@ void RunBackgroundContract(BackgroundSnapshot& result) {
     atmosphere.enabled = false;
     SetEnvironmentCommand environment(atmosphere, PostProcessParams {});
     environment.Execute(context);
+    auto& sphere = scene->GetEnvironment()
+      ->AddSystem<oxygen::scene::environment::SkySphere>();
+    sphere.SetSource(oxygen::scene::environment::SkySphereSource::kSolidColor);
+    sphere.SetSolidColorRgb({ 0.8F, 0.1F, 0.2F });
+    sphere.SetIntensity(64.0F);
     SetBackgroundColorCommand color({ 0.25F, 0.5F, 0.75F });
     color.Execute(context);
     BackgroundObservation observed;
@@ -539,13 +548,20 @@ void RunBackgroundContract(BackgroundSnapshot& result) {
     result.green = observed.color.y;
     result.blue = observed.color.z;
     result.atmosphere_disabled = !observed.atmosphere_enabled;
-    auto sphere = scene->GetEnvironment()
-      ->TryGetSystem<oxygen::scene::environment::SkySphere>();
-    result.solid_source = sphere->GetSource()
-      == oxygen::scene::environment::SkySphereSource::kSolidColor;
+    oxygen::vortex::RenderContext render_context;
+    render_context.scene = oxygen::observer_ptr { scene.get() };
+    const auto selected = oxygen::vortex::environment::ResolveSceneBackground(render_context);
+    result.presentation_source = selected.has_value() && *selected == observed.color;
+    result.hdr_sky_preserved = sphere.GetSolidColorRgb() == oxygen::Vec3(0.8F, 0.1F, 0.2F)
+      && sphere.GetIntensity() == 64.0F;
+    render_context.current_view.is_reflection_capture = true;
+    result.excluded_from_reflections = !oxygen::vortex::environment::ResolveSceneBackground(render_context).has_value();
+    render_context.current_view.is_reflection_capture = false;
     atmosphere.enabled = true;
     SetEnvironmentCommand reenable(atmosphere, PostProcessParams {});
     reenable.Execute(context);
+    render_context.current_view.with_atmosphere = true;
+    result.atmosphere_takes_precedence = !oxygen::vortex::environment::ResolveSceneBackground(render_context).has_value();
     observe.Execute(context);
     result.preserved_after_atmosphere_cycle = observed.atmosphere_enabled
       && observed.color == oxygen::Vec3(0.25F, 0.5F, 0.75F);
@@ -595,7 +611,10 @@ public:
     RunBackgroundContract(snapshot);
     AssertSucceeded(snapshot.status);
     Assert::IsTrue(snapshot.exists);
-    Assert::IsTrue(snapshot.solid_source);
+    Assert::IsTrue(snapshot.presentation_source);
+    Assert::IsTrue(snapshot.hdr_sky_preserved);
+    Assert::IsTrue(snapshot.excluded_from_reflections);
+    Assert::IsTrue(snapshot.atmosphere_takes_precedence);
     Assert::IsTrue(snapshot.atmosphere_disabled);
     Assert::IsTrue(snapshot.preserved_after_atmosphere_cycle);
     Assert::IsTrue(snapshot.invalid_rejected);
