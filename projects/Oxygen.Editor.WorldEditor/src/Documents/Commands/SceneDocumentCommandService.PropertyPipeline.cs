@@ -243,12 +243,26 @@ public sealed partial class SceneDocumentCommandService
         IReadOnlyDictionary<PropertyId, PropertyDescriptor> descriptors)
     {
         var touchedDescriptors = new List<PropertyDescriptor>(edit.Count);
-        foreach (var id in edit.Ids)
+        foreach (var id in GetAffectedPropertyIds(edit.Ids))
         {
             touchedDescriptors.Add(descriptors[id]);
         }
 
         return touchedDescriptors;
+    }
+
+    private static PropertyId[] GetAffectedPropertyIds(IEnumerable<PropertyId> editedProperties)
+    {
+        var ids = editedProperties.ToHashSet();
+        PropertyId[] rotation = [Transform.RotationX.Id, Transform.RotationY.Id, Transform.RotationZ.Id];
+        if (ids.Overlaps(rotation))
+        {
+            // Euler normalization can change another displayed axis while retaining
+            // one quaternion. History must capture the whole orientation.
+            ids.UnionWith(rotation);
+        }
+
+        return ids.ToArray();
     }
 
     private static PropertyOp BuildPropertyOp(
