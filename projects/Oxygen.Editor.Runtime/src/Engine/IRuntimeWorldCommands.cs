@@ -48,4 +48,11 @@ public interface IRuntimeWorldCommands
     /// <param name="cancellationToken">Cancels the observation wait.</param>
     /// <returns>The native state only if the requested activation remains current.</returns>
     public Task<RuntimeBackgroundObservation> ObserveBackgroundAsync(Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads stored atmosphere and post-process values for the current scene activation.</summary>
+    /// <param name="operationId">The observation identity.</param>
+    /// <param name="target">The scene activation to observe.</param>
+    /// <param name="cancellationToken">Cancels the observation wait.</param>
+    /// <returns>The native state only if the requested activation remains current.</returns>
+    public Task<RuntimeEnvironmentObservation> ObserveEnvironmentAsync(Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default);
 }

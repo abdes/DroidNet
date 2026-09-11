@@ -9,7 +9,7 @@ using Oxygen.Interop.World;
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Owns the concrete world/input facades and all native payload construction.</summary>
-internal sealed class NativeRuntimeCommandTransport(EngineContext context) : IRuntimeCommandTransport
+internal sealed partial class NativeRuntimeCommandTransport(EngineContext context) : IRuntimeCommandTransport
 {
     private readonly OxygenWorld world = new(context);
     private readonly OxygenInput input = new(context);
