@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
@@ -15,11 +17,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <param name="importService">The asset import service.</param>
 /// <param name="cookCoordinator">The shared project writer and lifetime coordinator.</param>
+/// <param name="cookDocuments">The registered saved-document owners.</param>
 /// <param name="logger">The logger.</param>
 /// <param name="projectContextService">Optional active project context service used for state queries.</param>
 public sealed partial class MaterialCookService(
     IImportService importService,
     IContentCookCoordinator cookCoordinator,
+    ICookDocumentRegistry cookDocuments,
     ILogger<MaterialCookService> logger,
     IProjectContextService? projectContextService = null) : IMaterialCookService
 {
@@ -48,15 +52,26 @@ public sealed partial class MaterialCookService(
                 OperationId: null);
         }
 
-        return await this.cookCoordinator.RunAsync(
+        return await this.cookCoordinator.RunCookAsync(
+            new(CookTargetKind.Asset, request.MaterialSourceUri),
             async (operation, token) =>
             {
+                CookRunContext.Report(new(Asset: new(request.MaterialSourceUri, ContentCookAssetKind.Material, CookAssetState.Preparing)));
                 if (!string.Equals(
                     Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.ProjectRoot)),
                     Path.TrimEndingDirectorySeparator(Path.GetFullPath(operation.Project.ProjectRoot)),
                     StringComparison.OrdinalIgnoreCase))
                 {
                     return new MaterialCookResult(request.MaterialSourceUri, CookedMaterialUri: null, MaterialCookState.Rejected, operation.OperationId);
+                }
+
+                using (var reads = await cookDocuments.AcquireAsync([Path.GetFullPath(Path.Combine(request.ProjectRoot, request.SourceRelativePath))], token).ConfigureAwait(false))
+                {
+                    var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
+                    if (dirty.Length != 0)
+                    {
+                        throw new CookInputsNeedSaveException(dirty);
+                    }
                 }
 
                 var result = await this.CookMaterialCoreAsync(request, token).ConfigureAwait(false);
@@ -208,6 +223,7 @@ public sealed partial class MaterialCookService(
 
         try
         {
+            CookRunContext.Report(new(Message: "Cooking material.", State: CookRunState.Cooking, Asset: new(request.MaterialSourceUri, ContentCookAssetKind.Material, CookAssetState.Cooking)));
             var result = await this.ImportMaterialAsync(request, virtualPath, cancellationToken).ConfigureAwait(false);
             return this.CreateCookResult(request, result);
         }
@@ -221,6 +237,7 @@ public sealed partial class MaterialCookService(
         }
         catch (Exception ex)
         {
+            CookRunContext.Report(new(Message: ex.Message, Severity: Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error));
             this.LogMaterialCookException(request.MaterialSourceUri, ex);
             return new MaterialCookResult(
                 request.MaterialSourceUri,
@@ -251,6 +268,17 @@ public sealed partial class MaterialCookService(
 
     private MaterialCookResult CreateCookResult(MaterialCookRequest request, ImportResult result)
     {
+        foreach (var diagnostic in result.Diagnostics)
+        {
+            var severity = diagnostic.Severity switch
+            {
+                ImportDiagnosticSeverity.Error => Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error,
+                ImportDiagnosticSeverity.Warning => Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning,
+                _ => Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Info,
+            };
+            CookRunContext.Report(new(Message: diagnostic.Message, Severity: severity));
+        }
+
         if (!result.Succeeded)
         {
             this.LogMaterialCookFailed(request.MaterialSourceUri, result.Diagnostics.Count, SummarizeDiagnostics(result.Diagnostics));
@@ -270,6 +298,7 @@ public sealed partial class MaterialCookService(
         }
 
         this.LogMaterialCookSucceeded(request.MaterialSourceUri, cookedUri, result.Imported.Count, result.Diagnostics.Count);
+        CookRunContext.Report(new(Asset: new(request.MaterialSourceUri, ContentCookAssetKind.Material, CookAssetState.Updated)));
         return new MaterialCookResult(
             request.MaterialSourceUri,
             cookedUri,

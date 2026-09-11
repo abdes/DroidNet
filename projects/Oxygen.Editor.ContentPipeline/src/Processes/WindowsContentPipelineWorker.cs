@@ -25,14 +25,15 @@ internal sealed partial class WindowsContentPipelineWorker : IContentPipelineWor
         SafeJobHandle job,
         SafeProcessHandle process,
         StreamReader outputReader,
-        StreamReader errorReader)
+        StreamReader errorReader,
+        IProgress<ContentPipelineProcessOutput>? output)
     {
         this.job = job;
         this.process = process;
         this.outputReader = outputReader;
         this.errorReader = errorReader;
-        this.StandardOutput = outputReader.ReadToEndAsync();
-        this.StandardError = errorReader.ReadToEndAsync();
+        this.StandardOutput = ReadOutputAsync(outputReader, isStandardError: false, output);
+        this.StandardError = ReadOutputAsync(errorReader, isStandardError: true, output);
         this.Exit = this.WaitForJobExitAsync();
     }
 
@@ -87,8 +88,9 @@ internal sealed partial class WindowsContentPipelineWorker : IContentPipelineWor
 
     /// <summary>Creates a contained worker using its structured launch request.</summary>
     /// <param name="startInfo">The executable, arguments, and working directory.</param>
+    /// <param name="output">Optional observer for complete lines, drained even during cancellation.</param>
     /// <returns>The worker owning the job and output readers.</returns>
-    internal static IContentPipelineWorker Start(ProcessStartInfo startInfo)
+    internal static IContentPipelineWorker Start(ProcessStartInfo startInfo, IProgress<ContentPipelineProcessOutput>? output = null)
     {
         var commandLine = WindowsWorkerCommandLine.Create(startInfo);
         var ownedJob = CreateConfiguredJob();
@@ -108,7 +110,7 @@ internal sealed partial class WindowsContentPipelineWorker : IContentPipelineWor
             outputPipe.DisposeLocalCopyOfClientHandle();
             errorPipe.DisposeLocalCopyOfClientHandle();
             input.DisposeLocalCopyOfClientHandle();
-            var worker = new WindowsContentPipelineWorker(ownedJob, ownedProcess, ownedOutput, ownedError);
+            var worker = new WindowsContentPipelineWorker(ownedJob, ownedProcess, ownedOutput, ownedError, output);
             ownedJob = null;
             ownedProcess = null;
             ownedOutput = null;

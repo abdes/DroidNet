@@ -193,10 +193,10 @@ public sealed partial class ContentPipelineProcessRunnerTests
             Directory.Delete(this.Root, recursive: true);
         }
 
-        internal Task<ContentPipelineProcessResult> Run(IReadOnlyList<string> arguments)
+        internal Task<ContentPipelineProcessResult> Run(IReadOnlyList<string> arguments, IProgress<ContentPipelineProcessOutput>? output = null)
         {
             var executable = Path.Combine(AppContext.BaseDirectory, "WorkerProbe", "Oxygen.Editor.ContentPipeline.WorkerProbe.exe");
-            this.operation = new ContentPipelineProcessRunner().RunAsync(new(executable, arguments, this.Root), this.Cancellation.Token);
+            this.operation = new ContentPipelineProcessRunner().RunAsync(new(executable, arguments, this.Root, output), this.Cancellation.Token);
             return this.operation;
         }
     }

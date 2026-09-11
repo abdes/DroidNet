@@ -7,6 +7,14 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Owns the single editor cook writer and its project lifetime.</summary>
 public interface IContentCookCoordinator
 {
+    /// <summary>Queues an identified user-visible cook with session progress and scoped cancellation.</summary>
+    /// <typeparam name="T">The workflow result.</typeparam>
+    /// <param name="request">The original logical scope and trigger.</param>
+    /// <param name="work">Work invoked only while owning the shared writer.</param>
+    /// <param name="cancellationToken">Cancels the request and its owned work.</param>
+    /// <returns>The workflow result after its owned work finishes.</returns>
+    public Task<T> RunCookAsync<T>(Cooking.CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken);
+
     /// <summary>Queues work and enters its saved-input/publication scope only after acquiring the writer.</summary>
     /// <typeparam name="T">The workflow result.</typeparam>
     /// <param name="work">Work receiving the captured project and its linked cancellation token.</param>

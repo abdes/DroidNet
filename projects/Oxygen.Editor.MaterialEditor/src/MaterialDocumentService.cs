@@ -211,21 +211,6 @@ public sealed partial class MaterialDocumentService(
                 document.DocumentId,
                 document.MaterialUri,
                 document.SourcePath);
-            var operationId = this.PublishMaterialFailure(
-                MaterialOperationKinds.Cook,
-                document,
-                MaterialDiagnosticCodes.DescriptorDirty,
-                "Material cook was rejected.",
-                "Save the material descriptor before cooking it.",
-                FailureDomain.ContentPipeline);
-            var rejected = new MaterialCookResult(
-                document.MaterialUri,
-                CookedMaterialUri: null,
-                MaterialCookState.Rejected,
-                OperationId: operationId);
-            this.SetCookState(documentId, rejected.State);
-
-            return rejected;
         }
 
         var location = this.pathResolver.Resolve(document.MaterialUri);

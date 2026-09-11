@@ -40,7 +40,6 @@ public sealed partial class ImportToolContentPipelineApiTests
         _ = runner.Request.Arguments.Should().ContainInOrder(
             "--no-tui",
             "--no-color",
-            "--quiet",
             "--cooked-root",
             manifest.Output,
             "batch",
