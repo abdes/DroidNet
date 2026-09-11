@@ -51,7 +51,6 @@
                                     InputScope="Number"
                                     IsSpellCheckEnabled="False"
                                     IsTextPredictionEnabled="False"
-                                    Text="{Binding Path=NumberValue, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=TwoWay}"
                                     TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                     TextWrapping="Wrap"
                                     Visibility="Collapsed" />

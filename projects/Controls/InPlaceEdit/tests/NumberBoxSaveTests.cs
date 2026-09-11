@@ -32,6 +32,7 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
         var input = BeginTextInput(number);
         input.Text = "8";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        _ = number.NumberValue.Should().Be(5, "draft text is committed through the edit session");
 
         number.CompletePendingTextEdit();
         number.CompletePendingTextEdit();
@@ -59,6 +60,23 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
 
         _ = number.NumberValue.Should().Be(5);
         _ = completions.Should().Equal(NumberBoxEditCompletionKind.Cancel);
+    });
+
+    /// <summary>Opening the text editor does not round the value through XAML's string conversion.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task UnchangedTextCommitPreservesTheExactNumericValue() => EnqueueAsync(async () =>
+    {
+        const float original = 16f / 9f;
+        var number = new NumberBox { NumberValue = original, Mask = "~.###" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        _ = BeginTextInput(number);
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        _ = number.NumberValue.Should().Be(original);
+
+        number.CompletePendingTextEdit();
+
+        _ = number.NumberValue.Should().Be(original);
     });
 
     private static TextBox BeginTextInput(NumberBox number)
