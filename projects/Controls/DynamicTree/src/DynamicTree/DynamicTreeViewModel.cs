@@ -255,7 +255,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     <see cref="TreeItemAddedEventArgs.RelativeIndex"/> (child index), not the visual index.</para>
     /// </remarks>
     /// <returns>A task that completes when the insertion finishes.</returns>
-    public async Task InsertItemAsync(ITreeItem item, ITreeItem parent, int relativeIndex)
+    public virtual async Task InsertItemAsync(ITreeItem item, ITreeItem parent, int relativeIndex)
         => await this.DisplayHelper.InsertItemAsync(item, parent, relativeIndex).ConfigureAwait(true);
 
     /// <summary>
@@ -272,7 +272,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     with expansion/collapse and virtualization.</para>
     /// </remarks>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
+    public virtual async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
         => await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
 
     /// <summary>
@@ -310,7 +310,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     undo/redo, because those reflect the actual indices used.</para>
     /// </remarks>
     /// <returns>A task that completes once the move finishes.</returns>
-    public Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
+    public virtual Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
         => this.DisplayHelper.MoveItemAsync(item, newParent, newIndex);
 
     /// <summary>
@@ -327,7 +327,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     Use the <see cref="TreeItemsMovedEventArgs.Moves"/> entries for reliable undo/redo.</para>
     /// </remarks>
     /// <returns>A task that completes once the batch move finishes.</returns>
-    public Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
+    public virtual Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
         => this.DisplayHelper.MoveItemsAsync(items, newParent, startIndex);
 
     /// <summary>
@@ -336,7 +336,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="item">The item whose shown position should change.</param>
     /// <param name="newIndex">The new zero-based index among the current parent&apos;s children.</param>
     /// <returns>A task that completes once the reorder finishes.</returns>
-    public Task ReorderItemAsync(ITreeItem item, int newIndex)
+    public virtual Task ReorderItemAsync(ITreeItem item, int newIndex)
         => this.DisplayHelper.ReorderItemAsync(item, newIndex);
 
     /// <summary>
@@ -345,7 +345,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="items">The ordered list of items to reposition.</param>
     /// <param name="startIndex">The destination index of the first item in <paramref name="items" />.</param>
     /// <returns>A task that completes once the block reorder finishes.</returns>
-    public Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
+    public virtual Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
         => this.DisplayHelper.ReorderItemsAsync(items, startIndex);
 
     /// <summary>
