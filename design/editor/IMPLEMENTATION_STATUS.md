@@ -487,8 +487,8 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 - [x] 07A.2 camera/light/environment gesture sessions and cancellation: packaged
       controls pass numeric/picker, history, wheel, selection and real Escape cases;
       inspector tests 40/40 and shared controls 50/50.
-- [ ] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:
-      inline near/far/aspect and selection tests pass; final dependency coverage remains.
+- [x] 07A.3 revision/target-scoped inline diagnostics and affected-field invalidation:
+      inline numeric, selection and sun removal/restoration cases pass; inspector 42/42.
 - [x] 07A.4 offline/reconnect/lifetime convergence with failed work retained;
       WorldEditor 131/131 and Runtime 61/61 regressions pass.
 - [x] 07A.5 shared atomic writes and inline scene/material conflict recovery (#7),
