@@ -172,6 +172,7 @@ target_link_libraries(
 m_gtest_program(
   AsyncImportGeometryDescriptor
   SOURCES
+    "Import/BuiltinGeometryCatalog_test.cpp"
     "Import/GeometryDescriptorImportJob_test.cpp"
     "Import/ImportManifest_geometry_descriptor_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_test.cpp"

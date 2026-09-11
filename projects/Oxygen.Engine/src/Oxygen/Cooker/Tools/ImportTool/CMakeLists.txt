@@ -35,6 +35,8 @@ add_executable(
   ${META_MODULE_TARGET}
   "BatchCommand.cpp"
   "BatchCommand.h"
+  "BuiltinCatalogCommand.cpp"
+  "BuiltinCatalogCommand.h"
   "CliBuilder.cpp"
   "CliBuilder.h"
   "FbxCommand.cpp"

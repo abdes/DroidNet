@@ -14,6 +14,8 @@
 
 namespace {
 
+namespace recipe = oxygen::data::procedural;
+
 auto BuildMesh(std::string_view name,
   std::vector<oxygen::data::Vertex> vertices, std::vector<uint32_t> indices)
   -> std::unique_ptr<oxygen::data::Mesh>
@@ -22,15 +24,17 @@ auto BuildMesh(std::string_view name,
   using oxygen::data::MeshBuilder;
   using oxygen::data::pak::geometry::MeshViewDesc;
 
+  const auto vertex_count = static_cast<uint32_t>(vertices.size());
+  const auto index_count = static_cast<uint32_t>(indices.size());
   auto mesh = MeshBuilder(0, name)
                 .WithVertices(std::move(vertices))
                 .WithIndices(std::move(indices))
                 .BeginSubMesh("default", MaterialAsset::CreateDefault())
                 .WithMeshView(MeshViewDesc {
                   .first_index = 0,
-                  .index_count = static_cast<uint32_t>(indices.size()),
+                  .index_count = index_count,
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                  .vertex_count = vertex_count,
                 })
                 .EndSubMesh()
                 .Build();
@@ -46,7 +50,8 @@ auto HandleSphereMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(16u, 32u);
+  auto defaults = std::make_tuple(
+    recipe::kSphereLatitudeSegments, recipe::kSphereLongitudeSegments);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -78,7 +83,7 @@ auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(2U);
+  auto defaults = std::make_tuple(recipe::kIcoSphereSubdivisionLevel);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -110,7 +115,7 @@ auto HandleSubdividedCubeMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(6U);
+  auto defaults = std::make_tuple(recipe::kSubdividedCubeSegments);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -142,7 +147,8 @@ auto HandlePlaneMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(1u, 1u, 1.0f);
+  auto defaults = std::make_tuple(
+    recipe::kPlaneXSegments, recipe::kPlaneZSegments, recipe::kPlaneSize);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -174,7 +180,8 @@ auto HandleCylinderMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(16u, 1.0f, 0.5f);
+  auto defaults = std::make_tuple(recipe::kCylinderSegments,
+    recipe::kCylinderHeight, recipe::kCylinderRadius);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -206,7 +213,8 @@ auto HandleConeMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(16u, 1.0f, 0.5f);
+  auto defaults = std::make_tuple(
+    recipe::kConeSegments, recipe::kConeHeight, recipe::kConeRadius);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -238,7 +246,9 @@ auto HandleTorusMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(32u, 16u, 1.0f, 0.25f);
+  auto defaults
+    = std::make_tuple(recipe::kTorusMajorSegments, recipe::kTorusMinorSegments,
+      recipe::kTorusMajorRadius, recipe::kTorusMinorRadius);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -270,7 +280,7 @@ auto HandleQuadMesh(std::span<const std::byte> param_blob)
 {
   using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
-  auto defaults = std::make_tuple(1.0f, 1.0f);
+  auto defaults = std::make_tuple(recipe::kQuadWidth, recipe::kQuadHeight);
   if (!param_blob.empty()) {
     MemoryStream stream(std::span<std::byte>(
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
@@ -380,43 +390,12 @@ auto ParseGeneratorAndMeshName(std::string_view full_name)
 auto oxygen::data::GenerateMeshBuffers(std::string_view full_name,
   std::span<const std::byte> param_blob) -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
-  using oxygen::serio::Reader;
-
-  // Parse Generator/MeshName
-  auto [generator_id, mesh_name] = ParseGeneratorAndMeshName(full_name);
+  const auto [generator_id, mesh_name] = ParseGeneratorAndMeshName(full_name);
   if (generator_id.empty() || mesh_name.empty()) {
-    // Invalid format
     return std::nullopt;
   }
-
-  std::optional<MeshDataPair> mesh_data;
-
-  if (generator_id == "Cube") {
-    mesh_data = MakeCubeMeshAsset();
-  } else if (generator_id == "SubdividedCube") {
-    mesh_data = HandleSubdividedCubeMesh(param_blob);
-  } else if (generator_id == "ArrowGizmo") {
-    mesh_data = MakeArrowGizmoMeshAsset();
-  } else if (generator_id == "Sphere") {
-    mesh_data = HandleSphereMesh(param_blob);
-  } else if (generator_id == "IcoSphere" || generator_id == "GeodesicSphere") {
-    mesh_data = HandleIcoSphereMesh(param_blob);
-  } else if (generator_id == "Plane") {
-    mesh_data = HandlePlaneMesh(param_blob);
-  } else if (generator_id == "Cylinder") {
-    mesh_data = HandleCylinderMesh(param_blob);
-  } else if (generator_id == "Cone") {
-    mesh_data = HandleConeMesh(param_blob);
-  } else if (generator_id == "Torus") {
-    mesh_data = HandleTorusMesh(param_blob);
-  } else if (generator_id == "Quad") {
-    mesh_data = HandleQuadMesh(param_blob);
-  }
-
-  return mesh_data;
+  return InvokeGenerator(generator_id, param_blob);
 }
-
 auto oxygen::data::GenerateMesh(std::string_view full_name,
   std::span<const std::byte> param_blob) -> std::unique_ptr<oxygen::data::Mesh>
 {

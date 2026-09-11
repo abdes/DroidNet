@@ -55,6 +55,7 @@ set(
   "AssetKey.h"
   "AssetType.h"
   "BufferResource.h"
+  "BuiltinGeometry.h"
   "ComponentType.h"
   "GeometryAsset.h"
   "HalfFloat.h"
@@ -81,6 +82,7 @@ set(
   "PhysicsResource.h"
   "PhysicsSceneAsset.h"
   "ProceduralMeshes.h"
+  "ProceduralMeshDefaults.h"
   "SceneAsset.h"
   "ScriptAsset.h"
   "ScriptResource.h"
@@ -94,6 +96,7 @@ set(
   OXYGEN_DATA_PRIVATE_SOURCES
   "AssetKey.cpp"
   "BufferResource.cpp"
+  "BuiltinGeometry.cpp"
   "CookedSource.cpp"
   "GeometryAsset.cpp"
   "InputActionAsset.cpp"

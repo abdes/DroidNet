@@ -33,6 +33,7 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/BuiltinCatalogCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/CliBuilder.h>
 #include <Oxygen/Cooker/Tools/ImportTool/FbxCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
@@ -698,6 +699,8 @@ auto main(int argc, char** argv) -> int
     GlobalOptions global_options;
     global_options.command_line = BuildCommandLineString(argc, argv);
     BatchCommand batch_command(&global_options);
+    oxygen::content::import::tool::BuiltinCatalogCommand
+      builtin_catalog_command;
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
@@ -714,6 +717,7 @@ auto main(int argc, char** argv) -> int
       &scripting_sidecar_command,
       &physics_sidecar_command,
       &batch_command,
+      &builtin_catalog_command,
     };
 
     AsyncImportService::Config service_config {};
@@ -759,9 +763,11 @@ auto main(int argc, char** argv) -> int
     }
 
     if (options_valid && !is_meta_command) {
-      service_owner = CreateImportService(*active_command, service_config,
-        thread_pool_size_set, concurrency_override_set, exit_code,
-        options_valid);
+      if (active_command->RequiresImportService()) {
+        service_owner = CreateImportService(*active_command, service_config,
+          thread_pool_size_set, concurrency_override_set, exit_code,
+          options_valid);
+      }
 
       if (service_owner != nullptr) {
         global_options.import_service

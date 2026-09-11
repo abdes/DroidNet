@@ -43,6 +43,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -54,6 +55,7 @@ namespace {
   using nlohmann::json;
   using nlohmann::json_schema::json_validator;
   namespace lc = oxygen::content::lc;
+  namespace recipe = oxygen::data::procedural;
 
   struct Bounds3 final {
     std::array<float, 3> min {};
@@ -516,32 +518,35 @@ namespace {
 
     auto ok = true;
     if (generator == "Sphere") {
-      ok = write_u32("latitude_segments", params, 16U)
-        && write_u32("longitude_segments", params, 32U);
+      ok = write_u32(
+             "latitude_segments", params, recipe::kSphereLatitudeSegments)
+        && write_u32(
+          "longitude_segments", params, recipe::kSphereLongitudeSegments);
     } else if (generator == "SubdividedCube") {
-      ok = write_u32("segments", params, 6U);
+      ok = write_u32("segments", params, recipe::kSubdividedCubeSegments);
     } else if (generator == "IcoSphere" || generator == "GeodesicSphere") {
-      ok = write_u32("subdivision_level", params, 2U);
+      ok = write_u32(
+        "subdivision_level", params, recipe::kIcoSphereSubdivisionLevel);
     } else if (generator == "Plane") {
-      ok = write_u32("x_segments", params, 1U)
-        && write_u32("z_segments", params, 1U)
-        && write_f32("size", params, 1.0F);
+      ok = write_u32("x_segments", params, recipe::kPlaneXSegments)
+        && write_u32("z_segments", params, recipe::kPlaneZSegments)
+        && write_f32("size", params, recipe::kPlaneSize);
     } else if (generator == "Cylinder") {
-      ok = write_u32("segments", params, 16U)
-        && write_f32("height", params, 1.0F)
-        && write_f32("radius", params, 0.5F);
+      ok = write_u32("segments", params, recipe::kCylinderSegments)
+        && write_f32("height", params, recipe::kCylinderHeight)
+        && write_f32("radius", params, recipe::kCylinderRadius);
     } else if (generator == "Cone") {
-      ok = write_u32("segments", params, 16U)
-        && write_f32("height", params, 1.0F)
-        && write_f32("radius", params, 0.5F);
+      ok = write_u32("segments", params, recipe::kConeSegments)
+        && write_f32("height", params, recipe::kConeHeight)
+        && write_f32("radius", params, recipe::kConeRadius);
     } else if (generator == "Torus") {
-      ok = write_u32("major_segments", params, 32U)
-        && write_u32("minor_segments", params, 16U)
-        && write_f32("major_radius", params, 1.0F)
-        && write_f32("minor_radius", params, 0.25F);
+      ok = write_u32("major_segments", params, recipe::kTorusMajorSegments)
+        && write_u32("minor_segments", params, recipe::kTorusMinorSegments)
+        && write_f32("major_radius", params, recipe::kTorusMajorRadius)
+        && write_f32("minor_radius", params, recipe::kTorusMinorRadius);
     } else if (generator == "Quad") {
-      ok
-        = write_f32("width", params, 1.0F) && write_f32("height", params, 1.0F);
+      ok = write_f32("width", params, recipe::kQuadWidth)
+        && write_f32("height", params, recipe::kQuadHeight);
     } else {
       // Cube and ArrowGizmo do not consume params.
       ok = true;
