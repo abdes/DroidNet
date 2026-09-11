@@ -11,7 +11,8 @@ namespace Oxygen.Editor.Diagnostics;
 /// <summary>
 /// Adapts operation results into output-console summary log entries.
 /// </summary>
-public sealed class OperationResultOutputLogAdapter : IObserver<OperationResult>, IDisposable
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+internal sealed partial class OperationResultOutputLogAdapter : IObserver<OperationResult>, IDisposable
 {
     private readonly OutputLogBuffer buffer;
     private readonly IDisposable subscription;

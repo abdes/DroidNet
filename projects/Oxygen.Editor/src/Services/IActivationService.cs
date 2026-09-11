@@ -57,6 +57,7 @@ namespace Oxygen.Editor.Services;
 /// </description>
 /// </item>
 /// </list>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "The public WinUI App constructor exposes this activation contract for host composition.")]
 public interface IActivationService : IObservable<object>
 {
     /// <summary>

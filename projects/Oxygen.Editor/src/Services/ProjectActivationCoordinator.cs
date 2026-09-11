@@ -4,18 +4,19 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Services;
 
 /// <summary>
 /// Host-owned coordinator for project open/create and workspace activation.
 /// </summary>
-public sealed class ProjectActivationCoordinator(
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+internal sealed partial class ProjectActivationCoordinator(
     IRouter router,
     IProjectValidationService validation,
     IProjectCreationService creation,
