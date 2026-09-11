@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include <glm/vec3.hpp>
@@ -23,7 +25,9 @@ struct alignas(packing::kShaderDataFieldAlignment) LightingFrameBindings {
   ShaderVisibleIndex light_view_data_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex grid_metadata_buffer_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex grid_indirection_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex directional_light_indices_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex directional_light_indices_srv {
+    kInvalidShaderVisibleIndex
+  };
 
   glm::ivec3 grid_size { 0 };
   float reserved_grid0 { 0.0F };
@@ -42,6 +46,7 @@ struct alignas(packing::kShaderDataFieldAlignment) LightingFrameBindings {
   std::uint32_t reserved_flags { 0U };
 
   glm::vec4 pre_view_translation_offset { 0.0F };
+  std::array<std::uint32_t, 3> reserved_directional_alignment {};
 
   DirectionalLightForwardData directional {};
 
@@ -49,11 +54,20 @@ struct alignas(packing::kShaderDataFieldAlignment) LightingFrameBindings {
   // the old placeholder binding shape to the richer lighting contract.
   ShaderVisibleIndex directional_lights_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex positional_lights_slot { kInvalidShaderVisibleIndex };
+  std::array<std::uint32_t, 2> reserved_tail {};
 };
 
 static_assert(
   alignof(LightingFrameBindings) == packing::kShaderDataFieldAlignment);
+static_assert(sizeof(LightingFrameBindings) == 208);
+static_assert(offsetof(LightingFrameBindings, has_directional_light) == 68);
 static_assert(
-  sizeof(LightingFrameBindings) % packing::kShaderDataFieldAlignment == 0);
+  offsetof(LightingFrameBindings, pre_view_translation_offset) == 84);
+static_assert(
+  offsetof(LightingFrameBindings, reserved_directional_alignment) == 100);
+static_assert(offsetof(LightingFrameBindings, directional) == 112);
+static_assert(offsetof(LightingFrameBindings, directional_lights_slot) == 192);
+static_assert(offsetof(LightingFrameBindings, positional_lights_slot) == 196);
+static_assert(offsetof(LightingFrameBindings, reserved_tail) == 200);
 
 } // namespace oxygen::vortex

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <glm/vec3.hpp>
@@ -58,8 +59,9 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
 
 static_assert(
   alignof(DirectionalLightForwardData) == packing::kShaderDataFieldAlignment);
-static_assert(
-  sizeof(DirectionalLightForwardData) % packing::kShaderDataFieldAlignment
-  == 0);
+static_assert(sizeof(DirectionalLightForwardData) == 80);
+static_assert(offsetof(DirectionalLightForwardData, color) == 16);
+static_assert(offsetof(DirectionalLightForwardData, illuminance_lux) == 28);
+static_assert(offsetof(DirectionalLightForwardData, light_flags) == 64);
 
 } // namespace oxygen::vortex
