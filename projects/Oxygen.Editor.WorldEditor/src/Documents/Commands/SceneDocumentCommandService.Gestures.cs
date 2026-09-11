@@ -114,7 +114,10 @@ public sealed partial class SceneDocumentCommandService
         if (string.Equals(kind, SceneEnvironmentKind, StringComparison.Ordinal) && targets[context.Scene.Id] is SceneEnvironmentPropertyTarget environment)
         {
             context.Scene.SetEnvironment(environment.Value);
-            ApplyEnvironmentSunBinding(context.Scene, environment.Value.SunNodeId);
+            if (snapshot.PerNode[context.Scene.Id].Contains(SceneEnvironment.SunNodeId.Id))
+            {
+                ApplyEnvironmentSunBinding(context.Scene, environment.Value.SunNodeId);
+            }
         }
     }
 

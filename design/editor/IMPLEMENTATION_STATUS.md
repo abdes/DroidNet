@@ -492,7 +492,8 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 - [ ] 07A.5 shared atomic write/conflict safety (#7), preserving landed #4 revisions.
 - [x] 07A.7 active loop supervision/state diagnostics and restart isolation (#6),
       with Runtime direct-service and native regressions passing 59/59.
-- [ ] 07A.8 material document history and edit sessions (#9).
+- [x] 07A.8 material document history and edit sessions (#9); MaterialEditor 38/38,
+      including document-scoped UI command routing and focused input at close.
 - [ ] 07A.6 complete actual-control/native field and transition evidence.
 
 ### ED-M07B - Safe Content Publication And Compatibility

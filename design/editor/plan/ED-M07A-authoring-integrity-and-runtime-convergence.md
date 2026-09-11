@@ -158,6 +158,14 @@ in unchanged portions of the command service are retained for the final cleanup.
 The visible color-change and control save/reopen cases remain in 07A.6; this native
 observation evidence does not close the milestone's presented-state gate.
 
+Control-to-native qualification (2026-09-11): a packaged WinUI test now drives the
+actual environment toggle and color picker through scene commands, the public
+EngineService and real SceneEngineSync. One hundred picker samples produce one
+color history entry. Native background reads confirm RGB `(100/255, 64/255,
+128/255)` with atmosphere off, the previous RGB after undo, and the chosen RGB
+after redo and atomic Save/reopen into a new document lifetime. The headless test
+does not present a viewport; the user-visible background check remains pending.
+
 ### 07A.2 - Real Gesture Sessions For Existing Inspectors
 
 Connect numeric drag, text commit, color gesture, and wheel begin/preview/commit/
@@ -208,6 +216,25 @@ The generated XAML connections match their control types in all four modified
 inspector views. The user confirmed scene selection opens the inspector after
 the TransformView connection-ID regression was corrected. This is one observed
 UI case; the complete field/dependency and control/native table is still open.
+
+Additional control and dependency qualification (2026-09-11): environment model
+notifications now refresh the bound inspector after undo/redo. Sun candidates
+and stale-reference feedback follow node/component removal, re-addition and
+scene switches. Diagnostic objects remain stable when XAML binds before the
+scene arrives. Ground albedo, sky luminance and background VectorBoxes now wire
+their child-control gesture sessions and inline feedback. Unrelated environment
+edits and their history no longer overwrite independently authored sun flags;
+the sun side effects run only for an explicit sun-reference edit.
+
+WorldEditor tests pass 140/140. Eleven packaged editor UI tests pass, including
+all five modified inspector/material views loading, actual camera near/far and
+zero-scale text validation, valid correction, three 100-sample environment vector
+gestures, and the native background workflow above. Two realized NumberBox tests
+also prove save-time valid commit, invalid cancellation and duplicate-terminal
+protection. Synthetic lifecycle samples exercise actual controls and bindings;
+the generic control cases use a managed sync substitute, while the background
+workflow runs the real native engine. These bounded cases do not replace the
+remaining complete per-field/runtime table or final user-visible qualification.
 
 ### 07A.4 - Revision-Aware Offline Convergence
 

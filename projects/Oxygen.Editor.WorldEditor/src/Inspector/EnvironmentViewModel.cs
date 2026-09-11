@@ -22,7 +22,7 @@ public partial class EnvironmentViewModel(
     ISceneDocumentCommandService? commandService = null,
     Func<SceneDocumentCommandContext?>? commandContextProvider = null) : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
-    private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldDiagnostics fieldDiagnostics = new();
 
     private InspectorEditSessionCoordinator? edits;
     private Scene? scene;
@@ -213,127 +213,130 @@ public partial class EnvironmentViewModel(
     public bool IsToneMappingControlsVisible => this.ToneMapping != ToneMappingMode.None;
 
     /// <summary>Gets current diagnostics for AtmosphereEnabled.</summary>
-    public InspectorFieldDiagnostic AtmosphereEnabledDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AtmosphereEnabledDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id);
+
+    /// <summary>Gets current feedback for the scene's sun reference.</summary>
+    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SunNodeId.Id);
 
     /// <summary>Gets current diagnostics for ExposureEnabled.</summary>
-    public InspectorFieldDiagnostic ExposureEnabledDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic ExposureEnabledDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled.Id);
 
     /// <summary>Gets current diagnostics for ManualExposureEv.</summary>
-    public InspectorFieldDiagnostic ManualExposureEvDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic ManualExposureEvDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ManualExposureEv.Id);
 
     /// <summary>Gets current diagnostics for ExposureCompensation.</summary>
-    public InspectorFieldDiagnostic ExposureCompensationDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic ExposureCompensationDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureCompensation.Id);
 
     /// <summary>Gets current diagnostics for ExposureKey.</summary>
-    public InspectorFieldDiagnostic ExposureKeyDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureKey.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic ExposureKeyDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureKey.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureMeteringMode.</summary>
-    public InspectorFieldDiagnostic AutoExposureMeteringModeDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureMeteringModeDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMode.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureMinEv.</summary>
-    public InspectorFieldDiagnostic AutoExposureMinEvDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureMinEvDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureMaxEv.</summary>
-    public InspectorFieldDiagnostic AutoExposureMaxEvDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureMaxEvDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureSpeedUp.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpeedUpDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureSpeedUpDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedUp.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureSpeedDown.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpeedDownDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureSpeedDownDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpeedDown.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureLowPercentile.</summary>
-    public InspectorFieldDiagnostic AutoExposureLowPercentileDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureLowPercentileDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureHighPercentile.</summary>
-    public InspectorFieldDiagnostic AutoExposureHighPercentileDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureHighPercentileDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureMinLogLuminance.</summary>
-    public InspectorFieldDiagnostic AutoExposureMinLogLuminanceDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureMinLogLuminanceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinLogLuminance.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureLogLuminanceRange.</summary>
-    public InspectorFieldDiagnostic AutoExposureLogLuminanceRangeDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureLogLuminanceRangeDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureLogLuminanceRange.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureTargetLuminance.</summary>
-    public InspectorFieldDiagnostic AutoExposureTargetLuminanceDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureTargetLuminanceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureTargetLuminance.Id);
 
     /// <summary>Gets current diagnostics for AutoExposureSpotMeterRadius.</summary>
-    public InspectorFieldDiagnostic AutoExposureSpotMeterRadiusDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AutoExposureSpotMeterRadiusDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius.Id);
 
     /// <summary>Gets current diagnostics for BloomIntensity.</summary>
-    public InspectorFieldDiagnostic BloomIntensityDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BloomIntensity.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic BloomIntensityDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BloomIntensity.Id);
 
     /// <summary>Gets current diagnostics for BloomThreshold.</summary>
-    public InspectorFieldDiagnostic BloomThresholdDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BloomThreshold.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic BloomThresholdDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BloomThreshold.Id);
 
     /// <summary>Gets current diagnostics for Saturation.</summary>
-    public InspectorFieldDiagnostic SaturationDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.Saturation.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SaturationDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.Saturation.Id);
 
     /// <summary>Gets current diagnostics for Contrast.</summary>
-    public InspectorFieldDiagnostic ContrastDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.Contrast.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic ContrastDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.Contrast.Id);
 
     /// <summary>Gets current diagnostics for VignetteIntensity.</summary>
-    public InspectorFieldDiagnostic VignetteIntensityDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic VignetteIntensityDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.VignetteIntensity.Id);
 
     /// <summary>Gets current diagnostics for DisplayGamma.</summary>
-    public InspectorFieldDiagnostic DisplayGammaDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.DisplayGamma.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic DisplayGammaDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.DisplayGamma.Id);
 
     /// <summary>Gets current diagnostics for PlanetRadiusKm.</summary>
-    public InspectorFieldDiagnostic PlanetRadiusKmDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic PlanetRadiusKmDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.PlanetRadiusMeters.Id);
 
     /// <summary>Gets current diagnostics for AtmosphereHeightKm.</summary>
-    public InspectorFieldDiagnostic AtmosphereHeightKmDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AtmosphereHeightKmDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters.Id);
 
     /// <summary>Gets current diagnostics for GroundAlbedoR.</summary>
-    public InspectorFieldDiagnostic GroundAlbedoRDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic GroundAlbedoRDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id);
 
     /// <summary>Gets current diagnostics for GroundAlbedoG.</summary>
-    public InspectorFieldDiagnostic GroundAlbedoGDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic GroundAlbedoGDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id);
 
     /// <summary>Gets current diagnostics for GroundAlbedoB.</summary>
-    public InspectorFieldDiagnostic GroundAlbedoBDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic GroundAlbedoBDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo.Id);
 
     /// <summary>Gets current diagnostics for RayleighScaleHeightKm.</summary>
-    public InspectorFieldDiagnostic RayleighScaleHeightKmDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic RayleighScaleHeightKmDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters.Id);
 
     /// <summary>Gets current diagnostics for MieScaleHeightKm.</summary>
-    public InspectorFieldDiagnostic MieScaleHeightKmDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic MieScaleHeightKmDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.MieScaleHeightMeters.Id);
 
     /// <summary>Gets current diagnostics for MieAnisotropy.</summary>
-    public InspectorFieldDiagnostic MieAnisotropyDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic MieAnisotropyDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.MieAnisotropy.Id);
 
     /// <summary>Gets current diagnostics for SkyLuminanceR.</summary>
-    public InspectorFieldDiagnostic SkyLuminanceRDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SkyLuminanceRDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id);
 
     /// <summary>Gets current diagnostics for SkyLuminanceG.</summary>
-    public InspectorFieldDiagnostic SkyLuminanceGDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SkyLuminanceGDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id);
 
     /// <summary>Gets current diagnostics for SkyLuminanceB.</summary>
-    public InspectorFieldDiagnostic SkyLuminanceBDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SkyLuminanceBDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SkyLuminance.Id);
 
     /// <summary>Gets current diagnostics for AerialPerspectiveDistanceScale.</summary>
-    public InspectorFieldDiagnostic AerialPerspectiveDistanceScaleDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AerialPerspectiveDistanceScaleDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveDistanceScale.Id);
 
     /// <summary>Gets current diagnostics for AerialScatteringStrength.</summary>
-    public InspectorFieldDiagnostic AerialScatteringStrengthDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AerialScatteringStrengthDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialScatteringStrength.Id);
 
     /// <summary>Gets current diagnostics for AerialPerspectiveStartDepthMeters.</summary>
-    public InspectorFieldDiagnostic AerialPerspectiveStartDepthMetersDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AerialPerspectiveStartDepthMetersDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id);
 
     /// <summary>Gets current diagnostics for HeightFogContribution.</summary>
-    public InspectorFieldDiagnostic HeightFogContributionDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic HeightFogContributionDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.HeightFogContribution.Id);
 
     /// <summary>Gets current diagnostics for SunDiskEnabled.</summary>
-    public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled.Id);
 
     /// <summary>Gets current diagnostics for BackgroundR.</summary>
-    public InspectorFieldDiagnostic BackgroundRDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic BackgroundRDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id);
 
     /// <summary>Gets current diagnostics for BackgroundG.</summary>
-    public InspectorFieldDiagnostic BackgroundGDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic BackgroundGDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id);
 
     /// <summary>Gets current diagnostics for BackgroundB.</summary>
-    public InspectorFieldDiagnostic BackgroundBDiagnostic => this.edits?.Diagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic BackgroundBDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id);
 
     /// <inheritdoc/>
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
@@ -379,11 +382,15 @@ public partial class EnvironmentViewModel(
 
         if (this.edits is null && commandService is not null && commandContextProvider is not null)
         {
-            this.edits = new(commandService, commandContextProvider, "Edit Environment", this.RefreshFromScene, environment: true);
+            this.edits = new(commandService, commandContextProvider, "Edit Environment", this.RefreshFromScene, environment: true, this.fieldDiagnostics);
+            this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
+            this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
         }
 
+        this.DetachSceneObservers();
         this.edits?.Bind(value is null ? [] : [value.Id]);
         this.scene = value;
+        this.AttachSceneObservers();
         this.RefreshFromScene();
     }
 
@@ -430,6 +437,7 @@ public partial class EnvironmentViewModel(
     {
         if (disposing)
         {
+            this.DetachSceneObservers();
             this.edits?.Dispose();
         }
     }

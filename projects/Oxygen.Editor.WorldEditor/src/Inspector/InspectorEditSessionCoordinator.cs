@@ -14,7 +14,8 @@ internal sealed partial class InspectorEditSessionCoordinator(
     Func<SceneDocumentCommandContext?> contextProvider,
     string label,
     Action refresh,
-    bool environment = false) : IDisposable
+    bool environment = false,
+    InspectorFieldDiagnostics? diagnostics = null) : IDisposable
 {
     private readonly List<Task> pending = [];
     private Guid[] targets = [];
@@ -25,7 +26,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     private bool refreshingResult;
 
     /// <summary>Gets the current diagnostics for the bound fields.</summary>
-    public InspectorFieldDiagnostics Diagnostics { get; } = new();
+    public InspectorFieldDiagnostics Diagnostics { get; } = diagnostics ?? new();
 
     /// <summary>Gets the identity of the current binding lifetime.</summary>
     public Guid ScopeId { get; private set; } = Guid.NewGuid();

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <RootNamespace>Oxygen.Editor.World.Tests</RootNamespace>
+        <AssemblyName>Oxygen.Editor.WorldEditor.UI.Tests</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ApplicationManifest>$(ProjectsRoot)\Controls\InPlaceEdit\tests\Properties\app.manifest</ApplicationManifest>
+        <PublishProfile />
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <Content Include="$(ProjectsRoot)\Controls\InPlaceEdit\tests\Assets\*">
+            <Link>Assets\%(Filename)%(Extension)</Link>
+        </Content>
+    </ItemGroup>
+    <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
+        <None Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>%(Filename)%(Extension)</Link>
+        </None>
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
+</Project>
