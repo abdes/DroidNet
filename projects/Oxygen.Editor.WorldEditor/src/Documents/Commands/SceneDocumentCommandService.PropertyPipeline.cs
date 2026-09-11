@@ -2,16 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Numerics;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;

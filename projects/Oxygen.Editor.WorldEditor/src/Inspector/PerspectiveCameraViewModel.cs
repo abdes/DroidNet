@@ -5,7 +5,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;

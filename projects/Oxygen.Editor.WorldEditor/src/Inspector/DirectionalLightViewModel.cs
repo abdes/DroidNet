@@ -4,12 +4,9 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Controls;
-using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;

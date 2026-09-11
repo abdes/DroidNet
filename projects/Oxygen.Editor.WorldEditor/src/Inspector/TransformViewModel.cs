@@ -8,10 +8,10 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Inspector;
 
