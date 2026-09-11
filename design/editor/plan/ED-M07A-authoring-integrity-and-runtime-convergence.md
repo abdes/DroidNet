@@ -271,6 +271,13 @@ close/reopen, automatic recovery and disposal. Runtime tests pass 61/61, includi
 pending scene/node cancellation and old-activation isolation. Required visible
 control/native field evidence remains in 07A.6.
 
+Open-document activation follow-up (2026-09-11): Scene Explorer now reuses the
+registered authoring model when switching back to an open scene. It no longer
+rereads disk and replaces unsaved state/history during tab activation. A direct
+view-model transition test switches between two scenes and back, verifies the
+same dirty source and adapters, and asserts that no disk reload occurred.
+WorldEditor tests pass 141/141 with this case and the later control feedback work.
+
 ### 07A.5 - Shared Atomic Save And Conflict Safety (#7)
 
 Preserve the landed #4 snapshot/revision and writer serialization. Factor the
@@ -314,6 +321,14 @@ Conflict UI and the scene reload workflow remain open. The save-and-close confli
 presentation is awaiting the user's UX choice; no nested dialog is launched from
 the serialized close-dialog save callback. This checkpoint does not close #7 or
 the 07A.5 gate.
+
+Reload storage preparation (2026-09-11): scene reload now separates an owned
+disk read from acceptance. Reading preserves the current project model and its
+save-conflict baseline; only the document owner's subsequent acceptance adopts
+the replacement and baseline. Reads validate scene identity, and acceptance
+rejects another service's result or a source model already replaced in the
+project. Project tests pass 52/52. Revision/lifetime checks in the authoring owner
+and the conflict UI still need integration before this gate closes.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 
