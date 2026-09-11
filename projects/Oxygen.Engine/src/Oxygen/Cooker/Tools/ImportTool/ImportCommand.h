@@ -21,9 +21,15 @@ public:
   virtual ~ImportCommand() = default;
 
   [[nodiscard]] virtual auto Name() const -> std::string_view = 0;
-  [[nodiscard]] virtual auto BuildCommand() -> std::shared_ptr<clap::Command>
-    = 0;
+  [[nodiscard]] virtual auto BuildCommand()
+    -> std::shared_ptr<clap::Command> = 0;
   [[nodiscard]] virtual auto Run() -> std::expected<void, std::error_code> = 0;
+
+  //! Whether this command schedules work through the asynchronous importer.
+  [[nodiscard]] virtual auto RequiresImportService() const noexcept -> bool
+  {
+    return true;
+  }
 
   //! Prepare import service configuration for this command.
   [[nodiscard]] virtual auto PrepareImportServiceConfig()

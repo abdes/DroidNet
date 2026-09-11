@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/api_export.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -26,45 +27,58 @@ OXGN_DATA_NDAPI auto MakeCubeMeshAsset()
 
 //! Creates a unit cube surface with welded vertices and configurable
 //! subdivisions per face edge.
-OXGN_DATA_NDAPI auto MakeSubdividedCubeMeshAsset(unsigned int segments = 6)
+OXGN_DATA_NDAPI auto MakeSubdividedCubeMeshAsset(
+  unsigned int segments = procedural::kSubdividedCubeSegments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a UV sphere centered at the origin.
 OXGN_DATA_NDAPI auto MakeSphereMeshAsset(
-  unsigned int latitude_segments = 16, unsigned int longitude_segments = 32)
+  unsigned int latitude_segments = procedural::kSphereLatitudeSegments,
+  unsigned int longitude_segments = procedural::kSphereLongitudeSegments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new geodesic/icosphere mesh centered at the origin.
-OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(unsigned int subdivision_level = 2)
+OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(
+  unsigned int subdivision_level = procedural::kIcoSphereSubdivisionLevel)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Alias of MakeIcoSphereMeshAsset for authoring/runtime readability.
-OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(unsigned int subdivision_level
-  = 2) -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(
+  unsigned int subdivision_level = procedural::kIcoSphereSubdivisionLevel)
+  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a flat plane in the XY plane at `z = 0`.
 OXGN_DATA_NDAPI auto MakePlaneMeshAsset(
-  unsigned int x_segments = 1, unsigned int z_segments = 1, float size = 1.0f)
+  unsigned int x_segments = procedural::kPlaneXSegments,
+  unsigned int z_segments = procedural::kPlaneZSegments,
+  float size = procedural::kPlaneSize)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a cylinder.
 OXGN_DATA_NDAPI auto MakeCylinderMeshAsset(
-  unsigned int segments = 32, float height = 1.0f, float radius = 0.5f)
+  unsigned int segments = procedural::kCylinderSegments,
+  float height = procedural::kCylinderHeight,
+  float radius = procedural::kCylinderRadius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a cone.
 OXGN_DATA_NDAPI auto MakeConeMeshAsset(
-  unsigned int segments = 32, float height = 1.0f, float radius = 0.5f)
+  unsigned int segments = procedural::kConeSegments,
+  float height = procedural::kConeHeight,
+  float radius = procedural::kConeRadius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a torus.
-OXGN_DATA_NDAPI auto MakeTorusMeshAsset(unsigned int major_segments = 32,
-  unsigned int minor_segments = 16, float major_radius = 1.0f,
-  float minor_radius = 0.25f)
+OXGN_DATA_NDAPI auto MakeTorusMeshAsset(
+  unsigned int major_segments = procedural::kTorusMajorSegments,
+  unsigned int minor_segments = procedural::kTorusMinorSegments,
+  float major_radius = procedural::kTorusMajorRadius,
+  float minor_radius = procedural::kTorusMinorRadius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a quad (two triangles in the XY plane).
-OXGN_DATA_NDAPI auto MakeQuadMeshAsset(float width = 1.0f, float height = 1.0f)
+OXGN_DATA_NDAPI auto MakeQuadMeshAsset(
+  float width = procedural::kQuadWidth, float height = procedural::kQuadHeight)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing an arrow/axis gizmo.
