@@ -15,6 +15,7 @@
 #include <exception>
 #include <unordered_map>
 #include <utility>
+#include <Oxygen/Data/MaterialAsset.h>
 
 namespace oxygen::interop::module {
 namespace {
@@ -102,7 +103,12 @@ SceneAssetRequests::SceneAssetRequests(content::IAssetLoader &loader,
           },
           [&loader, &resolver](const std::string &uri,
                                MaterialCompletion complete) {
-            const auto key = resolver.ResolveAssetKey(VirtualPath(uri, true));
+            const auto path = VirtualPath(uri, true);
+            if (path == "/Engine/Generated/Materials/Default") {
+              complete(data::MaterialAsset::CreateDefault(), {});
+              return;
+            }
+            const auto key = resolver.ResolveAssetKey(path);
             if (!key) {
               complete({}, "asset path could not be resolved");
             } else if (auto cached = loader.GetMaterialAsset(*key)) {
