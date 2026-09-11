@@ -173,6 +173,7 @@
     <ClInclude Include="Commands\SetEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveNodeCommand.h" />
+    <ClInclude Include="Utils\EditorRotation.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />
     <ClInclude Include="Commands\SetBackgroundColorCommand.h" />
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />

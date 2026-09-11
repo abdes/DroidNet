@@ -21,6 +21,7 @@
 #include <Commands/PropertyKeys.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Utils/EditorRotation.h>
 
 namespace oxygen::interop::module {
 
@@ -71,7 +72,7 @@ namespace oxygen::interop::module {
       }
       if (auto current = transform.GetLocalRotation()) {
         state.euler_degrees
-          = glm::degrees(glm::eulerAngles(*current));
+          = rotation::ToEulerDegrees(*current);
       }
       if (auto current = transform.GetLocalScale()) {
         state.scale = *current;
@@ -99,7 +100,7 @@ namespace oxygen::interop::module {
         transform.SetLocalPosition(state.position);
       }
       if (state.rotation_dirty) {
-        const glm::quat rot(glm::radians(state.euler_degrees));
+        const auto rot = rotation::ToQuaternion(state.euler_degrees);
         transform.SetLocalRotation(rot);
       }
       if (state.scale_dirty) {
