@@ -11,12 +11,15 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 public sealed class EditSessionToken
 {
+    private readonly CompletionState completion;
+
     private EditSessionToken(
         Guid sessionId,
         string operationKind,
         IReadOnlyList<Guid> nodeIds,
         string fieldKey,
-        bool isOneShot)
+        bool isOneShot,
+        CompletionState? completion = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationKind);
         ArgumentNullException.ThrowIfNull(nodeIds);
@@ -28,6 +31,7 @@ public sealed class EditSessionToken
         this.FieldKey = fieldKey;
         this.IsOneShot = isOneShot;
         this.State = isOneShot ? EditSessionState.Committed : EditSessionState.Open;
+        this.completion = completion ?? new();
     }
 
     /// <summary>
@@ -70,6 +74,9 @@ public sealed class EditSessionToken
     /// </summary>
     public EditSessionState State { get; private set; }
 
+    /// <summary>Gets a value indicating whether the command owner already closed this gesture.</summary>
+    internal bool IsConsumed => this.completion.Consumed;
+
     /// <summary>
     /// Starts an interactive edit session.
     /// </summary>
@@ -86,7 +93,7 @@ public sealed class EditSessionToken
     /// <summary>Captures the phase before an asynchronous producer can observe a later commit or cancellation.</summary>
     /// <returns>A token with the same identity and the current immutable request phase.</returns>
     public EditSessionToken Capture()
-        => this.IsOneShot ? this : new(this.SessionId, this.OperationKind, this.NodeIds, this.FieldKey, isOneShot: false) { State = this.State };
+        => this.IsOneShot ? this : new(this.SessionId, this.OperationKind, this.NodeIds, this.FieldKey, isOneShot: false, this.completion) { State = this.State };
 
     /// <summary>
     /// Marks the session as committed.
@@ -112,5 +119,19 @@ public sealed class EditSessionToken
         }
 
         this.State = EditSessionState.Cancelled;
+    }
+
+    /// <summary>Prevents late control callbacks from reopening a gesture completed by Save or Close.</summary>
+    internal void Consume()
+    {
+        if (!this.IsOneShot)
+        {
+            this.completion.Consumed = true;
+        }
+    }
+
+    private sealed class CompletionState
+    {
+        public bool Consumed { get; set; }
     }
 }

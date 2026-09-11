@@ -61,7 +61,6 @@ public sealed partial class SceneDocumentCommandService(
     private readonly IMessenger messenger = messenger;
     private readonly IOperationResultPublisher operationResults = operationResults;
     private readonly IStatusReducer statusReducer = statusReducer;
-    private readonly CommitGroupController transformCommitGroups = new();
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
@@ -138,11 +137,14 @@ public sealed partial class SceneDocumentCommandService(
         ArgumentNullException.ThrowIfNull(edit);
         ArgumentNullException.ThrowIfNull(session);
 
+        if (!session.IsOneShot && session.State != EditSessionState.Open)
+        {
+            return await this.EditPropertiesForTargetsAsync(context, session.NodeIds.ToDictionary(id => id, _ => PropertyEdit.Empty), "Edit Transform", session).ConfigureAwait(true);
+        }
+
         if (!HasAnyTransformField(edit))
         {
-            return session.State == EditSessionState.Cancelled
-                ? await this.CancelTransformEditSessionAsync(context, session).ConfigureAwait(true)
-                : SceneCommandResult.Success;
+            return SceneCommandResult.Success;
         }
 
         var validation = ValidateTransformEdit(edit);
@@ -151,7 +153,7 @@ public sealed partial class SceneDocumentCommandService(
             return this.ValidationFailure(SceneOperationKinds.EditTransform, validation.Value.Code, validation.Value.Title, validation.Value.Message, context);
         }
 
-        var targets = ResolveNodes(context.Scene, nodeIds)
+        var targets = ResolveNodes(context.Scene, session.IsOneShot ? nodeIds : session.NodeIds)
             .Select(static node => new { Node = node, Transform = node.Components.OfType<TransformComponent>().FirstOrDefault() })
             .Where(static target => target.Transform is not null)
             .ToList();
@@ -167,11 +169,8 @@ public sealed partial class SceneDocumentCommandService(
 
         if (!session.IsOneShot)
         {
-            return await this.EditTransformSessionAsync(
-                context,
-                session,
-                targets.ConvertAll(static target => target.Node),
-                edit).ConfigureAwait(true);
+            var preview = BuildPropertyEditFromTransformEdit(edit);
+            return await this.EditPropertiesForTargetsAsync(context, session.NodeIds.ToDictionary(id => id, _ => preview), "Edit Transform", session).ConfigureAwait(true);
         }
 
         // One-shot path is schema-driven via the property pipeline.
@@ -564,10 +563,12 @@ public sealed partial class SceneDocumentCommandService(
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneCommandResult> SaveSceneAsync(SceneDocumentCommandContext context)
     {
+        await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
         var gate = SaveGates.GetValue(context.Scene, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync().ConfigureAwait(true);
         try
         {
+            await this.CompleteEditSessionsAsync(context, commit: true).ConfigureAwait(true);
             var version = context.Metadata.ChangeVersion;
             var snapshot = SceneSaveSnapshot.Capture(context.Scene);
             var success = await this.projectManager.SaveSceneSnapshotAsync(snapshot).ConfigureAwait(true);
@@ -590,6 +591,18 @@ public sealed partial class SceneDocumentCommandService(
                 ? this.PublishSceneWarning(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "NEWER_CHANGES_UNSAVED", "Scene snapshot saved", "Saved; newer changes remain unsaved", context, domain: FailureDomain.Document)
                 : (Guid?)null;
             return new SceneCommandResult(Succeeded: true, notice) { HasUnsavedChanges = context.Metadata.IsDirty };
+        }
+        catch (DroidNet.Storage.StorageWriteConflictException exception)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.Save,
+                DiagnosticCodes.DocumentPrefix + "Conflict",
+                "Scene changed outside this document",
+                exception.Message,
+                context,
+                exception,
+                FailureDomain.Document);
+            return new SceneCommandResult(Succeeded: false, operationResultId) { IsConflict = true, HasUnsavedChanges = context.Metadata.IsDirty };
         }
         catch (Exception ex)
         {
@@ -1297,34 +1310,6 @@ public sealed partial class SceneDocumentCommandService(
         return nodesById.Values.ToList();
     }
 
-    private static string TransformSessionKey(EditSessionToken session)
-        => $"transform-session:{session.SessionId:N}";
-
-    private static List<PropertyDescriptor> GetTransformDescriptors(PropertyEdit edit)
-    {
-        var descriptors = new List<PropertyDescriptor>(edit.Count);
-        foreach (var id in edit.Ids)
-        {
-            descriptors.Add(Transform.ById[id]);
-        }
-
-        return descriptors;
-    }
-
-    private static Dictionary<Guid, object> BuildTransformTargetMap(IReadOnlyList<SceneNode> nodes)
-    {
-        var targets = new Dictionary<Guid, object>(nodes.Count);
-        foreach (var node in nodes)
-        {
-            if (node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform)
-            {
-                targets[node.Id] = transform;
-            }
-        }
-
-        return targets;
-    }
-
     private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
     {
         if (before.Count != after.Count)
@@ -1571,168 +1556,6 @@ public sealed partial class SceneDocumentCommandService(
 
     private async Task PublishDirtyMetadataAsync(SceneDocumentCommandContext context)
         => _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
-
-    private async Task<SceneCommandResult> EditTransformSessionAsync(
-        SceneDocumentCommandContext context,
-        EditSessionToken session,
-        IReadOnlyList<SceneNode> nodes,
-        TransformEdit edit)
-    {
-        if (session.State == EditSessionState.Cancelled)
-        {
-            return await this.CancelTransformEditSessionAsync(context, session).ConfigureAwait(true);
-        }
-
-        var propertyEdit = BuildPropertyEditFromTransformEdit(edit);
-        if (propertyEdit.Count == 0)
-        {
-            return SceneCommandResult.Success;
-        }
-
-        var descriptors = GetTransformDescriptors(propertyEdit);
-        var key = TransformSessionKey(session);
-        var before = PropertySnapshot.Capture(BuildTransformTargetMap(nodes), descriptors);
-        var group = this.transformCommitGroups.Begin(
-            key,
-            nodes.Select(static node => node.Id).ToList(),
-            before,
-            "Edit Transform");
-        var sessionNodes = ResolveNodes(context.Scene, group.Nodes);
-        var nodeTargets = BuildTransformTargetMap(sessionNodes);
-        var sceneNodes = sessionNodes.ToDictionary(static node => node.Id);
-
-        foreach (var target in nodeTargets.Values)
-        {
-            PropertyApply.ApplyToTarget(target, propertyEdit, Transform.ById);
-        }
-
-        var after = PropertySnapshot.Capture(nodeTargets, descriptors);
-        this.transformCommitGroups.RecordPreview(key, after);
-        if (session.State == EditSessionState.Open)
-        {
-            await this.PreviewTransformSessionAsync(context, sceneNodes, after).ConfigureAwait(true);
-            return SceneCommandResult.Success;
-        }
-
-        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
-        var closed = this.transformCommitGroups.Close(key, after) ?? group;
-        var op = new PropertyOp(closed.Nodes, closed.Before, after, closed.Label);
-        var metadataUpdate = Task.CompletedTask;
-        if (op.EffectiveEdit().Count > 0)
-        {
-            var resolver = new TransformPropertyTarget(this, context, sceneNodes);
-            this.RegisterPropertyOpHistory(context, op, resolver, Transform.ById);
-            metadataUpdate = this.MarkDirtyAsync(context, out revision);
-        }
-
-        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.CompleteTerminalTransformSessionAsync(context, sceneNodes, after, revision)).ConfigureAwait(true);
-        return new SceneCommandResult(Succeeded: true, operationResultId);
-    }
-
-    private async Task<SceneCommandResult> CancelTransformEditSessionAsync(
-        SceneDocumentCommandContext context,
-        EditSessionToken session)
-    {
-        var key = TransformSessionKey(session);
-        var active = this.transformCommitGroups.GetActive(key);
-        if (active is null)
-        {
-            return SceneCommandResult.Success;
-        }
-
-        _ = this.transformCommitGroups.Close(key, active.Before);
-        var sceneNodes = ResolveNodes(context.Scene, active.Nodes).ToDictionary(static node => node.Id);
-        foreach (var (nodeId, edit) in active.Before.PerNode)
-        {
-            if (!sceneNodes.TryGetValue(nodeId, out var node)
-                || node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform)
-            {
-                continue;
-            }
-
-            PropertyApply.ApplyToTarget(transform, edit, Transform.ById);
-        }
-
-        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
-        foreach (var (nodeId, edit) in active.Before.PerNode)
-        {
-            if (!sceneNodes.TryGetValue(nodeId, out var node))
-            {
-                continue;
-            }
-
-            var entries = BuildTransformPropertyEntries(edit);
-            if (entries.Count == 0)
-            {
-                continue;
-            }
-
-            _ = await this.sceneEngineSync.CancelPreviewSyncAsync(
-                context.Scene.Id,
-                node.Id,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
-        }
-
-        return SceneCommandResult.Success;
-    }
-
-    private async Task PreviewTransformSessionAsync(
-        SceneDocumentCommandContext context,
-        Dictionary<Guid, SceneNode> nodes,
-        PropertySnapshot snapshot)
-    {
-        var revision = this.sceneEngineSync.CaptureRevision(context.Scene, context.Metadata);
-        var observedAt = DateTimeOffset.UtcNow;
-        foreach (var (nodeId, edit) in snapshot.PerNode)
-        {
-            if (!nodes.TryGetValue(nodeId, out var node))
-            {
-                continue;
-            }
-
-            var entries = BuildTransformPropertyEntries(edit);
-            if (entries.Count == 0)
-            {
-                continue;
-            }
-
-            _ = await this.sceneEngineSync.TryPreviewSyncAsync(
-                context.Scene.Id,
-                node.Id,
-                observedAt,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
-        }
-    }
-
-    private async Task<Guid?> CompleteTerminalTransformSessionAsync(
-        SceneDocumentCommandContext context,
-        Dictionary<Guid, SceneNode> nodes,
-        PropertySnapshot snapshot,
-        SceneSyncRevision revision)
-    {
-        Guid? firstOperationResultId = null;
-        foreach (var (nodeId, edit) in snapshot.PerNode)
-        {
-            if (!nodes.TryGetValue(nodeId, out var node))
-            {
-                continue;
-            }
-
-            var entries = BuildTransformPropertyEntries(edit);
-            if (entries.Count == 0)
-            {
-                continue;
-            }
-
-            var outcome = await this.sceneEngineSync.CompleteTerminalSyncAsync(
-                context.Scene.Id,
-                node.Id,
-                cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, entries, revision, cancellationToken)).ConfigureAwait(true);
-            firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.EditTransform, outcome).ConfigureAwait(true);
-        }
-
-        return firstOperationResultId;
-    }
 
     private void RecordGeometryHistory(SceneDocumentCommandContext context, IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
         => context.History.AddChange("Restore Geometry", async () => await this.ApplyGeometryStatesForHistoryAsync(context, before, after).ConfigureAwait(true));

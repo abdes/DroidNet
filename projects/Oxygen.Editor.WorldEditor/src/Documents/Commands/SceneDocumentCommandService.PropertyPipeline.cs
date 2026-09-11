@@ -171,12 +171,6 @@ public sealed partial class SceneDocumentCommandService
                 session).ConfigureAwait(true)
             : this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult
             ? validationResult
-            : !session.IsOneShot
-            ? await this.EditTransformSessionAsync(
-                context,
-                session,
-                ResolveNodes(context.Scene, nodeIds),
-                BuildTransformEditFromPropertyEdit(edit)).ConfigureAwait(true)
             : await this.EditTransformPropertiesOneShotAsync(context, nodeIds, edit, label).ConfigureAwait(true);
     }
 

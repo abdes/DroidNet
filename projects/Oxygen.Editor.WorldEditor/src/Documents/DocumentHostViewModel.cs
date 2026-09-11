@@ -184,6 +184,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.windowId,
                 this.engineService,
                 this.container.Resolve<ISceneEngineSync>(),
+                this.container.Resolve<IDocumentInputCommitter>(),
                 this.operationResults,
                 this.statusReducer,
                 this.container.Resolve<ISceneDocumentCommandService>(),
@@ -203,7 +204,9 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 {
                     var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
                     _ = messenger.Send(new AssetsChangedMessage(uri));
-                });
+                },
+                inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
+                windowId: this.windowId);
         }
         else
         {
@@ -280,6 +283,14 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     {
         var requestId = Interlocked.Increment(ref this.activeEditorViewRequestId);
         _ = this.SwitchActiveEditorViewAsync(value, requestId);
+    }
+
+    partial void OnActiveEditorChanging(object? oldValue, object? newValue)
+    {
+        if (!ReferenceEquals(oldValue, newValue) && oldValue is MaterialEditorViewModel material)
+        {
+            material.Deactivate();
+        }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "View teardown failures are logged so an approved document transition can finish without crashing the UI.")]

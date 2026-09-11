@@ -189,6 +189,18 @@ public interface ISceneDocumentCommandService
     /// <returns>The command result.</returns>
     public Task<SceneCommandResult> SaveSceneAsync(SceneDocumentCommandContext context);
 
+    /// <summary>Completes the document's active property gestures before saving, reloading or closing.</summary>
+    /// <param name="context">The owning document instance.</param>
+    /// <param name="commit">Whether to commit the accepted previews or restore their original values.</param>
+    /// <returns>Completion of all terminal publications.</returns>
+    public Task CompleteEditSessionsAsync(SceneDocumentCommandContext context, bool commit);
+
+    /// <summary>Saves a distinct scene asset without redirecting or acknowledging the original document.</summary>
+    /// <param name="context">The source document.</param>
+    /// <param name="name">The new scene file name stem.</param>
+    /// <returns>The newly created scene or the reported failure.</returns>
+    public Task<SceneValueCommandResult<Scene>> SaveSceneCopyAsync(SceneDocumentCommandContext context, string name);
+
     /// <summary>
     /// Renames a tree item in the scene document.
     /// </summary>

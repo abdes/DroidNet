@@ -15,10 +15,10 @@
     </ItemGroup>
 
     <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
-      <Content Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
+      <None Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <Link>%(Filename)%(Extension)</Link>
-      </Content>
+      </None>
     </ItemGroup>
 
     <ItemGroup>

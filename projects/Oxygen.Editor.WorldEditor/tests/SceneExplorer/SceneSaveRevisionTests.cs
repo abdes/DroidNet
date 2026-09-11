@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
@@ -170,7 +171,15 @@ public sealed class SceneSaveRevisionTests
             var scene = new Scene(Mock.Of<IProject>(value => value.ProjectInfo == info)) { Name = "Saved Scene" };
             this.Context = new SceneDocumentCommandContext(scene.Id, new SceneDocumentMetadata(scene.Id) { IsDirty = true }, scene, new HistoryKeeper(scene));
             var document = new Mock<IDocument>();
-            _ = document.Setup(value => value.WriteAllTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns((string json, CancellationToken _) => this.WriteAsync(json));
+            _ = document.SetupGet(value => value.Location).Returns("H:/SceneRevisionTests/Content/Scenes/Saved Scene.oscene.json");
+            var atomicFiles = new Mock<IAtomicFileStore>();
+            _ = atomicFiles.Setup(value => value.WriteAsync(It.IsAny<string>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<FileVersion>(), It.IsAny<CancellationToken>()))
+                .Returns(async (string _, ReadOnlyMemory<byte> bytes, FileVersion _, CancellationToken _) =>
+                {
+                    await this.WriteAsync(Encoding.UTF8.GetString(bytes.Span)).ConfigureAwait(false);
+                    return new FileVersion(Exists: true, "saved snapshot");
+                });
+            _ = this.Storage.SetupGet(value => value.AtomicFiles).Returns(atomicFiles.Object);
             var folder = new Mock<IFolder>();
             _ = folder.Setup(value => value.GetFolderAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(folder.Object);
             _ = folder.Setup(value => value.ExistsAsync()).ReturnsAsync(value: true);

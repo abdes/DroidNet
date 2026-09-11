@@ -9,7 +9,21 @@
     xmlns:local="using:Oxygen.Editor.MaterialEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
+    x:Name="MaterialEditorRoot"
     mc:Ignorable="d">
+
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="UndoInvoked"
+            Modifiers="Control"
+            ScopeOwner="{x:Bind MaterialEditorRoot}" />
+        <KeyboardAccelerator
+            Key="Y"
+            Invoked="RedoInvoked"
+            Modifiers="Control"
+            ScopeOwner="{x:Bind MaterialEditorRoot}" />
+    </UserControl.KeyboardAccelerators>
 
     <UserControl.Resources>
         <ResourceDictionary>
@@ -70,6 +84,8 @@
                     HorizontalAlignment="Right"
                     Orientation="Horizontal"
                     Spacing="8">
+                    <Button Command="{x:Bind ViewModel.UndoCommand}" Content="Undo" />
+                    <Button Command="{x:Bind ViewModel.RedoCommand}" Content="Redo" />
                     <Button Command="{x:Bind ViewModel.SaveMaterialCommand}" Content="Save" />
                     <Button Command="{x:Bind ViewModel.CookCommand}" Content="Cook" />
                 </StackPanel>
@@ -158,6 +174,9 @@
                                             IsAlphaSliderVisible="True"
                                             IsColorChannelTextInputVisible="True"
                                             IsHexInputVisible="True"
+                                            Loaded="ColorPickerLoaded"
+                                            LostFocus="ColorLostFocus"
+                                            Unloaded="ColorPickerUnloaded"
                                             Color="{x:Bind ViewModel.BaseColorColor, Mode=OneWay}" />
                                     </Flyout>
                                 </Button.Flyout>
@@ -173,31 +192,43 @@
                             <controls:NumberBox
                                 Grid.Column="1"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="R"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}"
+                                Tag="BaseColorR" />
                             <controls:NumberBox
                                 Grid.Column="2"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="G"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorG, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.BaseColorG, Mode=TwoWay}"
+                                Tag="BaseColorG" />
                             <controls:NumberBox
                                 Grid.Column="3"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="B"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}"
+                                Tag="BaseColorB" />
                             <controls:NumberBox
                                 Grid.Column="4"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="A"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}"
+                                Tag="BaseColorA" />
                         </Grid>
                     </editorcontrols:PropertyCard>
 
@@ -210,17 +241,23 @@
 
                             <controls:NumberBox
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="Metallic"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.MetallicFactor, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.MetallicFactor, Mode=TwoWay}"
+                                Tag="MetallicFactor" />
                             <controls:NumberBox
                                 Grid.Column="1"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="Roughness"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.RoughnessFactor, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.RoughnessFactor, Mode=TwoWay}"
+                                Tag="RoughnessFactor" />
                         </Grid>
                     </editorcontrols:PropertyCard>
                 </editorcontrols:PropertiesExpander.Items>
@@ -246,10 +283,13 @@
                             <controls:NumberBox
                                 Grid.Column="1"
                                 MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
                                 Label="Cutoff"
                                 LabelPosition="Left"
                                 Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.AlphaCutoff, Mode=TwoWay}" />
+                                NumberValue="{x:Bind ViewModel.AlphaCutoff, Mode=TwoWay}"
+                                Tag="AlphaCutoff" />
                         </Grid>
                     </editorcontrols:PropertyCard>
 

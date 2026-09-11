@@ -20,6 +20,9 @@ public sealed record SceneCommandResult(bool Succeeded, Guid? OperationResultId 
     /// <summary>Gets a value indicating whether a successful save left newer authoring changes unsaved.</summary>
     public bool HasUnsavedChanges { get; init; }
 
+    /// <summary>Gets a value indicating whether saving conflicted with an external change or another writer.</summary>
+    public bool IsConflict { get; init; }
+
     /// <summary>
     /// Gets a successful command result.
     /// </summary>
