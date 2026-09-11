@@ -32,6 +32,11 @@ internal interface IRuntimeCommandTransport
     /// <returns>The native environment state.</returns>
     public Task<RuntimeEnvironmentState> ObserveEnvironmentAsync();
 
+    /// <summary>Reads node properties and currently resolved assets after earlier mutations.</summary>
+    /// <param name="nodeId">The authored node identity.</param>
+    /// <returns>The native node state.</returns>
+    public Task<RuntimeNodeState> ObserveNodeAsync(Guid nodeId);
+
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>
     /// <param name="input">The input transport value.</param>

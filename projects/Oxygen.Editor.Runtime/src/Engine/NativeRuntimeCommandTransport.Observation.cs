@@ -2,11 +2,28 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Converts native environment snapshots at the Runtime boundary.</summary>
+/// <summary>Converts native property snapshots at the Runtime boundary.</summary>
 internal sealed partial class NativeRuntimeCommandTransport
 {
+    /// <inheritdoc/>
+    public async Task<RuntimeNodeState> ObserveNodeAsync(Guid nodeId)
+    {
+        var state = await this.world.ObserveNodeAsync(nodeId).ConfigureAwait(false);
+        return new(
+            state.Exists,
+            state.IsPrimarySun,
+            state.Properties.Select(value => new RuntimePropertyValue(value.ComponentId, value.FieldId, value.Value)).ToImmutableArray(),
+            state.GeometryKey,
+            state.GeometryName,
+            state.VertexCount,
+            state.IndexCount,
+            state.MaterialKeys.ToImmutableArray());
+    }
+
     /// <inheritdoc/>
     public async Task<RuntimeEnvironmentState> ObserveEnvironmentAsync()
     {

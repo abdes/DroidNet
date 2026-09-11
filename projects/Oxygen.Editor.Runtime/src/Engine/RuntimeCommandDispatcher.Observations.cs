@@ -23,6 +23,14 @@ internal sealed partial class RuntimeCommandDispatcher
         return new(outcome, state);
     }
 
+    /// <inheritdoc/>
+    public async Task<RuntimeNodeObservation> ObserveNodeAsync(
+        Guid operationId, RuntimeSceneTarget target, Guid nodeId, CancellationToken cancellationToken = default)
+    {
+        var (outcome, state) = await this.ObserveAsync(operationId, target, transport => transport.ObserveNodeAsync(nodeId), cancellationToken).ConfigureAwait(false);
+        return new(outcome, nodeId, state);
+    }
+
     private async Task<(RuntimeCommandResult outcome, TState? state)> ObserveAsync<TState>(
         Guid operationId,
         RuntimeSceneTarget target,

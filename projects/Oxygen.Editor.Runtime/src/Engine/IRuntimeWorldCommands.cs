@@ -55,4 +55,12 @@ public interface IRuntimeWorldCommands
     /// <param name="cancellationToken">Cancels the observation wait.</param>
     /// <returns>The native state only if the requested activation remains current.</returns>
     public Task<RuntimeEnvironmentObservation> ObserveEnvironmentAsync(Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads stored node properties and the currently resolved assets.</summary>
+    /// <param name="operationId">The observation identity.</param>
+    /// <param name="target">The scene activation to observe.</param>
+    /// <param name="nodeId">The authored node identity.</param>
+    /// <param name="cancellationToken">Cancels the observation wait.</param>
+    /// <returns>The native state only if the requested activation remains current.</returns>
+    public Task<RuntimeNodeObservation> ObserveNodeAsync(Guid operationId, RuntimeSceneTarget target, Guid nodeId, CancellationToken cancellationToken = default);
 }
