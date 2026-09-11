@@ -537,11 +537,15 @@ public sealed partial class SceneDocumentCommandService(
         }
 
         var before = context.Scene.Environment;
-        var beforeSunStates = CaptureDirectionalSunStates(context.Scene);
+        var beforeSunStates = edit.SunNodeId.HasValue ? CaptureDirectionalSunStates(context.Scene) : [];
         var after = ApplyEnvironmentEdit(before, edit);
         context.Scene.SetEnvironment(after);
-        ApplyEnvironmentSunBinding(context.Scene, after.SunNodeId);
-        var afterSunStates = CaptureDirectionalSunStates(context.Scene);
+        if (edit.SunNodeId.HasValue)
+        {
+            ApplyEnvironmentSunBinding(context.Scene, after.SunNodeId);
+        }
+
+        var afterSunStates = edit.SunNodeId.HasValue ? CaptureDirectionalSunStates(context.Scene) : [];
         this.RecordEnvironmentHistory(context, before, after, beforeSunStates, afterSunStates);
 
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);

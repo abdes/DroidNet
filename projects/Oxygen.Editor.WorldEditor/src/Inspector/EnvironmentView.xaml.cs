@@ -42,6 +42,17 @@ public sealed partial class EnvironmentView
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(args);
 
+    private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string field })
+        {
+            this.ViewModel?.BeginEditSession($"{field}.{args.Component}", args.InteractionKind);
+        }
+    }
+
+    private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
+        => this.ViewModel?.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
+
     private void ColorPickerLoaded(object sender, RoutedEventArgs args)
     {
         if (sender is ColorPicker picker)

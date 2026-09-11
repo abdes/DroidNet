@@ -66,12 +66,23 @@
                     </StackPanel>
                 </editorcontrols:PropertyCard>
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Ground Albedo">
-                    <controls:VectorBox
-                        ComponentLabelPosition="Left"
-                        Dimension="3"
-                        XValue="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:VectorBox
+                            ComponentLabelPosition="Left"
+                            Dimension="3"
+                            EditSessionCompleted="VectorEditCompleted"
+                            EditSessionStarted="VectorEditStarted"
+                            Tag="GroundAlbedo"
+                            XValue="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </editorcontrols:PropertyCard>
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Rayleigh Height">
                     <StackPanel Spacing="2">
@@ -126,12 +137,23 @@
                     </StackPanel>
                 </editorcontrols:PropertyCard>
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sky Luminance">
-                    <controls:VectorBox
-                        ComponentLabelPosition="Left"
-                        Dimension="3"
-                        XValue="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}" />
+                    <StackPanel Spacing="2">
+                        <controls:VectorBox
+                            ComponentLabelPosition="Left"
+                            Dimension="3"
+                            EditSessionCompleted="VectorEditCompleted"
+                            EditSessionStarted="VectorEditStarted"
+                            Tag="SkyLuminance"
+                            XValue="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}" />
+                        <TextBlock
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Visibility, Mode=OneWay}" />
+                    </StackPanel>
                 </editorcontrols:PropertyCard>
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Aerial Distance">
                     <StackPanel Spacing="2">
@@ -215,6 +237,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -236,6 +259,14 @@
                             IsOpen="{x:Bind ViewModel.HasStaleSun, Mode=OneWay}"
                             Message="{x:Bind ViewModel.StaleSunText, Mode=OneWay}"
                             Severity="Warning" />
+                        <TextBlock
+                            Grid.Row="2"
+                            Grid.ColumnSpan="2"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.SunReferenceDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.SunReferenceDiagnostic.Visibility, Mode=OneWay}" />
                     </Grid>
                 </editorcontrols:PropertyCard>
             </editorcontrols:PropertiesExpander.Items>
@@ -663,6 +694,10 @@
             <editorcontrols:PropertiesExpander.Items>
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Color">
                     <Grid ColumnSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -694,9 +729,20 @@
                             Grid.Column="1"
                             ComponentLabelPosition="Left"
                             Dimension="3"
+                            EditSessionCompleted="VectorEditCompleted"
+                            EditSessionStarted="VectorEditStarted"
+                            Tag="BackgroundColor"
                             XValue="{x:Bind ViewModel.BackgroundR, Mode=TwoWay}"
                             YValue="{x:Bind ViewModel.BackgroundG, Mode=TwoWay}"
                             ZValue="{x:Bind ViewModel.BackgroundB, Mode=TwoWay}" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.BackgroundRDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.BackgroundRDiagnostic.Visibility, Mode=OneWay}" />
                     </Grid>
                 </editorcontrols:PropertyCard>
             </editorcontrols:PropertiesExpander.Items>

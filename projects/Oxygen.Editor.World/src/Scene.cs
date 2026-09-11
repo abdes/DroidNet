@@ -118,7 +118,13 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     internal void SetEnvironment(Serialization.SceneEnvironmentData environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        this.Environment = NormalizeEnvironment(environment);
+        var normalized = NormalizeEnvironment(environment);
+        if (this.Environment != normalized)
+        {
+            this.OnPropertyChanging(nameof(this.Environment));
+            this.Environment = normalized;
+            this.OnPropertyChanged(nameof(this.Environment));
+        }
     }
 
     private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
