@@ -201,6 +201,12 @@ public interface ISceneDocumentCommandService
     /// <returns>The newly created scene or the reported failure.</returns>
     public Task<SceneValueCommandResult<Scene>> SaveSceneCopyAsync(SceneDocumentCommandContext context, string name);
 
+    /// <summary>Reloads source after explicit discard confirmation, retiring the previous model and history.</summary>
+    /// <param name="context">The document whose current source is being replaced.</param>
+    /// <param name="cancellationToken">Cancels before accepting the replacement.</param>
+    /// <returns>The replacement model, or a failure retaining the original authoring state.</returns>
+    public Task<SceneValueCommandResult<Scene>> ReloadSceneAsync(SceneDocumentCommandContext context, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Renames a tree item in the scene document.
     /// </summary>

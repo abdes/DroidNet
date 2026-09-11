@@ -54,7 +54,7 @@ public sealed partial class SceneDocumentCommandService
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
             var operation = this.PublishSceneFailure(SceneOperationKinds.Save, DiagnosticCodes.DocumentPrefix + "COPY_FAILED", "Scene copy was not saved", exception.Message, context, exception, FailureDomain.Document);
-            return SceneCommandResults.Failure<Scene>(operation);
+            return SceneCommandResults.Failure<Scene>(operation) with { FailureMessage = exception.Message };
         }
         finally
         {
