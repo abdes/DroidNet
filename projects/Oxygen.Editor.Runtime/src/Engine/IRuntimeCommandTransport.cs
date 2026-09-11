@@ -28,6 +28,10 @@ internal interface IRuntimeCommandTransport
     /// <returns>The native background state.</returns>
     public Task<RuntimeBackgroundState> ObserveBackgroundAsync();
 
+    /// <summary>Reads native atmosphere and post-process values after earlier mutations.</summary>
+    /// <returns>The native environment state.</returns>
+    public Task<RuntimeEnvironmentState> ObserveEnvironmentAsync();
+
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>
     /// <param name="input">The input transport value.</param>
