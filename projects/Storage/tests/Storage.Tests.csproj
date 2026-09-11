@@ -14,11 +14,16 @@
 
     <ItemGroup>
       <ProjectReference Include="..\src\Storage.csproj" />
-      <ProjectReference Include="..\testhost\Storage.AtomicWriteProbe.csproj" ReferenceOutputAssembly="false" />
+      <ProjectReference Include="..\testhost\Storage.AtomicWriteProbe.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 
     <Target Name="CopyAtomicWriteProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
-        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="Build"
+                 Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)"
+                 RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents" />
+        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath"
+                 Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)"
+                 RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">
             <Output TaskParameter="TargetOutputs" ItemName="_AtomicWriteProbeAssembly" />
         </MSBuild>
         <PropertyGroup>
