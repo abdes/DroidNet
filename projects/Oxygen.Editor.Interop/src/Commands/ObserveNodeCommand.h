@@ -83,7 +83,7 @@ private:
       Add(result, ComponentId::kTransform, TransformField::kPositionZ, position->z);
     }
     if (const auto rotation = transform.GetLocalRotation()) {
-      const auto angles = glm::degrees(glm::eulerAngles(*rotation));
+      const auto angles = oxygen::interop::rotation::ToEulerDegrees(*rotation);
       Add(result, ComponentId::kTransform, TransformField::kRotationXDegrees, angles.x);
       Add(result, ComponentId::kTransform, TransformField::kRotationYDegrees, angles.y);
       Add(result, ComponentId::kTransform, TransformField::kRotationZDegrees, angles.z);

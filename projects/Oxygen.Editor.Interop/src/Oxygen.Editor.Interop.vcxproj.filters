@@ -304,6 +304,9 @@
     <ClInclude Include="Commands\ObserveNodeCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Utils\EditorRotation.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
     <ClInclude Include="World\EnvironmentStateManaged.h">
       <Filter>World</Filter>
     </ClInclude>
