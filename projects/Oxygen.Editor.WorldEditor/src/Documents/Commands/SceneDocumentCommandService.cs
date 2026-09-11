@@ -551,7 +551,7 @@ public sealed partial class SceneDocumentCommandService(
         this.RecordEnvironmentHistory(context, before, after, beforeSunStates, afterSunStates);
 
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
-        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentSyncAsync(context, after, revision)).ConfigureAwait(true);
+        var operationResultId = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentAndSunSyncAsync(context, after, beforeSunStates, afterSunStates, revision)).ConfigureAwait(true);
         if (validation is not null)
         {
             operationResultId ??= this.PublishSceneWarning(
@@ -1217,6 +1217,10 @@ public sealed partial class SceneDocumentCommandService(
         foreach (var state in CaptureDirectionalSunStates(scene))
         {
             state.Light.IsSunLight = state.Node.Id == sunNodeId;
+            if (state.Light.IsSunLight)
+            {
+                state.Light.EnvironmentContribution = true;
+            }
         }
     }
 
@@ -1243,7 +1247,7 @@ public sealed partial class SceneDocumentCommandService(
             .SelectMany(static root => SceneTraversal.CollectNodes(root))
             .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
             .Where(static item => item.Light is not null)
-            .Select(static item => new DirectionalSunState(item.Node, item.Light!, item.Light!.IsSunLight))
+            .Select(static item => new DirectionalSunState(item.Node, item.Light!, item.Light!.IsSunLight, item.Light.EnvironmentContribution))
             .ToList();
 
     private static void ApplySunStates(IReadOnlyList<DirectionalSunState> states)
@@ -1251,6 +1255,7 @@ public sealed partial class SceneDocumentCommandService(
         foreach (var state in states)
         {
             state.Light.IsSunLight = state.IsSunLight;
+            state.Light.EnvironmentContribution = state.EnvironmentContribution;
         }
     }
 
@@ -1268,13 +1273,13 @@ public sealed partial class SceneDocumentCommandService(
         foreach (var afterState in after)
         {
             var beforeState = before.FirstOrDefault(state => state.Node.Id == afterState.Node.Id);
-            if (beforeState is not null && beforeState.IsSunLight != afterState.IsSunLight)
+            if (beforeState is not null && (beforeState.IsSunLight != afterState.IsSunLight || beforeState.EnvironmentContribution != afterState.EnvironmentContribution))
             {
                 nodesById[afterState.Node.Id] = afterState.Node;
             }
         }
 
-        return nodesById.Values.ToList();
+        return nodesById.Values.OrderBy(node => node.Components.OfType<DirectionalLightComponent>().First().IsSunLight).ToList();
     }
 
     private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
@@ -1550,19 +1555,20 @@ public sealed partial class SceneDocumentCommandService(
     {
         var allSunStates = CaptureDirectionalSunStates(context.Scene);
         var before = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
+        var beforeSunNodeId = context.Scene.Environment.SunNodeId;
         foreach (var (_, light) in targets)
         {
             ApplyDirectionalLightEdit(light!, edit);
         }
 
-        if (edit.IsSunLight.HasValue && edit.IsSunLight.Value)
-        {
-            ApplyExclusiveSun(context.Scene, targets[0].node.Id);
-        }
+        ApplyDirectionalSunRules(context.Scene, targets, edit);
 
         var after = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
         var afterSunStates = CaptureDirectionalSunStates(context.Scene);
-        this.RecordDirectionalLightHistory(context, before, after, allSunStates, afterSunStates);
+        this.RecordDirectionalLightHistory(
+            context,
+            new(before, allSunStates, beforeSunNodeId),
+            new(after, afterSunStates, context.Scene.Environment.SunNodeId));
         var syncNodes = IncludeDirectionalSunChangedNodes(
             targets.Select(static target => target.node),
             allSunStates,
@@ -1571,7 +1577,9 @@ public sealed partial class SceneDocumentCommandService(
         var payloads = syncNodes.ToDictionary(node => node.Id, node =>
         {
             var light = node.Components.OfType<DirectionalLightComponent>().First();
-            return targetNodeIds.Contains(node.Id)
+            return edit.IsSunLight.HasValue || edit.EnvironmentContribution.HasValue
+                ? BuildDirectionalLightPropertyEntries(light)
+                : targetNodeIds.Contains(node.Id)
                 ? BuildDirectionalLightPropertyEntries(edit, light)
                 : [BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight)];
         });
@@ -1741,18 +1749,14 @@ public sealed partial class SceneDocumentCommandService(
 
     private void RecordDirectionalLightHistory(
         SceneDocumentCommandContext context,
-        IReadOnlyList<DirectionalLightState> before,
-        IReadOnlyList<DirectionalLightState> after,
-        IReadOnlyList<DirectionalSunState> beforeSunStates,
-        IReadOnlyList<DirectionalSunState> afterSunStates)
-        => context.History.AddChange("Restore Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, before, after, beforeSunStates, afterSunStates).ConfigureAwait(true));
+        DirectionalLightSceneState before,
+        DirectionalLightSceneState after)
+        => context.History.AddChange("Restore Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
 
     private async Task ApplyDirectionalLightStatesForHistoryAsync(
         SceneDocumentCommandContext context,
-        IReadOnlyList<DirectionalLightState> states,
-        IReadOnlyList<DirectionalLightState> inverse,
-        IReadOnlyList<DirectionalSunState> sunStates,
-        IReadOnlyList<DirectionalSunState> inverseSunStates)
+        DirectionalLightSceneState state,
+        DirectionalLightSceneState inverse)
     {
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
@@ -1760,14 +1764,15 @@ public sealed partial class SceneDocumentCommandService(
             return;
         }
 
-        foreach (var state in states)
+        foreach (var target in state.Targets)
         {
-            state.Apply();
+            target.Apply();
         }
 
-        ApplySunStates(sunStates);
-        context.History.AddChange("Reapply Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, inverse, states, inverseSunStates, sunStates).ConfigureAwait(true));
-        var syncNodes = IncludeDirectionalSunChangedNodes(states.Select(static state => state.Node), inverseSunStates, sunStates);
+        ApplySunStates(state.SunStates);
+        context.Scene.SetEnvironment(context.Scene.Environment with { SunNodeId = state.SunNodeId });
+        context.History.AddChange("Reapply Directional Light", async () => await this.ApplyDirectionalLightStatesForHistoryAsync(context, inverse, state).ConfigureAwait(true));
+        var syncNodes = IncludeDirectionalSunChangedNodes(state.Targets.Select(static target => target.Node), inverse.SunStates, state.SunStates);
         var payloads = syncNodes.ToDictionary(node => node.Id, node => BuildDirectionalLightPropertyEntries(node.Components.OfType<DirectionalLightComponent>().First()));
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
         _ = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
@@ -1802,7 +1807,7 @@ public sealed partial class SceneDocumentCommandService(
         ApplySunStates(sunStates);
         context.History.AddChange("Reapply Environment", async () => await this.ApplyEnvironmentForHistoryAsync(context, inverse, environment, inverseSunStates, sunStates).ConfigureAwait(true));
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
-        _ = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentSyncAsync(context, environment, revision)).ConfigureAwait(true);
+        _ = await CompletePublicationAsync(metadataUpdate, this.PublishEnvironmentAndSunSyncAsync(context, environment, inverseSunStates, sunStates, revision)).ConfigureAwait(true);
     }
 
     private async Task<Guid?> SyncComponentAddAsync(SceneDocumentCommandContext context, SceneNode node, GameComponent component)
@@ -2244,5 +2249,7 @@ public sealed partial class SceneDocumentCommandService(
         }
     }
 
-    private sealed record DirectionalSunState(SceneNode Node, DirectionalLightComponent Light, bool IsSunLight);
+    private sealed record DirectionalSunState(SceneNode Node, DirectionalLightComponent Light, bool IsSunLight, bool EnvironmentContribution);
+
+    private sealed record DirectionalLightSceneState(IReadOnlyList<DirectionalLightState> Targets, IReadOnlyList<DirectionalSunState> SunStates, Guid? SunNodeId);
 }
