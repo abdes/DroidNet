@@ -57,10 +57,15 @@ public interface IProjectManagerService
     /// </returns>
     public Task<Scene?> LoadSceneAsync(Scene scene);
 
-    /// <summary>Reloads a scene only if the source still identifies the same authored asset.</summary>
-    /// <param name="scene">The scene whose unsaved changes the caller has explicitly agreed to discard.</param>
-    /// <returns>The reloaded scene, or null when loading or identity validation fails.</returns>
-    public Task<Scene?> ReloadSceneAsync(Scene scene);
+    /// <summary>Reads a possible reload without replacing the model or adopting a new save baseline.</summary>
+    /// <param name="scene">The open scene whose source should be read.</param>
+    /// <returns>An owned replacement, or null when loading or identity validation fails.</returns>
+    public Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene);
+
+    /// <summary>Installs a reload after the caller confirms discard and checks the document's revision and lifetime.</summary>
+    /// <param name="snapshot">The owned read from this service for the still-current scene.</param>
+    /// <returns>The replacement scene with the disk baseline adopted.</returns>
+    public Scene AcceptSceneReload(SceneReloadSnapshot snapshot);
 
     /// <summary>
     /// Creates a new scene in the current project asynchronously.

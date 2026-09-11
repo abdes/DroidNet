@@ -133,10 +133,24 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc/>
-    public async Task<Scene?> ReloadSceneAsync(Scene scene)
+    public async Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene)
     {
-        var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project, scene.Id).ConfigureAwait(true);
-        return ReplaceLoadedScene(scene, loadedScene);
+        ArgumentNullException.ThrowIfNull(scene);
+        var read = await this.ReadSceneFromStorageAsync(scene.Name, scene.Project, scene.Id).ConfigureAwait(true);
+        return read is null ? null : new(this, scene, read.Scene, read.SourcePath, read.Version);
+    }
+
+    /// <inheritdoc/>
+    public Scene AcceptSceneReload(SceneReloadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!ReferenceEquals(snapshot.Owner, this) || !snapshot.Original.Project.Scenes.Contains(snapshot.Original))
+        {
+            throw new InvalidOperationException("The scene read no longer belongs to the current project model.");
+        }
+
+        this.sceneVersions[snapshot.SourcePath] = snapshot.Version;
+        return ReplaceLoadedScene(snapshot.Original, snapshot.Scene)!;
     }
 
     /// <inheritdoc />
@@ -322,7 +336,20 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "all failures are logged and propagated as null return value")]
-    private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project, Guid? expectedId = null)
+    private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project)
+    {
+        var read = await this.ReadSceneFromStorageAsync(sceneName, project).ConfigureAwait(true);
+        if (read is null)
+        {
+            return null;
+        }
+
+        this.sceneVersions[read.SourcePath] = read.Version;
+        return read.Scene;
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scene reads report storage/serialization failures without replacing authoring or its baseline.")]
+    private async Task<SceneRead?> ReadSceneFromStorageAsync(string sceneName, IProject project, Guid? expectedId = null)
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
 
@@ -350,17 +377,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var stream = new System.IO.MemoryStream(snapshot.Content.ToArray());
             await using var streamLifetime = stream.ConfigureAwait(true);
             var loadedScene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
-            if (expectedId is { } identity && loadedScene?.Id != identity)
-            {
-                throw new InvalidDataException("The source identifies a different scene asset and cannot replace this open document.");
-            }
-
-            if (loadedScene is not null)
-            {
-                this.sceneVersions[sceneFile.Location] = snapshot.Version;
-            }
-
-            return loadedScene;
+            return expectedId is { } identity && loadedScene?.Id != identity
+                ? throw new InvalidDataException("The source identifies a different scene asset and cannot replace this open document.")
+                : loadedScene is null ? null : new(loadedScene, sceneFile.Location, snapshot.Version);
         }
         catch (Exception ex)
         {
@@ -411,4 +430,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Level = LogLevel.Error,
         Message = "Failed to load scene metadata from {ScenePath}")]
     partial void CouldNotLoadSceneMetadata(Exception ex, string ScenePath);
+
+    private sealed record SceneRead(Scene Scene, string SourcePath, FileVersion Version);
 }

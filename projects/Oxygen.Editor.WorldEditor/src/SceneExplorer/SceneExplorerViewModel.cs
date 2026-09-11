@@ -746,7 +746,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             var ct = await this.BeginSceneLoadAsync().ConfigureAwait(true);
 
-            var loadedScene = await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
+            var loadedScene = this.sceneEngineSync.GetDocumentScene(documentMetadata)
+                ?? await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
             if (loadedScene is null)
             {
                 return;
