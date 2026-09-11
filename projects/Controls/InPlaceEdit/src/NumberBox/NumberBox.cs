@@ -179,6 +179,23 @@ public partial class NumberBox : Control
         this.UpdateVisualState();
     }
 
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape && this.IsMouseCaptured)
+        {
+            this.capturePoint = null;
+            this.valueTextBlock?.ReleasePointerCaptures();
+            this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
+            this.UpdateInputCursor();
+            this.UpdateVisualState();
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
     private void SetupValueTextBlockPart()
     {
         var oldValueTextBlock = this.valueTextBlock;
@@ -303,6 +320,7 @@ public partial class NumberBox : Control
             return;
         }
 
+        _ = this.Focus(FocusState.Pointer);
         this.capturePoint = e.GetCurrentPoint(this.valueTextBlock).Position;
         this.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
         this.UpdateInputCursor();
