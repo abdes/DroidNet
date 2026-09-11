@@ -49,7 +49,13 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         content.Children.Add(status);
-        return new CloseRow(item, selection, status, content);
+        var conflicts = new DocumentConflictPanel(item, () =>
+        {
+            status.Visibility = Visibility.Collapsed;
+            selection.IsEnabled = !item.IsSaved;
+        });
+        content.Children.Add(conflicts);
+        return new CloseRow(item, selection, status, content, conflicts);
     }
 
     private static StackPanel CreateContent(IReadOnlyList<CloseRow> rows, bool isWorkspaceClose)
@@ -92,7 +98,8 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
             {
                 var saved = await row.Item.SaveAsync().ConfigureAwait(true);
                 row.Status.Text = saved ? "Saved" : "Save failed. Your changes are still open. See Output for details.";
-                row.Status.Visibility = Visibility.Visible;
+                row.Status.Visibility = row.Item.HasConflict ? Visibility.Collapsed : Visibility.Visible;
+                row.Conflicts.Refresh();
                 allSaved &= saved;
             }
 
@@ -118,7 +125,17 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
             DefaultButton = DialogButton.Close,
             PrimaryAction = () => SaveSelectedAsync(rows),
         };
-        var result = await dialogs.ShowAsync(spec, windowId).ConfigureAwait(true);
+        DialogButton result;
+        try
+        {
+            result = await dialogs.ShowAsync(spec, windowId).ConfigureAwait(true);
+        }
+        finally
+        {
+            await Task.WhenAll(rows.Select(row => row.Conflicts.Pending)).ConfigureAwait(true);
+            await Task.WhenAll(documents.Select(item => item.Pending)).ConfigureAwait(true);
+        }
+
         if (result == DialogButton.Secondary)
         {
             foreach (var item in documents)
@@ -130,5 +147,5 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         return result is DialogButton.Primary or DialogButton.Secondary;
     }
 
-    private sealed record CloseRow(DocumentCloseItem Item, CheckBox Selection, TextBlock Status, StackPanel Content);
+    private sealed record CloseRow(DocumentCloseItem Item, CheckBox Selection, TextBlock Status, StackPanel Content, DocumentConflictPanel Conflicts);
 }

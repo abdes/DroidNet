@@ -319,6 +319,7 @@ public static partial class Program
         container.RegisterMapping<IEditorDocumentService, EditorDocumentService>();
         container.Register<DocumentCloseCoordinator>(Reuse.Singleton);
         container.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
+        container.Register<IDocumentConflictPrompt, DocumentConflictPrompt>(Reuse.Singleton);
         container.Register<IDocumentInputCommitter, DocumentInputCommitter>(Reuse.Singleton);
     }
 

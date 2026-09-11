@@ -342,18 +342,25 @@ distinct-identity Save Copy; WorldEditor tests pass 134/134. Material save/reloa
 copy tests run with the history cases below. The editor app builds, and changed
 files have no unsuppressed compiler analyzer or IDE diagnostics.
 
-Conflict UI and the scene reload workflow remain open. The save-and-close conflict
-presentation is awaiting the user's UX choice; no nested dialog is launched from
-the serialized close-dialog save callback. This checkpoint does not close #7 or
-the 07A.5 gate.
+Save conflicts keep the close dialog open with inline Reload and Save Copy.
+Reload requires explicit confirmation to discard unsaved changes and history.
+Material documents support both actions and use the same recovery panel after
+ordinary Save. Save Copy creates a distinct asset and leaves the original dirty;
+queued actions and close preparation wait for pending recovery I/O. Malformed
+reloads and copy collisions retain the original document and history.
+
+Tests pass: Documents 66/66, MaterialEditor 41/41, WorldEditor 141/141 and packaged
+UI 22/22, including the actual inline confirmation controls. Editor builds pass;
+changed files have no analyzer or IDE diagnostics.
 
 Reload storage preparation (2026-09-11): scene reload now separates an owned
 disk read from acceptance. Reading preserves the current project model and its
 save-conflict baseline; only the document owner's subsequent acceptance adopts
 the replacement and baseline. Reads validate scene identity, and acceptance
 rejects another service's result or a source model already replaced in the
-project. Project tests pass 52/52. Revision/lifetime checks in the authoring owner
-and the conflict UI still need integration before this gate closes.
+project. Project tests pass 52/52. Remaining work: integrate scene reload with
+the authoring owner's revision, pending-command and lifetime checks, then connect
+its Reload and Save Copy actions to the conflict panel.
 
 ### 07A.6 - Complete The Missing Workflow Evidence
 
