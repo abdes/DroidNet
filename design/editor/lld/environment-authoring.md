@@ -495,7 +495,13 @@ ED-M07A environment closure requires:
 ## 15. Closed Design Decisions
 
 BackgroundColor is linear LDR RGB in [0,1]; HDR background editing is outside
-V0.1. Live background application is a required ED-M07A.1 fix and native
+V0.1. With atmosphere off, Background retains the picked color on screen,
+independent of exposure and tone mapping. Foreground objects and HDR skies retain
+their existing shading behavior. Background compositing preserves opaque and
+translucent foreground coverage. The picker uses display-encoded color; stored
+RGB remains linear, with conversion at the picker boundary.
+
+Live background application is a required ED-M07A.1 fix and native
 Background/PostProcess descriptor/load mapping is ED-M07B.3. Unsupported required
 fields are development failures, not accepted release exceptions. The canonical
 PostProcess record owns exposure/tone values; compatibility mirror fields may
