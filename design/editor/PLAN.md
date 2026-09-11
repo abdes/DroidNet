@@ -83,9 +83,9 @@ flowchart LR
 ```
 
 `ED-M02` still requires its recorded supported-viewport validation. The current
-execution sequence is ED-M07A -> ED-M07B -> ED-M08 -> ED-M09 -> ED-M10. Earlier
-milestones retain their delivery records; source-identified omissions execute
-in 07A/07B, with no new M04 closure action. Implementation can progress while
+execution sequence is ED-M07B -> ED-M08 -> ED-M09 -> ED-M10. ED-M07A is validated.
+Earlier milestones retain their delivery records; source-identified omissions
+are assigned to 07A/07B, with no new M04 closure action. Implementation can progress while
 ED-M02's evidence is collected, but M08 cannot close without that evidence.
 
 ## 4. Milestone Roadmap
@@ -345,6 +345,9 @@ Exit gate:
 - Cook, inspect, and mount failures produce visible operation results.
 
 ### ED-M07A - Authoring Integrity And Runtime Convergence
+
+Status: `validated` (2026-09-11). Automated control/native cases and user-confirmed
+viewport workflows pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md).
 
 Purpose: close the source-identified inspector/property and authoring-integrity
 gaps in the [detailed plan](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
