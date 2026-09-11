@@ -192,6 +192,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.container.Resolve<IContentBrowserAssetProvider>(),
                 this.container,
                 messenger,
+                this.container.Resolve<SceneCookInputRegistrar>(),
                 this.loggerFactory,
                 conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
         }

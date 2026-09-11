@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -16,6 +17,12 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 public interface ISceneDocumentCommandService
 {
+    /// <summary>Acquires the scene's existing save gate and captures its saved-input state on the UI thread.</summary>
+    /// <param name="context">The still-current document and scene owner.</param>
+    /// <param name="cancellationToken">Cancels waiting for an in-flight save.</param>
+    /// <returns>The read lease, or null if the document has closed or its scene was replaced.</returns>
+    public Task<CookDocumentReadLease?> AcquireCookReadAsync(SceneDocumentCommandContext context, CancellationToken cancellationToken);
+
     /// <summary>
     /// Creates a primitive scene node.
     /// </summary>
