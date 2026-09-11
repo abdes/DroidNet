@@ -35,6 +35,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
 
     private readonly DocumentWriteCoordinator sceneWrites = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, FileVersion> sceneVersions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SceneSourceVersion> sceneSources = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public IProject? CurrentProject { get; private set; }
@@ -133,6 +134,15 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc/>
+    public SceneSourceVersion? GetSceneSourceVersion(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        return scene.Project.ProjectInfo.Location is { } projectRoot
+            ? this.sceneSources.GetValueOrDefault(SceneSourceKey(projectRoot, scene.Id))
+            : null;
+    }
+
+    /// <inheritdoc/>
     public async Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -151,6 +161,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
 
         this.sceneVersions[snapshot.SourcePath] = snapshot.Version;
+        this.sceneSources[SceneSourceKey(snapshot.Scene.Project.ProjectInfo.Location!, snapshot.Scene.Id)] = new(snapshot.SourcePath, snapshot.Version);
         return ReplaceLoadedScene(snapshot.Original, snapshot.Scene)!;
     }
 
@@ -233,6 +244,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot, createNew: true));
     }
 
+    private static string SceneSourceKey(string projectRoot, Guid sceneId)
+        => Path.Combine(Path.GetFullPath(projectRoot), sceneId.ToString("N"));
+
     private static Scene? ReplaceLoadedScene(Scene scene, Scene? loadedScene)
     {
         if (loadedScene is null)
@@ -284,6 +298,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var version = createNew ? FileVersion.Missing : this.sceneVersions.GetValueOrDefault(sceneFile.Location, FileVersion.Missing);
             var written = await this.AtomicFiles.WriteAsync(sceneFile.Location, System.Text.Encoding.UTF8.GetBytes(snapshot.Json), version).ConfigureAwait(true);
             this.sceneVersions[sceneFile.Location] = written;
+            this.sceneSources[SceneSourceKey(snapshot.ProjectLocation, snapshot.SceneId)] = new(sceneFile.Location, written);
             return true;
         }
         catch (StorageWriteConflictException)
@@ -346,6 +361,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
 
         this.sceneVersions[read.SourcePath] = read.Version;
+        this.sceneSources[SceneSourceKey(project.ProjectInfo.Location!, read.Scene.Id)] = new(read.SourcePath, read.Version);
         return read.Scene;
     }
 

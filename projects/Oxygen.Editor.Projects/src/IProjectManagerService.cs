@@ -57,6 +57,11 @@ public interface IProjectManagerService
     /// </returns>
     public Task<Scene?> LoadSceneAsync(Scene scene);
 
+    /// <summary>Gets the persisted source identity last acknowledged for a scene.</summary>
+    /// <param name="scene">The scene whose saved source is required.</param>
+    /// <returns>The saved source, or null if this service has not loaded or saved the scene.</returns>
+    public SceneSourceVersion? GetSceneSourceVersion(Scene scene);
+
     /// <summary>Reads a possible reload without replacing the model or adopting a new save baseline.</summary>
     /// <param name="scene">The open scene whose source should be read.</param>
     /// <param name="cancellationToken">Cancels the read before accepting a replacement.</param>
