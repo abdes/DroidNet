@@ -35,7 +35,7 @@ public sealed class EngineContentPipelineToolLocator : IEngineContentPipelineToo
 
     private static IEnumerable<string> EnumerateCandidates()
     {
-        var configuration =
+        const string configuration =
 #if DEBUG
             "Debug";
 #else

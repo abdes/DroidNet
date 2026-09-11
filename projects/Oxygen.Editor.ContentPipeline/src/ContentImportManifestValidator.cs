@@ -11,12 +11,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed class ContentImportManifestValidator : IContentImportManifestValidator
 {
-    private static readonly HashSet<string> SupportedJobTypes = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> SupportedJobTypes =
+    [
+        with(StringComparer.Ordinal),
         "material-descriptor",
         "geometry-descriptor",
         "scene-descriptor",
-    };
+    ];
 
     /// <inheritdoc />
     public IReadOnlyList<DiagnosticRecord> Validate(Guid operationId, ContentImportManifest manifest)

@@ -38,22 +38,16 @@ public static class ContentPipelinePaths
             ? path[..^".json".Length]
             : path;
 
-        if (!nativePath.EndsWith(expectedExtension, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException(
+        return !nativePath.EndsWith(expectedExtension, StringComparison.OrdinalIgnoreCase)
+            ? throw new ArgumentException(
                 $"Asset URI '{assetUri}' does not normalize to '{expectedExtension}'.",
-                nameof(assetUri));
-        }
-
-        if (nativePath.Contains("/../", StringComparison.Ordinal)
+                nameof(assetUri))
+            : nativePath.Contains("/../", StringComparison.Ordinal)
             || nativePath.Contains("/./", StringComparison.Ordinal)
             || nativePath.EndsWith("/..", StringComparison.Ordinal)
-            || nativePath.EndsWith("/.", StringComparison.Ordinal))
-        {
-            throw new ArgumentException("Asset URI path must not contain relative path segments.", nameof(assetUri));
-        }
-
-        return nativePath;
+            || nativePath.EndsWith("/.", StringComparison.Ordinal)
+            ? throw new ArgumentException("Asset URI path must not contain relative path segments.", nameof(assetUri))
+            : nativePath;
     }
 
     /// <summary>
