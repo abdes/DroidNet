@@ -38,7 +38,11 @@ public sealed partial class InspectorControlTests
         try
         {
             _ = valueText.PointerCaptures.Should().NotBeEmpty("the value label must capture the drag");
-            await PointerInput.MoveAsync(valueText, 0.7, 0.5).ConfigureAwait(true);
+            for (var step = 1; step <= 4; step++)
+            {
+                await PointerInput.MoveAsync(valueText, 0.5 + (0.05 * step), 0.5).ConfigureAwait(true);
+            }
+
             await PendingNumericEdits(model).ConfigureAwait(true);
             _ = number.NumberValue.Should().NotBe(original, "the drag must produce a real preview");
             await PointerInput.KeyAsync(0x1B).ConfigureAwait(true);
