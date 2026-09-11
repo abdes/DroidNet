@@ -112,6 +112,9 @@ public class HistoryKeeper : ITransactionManager
     /// </summary>
     public bool CanRedo => this.redoStack.Count != 0;
 
+    /// <summary>Gets a value indicating whether replay, a transaction or a change set is in progress.</summary>
+    public bool IsBusy => this.State != States.Idle || this.transactions.Count != 0 || this.isCollectingChangesCounter != 0;
+
     /// <summary>
     /// Gets the instance that represents the root (or document) for this set of changes.
     /// </summary>
