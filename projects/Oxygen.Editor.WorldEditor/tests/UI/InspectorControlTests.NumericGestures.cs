@@ -139,6 +139,7 @@ public sealed partial class InspectorControlTests
         "Camera" => model is PerspectiveCameraViewModel,
         "Light" => model is DirectionalLightViewModel,
         "Environment" => model is EnvironmentViewModel,
+        "Transform" => model is TransformViewModel,
         _ => false,
     };
 
@@ -147,6 +148,7 @@ public sealed partial class InspectorControlTests
         PerspectiveCameraViewModel camera => new PerspectiveCameraView { ViewModel = camera },
         DirectionalLightViewModel light => new DirectionalLightView { ViewModel = light },
         EnvironmentViewModel environment => new EnvironmentView { ViewModel = environment },
+        TransformViewModel transform => new TransformView { ViewModel = transform },
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };
 
