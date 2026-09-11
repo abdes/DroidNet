@@ -31,7 +31,11 @@ public sealed partial class InspectorControlTests
             var uri = new Uri("asset:///Content/Materials/Picker.omat.json");
             var resolver = new Mock<IMaterialSourcePathResolver>();
             _ = resolver.Setup(value => value.Resolve(uri)).Returns(new MaterialSourceLocation(uri, directory.FullName, "Content", Path.Combine(directory.FullName, "Picker.omat.json"), "Picker.omat.json"));
-            var service = new MaterialDocumentService(resolver.Object, Mock.Of<IMaterialCookService>(), new NativeAtomicFileStore(new RealFileSystem()));
+            var service = new MaterialDocumentService(
+                resolver.Object,
+                Mock.Of<IMaterialCookService>(),
+                new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
+                new NativeAtomicFileStore(new RealFileSystem()));
             var document = await service.CreateAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(true);
             await service.CloseAsync(document.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(true);
             using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service);

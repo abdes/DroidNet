@@ -9,6 +9,7 @@ using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
@@ -21,12 +22,14 @@ namespace Oxygen.Editor.MaterialEditor;
 /// </summary>
 /// <param name="pathResolver">The material source path resolver.</param>
 /// <param name="cookService">The material cook service.</param>
+/// <param name="cookDocuments">The shared registry of saved authoring inputs.</param>
 /// <param name="atomicFiles">The shared atomic file store.</param>
 /// <param name="operationResults">Optional operation-result publisher.</param>
 /// <param name="loggerFactory">Optional logger factory.</param>
 public sealed partial class MaterialDocumentService(
     IMaterialSourcePathResolver pathResolver,
     IMaterialCookService cookService,
+    ICookDocumentRegistry cookDocuments,
     IAtomicFileStore atomicFiles,
     IOperationResultPublisher? operationResults = null,
     ILoggerFactory? loggerFactory = null) : IMaterialDocumentService, IMaterialPropertyEditService
@@ -45,6 +48,7 @@ public sealed partial class MaterialDocumentService(
     private readonly DocumentWriteCoordinator sourceWrites = new();
     private readonly IAtomicFileStore atomicFiles = atomicFiles;
     private readonly Dictionary<Guid, FileVersion> fileVersions = [];
+    private readonly Dictionary<Guid, IDisposable> cookRegistrations = [];
     private readonly Lock sync = new();
     private MaterialSchemaValidator? cachedValidator;
     private bool validatorLoadAttempted;
@@ -73,13 +77,7 @@ public sealed partial class MaterialDocumentService(
         var source = CreateDefaultSource(assetName);
         var version = await this.atomicFiles.WriteAsync(location.SourcePath, SerializeSource(source), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
 
-        var document = this.Track(location, source, assetName, MaterialCookState.NotCooked, isDirty: false);
-        lock (this.sync)
-        {
-            this.fileVersions[document.DocumentId] = version;
-        }
-
-        return document;
+        return this.Track(location, source, assetName, MaterialCookState.NotCooked, version);
     }
 
     /// <inheritdoc />
@@ -98,18 +96,12 @@ public sealed partial class MaterialDocumentService(
         var displayName = GetMaterialDisplayName(location.MaterialUri);
         var source = WithName(MaterialSourceReader.Read(snapshot.Content.ToArray()), displayName);
 
-        var document = this.Track(
+        return this.Track(
             location,
             source,
             displayName,
             MaterialCookState.NotCooked,
-            isDirty: false);
-        lock (this.sync)
-        {
-            this.fileVersions[document.DocumentId] = snapshot.Version;
-        }
-
-        return document;
+            snapshot.Version);
     }
 
     /// <inheritdoc />
@@ -289,6 +281,8 @@ public sealed partial class MaterialDocumentService(
                 _ = this.histories.Remove(documentId);
                 _ = this.fileVersions.Remove(documentId);
                 _ = this.saveGates.Remove(documentId);
+                this.cookRegistrations[documentId].Dispose();
+                _ = this.cookRegistrations.Remove(documentId);
             }
         }
         finally
@@ -630,7 +624,7 @@ public sealed partial class MaterialDocumentService(
         MaterialSource source,
         string displayName,
         MaterialCookState cookState,
-        bool isDirty)
+        FileVersion version)
     {
         var document = new MaterialDocument(
             DocumentId: Guid.NewGuid(),
@@ -640,7 +634,7 @@ public sealed partial class MaterialDocumentService(
             DisplayName: displayName,
             Source: source,
             Asset: CreateAsset(location.MaterialUri, source),
-            IsDirty: isDirty,
+            IsDirty: false,
             CookState: cookState);
 
         lock (this.sync)
@@ -648,6 +642,10 @@ public sealed partial class MaterialDocumentService(
             this.documents[document.DocumentId] = document;
             this.histories[document.DocumentId] = new(source);
             this.saveGates[document.DocumentId] = new SemaphoreSlim(1, 1);
+            this.fileVersions[document.DocumentId] = version;
+            this.cookRegistrations[document.DocumentId] = cookDocuments.Register(
+                document.SourcePath,
+                token => this.AcquireCookReadAsync(document.DocumentId, token));
         }
 
         return document;

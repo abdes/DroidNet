@@ -436,3 +436,4 @@ public static partial class Program
         _ = container.Resolve<object>("AutoRegisterImporters");
     }
 }
+        container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
