@@ -681,6 +681,10 @@ namespace {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {
       graphics::ShaderDefine {
+        .name = "OXYGEN_OPAQUE_OUTPUT",
+        .value = "1",
+      },
+      graphics::ShaderDefine {
         .name = "OXYGEN_HDR_OUTPUT",
         .value = "1",
       },

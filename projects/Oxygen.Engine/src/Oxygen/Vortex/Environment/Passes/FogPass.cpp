@@ -160,7 +160,7 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
   const auto alpha_blend = graphics::BlendTargetDesc {
     .blend_enable = true,
     .src_blend = graphics::BlendFactor::kOne,
-    .dest_blend = graphics::BlendFactor::kSrcAlpha,
+    .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
     .blend_op = graphics::BlendOp::kAdd,
     .src_blend_alpha = graphics::BlendFactor::kOne,
     .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,

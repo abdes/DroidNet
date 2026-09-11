@@ -68,7 +68,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "SKIP_BRDF_LUT" }
+    .permutations=std::array<std::string_view, 4> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "SKIP_BRDF_LUT" }
   },
   RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
