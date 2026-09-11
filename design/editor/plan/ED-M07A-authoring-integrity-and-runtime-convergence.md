@@ -199,6 +199,13 @@ including SARIF notes. The user also confirmed that the picker works after the
 fix. This closes the reported picker reset, not the separate exposure failure
 or all remaining 07A.2/07A.6 gates.
 
+Packaged numeric qualification (2026-09-11): camera, light and environment
+controls each pass 100-sample history, 16 ms preview spacing, terminal delivery,
+cancellation and wheel-idle cases through the real inspector host. Mixed camera
+and light selections restore each original value on Undo. Selection cancellation
+now publishes its new scope before old-model notifications can reenter binding,
+preserving rejection of late callbacks. The packaged suite passes 37/37.
+
 ### 07A.3 - Scoped Current Field Diagnostics
 
 Bind rejected command results to the originating PropertyId/target/document
@@ -244,6 +251,12 @@ protection. Synthetic lifecycle samples exercise actual controls and bindings;
 the generic control cases use a managed sync substitute, while the background
 workflow runs the real native engine. These bounded cases do not replace the
 remaining complete per-field/runtime table or final user-visible qualification.
+
+Numeric text qualification (2026-09-11): NumberBox keeps draft text local until
+its explicit commit. Removing the template's duplicate two-way conversion
+preserves exact float values and prevents a refresh from clearing an unrelated
+field error. Packaged tests verify near/far dependent correction, retained aspect
+feedback and clearing on selection change; shared text-control tests pass 4/4.
 
 ### 07A.4 - Revision-Aware Offline Convergence
 
