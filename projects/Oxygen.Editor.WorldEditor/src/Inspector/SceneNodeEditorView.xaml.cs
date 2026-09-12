@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using CommunityToolkit.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
@@ -66,6 +67,7 @@ public sealed partial class SceneNodeEditorView : UserControl
         {
             this.observedModel = model;
             model.PropertyChanged += this.OnModelPropertyChanged;
+            model.ComponentFilterChanging += this.OnComponentFilterChanging;
         }
     }
 
@@ -74,6 +76,7 @@ public sealed partial class SceneNodeEditorView : UserControl
         if (this.observedModel is { } model)
         {
             model.PropertyChanged -= this.OnModelPropertyChanged;
+            model.ComponentFilterChanging -= this.OnComponentFilterChanging;
             this.observedModel = null;
         }
     }
@@ -83,6 +86,14 @@ public sealed partial class SceneNodeEditorView : UserControl
         if (string.Equals(args.PropertyName, nameof(SceneNodeEditorViewModel.SelectedComponentType), StringComparison.Ordinal))
         {
             _ = this.PropertyScroll.ChangeView(horizontalOffset: null, verticalOffset: 0, zoomFactor: null, disableAnimation: true);
+        }
+    }
+
+    private void OnComponentFilterChanging(object? sender, EventArgs args)
+    {
+        foreach (var number in this.PropertySections.FindDescendants().OfType<DroidNet.Controls.NumberBox>())
+        {
+            number.CompletePendingTextEdit();
         }
     }
 

@@ -357,8 +357,9 @@ The compact selector, All icon, type filtering, removal targets and original
 property layouts are implemented. Hidden sections retain field errors and pending
 validation results; affected component entries show an error icon and full-text
 feedback. Recycled section controls detach from their models. Packaged UI passes
-186/186 at 175% scaling, including seven new feedback/lifetime cases. Remaining
-edit-lifetime and 100%/150%/200% walkthroughs are still open.
+196/196 at 175% scaling. Numeric text, drag cancellation, late picker completion,
+invalid input and mixed-target source corrections have filter-boundary coverage.
+The separate 100%/150%/200% walkthroughs are still open.
 
 Pass: selecting Geometry shows only its editor; selecting Transform switches
 sections; clearing selection/All restores all applicable editors. Two components

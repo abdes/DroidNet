@@ -594,8 +594,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Compact type selection, the All icon, original property rows, full-text
       tooltips and consistent icons are implemented. Hidden sections retain field
       errors and pending results, and recycled controls detach from their models.
-      Packaged UI 186/186 passes at 175% scaling, including seven new feedback and
-      control-lifetime cases. Remaining edit-lifetime and scaling walkthroughs are open.
+      Packaged UI 196/196 passes at 175% scaling, including numeric/text/color edit
+      boundaries and mixed-target source corrections. Remaining scaling walkthroughs are open.
 - [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
       19 new worker/manifest cases pass; ContentPipeline is 64/64. Source/test
       diagnostic collection and cleanup passed for changed files. Evidence:
@@ -734,7 +734,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 221/221; publisher/worker/lease process tests 39/39; Runtime 90/90; SceneExplorer 167/167; MaterialEditor 48/48; packaged UI 186/186, including component-filter feedback and control lifetime. Same-key material refresh preserves scene identity and history. User confirmed recook/tab switching and leak-free shutdown under native debugging. Remaining slice gates stay open above. |
+| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 221/221; publisher/worker/lease process tests 39/39; Runtime 90/90; SceneExplorer 167/167; MaterialEditor 48/48; packaged UI 196/196, including component-filter feedback, text/drag/color boundaries and mixed-target corrections. Same-key material refresh preserves scene identity and history. User confirmed recook/tab switching and leak-free shutdown under native debugging. Remaining slice gates stay open above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
