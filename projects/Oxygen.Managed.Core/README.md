@@ -65,6 +65,19 @@ propagation into these contracts; engine-loop supervision is tracked in
 See the [diagnostics LLD](../../design/editor/lld/diagnostics-operation-results.md)
 for product presentation and correlation requirements.
 
+## Artifact qualification
+
+The `Compatibility` namespace verifies fixed Debug/Release qualification
+manifests against the host's required artifact inventory. It checks exact file
+hashes, sizes and schema identifiers, and returns Windows read leases that keep
+the verified files protected through native execution and drain. The host owns
+inventory discovery, explicit qualification/promotion and native startup policy.
+Verification never rewrites the accepted manifest.
+
+The resulting fingerprint depends on artifact content, schema identifiers and
+configuration. Installation paths, record ordering and qualification report
+revision do not change cook producer identity.
+
 ## Getting Started
 
 ### Prerequisites
