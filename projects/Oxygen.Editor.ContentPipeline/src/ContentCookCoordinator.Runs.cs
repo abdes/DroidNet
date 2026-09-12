@@ -173,7 +173,7 @@ public sealed partial class ContentCookCoordinator
         IEnumerable<CookRunAsset> assets = [];
         if (result is ContentCookResult content)
         {
-            state = content.Status switch
+            state = content.IsUpToDate && content.Status == OperationStatus.Succeeded ? CookRunState.UpToDate : content.Status switch
             {
                 OperationStatus.Succeeded => CookRunState.Succeeded,
                 OperationStatus.SucceededWithWarnings => CookRunState.SucceededWithWarnings,
@@ -181,7 +181,8 @@ public sealed partial class ContentCookCoordinator
                 _ => CookRunState.Failed,
             };
             diagnostics = content.Diagnostics;
-            assets = content.CookedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Updated));
+            assets = content.CookedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Updated))
+                .Concat(content.ReusedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Reused)));
         }
         else if (result is MaterialCookResult material)
         {
@@ -259,6 +260,7 @@ public sealed partial class ContentCookCoordinator
             {
                 CookRunState.Succeeded => "Cook complete.",
                 CookRunState.SucceededWithWarnings => "Cook completed with warnings.",
+                CookRunState.UpToDate => "Already up to date.",
                 CookRunState.Cancelled => "Cook cancelled. Owned work has stopped.",
                 _ => "Cook failed.",
             };

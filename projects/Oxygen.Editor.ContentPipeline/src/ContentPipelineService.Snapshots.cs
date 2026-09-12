@@ -100,17 +100,7 @@ public sealed partial class ContentPipelineService
         Task? retainedDrain = null;
         try
         {
-            var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts.Fingerprint, cancellationToken).ConfigureAwait(false);
-            var results = new List<ContentCookResult>();
-            foreach (var mount in graph!.Assets.GroupBy(static input => input.MountName, StringComparer.OrdinalIgnoreCase))
-            {
-                var inputs = mount.Select(input => input with { SourceAbsolutePath = Path.Combine(snapshot.InputRoot, input.SourceRelativePath) }).ToArray();
-                var scope = this.CreateScope(operation.Project, inputs, targetKind) with { Snapshot = snapshot, Artifacts = artifacts };
-                results.Add(await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false));
-            }
-
-            var result = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
-            return result with { TargetKind = targetKind, InputSnapshot = snapshot, InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false) };
+            return await this.ExecuteIncrementalCookAsync(operation, resolveScopes, targetKind, artifacts, cancellationToken).ConfigureAwait(false);
         }
         catch (CookInputDiscoveryException failure)
         {

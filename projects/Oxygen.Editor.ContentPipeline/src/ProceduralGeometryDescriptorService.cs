@@ -30,7 +30,8 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
         foreach (var uri in geometryUris.Distinct())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (catalog.Find(uri) is not { } definition)
+            var definition = catalog.Find(uri);
+            if (definition is null && uri != AssetUris.BuildGeneratedUri("Materials/Default"))
             {
                 continue;
             }
@@ -41,11 +42,16 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
                     scope,
                     catalog.MountName,
                     catalog.DefaultMaterial,
-                    new Uri($"asset://{catalog.DefaultMaterial.VirtualPath}.json"),
+                    AssetUris.BuildGeneratedUri("Materials/Default"),
                     ContentCookAssetKind.Material,
                     "Materials",
                     ".omat.json",
                     cancellationToken).ConfigureAwait(false));
+            }
+
+            if (definition is null)
+            {
+                continue;
             }
 
             generated.Add(await WriteContributionAsync(

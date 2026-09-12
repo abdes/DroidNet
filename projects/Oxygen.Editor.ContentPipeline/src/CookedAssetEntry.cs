@@ -9,4 +9,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <param name="VirtualPath">The native asset virtual path.</param>
 /// <param name="Kind">The asset kind.</param>
-public sealed record CookedAssetEntry(string VirtualPath, ContentCookAssetKind Kind);
+public sealed record CookedAssetEntry(string VirtualPath, ContentCookAssetKind Kind)
+{
+    /// <summary>Gets the descriptor's physical path within the inspected root, as recorded by the native index.</summary>
+    public string? DescriptorRelativePath { get; init; }
+}

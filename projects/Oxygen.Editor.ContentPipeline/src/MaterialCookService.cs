@@ -33,7 +33,7 @@ public sealed partial class MaterialCookService(
         }
 
         var result = await this.pipeline.CookAssetAsync(request.MaterialSourceUri, cancellationToken, project).ConfigureAwait(false);
-        var cooked = result.CookedAssets.FirstOrDefault(asset => asset.Kind == ContentCookAssetKind.Material
+        var cooked = result.CookedAssets.Concat(result.ReusedAssets).FirstOrDefault(asset => asset.Kind == ContentCookAssetKind.Material
             && asset.CookedAssetUri == GetCookedUri(request.MaterialSourceUri));
         var succeeded = result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
         var state = !succeeded || cooked is null ? MaterialCookState.Failed
