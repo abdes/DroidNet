@@ -11,6 +11,8 @@ public interface ICookRunService : System.ComponentModel.INotifyPropertyChanged
     public event EventHandler<CookRunChangedEventArgs>? RunChanged;
 
     /// <summary>Refreshes consumers of any pipeline result before its run completes and releases the writer.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1003:Use generic event handler instances", Justification = "Publication awaits every consumer before releasing the writer; a void event cannot express completion.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0046:The delegate must return void", Justification = "Consumers return tasks so publication retains writer ownership until refresh completes.")]
     public event CookCompletedHandler? CookCompleted;
 
     /// <summary>Gets or sets a value indicating whether automatic cooks wait in the queue; active and explicit cooks continue.</summary>

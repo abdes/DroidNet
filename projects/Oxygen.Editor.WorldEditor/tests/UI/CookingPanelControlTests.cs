@@ -156,6 +156,36 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = (await revealed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Be(next.OperationId);
     });
 
+    /// <summary>Automatic runs appear without taking selection, with successful history available through Show all.</summary>
+    /// <returns>The asynchronous automatic history regression.</returns>
+    [TestMethod]
+    public Task AutomaticCooksAreVisibleWhileRunningAndRetainedInShowAll() => EnqueueAsync(async () =>
+    {
+        var runs = new Mock<ICookRunService>();
+        using var model = CreateModel(runService: runs);
+        var selected = model.SelectedRun;
+        var snapshot = selected!.Snapshot with
+        {
+            OperationId = Guid.NewGuid(), DisplayName = "SavedScene", Request = new(CookTargetKind.Asset, new Uri("asset:///Content/Scenes/SavedScene.oscene.json"), IsAutomatic: true),
+            State = CookRunState.Queued, CompletedAt = null, Diagnostics = [], Revision = 0,
+        };
+        var reveals = 0;
+        model.RevealRequested += (_, _) => ++reveals;
+        var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 340 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = model.Runs.Should().Contain(item => item.Snapshot.OperationId == snapshot.OperationId);
+        _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(item => item.Text == "SavedScene");
+        _ = model.SelectedRun.Should().BeSameAs(selected);
+        runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot with { State = CookRunState.Succeeded, CompletedAt = DateTimeOffset.UtcNow, Revision = 1 }));
+        _ = model.Runs.Should().NotContain(item => item.Snapshot.OperationId == snapshot.OperationId);
+        model.ShowAll = true;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(item => item.Text == "SavedScene");
+        _ = reveals.Should().Be(0);
+    });
+
     /// <summary>Cook attention changes the actual dock tab and visible content, including after returning to the browser.</summary>
     /// <returns>The asynchronous dock activation regression.</returns>
     [TestMethod]
@@ -349,7 +379,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, Mock.Of<IProjectAssetCatalog>(), actions ?? Mock.Of<ICookingWorkspaceActions>(), new StrongReferenceMessenger(), hosting);
+        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, actions ?? Mock.Of<ICookingWorkspaceActions>(), hosting);
     }
 
     private async Task CaptureAsync(FrameworkElement view, string name)

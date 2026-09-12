@@ -214,7 +214,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.statusReducer,
                 this.container.Resolve<ISceneDocumentCommandService>(),
                 this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-                this.container.Resolve<IContentBrowserAssetProvider>(),
                 this.container,
                 messenger,
                 this.container.Resolve<SceneCookInputRegistrar>(),

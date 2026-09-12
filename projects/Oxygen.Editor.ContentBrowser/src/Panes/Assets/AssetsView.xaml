@@ -89,6 +89,8 @@
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator />
+                            <ToggleMenuFlyoutItem IsChecked="{x:Bind ViewModel.CookRuns.IsAutomaticCookingPaused, Mode=TwoWay}" Text="Pause automatic cooking" />
+                            <MenuFlyoutSeparator />
                             <MenuFlyoutItem Command="{x:Bind ViewModel.InspectCookedOutputCommand}" Text="Inspect Cooked Output">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE721;" />
