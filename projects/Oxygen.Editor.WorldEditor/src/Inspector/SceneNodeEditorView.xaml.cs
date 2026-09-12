@@ -1,8 +1,9 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -25,6 +26,8 @@ public sealed partial class SceneNodeEditorView : UserControl
     public SceneNodeEditorView()
     {
         this.InitializeComponent();
+        this.PropertySections.ElementPrepared += OnPropertySectionPrepared;
+        this.PropertySections.ElementClearing += OnPropertySectionClearing;
 
         this.ViewModelChanged += (_, _) =>
         {
@@ -38,6 +41,22 @@ public sealed partial class SceneNodeEditorView : UserControl
         };
         this.Loaded += (_, _) => this.ObserveModel();
         this.Unloaded += (_, _) => this.StopObservingModel();
+    }
+
+    private static void OnPropertySectionPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        if (args.Element is ContentPresenter { Content: IViewFor view, Tag: IDetailsSection model })
+        {
+            view.ViewModel = model;
+        }
+    }
+
+    private static void OnPropertySectionClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
+    {
+        if (args.Element is ContentPresenter { Content: IViewFor view })
+        {
+            view.ViewModel = null;
+        }
     }
 
     private void ObserveModel()

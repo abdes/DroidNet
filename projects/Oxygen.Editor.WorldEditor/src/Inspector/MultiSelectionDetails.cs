@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -70,6 +70,15 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
     /// be included.
     /// </summary>
     public ObservableCollection<IPropertyEditor<T>> PropertyEditors { get; } = [];
+
+    /// <summary>
+    /// Refreshes the visible property-editor values from the current selected item collection.
+    /// </summary>
+    public void RefreshPropertyEditorValues()
+    {
+        this.RefreshOwnProperties();
+        this.UpdatePropertyEditorsValues();
+    }
 
     /// <summary>
     /// Filters the property editors to be displayed in the UI for the items being edited.
@@ -146,20 +155,32 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         this.LogRefreshedProperties(this.Name);
     }
 
-    /// <summary>
-    /// Refreshes the visible property-editor values from the current selected item collection.
-    /// </summary>
-    public void RefreshPropertyEditorValues()
-    {
-        this.RefreshOwnProperties();
-        this.UpdatePropertyEditorsValues();
-    }
-
     /// <summary>Refreshes section visibility and binds each visible editor to the current selection.</summary>
-    protected void RefreshPropertyEditors()
+    /// <param name="refreshValues">Whether the authoring selection or source values also need rebinding.</param>
+    protected void RefreshPropertyEditors(bool refreshValues = true)
     {
         this.UpdatePropertyEditors();
-        this.UpdatePropertyEditorsValues();
+        if (refreshValues)
+        {
+            this.UpdatePropertyEditorsValues();
+        }
+    }
+
+    /// <summary>Ends input ownership for a removed section.</summary>
+    /// <param name="editor">The section removed from the visible collection.</param>
+    protected virtual void DeactivatePropertyEditor(IPropertyEditor<T> editor) => editor.UpdateValues([]);
+
+    /// <summary>Refreshes the models backing the property sections.</summary>
+    protected virtual void UpdatePropertyEditorsValues()
+    {
+        // Update values
+        foreach (var editor in this.PropertyEditors)
+        {
+            editor.UpdateValues(this.items.ToArray());
+        }
+
+        // Log that property editor values were updated
+        this.LogPropertyEditorsValuesUpdated();
     }
 
     private void UpdatePropertyEditors()
@@ -173,7 +194,7 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
             if (!filteredEditors.Contains(editor))
             {
                 this.PropertyEditors.RemoveAt(i);
-                editor.UpdateValues([]);
+                this.DeactivatePropertyEditor(editor);
             }
         }
 
@@ -193,18 +214,6 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
 
             ++targetIndex;
         }
-    }
-
-    private void UpdatePropertyEditorsValues()
-    {
-        // Update values
-        foreach (var editor in this.PropertyEditors)
-        {
-            editor.UpdateValues(this.items.ToArray());
-        }
-
-        // Log that property editor values were updated
-        this.LogPropertyEditorsValuesUpdated();
     }
 
     /// <summary>

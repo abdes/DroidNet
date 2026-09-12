@@ -607,6 +607,12 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
+        if (!this.IsInputEnabled)
+        {
+            this.RefreshValues();
+            return;
+        }
+
         binding.Value = value;
     }
 

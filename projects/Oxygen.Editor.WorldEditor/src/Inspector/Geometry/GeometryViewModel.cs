@@ -195,6 +195,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
     public async Task ApplyAssetAsync(AssetPickerItem item)
     {
+        if (!this.IsInputEnabled)
+        {
+            return;
+        }
+
         if (item is null)
         {
             return;
@@ -242,6 +247,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
     public async Task ApplyMaterialAsync(MaterialPickerItem item)
     {
+        if (!this.IsInputEnabled)
+        {
+            return;
+        }
+
         if (item is null)
         {
             return;

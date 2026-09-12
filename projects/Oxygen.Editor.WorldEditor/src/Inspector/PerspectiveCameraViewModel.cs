@@ -195,6 +195,12 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
             return;
         }
 
+        if (!this.IsInputEnabled)
+        {
+            this.RefreshValues();
+            return;
+        }
+
         binding.Value = value;
     }
 
