@@ -15,13 +15,16 @@ public sealed partial class InspectorControlTests
 {
     private sealed partial class NativeSceneFixture
     {
-        public async Task<(Uri uri, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken)
+        public async Task<(Uri uri, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null)
         {
             var relative = $"Content/Materials/{name}.omat.json";
             var path = Path.Combine(this.ProjectRoot, relative.Replace('/', Path.DirectorySeparatorChar));
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var color = baseColor ?? System.Numerics.Vector4.One;
+            var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
             var source = $$"""
-                { "Schema": "oxygen.material.v1", "Type": "PBR", "Name": "{{name}}" }
+                { "Schema": "oxygen.material.v1", "Type": "PBR", "Name": "{{name}}",
+                  "PbrMetallicRoughness": { "BaseColorFactor": {{factor}}, "MetallicFactor": 0, "RoughnessFactor": 0.5 } }
                 """;
             await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
             var registry = new ImporterRegistry();

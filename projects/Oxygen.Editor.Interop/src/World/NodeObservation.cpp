@@ -59,8 +59,11 @@ public:
       result.Properties[index] = entry;
     }
     result.MaterialKeys = gcnew array<System::String^>(static_cast<int>(value.material_keys.size()));
+    result.MaterialBaseColors = gcnew array<System::Numerics::Vector4>(static_cast<int>(value.material_base_colors.size()));
     for (int index = 0; index < result.MaterialKeys->Length; ++index) {
       result.MaterialKeys[index] = FromUtf8(value.material_keys[static_cast<std::size_t>(index)]);
+      const auto& color = value.material_base_colors[static_cast<std::size_t>(index)];
+      result.MaterialBaseColors[index] = System::Numerics::Vector4(color[0], color[1], color[2], color[3]);
     }
     completion_->TrySetResult(result);
   }

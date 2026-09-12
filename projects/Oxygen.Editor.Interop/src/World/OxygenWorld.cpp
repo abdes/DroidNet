@@ -59,6 +59,31 @@ using namespace oxygen::interop::module;
 namespace Oxygen::Interop::World {
 
   namespace {
+    class CookedRootsCompletion final {
+    public:
+      explicit CookedRootsCompletion(TaskCompletionSource<bool>^ completion)
+        : completion_(completion) {}
+      ~CookedRootsCompletion() { completion_->TrySetCanceled(); }
+      void Complete(bool succeeded, const std::string& error) const {
+        if (succeeded) {
+          completion_->TrySetResult(true);
+        } else {
+          completion_->TrySetException(gcnew System::InvalidOperationException(gcnew System::String(error.c_str())));
+        }
+      }
+    private:
+      msclr::gcroot<TaskCompletionSource<bool>^> completion_;
+    };
+
+    static std::function<void(bool, std::string)> MakeCookedRootsCallback(
+      TaskCompletionSource<bool>^ completion) {
+      auto owner = std::shared_ptr<CookedRootsCompletion>(
+        new CookedRootsCompletion(completion));
+      return [owner](bool succeeded, std::string error) {
+        owner->Complete(succeeded, error);
+      };
+    }
+
     static System::Threading::Tasks::Task<bool>^ CreateFailedBoolTask(
       const char* message)
     {
@@ -1075,6 +1100,40 @@ namespace Oxygen::Interop::World {
     msclr::interop::marshal_context marshal;
     auto native_path = marshal.marshal_as<std::string>(path);
     editor_module->get().AddLooseCookedRoot(native_path);
+  }
+
+  Task^ OxygenWorld::ReplaceCookedRootsAsync(array<String^>^ paths) {
+    if (paths == nullptr)
+      throw gcnew System::ArgumentNullException("paths");
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      throw gcnew System::InvalidOperationException("The native runtime is unavailable.");
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      throw gcnew System::InvalidOperationException("The editor module is unavailable.");
+    std::vector<std::string> roots;
+    roots.reserve(static_cast<std::size_t>(paths->Length));
+    msclr::interop::marshal_context marshal;
+    for each (String^ path in paths) {
+      roots.push_back(marshal.marshal_as<std::string>(path));
+    }
+    auto completion = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
+    editor_module->get().ReplaceCookedRoots(std::move(roots),
+      MakeCookedRootsCallback(completion));
+    return completion->Task;
+  }
+
+  Task^ OxygenWorld::SetCookedContentPausedAsync(bool paused) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      throw gcnew System::InvalidOperationException("The native runtime is unavailable.");
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      throw gcnew System::InvalidOperationException("The editor module is unavailable.");
+    auto completion = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
+    editor_module->get().SetCookedContentPaused(paused,
+      MakeCookedRootsCallback(completion));
+    return completion->Task;
   }
 
   void OxygenWorld::ClearCookedRoots() {

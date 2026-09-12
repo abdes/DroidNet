@@ -211,6 +211,13 @@ public sealed partial class EngineService
             return failures;
         }
 
+        _ = this.TryCleanup(this.ReleaseCookedContentReaders, "Release cooked content readers", failures);
+        if (this.cookedContentReaders.Count != 0)
+        {
+            this.ChangeState(EngineServiceState.Faulted);
+            return failures;
+        }
+
         foreach (var lease in this.activeLeases.Values)
         {
             lease.MarkReleased();

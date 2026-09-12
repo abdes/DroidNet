@@ -21,7 +21,7 @@ internal sealed partial class NativeRuntimeCommandTransport
             state.GeometryName,
             state.VertexCount,
             state.IndexCount,
-            state.MaterialKeys.ToImmutableArray());
+            state.MaterialKeys.ToImmutableArray()) { MaterialBaseColors = state.MaterialBaseColors.ToImmutableArray() };
     }
 
     /// <inheritdoc/>

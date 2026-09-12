@@ -260,18 +260,6 @@ namespace oxygen::interop::module {
       roots_dirty_ = true;
     }
 
-    if (roots_dirty_) {
-      std::lock_guard lock(roots_mutex_);
-      LOG_F(INFO, "Syncing {} cooked roots to AssetLoader and PathResolver", mounted_roots_.size());
-      asset_loader_.get()->ClearMounts();
-      path_resolver_->ClearMounts();
-      for (const auto& root : mounted_roots_) {
-        asset_loader_.get()->AddLooseCookedRoot(root);
-        path_resolver_->AddLooseCookedRoot(root);
-      }
-      roots_dirty_ = false;
-    }
-
     // Begin frame for the ViewManager: make the transient FrameContext
     // available so FrameStart commands (executed later in this method)
     // can perform immediate registration via ViewManager::CreateViewAsync.
@@ -538,6 +526,8 @@ namespace oxygen::interop::module {
     if (context == nullptr) {
       co_return;
     }
+    co_await ProcessContentPauseAsync(*context);
+    const auto content_changed = co_await SynchronizeCookedRootsAsync();
     // Drain only commands targeting SceneMutation. Leave other commands for
     // their appropriate phases so insertion order is preserved across phases.
     CommandContext cmd_context{
@@ -564,7 +554,23 @@ namespace oxygen::interop::module {
       });
 
     if (scene_ && asset_requests_) {
+      if (content_changed) {
+        asset_requests_->Refresh(*scene_);
+      }
       asset_requests_->Drain(*scene_);
+    }
+
+    if (active_roots_completion_ && (!asset_requests_ || !asset_requests_->IsRefreshPending())) {
+      auto complete = std::move(active_roots_completion_);
+      const auto error = asset_requests_ ? asset_requests_->RefreshError() : std::string{};
+      complete(error.empty(), error);
+    }
+
+    if (content_resume_completion_ && (!asset_requests_ || !asset_requests_->IsRefreshPending())) {
+      auto complete = std::move(content_resume_completion_);
+      const auto error = asset_requests_ ? asset_requests_->RefreshError() : std::string{};
+      preview_paused_ = !error.empty();
+      complete(error.empty(), error);
     }
 
     if (scene_ && !graphics_.expired() && view_manager_) {
@@ -660,6 +666,9 @@ namespace oxygen::interop::module {
 
   auto EditorModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     -> co::Co<> {
+    if (preview_paused_) {
+      co_return;
+    }
     if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
       co_return;
     }
@@ -803,6 +812,9 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    if (preview_paused_) {
+      co_return;
+    }
     if (context == nullptr) {
       co_return;
     }
@@ -853,6 +865,9 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    if (preview_paused_) {
+      co_return;
+    }
     if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
       LOG_F(INFO,
         "EditorModule::OnCompositing: missing context/engine/view_manager/"
@@ -1144,12 +1159,115 @@ namespace oxygen::interop::module {
     command_queue_.Enqueue(std::move(cmd));
   }
 
+  void EditorModule::SetCookedContentPaused(bool paused,
+    std::function<void(bool, std::string)> complete) {
+    std::lock_guard lock(roots_mutex_);
+    requested_content_pause_ = paused;
+    content_pause_completion_ = std::move(complete);
+  }
+
+  auto EditorModule::ProcessContentPauseAsync(engine::FrameContext& frame_context) -> co::Co<> {
+    std::optional<bool> requested;
+    std::function<void(bool, std::string)> complete;
+    {
+      std::lock_guard lock(roots_mutex_);
+      requested = std::exchange(requested_content_pause_, std::nullopt);
+      if (!requested) {
+        co_return;
+      }
+      complete = std::move(content_pause_completion_);
+    }
+    if (!*requested) {
+      if (scene_ && asset_requests_) {
+        asset_requests_->ResumeLoads(*scene_);
+      }
+      content_resume_completion_ = std::move(complete);
+      co_return;
+    }
+    preview_paused_ = true;
+    if (asset_requests_) {
+      asset_requests_->SuspendLoads();
+    }
+    for (const auto* view : view_manager_->GetAllRegisteredViews()) {
+      if (view) {
+        RemovePublishedRuntimeViewForIntent(view->GetViewId(), &frame_context);
+      }
+    }
+    try {
+      if (asset_loader_) {
+        co_await asset_loader_->WaitForPendingLoadsAsync();
+        if (scene_ && asset_requests_) {
+          asset_requests_->Drain(*scene_);
+        }
+        asset_loader_->ClearMounts();
+      }
+      if (path_resolver_) {
+        path_resolver_->ClearMounts();
+      }
+      {
+        std::lock_guard lock(roots_mutex_);
+        roots_dirty_ = false;
+      }
+      complete(true, {});
+    } catch (const std::exception& error) {
+      complete(false, error.what());
+    }
+  }
+
+  auto EditorModule::SynchronizeCookedRootsAsync() -> co::Co<bool> {
+    std::vector<std::string> roots;
+    std::uint64_t revision = 0;
+    {
+      std::lock_guard lock(roots_mutex_);
+      if (!roots_dirty_ || !asset_loader_ || !path_resolver_) {
+        co_return false;
+      }
+      roots = mounted_roots_;
+      revision = roots_revision_;
+      active_roots_completion_ = std::move(pending_roots_completion_);
+      roots_dirty_ = false;
+    }
+    // No new scene requests are admitted while this mutation phase waits.
+    co_await asset_loader_->WaitForPendingLoadsAsync();
+    std::lock_guard lock(roots_mutex_);
+    if (revision != roots_revision_) {
+      active_roots_completion_ = {};
+      co_return false;
+    }
+    try {
+      asset_loader_->ClearMounts();
+      path_resolver_->ClearMounts();
+      for (const auto& root : roots) {
+        asset_loader_->AddLooseCookedRoot(root);
+        path_resolver_->AddLooseCookedRoot(root);
+      }
+    } catch (const std::exception& error) {
+      if (active_roots_completion_) {
+        auto complete = std::move(active_roots_completion_);
+        complete(false, error.what());
+      }
+      LOG_F(ERROR, "Cooked roots could not be refreshed: {}", error.what());
+      co_return false;
+    }
+    co_return true;
+  }
+
+  void EditorModule::ReplaceCookedRoots(std::vector<std::string> roots,
+    std::function<void(bool, std::string)> complete) {
+    std::lock_guard lock(roots_mutex_);
+    mounted_roots_ = std::move(roots);
+    pending_roots_completion_ = std::move(complete);
+    ++roots_revision_;
+    roots_dirty_ = true;
+  }
+
   void EditorModule::AddLooseCookedRoot(std::string_view path) {
     LOG_F(INFO, "EditorModule::AddLooseCookedRoot: registering root '{}'",
       std::string(path));
     try {
       std::lock_guard lock(roots_mutex_);
       mounted_roots_.push_back(std::string(path));
+      ++roots_revision_;
       roots_dirty_ = true;
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Failed to add loose cooked root '{}': {}", std::string(path),
@@ -1162,6 +1280,8 @@ namespace oxygen::interop::module {
     try {
       std::lock_guard lock(roots_mutex_);
       mounted_roots_.clear();
+      pending_roots_completion_ = {};
+      ++roots_revision_;
       roots_dirty_ = true;
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Failed to clear cooked roots: {}", e.what());

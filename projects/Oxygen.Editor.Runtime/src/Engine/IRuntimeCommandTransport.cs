@@ -48,4 +48,14 @@ internal interface IRuntimeCommandTransport
 
     /// <summary>Performs the native ClearCookedRoots operation.</summary>
     public void ClearCookedRoots();
+
+    /// <summary>Replaces the complete native loose-root set and refreshes current scene bindings.</summary>
+    /// <param name="paths">All project roots that remain mounted after publication.</param>
+    /// <returns>Completion after current native bindings settle.</returns>
+    public Task ReplaceCookedRootsAsync(IReadOnlyList<string> paths);
+
+    /// <summary>Pauses and drains cooked-content reads, or resumes current bindings and rendering.</summary>
+    /// <param name="paused">Whether published files are about to be replaced.</param>
+    /// <returns>The native phase acknowledgement.</returns>
+    public Task SetCookedContentPausedAsync(bool paused);
 }

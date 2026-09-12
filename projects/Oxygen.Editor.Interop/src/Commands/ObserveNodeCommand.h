@@ -7,9 +7,11 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -38,6 +40,7 @@ struct NodeObservation {
   std::uint64_t vertex_count = 0;
   std::uint64_t index_count = 0;
   std::vector<std::string> material_keys;
+  std::vector<std::array<float, 4>> material_base_colors;
 };
 
 //! Looks up the authored node identity when its queued observation executes.
@@ -164,11 +167,14 @@ private:
         const auto material = renderable.ResolveSubmeshMaterial(0, slot);
         result.material_keys.push_back(material
           ? data::to_string(material->GetAssetKey()) : std::string {});
+        const auto color = material ? material->GetBaseColor() : std::span<const float, 4>{fallback_color_};
+        result.material_base_colors.push_back({color[0], color[1], color[2], color[3]});
       }
     }
   }
 
   UuidKey node_;
+  static constexpr std::array<float, 4> fallback_color_{};
   std::function<void(NodeObservation)> complete_;
 };
 

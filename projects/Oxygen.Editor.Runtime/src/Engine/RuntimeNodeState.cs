@@ -23,4 +23,8 @@ public sealed record RuntimeNodeState(
     string GeometryName,
     ulong VertexCount,
     ulong IndexCount,
-    ImmutableArray<string> MaterialKeys);
+    ImmutableArray<string> MaterialKeys)
+{
+    /// <summary>Gets the currently bound linear base colours in first-LOD slot order.</summary>
+    public ImmutableArray<System.Numerics.Vector4> MaterialBaseColors { get; init; } = [];
+}

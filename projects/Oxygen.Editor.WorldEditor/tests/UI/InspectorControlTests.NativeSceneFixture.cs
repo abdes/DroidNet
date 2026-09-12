@@ -119,6 +119,10 @@ public sealed partial class InspectorControlTests
 
         public void MountCookedRoot(string path) => this.engine.MountProjectCookedRoot(path);
 
+        public Task RefreshCookedRootsAsync(params string[] paths) => this.engine.RefreshProjectCookedRootsAsync(paths);
+
+        public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
+
         public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection)
         {
             this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
