@@ -39,7 +39,7 @@ public static class NativeArtifactInventory
             AddSchema("editor/Schemas/" + name, Path.Combine(installation.EditorRoot, "Schemas", name));
         }
 
-        foreach (var name in new[] { "Oxygen.Editor.ContentPipeline.dll", "Oxygen.Editor.Schemas.dll", "Oxygen.Editor.World.dll" })
+        foreach (var name in new[] { "Oxygen.Editor.ContentPipeline.dll", "Oxygen.Editor.Schemas.dll", "Oxygen.Editor.World.dll", "Oxygen.Managed.Assets.dll", "Oxygen.Managed.Core.dll" })
         {
             var id = "editor/" + name;
             files[id] = new(id, Path.Combine(installation.EditorRoot, name));
