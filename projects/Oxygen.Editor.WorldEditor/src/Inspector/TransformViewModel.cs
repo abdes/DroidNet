@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -271,6 +271,7 @@ public sealed partial class TransformViewModel(
             EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.ConvertAll(static node => node.Id), property),
             nodes,
             context,
+            args.InteractionKind,
             LastEdit: null);
     }
 
@@ -395,7 +396,7 @@ public sealed partial class TransformViewModel(
             },
         };
 
-    private static void UpdateBindingValue(
+    private void UpdateBindingValue(
         PropertyBinding<float> binding,
         ICollection<SceneNode> items,
         Action<float> setValue,
@@ -404,6 +405,7 @@ public sealed partial class TransformViewModel(
     {
         var nodeIds = items.Select(static node => node.Id).ToList();
         var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());
+        this.RefreshSourceFeedback(binding, targets);
         binding.UpdateFromModel(nodeIds, id => targets.GetValueOrDefault(id));
 
         if (!binding.HasValue)
@@ -562,7 +564,12 @@ public sealed partial class TransformViewModel(
                 try
                 {
                     this.UpdateValues(nodes.ToList());
-                    this.diagnostics.Complete(diagnostic, result);
+
+                    // A terminal request closes the gesture; it does not validate a new field value.
+                    if (requestSession.IsOneShot || requestSession.State == EditSessionState.Open)
+                    {
+                        this.diagnostics.Complete(diagnostic, result);
+                    }
                 }
                 finally
                 {
@@ -619,33 +626,33 @@ public sealed partial class TransformViewModel(
 
     private void UpdatePositionValues(ICollection<SceneNode> items)
     {
-        UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
-        UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
-        UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
     }
 
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
-        UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
-        UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
-        UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
+        this.UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
     }
 
     private void UpdateScaleValues(ICollection<SceneNode> items)
     {
-        UpdateBindingValue(
+        this.UpdateBindingValue(
             this.scaleXBinding,
             items,
             value => this.ScaleX = value,
             mixed => this.ScaleXIsIndeterminate = mixed,
             this.NormalizeScaleBindingValue);
-        UpdateBindingValue(
+        this.UpdateBindingValue(
             this.scaleYBinding,
             items,
             value => this.ScaleY = value,
             mixed => this.ScaleYIsIndeterminate = mixed,
             this.NormalizeScaleBindingValue);
-        UpdateBindingValue(
+        this.UpdateBindingValue(
             this.scaleZBinding,
             items,
             value => this.ScaleZ = value,
@@ -675,5 +682,6 @@ public sealed partial class TransformViewModel(
         EditSessionToken Token,
         IReadOnlyList<SceneNode> Nodes,
         SceneDocumentCommandContext Context,
+        NumberBoxEditInteractionKind Interaction,
         TransformEdit? LastEdit);
 }

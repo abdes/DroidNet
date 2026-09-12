@@ -16,6 +16,9 @@ public sealed partial class SceneNodeEditorViewModel
     private Guid? filterDocument;
     private Type? selectedComponentType;
 
+    /// <summary>Occurs before changing sections so the view can complete pending text input.</summary>
+    public event EventHandler? ComponentFilterChanging;
+
     /// <summary>Gets the component types represented by the current selection.</summary>
     public ObservableCollection<InspectorComponentFilter> ComponentFilters { get; } = [];
 
@@ -45,7 +48,13 @@ public sealed partial class SceneNodeEditorViewModel
             return;
         }
 
-        this.SetComponentFilter(this.selectedComponentType == componentType ? null : componentType);
+        var nextType = this.selectedComponentType == componentType ? null : componentType;
+        if (nextType != this.selectedComponentType)
+        {
+            this.ComponentFilterChanging?.Invoke(this, EventArgs.Empty);
+        }
+
+        this.SetComponentFilter(nextType);
         this.RefreshPropertyEditors(refreshValues: false);
         this.RefreshEditorInputState();
     }

@@ -94,7 +94,10 @@ internal static class InspectorColorGestures
             if (this.active)
             {
                 this.active = false;
-                this.owner?.EndEditSession(completion);
+                if (this.owner?.EditScopeId == this.scope)
+                {
+                    this.owner.EndEditSession(completion);
+                }
             }
         }
 

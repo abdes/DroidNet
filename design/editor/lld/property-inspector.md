@@ -526,6 +526,12 @@ or lose errors because an editor becomes hidden. Keep errors discoverable from
 the affected component entry. A filter change itself does not dirty the document,
 create undo history, synchronize values, or request a cook.
 
+Complete valid pending numeric text before changing sections; cancel unfinished
+drags. Invalid text keeps its field feedback after the section becomes hidden.
+An old color picker's completion cannot end a newer editing lifetime. Source
+corrections clear affected field errors, including in mixed selections, while
+retaining unrelated errors.
+
 Use friendly type labels such as Transform, Geometry, Camera, and Directional
 Light. Component rows use fixed type names, replacing component-instance renaming
 in this selector (accepted 2026-09-13). All components uses an icon-only compact
