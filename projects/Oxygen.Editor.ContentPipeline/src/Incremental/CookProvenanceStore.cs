@@ -53,14 +53,15 @@ internal sealed class CookProvenanceStore(IAtomicFileStore files)
     /// <param name="cancellationToken">Cancels before the atomic replacement.</param>
     /// <returns>The asynchronous write.</returns>
     public async Task WriteAsync(ProjectContext project, CookProvenance provenance, FileVersion version, CancellationToken cancellationToken)
-    {
-        if (!IsValid(provenance, project))
-        {
-            throw new InvalidDataException("Cooked output did not establish complete product provenance.");
-        }
+        => _ = await files.WriteAsync(PathFor(project), Serialize(project, provenance), version, cancellationToken).ConfigureAwait(false);
 
-        _ = await files.WriteAsync(PathFor(project), JsonSerializer.SerializeToUtf8Bytes(provenance, Options), version, cancellationToken).ConfigureAwait(false);
-    }
+    /// <summary>Validates and serializes product evidence for a journaled metadata commit.</summary>
+    /// <param name="project">The owning project.</param>
+    /// <param name="provenance">The complete updated product evidence.</param>
+    /// <returns>The bytes committed with the publication receipt.</returns>
+    internal static byte[] Serialize(ProjectContext project, CookProvenance provenance)
+        => IsValid(provenance, project) ? JsonSerializer.SerializeToUtf8Bytes(provenance, Options)
+            : throw new InvalidDataException("Cooked output did not establish complete product provenance.");
 
     private static string PathFor(ProjectContext project) => Path.Combine(project.ProjectRoot, ".build", "cook", "provenance.json");
 

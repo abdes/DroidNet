@@ -38,6 +38,12 @@ public sealed record ContentCookResult(
     /// <summary>Gets a value indicating whether every requested product was already current.</summary>
     public bool IsUpToDate { get; init; }
 
+    /// <summary>Gets a value indicating whether roots and metadata committed as a journaled publication.</summary>
+    public bool IsPublished { get; init; }
+
+    /// <summary>Gets a value indicating whether the committed content was applied to a running preview.</summary>
+    public bool IsMounted { get; init; }
+
     /// <summary>Gets the output evidence captured under the native validation read lease.</summary>
     internal Incremental.CookProvenance.Root? VerifiedRoot { get; init; }
 }

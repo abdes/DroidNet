@@ -32,7 +32,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
         return new ContentImportManifest(
             Version: 1,
-            Output: ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
+            Output: scope.StagingOutputRoot ?? ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
             Jobs: jobs);
     }
@@ -101,7 +101,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
         return new ContentImportManifest(
             Version: 1,
-            Output: ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
+            Output: scope.StagingOutputRoot ?? ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
             Jobs: jobs);
     }

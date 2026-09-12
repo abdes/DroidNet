@@ -67,6 +67,28 @@ public static partial class CookOutputLease
         }
     }
 
+    /// <summary>Retains one private operation through native work and publication.</summary>
+    /// <param name="projectRoot">The project that owns the operation.</param>
+    /// <param name="operationId">The private directory identity.</param>
+    /// <returns>The process-owned operation lease.</returns>
+    internal static FileStream AcquireOperation(string projectRoot, Guid operationId)
+    {
+        var (root, _, _) = PreparePaths(projectRoot);
+        var directory = Path.Combine(root, ".build", "cook", operationId.ToString("N"));
+        RejectReparsePoint(directory);
+        _ = Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "operation.lock");
+        RejectReparsePoint(path);
+        try
+        {
+            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+        }
+        catch (IOException exception) when (IsSharingConflict(exception))
+        {
+            throw new CookOutputBusyException("The cook operation still owns native or publication work.", exception);
+        }
+    }
+
     private static (string projectRoot, string gate, string readers) PreparePaths(string projectRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);

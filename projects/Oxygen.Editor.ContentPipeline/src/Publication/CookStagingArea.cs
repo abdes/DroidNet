@@ -10,10 +10,15 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 internal sealed partial class CookStagingArea : IDisposable
 {
     private readonly string outputDirectory;
+    private readonly FileStream operationLease;
     private bool retained;
     private bool disposed;
 
-    private CookStagingArea(string outputDirectory) => this.outputDirectory = outputDirectory;
+    private CookStagingArea(string outputDirectory, FileStream operationLease)
+    {
+        this.outputDirectory = outputDirectory;
+        this.operationLease = operationLease;
+    }
 
     /// <summary>Gets the complete affected-root set and its pre-cook identities.</summary>
     public ImmutableArray<Root> Roots { get; private set; } = [];
@@ -38,7 +43,8 @@ internal sealed partial class CookStagingArea : IDisposable
 
         _ = Directory.CreateDirectory(output);
         var roots = ImmutableArray.CreateBuilder<Root>();
-        var area = new CookStagingArea(output);
+        var lease = CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
+        var area = new CookStagingArea(output, lease);
         Exception? originalFailure = null;
         try
         {
@@ -94,10 +100,17 @@ internal sealed partial class CookStagingArea : IDisposable
         }
 
         this.disposed = true;
-        if (!this.retained && Directory.Exists(this.outputDirectory))
+        try
         {
-            CookOutputLease.RejectReparsePoint(this.outputDirectory);
-            Directory.Delete(this.outputDirectory, recursive: true);
+            if (!this.retained && Directory.Exists(this.outputDirectory))
+            {
+                CookOutputLease.RejectReparsePoint(this.outputDirectory);
+                Directory.Delete(this.outputDirectory, recursive: true);
+            }
+        }
+        finally
+        {
+            this.operationLease.Dispose();
         }
     }
 

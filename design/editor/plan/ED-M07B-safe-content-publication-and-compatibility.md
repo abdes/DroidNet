@@ -127,8 +127,12 @@ preserved unrelated bytes/timestamps, failed seeding, competing readers/writers,
 runtime-reader handoff, and external reader exit/termination. The combined
 publication/staging/lease/worker suite passes 69/69. The transaction core restores
 multi-root failures and persisted interruption states, including metadata writes
-and failed rollback mounts. Live pipeline/runtime integration, startup recovery
-orchestration and publisher-process interruption validation remain open.
+and failed rollback mounts. The shared pipeline now stages native output and
+publishes receipt/provenance transactionally. Recovery distinguishes live and
+abandoned operations, and mounting holds a reader through generation verification.
+ContentPipeline 221/221 passes, including native cook plus failed preview,
+startup handoff, and corrupt-receipt repair. Editor runtime integration and
+publisher-process interruption validation remain open.
 
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable

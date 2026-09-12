@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -15,6 +16,24 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Plans native jobs and preserves source-owned output evidence across partial cooks.</summary>
 public sealed partial class ContentPipelineService
 {
+    private static void RetainStagingUntilDrain(ContentPipelineTerminationException failure, CookStagingArea staging)
+        => _ = failure.DrainCompletion.ContinueWith(
+            completed =>
+            {
+                _ = completed.Exception;
+                try
+                {
+                    staging.Dispose();
+                }
+                catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+                {
+                    failure.Data["StagingCleanupFailure"] = cleanup.Message;
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
     private static CookProvenance BuildProvenance(CookProvenance previous, CookIncrementalPlan plan, CookDependencyGraph graph, IReadOnlyList<ContentCookResult> results)
     {
         var roots = previous.Roots.ToDictionary(static root => root.Mount, StringComparer.Ordinal);
@@ -108,7 +127,12 @@ public sealed partial class ContentPipelineService
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CancellationToken cancellationToken)
     {
         var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts.Fingerprint, cancellationToken).ConfigureAwait(false);
-        var (previous, version) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
+        {
+            previous = new(1, operation.Project.ProjectId, [], []);
+        }
+
         var plan = await CookIncrementalPlanner.PlanAsync(snapshot, graph, previous, cancellationToken).ConfigureAwait(false);
         foreach (var asset in plan.ReusedAssets)
         {
@@ -129,28 +153,65 @@ public sealed partial class ContentPipelineService
 
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
         dirtyInputs.AddRange(await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false));
+        var staging = await CookStagingArea.CreateAsync(operation, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContentPipelineTerminationException failure)
+        {
+            RetainStagingUntilDrain(failure, staging);
+            staging = null;
+            throw;
+        }
+        finally
+        {
+            staging?.Dispose();
+        }
+    }
+
+    private async Task<ContentCookResult> CookAndPublishStagingAsync(
+        ContentCookOperation operation,
+        CookTargetKind targetKind,
+        NativeArtifactLease artifacts,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        CookProvenance previous,
+        CookIncrementalPlan plan,
+        List<ContentCookInput> dirtyInputs,
+        CookStagingArea staging,
+        CancellationToken cancellationToken)
+    {
         var results = new List<ContentCookResult>();
         foreach (var mount in dirtyInputs.GroupBy(static input => input.MountName, StringComparer.OrdinalIgnoreCase))
         {
             var inputs = mount.Select(input => input with { SourceAbsolutePath = Path.Combine(snapshot.InputRoot, input.SourceRelativePath) }).ToArray();
-            var scope = this.CreateScope(operation.Project, inputs, targetKind) with { Snapshot = snapshot, Artifacts = artifacts, ReusableSources = plan.Reusable.Keys.ToImmutableHashSet() };
+            var scope = this.CreateScope(operation.Project, inputs, targetKind) with
+            {
+                Snapshot = snapshot, Artifacts = artifacts, ReusableSources = plan.Reusable.Keys.ToImmutableHashSet(),
+                StagingOutputRoot = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)).StagingPath,
+            };
             results.Add(await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false));
         }
 
-        var result = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
-        if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings) && results.Exists(static value => value.VerifiedRoot is not null))
+        var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
+        var result = cooked with
         {
-            await this.provenanceStore.WriteAsync(operation.Project, BuildProvenance(previous, plan, graph, results), version, cancellationToken).ConfigureAwait(false);
+            TargetKind = targetKind, InputSnapshot = snapshot, ReusedAssets = plan.ReusedAssets,
+            Status = cooked.Status == OperationStatus.Succeeded && !plan.Diagnostics.IsEmpty ? OperationStatus.SucceededWithWarnings : cooked.Status,
+            Diagnostics = NormalizeDiagnostics(operation.OperationId, cooked.Diagnostics.Concat(plan.Diagnostics)),
+        };
+        if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
+            && results.TrueForAll(static value => value.VerifiedRoot is not null))
+        {
+            result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results), cancellationToken).ConfigureAwait(false);
+        }
+        else if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
+        {
+            throw new InvalidDataException("Native validation did not establish output identities for publication.");
         }
 
-        return result with
-        {
-            TargetKind = targetKind,
-            Status = result.Status == OperationStatus.Succeeded && !plan.Diagnostics.IsEmpty ? OperationStatus.SucceededWithWarnings : result.Status,
-            Diagnostics = NormalizeDiagnostics(operation.OperationId, result.Diagnostics.Concat(plan.Diagnostics)),
-            InputSnapshot = snapshot,
-            ReusedAssets = plan.ReusedAssets,
-            InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
-        };
+        return result with { InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, result.IsPublished ? CancellationToken.None : cancellationToken).ConfigureAwait(false) };
     }
 }

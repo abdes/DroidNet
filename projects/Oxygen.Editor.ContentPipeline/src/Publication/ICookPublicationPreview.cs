@@ -7,6 +7,9 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Owns preview suspension while validated roots are replaced or restored.</summary>
 public interface ICookPublicationPreview : IAsyncDisposable
 {
+    /// <summary>Gets a value indicating whether native rendering participates in this publication.</summary>
+    public bool IsRuntimeAvailable { get; }
+
     /// <summary>Pauses rendering, drains content work, and releases mounted readers before filesystem replacement.</summary>
     /// <returns>Completion after conflicting native reads and file handles have drained.</returns>
     public Task PrepareReplacementAsync();

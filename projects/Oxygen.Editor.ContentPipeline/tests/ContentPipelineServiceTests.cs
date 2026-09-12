@@ -52,8 +52,11 @@ public sealed partial class ContentPipelineServiceTests
             && input.OutputVirtualPath == "/Content/Scenes/Main.oscene");
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job => job.Type == "scene-descriptor");
-        _ = api.ValidatedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
-        _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = api.ValidatedRoot.Should().Be(api.ImportedManifest.Output);
+        _ = api.InspectedRoot.Should().Be(api.ImportedManifest.Output);
+        _ = api.ImportedManifest.Output.Should().Contain(Path.Combine(".build", "cook"));
+        _ = result.Validation!.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = result.IsPublished.Should().BeTrue();
     }
 
     /// <summary>Stops before import when scene descriptor generation fails.</summary>
@@ -215,7 +218,8 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.Diagnostics.Should().ContainSingle(diagnostic =>
             diagnostic.Code == ContentPipelineDiagnosticCodes.ValidateFailed);
         _ = result.Inspection.Should().NotBeNull();
-        _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = api.InspectedRoot.Should().Be(api.ImportedManifest!.Output);
+        _ = result.IsPublished.Should().BeFalse();
     }
 
     /// <summary>Skips validation when cooked output inspection fails.</summary>
@@ -430,7 +434,8 @@ public sealed partial class ContentPipelineServiceTests
         TempWorkspace workspace,
         ISceneDescriptorGenerator generator,
         IEngineContentPipelineApi api,
-        Oxygen.Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null)
+        Oxygen.Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null,
+        Publication.CookPublicationService? publication = null)
         => new(
             workspace.ContextService,
             workspace.CookCoordinator,
@@ -440,7 +445,8 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestValidator(),
             api,
             workspace.Documents,
-            compatibility ?? workspace.Compatibility);
+            compatibility ?? workspace.Compatibility,
+            publication: publication);
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(
@@ -488,6 +494,11 @@ public sealed partial class ContentPipelineServiceTests
         CookInspectionResult inspection,
         NativeImportResult? importResult = null) : IEngineContentPipelineApi
     {
+        private readonly CookInspectionResult inspected = inspection with
+        {
+            Assets = inspection.Assets.Select(static asset => asset with { DescriptorRelativePath = asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/') }).ToArray(),
+        };
+
         public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }
 
         public List<ContentImportExecution> Executions { get; } = [];
@@ -516,6 +527,22 @@ public sealed partial class ContentPipelineServiceTests
             var manifest = execution.Manifest;
             this.ImportedManifest = manifest;
             this.ImportedManifests.Add(manifest);
+            _ = Directory.CreateDirectory(manifest.Output);
+            await File.WriteAllTextAsync(Path.Combine(manifest.Output, "container.index.bin"), "controlled native index", cancellationToken).ConfigureAwait(false);
+            foreach (var asset in this.inspected.Assets)
+            {
+                var path = Path.Combine(manifest.Output, asset.DescriptorRelativePath!);
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await File.WriteAllTextAsync(path, asset.VirtualPath, cancellationToken).ConfigureAwait(false);
+            }
+
+            foreach (var file in this.inspected.Files)
+            {
+                var path = Path.Combine(manifest.Output, file.RelativePath);
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await File.WriteAllBytesAsync(path, new byte[checked((int)file.Size)], cancellationToken).ConfigureAwait(false);
+            }
+
             return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
         }
 
@@ -524,7 +551,7 @@ public sealed partial class ContentPipelineServiceTests
             CancellationToken cancellationToken)
         {
             this.InspectedRoot = cookedRoot;
-            return Task.FromResult(inspection);
+            return Task.FromResult(this.inspected with { CookedRoot = cookedRoot });
         }
 
         public Task<CookValidationResult> ValidateLooseCookedRootAsync(
@@ -532,7 +559,7 @@ public sealed partial class ContentPipelineServiceTests
             CancellationToken cancellationToken)
         {
             this.ValidatedRoot = cookedRoot;
-            return Task.FromResult(validation);
+            return Task.FromResult(validation with { CookedRoot = cookedRoot });
         }
     }
 

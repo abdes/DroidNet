@@ -77,6 +77,7 @@ public sealed partial class ContentPipelineService
         CookTargetKind targetKind,
         CancellationToken cancellationToken)
     {
+        await this.publication.RecoverBeforeCookAsync(operation.Project, cancellationToken).ConfigureAwait(false);
         var primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
         if (primaryInputs.Length == 0)
         {

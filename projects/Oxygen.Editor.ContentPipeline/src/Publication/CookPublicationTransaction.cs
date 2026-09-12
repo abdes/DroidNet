@@ -48,6 +48,9 @@ internal sealed partial class CookPublicationTransaction
     /// <summary>Gets the last recorded publication phase.</summary>
     public CookPublicationPhase Phase => this.journal.Phase;
 
+    /// <summary>Gets a deferred private-file cleanup error after a successful commit.</summary>
+    public Exception? CleanupFailure { get; private set; }
+
     /// <summary>Records all baselines before preview or published files are changed.</summary>
     /// <param name="operation">The live project operation.</param>
     /// <param name="staging">The validated staging roots.</param>
@@ -137,6 +140,7 @@ internal sealed partial class CookPublicationTransaction
             mutationStarted = true;
             await this.InstallRootsAsync(verifyOwner).ConfigureAwait(false);
             await this.CommitInstalledRootsAsync(preview, writer, verifyOwner).ConfigureAwait(false);
+            await this.TryCleanupCommittedAsync(writer).ConfigureAwait(false);
         }
         catch (Exception failure)
         {
@@ -217,6 +221,18 @@ internal sealed partial class CookPublicationTransaction
 
         verifyOwner();
         await this.WriteJournalAsync(CookPublicationPhase.Committed, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task TryCleanupCommittedAsync(CookOutputWriteLease writer)
+    {
+        try
+        {
+            await this.CleanupAsync(writer).ConfigureAwait(false);
+        }
+        catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            this.CleanupFailure = cleanup;
+        }
     }
 
     private string MetadataPath(CookPublicationJournal.MetadataFile metadata) => Path.Combine(this.project.ProjectRoot, metadata.RelativePath);
