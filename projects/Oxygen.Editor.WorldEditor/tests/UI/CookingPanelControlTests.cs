@@ -32,6 +32,8 @@ namespace Oxygen.Editor.World.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class CookingPanelControlTests : VisualUserInterfaceTests
 {
+    private Windows.Graphics.SizeInt32 originalWindowSize;
+
     /// <summary>Gets or sets the active test context and artifact directory.</summary>
     public TestContext TestContext { get; set; } = null!;
 
@@ -145,6 +147,16 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = scroller.VerticalOffset.Should().BeGreaterThan(360);
     });
+
+    /// <inheritdoc />
+    protected override void TestSetup() => this.originalWindowSize = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Size;
+
+    /// <inheritdoc />
+    protected override async Task TestCleanupAsync()
+    {
+        VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(this.originalWindowSize);
+        await WaitForRenderAsync().ConfigureAwait(true);
+    }
 
     private static void AssertCompactHeader(CookingPanelView view)
     {
