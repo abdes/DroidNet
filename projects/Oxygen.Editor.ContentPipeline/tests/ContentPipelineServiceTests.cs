@@ -276,7 +276,7 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestValidator(),
             api,
             workspace.Documents,
-            workspace.Qualification);
+            workspace.Compatibility);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -430,7 +430,7 @@ public sealed partial class ContentPipelineServiceTests
         TempWorkspace workspace,
         ISceneDescriptorGenerator generator,
         IEngineContentPipelineApi api,
-        Oxygen.Managed.Core.Compatibility.IArtifactQualificationService? qualification = null)
+        Oxygen.Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null)
         => new(
             workspace.ContextService,
             workspace.CookCoordinator,
@@ -440,7 +440,7 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestValidator(),
             api,
             workspace.Documents,
-            qualification ?? workspace.Qualification);
+            compatibility ?? workspace.Compatibility);
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(
@@ -584,7 +584,7 @@ public sealed partial class ContentPipelineServiceTests
             this.Scene = new Scene(this.Project) { Name = "Main" };
             var producer = Path.Combine(this.Root, "producer.bin");
             File.WriteAllText(producer, "fixed test producer");
-            this.Qualification = new([new("test/producer", producer)]);
+            this.Compatibility = new([new("test/producer", producer)]);
         }
 
         public string Root { get; }
@@ -599,7 +599,7 @@ public sealed partial class ContentPipelineServiceTests
 
         public Scene Scene { get; }
 
-        public Oxygen.Testing.TemporaryArtifactQualification Qualification { get; }
+        public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
 
         public Snapshots.CookDocumentRegistry Documents { get; } = new();
 
@@ -648,7 +648,7 @@ public sealed partial class ContentPipelineServiceTests
         {
             this.ContextService.Close();
             this.CookCoordinator.Dispose();
-            this.Qualification.Dispose();
+            this.Compatibility.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

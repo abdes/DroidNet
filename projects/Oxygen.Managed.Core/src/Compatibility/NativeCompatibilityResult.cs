@@ -7,10 +7,10 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Core.Compatibility;
 
-/// <summary>Either an owned, verified artifact set or actionable qualification failures.</summary>
+/// <summary>Either an owned, verified artifact set or actionable compatibility failures.</summary>
 /// <param name="Artifacts">The verified set; the caller owns its disposal through native work and drain.</param>
-/// <param name="Diagnostics">Qualification failures, without changing the accepted manifest.</param>
-public sealed record ArtifactQualificationResult(QualifiedArtifactLease? Artifacts, ImmutableArray<DiagnosticRecord> Diagnostics)
+/// <param name="Diagnostics">Compatibility failures, without changing the accepted receipt.</param>
+public sealed record NativeCompatibilityResult(NativeArtifactLease? Artifacts, ImmutableArray<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets a value indicating whether the complete required artifact set was verified.</summary>
     public bool Succeeded => this.Artifacts is not null && this.Diagnostics.IsEmpty;

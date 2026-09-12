@@ -194,8 +194,8 @@ public sealed partial class ContentCookCoordinator
     private void FailRun(Guid operationId, Exception exception)
     {
         var state = exception is OperationCanceledException ? CookRunState.Cancelled : CookRunState.Failed;
-        var diagnostics = exception is ArtifactQualificationException qualification
-            ? qualification.Diagnostics.Select(diagnostic => diagnostic with { OperationId = operationId }).ToArray()
+        var diagnostics = exception is NativeCompatibilityException compatibility
+            ? compatibility.Diagnostics.Select(diagnostic => diagnostic with { OperationId = operationId }).ToArray()
             : state == CookRunState.Cancelled ? Array.Empty<DiagnosticRecord>() :
         [
             new DiagnosticRecord

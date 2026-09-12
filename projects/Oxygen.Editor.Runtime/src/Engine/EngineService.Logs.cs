@@ -11,10 +11,10 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public sealed partial class EngineService
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "Native artifact qualification failed: {Message}")]
-    private static partial void LogQualificationFailed(ILogger logger, string message, Exception? exception);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Native artifact compatibility failed: {Message}")]
+    private static partial void LogCompatibilityFailed(ILogger logger, string message, Exception? exception);
 
-    private void LogQualificationFailed(string message, Exception? exception) => LogQualificationFailed(this.logger, message, exception);
+    private void LogCompatibilityFailed(string message, Exception? exception) => LogCompatibilityFailed(this.logger, message, exception);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

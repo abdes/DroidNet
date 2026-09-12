@@ -31,7 +31,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
             runner,
             NullLogger<ImportToolContentPipelineApi>.Instance,
-            workspace.Qualification);
+            workspace.Compatibility);
 
         var execution = CreateExecution(workspace, manifest);
         var result = await api.ImportAsync(execution, CancellationToken.None).ConfigureAwait(false);
@@ -65,7 +65,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
             runner,
             NullLogger<ImportToolContentPipelineApi>.Instance,
-            workspace.Qualification);
+            workspace.Compatibility);
 
         var execution = CreateExecution(workspace, CreateManifest(workspace));
         var result = await api.ImportAsync(execution, CancellationToken.None).ConfigureAwait(false);
@@ -212,7 +212,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
             new CapturingRunner(new ContentPipelineProcessResult(0, string.Empty, string.Empty)),
             NullLogger<ImportToolContentPipelineApi>.Instance,
-            workspace.Qualification);
+            workspace.Compatibility);
 
     private static ContentImportExecution CreateExecution(TempWorkspace workspace, ContentImportManifest manifest)
     {
@@ -318,18 +318,18 @@ public sealed partial class ImportToolContentPipelineApiTests
             Directory.CreateDirectory(this.Root);
             this.ToolPath = Path.Combine(this.Root, "Oxygen.Cooker.ImportTool.exe");
             File.WriteAllText(this.ToolPath, "Test tool");
-            this.Qualification = new([new(Oxygen.Managed.Core.Compatibility.EditorArtifactInventory.ImportToolId, this.ToolPath)]);
+            this.Compatibility = new([new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.ImportToolId, this.ToolPath)]);
         }
 
         public string Root { get; }
 
         public string ToolPath { get; }
 
-        public Oxygen.Testing.TemporaryArtifactQualification Qualification { get; }
+        public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
 
         public void Dispose()
         {
-            this.Qualification.Dispose();
+            this.Compatibility.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

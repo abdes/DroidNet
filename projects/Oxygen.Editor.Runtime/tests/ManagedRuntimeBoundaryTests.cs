@@ -2,47 +2,74 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline;
+using DroidNet.Hosting.WinUI;
+using Moq;
+using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
-/// <summary>Proves startup-facing runtime operations are usable when Interop cannot be loaded.</summary>
+/// <summary>Exercises the managed runtime boundary in isolation inside the existing test assembly.</summary>
 [TestClass]
 public sealed class ManagedRuntimeBoundaryTests
 {
-    /// <summary>Gets or sets the current test context.</summary>
-    public TestContext TestContext { get; set; } = null!;
-
-    /// <summary>Copies the real probe without Interop and executes it in an owned isolated process.</summary>
-    /// <returns>The asynchronous process test.</returns>
+    /// <summary>Managed construction and failed startup never load Interop, even if it is available elsewhere in the process.</summary>
+    /// <returns>The asynchronous boundary test.</returns>
     [TestMethod]
     public async Task RuntimeSettingsAndServiceRemainUsableWithoutInterop()
     {
-        var source = Path.Combine(AppContext.BaseDirectory, "ManagedBoundaryProbe");
-        var root = Path.Combine(Path.GetTempPath(), "OxygenManagedBoundaryTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        var context = new RuntimeWithoutInterop();
         try
         {
-            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            var assembly = context.LoadFromAssemblyPath(typeof(IEngineService).Assembly.Location);
+            foreach (var type in assembly.GetExportedTypes())
             {
-                if (!string.Equals(Path.GetFileName(file), "DroidNet.Oxygen.Editor.Interop.dll", StringComparison.OrdinalIgnoreCase))
+                foreach (var method in type.GetMethods())
                 {
-                    var destination = Path.Combine(root, Path.GetRelativePath(source, file));
-                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                    File.Copy(file, destination);
+                    _ = method.ReturnType.Assembly.GetName().Name.Should().NotBe("DroidNet.Oxygen.Editor.Interop");
+                    _ = method.GetParameters().Should().NotContain(parameter => parameter.ParameterType.Assembly.GetName().Name == "DroidNet.Oxygen.Editor.Interop");
                 }
             }
 
-            var result = await new ContentPipelineProcessRunner().RunAsync(
-                new(Path.Combine(root, "Oxygen.Editor.Runtime.ManagedBoundaryProbe.exe"), [], root),
-                this.TestContext.CancellationToken).ConfigureAwait(false);
-            _ = result.ExitCode.Should().Be(0, result.StandardError + Environment.NewLine + result.StandardOutput);
-            _ = result.StandardOutput.Should().Contain("Managed runtime ready; Interop not loaded.");
+            var settingsType = assembly.GetType(typeof(EngineSettings).FullName!, throwOnError: true)!;
+            _ = JsonSerializer.Serialize(Activator.CreateInstance(settingsType), settingsType).Should().NotBeEmpty();
+            var diagnostic = new DiagnosticRecord { OperationId = Guid.NewGuid(), Domain = FailureDomain.RuntimeDiscovery, Severity = DiagnosticSeverity.Error, Code = NativeCompatibilityDiagnosticCodes.ArtifactMismatch, Message = "SDK changed" };
+            var compatibility = new Mock<INativeCompatibilityService>();
+            _ = compatibility.Setup(value => value.VerifyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new NativeCompatibilityResult(Artifacts: null, [diagnostic]));
+            var hosting = new HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! };
+            var serviceType = assembly.GetType(typeof(EngineService).FullName!, throwOnError: true)!;
+            var service = (IAsyncDisposable)Activator.CreateInstance(serviceType, hosting, Mock.Of<IOperationResultPublisher>(), null, null, null, compatibility.Object)!;
+            await using var lifetime = service.ConfigureAwait(false);
+            var initialize = (ValueTask<bool>)serviceType.GetMethod(nameof(EngineService.InitializeAsync))!.Invoke(service, [CancellationToken.None])!;
+            Func<Task> start = initialize.AsTask;
+            _ = await start.Should().ThrowAsync<NativeCompatibilityException>().ConfigureAwait(false);
+            _ = serviceType.GetProperty(nameof(EngineService.State))!.GetValue(service)!.ToString().Should().Be(nameof(EngineServiceState.Faulted));
+            _ = context.InteropRequested.Should().BeFalse();
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            context.Unload();
+        }
+    }
+
+    private sealed class RuntimeWithoutInterop() : AssemblyLoadContext(isCollectible: true)
+    {
+        public bool InteropRequested { get; private set; }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (string.Equals(assemblyName.Name, "DroidNet.Oxygen.Editor.Interop", StringComparison.Ordinal))
+            {
+                this.InteropRequested = true;
+                throw new FileNotFoundException("Interop is unavailable in this test context.");
+            }
+
+            return Default.LoadFromAssemblyName(assemblyName);
         }
     }
 }

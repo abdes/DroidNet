@@ -26,7 +26,7 @@ public sealed record ContentCookResult(
     CookInspectionResult? Inspection,
     CookValidationResult? Validation)
 {
-    /// <summary>Gets the saved inputs and qualified producer fingerprint used by this cook.</summary>
+    /// <summary>Gets the saved inputs and compatible producer fingerprint used by this cook.</summary>
     public CookInputSnapshot? InputSnapshot { get; init; }
 
     /// <summary>Gets whether captured inputs still match current authoring at completion, when checked.</summary>

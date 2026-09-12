@@ -35,7 +35,7 @@ using Testably.Abstractions;
 
 namespace Oxygen.Editor.World.Tests;
 
-/// <summary>Owns a real Runtime scene and disk source for per-field control qualification.</summary>
+/// <summary>Owns a real Runtime scene and disk source for per-field control compatibility.</summary>
 public sealed partial class InspectorControlTests
 {
     private sealed partial class NativeSceneFixture : IAsyncDisposable
@@ -43,7 +43,7 @@ public sealed partial class InspectorControlTests
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
         private readonly EngineService engine;
-        private readonly Oxygen.Testing.TemporaryArtifactQualification qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         private readonly SceneEngineSync sync;
         private readonly Mock<IDocumentService> documents = new();
         private readonly StrongReferenceMessenger messenger = new();
@@ -58,7 +58,7 @@ public sealed partial class InspectorControlTests
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
             var results = publisher.Object;
-            this.engine = new EngineService(this.hosting, results, artifactQualification: this.qualification);
+            this.engine = new EngineService(this.hosting, results, nativeCompatibility: this.compatibility);
             this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
             var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png")) { Name = "Environment fields" };
             var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
@@ -190,7 +190,7 @@ public sealed partial class InspectorControlTests
             }
             finally
             {
-                this.qualification.Dispose();
+                this.compatibility.Dispose();
                 this.directory.Delete(recursive: true);
             }
         }

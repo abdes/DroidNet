@@ -46,7 +46,6 @@ using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Import.Gltf;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Import.Textures;
-using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;
 using Serilog;
@@ -255,7 +254,6 @@ public static partial class Program
             .WithSpatialMapping();
 
         // Core services
-        container.RegisterInstance<IArtifactQualificationService>(EditorArtifactQualificationService.ForCurrentProcess());
         _ = container.WithSettings<IEngineSettings, EngineSettingsService>();
         container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);

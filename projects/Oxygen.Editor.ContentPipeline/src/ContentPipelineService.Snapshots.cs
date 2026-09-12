@@ -35,7 +35,7 @@ public sealed partial class ContentPipelineService
             Inspection: null,
             Validation: null);
 
-    private static Task ReleaseArtifactsAfterDrainAsync(Task drain, QualifiedArtifactLease artifacts)
+    private static Task ReleaseArtifactsAfterDrainAsync(Task drain, NativeArtifactLease artifacts)
         => drain.ContinueWith(
             async completed =>
             {
@@ -90,13 +90,13 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
         }
 
-        var qualification = await this.artifactQualification.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
-        if (!qualification.Succeeded)
+        var compatibility = await this.nativeCompatibility.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
+        if (!compatibility.Succeeded)
         {
-            return new(operation.OperationId, targetKind, OperationStatus.Failed, qualification.Diagnostics, [], Inspection: null, Validation: null);
+            return new(operation.OperationId, targetKind, OperationStatus.Failed, compatibility.Diagnostics, [], Inspection: null, Validation: null);
         }
 
-        var artifacts = qualification.Artifacts!;
+        var artifacts = compatibility.Artifacts!;
         Task? retainedDrain = null;
         try
         {
@@ -121,7 +121,7 @@ public sealed partial class ContentPipelineService
             retainedDrain = ReleaseArtifactsAfterDrainAsync(failure.DrainCompletion, artifacts);
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
         }
-        catch (ArtifactQualificationException failure)
+        catch (NativeCompatibilityException failure)
         {
             return new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, failure.Diagnostics), [], Inspection: null, Validation: null);
         }

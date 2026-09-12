@@ -7,18 +7,18 @@ using System.Collections.Immutable;
 namespace Oxygen.Managed.Core.Compatibility;
 
 /// <summary>Keeps verified files protected from replacement until their native owner has finished.</summary>
-public sealed class QualifiedArtifactLease : IDisposable, IAsyncDisposable
+public sealed class NativeArtifactLease : IDisposable, IAsyncDisposable
 {
     private readonly Lock sync = new();
     private readonly ImmutableDictionary<string, string> paths;
     private ImmutableArray<FileStream> streams;
     private bool disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="QualifiedArtifactLease"/> class with verified file ownership.</summary>
+    /// <summary>Initializes a new instance of the <see cref="NativeArtifactLease"/> class with verified file ownership.</summary>
     /// <param name="fingerprint">The canonical producer content identity.</param>
     /// <param name="paths">Verified physical paths by portable artifact identity.</param>
     /// <param name="streams">Protected file handles transferred by the verifier.</param>
-    internal QualifiedArtifactLease(string fingerprint, ImmutableDictionary<string, string> paths, ImmutableArray<FileStream> streams)
+    internal NativeArtifactLease(string fingerprint, ImmutableDictionary<string, string> paths, ImmutableArray<FileStream> streams)
     {
         this.Fingerprint = fingerprint;
         this.paths = paths;

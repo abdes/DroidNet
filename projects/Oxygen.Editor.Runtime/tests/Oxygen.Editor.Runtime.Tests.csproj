@@ -9,22 +9,8 @@
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
-        <ProjectReference Include="..\testhost\Oxygen.Editor.Runtime.ManagedBoundaryProbe.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="ErrorLog" />
         <PackageReference Include="Moq" />
         <Compile Include="..\..\Oxygen.Editor.Interop\test\NativeDllSearchPath.cs" Link="NativeDllSearchPath.cs" />
-        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryArtifactQualification.cs" Link="TemporaryArtifactQualification.cs" />
+        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
     </ItemGroup>
-    <Target Name="CopyManagedBoundaryProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
-        <MSBuild Projects="..\testhost\Oxygen.Editor.Runtime.ManagedBoundaryProbe.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog" />
-        <MSBuild Projects="..\testhost\Oxygen.Editor.Runtime.ManagedBoundaryProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog">
-            <Output TaskParameter="TargetOutputs" ItemName="_ManagedBoundaryProbeAssembly" />
-        </MSBuild>
-        <PropertyGroup>
-            <_ManagedBoundaryProbeDirectory>@(_ManagedBoundaryProbeAssembly->'%(RootDir)%(Directory)')</_ManagedBoundaryProbeDirectory>
-        </PropertyGroup>
-        <ItemGroup>
-            <_ManagedBoundaryProbeFiles Include="$(_ManagedBoundaryProbeDirectory)**\*" />
-        </ItemGroup>
-        <Copy SourceFiles="@(_ManagedBoundaryProbeFiles)" DestinationFiles="@(_ManagedBoundaryProbeFiles->'$(OutDir)ManagedBoundaryProbe\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-    </Target>
 </Project>

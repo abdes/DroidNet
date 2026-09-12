@@ -16,7 +16,7 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
     /// <summary>Discovers and captures coherent saved bytes, retrying changed discovery at most three times.</summary>
     /// <param name="operation">The operation holding the project writer.</param>
     /// <param name="discover">Resolves the complete source closure and its discovery hashes.</param>
-    /// <param name="buildFingerprint">The qualified native/tool/schema fingerprint.</param>
+    /// <param name="buildFingerprint">The compatible native/tool/schema fingerprint.</param>
     /// <param name="cancellationToken">Cancels capture before native work begins.</param>
     /// <returns>A snapshot or documents requiring Save/Reload.</returns>
     public async Task<CookSnapshotCaptureResult> CaptureAsync(

@@ -25,7 +25,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="manifestValidator">The import manifest validator.</param>
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
 /// <param name="cookDocuments">The registered saved-document owners.</param>
-/// <param name="artifactQualification">The qualified producer identity and file ownership.</param>
+/// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
 public sealed partial class ContentPipelineService(
     IProjectContextService projectContextService,
     IContentCookCoordinator cookCoordinator,
@@ -35,14 +35,14 @@ public sealed partial class ContentPipelineService(
     IContentImportManifestValidator manifestValidator,
     IEngineContentPipelineApi engineContentPipelineApi,
     ICookDocumentRegistry cookDocuments,
-    IArtifactQualificationService? artifactQualification = null) : IContentPipelineService
+    INativeCompatibilityService? nativeCompatibility = null) : IContentPipelineService
 {
     private static readonly System.Text.Json.JsonSerializerOptions NativeDescriptorJsonOptions = new()
     {
         WriteIndented = true,
     };
 
-    private readonly IArtifactQualificationService artifactQualification = artifactQualification ?? EditorArtifactQualificationService.ForCurrentProcess();
+    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));

@@ -150,26 +150,21 @@ off, and camera/light/material references. Visual equivalence is M08's gate.
 
 ### 07B.4 - Matched Artifact Preflight And Reproducible Import
 
-Installed artifact inventory, fixed-manifest verification and native entry-point
-checks are implemented. Runtime startup verifies before creating the native
-session; import/catalog workers retain verified files through termination and
-reader drain. Managed startup and view contracts remain usable without Interop.
-Core 80/80, ContentPipeline 131/131 and Runtime 83/83 pass. The explicit
-`Oxygen.Editor/tools/Qualify-EditorArtifacts.ps1` command tests a protected set
-before atomic manifest promotion; its failure/success fixture cases pass.
-Real Debug/Release promotion is pending an unlocked packaged UI run. The locked
-run passed 141/155, with foreground-pointer and two control-realization failures.
-Qualified import and clean-copy reproduction remain open.
+Decision D2, revised by the user on 2026-09-12: remove qualification manifests,
+promotion commands and the separately built startup probe. Normal development
+builds changed projects and runs the editor. Existing test projects own regression
+coverage; tests are never a startup prerequisite.
 
-Create/ship the PRD qualification manifest with exact editor/native/tool/schema
-hashes. Validate it before loading interop or spawning native tools. Keep Project
-Browser and safe saves available on mismatch. Implement the qualified glTF/FBX
-static/scalar validation and retained import settings from pipeline section 17.
+The ordinary Interop build embeds its native SDK binary hashes and tracks SDK
+headers/import libraries as compile inputs. Startup reads the receipt as managed
+metadata, checks the installed SDK, and retains native files through session
+cleanup. Managed/UI changes do not invalidate this receipt. An SDK change requires
+only the normal Interop rebuild. Cooking independently checks its tool/schema
+inputs and retains their current producer hashes through worker termination and
+reader drain. Project Browser and safe saves remain available on mismatch.
 
-Decision D2, accepted on 2026-09-11: Debug and Release both use a fixed
-qualification manifest. A build must not regenerate the accepted manifest to
-make its new outputs pass. Qualifying and promoting a new artifact set is an
-explicit operation, separate from ordinary compilation.
+Implement the supported glTF/FBX static/scalar validation and retained import
+settings from pipeline section 17. Clean-copy reproduction remains open.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and

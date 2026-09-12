@@ -11,11 +11,11 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Core.Compatibility;
 
-/// <summary>Verifies a fixed manifest against the host's complete required artifact inventory.</summary>
+/// <summary>Verifies a build receipt against the host's complete required artifact inventory.</summary>
 [SupportedOSPlatform("windows")]
-public static class ArtifactQualificationVerifier
+public static partial class NativeCompatibilityVerifier
 {
-    private static readonly JsonSerializerOptions ManifestOptions = new()
+    private static readonly JsonSerializerOptions ReceiptOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
@@ -25,61 +25,91 @@ public static class ArtifactQualificationVerifier
 
     /// <summary>Verifies all required files and retains read leases through the caller's native operation.</summary>
     /// <param name="operationId">The diagnostic correlation identity.</param>
-    /// <param name="manifestPath">The fixed qualification manifest to read.</param>
+    /// <param name="receiptPath">The Interop SDK build receipt to read.</param>
     /// <param name="configuration">The running build configuration.</param>
-    /// <param name="requiredArtifacts">The complete inventory required by the host, independently of the manifest.</param>
+    /// <param name="requiredArtifacts">The complete inventory required by the host, independently of the receipt.</param>
     /// <param name="cancellationToken">Cancels verification and releases all acquired file handles.</param>
     /// <param name="progress">Optional progress for the host's startup or cooking operation.</param>
-    /// <returns>The owned qualified set or failures that prevent native work.</returns>
-    public static async Task<ArtifactQualificationResult> VerifyAsync(
+    /// <returns>The owned compatible set or failures that prevent native work.</returns>
+    public static async Task<NativeCompatibilityResult> VerifyAsync(
         Guid operationId,
-        string manifestPath,
+        string receiptPath,
         string configuration,
-        IReadOnlyList<QualificationArtifactLocation> requiredArtifacts,
+        IReadOnlyList<NativeArtifactLocation> requiredArtifacts,
         CancellationToken cancellationToken,
-        IProgress<ArtifactQualificationProgress>? progress = null)
+        IProgress<NativeCompatibilityProgress>? progress = null)
     {
         if (!OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("Artifact qualification requires Windows file-sharing protection.");
+            throw new PlatformNotSupportedException("Artifact compatibility requires Windows file-sharing protection.");
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(receiptPath);
         ArgumentNullException.ThrowIfNull(requiredArtifacts);
         cancellationToken.ThrowIfCancellationRequested();
         var requirements = requiredArtifacts.ToImmutableArray();
         ValidateRequirements(configuration, requirements);
-        ArtifactQualificationManifest manifest;
+        NativeBuildReceipt receipt;
         try
         {
-            var bytes = await File.ReadAllBytesAsync(manifestPath, cancellationToken).ConfigureAwait(false);
+            var bytes = await File.ReadAllBytesAsync(receiptPath, cancellationToken).ConfigureAwait(false);
             using var document = JsonDocument.Parse(bytes);
             ValidateUniqueProperties(document.RootElement);
-            manifest = document.RootElement.Deserialize<ArtifactQualificationManifest>(ManifestOptions)
-                ?? throw new InvalidDataException("The qualification manifest is empty.");
-            ValidateManifest(manifest);
+            receipt = document.RootElement.Deserialize<NativeBuildReceipt>(ReceiptOptions)
+                ?? throw new InvalidDataException("The compatibility receipt is empty.");
+            ValidateReceipt(receipt);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
-            return new(Artifacts: null, [Failure(operationId, ArtifactQualificationDiagnosticCodes.ManifestInvalid, "The fixed qualification manifest is missing or invalid.", manifestPath, ex.ToString())]);
+            return new(Artifacts: null, [Failure(operationId, NativeCompatibilityDiagnosticCodes.ReceiptInvalid, "The Interop SDK build receipt is missing or invalid.", receiptPath, ex.ToString())]);
         }
 
-        if (!string.Equals(manifest.Configuration, configuration, StringComparison.Ordinal))
-        {
-            var mismatch = $"The qualification manifest is for {manifest.Configuration}; this build is {configuration}.";
-            return new(Artifacts: null, [Failure(operationId, ArtifactQualificationDiagnosticCodes.ConfigurationMismatch, mismatch, manifestPath)]);
-        }
-
-        return requirements.Select(static artifact => artifact.Id).ToHashSet(StringComparer.Ordinal).SetEquals(manifest.Artifacts.Select(static artifact => artifact.Id))
-            ? await VerifyFilesAsync(operationId, manifest, requirements, progress, cancellationToken).ConfigureAwait(false)
-            : new(Artifacts: null, [Failure(operationId, ArtifactQualificationDiagnosticCodes.ArtifactSetMismatch, "The installed artifact set differs from the fixed qualification manifest.", manifestPath)]);
+        return await VerifyAsync(operationId, receipt, configuration, requirements, cancellationToken, progress).ConfigureAwait(false);
     }
 
-    private static void ValidateRequirements(string configuration, IReadOnlyList<QualificationArtifactLocation> requirements)
+    /// <summary>Verifies native files against the SDK receipt embedded by the Interop build.</summary>
+    /// <param name="operationId">The diagnostic correlation identity.</param>
+    /// <param name="receipt">The build's recorded SDK inputs.</param>
+    /// <param name="configuration">The running configuration.</param>
+    /// <param name="requiredArtifacts">The native files required by the operation.</param>
+    /// <param name="cancellationToken">Cancels verification.</param>
+    /// <param name="progress">Optional verification progress.</param>
+    /// <returns>The protected native files or incompatibility diagnostics.</returns>
+    public static Task<NativeCompatibilityResult> VerifyAsync(Guid operationId, NativeBuildReceipt receipt, string configuration, IReadOnlyList<NativeArtifactLocation> requiredArtifacts, CancellationToken cancellationToken, IProgress<NativeCompatibilityProgress>? progress = null)
+    {
+        ValidateRequirements(configuration, requiredArtifacts);
+        ValidateReceipt(receipt);
+        if (!string.Equals(receipt.Configuration, configuration, StringComparison.Ordinal))
+        {
+            var mismatch = $"Interop was built for {receipt.Configuration}; this build is {configuration}. Rebuild Interop in {configuration}.";
+            return Task.FromResult(new NativeCompatibilityResult(Artifacts: null, [Failure(operationId, NativeCompatibilityDiagnosticCodes.ConfigurationMismatch, mismatch, string.Empty)]));
+        }
+
+        return requiredArtifacts.Select(static artifact => artifact.Id).ToHashSet(StringComparer.Ordinal).SetEquals(receipt.Artifacts.Select(static artifact => artifact.Id))
+            ? VerifyFilesAsync(operationId, receipt, requiredArtifacts, progress, cancellationToken)
+            : Task.FromResult(new NativeCompatibilityResult(Artifacts: null, [Failure(operationId, NativeCompatibilityDiagnosticCodes.ArtifactSetMismatch, "The installed engine SDK has changed. Rebuild Interop against this SDK.", string.Empty)]));
+    }
+
+    /// <summary>Rejects incomplete or malformed SDK metadata before resolving its artifact paths.</summary>
+    /// <param name="receipt">The SDK build receipt.</param>
+    internal static void ValidateReceipt(NativeBuildReceipt receipt)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (receipt.Version != 1 || receipt.Configuration is not ("Debug" or "Release")
+            || receipt.Artifacts.IsDefaultOrEmpty
+            || receipt.Artifacts.Any(artifact => artifact is null || !IsValidId(artifact.Id) || !ids.Add(artifact.Id)
+                || artifact.Size < 0 || artifact.Sha256.Length != SHA256.HashSizeInBytes * 2 || !artifact.Sha256.All(Uri.IsHexDigit)
+                || (artifact.SchemaId is not null && string.IsNullOrWhiteSpace(artifact.SchemaId))))
+        {
+            throw new InvalidDataException("The compatibility receipt contains invalid or duplicate artifact identities, hashes, schema identifiers or build metadata.");
+        }
+    }
+
+    private static void ValidateRequirements(string configuration, IReadOnlyList<NativeArtifactLocation> requirements)
     {
         if (configuration is not ("Debug" or "Release"))
         {
-            throw new ArgumentException("Qualification requires an explicit Debug or Release configuration.", nameof(configuration));
+            throw new ArgumentException("Compatibility requires an explicit Debug or Release configuration.", nameof(configuration));
         }
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -88,21 +118,7 @@ public static class ArtifactQualificationVerifier
             || !IsValidId(artifact.Id) || !ids.Add(artifact.Id)
             || !Path.IsPathFullyQualified(artifact.FullPath) || !paths.Add(Path.GetFullPath(artifact.FullPath))))
         {
-            throw new ArgumentException("Qualification requires a nonempty inventory of unique identities and absolute file paths.", nameof(requirements));
-        }
-    }
-
-    private static void ValidateManifest(ArtifactQualificationManifest manifest)
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        if (manifest.Version != 1 || manifest.Configuration is not ("Debug" or "Release")
-            || manifest.SourceRevision.Length is not (40 or 64) || !manifest.SourceRevision.All(Uri.IsHexDigit)
-            || manifest.Artifacts.IsDefaultOrEmpty
-            || manifest.Artifacts.Any(artifact => artifact is null || !IsValidId(artifact.Id) || !ids.Add(artifact.Id)
-                || artifact.Size < 0 || artifact.Sha256.Length != SHA256.HashSizeInBytes * 2 || !artifact.Sha256.All(Uri.IsHexDigit)
-                || (artifact.SchemaId is not null && string.IsNullOrWhiteSpace(artifact.SchemaId))))
-        {
-            throw new InvalidDataException("The qualification manifest contains invalid or duplicate artifact identities, hashes, schema identifiers or build metadata.");
+            throw new ArgumentException("Compatibility requires a nonempty inventory of unique identities and absolute file paths.", nameof(requirements));
         }
     }
 
@@ -120,7 +136,7 @@ public static class ArtifactQualificationVerifier
             {
                 if (!names.Add(property.Name))
                 {
-                    throw new InvalidDataException($"The qualification manifest repeats property '{property.Name}'.");
+                    throw new InvalidDataException($"The compatibility receipt repeats property '{property.Name}'.");
                 }
 
                 ValidateUniqueProperties(property.Value);
@@ -136,14 +152,14 @@ public static class ArtifactQualificationVerifier
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The successful result transfers its lease to the caller; all unsuccessful paths release acquired streams in finally.")]
-    private static async Task<ArtifactQualificationResult> VerifyFilesAsync(
+    private static async Task<NativeCompatibilityResult> VerifyFilesAsync(
         Guid operationId,
-        ArtifactQualificationManifest manifest,
-        IReadOnlyList<QualificationArtifactLocation> requiredArtifacts,
-        IProgress<ArtifactQualificationProgress>? progress,
+        NativeBuildReceipt receipt,
+        IReadOnlyList<NativeArtifactLocation> requiredArtifacts,
+        IProgress<NativeCompatibilityProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var expected = manifest.Artifacts.ToDictionary(static artifact => artifact.Id, StringComparer.Ordinal);
+        var expected = receipt.Artifacts.ToDictionary(static artifact => artifact.Id, StringComparer.Ordinal);
         var streams = new List<FileStream>();
         var diagnostics = new List<DiagnosticRecord>();
         var transferred = false;
@@ -163,11 +179,11 @@ public static class ArtifactQualificationVerifier
                 return new(Artifacts: null, [.. diagnostics]);
             }
 
-            var lease = new QualifiedArtifactLease(
-                ComputeFingerprint(manifest),
+            var lease = new NativeArtifactLease(
+                ComputeFingerprint(receipt),
                 requiredArtifacts.ToImmutableDictionary(static artifact => artifact.Id, static artifact => Path.GetFullPath(artifact.FullPath), StringComparer.Ordinal),
                 [.. streams]);
-            var result = new ArtifactQualificationResult(lease, []);
+            var result = new NativeCompatibilityResult(lease, []);
             transferred = true;
             return result;
         }
@@ -185,15 +201,15 @@ public static class ArtifactQualificationVerifier
 
     private static async Task VerifyFileAsync(
         Guid operationId,
-        QualificationArtifactLocation artifact,
-        QualifiedArtifact expected,
+        NativeArtifactLocation artifact,
+        NativeArtifact expected,
         List<FileStream> streams,
         List<DiagnosticRecord> diagnostics,
         CancellationToken cancellationToken)
     {
         if (!string.Equals(artifact.SchemaId, expected.SchemaId, StringComparison.Ordinal))
         {
-            diagnostics.Add(Failure(operationId, ArtifactQualificationDiagnosticCodes.ArtifactMismatch, $"The required schema identifier differs from qualification: {artifact.Id}.", artifact.FullPath));
+            diagnostics.Add(Failure(operationId, NativeCompatibilityDiagnosticCodes.ArtifactMismatch, $"The required schema identifier differs from the SDK used to build Interop; rebuild Interop: {artifact.Id}.", artifact.FullPath));
             return;
         }
 
@@ -204,22 +220,22 @@ public static class ArtifactQualificationVerifier
             if (stream.Length != expected.Size
                 || !string.Equals(Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false)), expected.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                diagnostics.Add(Failure(operationId, ArtifactQualificationDiagnosticCodes.ArtifactMismatch, $"The installed file differs from qualification: {artifact.Id}.", artifact.FullPath));
+                diagnostics.Add(Failure(operationId, NativeCompatibilityDiagnosticCodes.ArtifactMismatch, $"The installed file differs from the SDK used to build Interop; rebuild Interop: {artifact.Id}.", artifact.FullPath));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            diagnostics.Add(Failure(operationId, ArtifactQualificationDiagnosticCodes.ArtifactMismatch, $"The qualified file is missing or inaccessible: {artifact.Id}.", artifact.FullPath, ex.ToString()));
+            diagnostics.Add(Failure(operationId, NativeCompatibilityDiagnosticCodes.ArtifactMismatch, $"The compatible file is missing or inaccessible: {artifact.Id}.", artifact.FullPath, ex.ToString()));
         }
     }
 
-    private static string ComputeFingerprint(ArtifactQualificationManifest manifest)
+    private static string ComputeFingerprint(NativeBuildReceipt receipt)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            manifest.Version,
-            manifest.Configuration,
-            Artifacts = manifest.Artifacts.OrderBy(static artifact => artifact.Id, StringComparer.Ordinal)
+            receipt.Version,
+            receipt.Configuration,
+            Artifacts = receipt.Artifacts.OrderBy(static artifact => artifact.Id, StringComparer.Ordinal)
                 .Select(static artifact => artifact with { Sha256 = artifact.Sha256.ToUpperInvariant() }),
         });
         return Convert.ToHexString(SHA256.HashData(bytes));

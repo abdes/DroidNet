@@ -42,7 +42,7 @@ public sealed class EngineContentPipelineToolLocator : IEngineContentPipelineToo
             "Release";
 #endif
 
-        var installation = Oxygen.Managed.Core.Compatibility.EditorArtifactInstallation.Discover(AppContext.BaseDirectory, configuration);
+        var installation = Oxygen.Managed.Core.Compatibility.EditorNativeInstallation.Discover(AppContext.BaseDirectory, configuration);
         yield return Path.Combine(installation.EngineRoot, "bin", ImportToolExecutableName);
 
         var current = new DirectoryInfo(AppContext.BaseDirectory);

@@ -11,10 +11,10 @@ using Testably.Abstractions;
 
 namespace Oxygen.Testing;
 
-/// <summary>Composes the production native pipeline under a fixture-owned qualification manifest.</summary>
+/// <summary>Composes the production native pipeline under a fixture-owned compatibility manifest.</summary>
 internal sealed partial class NativeContentPipelineFixture : IDisposable
 {
-    private readonly TemporaryArtifactQualification qualification = TemporaryArtifactQualification.ForInstalledEngine();
+    private readonly TemporaryNativeArtifacts compatibility = TemporaryNativeArtifacts.ForInstalledEngine();
 
     /// <summary>Initializes a new instance of the <see cref="NativeContentPipelineFixture"/> class.</summary>
     /// <param name="context">The active fixture project.</param>
@@ -22,7 +22,7 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
     /// <param name="documents">The document owners participating in capture.</param>
     public NativeContentPipelineFixture(IProjectContextService context, IContentCookCoordinator coordinator, ICookDocumentRegistry documents)
     {
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.qualification);
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         this.Pipeline = new ContentPipelineService(
             context,
             coordinator,
@@ -32,12 +32,12 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
             new ContentImportManifestValidator(),
             api,
             documents,
-            this.qualification);
+            this.compatibility);
     }
 
     /// <summary>Gets the production pipeline for fixture operations.</summary>
     public ContentPipelineService Pipeline { get; }
 
     /// <inheritdoc />
-    public void Dispose() => this.qualification.Dispose();
+    public void Dispose() => this.compatibility.Dispose();
 }

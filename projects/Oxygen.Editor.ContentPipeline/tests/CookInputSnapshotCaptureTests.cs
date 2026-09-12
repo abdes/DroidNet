@@ -174,7 +174,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
     }
 
-    /// <summary>Uses logical source content and qualified artifacts, independently of workspace and operation paths.</summary>
+    /// <summary>Uses logical source content and compatible artifacts, independently of workspace and operation paths.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task InputIdentityIsPortableAndIncludesTheBuildFingerprint()
@@ -185,7 +185,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         var secondInput = second.WriteInput("Content/source.bin", "same bytes");
         var original = (await first.CaptureAsync([firstInput]).ConfigureAwait(false)).Snapshot!;
         var relocated = (await second.CaptureAsync([secondInput with { RelativePath = "Content\\source.bin" }]).ConfigureAwait(false)).Snapshot!;
-        var changedBuild = (await second.CaptureAsync([secondInput], "different-qualified-build").ConfigureAwait(false)).Snapshot!;
+        var changedBuild = (await second.CaptureAsync([secondInput], "different-compatible-build").ConfigureAwait(false)).Snapshot!;
 
         _ = relocated.InputIdentity.Should().Be(original.InputIdentity);
         _ = relocated.InputRoot.Should().NotBe(original.InputRoot);
@@ -204,7 +204,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         var capture = () => workspace.Capture.CaptureAsync(
             operation,
             _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>([input]),
-            "qualified-build",
+            "compatible-build",
             CancellationToken.None);
         _ = await capture.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
@@ -267,11 +267,11 @@ public sealed partial class CookInputSnapshotCaptureTests
             return new(new Uri("asset:///" + relativePath), source, relativePath, Hash(content));
         }
 
-        public Task<CookSnapshotCaptureResult> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "qualified-build")
+        public Task<CookSnapshotCaptureResult> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "compatible-build")
             => this.CaptureAsync(_ => Task.FromResult(inputs), build);
 
         public Task<CookSnapshotCaptureResult> CaptureAsync(
-            Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover, string build = "qualified-build")
+            Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover, string build = "compatible-build")
             => this.Coordinator.RunAsync((operation, token) => this.Capture.CaptureAsync(operation, discover, build, token), CancellationToken.None);
 
         public void Dispose()

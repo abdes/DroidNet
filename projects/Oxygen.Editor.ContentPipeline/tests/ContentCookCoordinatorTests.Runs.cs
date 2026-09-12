@@ -11,10 +11,10 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Verifies scoped history, cancellation, and explicit save recovery.</summary>
 public sealed partial class ContentCookCoordinatorTests
 {
-    /// <summary>Catalog qualification failures retain actionable artifact details in the selected cook.</summary>
+    /// <summary>Catalog compatibility failures retain actionable artifact details in the selected cook.</summary>
     /// <returns>The asynchronous operation test.</returns>
     [TestMethod]
-    public async Task QualificationFailuresKeepArtifactDiagnosticsInCookHistory()
+    public async Task CompatibilityFailuresKeepArtifactDiagnosticsInCookHistory()
     {
         using var coordinator = CreateCoordinator(CreateContextService());
         var diagnostic = new DiagnosticRecord
@@ -22,15 +22,15 @@ public sealed partial class ContentCookCoordinatorTests
             OperationId = Guid.NewGuid(),
             Domain = FailureDomain.RuntimeDiscovery,
             Severity = DiagnosticSeverity.Error,
-            Code = Oxygen.Managed.Core.Compatibility.ArtifactQualificationDiagnosticCodes.ArtifactMismatch,
+            Code = Oxygen.Managed.Core.Compatibility.NativeCompatibilityDiagnosticCodes.ArtifactMismatch,
             Message = "The import tool changed.",
             AffectedPath = "ImportTool.exe",
         };
         Func<Task> cook = () => coordinator.RunCookAsync<int>(
             new(CookTargetKind.Project, ScopeUri: null),
-            (_, _) => Task.FromException<int>(new Oxygen.Managed.Core.Compatibility.ArtifactQualificationException([diagnostic])),
+            (_, _) => Task.FromException<int>(new Oxygen.Managed.Core.Compatibility.NativeCompatibilityException([diagnostic])),
             CancellationToken.None);
-        _ = await cook.Should().ThrowAsync<Oxygen.Managed.Core.Compatibility.ArtifactQualificationException>().ConfigureAwait(false);
+        _ = await cook.Should().ThrowAsync<Oxygen.Managed.Core.Compatibility.NativeCompatibilityException>().ConfigureAwait(false);
         var run = coordinator.Runs.Single();
         _ = run.Diagnostics.Should().ContainSingle().Which.Should().Be(diagnostic with { OperationId = run.OperationId });
     }

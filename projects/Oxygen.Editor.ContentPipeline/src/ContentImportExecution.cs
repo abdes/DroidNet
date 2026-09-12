@@ -18,5 +18,5 @@ public sealed record ContentImportExecution(
     ContentImportManifest Manifest)
 {
     /// <summary>Gets artifacts borrowed from the cook owner, which retains them through worker drain.</summary>
-    public QualifiedArtifactLease? Artifacts { get; init; }
+    public NativeArtifactLease? Artifacts { get; init; }
 }

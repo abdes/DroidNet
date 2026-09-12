@@ -9,7 +9,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Routes material cooking through the shared saved-input pipeline.</summary>
-/// <param name="pipeline">The shared cook, qualification and snapshot workflow.</param>
+/// <param name="pipeline">The shared cook, compatibility and snapshot workflow.</param>
 /// <param name="projectContextService">The active project context.</param>
 /// <param name="logger">Material workflow logging.</param>
 public sealed partial class MaterialCookService(

@@ -10,26 +10,26 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ImportToolContentPipelineApi : IBuiltinGeometryCatalogProvider
 {
     /// <inheritdoc/>
-    public async Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken, QualifiedArtifactLease? artifacts = null)
+    public async Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(mountName);
         cancellationToken.ThrowIfCancellationRequested();
-        var qualification = artifacts is not null
-            ? new ArtifactQualificationResult(artifacts, [])
-            : await this.artifactQualification.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
-        if (!qualification.Succeeded)
+        var compatibility = artifacts is not null
+            ? new NativeCompatibilityResult(artifacts, [])
+            : await this.nativeCompatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
+        if (!compatibility.Succeeded)
         {
-            throw new ArtifactQualificationException(qualification.Diagnostics);
+            throw new NativeCompatibilityException(compatibility.Diagnostics);
         }
 
-        var qualified = qualification.Artifacts!;
+        var compatible = compatibility.Artifacts!;
         var output = Path.Combine(projectRoot, ".pipeline", "Catalogs", $"builtins-{Guid.NewGuid():N}.json");
         Task? retainedWorkerDrain = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var toolPath = this.GetQualifiedToolPath(qualified);
+            var toolPath = this.GetCompatibleToolPath(compatible);
             var request = new ContentPipelineProcessRequest(
                 toolPath, ["--no-tui", "--no-color", "--quiet", "builtin-catalog", output, "--mount", mountName], projectRoot);
             var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
@@ -53,14 +53,14 @@ public sealed partial class ImportToolContentPipelineApi : IBuiltinGeometryCatal
             {
                 if (artifacts is null)
                 {
-                    await qualified.DisposeAsync().ConfigureAwait(false);
+                    await compatible.DisposeAsync().ConfigureAwait(false);
                 }
 
                 TryDeleteFile(output);
             }
             else
             {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, output, artifacts is null ? qualified : null);
+                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, output, artifacts is null ? compatible : null);
             }
         }
     }

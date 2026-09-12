@@ -9,7 +9,7 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <summary>Identifies an immutable private saved-input set retained through cook and publication.</summary>
 /// <param name="Operation">The owning project operation.</param>
 /// <param name="InputRoot">The private directory read by native jobs.</param>
-/// <param name="BuildFingerprint">The qualified artifact/schema identity.</param>
+/// <param name="BuildFingerprint">The compatible artifact/schema identity.</param>
 /// <param name="InputIdentity">The content identity independent of local paths and operation IDs.</param>
 /// <param name="Inputs">The original identities, paths, and captured hashes.</param>
 /// <param name="Documents">The saved revisions of participating open documents.</param>

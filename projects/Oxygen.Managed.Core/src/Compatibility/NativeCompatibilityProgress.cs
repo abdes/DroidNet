@@ -4,8 +4,8 @@
 
 namespace Oxygen.Managed.Core.Compatibility;
 
-/// <summary>Progress while checking the fixed artifact inventory.</summary>
+/// <summary>Progress while checking the native artifact inventory.</summary>
 /// <param name="ArtifactId">The artifact just checked.</param>
 /// <param name="Checked">The number of completed checks, including failures.</param>
 /// <param name="Total">The complete required artifact count.</param>
-public sealed record ArtifactQualificationProgress(string ArtifactId, int Checked, int Total);
+public sealed record NativeCompatibilityProgress(string ArtifactId, int Checked, int Total);

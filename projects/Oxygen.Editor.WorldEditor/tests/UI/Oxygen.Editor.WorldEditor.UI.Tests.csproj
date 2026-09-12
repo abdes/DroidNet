@@ -10,7 +10,7 @@
         <PackageReference Include="Moq" />
         <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
-        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Core\testsupport\TemporaryArtifactQualification.cs" Link="TemporaryArtifactQualification.cs" />
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
     </ItemGroup>
     <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
         <None Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
