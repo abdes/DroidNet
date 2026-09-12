@@ -557,8 +557,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       receipt and provenance through the transaction. Recovery skips live operation
       leases and restores abandoned journals; mounting holds a read lease through
       verification. ContentPipeline 221/221 passes, including native cook followed
-      by failed preview restoration and receipt repair. Editor runtime pause/lease
-      integration and publisher-process interruption validation remain open.
+      by failed preview restoration and receipt repair. Fifteen actual publisher
+      process-termination cases now cover prepared state, individual root moves,
+      metadata writes and completed commit; combined process/worker/lease tests
+      pass 39/39. Editor runtime pause/lease integration remains open.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
       The normal Interop build now records its native SDK in assembly metadata.
