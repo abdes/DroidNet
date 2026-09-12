@@ -178,6 +178,52 @@ coordinator, reset on project close; no new durable preference/settings panel.
 Pause prevents automatic jobs starting, does not interrupt an active transaction,
 and coalesces saved/demand changes for Resume. Explicit Cook remains available.
 
+### One Completion Path For Every Trigger
+
+The familiar workflow is edit, save/apply, and see existing scene uses update.
+Unreal's [material Apply action](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-editor-ui)
+updates the material and its uses in the world. Unity's
+[asset refresh](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html)
+tracks dependencies, imports changed data and hot-reloads assets. Unreal's
+[platform cooking](https://dev.epicgames.com/documentation/en-us/unreal-engine/cooking-content-in-unreal-engine)
+is a separate concern from applying material edits in the editor.
+
+Oxygen's embedded runtime consumes cooked assets. Under D1, successful Save is
+the material's automatic cook trigger; it does not require another Apply button.
+Existing direct scene-property previews remain immediate. Transient gestures and
+Undo/Redo never launch cooks. External reimport stays explicit under the accepted
+policy. The supported asset formats remain the PRD's V0.1 set.
+
+All triggers converge on one asynchronous project-owned workflow:
+
+1. Successful Save, accepted Import/Reimport, preview demand, or explicit Cook
+   submits the logical source scope. Save success is independent of cook success.
+2. The coordinator coalesces requests, captures saved dependencies, and reuses
+   verified products. Browsing and catalog refresh cannot submit work.
+3. Changed products cook and validate in private staging while the previous
+   published content remains usable.
+4. The publication transaction pauses conflicting runtime reads, installs the
+   complete root set, refreshes native sources and current asset bindings, and
+   waits for the runtime's acknowledgment. It preserves the active document,
+   selection, camera, and newer authoring changes. A material refresh does not
+   require recreating the scene. Geometry refresh preserves surviving overrides.
+5. A committed content-generation change updates the catalog, pickers, previews
+   and Cooking history. It carries project/lifetime and generation identities,
+   changed/removed assets, root set and outcome. Consumers reject obsolete work.
+
+UI buttons only submit requests and present outcomes. Material-editor callbacks,
+browser messages and filesystem watchers must not independently remount roots or
+reload bindings. Runtime/cache invalidation is part of publication, for every
+trigger and supported asset kind. Use the existing scene asset-request authority
+to preserve current reference intent and reject late completions.
+
+An unchanged cook causes no native work, root replacement, catalog-refresh loop
+or preview pause. Failures keep the last working published content and expose
+recovery in Cooking. Automatic work stays quiet and does not steal focus; its
+errors remain discoverable. A saved asset may have failed cooking without becoming
+unsaved again. No extra qualification command or separately built probe belongs
+to this workflow.
+
 ## 5. Incremental Execution Contract
 
 All automatic and explicit requests use the same snapshot and publication

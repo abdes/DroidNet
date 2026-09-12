@@ -129,10 +129,21 @@ journal/backups, preview pause/read drain, all-affected-root replacement, remoun
 metadata/catalog commit, and rollback/recovery. Runtime/output leases prevent
 standalone readers or late requests from observing a partially replaced set.
 
+Apply the workflow LLD's common completion path to Save-triggered, import,
+demand, explicit, retry and Save listed & Cook requests. Replace UI-owned
+fire-and-forget mount refresh with an awaited publication/runtime boundary.
+Refreshing a source must refresh its existing live bindings; clearing native
+caches alone leaves the scene's old material/geometry objects in use. Preserve
+unaffected roots, current reference intent, scene identity, selection and camera.
+The material-editor-only catalog callback is not a publication mechanism.
+
 Pass: inject failure/interruption at every journaled boundary, first publication,
 partial asset recook, cancellation, native mount and rollback mount. Prior output
 is intact/restored or recoverably retained with preview visibly unavailable.
 No failed generation is reported Mounted/current. Authoring remains responsive.
+Save and recook a shared material and observe its new values on all current uses
+without scene reload. Repeat through every trigger, with a pending load, newer
+assignment, removed node, closed project, failed cook and no-op cook.
 
 ### 07B.3 - Complete Native Descriptor/Load Mappings
 
