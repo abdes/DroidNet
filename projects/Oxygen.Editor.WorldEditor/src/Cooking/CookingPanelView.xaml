@@ -100,21 +100,15 @@
             </Expander>
         </DataTemplate>
         <DataTemplate x:Key="UnsavedCookDocumentTemplate" x:DataType="snapshots:CookDocumentState">
-            <Grid ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    VerticalAlignment="Center"
-                    Text="{x:Bind DisplayName}"
-                    TextTrimming="CharacterEllipsis" />
-                <HyperlinkButton
-                    Grid.Column="1"
-                    Padding="4,2"
-                    Click="OpenDocumentClicked"
-                    Content="Open" />
-            </Grid>
+            <HyperlinkButton
+                MinHeight="28"
+                Padding="0,2"
+                HorizontalAlignment="Left"
+                AutomationProperties.Name="{x:Bind DisplayName}"
+                Click="OpenDocumentClicked"
+                ToolTipService.ToolTip="{x:Bind SourcePath}">
+                <TextBlock Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis" />
+            </HyperlinkButton>
         </DataTemplate>
     </UserControl.Resources>
     <Grid x:Name="SplitRoot" RowSpacing="4">
@@ -276,15 +270,14 @@
                         IsClosable="False"
                         IsOpen="{x:Bind ViewModel.SelectedRun.NeedsSave, Mode=OneWay}"
                         Severity="Warning">
-                        <StackPanel Spacing="4">
-                            <ItemsControl ItemTemplate="{StaticResource UnsavedCookDocumentTemplate}" ItemsSource="{x:Bind ViewModel.SelectedRun.UnsavedDocuments, Mode=OneWay}" />
+                        <InfoBar.ActionButton>
                             <Button
                                 MinHeight="28"
                                 Padding="8,3"
-                                HorizontalAlignment="Left"
                                 Command="{x:Bind ViewModel.SaveListedAndCookCommand}"
                                 Content="Save listed &amp; Cook" />
-                        </StackPanel>
+                        </InfoBar.ActionButton>
+                        <ItemsControl ItemTemplate="{StaticResource UnsavedCookDocumentTemplate}" ItemsSource="{x:Bind ViewModel.SelectedRun.UnsavedDocuments, Mode=OneWay}" />
                     </InfoBar>
                     <Expander
                         x:Name="OutputSection"
