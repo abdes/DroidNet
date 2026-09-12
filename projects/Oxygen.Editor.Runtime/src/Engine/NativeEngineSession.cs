@@ -17,6 +17,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The service invokes explicit destruction stages independently and retains failed ownership for retry.")]
 internal sealed partial class NativeEngineSession(HostingContext hostingContext, NativeArtifactLease artifacts) : EngineSession
 {
+    private readonly Dictionary<Guid, SwapChainPanel> surfacePanels = [];
     private EngineRunner? runner;
     private EngineContext? context;
     private IRuntimeCommandTransport commands = null!;
@@ -74,12 +75,20 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
         => this.startup ?? throw new InvalidOperationException("The engine loop has not started.");
 
     /// <inheritdoc/>
-    public override void Stop() => this.Runner.StopEngine(this.context);
+    public override void Stop()
+    {
+        this.DetachSurfacePanels();
+        this.Runner.StopEngine(this.context);
+    }
 
     /// <inheritdoc/>
     public override async Task CompleteLoopCleanupAsync()
     {
-        await hostingContext.Dispatcher.DispatchAsync(this.Runner.WaitForLoopCleanupAsync).ConfigureAwait(false);
+        await hostingContext.Dispatcher.DispatchAsync(async () =>
+        {
+            this.DetachSurfacePanels();
+            await this.Runner.WaitForLoopCleanupAsync().ConfigureAwait(true);
+        }).ConfigureAwait(false);
         _ = this.startup?.Exception;
     }
 
@@ -89,6 +98,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
         var panelPointer = Marshal.GetIUnknownForObject(panel);
         try
         {
+            this.surfacePanels.Add(key.ViewportId, panel);
             var (scale, width, height) = GetInitialDimensions(panel);
             return await this.Runner.TryRegisterSurfaceAsync(
                 this.context,
@@ -107,7 +117,11 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
     }
 
     /// <inheritdoc/>
-    public override Task<bool> UnregisterSurfaceAsync(Guid viewportId) => this.Runner.TryUnregisterSurfaceAsync(viewportId);
+    public override Task<bool> UnregisterSurfaceAsync(Guid viewportId)
+    {
+        this.DetachSurfacePanel(viewportId);
+        return this.Runner.TryUnregisterSurfaceAsync(viewportId);
+    }
 
     /// <inheritdoc/>
     public override Task<bool> ResizeSurfaceAsync(Guid viewportId, uint width, uint height)
@@ -130,6 +144,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
             throw new InvalidOperationException("Native runner destruction requires its UI dispatcher thread.");
         }
 
+        this.DetachSurfacePanels();
         this.runner?.Dispose();
         this.runner = null;
         this.ReleaseArtifactsIfDestroyed();

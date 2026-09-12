@@ -61,6 +61,55 @@ public sealed partial class InspectorControlTests
         }
     });
 
+    /// <summary>Native teardown releases panel attachments even while WinUI retains the loaded controls.</summary>
+    /// <param name="releaseFirst">Whether a viewport is detached before engine shutdown.</param>
+    /// <returns>The asynchronous shutdown regression.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task ShutdownWithLoadedViewportPanelsCompletes(bool releaseFirst) => EnqueueAsync(async () =>
+    {
+        var fixture = new NativeSceneFixture(automatic: false, scene => AddGeometryNode(scene, "Cube"));
+        await using var lifetime = fixture.ConfigureAwait(true);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(40));
+        await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
+        var first = new SwapChainPanel { Width = 320, Height = 200 };
+        var second = new SwapChainPanel { Width = 320, Height = 200 };
+        var host = new StackPanel();
+        host.Children.Add(first);
+        host.Children.Add(second);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var firstLease = await AttachTestPanelAsync(fixture, first, timeout.Token).ConfigureAwait(true);
+        await using var firstLifetime = firstLease.ConfigureAwait(true);
+        var secondLease = await AttachTestPanelAsync(fixture, second, timeout.Token).ConfigureAwait(true);
+        await using var secondLifetime = secondLease.ConfigureAwait(true);
+        if (releaseFirst)
+        {
+            await firstLease.DisposeAsync().ConfigureAwait(true);
+        }
+
+        _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(releaseFirst ? 1 : 2);
+        await fixture.Runtime.ShutdownAsync().AsTask().WaitAsync(timeout.Token).ConfigureAwait(true);
+        _ = fixture.Runtime.State.Should().Be(EngineServiceState.NoEngine);
+        _ = firstLease.IsAttached.Should().BeFalse();
+        _ = secondLease.IsAttached.Should().BeFalse();
+        _ = first.IsLoaded.Should().BeTrue();
+        _ = second.IsLoaded.Should().BeTrue();
+        GC.KeepAlive(host);
+    });
+
+    private static ValueTask<IViewportSurfaceLease> AttachTestPanelAsync(NativeSceneFixture fixture, SwapChainPanel panel, CancellationToken cancellationToken)
+        => fixture.Runtime.AttachViewportAsync(
+            new()
+            {
+                DocumentId = fixture.Context.DocumentId,
+                ViewportId = Guid.NewGuid(),
+                ViewportIndex = 0,
+            },
+            panel,
+            cancellationToken);
+
     private static async Task ObserveRenderedFramesAsync(NativeSceneFixture fixture, CancellationToken cancellationToken)
     {
         var nodeId = fixture.Source.RootNodes.Single().Id;
