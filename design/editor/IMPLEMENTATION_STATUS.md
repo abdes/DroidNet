@@ -539,8 +539,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       current products across service recreation. Native tests cover unchanged
       cooks with no workers/rewrites, one changed material, corrupt descriptors,
       failed-run provenance, warning retention, and every built-in. ContentPipeline
-      150/150 passes. Imported-source closure, coalescing, automatic triggers and
-      publication/runtime integration remain.
+      166/166 passes. Saved-source scheduling coalesces revisions, resumes blocked
+      scopes, and supports session pause. Consumer completion is awaited before
+      releasing the writer. Imported-source closure, priorities/observer
+      cancellation, editor trigger wiring, and publication/runtime integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;
@@ -562,8 +564,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped
       issues, cancellation, explicit save/resume, and Aerial Start navigation and
       bounds are implemented. ContentPipeline 107/107, MaterialEditor 44/44, and
-      focused packaged controls 7/7 pass. Automatic triggers and publication
-      integration remain.
+      focused packaged controls 7/7 pass. Actual dock activation now passes eight
+      Cooking UI regressions and 192 Docking tests. Automatic trigger wiring and
+      publication integration remain in progress.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.

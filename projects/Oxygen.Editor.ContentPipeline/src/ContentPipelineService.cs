@@ -57,6 +57,19 @@ public sealed partial class ContentPipelineService(
     private readonly IEngineContentPipelineApi engineContentPipelineApi = engineContentPipelineApi ?? throw new ArgumentNullException(nameof(engineContentPipelineApi));
 
     /// <inheritdoc />
+    public Task<ContentCookResult> CookSavedAssetAsync(Uri assetUri, ProjectContext expectedProject, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(assetUri);
+        ArgumentNullException.ThrowIfNull(expectedProject);
+        return this.cookCoordinator.RunCookAsync(
+            new(CookTargetKind.Asset, assetUri, IsAutomatic: true),
+            (operation, token) => ReferenceEquals(operation.Project, expectedProject)
+                ? this.CookAssetCoreAsync(operation, assetUri, token)
+                : throw new OperationCanceledException("The saved source's project is no longer active.", token),
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<ContentCookResult> CookCurrentSceneAsync(Uri sceneAssetUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sceneAssetUri);
@@ -490,7 +503,7 @@ public sealed partial class ContentPipelineService(
         try
         {
             var generatedAbsolutePath = GetGeneratedMaterialDescriptorPath(scope.InputRoot, input);
-            Directory.CreateDirectory(Path.GetDirectoryName(generatedAbsolutePath)!);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(generatedAbsolutePath)!);
 
             var materialBytes = await File.ReadAllBytesAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var material = MaterialSourceReader.Read(materialBytes);

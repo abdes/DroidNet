@@ -11,6 +11,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public interface IContentPipelineService
 {
+    /// <summary>Cooks an acknowledged saved asset as background work in its originating project.</summary>
+    /// <param name="assetUri">The saved source identity.</param>
+    /// <param name="expectedProject">The project that owned the Save.</param>
+    /// <param name="cancellationToken">Cancels this request.</param>
+    /// <returns>The shared pipeline's incremental result.</returns>
+    public Task<ContentCookResult> CookSavedAssetAsync(Uri assetUri, ProjectContext expectedProject, CancellationToken cancellationToken);
+
     /// <summary>
     /// Cooks the current scene's saved source and required dependencies.
     /// </summary>

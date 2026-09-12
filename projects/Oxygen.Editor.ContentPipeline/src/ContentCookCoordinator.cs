@@ -144,12 +144,8 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             using var reporting = CookRunContext.Enter(progress);
             while (true)
             {
-                await this.writer.WaitAsync(requestCancellation.Token).ConfigureAwait(false);
+                await this.AcquireWriterAsync(operation, request?.IsAutomatic == true, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
-                lock (this.stateLock)
-                {
-                    this.activeOperation = operation;
-                }
 
                 requestCancellation.Token.ThrowIfCancellationRequested();
                 this.VerifyCurrent(operation);
@@ -159,7 +155,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                     var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
                     requestCancellation.Token.ThrowIfCancellationRequested();
                     this.VerifyCurrent(operation);
-                    this.CompleteRun(operation.OperationId, result);
+                    await this.CompleteRunAsync(operation, result, requestCancellation.Token).ConfigureAwait(false);
                     return result;
                 }
                 catch (CookInputsNeedSaveException ex) when (progress is not null)
