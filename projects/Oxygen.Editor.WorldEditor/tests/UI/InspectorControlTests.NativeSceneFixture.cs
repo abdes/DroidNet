@@ -79,6 +79,7 @@ public sealed partial class InspectorControlTests
             _ = this.MaterialPicker.Setup(value => value.Results).Returns(this.materialChoices);
             _ = this.MaterialPicker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Commands = new SceneDocumentCommandService(
+                Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
                 Mock.Of<ISceneExplorerService>(),
                 new SceneSelectionService(),
                 this.sync,

@@ -112,6 +112,7 @@ public sealed partial class InspectorControlTests
         var documents = new Mock<IDocumentService>();
         _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
         var commands = new SceneDocumentCommandService(
+            Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             Mock.Of<ISceneExplorerService>(),
             new SceneSelectionService(),
             sync,

@@ -1428,6 +1428,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             .ReturnsAsync(value: true);
         var results = new CapturingOperationResultPublisher();
         var sut = new SceneDocumentCommandService(
+            Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
             synchronization ?? sync.Object,

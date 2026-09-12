@@ -32,6 +32,7 @@ public sealed partial class InspectorControlTests
             var resolver = new Mock<IMaterialSourcePathResolver>();
             _ = resolver.Setup(value => value.Resolve(uri)).Returns(new MaterialSourceLocation(uri, directory.FullName, "Content", Path.Combine(directory.FullName, "Picker.omat.json"), "Picker.omat.json"));
             var service = new MaterialDocumentService(
+                Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
                 resolver.Object,
                 Mock.Of<IMaterialCookService>(),
                 new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),

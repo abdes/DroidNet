@@ -43,7 +43,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var completion = new TaskCompletionSource<MaterialCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var cookService = new RecordingCookService { Completion = completion.Task };
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cookService, workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), cookService, workspace.CookDocuments, CreateFileStore());
         var uri = new Uri("asset:///Content/Materials/Test.omat.json");
         var created = await service.CreateAsync(uri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var cooking = service.CookAsync(created.DocumentId, this.TestContext.CancellationToken);

@@ -24,7 +24,7 @@ public sealed partial class MaterialDocumentServiceTests
             writing.SetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);
         });
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, files);
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, files);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Capture.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.25f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken);
