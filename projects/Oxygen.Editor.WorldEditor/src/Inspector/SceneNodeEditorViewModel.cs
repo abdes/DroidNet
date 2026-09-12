@@ -14,7 +14,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
@@ -139,16 +138,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     public bool HasInspectorContent => this.HasItems || this.activeScene is not null;
 
     /// <summary>
-    /// Gets the top pane height; empty scene selection should not reserve node-header space.
-    /// </summary>
-    public GridLength TopPaneHeight => this.HasItems ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
-
-    /// <summary>
-    /// Gets the property editor pane height.
-    /// </summary>
-    public GridLength PropertyPaneHeight => this.HasItems ? new GridLength(3, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
-
-    /// <summary>
     /// Gets the number of scene property edits buffered until the runtime can replay them.
     /// </summary>
     public int PendingLiveSyncEditCount
@@ -213,6 +202,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.sceneEngineSync.PendingPropertySyncCountChanged -= this.OnPendingPropertySyncCountChanged;
         this.messenger.UnregisterAll(this);
+        WeakReferenceMessenger.Default.UnregisterAll(this);
         this.UnsubscribeAllComponentCollections();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
         {
@@ -251,8 +241,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
         this.OnPropertyChanged(nameof(this.SelectedNode));
         this.OnPropertyChanged(nameof(this.HasInspectorContent));
-        this.OnPropertyChanged(nameof(this.TopPaneHeight));
-        this.OnPropertyChanged(nameof(this.PropertyPaneHeight));
         this.RefreshPendingLiveSyncState();
     }
 
@@ -270,13 +258,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         var keysToCheck = this.GetApplicablePropertyEditorTypes();
-
-        foreach (var (componentType, editor) in this.editorInstances)
+        this.ReconcileComponentFilters();
+        if (this.selectedComponentType is { } selected)
         {
-            if (this.items.Count == 0 || !keysToCheck.Contains(componentType))
-            {
-                editor.UpdateValues([]);
-            }
+            keysToCheck.IntersectWith([selected]);
         }
 
         if (this.items.Count == 0)
@@ -581,6 +566,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
             // Rebuild property editors for current selection
             this.UpdateItemsCollection(this.items);
+            this.SubscribeToComponentCollections();
         });
     }
 
