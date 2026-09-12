@@ -542,7 +542,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       166/166 passes. Saved-source scheduling coalesces revisions, resumes blocked
       scopes, and supports session pause. Consumer completion is awaited before
       releasing the writer. Imported-source closure, priorities/observer
-      cancellation, editor trigger wiring, and publication/runtime integration remain.
+      cancellation and the remaining Import/demand triggers remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;
@@ -560,7 +560,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       by failed preview restoration and receipt repair. Fifteen actual publisher
       process-termination cases now cover prepared state, individual root moves,
       metadata writes and completed commit; combined process/worker/lease tests
-      pass 39/39. Editor runtime pause/lease integration remains open.
+      pass 39/39. Runtime now awaits native load drain, retains readers through
+      refresh and teardown, and refreshes existing scene bindings. Runtime 90/90
+      and focused packaged UI 14/14 pass, including same-key material colour
+      replacement without scene reload. The user confirmed recook/tab switching
+      and leak-free shutdown under native debugging. Workspace publication uses this boundary;
+      the remaining project-lifetime and recovery workflows are still open.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
       The normal Interop build now records its native SDK in assembly metadata.
@@ -579,8 +584,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       issues, cancellation, explicit save/resume, and Aerial Start navigation and
       bounds are implemented. ContentPipeline 107/107, MaterialEditor 44/44, and
       focused packaged controls 7/7 pass. Actual dock activation now passes eight
-      Cooking UI regressions and 192 Docking tests. Automatic trigger wiring and
-      publication integration remain in progress.
+      Cooking UI regressions and 192 Docking tests. Changed material/scene saves
+      now notify the shared automatic scheduler. Fourteen focused packaged UI tests
+      cover dock activation, automatic history, stale-banner removal and native
+      material refresh. Remaining Import/demand triggers and workflow gates are open.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
@@ -722,7 +729,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `pending` | - | No validation evidence yet for the new publication/compatibility gates. |
+| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 221/221; publisher/worker/lease process tests 39/39; Runtime 90/90; SceneExplorer 167/167; MaterialEditor 48/48; focused packaged UI 14/14. Same-key material refresh preserves scene identity and history. User confirmed recook/tab switching and leak-free shutdown under native debugging. Remaining slice gates stay open above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

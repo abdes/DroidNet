@@ -96,9 +96,10 @@ All engine built-ins retain source identities through repeated scene/project
 cooks. Saved-source scheduling now coalesces revisions, resumes scopes blocked by
 saved documents, and supports session pause without blocking explicit cooks.
 Consumer completion is awaited before the shared writer is released.
-ContentPipeline 166/166 passes. Imported-source closure, request priorities and
-observer cancellation, editor trigger wiring, and publication/runtime integration
-remain open.
+ContentPipeline 166/166 passes. Successful changed material/scene saves now
+notify the shared scheduler; unchanged saves can resume blocked scopes without
+queuing another cook. Imported-source closure, request priorities, observer
+cancellation and the remaining Import/demand triggers remain open.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and
@@ -133,8 +134,13 @@ abandoned operations, and mounting holds a reader through generation verificatio
 ContentPipeline 221/221 passes, including native cook plus failed preview,
 startup handoff, and corrupt-receipt repair. Fifteen actual publisher-termination
 cases verify recovery at prepared, root-move, metadata-write and committed
-boundaries. The combined process/worker/lease suite passes 39/39. Editor runtime
-integration remains open.
+boundaries. The combined process/worker/lease suite passes 39/39. Runtime awaits
+the public asset-loader drain, retains output readers through native refresh and
+teardown, and replaces existing material bindings without reloading the scene.
+Runtime 90/90 and focused packaged UI 14/14 pass. The user confirmed recook/tab
+switching and leak-free shutdown under native debugging. Workspace publication
+now uses this awaited boundary. Project-lifetime, recovery and complete user workflows
+still require their remaining integration checks.
 
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable
