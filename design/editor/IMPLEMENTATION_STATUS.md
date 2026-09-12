@@ -530,8 +530,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       and collects independent input errors by asset. Source/native references
       resolve to the same authored descriptor. ContentPipeline tests pass 127/127,
       including native first-cook dependencies and discovery/capture races.
-      Snapshot-to-worker integration, imported-source closure, incremental reuse
-      and publication integration remain.
+      Explicit asset/folder/scene/project cooks now capture the complete saved
+      source set before generation, use private native inputs, carry the qualified
+      producer fingerprint, and report later source/dirty changes. Geometry media
+      references resolve to captured copies. ContentPipeline 137/137 passes.
+      The material helper, imported-source closure, incremental reuse and
+      publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;

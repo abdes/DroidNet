@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core.Compatibility;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Explicit physical input and operation paths for one native manifest execution.</summary>
@@ -13,4 +15,8 @@ public sealed record ContentImportExecution(
     Guid OperationId,
     string InputRoot,
     string OperationRoot,
-    ContentImportManifest Manifest);
+    ContentImportManifest Manifest)
+{
+    /// <summary>Gets artifacts borrowed from the cook owner, which retains them through worker drain.</summary>
+    public QualifiedArtifactLease? Artifacts { get; init; }
+}

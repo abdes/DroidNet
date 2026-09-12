@@ -360,7 +360,8 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
     {
         var name = Path.GetFileName(sceneInput.SourceRelativePath);
         var normalized = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
-        return Path.Combine(scope.Project.ProjectRoot, ".pipeline", "Scenes", normalized + ".oscene.json");
+        var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
+        return Path.Combine(scope.InputRoot, ".pipeline", "Scenes", folder, normalized + ".oscene.json");
     }
 
     private static IEnumerable<ContentCookInput> ResolveMaterialDependencies(Scene scene, ContentCookScope scope)
@@ -395,6 +396,7 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
         }
 
         var input = CookInputResolver.Resolve(scope.Project, assetUri, ContentCookInputRole.Dependency);
+        input = input with { SourceAbsolutePath = Path.Combine(scope.InputRoot, input.SourceRelativePath) };
         return File.Exists(input.SourceAbsolutePath) || assetUri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? input : null;
     }

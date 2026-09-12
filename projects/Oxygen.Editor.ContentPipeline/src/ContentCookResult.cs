@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -23,4 +24,11 @@ public sealed record ContentCookResult(
     IReadOnlyList<DiagnosticRecord> Diagnostics,
     IReadOnlyList<ContentCookedAsset> CookedAssets,
     CookInspectionResult? Inspection,
-    CookValidationResult? Validation);
+    CookValidationResult? Validation)
+{
+    /// <summary>Gets the saved inputs and qualified producer fingerprint used by this cook.</summary>
+    public CookInputSnapshot? InputSnapshot { get; init; }
+
+    /// <summary>Gets whether captured inputs still match current authoring at completion, when checked.</summary>
+    public bool? InputsAreCurrent { get; init; }
+}

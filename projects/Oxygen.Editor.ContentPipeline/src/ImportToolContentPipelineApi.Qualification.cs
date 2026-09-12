@@ -9,12 +9,16 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Protects the qualified tool set through owned worker termination and drain.</summary>
 public sealed partial class ImportToolContentPipelineApi
 {
-    private static Task ReleaseAfterWorkerDrainAsync(Task drain, string inputPath, QualifiedArtifactLease artifacts)
+    private static Task ReleaseAfterWorkerDrainAsync(Task drain, string inputPath, QualifiedArtifactLease? artifacts)
         => drain.ContinueWith(
             async completed =>
             {
                 _ = completed.Exception;
-                await artifacts.DisposeAsync().ConfigureAwait(false);
+                if (artifacts is not null)
+                {
+                    await artifacts.DisposeAsync().ConfigureAwait(false);
+                }
+
                 TryDeleteFile(inputPath);
             },
             CancellationToken.None,
