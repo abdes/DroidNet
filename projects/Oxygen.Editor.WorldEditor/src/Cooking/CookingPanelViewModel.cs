@@ -107,7 +107,12 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
 
     private void OnRunChanged(object? sender, CookRunChangedEventArgs args)
     {
-        if (this.hosting.Dispatcher.HasThreadAccess)
+        if (args.Reveal)
+        {
+            // Let the initiating menu close before activating the cook's recovery surface.
+            _ = this.hosting.Dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => this.ApplyRun(args));
+        }
+        else if (this.hosting.Dispatcher.HasThreadAccess)
         {
             this.ApplyRun(args);
         }

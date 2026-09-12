@@ -609,6 +609,7 @@ public partial class AssetsViewModel(
         Uri? scopeUri,
         Func<Task<ContentCookResult>> cook)
     {
+        this.IsOperationResultVisible = false;
         try
         {
             var result = await this.RefreshCatalogAfterCookAsync(await cook().ConfigureAwait(true), scopeUri)
@@ -627,7 +628,8 @@ public partial class AssetsViewModel(
                 ex.Message,
                 AssetCookDiagnosticCodes.CookFailed,
                 scopeUri,
-                ex);
+                ex,
+                showInBrowser: false);
         }
     }
 
@@ -648,7 +650,8 @@ public partial class AssetsViewModel(
             title,
             message,
             result.Diagnostics,
-            scopeUri);
+            scopeUri,
+            showInBrowser: false);
     }
 
     private void PublishFailure(
@@ -657,7 +660,8 @@ public partial class AssetsViewModel(
         string message,
         string code,
         Uri? scopeUri,
-        Exception? exception = null)
+        Exception? exception = null,
+        bool showInBrowser = true)
     {
         var operationId = Guid.NewGuid();
         var scope = this.CreateAffectedScope(scopeUri);
@@ -672,7 +676,7 @@ public partial class AssetsViewModel(
             ExceptionType = exception?.GetType().FullName,
             AffectedEntity = scope,
         };
-        this.PublishOperation(operationId, operationKind, OperationStatus.Failed, title, message, [diagnostic], scopeUri);
+        this.PublishOperation(operationId, operationKind, OperationStatus.Failed, title, message, [diagnostic], scopeUri, showInBrowser);
     }
 
     private void PublishOperation(
@@ -682,7 +686,8 @@ public partial class AssetsViewModel(
         string title,
         string message,
         IReadOnlyList<DiagnosticRecord> diagnostics,
-        Uri? scopeUri)
+        Uri? scopeUri,
+        bool showInBrowser = true)
     {
         var normalizedDiagnostics = NormalizeDiagnostics(operationId, diagnostics);
         var severity = status == OperationStatus.Failed && normalizedDiagnostics.Count == 0
@@ -701,7 +706,10 @@ public partial class AssetsViewModel(
             Diagnostics = normalizedDiagnostics,
         };
         operationResults.Publish(result);
-        this.ApplyOperationResult(result);
+        if (showInBrowser)
+        {
+            this.ApplyOperationResult(result);
+        }
     }
 
     private void ApplyOperationResult(OperationResult result)
