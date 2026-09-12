@@ -1,0 +1,16 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <ForcedIncludeFiles>$(NativeSdkReceiptHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="RecordInteropNativeSdk" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1&quot; -SdkRoot &quot;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)&quot; -Configuration &quot;$(Configuration)&quot; -OutputHeader &quot;$(NativeSdkReceiptHeader)&quot;" />
+    <ItemGroup>
+      <FileWrites Include="$(NativeSdkReceiptHeader)" />
+    </ItemGroup>
+  </Target>
+</Project>
