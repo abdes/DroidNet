@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace DroidNet.Docking;
 
@@ -13,7 +14,7 @@ namespace DroidNet.Docking;
 /// The <see cref="IDock"/> interface provides methods and properties to manage dockable entities within a docking framework.
 /// It supports operations such as adopting, disowning, and destroying dockables, as well as migrating dockables between docks.
 /// </remarks>
-public interface IDock : IDisposable
+public interface IDock : IDisposable, INotifyPropertyChanged
 {
     /// <summary>
     /// Gets the unique identifier of the dock.

@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Docking.Detail;
 using Windows.Foundation;
 
 namespace DroidNet.Docking.Controls;
@@ -124,6 +126,9 @@ public partial class DockPanelViewModel : ObservableRecipient
     {
         base.OnActivated();
 
+        this.dock.PropertyChanged += this.OnDockPropertyChanged;
+        this.ActiveDockable = this.dock.ActiveDockable;
+
         // Listen for the docking mode messages to participate during a docking maneuver.
         StrongReferenceMessenger.Default.Register<EnterDockingModeMessage>(
             this,
@@ -131,9 +136,33 @@ public partial class DockPanelViewModel : ObservableRecipient
         StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
     }
 
+    /// <inheritdoc/>
+    protected override void OnDeactivated()
+    {
+        this.dock.PropertyChanged -= this.OnDockPropertyChanged;
+        StrongReferenceMessenger.Default.UnregisterAll(this);
+        base.OnDeactivated();
+    }
+
     private static AnchorPosition AnchorPositionFromString(string position) => Enum.TryParse<AnchorPosition>(position, ignoreCase: true, out var result)
             ? result
             : throw new ArgumentException($"invalid anchor position for root docking `{position}`", nameof(position));
+
+    partial void OnActiveDockableChanged(IDockable? value)
+    {
+        if (value is not null && value.Owner == this.dock && !value.IsActive)
+        {
+            value.AsDockable().IsActive = true;
+        }
+    }
+
+    private void OnDockPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(IDock.ActiveDockable) or null or "")
+        {
+            this.ActiveDockable = this.dock.ActiveDockable;
+        }
+    }
 
     /// <summary>
     /// Toggles the docking mode.

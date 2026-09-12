@@ -5,7 +5,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
@@ -18,9 +17,12 @@ namespace DroidNet.Docking.Controls;
 
 /// <summary>A decorated panel that represents a dock.</summary>
 [ViewModel(typeof(DockPanelViewModel))]
-[ObservableObject]
 public sealed partial class DockPanel
 {
+    /// <summary>Identifies the visibility of the docking overlay.</summary>
+    public static readonly DependencyProperty OverlayVisibilityProperty = DependencyProperty.Register(
+        nameof(OverlayVisibility), typeof(Visibility), typeof(DockPanel), new PropertyMetadata(Visibility.Collapsed));
+
     /// <summary>
     /// Identifies the <see cref="IconConverter"/> dependency property.
     /// </summary>
@@ -79,8 +81,12 @@ public sealed partial class DockPanel
         this.pointerExitEventHandler = (_, _) => this.HideOverlay();
     }
 
-    [ObservableProperty]
-    public partial Visibility OverlayVisibility { get; set; } = Visibility.Collapsed;
+    /// <summary>Gets or sets the visibility of the docking overlay.</summary>
+    public Visibility OverlayVisibility
+    {
+        get => (Visibility)this.GetValue(OverlayVisibilityProperty);
+        set => this.SetValue(OverlayVisibilityProperty, value);
+    }
 
     /// <summary>
     /// Gets or sets the converter used to get an icon for the dockable entity.
@@ -129,6 +135,8 @@ public sealed partial class DockPanel
 
     private void OnLoaded(object o, RoutedEventArgs routedEventArgs)
     {
+        _ = this.ViewModel?.IsActive = true;
+
         // Register for size changes, but we don't want to trigger the effect on every change when a dock is being
         // continuously resized. So, we throttle the events and only react after a stable size is reached.
         this.sizeChangedSubscription = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
@@ -167,6 +175,7 @@ public sealed partial class DockPanel
 
     private void OnUnloaded(object o, RoutedEventArgs routedEventArgs)
     {
+        _ = this.ViewModel?.IsActive = false;
         this.ViewModelChanged -= this.OnViewModelChanged;
         this.sizeChangedSubscription?.Dispose();
     }
