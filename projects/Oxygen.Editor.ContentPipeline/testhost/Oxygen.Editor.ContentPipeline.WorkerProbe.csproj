@@ -6,4 +6,7 @@
         <RootNamespace>Oxygen.Editor.ContentPipeline.WorkerProbe</RootNamespace>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\src\Oxygen.Editor.ContentPipeline.csproj" />
+    </ItemGroup>
 </Project>

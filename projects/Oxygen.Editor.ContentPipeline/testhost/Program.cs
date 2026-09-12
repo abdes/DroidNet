@@ -10,40 +10,30 @@ using System.Text.Json;
 namespace Oxygen.Editor.ContentPipeline.WorkerProbe;
 
 /// <summary>Controlled process and descendant writer for worker-lifetime tests.</summary>
-internal static class Program
+internal static partial class Program
 {
     private static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        if (args.Length == 0)
+        return args.Length == 0 ? 2 : args[0] switch
         {
-            return 2;
-        }
+            "echo" => await EchoAsync(args).ConfigureAwait(false),
+            "flood" => await FloodAsync().ConfigureAwait(false),
+            "exit" => int.Parse(args[1], CultureInfo.InvariantCulture),
+            "hold-file" => await HoldFileAsync(args[1]).ConfigureAwait(false),
+            "publish" => await PublishUntilBoundaryAsync(args).ConfigureAwait(false),
+            _ => await RunWriterAsync(args).ConfigureAwait(false),
+        };
+    }
 
-        if (string.Equals(args[0], "echo", StringComparison.Ordinal))
-        {
-            await Console.Out.WriteAsync(JsonSerializer.Serialize(args[1..])).ConfigureAwait(false);
-            return 0;
-        }
+    private static async Task<int> EchoAsync(string[] args)
+    {
+        await Console.Out.WriteAsync(JsonSerializer.Serialize(args[1..])).ConfigureAwait(false);
+        return 0;
+    }
 
-        if (string.Equals(args[0], "flood", StringComparison.Ordinal))
-        {
-            var output = new string('x', 300_000);
-            var error = new string('y', 300_000);
-            await Task.WhenAll(Console.Out.WriteAsync(output), Console.Error.WriteAsync(error)).ConfigureAwait(false);
-            return 7;
-        }
-
-        if (string.Equals(args[0], "exit", StringComparison.Ordinal))
-        {
-            return int.Parse(args[1], CultureInfo.InvariantCulture);
-        }
-
-        if (string.Equals(args[0], "hold-file", StringComparison.Ordinal))
-        {
-            return await HoldFileAsync(args[1]).ConfigureAwait(false);
-        }
-
+    private static async Task<int> RunWriterAsync(string[] args)
+    {
         var root = args[1];
         var name = args.Length > 2 ? args[2] : "root";
         if (args[0] is "tree" or "orphan")
@@ -82,5 +72,13 @@ internal static class Program
         await Console.Out.FlushAsync().ConfigureAwait(false);
         _ = await Console.In.ReadLineAsync().ConfigureAwait(false);
         return 0;
+    }
+
+    private static async Task<int> FloodAsync()
+    {
+        var output = new string('x', 300_000);
+        var error = new string('y', 300_000);
+        await Task.WhenAll(Console.Out.WriteAsync(output), Console.Error.WriteAsync(error)).ConfigureAwait(false);
+        return 7;
     }
 }

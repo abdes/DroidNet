@@ -131,8 +131,10 @@ and failed rollback mounts. The shared pipeline now stages native output and
 publishes receipt/provenance transactionally. Recovery distinguishes live and
 abandoned operations, and mounting holds a reader through generation verification.
 ContentPipeline 221/221 passes, including native cook plus failed preview,
-startup handoff, and corrupt-receipt repair. Editor runtime integration and
-publisher-process interruption validation remain open.
+startup handoff, and corrupt-receipt repair. Fifteen actual publisher-termination
+cases verify recovery at prepared, root-move, metadata-write and committed
+boundaries. The combined process/worker/lease suite passes 39/39. Editor runtime
+integration remains open.
 
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable
