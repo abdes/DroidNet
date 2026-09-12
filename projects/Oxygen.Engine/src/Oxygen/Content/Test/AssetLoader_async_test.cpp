@@ -148,6 +148,15 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAssetMaterialInvokesCallback)
           }
         });
 
+      co_await loader.WaitForPendingLoadsAsync();
+      EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+      const auto settled_material = loader.GetAsset<MaterialAsset>(material_key);
+      EXPECT_THAT(settled_material, NotNull());
+      if (settled_material) {
+        EXPECT_NE(settled_material->GetBaseColorTextureKey().get(), 0U);
+        EXPECT_NE(settled_material->GetNormalTextureKey().get(), 0U);
+      }
+
       auto timeout_task
         = pool.Run([](oxygen::co::ThreadPool::CancelToken token) {
             using namespace std::chrono_literals;

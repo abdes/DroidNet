@@ -130,6 +130,7 @@ public:
   }
 
   auto ClearMounts() -> void override { }
+  auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
 
   auto ReloadScript(const std::filesystem::path& /*path*/) -> void override { }
   auto ReloadAllScripts() -> void override { }

@@ -318,6 +318,15 @@ public:
   //! Clear all mounted roots and pak files.
   virtual auto ClearMounts() -> void = 0;
 
+  //! Await outstanding asset/resource reads before replacing mounted sources.
+  /*!
+   Must run on the owning thread while the loader is active. The caller must
+   prevent new external load requests until source replacement finishes.
+   Dependencies started by outstanding loads are included. Cancellation does
+   not imply that reads have drained.
+  */
+  virtual auto WaitForPendingLoadsAsync() -> co::Co<> = 0;
+
   //! Clear cached assets/resources without unmounting sources.
   virtual auto TrimCache() -> void = 0;
 

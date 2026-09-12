@@ -291,6 +291,7 @@ public:
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void override;
+  OXGN_CNTT_API auto WaitForPendingLoadsAsync() -> co::Co<> override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
   OXGN_CNTT_API auto SetResidencyPolicy(const ResidencyPolicy& policy)
