@@ -525,10 +525,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Shared writer, snapshot capture and scene/material save-gate adapters are
       implemented. Current Scene now uses the same saved-file path as other scene
       scopes; scene/material preparation rechecks dirty state and acknowledged
-      hashes under save leases. ContentPipeline tests pass 117/117,
-      including queued saves, later authoring, external changes, save/resume and
-      native scene/project cooks. Dependency discovery, incremental reuse and
-      publication integration remain.
+      hashes under save leases. Saved scene/geometry/material dependency discovery
+      now includes geometry buffers and import settings, tracks absent settings,
+      and collects independent input errors by asset. Source/native references
+      resolve to the same authored descriptor. ContentPipeline tests pass 127/127,
+      including native first-cook dependencies and discovery/capture races.
+      Snapshot-to-worker integration, imported-source closure, incremental reuse
+      and publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;

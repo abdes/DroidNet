@@ -370,7 +370,7 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             .Where(static uri => uri is not null && !IsEmptyAssetUri(uri))
             .Cast<Uri>()
             .Distinct()
-            .Select(uri => TryResolveAuthoringInput(scope, uri, ContentCookAssetKind.Material, ".omat"))
+            .Select(uri => TryResolveAuthoringInput(scope, uri))
             .Where(static input => input is not null)
             .Cast<ContentCookInput>();
 
@@ -383,45 +383,20 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
                                  && !ProceduralGeometryDescriptorService.IsGeneratedBasicShape(uri))
             .Cast<Uri>()
             .Distinct()
-            .Select(uri => TryResolveAuthoringInput(scope, uri, ContentCookAssetKind.Geometry, ".ogeo"))
+            .Select(uri => TryResolveAuthoringInput(scope, uri))
             .Where(static input => input is not null)
             .Cast<ContentCookInput>();
 
-    private static ContentCookInput? TryResolveAuthoringInput(
-        ContentCookScope scope,
-        Uri assetUri,
-        ContentCookAssetKind kind,
-        string nativeExtension)
+    private static ContentCookInput? TryResolveAuthoringInput(ContentCookScope scope, Uri assetUri)
     {
-        if (!string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+        if (assetUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var path = Uri.UnescapeDataString(assetUri.AbsolutePath).TrimStart('/').Replace('\\', '/');
-        var slash = path.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            return null;
-        }
-
-        var mountName = path[..slash];
-        var mountRelative = path[(slash + 1)..];
-        var mount = scope.Project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            return null;
-        }
-
-        var sourceRelativePath = Path.Combine(mount.RelativePath, mountRelative).Replace('\\', '/');
-        return new ContentCookInput(
-            assetUri,
-            kind,
-            mountName,
-            sourceRelativePath,
-            Path.Combine(scope.Project.ProjectRoot, sourceRelativePath),
-            ContentPipelinePaths.ToNativeDescriptorPath(assetUri, nativeExtension),
-            ContentCookInputRole.Dependency);
+        var input = CookInputResolver.Resolve(scope.Project, assetUri, ContentCookInputRole.Dependency);
+        return File.Exists(input.SourceAbsolutePath) || assetUri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? input : null;
     }
 
     private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)

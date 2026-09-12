@@ -98,7 +98,7 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
         var streams = new Dictionary<string, FileStream>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            foreach (var input in inputs.OrderBy(static input => input.SourcePath, StringComparer.OrdinalIgnoreCase))
+            foreach (var input in inputs.Where(static input => !input.IsAbsent).OrderBy(static input => input.SourcePath, StringComparer.OrdinalIgnoreCase))
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
@@ -109,6 +109,12 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
             var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var input in inputs)
             {
+                if (input.IsAbsent)
+                {
+                    hashes[input.SourcePath] = CookSavedSourceReader.Exists(input.SourcePath) ? "present" : string.Empty;
+                    continue;
+                }
+
                 var source = streams[input.SourcePath];
                 source.Position = 0;
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
@@ -121,6 +127,11 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
                 {
                     await source.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
                 }
+            }
+
+            foreach (var input in inputs.Where(static input => input.IsAbsent && CookSavedSourceReader.Exists(input.SourcePath)))
+            {
+                hashes[input.SourcePath] = "present";
             }
 
             return hashes;
@@ -148,8 +159,8 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
                     || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
                     || part.EndsWith('.') || part.EndsWith(' '))
                 || !targets.Add(relative)
-                || input.DiscoveryHash.Length != SHA256.HashSizeInBytes * 2
-                || !input.DiscoveryHash.All(Uri.IsHexDigit))
+                || (input.IsAbsent ? input.DiscoveryHash.Length != 0
+                    : input.DiscoveryHash.Length != SHA256.HashSizeInBytes * 2 || !input.DiscoveryHash.All(Uri.IsHexDigit)))
             {
                 throw new ArgumentException("Snapshot inputs require absolute sources, unique contained relative paths, and discovery hashes.", nameof(inputs));
             }
@@ -171,7 +182,7 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
         {
             Build = buildFingerprint,
             Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
-                .Select(static input => new { Uri = input.AssetUri?.AbsoluteUri, input.RelativePath, Hash = input.DiscoveryHash }),
+                .Select(static input => new { Uri = input.AssetUri?.AbsoluteUri, input.RelativePath, Hash = input.DiscoveryHash, input.IsAbsent }),
         });
         return Convert.ToHexString(SHA256.HashData(bytes));
     }

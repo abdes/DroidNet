@@ -4,15 +4,21 @@
 
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Reads acknowledged saved bytes without retaining live authoring objects.</summary>
-public sealed partial class ContentPipelineService
+internal static class CookSavedSourceReader
 {
-    private async Task<byte[]> ReadSavedSourceAsync(string sourcePath, CancellationToken cancellationToken)
+    /// <summary>Reads one source while excluding saves and unacknowledged external changes.</summary>
+    /// <param name="documents">Registered source owners.</param>
+    /// <param name="sourcePath">The absolute source path.</param>
+    /// <param name="cancellationToken">Cancels the protected read.</param>
+    /// <returns>The saved bytes released from their source read lease.</returns>
+    public static async Task<byte[]> ReadAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken)
     {
-        using var reads = await cookDocuments.AcquireAsync([sourcePath], cancellationToken).ConfigureAwait(false);
+        using var reads = await documents.AcquireAsync([sourcePath], cancellationToken).ConfigureAwait(false);
         var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
         if (dirty.Length != 0)
         {
@@ -36,5 +42,21 @@ public sealed partial class ContentPipelineService
         }
 
         return bytes;
+    }
+
+    /// <summary>Checks presence without treating inaccessible input as an absent optional file.</summary>
+    /// <param name="path">The input path.</param>
+    /// <returns>Whether a filesystem entry exists at the path.</returns>
+    public static bool Exists(string path)
+    {
+        try
+        {
+            _ = File.GetAttributes(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return false;
+        }
     }
 }

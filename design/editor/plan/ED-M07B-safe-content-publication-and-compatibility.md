@@ -83,6 +83,13 @@ recorded. This review/contract gate is complete; implementation gates follow.
 
 ### 07B.1 - Saved Dependency Snapshot And Single Cook Writer
 
+Saved scene/scalar-material/static-geometry discovery is implemented for the
+existing explicit scopes, including transitive materials, geometry buffers and
+import-settings presence. It collects input errors by asset before native work.
+Discovery/capture and real native dependency cases pass in ContentPipeline's
+127/127 suite (`artifacts/m07b-dependency-final-tests.log`). Complete imported-
+source discovery, snapshot-to-worker integration and incremental planning remain.
+
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and
 import settings under coordinated reads, and pass snapshot paths to native jobs.

@@ -106,17 +106,11 @@ public sealed partial class ContentPipelineServiceTests
         await File.AppendAllTextAsync(path, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = CreateSuccessfulApi(workspace);
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
-        if (material)
-        {
-            var result = await service.CookAssetAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
-            _ = result.Status.Should().Be(OperationStatus.Failed);
-            _ = result.Diagnostics.Should().Contain(diagnostic => diagnostic.TechnicalMessage != null && diagnostic.TechnicalMessage.Contains("Reload", StringComparison.Ordinal));
-        }
-        else
-        {
-            Func<Task> cook = () => service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken);
-            _ = await cook.Should().ThrowAsync<IOException>().WithMessage("*Reload*").ConfigureAwait(false);
-        }
+        var result = material
+            ? await service.CookAssetAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
+            : await service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Status.Should().Be(OperationStatus.Failed);
+        _ = result.Diagnostics.Should().Contain(diagnostic => diagnostic.Message.Contains("Reload", StringComparison.Ordinal));
 
         _ = api.ImportedManifest.Should().BeNull();
         _ = workspace.CookCoordinator.Runs.Single().State.Should().Be(CookRunState.Failed);
