@@ -33,7 +33,7 @@ This contract belongs to ED-M07B.5d-f and complements
 | History | Retain this editor session's runs only. No completed history after restart. |
 | Automatic runs | Never open the panel or steal focus. Show active, queued, failed, and warning runs by default; successful automatic runs appear through Show all. |
 | Cancel | Cancel only the selected cook; other queued cooks continue. Show Cancelling until a safe stopping point. |
-| Unsaved inputs | List the participating documents inline and offer Save listed & Cook. Saving requires explicit action. |
+| Unsaved inputs | Put Save listed & Cook inline with Unsaved documents; each document name is its Open link. Saving requires explicit action. |
 | Retry | Immediately resubmit the original scope with the latest saved inputs; reuse valid current outputs. |
 | Go to property | Keep Cooking visible and the failed run selected while opening and focusing the affected property. |
 | Visual treatment | Compact rows, clear grouping, restrained status colours, consistent with the editor. |
@@ -193,8 +193,9 @@ The next result reports the repair; current asset status follows publication.
 
 ### Needs Save
 
-List exactly the unsaved documents participating in the request, with Open and
-Save listed & Cook. The latter invokes their ordinary Save commands and existing
+List exactly the unsaved documents participating in the request as document-name
+links. Put Save listed & Cook inline with the Unsaved documents heading. The
+action invokes their ordinary Save commands and existing
 conflict handling. It does not save unrelated documents or overwrite conflicting
 external changes. Recheck the dependency closure after saving; newly discovered
 dirty inputs require an updated visible list and another explicit save action.

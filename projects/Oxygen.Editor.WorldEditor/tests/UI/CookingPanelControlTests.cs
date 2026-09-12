@@ -110,6 +110,34 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = ((SolidColorBrush)icon.Foreground).Color.Should().Be(((SolidColorBrush)reference.Background).Color);
     });
 
+    /// <summary>Unsaved recovery stays compact and a document's name opens that document.</summary>
+    /// <returns>The asynchronous layout and navigation regression.</returns>
+    [TestMethod]
+    public Task UnsavedRecoveryKeepsItsActionInlineAndNamesNavigable() => EnqueueAsync(async () =>
+    {
+        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(Guid.NewGuid(), "C:\\Project\\Content\\NewScene2.oscene.json", "NewScene2", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: string.Empty);
+        var actions = new Mock<ICookingWorkspaceActions>();
+        _ = actions.Setup(value => value.OpenDocumentAsync(document.DocumentId)).ReturnsAsync(value: true);
+        using var model = CreateModel(actions.Object, document);
+        var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 340, RequestedTheme = ElementTheme.Dark };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        var scale = view.XamlRoot.RasterizationScale;
+        VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(960 * scale) + 40, (int)(340 * scale) + 80));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        view.UpdateLayout();
+        var banner = view.FindDescendant<InfoBar>(value => string.Equals(value.Title, "Unsaved documents", StringComparison.Ordinal))!;
+        var title = banner.FindDescendant<TextBlock>(value => string.Equals(value.Name, "Title", StringComparison.Ordinal))!;
+        var action = banner.ActionButton;
+        _ = Math.Abs(title.TransformToVisual(view).TransformPoint(default).Y - action.TransformToVisual(view).TransformPoint(default).Y).Should().BeLessThan(20);
+        _ = (banner.TransformToVisual(view).TransformPoint(default).Y + banner.ActualHeight).Should().BeLessThan(view.ActualHeight);
+        var link = banner.FindDescendant<HyperlinkButton>()!;
+        _ = ((TextBlock)link.Content).Text.Should().Be(document.DisplayName);
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.HyperlinkButtonAutomationPeer(link).GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        await WaitForRenderAsync().ConfigureAwait(true);
+        actions.Verify(value => value.OpenDocumentAsync(document.DocumentId), Times.Once);
+        await this.CaptureAsync(view, "cooking-unsaved-inline.png").ConfigureAwait(true);
+    });
+
     /// <summary>Long Output and Assets sections grow past the former caps and remain reachable through the parent.</summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
@@ -189,7 +217,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel()
+    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null)
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
@@ -219,11 +247,16 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
             Messages = run.Messages.Add(new(1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Checking saved inputs."))
                 .Add(new(2, DateTimeOffset.UtcNow, DiagnosticSeverity.Error, "Aerial Start must be 0 m or greater.")),
         };
+        if (waitingDocument is not null)
+        {
+            run = run with { State = CookRunState.NeedsSave, CompletedAt = null, Diagnostics = [], UnsavedDocuments = [waitingDocument], Assets = run.Assets.Clear(), Messages = [] };
+        }
+
         var runs = new Mock<ICookRunService>();
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, Mock.Of<IProjectAssetCatalog>(), Mock.Of<ICookingWorkspaceActions>(), new StrongReferenceMessenger(), hosting);
+        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, Mock.Of<IProjectAssetCatalog>(), actions ?? Mock.Of<ICookingWorkspaceActions>(), new StrongReferenceMessenger(), hosting);
     }
 
     private async Task CaptureAsync(FrameworkElement view, string name)
