@@ -17,6 +17,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <None Update="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryArtifactQualification.cs" Link="TemporaryArtifactQualification.cs" />
     </ItemGroup>
     <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
         <MSBuild Projects="..\testhost\Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog" />

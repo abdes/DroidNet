@@ -8,6 +8,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -18,16 +19,19 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="toolLocator">The native tool locator.</param>
 /// <param name="processRunner">The contained worker runner.</param>
 /// <param name="logger">The operation logger.</param>
+/// <param name="artifactQualification">The fixed installed artifact verification service.</param>
 public sealed partial class ImportToolContentPipelineApi(
     IEngineContentPipelineToolLocator toolLocator,
     IContentPipelineProcessRunner processRunner,
-    ILogger<ImportToolContentPipelineApi> logger) : IEngineContentPipelineApi
+    ILogger<ImportToolContentPipelineApi> logger,
+    IArtifactQualificationService? artifactQualification = null) : IEngineContentPipelineApi
 {
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
 
     private readonly IEngineContentPipelineToolLocator toolLocator = toolLocator ?? throw new ArgumentNullException(nameof(toolLocator));
     private readonly IContentPipelineProcessRunner processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly ILogger<ImportToolContentPipelineApi> logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IArtifactQualificationService artifactQualification = artifactQualification ?? EditorArtifactQualificationService.ForCurrentProcess();
 
     /// <inheritdoc />
     public async Task<NativeImportResult> ImportAsync(
@@ -39,14 +43,22 @@ public sealed partial class ImportToolContentPipelineApi(
         cancellationToken.ThrowIfCancellationRequested();
         ValidateExecutionPaths(execution);
 
-        var toolPath = this.toolLocator.GetImportToolPath();
+        var qualification = await this.artifactQualification.VerifyAsync(execution.OperationId, cancellationToken).ConfigureAwait(false);
+        if (!qualification.Succeeded)
+        {
+            return new(Succeeded: false, qualification.Diagnostics);
+        }
+
+        var artifacts = qualification.Artifacts!;
         var manifest = execution.Manifest;
         var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         Task? retainedWorkerDrain = null;
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var toolPath = this.GetQualifiedToolPath(artifacts);
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
             await WriteManifestAsync(manifest, manifestPath, cancellationToken).ConfigureAwait(false);
             var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, execution.InputRoot) with
             {
@@ -68,11 +80,12 @@ public sealed partial class ImportToolContentPipelineApi(
         {
             if (retainedWorkerDrain is null)
             {
+                await artifacts.DisposeAsync().ConfigureAwait(false);
                 TryDeleteFile(manifestPath);
             }
             else
             {
-                _ = DeleteAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath);
+                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, artifacts);
             }
         }
     }
@@ -188,17 +201,6 @@ public sealed partial class ImportToolContentPipelineApi(
                 .ToList(),
             Diagnostics: []);
     }
-
-    private static Task DeleteAfterWorkerDrainAsync(Task drain, string manifestPath)
-        => drain.ContinueWith(
-            completed =>
-            {
-                _ = completed.Exception;
-                TryDeleteFile(manifestPath);
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
 
     private static async Task WriteManifestAsync(ContentImportManifest manifest, string path, CancellationToken cancellationToken)
     {

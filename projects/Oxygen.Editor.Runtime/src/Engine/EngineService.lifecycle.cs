@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -28,7 +30,7 @@ public sealed partial class EngineService
             }
 
             ThrowCleanupFailures(await this.ShutdownCoreAsync().ConfigureAwait(true));
-            return await this.InitializeCoreAsync().ConfigureAwait(true);
+            return await this.InitializeCoreAsync(cancellationToken).ConfigureAwait(true);
         }
         finally
         {
@@ -139,16 +141,32 @@ public sealed partial class EngineService
         }
     }
 
-    private async Task<bool> InitializeCoreAsync()
+    private async Task<bool> InitializeCoreAsync(CancellationToken cancellationToken)
     {
         this.ChangeState(EngineServiceState.Initializing);
         try
         {
-            this.session = this.sessionFactory();
+            this.session = await this.sessionFactory(cancellationToken).ConfigureAwait(true);
             this.session.Initialize(this.engineSettings, this.pathFinder?.GetConfigFilePath(EditorCVarsArchiveFileName), loggerFactory?.CreateLogger("Oxygen.Engine"));
             this.ChangeState(EngineServiceState.Ready);
             this.LogContextReady();
             return true;
+        }
+        catch (ArtifactQualificationException exception)
+        {
+            _ = await this.ShutdownCoreAsync().ConfigureAwait(true);
+            var result = new OperationResult
+            {
+                OperationId = exception.Diagnostics.FirstOrDefault()?.OperationId ?? Guid.NewGuid(),
+                OperationKind = "Runtime.Qualification",
+                Status = OperationStatus.Failed,
+                Severity = DiagnosticSeverity.Error,
+                Title = "Native runtime unavailable",
+                Message = exception.Message,
+                Diagnostics = exception.Diagnostics,
+            };
+            this.ChangeState(EngineServiceState.Faulted, result, exception);
+            throw;
         }
         catch
         {

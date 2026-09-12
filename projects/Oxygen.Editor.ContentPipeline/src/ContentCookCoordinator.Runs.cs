@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -193,7 +194,9 @@ public sealed partial class ContentCookCoordinator
     private void FailRun(Guid operationId, Exception exception)
     {
         var state = exception is OperationCanceledException ? CookRunState.Cancelled : CookRunState.Failed;
-        var diagnostics = state == CookRunState.Cancelled ? Array.Empty<DiagnosticRecord>() :
+        var diagnostics = exception is ArtifactQualificationException qualification
+            ? qualification.Diagnostics.Select(diagnostic => diagnostic with { OperationId = operationId }).ToArray()
+            : state == CookRunState.Cancelled ? Array.Empty<DiagnosticRecord>() :
         [
             new DiagnosticRecord
             {

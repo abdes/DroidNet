@@ -46,7 +46,8 @@ public sealed partial class ContentPipelineServiceTests
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "*", SearchOption.AllDirectories).Should().BeEmpty();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, qualification);
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api);
         var result = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -65,7 +66,8 @@ public sealed partial class ContentPipelineServiceTests
     public async Task EveryBuiltinCooksThroughNativeSceneAndProjectWorkflows(bool projectCook)
     {
         using var workspace = new TempWorkspace();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, qualification);
         var catalog = await api.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = catalog.Geometries.Should().HaveCount(11);
         foreach (var definition in catalog.Geometries)

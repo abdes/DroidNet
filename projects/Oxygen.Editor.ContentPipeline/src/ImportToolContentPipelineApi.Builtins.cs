@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core.Compatibility;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Queries the native procedural catalog under the same worker lifetime contract as import.</summary>
@@ -13,11 +15,19 @@ public sealed partial class ImportToolContentPipelineApi : IBuiltinGeometryCatal
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(mountName);
         cancellationToken.ThrowIfCancellationRequested();
-        var toolPath = this.toolLocator.GetImportToolPath();
+        var qualification = await this.artifactQualification.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
+        if (!qualification.Succeeded)
+        {
+            throw new ArtifactQualificationException(qualification.Diagnostics);
+        }
+
+        var artifacts = qualification.Artifacts!;
         var output = Path.Combine(projectRoot, ".pipeline", "Catalogs", $"builtins-{Guid.NewGuid():N}.json");
         Task? retainedWorkerDrain = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var toolPath = this.GetQualifiedToolPath(artifacts);
             var request = new ContentPipelineProcessRequest(
                 toolPath, ["--no-tui", "--no-color", "--quiet", "builtin-catalog", output, "--mount", mountName], projectRoot);
             var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
@@ -39,11 +49,12 @@ public sealed partial class ImportToolContentPipelineApi : IBuiltinGeometryCatal
         {
             if (retainedWorkerDrain is null)
             {
+                await artifacts.DisposeAsync().ConfigureAwait(false);
                 TryDeleteFile(output);
             }
             else
             {
-                _ = DeleteAfterWorkerDrainAsync(retainedWorkerDrain, output);
+                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, output, artifacts);
             }
         }
     }

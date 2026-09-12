@@ -136,7 +136,15 @@ public sealed partial class EngineService
     {
         if (change.OperationResult is { } result)
         {
-            this.LogLoopTerminated(change.RunId, result.Message, change.Exception);
+            if (string.Equals(result.OperationKind, "Runtime.Qualification", StringComparison.Ordinal))
+            {
+                this.LogQualificationFailed(result.Message, change.Exception);
+            }
+            else
+            {
+                this.LogLoopTerminated(change.RunId, result.Message, change.Exception);
+            }
+
             this.NotifySubscriber(() => this.operationResults.Publish(result));
         }
 

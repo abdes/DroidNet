@@ -42,7 +42,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         Directory.CreateDirectory(publishedRoot);
         var previous = Path.Combine(publishedRoot, "previous-generation.txt");
         await File.WriteAllTextAsync(previous, "Previous publication", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, qualification);
 
         var result = await api.ImportAsync(new(operationId, inputRoot, operationRoot, manifest), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -83,6 +84,6 @@ public sealed partial class ImportToolContentPipelineApiTests
 
         _ = await import.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         _ = runner.Request.Should().BeNull();
-        _ = Directory.EnumerateFileSystemEntries(workspace.Root).Should().BeEmpty();
+        _ = Directory.Exists(execution.OperationRoot).Should().BeFalse();
     }
 }

@@ -11,6 +11,30 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Verifies scoped history, cancellation, and explicit save recovery.</summary>
 public sealed partial class ContentCookCoordinatorTests
 {
+    /// <summary>Catalog qualification failures retain actionable artifact details in the selected cook.</summary>
+    /// <returns>The asynchronous operation test.</returns>
+    [TestMethod]
+    public async Task QualificationFailuresKeepArtifactDiagnosticsInCookHistory()
+    {
+        using var coordinator = CreateCoordinator(CreateContextService());
+        var diagnostic = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.RuntimeDiscovery,
+            Severity = DiagnosticSeverity.Error,
+            Code = Oxygen.Managed.Core.Compatibility.ArtifactQualificationDiagnosticCodes.ArtifactMismatch,
+            Message = "The import tool changed.",
+            AffectedPath = "ImportTool.exe",
+        };
+        Func<Task> cook = () => coordinator.RunCookAsync<int>(
+            new(CookTargetKind.Project, ScopeUri: null),
+            (_, _) => Task.FromException<int>(new Oxygen.Managed.Core.Compatibility.ArtifactQualificationException([diagnostic])),
+            CancellationToken.None);
+        _ = await cook.Should().ThrowAsync<Oxygen.Managed.Core.Compatibility.ArtifactQualificationException>().ConfigureAwait(false);
+        var run = coordinator.Runs.Single();
+        _ = run.Diagnostics.Should().ContainSingle().Which.Should().Be(diagnostic with { OperationId = run.OperationId });
+    }
+
     /// <summary>Represents an entire project with one run and ordered messages for all its work.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

@@ -8,6 +8,7 @@ using System.Runtime.Loader;
 using System.Text.Json;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.ManagedBoundaryProbe;
@@ -39,9 +40,10 @@ internal static class Program
         _ = new RuntimeViewConfig { Name = "Offline viewport", ClearColor = new(0.1f, 0.2f, 0.3f, 1.0f) };
         InspectPublicContracts();
         var hosting = new HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! };
-        var engine = new EngineService(hosting, new Publisher());
+        var publisher = new Publisher();
+        var engine = new EngineService(hosting, publisher);
         await using var lifetime = engine.ConfigureAwait(false);
-        if (engine.State != EngineServiceState.NoEngine || engine.WorldCommands.RunId != Guid.Empty)
+        if (engine.WorldCommands.RunId != Guid.Empty)
         {
             throw new InvalidOperationException("The managed service unexpectedly started native work.");
         }
@@ -50,6 +52,19 @@ internal static class Program
         if (result.Status != RuntimeCommandStatus.Unavailable)
         {
             throw new InvalidOperationException("Unavailable native work was not reported explicitly.");
+        }
+
+        try
+        {
+            _ = await engine.InitializeAsync().ConfigureAwait(false);
+            throw new InvalidOperationException("Unqualified native startup was allowed.");
+        }
+        catch (ArtifactQualificationException exception)
+        {
+            if (engine.State != EngineServiceState.Faulted || exception.Diagnostics.IsEmpty || !string.Equals(publisher.Result?.OperationKind, "Runtime.Qualification", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Qualification failure was not reported through the runtime state and diagnostics.");
+            }
         }
     }
 
@@ -94,9 +109,9 @@ internal static class Program
 
     private sealed class Publisher : IOperationResultPublisher
     {
-        public void Publish(OperationResult result)
-        {
-        }
+        public OperationResult? Result { get; private set; }
+
+        public void Publish(OperationResult result) => this.Result = result;
 
         public IDisposable Subscribe(IObserver<OperationResult> observer) => System.Reactive.Disposables.Disposable.Empty;
     }

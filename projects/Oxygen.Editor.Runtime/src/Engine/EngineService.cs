@@ -7,6 +7,7 @@ using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -23,12 +24,14 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="loggerFactory">Optional factory used to bridge native engine logging.</param>
 /// <param name="engineSettings">Editor native engine startup settings.</param>
 /// <param name="pathFinder">Resolves editor configuration paths.</param>
+/// <param name="artifactQualification">Verifies the fixed installed artifact set before native loading.</param>
 public sealed partial class EngineService(
     HostingContext hostingContext,
     IOperationResultPublisher operationResults,
     ILoggerFactory? loggerFactory = null,
     ISettingsService<IEngineSettings>? engineSettings = null,
-    IPathFinder? pathFinder = null) : IEngineService
+    IPathFinder? pathFinder = null,
+    IArtifactQualificationService? artifactQualification = null) : IEngineService
 {
     private const string EditorCVarsArchiveFileName = "engine-cvars.json";
 
@@ -41,7 +44,7 @@ public sealed partial class EngineService(
     // This gate has no wait handles and remains available for concurrent/repeated cleanup.
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Cleanup remains callable after disposal; SemaphoreSlim.AvailableWaitHandle is never used.")]
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
-    private readonly Func<EngineSession> sessionFactory = () => CreateNativeSession(hostingContext);
+    private readonly Func<CancellationToken, Task<EngineSession>> sessionFactory = token => CreateQualifiedSessionAsync(hostingContext, artifactQualification ?? EditorArtifactQualificationService.ForCurrentProcess(), token);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
     private readonly RuntimeCommandDispatcher commandDispatcher = new();
@@ -60,7 +63,7 @@ public sealed partial class EngineService(
     internal EngineService(HostingContext hostingContext, Func<EngineSession> sessionFactory, IOperationResultPublisher operationResults, ILoggerFactory? loggerFactory = null)
         : this(hostingContext, operationResults, loggerFactory)
     {
-        this.sessionFactory = sessionFactory;
+        this.sessionFactory = _ => Task.FromResult(sessionFactory());
     }
 
     /// <inheritdoc/>
@@ -152,7 +155,52 @@ public sealed partial class EngineService(
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "The factory signature stays on the managed boundary so service construction does not require the native session type.")]
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static EngineSession CreateNativeSession(HostingContext hostingContext) => new NativeEngineSession(hostingContext);
+    private static EngineSession CreateNativeSession(HostingContext hostingContext, QualifiedArtifactLease artifacts) => new NativeEngineSession(hostingContext, artifacts);
+
+    private static async Task<EngineSession> CreateQualifiedSessionAsync(HostingContext hostingContext, IArtifactQualificationService qualification, CancellationToken cancellationToken)
+    {
+        var result = await qualification.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            throw new ArtifactQualificationException(result.Diagnostics);
+        }
+
+        var artifacts = result.Artifacts!;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var interopPath = Path.Combine(AppContext.BaseDirectory, "DroidNet.Oxygen.Editor.Interop.dll");
+            if (!string.Equals(artifacts.GetPath(EditorArtifactInventory.InteropId), interopPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArtifactQualificationException(
+                [
+                    new DiagnosticRecord
+                    {
+                        OperationId = Guid.NewGuid(),
+                        Domain = FailureDomain.RuntimeDiscovery,
+                        Severity = DiagnosticSeverity.Error,
+                        Code = ArtifactQualificationDiagnosticCodes.ArtifactMismatch,
+                        Message = "Qualification refers to a different editor Interop assembly.",
+                        AffectedPath = interopPath,
+                    },
+                ]);
+            }
+
+            var directory = Path.GetDirectoryName(artifacts.GetPath(EditorArtifactInventory.RuntimeId(EditorArtifactQualificationService.CurrentConfiguration)))!;
+            var path = Environment.GetEnvironmentVariable("PATH");
+            if (path?.Split(Path.PathSeparator).Contains(directory, StringComparer.OrdinalIgnoreCase) != true)
+            {
+                Environment.SetEnvironmentVariable("PATH", string.IsNullOrEmpty(path) ? directory : directory + Path.PathSeparator + path);
+            }
+
+            return CreateNativeSession(hostingContext, artifacts);
+        }
+        catch
+        {
+            await artifacts.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
 
     private EngineSession EnsureIsReadyOrRunning()
     {

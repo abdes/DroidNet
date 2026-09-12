@@ -43,7 +43,8 @@ public sealed partial class InspectorControlTests
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new DispatcherQueueScheduler(dispatcher), IsRunning = true };
         var results = Mock.Of<IOperationResultPublisher>();
-        var engine = new EngineService(hosting, results);
+        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        var engine = new EngineService(hosting, results, artifactQualification: qualification);
         await using var engineLifetime = engine.ConfigureAwait(true);
         _ = (await engine.InitializeAsync(timeout.Token).ConfigureAwait(true)).Should().BeTrue();
         engine.TargetFps = 60;
