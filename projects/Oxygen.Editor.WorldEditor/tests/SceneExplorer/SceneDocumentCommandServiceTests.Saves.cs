@@ -23,6 +23,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         SceneSaveSnapshot? saved = null;
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
+        _ = manager.Setup(value => value.GetSceneSourceVersion(It.IsAny<Scene>())).Returns(value: (SceneSourceVersion?)null);
         _ = manager.Setup(value => value.SaveSceneSnapshotAsync(It.IsAny<SceneSaveSnapshot>()))
             .Callback<SceneSaveSnapshot>(snapshot => saved = snapshot).ReturnsAsync(value: true);
         var fixture = CreateFixture(projectManager: manager.Object);
@@ -53,6 +54,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task SceneSaveConflictPreservesDirtySourceAndHistory()
     {
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
+        _ = manager.Setup(value => value.GetSceneSourceVersion(It.IsAny<Scene>())).Returns(value: (SceneSourceVersion?)null);
         _ = manager.Setup(value => value.SaveSceneSnapshotAsync(It.IsAny<SceneSaveSnapshot>()))
             .ThrowsAsync(new StorageWriteConflictException("Changed externally"));
         var fixture = CreateFixture(projectManager: manager.Object);
@@ -79,6 +81,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         SceneSaveSnapshot? saved = null;
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
+        _ = manager.Setup(value => value.GetSceneSourceVersion(It.IsAny<Scene>())).Returns(value: (SceneSourceVersion?)null);
         _ = manager.Setup(value => value.CreateSceneSnapshotAsync(It.IsAny<SceneSaveSnapshot>()))
             .Callback<SceneSaveSnapshot>(snapshot => saved = snapshot).ReturnsAsync(value: true);
         var fixture = CreateFixture(projectManager: manager.Object);

@@ -24,7 +24,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (path, bytes, token) =>
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (path, bytes, token) =>
         {
             _ = captured.TrySetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);
@@ -60,7 +60,7 @@ public sealed partial class MaterialDocumentServiceTests
         var firstWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var writes = 0;
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (path, bytes, token) =>
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (path, bytes, token) =>
         {
             if (Interlocked.Increment(ref writes) == 1)
             {
@@ -92,7 +92,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (_, _, token) =>
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, new ControlledFileStore(async (_, _, token) =>
         {
             captured.SetResult();
             await release.Task.WaitAsync(token).ConfigureAwait(false);

@@ -30,6 +30,25 @@ public sealed class SceneSaveRevisionTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AutomaticCookIsNotifiedOnlyAfterSuccessfulSave(bool failWrite)
+    {
+        var fixture = new SaveFixture { FailWrite = failWrite };
+        var save = fixture.Commands.SaveSceneAsync(fixture.Context);
+        await fixture.WriteStarted.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.AutomaticCooking.VerifyNoOtherCalls();
+        fixture.ReleaseWrite.SetResult();
+        _ = (await save.ConfigureAwait(false)).Succeeded.Should().Be(!failWrite);
+        fixture.AutomaticCooking.Verify(value => value.NotifySaved(It.IsAny<string>(), "saved snapshot", contentChanged: true), failWrite ? Times.Never : Times.Once);
+        if (!failWrite)
+        {
+            _ = await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(false);
+            fixture.AutomaticCooking.Verify(value => value.NotifySaved(It.IsAny<string>(), "saved snapshot", contentChanged: false), Times.Once);
+        }
+    }
+
+    [TestMethod]
     public async Task HierarchyAddRecordsRevisionBeforeAwaitingLiveSync()
     {
         var fixture = new SaveFixture();
@@ -189,6 +208,7 @@ public sealed class SceneSaveRevisionTests
             var documents = new Mock<IDocumentService>();
             _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
             this.Commands = new SceneDocumentCommandService(
+                this.AutomaticCooking.Object,
                 Mock.Of<ISceneExplorerService>(),
                 new SceneSelectionService(),
                 this.Sync.Object,
@@ -201,6 +221,8 @@ public sealed class SceneSaveRevisionTests
         }
 
         public SceneDocumentCommandContext Context { get; }
+
+        public Mock<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService> AutomaticCooking { get; } = new();
 
         public SceneDocumentCommandService Commands { get; }
 

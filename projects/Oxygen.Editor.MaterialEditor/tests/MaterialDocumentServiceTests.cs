@@ -34,7 +34,7 @@ public sealed partial class MaterialDocumentServiceTests
     {
         using var workspace = new TempWorkspace();
         var results = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), results);
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), results);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/Locked.omat.json"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -182,7 +182,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var cook = new RecordingCookService();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
 
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -292,7 +292,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var publisher = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = PropertyEdit.Single(MaterialDescriptors.Metalness, 2.0f);
 
@@ -319,7 +319,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var cook = new RecordingCookService();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), cook, workspace.CookDocuments, CreateFileStore());
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
@@ -343,7 +343,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var publisher = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var unknown = new PropertyId<float>("material", "/parameters/unknown");
 
@@ -487,7 +487,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
         var publisher = new RecordingOperationPublisher();
-        var service = new MaterialDocumentService(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
+        var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
 
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await service.EditScalarAsync(
@@ -669,10 +669,11 @@ public sealed partial class MaterialDocumentServiceTests
         => new(new Testably.Abstractions.RealFileSystem());
 
     private static MaterialDocumentService CreateService(TempWorkspace workspace)
-        => new(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
+        => new(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
 
     private static MaterialDocumentService CreateCookingService(TempWorkspace workspace)
         => new(
+            Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new TestResolver(workspace.Root),
             new MaterialCookService(workspace.NativePipeline.Pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance),
             workspace.CookDocuments,

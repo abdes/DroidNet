@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Moq" />
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
