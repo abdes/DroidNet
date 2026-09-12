@@ -113,8 +113,7 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasMultipleItems)));
 
         this.RefreshOwnProperties();
-        this.UpdatePropertyEditors();
-        this.UpdatePropertyEditorsValues();
+        this.RefreshPropertyEditors();
 
         // Log the collection update
         this.LogItemsCollectionUpdated();
@@ -156,6 +155,13 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         this.UpdatePropertyEditorsValues();
     }
 
+    /// <summary>Refreshes section visibility and binds each visible editor to the current selection.</summary>
+    protected void RefreshPropertyEditors()
+    {
+        this.UpdatePropertyEditors();
+        this.UpdatePropertyEditorsValues();
+    }
+
     private void UpdatePropertyEditors()
     {
         var filteredEditors = this.FilterPropertyEditors();
@@ -167,13 +173,25 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
             if (!filteredEditors.Contains(editor))
             {
                 this.PropertyEditors.RemoveAt(i);
+                editor.UpdateValues([]);
             }
         }
 
-        // Add new items
-        foreach (var editor in filteredEditors.Where(editor => !this.PropertyEditors.Contains(editor)))
+        // Preserve canonical section order when a filter restores existing editors.
+        var targetIndex = 0;
+        foreach (var editor in filteredEditors)
         {
-            this.PropertyEditors.Add(editor);
+            var currentIndex = this.PropertyEditors.IndexOf(editor);
+            if (currentIndex < 0)
+            {
+                this.PropertyEditors.Insert(targetIndex, editor);
+            }
+            else if (currentIndex != targetIndex)
+            {
+                this.PropertyEditors.Move(currentIndex, targetIndex);
+            }
+
+            ++targetIndex;
         }
     }
 
@@ -182,7 +200,7 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         // Update values
         foreach (var editor in this.PropertyEditors)
         {
-            editor.UpdateValues(this.items);
+            editor.UpdateValues(this.items.ToArray());
         }
 
         // Log that property editor values were updated

@@ -162,23 +162,36 @@ public sealed partial class InspectorControlTests
 
     private sealed partial class Fixture
     {
-        public SceneNodeEditorViewModel CreateInspectorHost(string kind)
+        public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false)
         {
             IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
             this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
             _ = this.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([this.Context.Metadata]);
             _ = this.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(this.Scene.Id);
             _ = this.Sync.Setup(service => service.GetDocumentScene(this.Context.Metadata)).Returns(this.Scene);
+            var locator = new Mock<IViewLocator>();
+            if (realizeViews)
+            {
+                _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.World.Inspector.Geometry.GeometryViewModel
+                    ? new Oxygen.Editor.World.Inspector.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
+            }
+
+            var catalog = new Mock<IAssetCatalog>();
+            _ = catalog.SetupGet(value => value.Changes).Returns(System.Reactive.Linq.Observable.Empty<AssetChange>());
+            _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var materials = new Mock<IMaterialPickerService>();
+            _ = materials.SetupGet(value => value.Results).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
+            _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
             return new(
                 new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) },
-                new ViewModelToView(Mock.Of<IViewLocator>()),
+                new ViewModelToView(locator.Object),
                 this.Messenger,
                 this.Commands,
                 this.Documents.Object,
                 default,
-                Mock.Of<IAssetCatalog>(),
-                Mock.Of<IMaterialPickerService>(),
+                catalog.Object,
+                materials.Object,
                 this.Sync.Object);
         }
 

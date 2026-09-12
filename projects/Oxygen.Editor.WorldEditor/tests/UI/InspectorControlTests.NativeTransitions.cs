@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 
@@ -61,7 +60,7 @@ public sealed partial class InspectorControlTests
         var transform = node.Components.OfType<TransformComponent>().Single();
         view.ViewModel!.SelectedComponent = transform;
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var delete = view.FindDescendants().OfType<Button>().Single(button => button.Content is FontIcon { Glyph: "\uE74D" });
+        var delete = (DroidNet.Controls.ToolBarButton)view.FindName("DeleteComponentButton");
         _ = delete.IsEnabled.Should().BeFalse();
         _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, node.Id, transform.Id).ConfigureAwait(true)).Succeeded.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
