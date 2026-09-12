@@ -9,7 +9,7 @@ using DroidNet.Mvvm.Generators;
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
 /// <summary>
-///     The View for the Project Layout pane in the <see cref="ContentBrowserView" />.
+///     The View for the Project Layout pane in the <see cref="Shell.ContentBrowserView" />.
 /// </summary>
 [ViewModel(typeof(ProjectLayoutViewModel))]
 public sealed partial class ProjectLayoutView

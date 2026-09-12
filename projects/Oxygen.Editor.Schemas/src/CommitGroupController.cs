@@ -19,9 +19,9 @@ namespace Oxygen.Editor.Schemas;
 /// A <see cref="CommitGroupController"/> represents one in-flight
 /// gesture (a drag, a wheel scroll, a numeric-box edit). It captures the
 /// "before" snapshot once at <see cref="Begin"/>, buffers preview
-/// values, and produces a single <see cref="PropertyOp"/> at
-/// <see cref="CommitAsync"/>. <see cref="Cancel"/> restores the
-/// "before" snapshot directly.
+/// values, and returns the snapshots for a single <see cref="PropertyOp"/> at
+/// <see cref="Close"/>. The caller restores the "before" snapshot when
+/// cancelling the gesture.
 /// </para>
 /// <para>
 /// Mouse-wheel idle commits are scheduled via
