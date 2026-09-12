@@ -42,6 +42,7 @@ public:
   using MaterialLoader =
       std::function<void(const std::string &, MaterialCompletion)>;
   using Diagnostic = std::function<void(const std::string &)>;
+  using AssetAvailability = std::function<bool(const std::string &, bool)>;
   //! Reports a current failure with the native request generation.
   using FailureCallback =
       std::function<void(uint64_t, const std::string &)>;
@@ -49,7 +50,8 @@ public:
   SceneAssetRequests(content::IAssetLoader &loader,
                      content::VirtualPathResolver &resolver);
   SceneAssetRequests(GeometryLoader geometry_loader,
-                     MaterialLoader material_loader, Diagnostic diagnostic);
+                     MaterialLoader material_loader, Diagnostic diagnostic,
+                     AssetAvailability available);
   ~SceneAssetRequests();
 
   SceneAssetRequests(const SceneAssetRequests &) = delete;
@@ -63,6 +65,14 @@ public:
   void SetMaterial(scene::NodeHandle node, std::size_t slot,
                    const std::string &uri, FailureCallback on_failure = {});
   void Detach(scene::NodeHandle node);
+
+  //! Re-request current bindings after mounted sources have been refreshed.
+  //! Existing scene objects remain usable until their replacements arrive.
+  void Refresh(scene::Scene &scene);
+  void SuspendLoads();
+  void ResumeLoads(scene::Scene &scene);
+  [[nodiscard]] auto IsRefreshPending() const -> bool;
+  [[nodiscard]] auto RefreshError() const -> std::string;
 
   //! Drain after authoring commands. Reject dead targets and obsolete results.
   void Drain(scene::Scene &scene);

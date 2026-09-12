@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Commands/DetachGeometryCommand.h>
@@ -79,6 +80,7 @@ struct Fixture {
   std::unordered_map<std::string, Requests::Geometry> geometry_cache;
   std::unordered_map<std::string, Requests::Material> material_cache;
   std::vector<std::string> diagnostics;
+  std::unordered_set<std::string> unavailable;
   std::unique_ptr<Requests> requests = NewRequests();
 
   auto NewRequests() -> std::unique_ptr<Requests> {
@@ -103,7 +105,8 @@ struct Fixture {
             material_loads.push_back(std::move(complete));
           }
         },
-        [this](const std::string &message) { diagnostics.push_back(message); });
+        [this](const std::string &message) { diagnostics.push_back(message); },
+        [this](const std::string& uri, bool) { return !unavailable.contains(uri); });
   }
 
   void Execute(EditorCommand &command) {
@@ -500,9 +503,146 @@ void MutationBoundary() {
 
 thread_local char last_error[1024]{};
 
+void RefreshRebindsSameIdentityWithoutRecreatingNode() {
+  Fixture f;
+  f.Attach();
+  f.material_cache["red"] = f.red;
+  f.Material("red");
+  f.Drain();
+  const auto handle = f.node.GetHandle();
+  const auto updated = MakeMaterial("/red");
+  f.material_cache["red"] = updated;
+  f.requests->Refresh(*f.scene);
+  Require(f.requests->IsRefreshPending(), "refresh completed before queued replacements were applied");
+  Require(f.CurrentMaterial() == f.red, "refresh changed scene outside mutation drain");
+  f.Drain();
+  Require(!f.requests->IsRefreshPending(), "applied replacements did not complete refresh");
+  Require(f.CurrentMaterial() == updated, "same-key material was not rebound");
+  Require(f.node.GetHandle() == handle, "refresh replaced the scene node");
+}
+
+void RefreshPreservesNewerEditsAndPreviousMaterialOnFailure() {
+  Fixture f;
+  f.Attach();
+  f.material_cache["red"] = f.red;
+  f.Material("red");
+  f.Drain();
+  f.material_cache.clear();
+  f.requests->Refresh(*f.scene);
+  f.material_loads[0]({}, "refresh failed");
+  f.Drain();
+  Require(!f.requests->IsRefreshPending() && !f.requests->RefreshError().empty(), "failed refresh did not settle with its error");
+  Require(f.CurrentMaterial() == f.red, "failed refresh removed the visible material");
+  f.requests->Refresh(*f.scene);
+  f.Material("blue");
+  f.material_loads[2](f.blue, {});
+  f.material_loads[1](f.red, {});
+  f.Drain();
+  Require(f.CurrentMaterial() == f.blue, "refresh reversed a newer assignment");
+}
+
+void RefreshDoesNotReviveClearedOrRemovedSlots() {
+  Fixture f;
+  f.Attach();
+  f.material_cache["red"] = f.red;
+  f.Material("red", 1);
+  f.Drain();
+  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Drain();
+  f.geometry_cache["B"] = f.b;
+  f.Geometry("B");
+  f.Drain();
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial(1) != f.red, "refresh resurrected a removed slot override");
+  f.Material("red");
+  f.Drain();
+  f.Material("");
+  f.Drain();
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial() != f.red, "refresh reversed None");
+}
+
+void RefreshLeavesUncookedIntentForItsOwnPublication() {
+  Fixture f;
+  f.Attach();
+  f.material_cache["red"] = f.red;
+  f.Material("red");
+  f.Drain();
+  f.Material("uncooked");
+  f.material_loads[0]({}, "not cooked yet");
+  f.Drain();
+  f.unavailable.insert("uncooked");
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.material_loads.size() == 1, "unrelated publication retried an uncooked intent");
+  Require(f.requests->RefreshError().empty(), "unrelated uncooked intent failed publication");
+  Require(f.CurrentMaterial() == f.red, "unrelated publication removed last visible material");
+  f.unavailable.clear();
+  f.material_cache["uncooked"] = f.blue;
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial() == f.blue, "newly published intent was not resolved");
+}
+
+void SuspendedLoadsRetainLatestIntentAndClear() {
+  Fixture f;
+  f.Attach();
+  f.material_cache["red"] = f.red;
+  f.Material("red");
+  f.Drain();
+  f.requests->SuspendLoads();
+  f.Material("blue");
+  f.Material("");
+  f.Drain();
+  Require(f.material_loads.empty(), "suspended authoring started file reads");
+  Require(f.CurrentMaterial() == f.red, "suspension changed the last applied material");
+  f.requests->ResumeLoads(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial() != f.red, "resume lost the newer None intent");
+  Require(!f.requests->IsRefreshPending(), "clear remained pending after resume");
+}
+
+void PublicationRefreshWorksWhileAuthoringLoadsStaySuspended() {
+  Fixture f;
+  f.Attach();
+  f.requests->SuspendLoads();
+  f.Material("blue");
+  f.material_cache["blue"] = f.blue;
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial() == f.blue, "publication did not bind staged material while paused");
+  f.Material("red");
+  f.Drain();
+  Require(f.material_loads.empty(), "publication accidentally resumed ordinary loading");
+  f.material_cache["red"] = f.red;
+  f.requests->ResumeLoads(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial() == f.red, "resume did not apply the newer authoring intent");
+}
+
 auto RunScenario(int scenario) -> const char * {
   try {
     switch (scenario) {
+    case 24:
+      SuspendedLoadsRetainLatestIntentAndClear();
+      break;
+    case 25:
+      PublicationRefreshWorksWhileAuthoringLoadsStaySuspended();
+      break;
+    case 23:
+      RefreshLeavesUncookedIntentForItsOwnPublication();
+      break;
+    case 20:
+      RefreshRebindsSameIdentityWithoutRecreatingNode();
+      break;
+    case 21:
+      RefreshPreservesNewerEditsAndPreviousMaterialOnFailure();
+      break;
+    case 22:
+      RefreshDoesNotReviveClearedOrRemovedSlots();
+      break;
     case 0:
       GeometryOrdering(false);
       break;
@@ -590,6 +730,24 @@ private:
   }
 
 public:
+  [TestMethod]
+  void SuspendedLoadsRetainLatestIntentAndClear() { Check(24); }
+
+  [TestMethod]
+  void PublicationRefreshWorksWhileAuthoringLoadsStaySuspended() { Check(25); }
+
+  [TestMethod]
+  void RefreshLeavesUncookedIntentForItsOwnPublication() { Check(23); }
+
+  [TestMethod]
+  void RefreshRebindsSameIdentityWithoutRecreatingNode() { Check(20); }
+
+  [TestMethod]
+  void RefreshPreservesNewerEditsAndPreviousMaterialOnFailure() { Check(21); }
+
+  [TestMethod]
+  void RefreshDoesNotReviveClearedOrRemovedSlots() { Check(22); }
+
   [TestMethod]
   void CorrelatedFailuresRespectGenerationAndLifetime() {
     Check(19);
