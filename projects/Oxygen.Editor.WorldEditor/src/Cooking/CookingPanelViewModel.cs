@@ -6,10 +6,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
@@ -23,9 +20,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private readonly ICookRunService runs;
     private readonly IContentPipelineService pipeline;
     private readonly IProjectContextService projects;
-    private readonly IProjectAssetCatalog catalog;
     private readonly ICookingWorkspaceActions workspace;
-    private readonly IMessenger messenger;
     private readonly HostingContext hosting;
     private readonly Dictionary<Guid, CookingRunViewModel> items = [];
     private bool reconciling;
@@ -35,25 +30,19 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     /// <param name="runs">The coordinator's run history and controls.</param>
     /// <param name="pipeline">The shared cook entry points for every scope.</param>
     /// <param name="projects">The active project identity.</param>
-    /// <param name="catalog">The published asset catalog.</param>
     /// <param name="workspace">Document/property recovery navigation.</param>
-    /// <param name="messenger">The workspace's runtime publication channel.</param>
     /// <param name="hosting">The authoring dispatcher.</param>
     public CookingPanelViewModel(
         ICookRunService runs,
         IContentPipelineService pipeline,
         IProjectContextService projects,
-        IProjectAssetCatalog catalog,
         ICookingWorkspaceActions workspace,
-        IMessenger messenger,
         HostingContext hosting)
     {
         this.runs = runs;
         this.pipeline = pipeline;
         this.projects = projects;
-        this.catalog = catalog;
         this.workspace = workspace;
-        this.messenger = messenger;
         this.hosting = hosting;
         this.runs.RunChanged += this.OnRunChanged;
         foreach (var run in this.runs.Runs)
@@ -249,18 +238,12 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
         this.ActionError = string.Empty;
         try
         {
-            var result = request.TargetKind switch
+            _ = request.TargetKind switch
             {
                 CookTargetKind.Project => await this.pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(true),
                 CookTargetKind.Folder => await this.pipeline.CookFolderAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
                 _ => await this.pipeline.CookAssetAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
             };
-            if (result.Validation?.Succeeded == true && result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
-            {
-                await this.catalog.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-                var roots = result.Validation.CookedRoot.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
-                _ = this.messenger.Send(new ValidatedCookedOutputMessage(roots));
-            }
         }
         catch (OperationCanceledException)
         {

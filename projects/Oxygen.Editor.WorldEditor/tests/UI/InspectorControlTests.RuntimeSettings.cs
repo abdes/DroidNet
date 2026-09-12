@@ -9,7 +9,6 @@ using DroidNet.Tests;
 using DryIoc;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
@@ -115,7 +114,6 @@ public sealed partial class InspectorControlTests
                 new OperationStatusReducer(),
                 this.Commands,
                 Mock.Of<IContentPipelineService>(),
-                Mock.Of<IContentBrowserAssetProvider>(),
                 container,
                 this.messenger,
                 new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting));

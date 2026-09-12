@@ -32,6 +32,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <summary>
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
+/// <param name="cookRuns">The session cooking controls.</param>
 /// <param name="assetCatalog">The asset catalog.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
@@ -45,6 +46,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="importService">The import service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
+    Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
     IAssetCatalog assetCatalog,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
@@ -62,6 +64,9 @@ public partial class AssetsViewModel(
 {
     private bool disposed;
     private bool isInitialized;
+
+    /// <summary>Gets the shared session controls for automatic cooking.</summary>
+    public Oxygen.Editor.ContentPipeline.Cooking.ICookRunService CookRuns { get; } = cookRuns;
 
     /// <summary>
     ///     Gets the layout view model.
@@ -586,10 +591,6 @@ public partial class AssetsViewModel(
                     : $"Cooked output validation failed: {result.CookedRoot}.",
                 result.Diagnostics,
                 scopeUri);
-            if (result.Succeeded)
-            {
-                _ = messenger.Send(new ValidatedCookedOutputMessage([result.CookedRoot]));
-            }
         }
         catch (Exception ex)
         {
@@ -612,13 +613,8 @@ public partial class AssetsViewModel(
         this.IsOperationResultVisible = false;
         try
         {
-            var result = await this.RefreshCatalogAfterCookAsync(await cook().ConfigureAwait(true), scopeUri)
-                .ConfigureAwait(true);
+            var result = await cook().ConfigureAwait(true);
             this.PublishCookResult(operationKind, title, result, scopeUri);
-            if (result.Validation?.Succeeded == true && result.Status is not OperationStatus.Failed)
-            {
-                _ = messenger.Send(new ValidatedCookedOutputMessage(GetValidatedCookedRoots(result)));
-            }
         }
         catch (Exception ex)
         {
@@ -748,50 +744,6 @@ public partial class AssetsViewModel(
     internal static bool ShouldShowSucceededOperationResult(string operationKind)
         => string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputInspect, StringComparison.Ordinal)
            || string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputValidate, StringComparison.Ordinal);
-
-    private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri? scopeUri)
-    {
-        if (result.Status == OperationStatus.Failed || result.IsUpToDate)
-        {
-            return result;
-        }
-
-        try
-        {
-            await assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
-            _ = messenger.Send(new AssetsChangedMessage(scopeUri));
-            return result;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            var diagnostic = new DiagnosticRecord
-            {
-                OperationId = result.OperationId,
-                Domain = FailureDomain.AssetIdentity,
-                Severity = DiagnosticSeverity.Error,
-                Code = AssetIdentityDiagnosticCodes.RefreshFailed,
-                Message = "Asset catalog refresh failed after cook.",
-                TechnicalMessage = ex.Message,
-                ExceptionType = ex.GetType().FullName,
-                AffectedEntity = this.CreateAffectedScope(scopeUri),
-            };
-            return result with
-            {
-                Status = result.Status == OperationStatus.Succeeded
-                    ? OperationStatus.PartiallySucceeded
-                    : result.Status,
-                Diagnostics = [.. result.Diagnostics, diagnostic],
-            };
-        }
-    }
-
-    private static IReadOnlyList<string> GetValidatedCookedRoots(ContentCookResult result)
-        => result.Validation?.CookedRoot
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(static root => !string.IsNullOrWhiteSpace(root))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList()
-           ?? [];
 
     private static IReadOnlyList<DiagnosticRecord> NormalizeDiagnostics(
         Guid operationId,

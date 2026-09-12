@@ -59,7 +59,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IStatusReducer statusReducer;
     private readonly ISceneDocumentCommandService commandService;
     private readonly IContentPipelineService contentPipelineService;
-    private readonly IContentBrowserAssetProvider assetProvider;
     private readonly SceneCookInputRegistrar cookInputs;
     private readonly IDocumentService documentService;
     private readonly WindowId windowId;
@@ -86,7 +85,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="commandService">The scene authoring command service.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
-    /// <param name="assetProvider">The content-browser asset provider.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="cookInputs">Registers saved scene inputs for coordinated cooking.</param>
@@ -103,7 +101,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IStatusReducer statusReducer,
         ISceneDocumentCommandService commandService,
         IContentPipelineService contentPipelineService,
-        IContentBrowserAssetProvider assetProvider,
         IContainer container,
         IMessenger messenger,
         SceneCookInputRegistrar cookInputs,
@@ -118,7 +115,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.statusReducer = statusReducer;
         this.commandService = commandService;
         this.contentPipelineService = contentPipelineService;
-        this.assetProvider = assetProvider;
         this.cookInputs = cookInputs;
         this.documentService = documentService;
         this.windowId = windowId;
@@ -401,14 +397,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         return new Uri($"{AssetUris.Scheme}:///{mountName}/Scenes/{scene.Name}.oscene.json");
     }
 
-    private static List<string> GetValidatedCookedRoots(ContentCookResult result)
-        => result.Validation?.CookedRoot
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(static root => !string.IsNullOrWhiteSpace(root))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList()
-           ?? [];
-
     private void RegisterMessages()
     {
         this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
@@ -613,12 +601,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             var sceneUri = GetSceneAssetUri(this.scene);
             var result = await this.contentPipelineService.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
-            result = await this.RefreshCatalogAfterCookAsync(result, sceneUri).ConfigureAwait(true);
+
             this.PublishCookResult(result, sceneUri);
-            if (result.Validation?.Succeeded == true && result.Status is not OperationStatus.Failed)
-            {
-                _ = this.messenger.Send(new ValidatedCookedOutputMessage(GetValidatedCookedRoots(result)));
-            }
         }
         catch (Exception ex)
         {
@@ -727,50 +711,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             },
             Diagnostics = [diagnostic],
         });
-    }
-
-    private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri sceneUri)
-    {
-        if (result.Status == OperationStatus.Failed || result.IsUpToDate)
-        {
-            return result;
-        }
-
-        try
-        {
-            await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
-            _ = this.messenger.Send(new AssetsChangedMessage(sceneUri));
-            return result;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            var diagnostic = new DiagnosticRecord
-            {
-                OperationId = result.OperationId,
-                Domain = FailureDomain.AssetIdentity,
-                Severity = DiagnosticSeverity.Error,
-                Code = AssetIdentityDiagnosticCodes.RefreshFailed,
-                Message = "Asset catalog refresh failed after scene cook.",
-                TechnicalMessage = ex.Message,
-                ExceptionType = ex.GetType().FullName,
-                AffectedEntity = new AffectedScope
-                {
-                    DocumentId = this.Metadata.DocumentId,
-                    DocumentName = this.Metadata.Title,
-                    AssetId = sceneUri.ToString(),
-                    AssetVirtualPath = sceneUri.AbsolutePath,
-                    SceneId = this.scene?.Id,
-                    SceneName = this.scene?.Name,
-                },
-            };
-            return result with
-            {
-                Status = result.Status == OperationStatus.Succeeded
-                    ? OperationStatus.PartiallySucceeded
-                    : result.Status,
-                Diagnostics = [.. result.Diagnostics, diagnostic],
-            };
-        }
     }
 
     private IMenuSource BuildQuickAddMenu()

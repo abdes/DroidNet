@@ -417,6 +417,8 @@ public static partial class Program
         container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
         container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
         container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);
+        container.Register<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
+        container.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);

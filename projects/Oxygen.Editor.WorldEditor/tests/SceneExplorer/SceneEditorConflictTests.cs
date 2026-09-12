@@ -133,7 +133,6 @@ public sealed partial class SceneEditorConflictTests
                 new OperationStatusReducer(),
                 this.Commands.Object,
                 Mock.Of<IContentPipelineService>(),
-                Mock.Of<IContentBrowserAssetProvider>(),
                 this.container,
                 this.Messenger,
                 new SceneCookInputRegistrar(

@@ -394,10 +394,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.StatusText = result.Cook?.IsUpToDate == true ? "Already up to date." : result.State == MaterialCookState.Rejected
             ? "Save the material before cooking."
             : $"Cook: {result.State}";
-        if (result.Cook?.IsUpToDate != true && result.State is MaterialCookState.Cooked or MaterialCookState.Stale)
-        {
-            this.assetChanged?.Invoke(this.metadata.MaterialUri);
-        }
     }
 
     [RelayCommand]
