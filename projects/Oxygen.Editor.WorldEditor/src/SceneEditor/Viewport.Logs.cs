@@ -4,7 +4,8 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Oxygen.Interop;
+
+using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.LevelEditor;
 
@@ -224,10 +225,10 @@ public sealed partial class Viewport
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "[Viewport] Created engine view for viewport={ViewportId} viewId={ViewId}")]
-    private static partial void LogViewCreated(ILogger logger, Guid viewportId, string viewId);
+    private static partial void LogViewCreated(ILogger logger, Guid viewportId, ulong viewId);
 
-    private void LogViewCreated(Guid viewportId, ViewIdManaged viewId)
-        => LogViewCreated(this.logger, viewportId, viewId.ToString());
+    private void LogViewCreated(Guid viewportId, RuntimeViewId viewId)
+        => LogViewCreated(this.logger, viewportId, viewId.Value);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

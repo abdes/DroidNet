@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -146,14 +145,7 @@ public sealed partial class EngineService
         try
         {
             this.session = this.sessionFactory();
-            var config = ConfigFactory.CreateDefaultEditorEngineConfig();
-            config.Engine.TargetFps = 1;
-            this.engineSettings.ApplyTo(config);
-            this.ApplyEditorRuntimePathDefaults(config);
-            config.Platform.Headless = true;
-            config.Engine.Graphics.Headless = true;
-            config.Engine.EnableAssetLoader = true;
-            this.session.Initialize(config, loggerFactory?.CreateLogger("Oxygen.Engine"));
+            this.session.Initialize(this.engineSettings, this.pathFinder?.GetConfigFilePath(EditorCVarsArchiveFileName), loggerFactory?.CreateLogger("Oxygen.Engine"));
             this.ChangeState(EngineServiceState.Ready);
             this.LogContextReady();
             return true;

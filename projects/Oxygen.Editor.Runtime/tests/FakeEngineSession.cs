@@ -5,7 +5,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -14,9 +13,11 @@ internal sealed class FakeEngineSession : EngineSession
     private bool hasRunner;
     private bool hasContext;
 
-    public override EngineRunner Runner => null!;
+    public override int LoggingVerbosity { get; set; }
 
-    public override EngineContext? Context => null;
+    public override uint MaxTargetFps => 1000;
+
+    public override uint TargetFps { get; set; }
 
     public override IRuntimeCommandTransport Commands { get; } = Moq.Mock.Of<IRuntimeCommandTransport>();
 
@@ -40,7 +41,7 @@ internal sealed class FakeEngineSession : EngineSession
 
     public bool CompleteOnStop { get; set; } = true;
 
-    public override void Initialize(EditorEngineConfigManaged config, ILogger? logger)
+    public override void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger)
     {
         this.hasRunner = true;
         this.Step("Create runner");
@@ -84,6 +85,22 @@ internal sealed class FakeEngineSession : EngineSession
     }
 
     public override Task<bool> ResizeSurfaceAsync(Guid viewportId, uint width, uint height) => Task.FromResult(true);
+
+    public override Task<RuntimeViewId> CreateViewAsync(RuntimeViewConfig config) => Task.FromResult(new RuntimeViewId(1));
+
+    public override Task<bool> DestroyViewAsync(RuntimeViewId viewId) => Task.FromResult(true);
+
+    public override Task<bool> ShowViewAsync(RuntimeViewId viewId) => Task.FromResult(true);
+
+    public override Task<bool> HideViewAsync(RuntimeViewId viewId) => Task.FromResult(true);
+
+    public override Task<bool> SetViewCameraPresetAsync(RuntimeViewId viewId, CameraViewPreset preset) => Task.FromResult(true);
+
+    public override Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode) => Task.FromResult(true);
+
+    public override Task<bool> SetViewCameraMovementSpeedAsync(RuntimeViewId viewId, float speedUnitsPerSecond) => Task.FromResult(true);
+
+    public override Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane) => Task.FromResult(true);
 
     public override void DestroyContext()
     {

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -94,9 +93,9 @@ public sealed partial class EngineService
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Requesting view ('{Name}'/'{Purpose}') from the engine: Extent={Width}x{Height}, {TargetInfo}")]
-    private static partial void LogCreateView(ILogger logger, string name, string purpose, uint width, uint height, string targetInfo);
+    private static partial void LogCreateView(ILogger logger, string name, string purpose, uint? width, uint? height, string targetInfo);
 
-    private void LogCreateView(ViewConfigManaged config)
+    private void LogCreateView(RuntimeViewConfig config)
     {
         var hasTarget = config.CompositingTarget != null ? $"composing to: {config.CompositingTarget}" : "without target";
         LogCreateView(this.logger, config.Name, config.Purpose, config.Width, config.Height, hasTarget);
@@ -108,7 +107,7 @@ public sealed partial class EngineService
         Message = "Requesting view with id '{ViewId}' to be destroyed.")]
     private static partial void LogDestroyView(ILogger logger, ulong viewId);
 
-    private void LogDestroyView(ViewIdManaged viewId)
+    private void LogDestroyView(RuntimeViewId viewId)
         => LogDestroyView(this.logger, viewId.Value);
 
     [LoggerMessage(
@@ -117,7 +116,7 @@ public sealed partial class EngineService
         Message = "Requesting view with id '{ViewId}' to be hidden.")]
     private static partial void LogHideView(ILogger logger, ulong viewId);
 
-    private void LogHideView(ViewIdManaged viewId)
+    private void LogHideView(RuntimeViewId viewId)
         => LogHideView(this.logger, viewId.Value);
 
     [LoggerMessage(
@@ -126,25 +125,25 @@ public sealed partial class EngineService
         Message = "Requesting view with id '{ViewId}' to be shown.")]
     private static partial void LogShowView(ILogger logger, ulong viewId);
 
-    private void LogShowView(ViewIdManaged viewId)
+    private void LogShowView(RuntimeViewId viewId)
         => LogShowView(this.logger, viewId.Value);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Requesting view with id '{ViewId}' to set camera preset to '{Preset}'.")]
-    private static partial void LogSetViewCameraPreset(ILogger logger, ulong viewId, CameraViewPresetManaged preset);
+    private static partial void LogSetViewCameraPreset(ILogger logger, ulong viewId, CameraViewPreset preset);
 
-    private void LogSetViewCameraPreset(ViewIdManaged viewId, CameraViewPresetManaged preset)
+    private void LogSetViewCameraPreset(RuntimeViewId viewId, CameraViewPreset preset)
         => LogSetViewCameraPreset(this.logger, viewId.Value, preset);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Requesting view with id '{ViewId}' to set camera control mode to '{Mode}'.")]
-    private static partial void LogSetViewCameraControlMode(ILogger logger, ulong viewId, CameraControlModeManaged mode);
+    private static partial void LogSetViewCameraControlMode(ILogger logger, ulong viewId, CameraControlMode mode);
 
-    private void LogSetViewCameraControlMode(ViewIdManaged viewId, CameraControlModeManaged mode)
+    private void LogSetViewCameraControlMode(RuntimeViewId viewId, CameraControlMode mode)
         => LogSetViewCameraControlMode(this.logger, viewId.Value, mode);
 
     [LoggerMessage(
@@ -153,7 +152,7 @@ public sealed partial class EngineService
         Message = "Requesting view with id '{ViewId}' to set camera movement speed to '{SpeedUnitsPerSecond}'.")]
     private static partial void LogSetViewCameraMovementSpeed(ILogger logger, ulong viewId, float speedUnitsPerSecond);
 
-    private void LogSetViewCameraMovementSpeed(ViewIdManaged viewId, float speedUnitsPerSecond)
+    private void LogSetViewCameraMovementSpeed(RuntimeViewId viewId, float speedUnitsPerSecond)
         => LogSetViewCameraMovementSpeed(this.logger, viewId.Value, speedUnitsPerSecond);
 
     [LoggerMessage(
@@ -162,6 +161,6 @@ public sealed partial class EngineService
         Message = "Requesting view with id '{ViewId}' to set camera settings to fov '{FieldOfViewDegrees}', near '{NearPlane}', far '{FarPlane}'.")]
     private static partial void LogSetViewCameraSettings(ILogger logger, ulong viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 
-    private void LogSetViewCameraSettings(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
+    private void LogSetViewCameraSettings(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
         => LogSetViewCameraSettings(this.logger, viewId.Value, fieldOfViewDegrees, nearPlane, farPlane);
 }

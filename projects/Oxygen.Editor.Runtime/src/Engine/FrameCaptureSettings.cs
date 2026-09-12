@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Interop;
-
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
@@ -14,12 +12,12 @@ public sealed class FrameCaptureSettings
     /// <summary>
     ///     Gets or sets the frame-capture provider requested by the editor.
     /// </summary>
-    public FrameCaptureProviderManaged? Provider { get; set; }
+    public FrameCaptureProvider? Provider { get; set; }
 
     /// <summary>
     ///     Gets or sets how the native graphics backend should initialize frame capture support.
     /// </summary>
-    public FrameCaptureInitModeManaged? InitMode { get; set; }
+    public FrameCaptureInitMode? InitMode { get; set; }
 
     /// <summary>
     ///     Gets or sets the first frame to capture.

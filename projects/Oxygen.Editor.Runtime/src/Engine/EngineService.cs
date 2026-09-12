@@ -2,13 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Globalization;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -32,7 +30,6 @@ public sealed partial class EngineService(
     ISettingsService<IEngineSettings>? engineSettings = null,
     IPathFinder? pathFinder = null) : IEngineService
 {
-    private const string EngineDefaultCVarsArchivePath = "bin/Oxygen/cvars.json";
     private const string EditorCVarsArchiveFileName = "engine-cvars.json";
 
     private readonly HostingContext hostingContext = hostingContext;
@@ -44,7 +41,7 @@ public sealed partial class EngineService(
     // This gate has no wait handles and remains available for concurrent/repeated cleanup.
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Cleanup remains callable after disposal; SemaphoreSlim.AvailableWaitHandle is never used.")]
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
-    private readonly Func<EngineSession> sessionFactory = () => new NativeEngineSession(hostingContext);
+    private readonly Func<EngineSession> sessionFactory = () => CreateNativeSession(hostingContext);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
     private readonly RuntimeCommandDispatcher commandDispatcher = new();
@@ -77,12 +74,7 @@ public sealed partial class EngineService(
     /// <inheritdoc/>
     public int EngineLoggingVerbosity
     {
-        get
-        {
-            var runner = this.EnsureIsReadyOrRunning();
-            var cfg = runner.GetLoggingConfig(this.EngineContext);
-            return cfg.Verbosity;
-        }
+        get => this.EnsureIsReadyOrRunning().LoggingVerbosity;
 
         set
         {
@@ -97,13 +89,7 @@ public sealed partial class EngineService(
             var runner = this.EnsureIsReadyOrRunning();
             try
             {
-                var cfg = runner.GetLoggingConfig(this.EngineContext);
-                cfg.Verbosity = value;
-                if (!runner.ConfigureLogging(cfg))
-                {
-                    this.LogSetLoggingVerbosityFailed(value);
-                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Failed to configure native engine logging with verbosity {value}."));
-                }
+                runner.LoggingVerbosity = value;
 
                 this.LogLoggingVerbositySet(value);
             }
@@ -116,31 +102,18 @@ public sealed partial class EngineService(
     }
 
     /// <inheritdoc/>
-    public uint MaxTargetFps
-    {
-        get
-        {
-            _ = this.EnsureIsReadyOrRunning();
-            return EngineConfig.MaxTargetFps; // FIXME: this should be queried from the engine as it will change based on monitor, and other factors
-        }
-    }
+    public uint MaxTargetFps => this.EnsureIsReadyOrRunning().MaxTargetFps;
 
     /// <inheritdoc/>
     public uint TargetFps
     {
-        get
-        {
-            var runner = this.EnsureIsReadyOrRunning();
-            var cfg = runner.GetEngineConfig(this.EngineContext);
-            Debug.Assert(cfg is not null, "A ready or running engine should return a valid EngineConfig object");
-            return cfg.TargetFps;
-        }
+        get => this.EnsureIsReadyOrRunning().TargetFps;
 
         set
         {
             var runner = this.EnsureIsReadyOrRunning();
             var clamped = Math.Clamp(value, 0, this.MaxTargetFps);
-            runner.SetTargetFps(this.EngineContext, clamped);
+            runner.TargetFps = clamped;
             this.LogTargetFpsSet(value, clamped);
         }
     }
@@ -163,8 +136,6 @@ public sealed partial class EngineService(
     /// <inheritdoc/>
     public IRuntimeInputCommands InputCommands => this.commandDispatcher;
 
-    private EngineContext? EngineContext => this.session?.Context;
-
     /// <inheritdoc/>
     public void MountProjectCookedRoot(string path)
     {
@@ -179,46 +150,20 @@ public sealed partial class EngineService(
         this.session!.Commands.ClearCookedRoots();
     }
 
-    private static bool ShouldUseEditorCVarsArchive(string? cvarsArchivePath)
-        => string.IsNullOrWhiteSpace(cvarsArchivePath)
-            || string.Equals(
-                cvarsArchivePath.Replace('\\', '/'),
-                EngineDefaultCVarsArchivePath,
-                StringComparison.OrdinalIgnoreCase);
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "The factory signature stays on the managed boundary so service construction does not require the native session type.")]
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static EngineSession CreateNativeSession(HostingContext hostingContext) => new NativeEngineSession(hostingContext);
 
-    private EngineRunner EnsureIsReadyOrRunning()
+    private EngineSession EnsureIsReadyOrRunning()
     {
         this.EnsureInStates(EngineServiceState.Ready, EngineServiceState.Running);
-        return this.session!.Runner;
+        return this.session!;
     }
 
-    private EngineRunner EnsureIsRunning()
+    private EngineSession EnsureIsRunning()
     {
         this.EnsureInStates(EngineServiceState.Running);
-        return this.session!.Runner;
-    }
-
-    private void ApplyEditorRuntimePathDefaults(EditorEngineConfigManaged config)
-    {
-        if (this.pathFinder is null)
-        {
-            return;
-        }
-
-        var editorCVarsArchivePath = this.pathFinder.GetConfigFilePath(EditorCVarsArchiveFileName);
-        config.Engine ??= new EngineConfig();
-        config.Renderer ??= new RendererConfigManaged();
-        config.Engine.PathFinder ??= new PathFinderConfigManaged();
-        if (ShouldUseEditorCVarsArchive(config.Engine.PathFinder.CVarsArchivePath))
-        {
-            config.Engine.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
-        }
-
-        config.Renderer.PathFinder ??= config.Engine.PathFinder;
-        if (ShouldUseEditorCVarsArchive(config.Renderer.PathFinder.CVarsArchivePath))
-        {
-            config.Renderer.PathFinder.CVarsArchivePath = editorCVarsArchivePath;
-        }
+        return this.session!;
     }
 
     private void EnsureInStates(params EngineServiceState[] validStates)

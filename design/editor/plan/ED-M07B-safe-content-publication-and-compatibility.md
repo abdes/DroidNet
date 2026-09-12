@@ -144,6 +144,12 @@ Managed.Core. All 30 qualification cases pass in its 76/76 test suite, including
 same-size/same-timestamp mutations, configuration/schema mismatches, exact-set
 coverage, cancellation and handle release. Host inventory, explicit promotion,
 runtime/cooker integration and the import workflow remain open.
+Runtime settings and view APIs now use managed contracts; native configuration,
+view conversion and execution are contained in the native session. The isolated
+no-Interop probe, native conversion checks and lifecycle cases pass in Runtime
+81/81; viewport caller cases pass in SceneExplorer 165/165. Evidence:
+`artifacts/m07b-boundary-runtime-tests.log` and
+`artifacts/m07b-boundary-scene-tests.log`.
 
 Create/ship the PRD qualification manifest with exact editor/native/tool/schema
 hashes. Validate it before loading interop or spawning native tools. Keep Project

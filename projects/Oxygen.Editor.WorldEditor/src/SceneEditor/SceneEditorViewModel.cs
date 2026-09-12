@@ -27,7 +27,6 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.SceneEditor;
-using Oxygen.Interop;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -40,13 +39,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 {
     // A small palette of candidate clear colors shared by viewports. We wrap the
     // palette here so the Scene Editor decides the per-viewport colors.
-    private static readonly ColorManaged[] DefaultViewportClearColors = [
-        new ColorManaged(0.10f, 0.12f, 0.15f, 1.0f), // default blue-ish
-        new ColorManaged(0.18f, 0.09f, 0.09f, 1.0f), // warm
-        new ColorManaged(0.09f, 0.18f, 0.09f, 1.0f), // green
-        new ColorManaged(0.09f, 0.12f, 0.18f, 1.0f), // deep blue
-        new ColorManaged(0.18f, 0.12f, 0.08f, 1.0f), // orange
-        new ColorManaged(0.14f, 0.09f, 0.18f, 1.0f), // purple
+    private static readonly RuntimeColor[] DefaultViewportClearColors = [
+        new RuntimeColor(0.10f, 0.12f, 0.15f, 1.0f), // default blue-ish
+        new RuntimeColor(0.18f, 0.09f, 0.09f, 1.0f), // warm
+        new RuntimeColor(0.09f, 0.18f, 0.09f, 1.0f), // green
+        new RuntimeColor(0.09f, 0.12f, 0.18f, 1.0f), // deep blue
+        new RuntimeColor(0.18f, 0.12f, 0.08f, 1.0f), // orange
+        new RuntimeColor(0.14f, 0.09f, 0.18f, 1.0f), // purple
     ];
 
     private readonly IMessenger messenger;
@@ -492,7 +491,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.EnsureFocusedViewportIsValid();
     }
 
-    private ColorManaged ChooseViewportClearColor(Guid viewportId)
+    private RuntimeColor ChooseViewportClearColor(Guid viewportId)
     {
         // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
         var paletteLen = DefaultViewportClearColors.Length;
