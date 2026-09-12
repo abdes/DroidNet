@@ -125,8 +125,10 @@ coalesce to the latest saved revision; cancelled/failed work does not self-retry
 Private-root seeding and cross-process output leases are implemented. Tests cover
 preserved unrelated bytes/timestamps, failed seeding, competing readers/writers,
 runtime-reader handoff, and external reader exit/termination. The combined
-staging/lease/worker suite passes 33/33. Journaled replacement/recovery and live
-pipeline/runtime integration remain open.
+publication/staging/lease/worker suite passes 69/69. The transaction core restores
+multi-root failures and persisted interruption states, including metadata writes
+and failed rollback mounts. Live pipeline/runtime integration, startup recovery
+orchestration and publisher-process interruption validation remain open.
 
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable

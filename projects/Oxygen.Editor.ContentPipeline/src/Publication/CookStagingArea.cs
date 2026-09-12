@@ -101,7 +101,10 @@ internal sealed partial class CookStagingArea : IDisposable
         }
     }
 
-    private static string[] ValidateMounts(IEnumerable<string> mounts)
+    /// <summary>Validates physical mount directory names before publication or recovery.</summary>
+    /// <param name="mounts">The names being resolved into owned paths.</param>
+    /// <returns>The validated, ordered names.</returns>
+    internal static string[] ValidateMounts(IEnumerable<string> mounts)
     {
         ArgumentNullException.ThrowIfNull(mounts);
         var names = mounts.ToArray();

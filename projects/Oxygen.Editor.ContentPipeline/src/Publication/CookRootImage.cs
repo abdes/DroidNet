@@ -10,7 +10,7 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Complete byte identities used to seed and verify one publication root.</summary>
 /// <param name="Exists">Whether the root existed.</param>
 /// <param name="Files">The complete root-relative file set.</param>
-internal sealed record CookRootImage(bool Exists, ImmutableSortedDictionary<string, CookRootImage.FileImage> Files)
+internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, CookRootImage.FileImage> Files)
 {
     /// <summary>Reads a root or copies it to private staging while recording the same bytes.</summary>
     /// <param name="root">The published or staged root.</param>
@@ -19,7 +19,7 @@ internal sealed record CookRootImage(bool Exists, ImmutableSortedDictionary<stri
     /// <returns>The protected source content identities.</returns>
     public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken)
     {
-        var files = ImmutableSortedDictionary.CreateBuilder<string, FileImage>(StringComparer.Ordinal);
+        var files = ImmutableDictionary.CreateBuilder<string, FileImage>(StringComparer.Ordinal);
         CookOutputLease.RejectReparsePoint(root);
         var rootAttributes = new DirectoryInfo(root).Attributes;
         if (rootAttributes == (FileAttributes)(-1))
