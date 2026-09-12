@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
@@ -26,6 +27,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
 /// <param name="cookDocuments">The registered saved-document owners.</param>
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
+/// <param name="provenanceFiles">Atomic storage for incremental product evidence.</param>
 public sealed partial class ContentPipelineService(
     IProjectContextService projectContextService,
     IContentCookCoordinator cookCoordinator,
@@ -35,7 +37,8 @@ public sealed partial class ContentPipelineService(
     IContentImportManifestValidator manifestValidator,
     IEngineContentPipelineApi engineContentPipelineApi,
     ICookDocumentRegistry cookDocuments,
-    INativeCompatibilityService? nativeCompatibility = null) : IContentPipelineService
+    INativeCompatibilityService? nativeCompatibility = null,
+    DroidNet.Storage.IAtomicFileStore? provenanceFiles = null) : IContentPipelineService
 {
     private static readonly System.Text.Json.JsonSerializerOptions NativeDescriptorJsonOptions = new()
     {
@@ -43,6 +46,7 @@ public sealed partial class ContentPipelineService(
     };
 
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
+    private readonly CookProvenanceStore provenanceStore = new(provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
@@ -701,6 +705,13 @@ public sealed partial class ContentPipelineService(
         IReadOnlyList<DiagnosticRecord> diagnostics,
         CancellationToken cancellationToken)
     {
+        var skippedSources = scope.Inputs.GroupBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
+            .Where(group => group.All(input => scope.ReusableSources.Contains(input.AssetUri)))
+            .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
+        var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.Source)).ToArray();
+        var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
+        manifest = manifest with { Jobs = keptJobs.Select(job => job with { DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray() }).ToArray() };
+        scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
         {
@@ -718,18 +729,22 @@ public sealed partial class ContentPipelineService(
         var importResult = await this.ImportManifestAsync(operationId, scope, manifest, cancellationToken)
             .ConfigureAwait(false);
         var allDiagnostics = diagnostics.Concat(importResult.Diagnostics).ToList();
-        if (!importResult.Succeeded)
-        {
-            return new ContentCookResult(
+        return !importResult.Succeeded
+            ? new ContentCookResult(
                 operationId,
                 targetKind,
                 OperationStatus.Failed,
                 NormalizeDiagnostics(operationId, allDiagnostics),
                 CookedAssets: [],
                 Inspection: null,
-                Validation: null);
-        }
+                Validation: null)
+            : await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, cancellationToken).ConfigureAwait(false);
+    }
 
+    private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, CancellationToken cancellationToken)
+    {
+        var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
+        await using var outputLifetime = outputLease.ConfigureAwait(false);
         CookRunContext.Report(new(Message: "Inspecting cooked output.", State: CookRunState.Validating));
         var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(manifest.Output, cancellationToken)
             .ConfigureAwait(false);
@@ -751,6 +766,9 @@ public sealed partial class ContentPipelineService(
             .ConfigureAwait(false);
         allDiagnostics.AddRange(validation.Diagnostics);
 
+        var proof = validation.Succeeded && outputLease.HasIndex
+            ? await outputLease.CaptureAsync(scope.Inputs[0].MountName, inspection, cancellationToken).ConfigureAwait(false)
+            : null;
         return new ContentCookResult(
             operationId,
             targetKind,
@@ -758,7 +776,7 @@ public sealed partial class ContentPipelineService(
             NormalizeDiagnostics(operationId, allDiagnostics),
             CreateCookedAssets(scope, inspection),
             inspection,
-            validation);
+            validation) { VerifiedRoot = proof };
     }
 
     private Task<NativeImportResult> ImportManifestAsync(Guid operationId, ContentCookScope scope, ContentImportManifest manifest, CancellationToken cancellationToken)

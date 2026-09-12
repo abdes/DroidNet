@@ -31,4 +31,13 @@ public sealed record ContentCookResult(
 
     /// <summary>Gets whether captured inputs still match current authoring at completion, when checked.</summary>
     public bool? InputsAreCurrent { get; init; }
+
+    /// <summary>Gets validated existing products reused without native import.</summary>
+    public IReadOnlyList<ContentCookedAsset> ReusedAssets { get; init; } = [];
+
+    /// <summary>Gets a value indicating whether every requested product was already current.</summary>
+    public bool IsUpToDate { get; init; }
+
+    /// <summary>Gets the output evidence captured under the native validation read lease.</summary>
+    internal Incremental.CookProvenance.Root? VerifiedRoot { get; init; }
 }

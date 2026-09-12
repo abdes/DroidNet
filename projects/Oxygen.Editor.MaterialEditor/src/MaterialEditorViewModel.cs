@@ -391,10 +391,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         var result = await this.documentService.CookAsync(this.document.DocumentId, CancellationToken.None).ConfigureAwait(true);
         this.CookState = result.State;
-        this.StatusText = result.State == MaterialCookState.Rejected
+        this.StatusText = result.Cook?.IsUpToDate == true ? "Already up to date." : result.State == MaterialCookState.Rejected
             ? "Save the material before cooking."
             : $"Cook: {result.State}";
-        if (result.State is MaterialCookState.Cooked or MaterialCookState.Stale)
+        if (result.Cook?.IsUpToDate != true && result.State is MaterialCookState.Cooked or MaterialCookState.Stale)
         {
             this.assetChanged?.Invoke(this.metadata.MaterialUri);
         }

@@ -29,4 +29,7 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets the physical input root used by descriptor generation and native jobs.</summary>
     public string InputRoot => this.Snapshot?.InputRoot ?? this.Project.ProjectRoot;
+
+    /// <summary>Gets sources whose validated products should be omitted from native manifests.</summary>
+    internal System.Collections.Immutable.ImmutableHashSet<Uri> ReusableSources { get; init; } = [];
 }

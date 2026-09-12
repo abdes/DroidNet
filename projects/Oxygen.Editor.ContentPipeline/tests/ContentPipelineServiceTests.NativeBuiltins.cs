@@ -99,5 +99,13 @@ public sealed partial class ContentPipelineServiceTests
         }
 
         _ = Directory.GetFiles(Path.Combine(workspace.Root, ".pipeline", "Catalogs")).Should().BeEmpty();
+        var repeated = projectCook
+            ? await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
+            : await pipeline.CookCurrentSceneAsync(new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = repeated.IsUpToDate.Should().BeTrue();
+        foreach (var definition in catalog.Geometries)
+        {
+            _ = repeated.ReusedAssets.Should().Contain(asset => asset.SourceAssetUri == definition.AssetUri);
+        }
     }
 }

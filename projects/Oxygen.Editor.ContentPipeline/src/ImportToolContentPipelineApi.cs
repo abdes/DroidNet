@@ -199,7 +199,7 @@ public sealed partial class ImportToolContentPipelineApi(
                 .OrderBy(static asset => asset.VirtualPath, StringComparer.Ordinal)
                 .Select(static asset => new CookedAssetEntry(
                     asset.VirtualPath ?? asset.DescriptorRelativePath,
-                    MapAssetKind(asset.AssetType)))
+                    MapAssetKind(asset.AssetType)) { DescriptorRelativePath = asset.DescriptorRelativePath })
                 .ToList(),
             document.Files
                 .OrderBy(static file => file.RelativePath, StringComparer.Ordinal)

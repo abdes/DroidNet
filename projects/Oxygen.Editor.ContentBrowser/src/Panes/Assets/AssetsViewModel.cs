@@ -743,7 +743,7 @@ public partial class AssetsViewModel(
 
     private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri? scopeUri)
     {
-        if (result.Status == OperationStatus.Failed)
+        if (result.Status == OperationStatus.Failed || result.IsUpToDate)
         {
             return result;
         }

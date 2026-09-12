@@ -45,10 +45,12 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, byte[]> discoveredBytes = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> dependencies = [];
+        private readonly Dictionary<Uri, HashSet<string>> fileDependencies = [];
         private readonly HashSet<Uri> builtins = [];
         private readonly HashSet<Uri> published = [];
         private readonly Queue<ContentCookInput> pending = new();
         private readonly List<DiagnosticRecord> diagnostics = [];
+        private Uri currentAsset = null!;
 
         public void AddAsset(ContentCookInput input)
         {
@@ -90,6 +92,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
                 [.. this.assets.Values.OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)],
                 [.. this.files.Values.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)],
                 this.dependencies.ToImmutableDictionary(),
+                this.fileDependencies.ToImmutableDictionary(static pair => pair.Key, static pair => pair.Value.Order(StringComparer.Ordinal).ToImmutableArray()),
                 [.. this.builtins.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
                 [.. this.published.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
                 [.. this.diagnostics]);
@@ -107,6 +110,8 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
 
         private async Task ReadAssetAsync(ContentCookInput input, CancellationToken cancellationToken)
         {
+            this.currentAsset = input.AssetUri;
+            this.fileDependencies[input.AssetUri] = [with(StringComparer.Ordinal)];
             var bytes = await this.ReadFileAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             await this.ReadSettingsAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var references = input.Kind switch
@@ -122,6 +127,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
         private async Task<byte[]> ReadFileAsync(Uri? assetUri, string path, CancellationToken cancellationToken)
         {
             path = Path.GetFullPath(path);
+            _ = this.fileDependencies[this.currentAsset].Add(this.RelativePath(path));
             if (this.discoveredBytes.TryGetValue(path, out var captured))
             {
                 return captured;
@@ -137,6 +143,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
         private async Task ReadSettingsAsync(string sourcePath, CancellationToken cancellationToken)
         {
             var settings = sourcePath + ".import.json";
+            _ = this.fileDependencies[this.currentAsset].Add(this.RelativePath(settings));
             if (CookSavedSourceReader.Exists(settings))
             {
                 _ = await this.ReadFileAsync(assetUri: null, settings, cancellationToken).ConfigureAwait(false);

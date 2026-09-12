@@ -83,23 +83,18 @@ recorded. This review/contract gate is complete; implementation gates follow.
 
 ### 07B.1 - Saved Dependency Snapshot And Single Cook Writer
 
-Saved scene/scalar-material/static-geometry discovery is implemented for the
-existing explicit scopes, including transitive materials, geometry buffers and
-import-settings presence. It collects input errors by asset before native work.
-Discovery/capture and real native dependency cases pass in ContentPipeline's
-137/137 suite (`artifacts/m07b-snapshot-final-tests.log`). Explicit native cook
-scopes share one coherent saved snapshot across project mounts. Generated
-descriptors and relocated geometry media references use its private input root;
-the result records the qualified producer identity and captured/current state.
-Later edits do not block the captured cook or become clean. Qualified artifact
-ownership drains before the next writer starts after termination failure.
-Material-helper integration is implemented: its Cook action delegates to the
-same captured pipeline and preserves operation identity, snapshot details and
-later-change status. Project facts are checked before submission and the origin
-is checked inside the writer. Reopen queries existing cook state without cooking.
-ContentPipeline 144/144 and MaterialEditor 47/47 pass, including native scalar
-round trips, save/resume, newer edit/save completion races and worker startup
-failures. Complete imported-source discovery and incremental planning remain.
+Saved scene/scalar-material/static-geometry discovery and private input capture
+are implemented for explicit scopes, including geometry buffers and optional
+import settings. Material helpers use the same writer and saved snapshot.
+Incremental product provenance now persists source/dependency fingerprints and
+validated descriptor/index/resource hashes. Current repeat requests start no
+native workers and leave cooked files unchanged. A changed scalar material
+rebuilds its own product; current scene/geometry descriptors are reused. A
+same-size/timestamp descriptor corruption is detected and repaired, failed cooks
+do not advance provenance, and warnings remain attached to reused products.
+All engine built-ins retain source identities through repeated scene/project
+cooks. ContentPipeline 150/150 passes. Imported-source closure, request coalescing,
+automatic triggers and publication/runtime integration remain open.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

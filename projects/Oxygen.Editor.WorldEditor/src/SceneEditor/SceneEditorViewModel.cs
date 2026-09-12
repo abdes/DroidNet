@@ -731,7 +731,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<ContentCookResult> RefreshCatalogAfterCookAsync(ContentCookResult result, Uri sceneUri)
     {
-        if (result.Status == OperationStatus.Failed)
+        if (result.Status == OperationStatus.Failed || result.IsUpToDate)
         {
             return result;
         }
