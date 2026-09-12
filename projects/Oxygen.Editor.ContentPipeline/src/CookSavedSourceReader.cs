@@ -45,18 +45,9 @@ internal static class CookSavedSourceReader
     }
 
     /// <summary>Checks presence without treating inaccessible input as an absent optional file.</summary>
+    /// <remarks>FileSystemInfo reports missing entries with -1 while preserving errors reading attributes.</remarks>
     /// <param name="path">The input path.</param>
     /// <returns>Whether a filesystem entry exists at the path.</returns>
     public static bool Exists(string path)
-    {
-        try
-        {
-            _ = File.GetAttributes(path);
-            return true;
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return false;
-        }
-    }
+        => new FileInfo(path).Attributes != (FileAttributes)(-1);
 }
