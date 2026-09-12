@@ -29,6 +29,11 @@ public sealed class NativeAtomicFileStore(IFileSystem fileSystem) : IAtomicFileS
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         cancellationToken.ThrowIfCancellationRequested();
+        if (this.fileSystem.FileInfo.New(path).Attributes == (FileAttributes)(-1))
+        {
+            return new([], FileVersion.Missing);
+        }
+
         try
         {
             var source = this.fileSystem.FileStream.New(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
