@@ -218,21 +218,25 @@ trigger policy D1 on 2026-09-11 when directing implementation of revised M07B.
    The pause and any failure are visible; fixed `.cooked/<Mount>` output paths
    remain the published project layout.
 
-## 9. Compatibility And Qualification Envelope
+## 9. Compatibility And Validation Envelope
 
 V0.1 supports Windows 11 x64 with the repository's .NET/WinUI runtime and an
-Oxygen-supported D3D12 adapter. Qualify a matched editor, interop/native runtime,
-RenderScene, cooker tools, engine schemas, and editor overlays from the same
-source revision and build configuration. Record their hashes and schema IDs in
-the qualification manifest. Debug and Release both require a fixed,
-configuration-specific qualification manifest. Ordinary builds do not refresh or
-requalify that manifest. Independent component upgrades are unsupported;
-missing/mismatched artifacts must disable native work with a visible diagnostic
-before an unsafe native call. Project Browser and safe authoring/save remain
-available when native qualification fails. Project manifest schema version 1 is
-the supported version; unsupported versions are rejected without rewriting.
+Oxygen-supported D3D12 adapter. The ordinary Interop build records its installed
+native SDK inputs in assembly metadata. Startup reads that metadata without
+loading Interop and checks the installed native binaries. An SDK mismatch reports
+which dependency changed and requests an Interop rebuild before native calls.
+Managed/UI edits require no approval, qualification manifest, or separate probe
+build. Debug and Release use the same automatic build-compatibility workflow.
 
-The qualification report names CPU, RAM, GPU/VRAM, driver, OS/runtime versions,
+Cooking checks its tools and matching editor/native schemas when requested and
+captures producer hashes for incremental invalidation. These checks do not block
+viewport startup. Regression tests run in existing test projects; no qualification
+promotion command or dedicated probe project is required. Project Browser and
+safe authoring/save remain available when native compatibility fails. Project
+manifest schema version 1 is supported; unsupported versions are rejected
+without rewriting.
+
+Release validation records CPU, RAM, GPU/VRAM, driver, OS/runtime versions,
 build configuration, and exact fixture hashes. This establishes support on the
 recorded configuration, not a claim about all hardware satisfying a GPU name.
 
@@ -243,10 +247,10 @@ environment settings, every exposed built-in shape and small imported meshes, sh
 distinct scalar materials. Pad the catalog with valid scalar descriptors to
 exactly 1,000 entries. Keep visible geometry at or below 250,000 triangles.
 
-Qualification uses Release, a 1920x1080 live viewport, conventional directional
+Performance validation uses Release, a 1920x1080 live viewport, conventional directional
 shadows, and the controlled settings in the standalone-validation LLD:
 
-| Measurement | Required result on the recorded qualification machine |
+| Measurement | Required result on the recorded validation machine |
 | --- | --- |
 | Command/selection/field feedback | p95 at most 100 ms across 100 interactions after warm-up. |
 | Warm catalog folder/filter update | p95 at most 250 ms across 100 queries. |

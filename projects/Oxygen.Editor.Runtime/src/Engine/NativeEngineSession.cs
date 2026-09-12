@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="hostingContext">The owning UI dispatcher, which must remain alive through native cleanup.</param>
 /// <param name="artifacts">Verified files retained until all native ownership is released.</param>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The service invokes explicit destruction stages independently and retains failed ownership for retry.")]
-internal sealed partial class NativeEngineSession(HostingContext hostingContext, QualifiedArtifactLease artifacts) : EngineSession
+internal sealed partial class NativeEngineSession(HostingContext hostingContext, NativeArtifactLease artifacts) : EngineSession
 {
     private EngineRunner? runner;
     private EngineContext? context;

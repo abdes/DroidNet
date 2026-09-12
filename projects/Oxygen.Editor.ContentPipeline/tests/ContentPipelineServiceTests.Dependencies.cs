@@ -48,7 +48,7 @@ public sealed partial class ContentPipelineServiceTests
 
         var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
         var result = await workspace.CookCoordinator.RunAsync(
-            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "qualified-fixture-artifacts", token),
+            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Snapshot.Should().NotBeNull();
         workspace.WriteText("Content/Geometry/mesh.bin", "changed buffer bytes");
@@ -85,7 +85,7 @@ public sealed partial class ContentPipelineServiceTests
 
                 return graph.Files;
             },
-            "qualified-fixture-artifacts",
+            "compatible-fixture-artifacts",
             token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -160,9 +160,9 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, qualification);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, qualification);
+        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
 
         if (sceneCook)
         {

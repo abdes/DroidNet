@@ -19,19 +19,19 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="toolLocator">The native tool locator.</param>
 /// <param name="processRunner">The contained worker runner.</param>
 /// <param name="logger">The operation logger.</param>
-/// <param name="artifactQualification">The fixed installed artifact verification service.</param>
+/// <param name="nativeCompatibility">The operation-specific native compatibility check.</param>
 public sealed partial class ImportToolContentPipelineApi(
     IEngineContentPipelineToolLocator toolLocator,
     IContentPipelineProcessRunner processRunner,
     ILogger<ImportToolContentPipelineApi> logger,
-    IArtifactQualificationService? artifactQualification = null) : IEngineContentPipelineApi
+    INativeCompatibilityService? nativeCompatibility = null) : IEngineContentPipelineApi
 {
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
 
     private readonly IEngineContentPipelineToolLocator toolLocator = toolLocator ?? throw new ArgumentNullException(nameof(toolLocator));
     private readonly IContentPipelineProcessRunner processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly ILogger<ImportToolContentPipelineApi> logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IArtifactQualificationService artifactQualification = artifactQualification ?? EditorArtifactQualificationService.ForCurrentProcess();
+    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
 
     /// <inheritdoc />
     public async Task<NativeImportResult> ImportAsync(
@@ -43,15 +43,15 @@ public sealed partial class ImportToolContentPipelineApi(
         cancellationToken.ThrowIfCancellationRequested();
         ValidateExecutionPaths(execution);
 
-        var qualification = execution.Artifacts is { } borrowed
-            ? new ArtifactQualificationResult(borrowed, [])
-            : await this.artifactQualification.VerifyAsync(execution.OperationId, cancellationToken).ConfigureAwait(false);
-        if (!qualification.Succeeded)
+        var compatibility = execution.Artifacts is { } borrowed
+            ? new NativeCompatibilityResult(borrowed, [])
+            : await this.nativeCompatibility.VerifyAsync(execution.OperationId, cancellationToken).ConfigureAwait(false);
+        if (!compatibility.Succeeded)
         {
-            return new(Succeeded: false, qualification.Diagnostics);
+            return new(Succeeded: false, compatibility.Diagnostics);
         }
 
-        var artifacts = qualification.Artifacts!;
+        var artifacts = compatibility.Artifacts!;
         var manifest = execution.Manifest;
         var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
         Task? retainedWorkerDrain = null;
@@ -59,7 +59,7 @@ public sealed partial class ImportToolContentPipelineApi(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var toolPath = this.GetQualifiedToolPath(artifacts);
+            var toolPath = this.GetCompatibleToolPath(artifacts);
             Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
             await WriteManifestAsync(manifest, manifestPath, cancellationToken).ConfigureAwait(false);
             var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, execution.InputRoot) with

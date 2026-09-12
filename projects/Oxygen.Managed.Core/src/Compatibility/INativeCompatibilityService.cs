@@ -5,11 +5,11 @@
 namespace Oxygen.Managed.Core.Compatibility;
 
 /// <summary>Verifies the installed artifact set before a native operation begins.</summary>
-public interface IArtifactQualificationService
+public interface INativeCompatibilityService
 {
     /// <summary>Acquires the verified artifact leases required by the native owner.</summary>
     /// <param name="operationId">The operation correlation identity.</param>
     /// <param name="cancellationToken">Cancels verification.</param>
-    /// <returns>The qualified set or diagnostics preventing native work.</returns>
-    public Task<ArtifactQualificationResult> VerifyAsync(Guid operationId, CancellationToken cancellationToken);
+    /// <returns>The compatible set or diagnostics preventing native work.</returns>
+    public Task<NativeCompatibilityResult> VerifyAsync(Guid operationId, CancellationToken cancellationToken);
 }

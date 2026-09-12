@@ -101,7 +101,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
             return material.PbrMetallicRoughness.BaseColorTexture is not null
                 || material.PbrMetallicRoughness.MetallicRoughnessTexture is not null
                 || material.NormalTexture is not null || material.OcclusionTexture is not null
-                ? throw new InvalidDataException($"Material '{input.AssetUri}' contains textures. This editor's qualified material cook supports scalar properties only.")
+                ? throw new InvalidDataException($"Material '{input.AssetUri}' contains textures. Material cooking supports scalar properties only.")
                 : [];
         }
 
@@ -193,7 +193,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
             {
                 if (string.Equals(lod.GetProperty("mesh_type").GetString(), "skinned", StringComparison.Ordinal))
                 {
-                    throw new InvalidDataException($"Geometry '{input.AssetUri}' is skinned. This editor's qualified geometry cook supports static meshes only.");
+                    throw new InvalidDataException($"Geometry '{input.AssetUri}' is skinned. Geometry cooking supports static meshes only.");
                 }
 
                 if (lod.TryGetProperty("buffers", out var meshBuffers))

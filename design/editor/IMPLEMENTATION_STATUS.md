@@ -545,13 +545,14 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       the publication transaction and snapshot integration remain unwired.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
-      Fixed inventory/qualification and native startup/tool gates are implemented;
-      artifact leases follow native ownership and worker drain. The explicit
-      promotion command is ready. Core 80/80, ContentPipeline 131/131 and Runtime
-      83/83 pass, including startup without Interop. Real Debug/Release promotion
-      is pending an unlocked UI rerun: 141/155 passed, with pointer-foreground and
-      two control-realization failures while Windows was locked. Qualified import
-      and clean-copy reproduction remain open.
+      The normal Interop build now records its native SDK in assembly metadata.
+      Startup checks SDK compatibility independently of managed/UI edits; cooking
+      checks its own tools and schemas. Artifact leases follow native ownership
+      and worker drain. Qualification manifests, promotion commands and the
+      separately built startup probe are removed. Core 82/82, Runtime 83/83 and
+      ContentPipeline 145/145 pass, including native mismatch, managed-edit
+      independence, startup without Interop and installed cooker/schema preflight.
+      Supported import and clean-copy reproduction remain open.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking

@@ -152,13 +152,13 @@ public sealed partial class EngineService
             this.LogContextReady();
             return true;
         }
-        catch (ArtifactQualificationException exception)
+        catch (NativeCompatibilityException exception)
         {
             _ = await this.ShutdownCoreAsync().ConfigureAwait(true);
             var result = new OperationResult
             {
                 OperationId = exception.Diagnostics.FirstOrDefault()?.OperationId ?? Guid.NewGuid(),
-                OperationKind = "Runtime.Qualification",
+                OperationKind = "Runtime.Compatibility",
                 Status = OperationStatus.Failed,
                 Severity = DiagnosticSeverity.Error,
                 Title = "Native runtime unavailable",

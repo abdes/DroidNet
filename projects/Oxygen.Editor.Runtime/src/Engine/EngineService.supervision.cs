@@ -136,9 +136,9 @@ public sealed partial class EngineService
     {
         if (change.OperationResult is { } result)
         {
-            if (string.Equals(result.OperationKind, "Runtime.Qualification", StringComparison.Ordinal))
+            if (string.Equals(result.OperationKind, "Runtime.Compatibility", StringComparison.Ordinal))
             {
-                this.LogQualificationFailed(result.Message, change.Exception);
+                this.LogCompatibilityFailed(result.Message, change.Exception);
             }
             else
             {

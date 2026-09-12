@@ -4,20 +4,20 @@
 
 namespace Oxygen.Managed.Core.Compatibility;
 
-/// <summary>The editor and installed engine locations for a configuration-specific qualification.</summary>
+/// <summary>The editor and installed engine locations for each build configuration.</summary>
 /// <param name="EditorRoot">The editor application directory.</param>
 /// <param name="EngineRoot">The installed engine SDK directory.</param>
 /// <param name="Configuration">The Debug or Release build configuration.</param>
-public sealed record EditorArtifactInstallation(string EditorRoot, string EngineRoot, string Configuration)
+public sealed record EditorNativeInstallation(string EditorRoot, string EngineRoot, string Configuration)
 {
-    /// <summary>Gets the fixed manifest path supplied by explicit qualification.</summary>
-    public string ManifestPath => Path.Combine(this.EditorRoot, "qualification", this.Configuration + ".json");
+    /// <summary>Gets the Interop assembly containing its native SDK build receipt.</summary>
+    public string InteropPath => Path.Combine(this.EditorRoot, "DroidNet.Oxygen.Editor.Interop.dll");
 
     /// <summary>Resolves the packaged engine or the current checkout's installed SDK without loading native code.</summary>
     /// <param name="editorRoot">The application directory.</param>
     /// <param name="configuration">The running build configuration.</param>
     /// <returns>The expected installation paths, including when files are missing.</returns>
-    public static EditorArtifactInstallation Discover(string editorRoot, string configuration)
+    public static EditorNativeInstallation Discover(string editorRoot, string configuration)
     {
         editorRoot = Path.GetFullPath(editorRoot);
         var bundled = Path.Combine(editorRoot, "Engine");
