@@ -25,7 +25,7 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
             return [];
         }
 
-        var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(scope.Project.ProjectRoot, AssetUris.ContentMountPoint, cancellationToken).ConfigureAwait(false);
+        var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(scope.InputRoot, AssetUris.ContentMountPoint, cancellationToken, scope.Artifacts).ConfigureAwait(false);
         var generated = new List<ContentCookInput>();
         foreach (var uri in geometryUris.Distinct())
         {
@@ -80,7 +80,7 @@ public sealed class ProceduralGeometryDescriptorService(IBuiltinGeometryCatalogP
         CancellationToken cancellationToken)
     {
         var relative = Path.Combine(".pipeline", folder, contribution.Name + extension);
-        var path = Path.Combine(scope.Project.ProjectRoot, relative);
+        var path = Path.Combine(scope.InputRoot, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var stream = File.Create(path);
         await using (stream.ConfigureAwait(false))

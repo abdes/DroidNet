@@ -9,6 +9,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="manifestValidator">The import manifest validator.</param>
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
 /// <param name="cookDocuments">The registered saved-document owners.</param>
+/// <param name="artifactQualification">The qualified producer identity and file ownership.</param>
 public sealed partial class ContentPipelineService(
     IProjectContextService projectContextService,
     IContentCookCoordinator cookCoordinator,
@@ -32,12 +34,15 @@ public sealed partial class ContentPipelineService(
     IContentImportManifestBuilder manifestBuilder,
     IContentImportManifestValidator manifestValidator,
     IEngineContentPipelineApi engineContentPipelineApi,
-    ICookDocumentRegistry cookDocuments) : IContentPipelineService
+    ICookDocumentRegistry cookDocuments,
+    IArtifactQualificationService? artifactQualification = null) : IContentPipelineService
 {
     private static readonly System.Text.Json.JsonSerializerOptions NativeDescriptorJsonOptions = new()
     {
         WriteIndented = true,
     };
+
+    private readonly IArtifactQualificationService artifactQualification = artifactQualification ?? EditorArtifactQualificationService.ForCurrentProcess();
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
@@ -409,7 +414,7 @@ public sealed partial class ContentPipelineService(
             _ => "opaque",
         };
 
-    private async Task<PreparedScope> PrepareScopeInputsAsync(
+    private static async Task<PreparedScope> PrepareScopeInputsAsync(
         Guid operationId,
         ContentCookScope scope,
         IReadOnlyList<DiagnosticRecord> diagnostics,
@@ -419,7 +424,7 @@ public sealed partial class ContentPipelineService(
         var allDiagnostics = diagnostics.ToList();
         foreach (var input in scope.Inputs)
         {
-            var result = await this.PrepareInputAsync(operationId, scope, input, cancellationToken).ConfigureAwait(false);
+            var result = await PrepareInputAsync(operationId, scope, input, cancellationToken).ConfigureAwait(false);
             prepared.Add(result.Input);
             allDiagnostics.AddRange(result.Diagnostics);
         }
@@ -427,14 +432,14 @@ public sealed partial class ContentPipelineService(
         return new PreparedScope(scope with { Inputs = prepared }, allDiagnostics);
     }
 
-    private async Task<PreparedSceneDescriptors> PrepareSceneDescriptorsAsync(
+    private static async Task<PreparedSceneDescriptors> PrepareSceneDescriptorsAsync(
         Guid operationId,
         ContentCookScope scope,
         List<SceneDescriptorGenerationResult> descriptors,
         CancellationToken cancellationToken)
     {
         var diagnostics = descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToList();
-        var preparedScope = await this.PrepareScopeInputsAsync(operationId, scope, diagnostics, cancellationToken)
+        var preparedScope = await PrepareScopeInputsAsync(operationId, scope, diagnostics, cancellationToken)
             .ConfigureAwait(false);
         diagnostics = preparedScope.Diagnostics.ToList();
 
@@ -444,7 +449,7 @@ public sealed partial class ContentPipelineService(
             var dependencies = new List<ContentCookInput>(descriptor.Dependencies.Count);
             foreach (var dependency in descriptor.Dependencies)
             {
-                var result = await this.PrepareInputAsync(operationId, scope, dependency, cancellationToken).ConfigureAwait(false);
+                var result = await PrepareInputAsync(operationId, scope, dependency, cancellationToken).ConfigureAwait(false);
                 dependencies.Add(result.Input);
                 diagnostics.AddRange(result.Diagnostics);
             }
@@ -459,7 +464,12 @@ public sealed partial class ContentPipelineService(
         return new PreparedSceneDescriptors(preparedScope.Scope with { Inputs = inputs }, preparedDescriptors, diagnostics);
     }
 
-    private async Task<PreparedInput> PrepareInputAsync(
+    private static Task<PreparedInput> PrepareInputAsync(Guid operationId, ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
+        => input.Kind == ContentCookAssetKind.Geometry && input.Role != ContentCookInputRole.GeneratedDescriptor
+            ? PrepareCapturedGeometryAsync(scope, input, cancellationToken)
+            : PrepareMaterialInputAsync(operationId, scope, input, cancellationToken);
+
+    private static async Task<PreparedInput> PrepareMaterialInputAsync(
         Guid operationId,
         ContentCookScope scope,
         ContentCookInput input,
@@ -472,10 +482,10 @@ public sealed partial class ContentPipelineService(
 
         try
         {
-            var generatedAbsolutePath = GetGeneratedMaterialDescriptorPath(scope.Project.ProjectRoot, input);
+            var generatedAbsolutePath = GetGeneratedMaterialDescriptorPath(scope.InputRoot, input);
             Directory.CreateDirectory(Path.GetDirectoryName(generatedAbsolutePath)!);
 
-            var materialBytes = await CookSavedSourceReader.ReadAsync(cookDocuments, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+            var materialBytes = await File.ReadAllBytesAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var material = MaterialSourceReader.Read(materialBytes);
             var native = ToNativeMaterialDescriptor(input, material);
             var stream = File.Create(generatedAbsolutePath);
@@ -489,7 +499,7 @@ public sealed partial class ContentPipelineService(
                     .ConfigureAwait(false);
             }
 
-            var generatedRelativePath = Path.GetRelativePath(scope.Project.ProjectRoot, generatedAbsolutePath)
+            var generatedRelativePath = Path.GetRelativePath(scope.InputRoot, generatedAbsolutePath)
                 .Replace('\\', '/');
             return new PreparedInput(
                 input with
@@ -522,62 +532,22 @@ public sealed partial class ContentPipelineService(
         }
     }
 
-    private async Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, Uri sceneAssetUri, CancellationToken cancellationToken)
-    {
-        var scope = this.CreateSceneScope(operation.Project, sceneAssetUri);
-        await this.RequireSavedDocumentsAsync(scope.Inputs, cancellationToken).ConfigureAwait(false);
-        return await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
-    }
+    private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, Uri sceneAssetUri, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri)], CookTargetKind.CurrentScene, cancellationToken);
 
-    private async Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken)
-    {
-        var operationId = operation.OperationId;
-        var project = operation.Project;
-        var input = ResolveInput(project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary);
-        var scope = this.CreateScope(project, [input], CookTargetKind.Asset);
-        await this.RequireSavedDocumentsAsync(scope.Inputs, cancellationToken).ConfigureAwait(false);
-        return await this.CookMixedInputsAsync(operationId, scope, cancellationToken).ConfigureAwait(false);
-    }
+    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset)], CookTargetKind.Asset, cancellationToken);
 
-    private async Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, Uri folderUri, CancellationToken cancellationToken)
-    {
-        var operationId = operation.OperationId;
-        var project = operation.Project;
-        var scope = this.CreateScope(project, ResolveFolderInputs(project, folderUri), CookTargetKind.Folder);
-        await this.RequireSavedDocumentsAsync(scope.Inputs, cancellationToken).ConfigureAwait(false);
-        return await this.CookMixedInputsAsync(operationId, scope, cancellationToken).ConfigureAwait(false);
-    }
+    private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, Uri folderUri, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder)], CookTargetKind.Folder, cancellationToken);
 
-    private async Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
-    {
-        var operationId = operation.OperationId;
-        var project = operation.Project;
-        var scopes = project.AuthoringMounts
-            .Where(static mount => !IsDerivedRootMount(mount))
-            .Select(mount => this.CreateScope(project, ResolveMountInputs(project, mount), CookTargetKind.Project))
-            .Where(static scope => scope.Inputs.Count > 0)
-            .ToList();
-        if (scopes.Count == 0)
-        {
-            return new ContentCookResult(
-                operationId,
-                CookTargetKind.Project,
-                OperationStatus.Succeeded,
-                Diagnostics: [],
-                CookedAssets: [],
-                Inspection: null,
-                Validation: null);
-        }
-
-        var results = new List<ContentCookResult>();
-        await this.RequireSavedDocumentsAsync(scopes.SelectMany(static scope => scope.Inputs), cancellationToken).ConfigureAwait(false);
-        foreach (var scope in scopes)
-        {
-            results.Add(await this.CookMixedInputsAsync(operationId, scope, cancellationToken).ConfigureAwait(false));
-        }
-
-        return MergeProjectResults(operationId, results);
-    }
+    private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(
+            operation,
+            () => operation.Project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount))
+                .Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project)).ToArray(),
+            CookTargetKind.Project,
+            cancellationToken);
 
     private async Task RequireSavedDocumentsAsync(IEnumerable<ContentCookInput> inputs, CancellationToken cancellationToken)
     {
@@ -599,55 +569,10 @@ public sealed partial class ContentPipelineService(
         => this.projectContextService.ActiveProject
            ?? throw new InvalidOperationException("Content pipeline requires an active project.");
 
-    private async Task<ContentCookResult> CookMixedInputsAsync(
-        Guid operationId,
-        ContentCookScope scope,
-        CancellationToken cancellationToken)
-    {
-        var missing = CreateSourceMissingDiagnostics(operationId, scope.Inputs);
-        if (missing.Count != 0)
-        {
-            return new(operationId, scope.TargetKind, OperationStatus.Failed, NormalizeDiagnostics(operationId, missing), [], Inspection: null, Validation: null);
-        }
-
-        try
-        {
-            var graph = await new CookDependencyDiscovery(cookDocuments).DiscoverAsync(scope.Project, scope.Inputs, cancellationToken).ConfigureAwait(false);
-            if (HasError(graph.Diagnostics))
-            {
-                return new(operationId, scope.TargetKind, OperationStatus.Failed, NormalizeDiagnostics(operationId, graph.Diagnostics), [], Inspection: null, Validation: null);
-            }
-
-            scope = scope with { Inputs = graph.Assets };
-            await this.RequireSavedDocumentsAsync(scope.Inputs, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
-        {
-            return new(
-                operationId,
-                scope.TargetKind,
-                OperationStatus.Failed,
-                [
-                    new DiagnosticRecord
-                    {
-                        OperationId = operationId,
-                        Domain = FailureDomain.ContentPipeline,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = ContentPipelineDiagnosticCodes.ManifestGenerationFailed,
-                        Message = ex.Message,
-                        TechnicalMessage = ex.ToString(),
-                        ExceptionType = ex.GetType().FullName,
-                    },
-                ],
-                [],
-                Inspection: null,
-                Validation: null);
-        }
-
-        return scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.Scene)
-            ? await this.CookSceneInputsAsync(operationId, scope, cancellationToken).ConfigureAwait(false)
-            : await this.CookResolvedInputsAsync(operationId, scope, diagnostics: [], cancellationToken).ConfigureAwait(false);
-    }
+    private Task<ContentCookResult> CookMixedInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
+        => scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.Scene)
+            ? this.CookSceneInputsAsync(operationId, scope, cancellationToken)
+            : this.CookResolvedInputsAsync(operationId, scope, diagnostics: [], cancellationToken);
 
     private async Task<ContentCookResult> CookSceneInputsAsync(
         Guid operationId,
@@ -669,7 +594,6 @@ public sealed partial class ContentPipelineService(
         }
 
         var descriptors = await this.GenerateSceneDescriptorsAsync(scope, sceneInputs, cancellationToken).ConfigureAwait(false);
-        await this.RequireSavedDocumentsAsync(descriptors.SelectMany(static descriptor => descriptor.Dependencies), cancellationToken).ConfigureAwait(false);
         var diagnostics = descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToList();
         diagnostics.AddRange(CreateSourceMissingDiagnostics(
             operationId,
@@ -688,7 +612,7 @@ public sealed partial class ContentPipelineService(
 
         var descriptorInputs = scope.Inputs.Where(static input => input.Kind is not ContentCookAssetKind.Scene).ToList();
         var generatedSceneScope = scope with { Inputs = [.. scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Scene), .. descriptorInputs] };
-        var prepared = await this.PrepareSceneDescriptorsAsync(operationId, generatedSceneScope, descriptors, cancellationToken)
+        var prepared = await PrepareSceneDescriptorsAsync(operationId, generatedSceneScope, descriptors, cancellationToken)
             .ConfigureAwait(false);
         if (HasError(prepared.Diagnostics))
         {
@@ -714,11 +638,11 @@ public sealed partial class ContentPipelineService(
         var descriptors = new List<SceneDescriptorGenerationResult>();
         foreach (var input in sceneInputs)
         {
-            var bytes = await CookSavedSourceReader.ReadAsync(cookDocuments, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+            var bytes = await File.ReadAllBytesAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var stream = new MemoryStream(bytes, writable: false);
             await using var lifetime = stream.ConfigureAwait(false);
             var scene = await new SceneSerializer(project).DeserializeAsync(stream).ConfigureAwait(false);
-            var singleSceneScope = this.CreateScope(scope.Project, [input], scope.TargetKind);
+            var singleSceneScope = scope with { Inputs = [input] };
             var descriptor = await this.sceneDescriptorGenerator.GenerateAsync(scene, singleSceneScope, cancellationToken).ConfigureAwait(false);
             descriptors.Add(descriptor);
         }
@@ -747,7 +671,7 @@ public sealed partial class ContentPipelineService(
                 Validation: null);
         }
 
-        var prepared = await this.PrepareScopeInputsAsync(operationId, scope, allDiagnostics, cancellationToken)
+        var prepared = await PrepareScopeInputsAsync(operationId, scope, allDiagnostics, cancellationToken)
             .ConfigureAwait(false);
         if (HasError(prepared.Diagnostics))
         {
@@ -844,9 +768,9 @@ public sealed partial class ContentPipelineService(
         CookRunContext.Report(new(Message: "Cooking content.", State: CookRunState.Cooking));
         var execution = new ContentImportExecution(
             operationId,
-            scope.Project.ProjectRoot,
+            scope.InputRoot,
             Path.Combine(scope.Project.ProjectRoot, ".build", "cook", operationId.ToString("N")),
-            manifest);
+            manifest) { Artifacts = scope.Artifacts };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 

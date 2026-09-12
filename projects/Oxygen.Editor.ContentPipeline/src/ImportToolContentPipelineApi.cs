@@ -43,7 +43,9 @@ public sealed partial class ImportToolContentPipelineApi(
         cancellationToken.ThrowIfCancellationRequested();
         ValidateExecutionPaths(execution);
 
-        var qualification = await this.artifactQualification.VerifyAsync(execution.OperationId, cancellationToken).ConfigureAwait(false);
+        var qualification = execution.Artifacts is { } borrowed
+            ? new ArtifactQualificationResult(borrowed, [])
+            : await this.artifactQualification.VerifyAsync(execution.OperationId, cancellationToken).ConfigureAwait(false);
         if (!qualification.Succeeded)
         {
             return new(Succeeded: false, qualification.Diagnostics);
@@ -80,12 +82,16 @@ public sealed partial class ImportToolContentPipelineApi(
         {
             if (retainedWorkerDrain is null)
             {
-                await artifacts.DisposeAsync().ConfigureAwait(false);
+                if (execution.Artifacts is null)
+                {
+                    await artifacts.DisposeAsync().ConfigureAwait(false);
+                }
+
                 TryDeleteFile(manifestPath);
             }
             else
             {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, artifacts);
+                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, execution.Artifacts is null ? artifacts : null);
             }
         }
     }

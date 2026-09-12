@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -17,4 +19,14 @@ public sealed record ContentCookScope(
     ProjectContext Project,
     ProjectCookScope CookScope,
     IReadOnlyList<ContentCookInput> Inputs,
-    CookTargetKind TargetKind);
+    CookTargetKind TargetKind)
+{
+    /// <summary>Gets the coherent saved input set when preparation belongs to a cook operation.</summary>
+    public CookInputSnapshot? Snapshot { get; init; }
+
+    /// <summary>Gets the qualified artifacts borrowed from the owning cook operation.</summary>
+    public QualifiedArtifactLease? Artifacts { get; init; }
+
+    /// <summary>Gets the physical input root used by descriptor generation and native jobs.</summary>
+    public string InputRoot => this.Snapshot?.InputRoot ?? this.Project.ProjectRoot;
+}

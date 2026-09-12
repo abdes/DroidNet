@@ -87,8 +87,14 @@ Saved scene/scalar-material/static-geometry discovery is implemented for the
 existing explicit scopes, including transitive materials, geometry buffers and
 import-settings presence. It collects input errors by asset before native work.
 Discovery/capture and real native dependency cases pass in ContentPipeline's
-127/127 suite (`artifacts/m07b-dependency-final-tests.log`). Complete imported-
-source discovery, snapshot-to-worker integration and incremental planning remain.
+137/137 suite (`artifacts/m07b-snapshot-final-tests.log`). Explicit native cook
+scopes share one coherent saved snapshot across project mounts. Generated
+descriptors and relocated geometry media references use its private input root;
+the result records the qualified producer identity and captured/current state.
+Later edits do not block the captured cook or become clean. Qualified artifact
+ownership drains before the next writer starts after termination failure.
+Material-helper integration, complete imported-source discovery and incremental
+planning remain.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

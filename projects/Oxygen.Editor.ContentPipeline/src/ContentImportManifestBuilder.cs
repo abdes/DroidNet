@@ -92,7 +92,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 descriptor.SceneAssetUri,
                 ContentCookAssetKind.Scene,
                 mountName,
-                ToProjectRelativePath(scope.Project.ProjectRoot, descriptor.DescriptorPath),
+                ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
                 descriptor.DescriptorPath,
                 descriptor.DescriptorVirtualPath,
                 ContentCookInputRole.GeneratedDescriptor);

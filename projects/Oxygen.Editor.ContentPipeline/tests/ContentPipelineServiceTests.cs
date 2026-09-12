@@ -120,7 +120,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job =>
             job.Type == "material-descriptor" && job.Source == ".pipeline/Materials/Content/Materials/Red.omat.json");
-        var generatedDescriptor = workspace.ReadText(".pipeline/Materials/Content/Materials/Red.omat.json");
+        var generatedDescriptor = await File.ReadAllTextAsync(Path.Combine(api.ImportedExecution!.InputRoot, ".pipeline/Materials/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generatedDescriptor.Should().Contain("\"base_color\"");
         _ = generatedDescriptor.Should().Contain("\"metalness\"");
         _ = generatedDescriptor.Should().Contain("\"alpha_mode\"");
@@ -275,7 +275,8 @@ public sealed partial class ContentPipelineServiceTests
             new InvalidManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            workspace.Documents);
+            workspace.Documents,
+            workspace.Qualification);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -428,7 +429,8 @@ public sealed partial class ContentPipelineServiceTests
     private static ContentPipelineService CreateService(
         TempWorkspace workspace,
         ISceneDescriptorGenerator generator,
-        IEngineContentPipelineApi api)
+        IEngineContentPipelineApi api,
+        Oxygen.Managed.Core.Compatibility.IArtifactQualificationService? qualification = null)
         => new(
             workspace.ContextService,
             workspace.CookCoordinator,
@@ -437,7 +439,8 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            workspace.Documents);
+            workspace.Documents,
+            qualification ?? workspace.Qualification);
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(
@@ -470,7 +473,7 @@ public sealed partial class ContentPipelineServiceTests
                 await beforeGenerate(cancellationToken).ConfigureAwait(false);
             }
 
-            var descriptorPath = Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
+            var descriptorPath = Path.Combine(scope.Snapshot?.InputRoot ?? workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
             return new SceneDescriptorGenerationResult(
                 new Uri("asset:///Content/Scenes/Main.oscene.json"),
                 descriptorPath,
@@ -485,6 +488,12 @@ public sealed partial class ContentPipelineServiceTests
         CookInspectionResult inspection,
         NativeImportResult? importResult = null) : IEngineContentPipelineApi
     {
+        public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }
+
+        public List<ContentImportExecution> Executions { get; } = [];
+
+        public ContentImportExecution? ImportedExecution { get; private set; }
+
         public ContentImportManifest? ImportedManifest { get; private set; }
 
         public List<ContentImportManifest> ImportedManifests { get; } = [];
@@ -493,14 +502,21 @@ public sealed partial class ContentPipelineServiceTests
 
         public string? ValidatedRoot { get; private set; }
 
-        public Task<NativeImportResult> ImportAsync(
+        public async Task<NativeImportResult> ImportAsync(
             ContentImportExecution execution,
             CancellationToken cancellationToken)
         {
+            this.Executions.Add(execution);
+            if (this.BeforeImport is { } beforeImport)
+            {
+                await beforeImport(execution, cancellationToken).ConfigureAwait(false);
+            }
+
+            this.ImportedExecution = execution;
             var manifest = execution.Manifest;
             this.ImportedManifest = manifest;
             this.ImportedManifests.Add(manifest);
-            return Task.FromResult(importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []));
+            return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
         }
 
         public Task<CookInspectionResult> InspectLooseCookedRootAsync(
@@ -566,6 +582,9 @@ public sealed partial class ContentPipelineServiceTests
             this.ContextService.Activate(this.ProjectContext);
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
             this.Scene = new Scene(this.Project) { Name = "Main" };
+            var producer = Path.Combine(this.Root, "producer.bin");
+            File.WriteAllText(producer, "fixed test producer");
+            this.Qualification = new([new("test/producer", producer)]);
         }
 
         public string Root { get; }
@@ -579,6 +598,8 @@ public sealed partial class ContentPipelineServiceTests
         public ContentCookCoordinator CookCoordinator { get; }
 
         public Scene Scene { get; }
+
+        public Oxygen.Testing.TemporaryArtifactQualification Qualification { get; }
 
         public Snapshots.CookDocumentRegistry Documents { get; } = new();
 
@@ -627,6 +648,7 @@ public sealed partial class ContentPipelineServiceTests
         {
             this.ContextService.Close();
             this.CookCoordinator.Dispose();
+            this.Qualification.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);
