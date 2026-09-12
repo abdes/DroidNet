@@ -139,17 +139,16 @@ off, and camera/light/material references. Visual equivalence is M08's gate.
 
 ### 07B.4 - Matched Artifact Preflight And Reproducible Import
 
-The shared fixed-manifest verifier and artifact read leases are implemented in
-Managed.Core. All 30 qualification cases pass in its 76/76 test suite, including
-same-size/same-timestamp mutations, configuration/schema mismatches, exact-set
-coverage, cancellation and handle release. Host inventory, explicit promotion,
-runtime/cooker integration and the import workflow remain open.
-Runtime settings and view APIs now use managed contracts; native configuration,
-view conversion and execution are contained in the native session. The isolated
-no-Interop probe, native conversion checks and lifecycle cases pass in Runtime
-81/81; viewport caller cases pass in SceneExplorer 165/165. Evidence:
-`artifacts/m07b-boundary-runtime-tests.log` and
-`artifacts/m07b-boundary-scene-tests.log`.
+Installed artifact inventory, fixed-manifest verification and native entry-point
+checks are implemented. Runtime startup verifies before creating the native
+session; import/catalog workers retain verified files through termination and
+reader drain. Managed startup and view contracts remain usable without Interop.
+Core 80/80, ContentPipeline 131/131 and Runtime 83/83 pass. The explicit
+`Oxygen.Editor/tools/Qualify-EditorArtifacts.ps1` command tests a protected set
+before atomic manifest promotion; its failure/success fixture cases pass.
+Real Debug/Release promotion is pending an unlocked packaged UI run. The locked
+run passed 141/155, with foreground-pointer and two control-realization failures.
+Qualified import and clean-copy reproduction remain open.
 
 Create/ship the PRD qualification manifest with exact editor/native/tool/schema
 hashes. Validate it before loading interop or spawning native tools. Keep Project
