@@ -44,10 +44,15 @@ public sealed partial class InspectorControlTests : VisualUserInterfaceTests
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        _ = view.FindDescendant<NumberBox>().Should().NotBeNull();
         if (view is MaterialEditorView)
         {
+            var scroller = view.FindDescendant<ScrollViewer>()!;
+            _ = await FindInspectorControlAsync(scroller, () => view.FindDescendant<NumberBox>(number => Equals(number.Tag, "RoughnessFactor")), "Material.RoughnessFactor", this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = view.KeyboardAccelerators.Should().OnlyContain(accelerator => ReferenceEquals(accelerator.ScopeOwner, view));
+        }
+        else
+        {
+            _ = view.FindDescendant<NumberBox>().Should().NotBeNull();
         }
     });
 
