@@ -742,6 +742,11 @@ The transaction is a required ED-M07B contract, not a claim of current code.
   their bytes are copied. If the set changes while dependencies are resolved,
   retry capture at most three times, then fail visibly. Do not guess a mixture
   of revisions. External inaccessible/conflicting files fail before cooking.
+  Optional import settings record absence as an input fact; settings created
+  during discovery/capture cause rediscovery. Discovery includes geometry buffer
+  files and separates engine recipes and cooked-only references from authored
+  inputs. Cooked-only references require publication validation and output leases
+  before reuse; their presence in the graph does not establish freshness.
 - Copy inputs to `.build/cook/<OperationId>/inputs`, preserving their logical
   mount-relative relationships. Record document saved revisions where known,
   source hashes, import settings, schema/build fingerprint, project lifetime,

@@ -8,5 +8,6 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="AssetUri">The logical authored identity, when this file is an asset.</param>
 /// <param name="SourcePath">The original absolute source path.</param>
 /// <param name="RelativePath">The preserved path inside the private input root.</param>
-/// <param name="DiscoveryHash">The hash observed while resolving dependencies.</param>
-public sealed record CookSnapshotInput(Uri? AssetUri, string SourcePath, string RelativePath, string DiscoveryHash);
+/// <param name="DiscoveryHash">The hash observed during discovery, or empty for an absent optional file.</param>
+/// <param name="IsAbsent">Whether discovery observed that an optional settings file did not exist.</param>
+public sealed record CookSnapshotInput(Uri? AssetUri, string SourcePath, string RelativePath, string DiscoveryHash, bool IsAbsent = false);
