@@ -41,9 +41,13 @@ public sealed class NativeSdkCompatibilityTests
     }
 
     /// <summary>Cooking needs no Interop or accepted manifest, and producer changes alter its content identity.</summary>
+    /// <param name="producerFile">The managed producer or reader that changed.</param>
     /// <returns>The asynchronous producer test.</returns>
     [TestMethod]
-    public async Task CookingCapturesCurrentProducerWithoutQualification()
+    [DataRow("Oxygen.Editor.ContentPipeline.dll")]
+    [DataRow("Oxygen.Managed.Assets.dll")]
+    [DataRow("Oxygen.Managed.Core.dll")]
+    public async Task CookingCapturesCurrentProducerWithoutQualification(string producerFile)
     {
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
@@ -53,7 +57,7 @@ public sealed class NativeSdkCompatibilityTests
         _ = first.Succeeded.Should().BeTrue();
         var fingerprint = first.Artifacts!.Fingerprint;
         await first.Artifacts.DisposeAsync().ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Oxygen.Editor.ContentPipeline.dll"), "updated producer", this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, producerFile), "updated producer", this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = second.Succeeded.Should().BeTrue();
         var artifacts = second.Artifacts!;
