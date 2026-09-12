@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking.Workspace;
 
 namespace DroidNet.Docking.Detail;
@@ -27,7 +28,7 @@ namespace DroidNet.Docking.Detail;
 /// ]]></code>
 /// </example>
 /// </remarks>
-public abstract partial class Dock : IDock
+public abstract partial class Dock : ObservableObject, IDock
 {
     private readonly ObservableCollection<IDockable> dockables = [];
     private bool isDisposed;
@@ -47,7 +48,8 @@ public abstract partial class Dock : IDock
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     /// <inheritdoc/>
-    public IDockable? ActiveDockable { get; private set; }
+    [ObservableProperty]
+    public partial IDockable? ActiveDockable { get; private set; }
 
     /// <inheritdoc/>
     public virtual bool CanMinimize => true;
@@ -275,8 +277,12 @@ public abstract partial class Dock : IDock
         // If the dockable is becoming active, deactivate the current active dockable.
         if (dockable.IsActive)
         {
-            _ = this.ActiveDockable?.AsDockable().IsActive = false;
+            var previous = this.ActiveDockable;
             this.ActiveDockable = dockable;
+            if (previous != dockable)
+            {
+                _ = previous?.AsDockable().IsActive = false;
+            }
         }
 
         // If the active dockable is becoming inactive, activate another dockable.

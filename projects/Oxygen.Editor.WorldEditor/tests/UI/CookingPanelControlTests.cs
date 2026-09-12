@@ -6,6 +6,9 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
+using DroidNet.Docking;
+using DroidNet.Docking.Controls;
+using DroidNet.Docking.Workspace;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Dispatching;
@@ -153,6 +156,64 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = (await revealed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Be(next.OperationId);
     });
 
+    /// <summary>Cook attention changes the actual dock tab and visible content, including after returning to the browser.</summary>
+    /// <returns>The asynchronous dock activation regression.</returns>
+    [TestMethod]
+    public Task CookingAttentionActivatesTheRenderedDockAtStartAndCompletion() => EnqueueAsync(async () =>
+    {
+        var runs = new Mock<ICookRunService>();
+        using var model = CreateModel(runService: runs);
+        using var docker = new Docker();
+        var dock = ToolDock.New();
+        var browser = Dockable.New(Guid.NewGuid().ToString("N"));
+        var cooking = Dockable.New(Guid.NewGuid().ToString("N"));
+        var browserView = new TextBlock { Text = "Content Browser" };
+        var cookingView = new CookingPanelView { ViewModel = model };
+        browser.ViewModel = browserView;
+        cooking.ViewModel = cookingView;
+        dock.AdoptDockable(browser);
+        dock.AdoptDockable(cooking);
+        docker.Dock(dock, new AnchorBottom());
+        browser.IsActive = true;
+        var converter = new Mock<Microsoft.UI.Xaml.Data.IValueConverter>();
+        _ = converter.Setup(value => value.Convert(It.IsAny<object>(), It.IsAny<Type>(), It.IsAny<object>(), It.IsAny<string>()))
+            .Returns((object value, Type _, object _, string _) => value);
+        var resources = Application.Current.Resources;
+        var hadConverter = resources.TryGetValue("VmToViewConverter", out var previousConverter);
+        resources["VmToViewConverter"] = converter.Object;
+        var dockModel = new DockPanelViewModel(dock);
+        try
+        {
+            var panel = new DockPanel { VmToViewConverter = converter.Object, ViewModel = dockModel, Width = 960, Height = 340 };
+            model.RevealRequested += (_, _) =>
+            {
+                docker.PinDock(dock);
+                cooking.IsActive = true;
+            };
+            await LoadTestContentAsync(panel).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            var tabs = panel.FindDescendant<DockableTabsBar>()!;
+            _ = tabs.ActiveDockable.Should().Be(browser);
+            _ = panel.FindDescendants().Should().Contain(browserView);
+
+            await VerifyDockAttentionAsync(runs, model, dock, browser, cooking, browserView, cookingView, panel, tabs).ConfigureAwait(true);
+
+            await this.CaptureAsync(panel, "cooking-dock-activated.png").ConfigureAwait(true);
+        }
+        finally
+        {
+            dockModel.IsActive = false;
+            if (hadConverter)
+            {
+                resources["VmToViewConverter"] = previousConverter;
+            }
+            else
+            {
+                _ = resources.Remove("VmToViewConverter");
+            }
+        }
+    });
+
     /// <summary>Long Output and Assets sections grow past the former caps and remain reachable through the parent.</summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
@@ -199,6 +260,23 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
     {
         VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(this.originalWindowSize);
         await WaitForRenderAsync().ConfigureAwait(true);
+    }
+
+    private static async Task VerifyDockAttentionAsync(Mock<ICookRunService> runs, CookingPanelViewModel model, ToolDock dock, Dockable browser, Dockable cooking, TextBlock browserView, CookingPanelView cookingView, DockPanel panel, DockableTabsBar tabs)
+    {
+        foreach (var state in new[] { CookRunState.Queued, CookRunState.NeedsSave, CookRunState.Succeeded })
+        {
+            tabs.ActiveDockable = browser;
+            await WaitForRenderAsync().ConfigureAwait(true);
+            _ = dock.ActiveDockable.Should().Be(browser);
+            var next = model.SelectedRun!.Snapshot with { State = state, Revision = model.SelectedRun.Snapshot.Revision + 1 };
+            runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(next, reveal: true));
+            await WaitForRenderAsync().ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            _ = tabs.ActiveDockable.Should().Be(cooking);
+            _ = panel.FindDescendants().Should().Contain(cookingView).And.NotContain(browserView);
+            _ = dock.Dockables.Count(value => value.IsActive).Should().Be(1);
+        }
     }
 
     private static void AssertCompactHeader(CookingPanelView view)
