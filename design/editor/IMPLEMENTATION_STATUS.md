@@ -553,8 +553,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       metadata, restores failed replacements, and verifies recovery material before
       changing files. Combined publication/staging/lease/worker regressions pass
       69/69, including persisted interruption states between directory moves and
-      journal updates. Pipeline/runtime integration, startup recovery orchestration,
-      and publisher-process interruption validation remain open.
+      journal updates. Native cooks now write to private staging and commit roots,
+      receipt and provenance through the transaction. Recovery skips live operation
+      leases and restores abandoned journals; mounting holds a read lease through
+      verification. ContentPipeline 221/221 passes, including native cook followed
+      by failed preview restoration and receipt repair. Editor runtime pause/lease
+      integration and publisher-process interruption validation remain open.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
       The normal Interop build now records its native SDK in assembly metadata.

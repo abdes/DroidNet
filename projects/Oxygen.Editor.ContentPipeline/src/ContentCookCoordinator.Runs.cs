@@ -206,7 +206,11 @@ public sealed partial class ContentCookCoordinator
             await this.PublishCookCompletedAsync(new(operation.Project, completed)).ConfigureAwait(false);
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
+        if (result is not ContentCookResult { IsPublished: true })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
         this.VerifyCurrent(operation);
         this.FinishRun(operation.OperationId, state, diagnostics, assets);
     }

@@ -153,7 +153,11 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 try
                 {
                     var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
-                    requestCancellation.Token.ThrowIfCancellationRequested();
+                    if (result is not ContentCookResult { IsPublished: true })
+                    {
+                        requestCancellation.Token.ThrowIfCancellationRequested();
+                    }
+
                     this.VerifyCurrent(operation);
                     await this.CompleteRunAsync(operation, result, requestCancellation.Token).ConfigureAwait(false);
                     return result;

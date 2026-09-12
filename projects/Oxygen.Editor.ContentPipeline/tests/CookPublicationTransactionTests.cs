@@ -212,6 +212,8 @@ public sealed partial class CookPublicationTransactionTests
         private readonly List<FileStream> openFiles = [];
         private IDisposable? reader = CookOutputLease.AcquireRead(projectRoot);
 
+        public bool IsRuntimeAvailable => true;
+
         public bool FailFirstMount { get; init; }
 
         public bool FailAllMounts { get; init; }

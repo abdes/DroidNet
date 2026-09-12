@@ -28,6 +28,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="cookDocuments">The registered saved-document owners.</param>
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
 /// <param name="provenanceFiles">Atomic storage for incremental product evidence.</param>
+/// <param name="publication">The shared journal and runtime-publication owner.</param>
 public sealed partial class ContentPipelineService(
     IProjectContextService projectContextService,
     IContentCookCoordinator cookCoordinator,
@@ -38,7 +39,8 @@ public sealed partial class ContentPipelineService(
     IEngineContentPipelineApi engineContentPipelineApi,
     ICookDocumentRegistry cookDocuments,
     INativeCompatibilityService? nativeCompatibility = null,
-    DroidNet.Storage.IAtomicFileStore? provenanceFiles = null) : IContentPipelineService
+    DroidNet.Storage.IAtomicFileStore? provenanceFiles = null,
+    Publication.CookPublicationService? publication = null) : IContentPipelineService
 {
     private static readonly System.Text.Json.JsonSerializerOptions NativeDescriptorJsonOptions = new()
     {
@@ -47,6 +49,7 @@ public sealed partial class ContentPipelineService(
 
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
     private readonly CookProvenanceStore provenanceStore = new(provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+    private readonly Publication.CookPublicationService publication = publication ?? new(cookCoordinator, projectContextService, provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
@@ -107,19 +110,21 @@ public sealed partial class ContentPipelineService(
         => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), this.CookProjectCoreAsync, cancellationToken);
 
     /// <inheritdoc />
-    public Task<CookInspectionResult> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
+    public async Task<CookInspectionResult> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var cookedRoot = this.ResolveCookedRoot(scopeUri);
-        return this.engineContentPipelineApi.InspectLooseCookedRootAsync(cookedRoot, cancellationToken);
+        using var reader = Publication.CookOutputLease.AcquireRead(this.projectContextService.ActiveProject!.ProjectRoot);
+        return await this.engineContentPipelineApi.InspectLooseCookedRootAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public Task<CookValidationResult> ValidateCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
+    public async Task<CookValidationResult> ValidateCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var cookedRoot = this.ResolveCookedRoot(scopeUri);
-        return this.engineContentPipelineApi.ValidateLooseCookedRootAsync(cookedRoot, cancellationToken);
+        using var reader = Publication.CookOutputLease.AcquireRead(this.projectContextService.ActiveProject!.ProjectRoot);
+        return await this.engineContentPipelineApi.ValidateLooseCookedRootAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
     }
 
     private static ContentCookResult MergeProjectResults(
