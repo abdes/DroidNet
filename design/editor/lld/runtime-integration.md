@@ -588,6 +588,16 @@ native operations visibly while Project Browser and safe authoring/save remain
 available. The public managed boundary must be loadable without initializing
 interop merely to open the Project Browser.
 
+`Oxygen.Managed.Core.Compatibility` verifies the fixed manifest against the
+host's independently resolved required inventory. Verification checks exact
+configuration, file hashes/sizes and schema identifiers, then returns an owned
+artifact lease and its portable content fingerprint. Windows read handles stay
+open through native execution and cleanup, preventing replacement between
+verification and use. Failure or cancellation releases the whole acquired set.
+The host owns inventory discovery and explicit qualification/promotion; ordinary
+compilation does not write the accepted manifest. Native bootstrap and cooker
+integration consume the same qualified artifact identity.
+
 Publication briefly pauses preview and drains affected content reads before
 fixed cooked-root replacement. The runtime exposes the required pause/drain/
 remount/resume capabilities; ContentPipeline owns journal, paths and policy.

@@ -538,6 +538,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       the publication transaction and snapshot integration remain unwired.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
+      The shared fixed-manifest verifier and protected artifact leases pass
+      30 qualification cases in the 76/76 Managed.Core suite. Required inventory,
+      explicit promotion and runtime/cooker integration remain to be connected.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking

@@ -139,6 +139,12 @@ off, and camera/light/material references. Visual equivalence is M08's gate.
 
 ### 07B.4 - Matched Artifact Preflight And Reproducible Import
 
+The shared fixed-manifest verifier and artifact read leases are implemented in
+Managed.Core. All 30 qualification cases pass in its 76/76 test suite, including
+same-size/same-timestamp mutations, configuration/schema mismatches, exact-set
+coverage, cancellation and handle release. Host inventory, explicit promotion,
+runtime/cooker integration and the import workflow remain open.
+
 Create/ship the PRD qualification manifest with exact editor/native/tool/schema
 hashes. Validate it before loading interop or spawning native tools. Keep Project
 Browser and safe saves available on mismatch. Implement the qualified glTF/FBX
