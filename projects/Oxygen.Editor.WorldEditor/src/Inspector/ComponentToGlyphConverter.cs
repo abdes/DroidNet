@@ -16,9 +16,7 @@ public sealed partial class ComponentToGlyphConverter : IValueConverter
 
     /// <inheritdoc />
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is null
-            ? UnknownComponentGlyph
-            : value.GetType().Name switch
+        => (value as Type ?? value?.GetType())?.Name switch
             {
                 "TransformComponent" => "\uE7AD",
                 "MeshComponent" or "GeometryComponent" => "\uF158",
