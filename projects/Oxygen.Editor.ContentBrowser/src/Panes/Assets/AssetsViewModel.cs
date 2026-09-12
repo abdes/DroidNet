@@ -729,9 +729,7 @@ public partial class AssetsViewModel(
             return message;
         }
 
-        var details = string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage)
-            ? diagnostic.Message
-            : diagnostic.TechnicalMessage;
+        var details = diagnostic.Message;
         return string.IsNullOrWhiteSpace(details)
             || string.Equals(details, message, StringComparison.Ordinal)
             || message.Contains(details, StringComparison.Ordinal)
