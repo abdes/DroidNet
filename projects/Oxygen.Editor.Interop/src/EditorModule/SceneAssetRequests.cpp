@@ -14,7 +14,10 @@
 #include <cstdint>
 #include <exception>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <vector>
+#include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
 namespace oxygen::interop::module {
@@ -52,6 +55,7 @@ struct SceneAssetRequests::State {
     Material material;
     bool ready = false;
     bool apply = false;
+    bool rejected_slot = false;
     FailureCallback on_failure;
   };
   struct Target {
@@ -65,15 +69,33 @@ struct SceneAssetRequests::State {
   GeometryLoader geometry_loader;
   MaterialLoader material_loader;
   Diagnostic diagnostic;
+  AssetAvailability available;
   uint64_t generation = 0;
   std::unordered_map<scene::NodeHandle, Target> targets;
+  std::unordered_set<uint64_t> refresh_requests;
+  std::string refresh_error;
+  bool loads_paused = false;
   std::shared_ptr<ThreadSafeQueue<Completion>> inbox =
       std::make_shared<ThreadSafeQueue<Completion>>();
+
+  auto CanRefresh(const std::string& uri, bool material) -> bool {
+    try {
+      return available(uri, material);
+    } catch (const std::exception& error) {
+      refresh_error = fmt::format("Asset '{}' could not be resolved: {}", uri, error.what());
+      diagnostic(refresh_error);
+      return false;
+    }
+  }
 
   void Report(scene::NodeHandle node, const std::string &uri,
               const std::string &error, bool geometry,
               uint64_t generation, const FailureCallback &on_failure,
-              std::size_t slot = 0) const {
+              std::size_t slot = 0) {
+    if (refresh_requests.contains(generation)) {
+      refresh_error = fmt::format("{} '{}' could not be refreshed: {}",
+        geometry ? "Geometry" : "Material", uri, error);
+    }
     diagnostic(fmt::format("{} request '{}' on node {} slot {}: {}",
                            geometry ? "Geometry" : "Material", uri,
                            nostd::to_string(node), slot, error));
@@ -121,15 +143,22 @@ SceneAssetRequests::SceneAssetRequests(content::IAssetLoader &loader,
                   });
             }
           },
-          [](const std::string &message) { LOG_F(ERROR, "{}", message); }) {}
+          [](const std::string &message) { LOG_F(ERROR, "{}", message); },
+          [&resolver](const std::string& uri, bool material) {
+            const auto path = VirtualPath(uri, material);
+            return (material && path == "/Engine/Generated/Materials/Default")
+              || resolver.ResolveAssetKey(path).has_value();
+          }) {}
 
 SceneAssetRequests::SceneAssetRequests(GeometryLoader geometry_loader,
                                        MaterialLoader material_loader,
-                                       Diagnostic diagnostic)
+                                       Diagnostic diagnostic,
+                                       AssetAvailability available)
     : state_(std::make_unique<State>()) {
   state_->geometry_loader = std::move(geometry_loader);
   state_->material_loader = std::move(material_loader);
   state_->diagnostic = std::move(diagnostic);
+  state_->available = std::move(available);
 }
 
 SceneAssetRequests::~SceneAssetRequests() = default;
@@ -158,6 +187,9 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
 
 void SceneAssetRequests::LoadGeometry(const std::string &uri,
                                       GeometryCompletion complete) {
+  if (state_->loads_paused) {
+    return;
+  }
   try {
     state_->geometry_loader(uri, complete);
   } catch (const std::exception &ex) {
@@ -174,6 +206,9 @@ void SceneAssetRequests::SetMaterial(scene::NodeHandle node, std::size_t slot,
   state_->targets[node].slots[slot] =
       State::Slot{.generation = generation, .uri = uri,
                   .on_failure = std::move(on_failure)};
+  if (state_->loads_paused) {
+    return;
+  }
   auto complete = [inbox = std::weak_ptr(state_->inbox), node, slot,
                    generation](Material asset, std::string error) {
     if (auto queue = inbox.lock()) {
@@ -202,6 +237,61 @@ void SceneAssetRequests::Detach(scene::NodeHandle node) {
   state_->targets.erase(node);
 }
 
+void SceneAssetRequests::Refresh(scene::Scene &scene) {
+  const auto was_paused = state_->loads_paused;
+  state_->loads_paused = false;
+  state_->refresh_requests.clear();
+  state_->refresh_error.clear();
+  for (auto &[handle, target] : state_->targets) {
+    const auto node = scene.GetNode(handle);
+    if (!node || !node->IsAlive()) {
+      continue;
+    }
+    if (!target.geometry_uri.empty() &&
+        !data::IsBuiltinGeometryUri(target.geometry_uri) &&
+        state_->CanRefresh(target.geometry_uri, false)) {
+      auto complete = BeginGeometry(handle, target.geometry_uri,
+                                    target.geometry_failure);
+      state_->refresh_requests.insert(state_->generation);
+      LoadGeometry(target.geometry_uri, std::move(complete));
+    }
+    // Copy the authored requests before SetMaterial replaces their slot state.
+    const auto slots = target.slots;
+    for (const auto &[index, slot] : slots) {
+      if (!slot.rejected_slot && (slot.uri.empty() || state_->CanRefresh(slot.uri, true))) {
+        SetMaterial(handle, index, slot.uri, slot.on_failure);
+        state_->refresh_requests.insert(state_->generation);
+      }
+    }
+  }
+  state_->loads_paused = was_paused;
+}
+
+void SceneAssetRequests::SuspendLoads() { state_->loads_paused = true; }
+
+void SceneAssetRequests::ResumeLoads(scene::Scene& scene) {
+  state_->loads_paused = false;
+  Refresh(scene);
+}
+
+auto SceneAssetRequests::IsRefreshPending() const -> bool {
+  for (const auto& [handle, target] : state_->targets) {
+    if (target.geometry_pending && state_->refresh_requests.contains(target.geometry_generation)) {
+      return true;
+    }
+    for (const auto& [index, slot] : target.slots) {
+      if (!slot.ready && state_->refresh_requests.contains(slot.generation)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+auto SceneAssetRequests::RefreshError() const -> std::string {
+  return state_->refresh_error;
+}
+
 void SceneAssetRequests::Drain(scene::Scene &scene) {
   std::erase_if(state_->targets, [&scene](const auto &entry) {
     const auto node = scene.GetNode(entry.first);
@@ -228,6 +318,14 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
         return;
       }
       node->GetRenderable().SetGeometry(std::move(result.geometry_asset));
+      const auto geometry = node->GetRenderable().GetGeometry();
+      const auto slot_count = geometry && geometry->LodCount() > 0 && geometry->MeshAt(0)
+          ? geometry->MeshAt(0)->SubMeshes().size() : 0;
+      for (auto &[index, slot] : target.slots) {
+        if (slot.ready && !slot.apply && index >= slot_count) {
+          slot.rejected_slot = true;
+        }
+      }
       // Existing overrides are preserved by the engine for surviving slots.
       // Only material results still awaiting geometry need application below.
     } else {
@@ -277,6 +375,7 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
                          false, slot.generation, slot.on_failure, index);
         }
         slot.material.reset();
+        slot.rejected_slot = true;
         continue;
       }
       if (slot.material) {
