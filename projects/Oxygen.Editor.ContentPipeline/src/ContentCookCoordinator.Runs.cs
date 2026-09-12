@@ -16,6 +16,8 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentCookCoordinator
 {
     private readonly Dictionary<Guid, RunEntry> runs = [];
+    private readonly HashSet<Guid> currentQueue = [];
+    private bool revealQueueOutcome;
 
     /// <inheritdoc />
     public event EventHandler<CookRunChangedEventArgs>? RunChanged;
@@ -117,7 +119,7 @@ public sealed partial class ContentCookCoordinator
             run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
         }
 
-        this.PublishRun(snapshot);
+        this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return resume;
     }
 
@@ -144,6 +146,8 @@ public sealed partial class ContentCookCoordinator
         lock (this.stateLock)
         {
             this.runs.Add(operation.OperationId, new(snapshot, cancellation));
+            _ = this.currentQueue.Add(operation.OperationId);
+            this.revealQueueOutcome |= !request.IsAutomatic;
         }
 
         this.PublishRun(snapshot, reveal: !request.IsAutomatic);
@@ -215,6 +219,7 @@ public sealed partial class ContentCookCoordinator
     private void FinishRun(Guid operationId, CookRunState state, IEnumerable<DiagnosticRecord> diagnostics, IEnumerable<CookRunAsset> assets)
     {
         CookRunSnapshot snapshot;
+        CookRunSnapshot? queueOutcome = null;
         lock (this.stateLock)
         {
             if (!this.runs.TryGetValue(operationId, out var run) || run.Snapshot.IsCompleted)
@@ -266,9 +271,36 @@ public sealed partial class ContentCookCoordinator
             };
             snapshot = Append(snapshot, new(message));
             run.Snapshot = snapshot = snapshot with { State = state, CompletedAt = DateTimeOffset.UtcNow };
+            queueOutcome = this.TakeCompletedQueueOutcome();
         }
 
-        this.PublishRun(snapshot);
+        this.PublishCompletedQueue(snapshot, queueOutcome);
+    }
+
+    private void PublishCompletedQueue(CookRunSnapshot snapshot, CookRunSnapshot? queueOutcome)
+    {
+        this.PublishRun(snapshot, reveal: queueOutcome?.OperationId == snapshot.OperationId);
+        if (queueOutcome is not null && queueOutcome.OperationId != snapshot.OperationId)
+        {
+            this.PublishRun(queueOutcome, reveal: true);
+        }
+    }
+
+    private CookRunSnapshot? TakeCompletedQueueOutcome()
+    {
+        if (this.currentQueue.Any(id => !this.runs[id].Snapshot.IsCompleted))
+        {
+            return null;
+        }
+
+        var outcome = this.revealQueueOutcome
+            ? this.currentQueue.Select(id => this.runs[id].Snapshot)
+                .OrderBy(static item => item.State == CookRunState.Failed ? 0 : item.State == CookRunState.SucceededWithWarnings ? 1 : 2)
+                .ThenByDescending(static item => item.CompletedAt).First()
+            : null;
+        this.currentQueue.Clear();
+        this.revealQueueOutcome = false;
+        return outcome;
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A presentation subscriber must not interrupt cook ownership, worker drain, or publication.")]

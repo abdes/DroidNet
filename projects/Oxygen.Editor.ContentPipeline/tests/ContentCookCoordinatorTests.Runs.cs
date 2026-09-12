@@ -65,7 +65,7 @@ public sealed partial class ContentCookCoordinatorTests
         _ = run.State.Should().Be(CookRunState.Succeeded);
         _ = run.Messages.Select(static message => message.Text).Should().ContainInOrder("Cooking Main.", "Cooking NewScene2.", "Cook complete.");
         _ = run.Messages.Select(static message => message.Sequence).Should().BeInAscendingOrder();
-        _ = reveals.Should().Equal(run.OperationId);
+        _ = reveals.Should().Equal(run.OperationId, run.OperationId);
         _ = CookRunContext.Current.Should().BeNull();
     }
 

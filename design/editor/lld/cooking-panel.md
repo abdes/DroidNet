@@ -9,6 +9,14 @@ or project. Explicit Cook actions reveal this dockable panel. Automatic cooking
 uses the same presentation without opening it or taking focus. Asset rows and
 property slots retain concise status and a link to the relevant run.
 
+For user-initiated cooking, reveal the panel again when input is required and
+select that blocked run. When the current queue finishes, reveal its results,
+selecting a failure or warning before a successful outcome. Activation follows
+the initiating menu's dismissal so the menu cannot hide the recovery surface.
+Purely automatic queues remain quiet. Cooking is the sole progress/recovery
+surface for submitted cooks; clear previous browser cook feedback when a new
+request starts and do not publish a second cook-result banner in Content Browser.
+
 Reuse the workspace docking system, ContentPipeline coordinator, ordinary
 document saves, shared operation results, and existing logging infrastructure. The panel
 does not create another scheduler, native-worker owner, or publication path.

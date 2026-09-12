@@ -138,6 +138,21 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         await this.CaptureAsync(view, "cooking-unsaved-inline.png").ConfigureAwait(true);
     });
 
+    /// <summary>Recovery activation waits for the initiating menu event to return and selects the requested run.</summary>
+    /// <returns>The asynchronous attention regression.</returns>
+    [TestMethod]
+    public Task RequestedAttentionSelectsTheRunAfterTheInitiatingEvent() => EnqueueAsync(async () =>
+    {
+        var runs = new Mock<ICookRunService>();
+        using var model = CreateModel(runService: runs);
+        var next = model.SelectedRun!.Snapshot with { OperationId = Guid.NewGuid(), State = CookRunState.NeedsSave, CompletedAt = null };
+        var revealed = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
+        model.RevealRequested += (_, _) => revealed.TrySetResult(model.SelectedRun!.Snapshot.OperationId);
+        runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(next, reveal: true));
+        _ = revealed.Task.IsCompleted.Should().BeFalse();
+        _ = (await revealed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Be(next.OperationId);
+    });
+
     /// <summary>Long Output and Assets sections grow past the former caps and remain reachable through the parent.</summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
@@ -217,7 +232,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null)
+    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null, Mock<ICookRunService>? runService = null)
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
@@ -252,7 +267,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
             run = run with { State = CookRunState.NeedsSave, CompletedAt = null, Diagnostics = [], UnsavedDocuments = [waitingDocument], Assets = run.Assets.Clear(), Messages = [] };
         }
 
-        var runs = new Mock<ICookRunService>();
+        var runs = runService ?? new Mock<ICookRunService>();
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
