@@ -404,6 +404,7 @@ public partial class EnvironmentViewModel(
         if (this.edits is null && commandService is not null && commandContextProvider is not null)
         {
             this.edits = new(commandService, commandContextProvider, "Edit Environment", this.RefreshFromScene, environment: true, this.fieldDiagnostics);
+            this.edits.SetInputEnabled(this.IsInputEnabled);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
         }

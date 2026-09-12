@@ -24,6 +24,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     private HashSet<PropertyId>? supersededProperties;
     private bool disposed;
     private bool refreshingResult;
+    private bool inputEnabled = true;
 
     /// <summary>Gets the current diagnostics for the bound fields.</summary>
     public InspectorFieldDiagnostics Diagnostics { get; } = diagnostics ?? new();
@@ -33,6 +34,32 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
     /// <summary>Gets completion of already submitted edits.</summary>
     public Task Pending => this.DrainAsync();
+
+    /// <summary>Ends hidden control gestures while retaining target-scoped feedback and pending results.</summary>
+    /// <param name="enabled">Whether new control input may be submitted.</param>
+    public void SetInputEnabled(bool enabled)
+    {
+        if (this.inputEnabled == enabled)
+        {
+            return;
+        }
+
+        this.inputEnabled = enabled;
+        this.ScopeId = Guid.NewGuid();
+        if (!enabled)
+        {
+            this.supersededProperties = this.active?.Properties;
+            var completion = this.active?.Interaction == NumberBoxEditInteractionKind.Text ? NumberBoxEditCompletionKind.Commit : NumberBoxEditCompletionKind.Cancel;
+            this.End(completion);
+            if (completion == NumberBoxEditCompletionKind.Cancel && this.supersededProperties is { } properties)
+            {
+                foreach (var property in properties)
+                {
+                    this.Diagnostics.Invalidate(property);
+                }
+            }
+        }
+    }
 
     /// <summary>Updates the binding scope, ending the old gesture first.</summary>
     /// <param name="nodeIds">The bound target identities.</param>
@@ -61,7 +88,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     /// <param name="interaction">The control interaction that owns the gesture.</param>
     public void Begin(string field, NumberBoxEditInteractionKind interaction)
     {
-        if (this.disposed || contextProvider() is not { } context || this.targets.Length == 0)
+        if (this.disposed || !this.inputEnabled || contextProvider() is not { } context || this.targets.Length == 0)
         {
             return;
         }
@@ -150,7 +177,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
     private void Submit(IReadOnlyDictionary<Guid, PropertyEdit> edits, bool uniform)
     {
-        if (this.disposed || contextProvider() is not { } context || !this.IsBoundTo(context))
+        if (this.disposed || !this.inputEnabled || contextProvider() is not { } context || !this.IsBoundTo(context))
         {
             return;
         }

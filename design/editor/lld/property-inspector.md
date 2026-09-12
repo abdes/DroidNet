@@ -486,10 +486,10 @@ UI rules:
 ### 9.1 ED-M07B Compact Layout And Component Filtering
 
 ED-M07B.5g owns the user-reported component-list sizing and filtering defects.
-`SceneNodeEditorViewModel` currently requests a 2*:3* split between the header/
-component area and properties; multi-node mode reserves the same area while
-hiding the list. `SceneNodeDetailsViewModel.SelectedComponent` only controls
-deletion availability, and the host's editor filter does not consume it.
+The previous inspector reserved a 2*:3* split between the header/component area
+and properties, including empty space in multi-node mode. Component selection
+controlled deletion but did not filter property sections. The compact selector
+replaces that behavior under the following contract.
 
 The node header and component selector must size to their content. The property
 editors receive the remaining height. Show up to four compact component rows

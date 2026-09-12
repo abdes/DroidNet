@@ -134,11 +134,22 @@
                                                     VerticalAlignment="Center"
                                                     Text="{x:Bind Label}"
                                                     TextTrimming="CharacterEllipsis" />
-                                                <TextBlock
+                                                <StackPanel
                                                     Grid.Column="2"
                                                     VerticalAlignment="Center"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Text="{x:Bind StatusLabel, Mode=OneWay}" />
+                                                    Orientation="Horizontal"
+                                                    Spacing="4">
+                                                    <FontIcon
+                                                        AutomationProperties.Name="Component validation error"
+                                                        FontSize="12"
+                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                        Glyph="&#xEA39;"
+                                                        Visibility="{x:Bind HasValidationErrors, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{x:Bind StatusLabel, Mode=OneWay}" />
+                                                </StackPanel>
                                             </Grid>
                                         </ToggleButton>
                                     </Grid>
@@ -163,6 +174,7 @@
                 HorizontalScrollMode="Disabled"
                 VerticalScrollBarVisibility="Auto">
                 <ItemsRepeater
+                    x:Name="PropertySections"
                     HorizontalAlignment="Stretch"
                     ItemsSource="{x:Bind ViewModel.PropertyEditors}"
                     TabFocusNavigation="Local">
@@ -171,7 +183,7 @@
                     </ItemsRepeater.Layout>
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="local:IDetailsSection">
-                            <ContentPresenter Content="{x:Bind Converter={StaticResource VmToViewConverter}}" />
+                            <ContentPresenter Content="{x:Bind Converter={StaticResource VmToViewConverter}}" Tag="{x:Bind}" />
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>

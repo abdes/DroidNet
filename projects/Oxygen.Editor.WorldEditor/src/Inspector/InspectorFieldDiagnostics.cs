@@ -16,6 +16,13 @@ internal sealed class InspectorFieldDiagnostics
     private long sequence;
     private Guid scope = Guid.NewGuid();
 
+    /// <summary>Occurs when current field feedback changes.</summary>
+    public event EventHandler? FeedbackChanged;
+
+    /// <summary>Gets the distinct current errors for the component entry.</summary>
+    public string Summary => string.Join(Environment.NewLine, this.fields.Values.Select(static diagnostic => diagnostic.Message)
+        .Where(static message => message.Length != 0).Distinct(StringComparer.Ordinal));
+
     /// <summary>Gets stable bindable feedback for a property.</summary>
     /// <param name="property">The originating property.</param>
     /// <returns>The current field diagnostic.</returns>
@@ -77,6 +84,8 @@ internal sealed class InspectorFieldDiagnostics
             field.Code = result.Succeeded ? string.Empty : result.ValidationCode ?? "PROPERTY_REJECTED";
             field.Message = result.Succeeded ? string.Empty : result.ValidationMessage ?? "This value was rejected.";
         }
+
+        this.FeedbackChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Clears feedback superseded by a model refresh.</summary>
@@ -97,6 +106,8 @@ internal sealed class InspectorFieldDiagnostics
             field.Code = string.Empty;
             field.Message = string.Empty;
         }
+
+        this.FeedbackChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Identifies the source scope, edit order, revision and affected fields.</summary>

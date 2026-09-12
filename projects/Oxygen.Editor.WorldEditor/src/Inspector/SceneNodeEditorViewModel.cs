@@ -204,6 +204,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger.UnregisterAll(this);
         WeakReferenceMessenger.Default.UnregisterAll(this);
         this.UnsubscribeAllComponentCollections();
+        this.StopObservingComponentFeedback();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
         {
             editor.Dispose();
@@ -211,6 +212,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.environmentEditor.Dispose();
         this.editorInstances.Clear();
+        this.boundEditors.Clear();
         this.LogDisposed();
 
         this.isDisposed = true;
@@ -280,6 +282,25 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         return result;
     }
 
+    /// <inheritdoc />
+    protected override void DeactivatePropertyEditor(IPropertyEditor<SceneNode> editor)
+        => ((ComponentPropertyEditor)editor).SetInputEnabled(enabled: false);
+
+    /// <inheritdoc />
+    protected override void UpdatePropertyEditorsValues()
+    {
+        var selection = this.items.ToArray();
+        foreach (var editor in this.editorInstances.Values.Cast<ComponentPropertyEditor>().ToArray())
+        {
+            editor.UpdateValues(selection);
+            _ = this.boundEditors.Add(editor);
+            editor.SetInputEnabled(this.PropertyEditors.Contains(editor));
+        }
+
+        this.environmentEditor.UpdateValues(selection);
+        this.environmentEditor.SetInputEnabled(this.PropertyEditors.Contains(this.environmentEditor));
+    }
+
     private HashSet<Type> GetApplicablePropertyEditorTypes()
     {
         var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
@@ -325,7 +346,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         Debug.WriteLine($"[SceneNodeEditorViewModel] Creating NEW editor instance for {factory.Key.Name}");
         instance = factory.Value(this.messenger);
+        ((ComponentPropertyEditor)instance).SetInputEnabled(enabled: false);
         this.editorInstances[factory.Key] = instance;
+        this.ObserveComponentFeedback(factory.Key, (ComponentPropertyEditor)instance);
         return instance;
     }
 

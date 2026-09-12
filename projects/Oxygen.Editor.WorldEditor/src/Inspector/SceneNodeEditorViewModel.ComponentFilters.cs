@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -10,6 +10,7 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>Owns component filtering without changing authored selection or properties.</summary>
 public sealed partial class SceneNodeEditorViewModel
 {
+    private readonly HashSet<ComponentPropertyEditor> boundEditors = [];
     private SceneNode[] filterNodes = [];
     private Scene? filterScene;
     private Guid? filterDocument;
@@ -45,7 +46,8 @@ public sealed partial class SceneNodeEditorViewModel
         }
 
         this.SetComponentFilter(this.selectedComponentType == componentType ? null : componentType);
-        this.RefreshPropertyEditors();
+        this.RefreshPropertyEditors(refreshValues: false);
+        this.RefreshEditorInputState();
     }
 
     private static string ComponentLabel(Type type)
@@ -60,6 +62,19 @@ public sealed partial class SceneNodeEditorViewModel
             nameof(SpotLightComponent) => "Spot Light",
             _ => type.Name,
         };
+
+    private void RefreshEditorInputState()
+    {
+        foreach (var editor in this.editorInstances.Values.Cast<ComponentPropertyEditor>().ToArray())
+        {
+            if (this.boundEditors.Add(editor))
+            {
+                editor.UpdateValues(this.items.ToArray());
+            }
+
+            editor.SetInputEnabled(this.PropertyEditors.Contains(editor));
+        }
+    }
 
     private void SetComponentFilter(Type? componentType)
     {

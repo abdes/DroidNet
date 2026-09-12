@@ -248,7 +248,7 @@ public sealed partial class TransformViewModel(
     /// <param name="args">The vector-box edit session event arguments.</param>
     public void BeginEditSession(TransformEditFieldGroup group, VectorBoxEditSessionEventArgs args)
     {
-        if (this.isDisposed || this.selectedItems is null || this.selectedItems.Count == 0)
+        if (this.isDisposed || !this.IsInputEnabled || this.selectedItems is null || this.selectedItems.Count == 0)
         {
             return;
         }
@@ -303,12 +303,25 @@ public sealed partial class TransformViewModel(
     /// <param name="args">The component and validation outcome.</param>
     public void ReportControlValidation(TransformEditFieldGroup group, ValidationEventArgs<float> args)
     {
+        if (!this.IsInputEnabled || this.isApplyingEditorChanges)
+        {
+            return;
+        }
+
         if (args.Target is not Component component)
         {
             return;
         }
 
-        var property = this.TransformPropertyId(ToPropertyName(group, component));
+        var field = ToPropertyName(group, component);
+        if (!this.activeSessions.ContainsKey(field))
+        {
+            // Controls also validate while applying templates and displaying model values.
+            // Only an edit session can replace feedback from an authoring command.
+            return;
+        }
+
+        var property = this.TransformPropertyId(field);
         var ticket = this.diagnostics.Begin([property], commandContextProvider?.Invoke()?.Metadata.ChangeVersion ?? 0);
         var result = args.IsValid ? SceneCommandResult.Success : new SceneCommandResult(Succeeded: false)
         {
@@ -493,7 +506,7 @@ public sealed partial class TransformViewModel(
 
     private void ApplyTransformEdit(string property, TransformEdit edit)
     {
-        if (this.isDisposed || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
+        if (this.isDisposed || !this.IsInputEnabled || this.isApplyingEditorChanges || this.selectedItems is null || commandService is null || commandContextProvider is null)
         {
             return;
         }

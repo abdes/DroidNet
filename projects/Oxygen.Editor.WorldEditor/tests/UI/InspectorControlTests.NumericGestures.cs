@@ -162,7 +162,7 @@ public sealed partial class InspectorControlTests
 
     private sealed partial class Fixture
     {
-        public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false)
+        public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null)
         {
             IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
             this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
@@ -187,7 +187,7 @@ public sealed partial class InspectorControlTests
                 new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) },
                 new ViewModelToView(locator.Object),
                 this.Messenger,
-                this.Commands,
+                commandService ?? this.Commands,
                 this.Documents.Object,
                 default,
                 catalog.Object,
