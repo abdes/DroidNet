@@ -347,10 +347,16 @@ ED-M08; usability and correct state transitions are required in ED-M07B.
 Implement property-inspector section 9.1. Replace the proportional header/list
 allocation with content-sized, bounded component selection and give properties
 the remaining height. Remove the empty list allocation in multi-node mode and
-reduce repetitive header prose, padding, and absent-control space. The component
-selector filters the property sections; no component selected means All components.
+compact the node header actions and absent-control space. Preserve the existing
+property-editor layout and spacing; use full-text tooltips for clipped text.
+The component selector filters the property sections; no component selected means All components.
 Provide a clear, keyboard-accessible reset and consistent behavior across node
 selection changes. Multi-node filters respect existing applicability/mixed values.
+
+The compact selector, All icon, type filtering, removal targets and original
+property layouts are implemented. The packaged UI suite passes 177/177, plus two
+final header-binding cases, at 175% scaling. Validation-message continuity across hidden sections and the remaining
+100%/150%/200% walkthroughs are still open.
 
 Pass: selecting Geometry shows only its editor; selecting Transform switches
 sections; clearing selection/All restores all applicable editors. Two components
