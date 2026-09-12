@@ -123,6 +123,21 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     public void UnmountProjectCookedRoot();
 
+    /// <summary>Refreshes all project cooked roots and the current scene's asset bindings.</summary>
+    /// <param name="paths">The complete set of validated project cooked roots.</param>
+    /// <param name="readLease">Optional read ownership transferred to the native session, including on failure.</param>
+    /// <param name="keepPaused">Whether the publisher will resume rendering after committing metadata.</param>
+    /// <returns>Completion after native loading and current binding replacement settle.</returns>
+    public Task RefreshProjectCookedRootsAsync(IReadOnlyList<string> paths, IDisposable? readLease = null, bool keepPaused = false);
+
+    /// <summary>Suspends preview and releases content readers only after native I/O drains and roots unmount.</summary>
+    /// <returns>The native suspension acknowledgement.</returns>
+    public Task SuspendCookedContentAsync();
+
+    /// <summary>Resumes the current authoring preview after publication or restoration.</summary>
+    /// <returns>The native resume acknowledgement.</returns>
+    public Task ResumeCookedContentAsync();
+
     /// <summary>Initializes the runtime, first completing cleanup of any previous failed instance.</summary>
     /// <param name="cancellationToken">Cancels waiting for another lifecycle operation; native creation is synchronous.</param>
     /// <returns>A task yielding <see langword="true"/> when ready or already running.</returns>

@@ -9,9 +9,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -184,14 +186,24 @@ namespace oxygen::interop::module {
     //! Clears all mounted roots in the virtual path resolver.
     void ClearCookedRoots();
 
+    //! Replace the complete loose-root set as one engine-thread refresh request.
+    void ReplaceCookedRoots(std::vector<std::string> roots,
+      std::function<void(bool, std::string)> complete);
+
+    void SetCookedContentPaused(bool paused,
+      std::function<void(bool, std::string)> complete);
+
   private:
     struct SubscriptionToken;
+
+    auto SynchronizeCookedRootsAsync() -> oxygen::co::Co<bool>;
+    auto ProcessContentPauseAsync(oxygen::engine::FrameContext& frame_context) -> oxygen::co::Co<>;
 
     void UpdateViewRoutingFromInputBatch(ViewId view_id,
       const AccumulatedInput& batch) noexcept;
     void RemovePublishedRuntimeViewForIntent(
       oxygen::ViewId view_id,
-      oxygen::engine::FrameContext* frame_context = nullptr);
+      oxygen::engine::FrameContext* frame_context);
 
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
@@ -217,6 +229,13 @@ namespace oxygen::interop::module {
     // Roots management for thread-safe AssetLoader initialization
     std::mutex roots_mutex_;
     std::vector<std::string> mounted_roots_;
+    std::function<void(bool, std::string)> pending_roots_completion_;
+    std::function<void(bool, std::string)> active_roots_completion_;
+    std::uint64_t roots_revision_ = 0;
+    bool preview_paused_ = false;
+    std::optional<bool> requested_content_pause_;
+    std::function<void(bool, std::string)> content_pause_completion_;
+    std::function<void(bool, std::string)> content_resume_completion_;
     std::atomic<bool> roots_dirty_{ false };
 
     std::chrono::steady_clock::time_point last_frame_time_{};

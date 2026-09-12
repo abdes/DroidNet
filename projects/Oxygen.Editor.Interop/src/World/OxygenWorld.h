@@ -52,6 +52,7 @@ namespace Oxygen::Interop::World {
     System::UInt64 VertexCount;
     System::UInt64 IndexCount;
     array<System::String^>^ MaterialKeys;
+    array<System::Numerics::Vector4>^ MaterialBaseColors;
   };
 
   public
@@ -192,6 +193,8 @@ namespace Oxygen::Interop::World {
     // Asset management
     void AddLooseCookedRoot(String^ path);
     void ClearCookedRoots();
+    System::Threading::Tasks::Task^ ReplaceCookedRootsAsync(array<String^>^ paths);
+    System::Threading::Tasks::Task^ SetCookedContentPausedAsync(bool paused);
 
     // (All APIs are GUID-based; no scene names are accepted)
 

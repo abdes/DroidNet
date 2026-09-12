@@ -127,6 +127,12 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
     /// <inheritdoc/>
     public void ClearCookedRoots() => this.world.ClearCookedRoots();
 
+    /// <inheritdoc />
+    public Task ReplaceCookedRootsAsync(IReadOnlyList<string> paths) => this.world.ReplaceCookedRootsAsync([.. paths]);
+
+    /// <inheritdoc />
+    public Task SetCookedContentPausedAsync(bool paused) => this.world.SetCookedContentPausedAsync(paused);
+
     private void OnAssetLoadFailed(RuntimeWorldRequest request, ulong generation, string message)
         => this.AssetLoadFailed?.Invoke(this, new RuntimeAssetLoadFailedEventArgs(request, generation, message));
 
