@@ -81,7 +81,7 @@ internal static class EngineSettingsExtensions
 
         if (settings.PhysicsBackend.HasValue)
         {
-            config.PhysicsBackend = settings.PhysicsBackend.Value;
+            config.PhysicsBackend = NativeSessionConversions.ToNative<PhysicsBackendManaged>(settings.PhysicsBackend.Value);
         }
 
         if (settings.EnableScriptHotReload.HasValue)
@@ -133,7 +133,7 @@ internal static class EngineSettingsExtensions
     {
         if (settings.Implementation.HasValue)
         {
-            engine.RendererImplementation = settings.Implementation.Value;
+            engine.RendererImplementation = NativeSessionConversions.ToNative<RendererImplementationManaged>(settings.Implementation.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(settings.UploadQueueKey))
@@ -148,12 +148,12 @@ internal static class EngineSettingsExtensions
 
         if (settings.ShadowQualityTier.HasValue)
         {
-            config.ShadowQualityTier = settings.ShadowQualityTier.Value;
+            config.ShadowQualityTier = NativeSessionConversions.ToNative<ShadowQualityTierManaged>(settings.ShadowQualityTier.Value);
         }
 
         if (settings.DirectionalShadowPolicy.HasValue)
         {
-            config.DirectionalShadowPolicy = settings.DirectionalShadowPolicy.Value;
+            config.DirectionalShadowPolicy = NativeSessionConversions.ToNative<DirectionalShadowImplementationPolicyManaged>(settings.DirectionalShadowPolicy.Value);
         }
 
         if (settings.EnableImGui.HasValue)
@@ -236,12 +236,12 @@ internal static class EngineSettingsExtensions
     {
         if (settings.Provider.HasValue)
         {
-            config.Provider = settings.Provider.Value;
+            config.Provider = NativeSessionConversions.ToNative<FrameCaptureProviderManaged>(settings.Provider.Value);
         }
 
         if (settings.InitMode.HasValue)
         {
-            config.InitMode = settings.InitMode.Value;
+            config.InitMode = NativeSessionConversions.ToNative<FrameCaptureInitModeManaged>(settings.InitMode.Value);
         }
 
         if (settings.FromFrame.HasValue)

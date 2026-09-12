@@ -588,6 +588,13 @@ native operations visibly while Project Browser and safe authoring/save remain
 available. The public managed boundary must be loadable without initializing
 interop merely to open the Project Browser.
 
+Settings, `IEngineService`, view IDs/configuration and camera choices use managed
+contracts. `EngineSession` exposes managed operations and ownership facts;
+`NativeEngineSession` owns native config creation, runner/context access and
+conversion. Its factory has a managed signature and cannot be inlined into
+service construction. Omitted view options retain native defaults, and enum
+conversion preserves named meanings at the native boundary.
+
 `Oxygen.Managed.Core.Compatibility` verifies the fixed manifest against the
 host's independently resolved required inventory. Verification checks exact
 configuration, file hashes/sizes and schema identifiers, then returns an owned

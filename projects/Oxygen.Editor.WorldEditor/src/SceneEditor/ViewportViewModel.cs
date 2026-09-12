@@ -18,7 +18,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
-using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LevelEditor;
@@ -152,7 +151,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
     [NotifyPropertyChangedFor(nameof(CameraControlModeLabel))]
-    public partial CameraControlModeManaged CameraControlMode { get; set; } = CameraControlModeManaged.OrbitTurntable;
+    public partial CameraControlMode CameraControlMode { get; set; } = CameraControlMode.OrbitTurntable;
 
     [ObservableProperty]
     public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
@@ -180,7 +179,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// teardown. Managed and owned by the UI layer — engine surface/lease code is
     /// unaffected by this property.
     /// </summary>
-    public ViewIdManaged AssignedViewId { get; set; } = ViewIdManaged.Invalid;
+    public RuntimeViewId AssignedViewId { get; set; } = RuntimeViewId.Invalid;
 
     /// <summary>Gets or sets the input target captured for this view creation.</summary>
     public RuntimeViewTarget? AssignedInputTarget { get; set; }
@@ -215,9 +214,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public string CameraControlModeLabel => this.CameraControlMode switch
     {
-        CameraControlModeManaged.OrbitTurntable => "Turntable",
-        CameraControlModeManaged.OrbitTrackball => "Trackball",
-        CameraControlModeManaged.Fly => "Fly",
+        CameraControlMode.OrbitTurntable => "Turntable",
+        CameraControlMode.OrbitTrackball => "Trackball",
+        CameraControlMode.Fly => "Fly",
         _ => "Camera",
     };
 
@@ -270,7 +269,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     // Background clear color used when creating a matching engine view. Exposed
     // from the view-model so each viewport can choose its own diagnostic tint.
     [ObservableProperty]
-    public partial ColorManaged ClearColor { get; set; } = new ColorManaged(0.1f, 0.12f, 0.15f, 1.0f);
+    public partial RuntimeColor ClearColor { get; set; } = new RuntimeColor(0.1f, 0.12f, 0.15f, 1.0f);
 
     /// <summary>
     /// Gets the menu source for the Layout menu. Built lazily on first access.
@@ -593,12 +592,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private void AddPerspectiveCameraItems(MenuBuilder builder)
         => _ = builder
             .AddSeparator("Perspective")
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Turntable", CameraControlModeManaged.OrbitTurntable))
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Trackball", CameraControlModeManaged.OrbitTrackball))
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Fly", CameraControlModeManaged.Fly))
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Turntable", CameraControlMode.OrbitTurntable))
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Trackball", CameraControlMode.OrbitTrackball))
+            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Fly", CameraControlMode.Fly))
             .AddMenuItem(this.CreateCameraNumberBoxMenuItem(MovementSpeedText, this.movementSpeedItem));
 
-    private MenuItemData CreatePerspectiveCameraModeItem(string text, CameraControlModeManaged mode)
+    private MenuItemData CreatePerspectiveCameraModeItem(string text, CameraControlMode mode)
         => new()
         {
             Text = text,
@@ -607,7 +606,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             Command = new RelayCommand(() => _ = this.ApplyPerspectiveCameraModeAsync(mode)),
         };
 
-    private async Task ApplyPerspectiveCameraModeAsync(CameraControlModeManaged mode)
+    private async Task ApplyPerspectiveCameraModeAsync(CameraControlMode mode)
     {
         await this.ApplyCameraPresetAsync(CameraType.Perspective).ConfigureAwait(true);
         await this.ApplyCameraControlModeAsync(mode).ConfigureAwait(true);
@@ -615,9 +614,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task ApplyOrthographicCameraPresetAsync(CameraType type)
     {
-        if (this.CameraControlMode == CameraControlModeManaged.Fly)
+        if (this.CameraControlMode == CameraControlMode.Fly)
         {
-            await this.ApplyCameraControlModeAsync(CameraControlModeManaged.OrbitTurntable).ConfigureAwait(true);
+            await this.ApplyCameraControlModeAsync(CameraControlMode.OrbitTurntable).ConfigureAwait(true);
         }
 
         await this.ApplyCameraPresetAsync(type).ConfigureAwait(true);
@@ -636,14 +635,14 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
         var preset = type switch
         {
-            CameraType.Perspective => CameraViewPresetManaged.Perspective,
-            CameraType.Top => CameraViewPresetManaged.Top,
-            CameraType.Bottom => CameraViewPresetManaged.Bottom,
-            CameraType.Left => CameraViewPresetManaged.Left,
-            CameraType.Right => CameraViewPresetManaged.Right,
-            CameraType.Front => CameraViewPresetManaged.Front,
-            CameraType.Back => CameraViewPresetManaged.Back,
-            _ => CameraViewPresetManaged.Perspective,
+            CameraType.Perspective => CameraViewPreset.Perspective,
+            CameraType.Top => CameraViewPreset.Top,
+            CameraType.Bottom => CameraViewPreset.Bottom,
+            CameraType.Left => CameraViewPreset.Left,
+            CameraType.Right => CameraViewPreset.Right,
+            CameraType.Front => CameraViewPreset.Front,
+            CameraType.Back => CameraViewPreset.Back,
+            _ => CameraViewPreset.Perspective,
         };
 
         try
@@ -671,7 +670,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task ApplyCameraControlModeAsync(CameraControlModeManaged mode)
+    private async Task ApplyCameraControlModeAsync(CameraControlMode mode)
     {
         this.CameraControlMode = mode;
         this.cameraMenu = this.BuildCameraMenu();

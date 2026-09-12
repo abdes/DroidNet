@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -213,12 +212,12 @@ public interface IEngineService : IAsyncDisposable
     // -- View Management --
 
     /// <summary>
-    ///     Create an Editor view in the native engine using the supplied <see cref="ViewConfigManaged"/>.
+    ///     Create an Editor view in the native engine using the supplied <see cref="RuntimeViewConfig"/>.
     /// </summary>
     /// <param name="config">Configuration used to create the view.</param>
     /// <returns>
-    ///     A <see cref="Task{ViewIdManaged}"/> that completes with the engine-assigned view id on
-    ///     success, or <see cref="ViewIdManaged.Invalid"/> on failure.
+    ///     A <see cref="Task{RuntimeViewId}"/> that completes with the engine-assigned view id on
+    ///     success, or <see cref="RuntimeViewId.Invalid"/> on failure.
     /// </returns>
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     /// <remarks>
@@ -228,7 +227,7 @@ public interface IEngineService : IAsyncDisposable
     ///     </list>
     ///     Using it in any other state throws an exception.
     /// </remarks>
-    public Task<ViewIdManaged> CreateViewAsync(ViewConfigManaged config);
+    public Task<RuntimeViewId> CreateViewAsync(RuntimeViewConfig config);
 
     /// <summary>
     /// Destroy a previously created engine view. Returns true if the destroy
@@ -247,7 +246,7 @@ public interface IEngineService : IAsyncDisposable
     ///     </list>
     ///     Using it in any other state throws an exception.
     /// </remarks>
-    public Task<bool> DestroyViewAsync(ViewIdManaged viewId);
+    public Task<bool> DestroyViewAsync(RuntimeViewId viewId);
 
     /// <summary>
     /// Make an existing view visible (resume rendering). Returns true if the
@@ -266,7 +265,7 @@ public interface IEngineService : IAsyncDisposable
     ///     </list>
     ///     Using it in any other state throws an exception.
     /// </remarks>
-    public Task<bool> ShowViewAsync(ViewIdManaged viewId);
+    public Task<bool> ShowViewAsync(RuntimeViewId viewId);
 
     /// <summary>
     /// Hide an existing view (pause rendering while retaining resources).
@@ -285,7 +284,7 @@ public interface IEngineService : IAsyncDisposable
     ///     </list>
     ///     Using it in any other state throws an exception.
     /// </remarks>
-    public Task<bool> HideViewAsync(ViewIdManaged viewId);
+    public Task<bool> HideViewAsync(RuntimeViewId viewId);
 
     /// <summary>
     /// Set the camera view preset for an existing view (Perspective/Top/etc).
@@ -296,7 +295,7 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset);
+    public Task<bool> SetViewCameraPresetAsync(RuntimeViewId viewId, CameraViewPreset preset);
 
     /// <summary>
     /// Set the editor camera navigation mode for an existing view.
@@ -307,7 +306,7 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewCameraControlModeAsync(ViewIdManaged viewId, CameraControlModeManaged mode);
+    public Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode);
 
     /// <summary>
     /// Set the editor camera fly movement speed for an existing view.
@@ -318,7 +317,7 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewCameraMovementSpeedAsync(ViewIdManaged viewId, float speedUnitsPerSecond);
+    public Task<bool> SetViewCameraMovementSpeedAsync(RuntimeViewId viewId, float speedUnitsPerSecond);
 
     /// <summary>
     /// Set the editor camera lens and clipping settings for an existing view.
@@ -331,5 +330,5 @@ public interface IEngineService : IAsyncDisposable
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewCameraSettingsAsync(ViewIdManaged viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
+    public Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 }

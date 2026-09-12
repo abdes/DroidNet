@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Interop;
-
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
@@ -44,7 +42,7 @@ public sealed class EngineCoreSettings
     /// <summary>
     ///     Gets or sets the requested physics backend.
     /// </summary>
-    public PhysicsBackendManaged? PhysicsBackend { get; set; }
+    public PhysicsBackend? PhysicsBackend { get; set; }
 
     /// <summary>
     ///     Gets or sets a value indicating whether script hot reload is enabled.

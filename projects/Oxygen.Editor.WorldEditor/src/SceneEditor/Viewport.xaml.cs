@@ -18,7 +18,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Interop;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.System;
 using Windows.UI.Core;
@@ -1078,7 +1077,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 // Compute a reasonable initial pixel size for the view
                 _ = this.TryGetSwapChainPixelSize(out var pixelW, out var pixelH);
 
-                var cfg = new ViewConfigManaged
+                var cfg = new RuntimeViewConfig
                 {
                     Name = requestTag,
                     Purpose = "Viewport",
@@ -1159,7 +1158,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         "The runtime rejected the engine view teardown request for this viewport.");
                 }
 
-                vm.AssignedViewId = ViewIdManaged.Invalid;
+                vm.AssignedViewId = RuntimeViewId.Invalid;
                 vm.AssignedInputTarget = null;
                 this.LogViewDestroyed(vm.ViewportId);
             }
@@ -1176,7 +1175,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             }
             finally
             {
-                vm.AssignedViewId = ViewIdManaged.Invalid;
+                vm.AssignedViewId = RuntimeViewId.Invalid;
                 vm.AssignedInputTarget = null;
             }
         }

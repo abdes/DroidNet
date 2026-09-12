@@ -13,18 +13,12 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Retains each native owner until its deterministic destruction succeeds.</summary>
 /// <param name="hostingContext">The owning UI dispatcher, which must remain alive through native cleanup.</param>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The service invokes explicit destruction stages independently and retains failed ownership for retry.")]
-internal sealed class NativeEngineSession(HostingContext hostingContext) : EngineSession
+internal sealed partial class NativeEngineSession(HostingContext hostingContext) : EngineSession
 {
     private EngineRunner? runner;
     private EngineContext? context;
     private IRuntimeCommandTransport commands = null!;
     private Task? startup;
-
-    /// <inheritdoc/>
-    public override EngineRunner Runner => this.runner ?? throw new InvalidOperationException("Engine runner is unavailable.");
-
-    /// <inheritdoc/>
-    public override EngineContext? Context => this.context;
 
     /// <inheritdoc/>
     public override IRuntimeCommandTransport Commands => this.commands;
@@ -35,9 +29,13 @@ internal sealed class NativeEngineSession(HostingContext hostingContext) : Engin
     /// <inheritdoc/>
     public override bool HasContext => this.context is not null;
 
+    /// <summary>Gets the initialized native runner.</summary>
+    private EngineRunner Runner => this.runner ?? throw new InvalidOperationException("Engine runner is unavailable.");
+
     /// <inheritdoc/>
-    public override void Initialize(EditorEngineConfigManaged config, ILogger? logger)
+    public override void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger)
     {
+        var config = CreateConfig(settings, editorCVarsArchivePath);
         this.runner = new EngineRunner();
         if (logger is not null)
         {

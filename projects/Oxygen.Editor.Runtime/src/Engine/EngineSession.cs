@@ -4,18 +4,20 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>The native ownership boundary used by the service lifecycle.</summary>
 internal abstract class EngineSession
 {
-    /// <summary>Gets the native runner for normal runtime operations.</summary>
-    public abstract EngineRunner Runner { get; }
+    /// <summary>Gets or sets native logging verbosity.</summary>
+    public abstract int LoggingVerbosity { get; set; }
 
-    /// <summary>Gets the context still owned by this session.</summary>
-    public abstract EngineContext? Context { get; }
+    /// <summary>Gets the native maximum target frame rate.</summary>
+    public abstract uint MaxTargetFps { get; }
+
+    /// <summary>Gets or sets the native target frame rate.</summary>
+    public abstract uint TargetFps { get; set; }
 
     /// <summary>Gets the internal runtime command transport for the owned context.</summary>
     public abstract IRuntimeCommandTransport Commands { get; }
@@ -27,9 +29,10 @@ internal abstract class EngineSession
     public abstract bool HasContext { get; }
 
     /// <summary>Initializes native ownership; partially created resources remain owned on failure.</summary>
-    /// <param name="config">The startup configuration.</param>
+    /// <param name="settings">The managed startup settings.</param>
+    /// <param name="editorCVarsArchivePath">The editor configuration archive path.</param>
     /// <param name="logger">The optional native logger.</param>
-    public abstract void Initialize(EditorEngineConfigManaged config, ILogger? logger);
+    public abstract void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger);
 
     /// <summary>Starts the loop and returns its lifetime task.</summary>
     /// <returns>The operation completion task.</returns>
@@ -63,6 +66,52 @@ internal abstract class EngineSession
     /// <param name="height">The height in pixels.</param>
     /// <returns>The operation completion task.</returns>
     public abstract Task<bool> ResizeSurfaceAsync(Guid viewportId, uint width, uint height);
+
+    /// <summary>Creates a runtime view.</summary>
+    /// <param name="config">The config value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<RuntimeViewId> CreateViewAsync(RuntimeViewConfig config);
+
+    /// <summary>Destroys a runtime view.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> DestroyViewAsync(RuntimeViewId viewId);
+
+    /// <summary>Shows a runtime view.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> ShowViewAsync(RuntimeViewId viewId);
+
+    /// <summary>Hides a runtime view.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> HideViewAsync(RuntimeViewId viewId);
+
+    /// <summary>Sets the editor camera preset.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <param name="preset">The preset value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewCameraPresetAsync(RuntimeViewId viewId, CameraViewPreset preset);
+
+    /// <summary>Sets the editor camera navigation mode.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <param name="mode">The mode value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode);
+
+    /// <summary>Sets the editor camera movement speed.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <param name="speedUnitsPerSecond">The speedUnitsPerSecond value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewCameraMovementSpeedAsync(RuntimeViewId viewId, float speedUnitsPerSecond);
+
+    /// <summary>Sets the editor camera lens and clipping planes.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <param name="fieldOfViewDegrees">The fieldOfViewDegrees value.</param>
+    /// <param name="nearPlane">The nearPlane value.</param>
+    /// <param name="farPlane">The farPlane value.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 
     /// <summary>Releases context ownership after loop termination.</summary>
     public abstract void DestroyContext();
