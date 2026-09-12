@@ -186,6 +186,10 @@ namespace Oxygen::Interop {
       float compositionScale)
       -> System::Threading::Tasks::Task<bool>^
       ;
+    /// <summary>Releases the panel's swap-chain references on its owning UI thread.</summary>
+    /// <param name="panel">The panel's IUnknown pointer, borrowed for this call.</param>
+    void DetachSwapChainPanel(System::IntPtr panel);
+
     auto TryUnregisterSurfaceAsync(System::Guid viewportId)
       -> System::Threading::Tasks::Task<bool>^
       ;

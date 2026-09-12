@@ -114,6 +114,21 @@ namespace Oxygen::Interop {
     float composition_scale_;
   };
 
+  void EngineRunner::DetachSwapChainPanel(IntPtr panel) {
+    ui_dispatcher_->VerifyAccess("Swap-chain detachment requires the UI thread.");
+    if (panel == IntPtr::Zero) {
+      throw gcnew ArgumentException("The panel pointer must not be zero.", "panel");
+    }
+    auto* unknown = reinterpret_cast<IUnknown*>(panel.ToPointer());
+    ISwapChainPanelNative* native = nullptr;
+    auto hr = unknown->QueryInterface(__uuidof(ISwapChainPanelNative),
+      reinterpret_cast<void**>(&native));
+    System::Runtime::InteropServices::Marshal::ThrowExceptionForHR(hr);
+    hr = native->SetSwapChain(nullptr);
+    native->Release();
+    System::Runtime::InteropServices::Marshal::ThrowExceptionForHR(hr);
+  }
+
   auto EngineRunner::TryUnregisterSurfaceAsync(System::Guid viewportId)
     -> Task<bool>^
   {
@@ -543,9 +558,10 @@ namespace Oxygen::Interop {
     }
 
     try {
-      ui_dispatcher_->Post(
-        gcnew SendOrPostCallback(this, &EngineRunner::AttachSwapChainCallback),
-        state);
+      // Registration already requires this UI thread. Complete attachment now
+      // so it cannot run after the caller has unregistered the surface.
+      ui_dispatcher_->VerifyAccess("Swap-chain attachment requires the UI thread.");
+      AttachSwapChainCallback(state);
     }
     catch (...) {
       panelUnknown->Release();
