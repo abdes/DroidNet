@@ -979,6 +979,12 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   AssertSourceKeyConsistency("AddLooseCookedRoot.mount");
 }
 
+auto AssetLoader::WaitForPendingLoadsAsync() -> co::Co<>
+{
+  AssertOwningThread();
+  co_await in_flight_ops_->WaitUntilEmpty();
+}
+
 auto AssetLoader::ClearMounts() -> void
 {
   LOG_F(INFO, "AssetLoader::ClearMounts thread={} owner={}",

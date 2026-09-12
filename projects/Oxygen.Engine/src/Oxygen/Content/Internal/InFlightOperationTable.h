@@ -14,6 +14,7 @@
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/Shared.h>
 
 namespace oxygen::content::internal {
@@ -40,6 +41,7 @@ public:
   {
     ++stats_.clear_calls;
     table_.clear();
+    idle_.UnParkAll();
   }
   auto Find(TypeId type_id, uint64_t hash_key, const RequestMeta& request)
     -> std::optional<SharedVoidOp>
@@ -91,6 +93,17 @@ public:
     if (type_it->second.empty()) {
       table_.erase(type_it);
     }
+    if (table_.empty()) {
+      idle_.UnParkAll();
+    }
+  }
+
+  //! Wait for registered operations, including dependencies they register.
+  auto WaitUntilEmpty() -> co::Co<>
+  {
+    while (!table_.empty()) {
+      co_await idle_.Park();
+    }
   }
   [[nodiscard]] auto GetStats() const -> Stats
   {
@@ -132,6 +145,7 @@ private:
   }
   std::unordered_map<TypeId, std::unordered_map<uint64_t, Entry>> table_;
   Stats stats_ {};
+  co::ParkingLot idle_;
 };
 
 } // namespace oxygen::content::internal
