@@ -1,0 +1,85 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using AwesomeAssertions;
+using CommunityToolkit.WinUI;
+using DroidNet.Tests;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Controls.ToolBars.Tests;
+
+/// <summary>Verifies that overflow uses only the space required by the visible toolbar.</summary>
+[TestClass]
+[TestCategory("UITest")]
+public sealed class ToolBarOverflowTests : VisualUserInterfaceTests
+{
+    /// <summary>A compact icon in an Auto column stays visible beside a selection summary.</summary>
+    /// <returns>The asynchronous toolbar layout regression.</returns>
+    [TestMethod]
+    public Task AutoSizedIconToolbarKeepsItsOnlyButtonVisible() => EnqueueAsync(async () =>
+    {
+        var grid = new Grid { Width = 400 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.Children.Add(new TextBlock { Text = "2 objects" });
+        var toolbar = new ToolBar { IsCompact = true };
+        var all = new ToolBarToggleButton { Label = "All components", ToolBarLabelPosition = ToolBarLabelPosition.Collapsed, Icon = new SymbolIconSource { Symbol = Symbol.AllApps } };
+        toolbar.PrimaryItems.Add(all);
+        Grid.SetColumn(toolbar, 1);
+        grid.Children.Add(toolbar);
+        await LoadTestContentAsync(grid).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
+        var items = GetPartOrFail<ItemsControl>(toolbar, ToolBar.PrimaryItemsControlPartName);
+        _ = ((FrameworkElement)items.ContainerFromIndex(0)).Visibility.Should().Be(Visibility.Visible);
+        _ = all.ActualWidth.Should().BePositive();
+    });
+
+    /// <summary>When both groups fit exactly, neither requires an overflow menu.</summary>
+    /// <returns>The asynchronous width regression.</returns>
+    [TestMethod]
+    public Task PrimaryAndSecondaryItemsUseAvailableSpaceBeforeOverflow() => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 300, Padding = new Thickness(0) };
+        toolbar.PrimaryItems.Add(new ToolBarButton { Label = "One", Width = 50 });
+        toolbar.SecondaryItems.Add(new ToolBarButton { Label = "Two", Width = 50 });
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var primary = GetPartOrFail<ItemsControl>(toolbar, ToolBar.PrimaryItemsControlPartName);
+        var secondary = GetPartOrFail<ItemsControl>(toolbar, ToolBar.SecondaryItemsControlPartName);
+        var scale = toolbar.XamlRoot.RasterizationScale;
+        toolbar.Width = Math.Ceiling((primary.DesiredSize.Width + secondary.DesiredSize.Width) * scale) / scale;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
+        _ = secondary.Visibility.Should().Be(Visibility.Visible);
+    });
+
+    /// <summary>Real overflow clears when the toolbar receives sufficient width again.</summary>
+    /// <returns>The asynchronous resize regression.</returns>
+    [TestMethod]
+    public Task WideningToolbarRestoresOverflowedItems() => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 60, Padding = new Thickness(0) };
+        toolbar.PrimaryItems.Add(new ToolBarButton { Label = "One", Width = 50 });
+        toolbar.PrimaryItems.Add(new ToolBarButton { Label = "Two", Width = 50 });
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Visible);
+        toolbar.Width = 160;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
+        var items = GetPartOrFail<ItemsControl>(toolbar, ToolBar.PrimaryItemsControlPartName);
+        _ = ((FrameworkElement)items.ContainerFromIndex(0)).Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)items.ContainerFromIndex(1)).Visibility.Should().Be(Visibility.Visible);
+    });
+
+    private static T GetPartOrFail<T>(ToolBar toolbar, string name)
+        where T : FrameworkElement
+    {
+        var part = toolbar.FindDescendant<T>(element => string.Equals(element.Name, name, StringComparison.Ordinal));
+        _ = part.Should().NotBeNull();
+        return part!;
+    }
+}

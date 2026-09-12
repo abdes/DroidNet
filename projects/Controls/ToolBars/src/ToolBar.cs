@@ -422,7 +422,7 @@ public partial class ToolBar : Control
         Debug.Assert(this.rootGrid != null, "root grid should not be null when measuring toolbar components.");
         Debug.Assert(this.overflowButton != null, "overflow button should not be null when measuring toolbar components.");
 
-        // Overlay button: always subtract its width from available space
+        // The overflow button is only needed if the complete toolbar does not fit.
         var totalWidth = this.rootGrid.ActualWidth;
 
         // Start with an empty measurements record and let helper methods populate it.
@@ -524,8 +524,8 @@ public partial class ToolBar : Control
         var pad = this.rootGrid.Padding;
         var padding = pad.Left + pad.Right;
 
-        // Overlay button: always subtract its width from total available width
-        var availableWithSecondaries = measurements.Total - measurements.Secondary - measurements.OverflowButton - padding;
+        // Try the complete toolbar before reserving space for an overflow button.
+        var availableWithSecondaries = measurements.Total - measurements.Secondary - padding;
         var hasOverflowWithSecondaries = measurements.PrimaryTotal > availableWithSecondaries;
 
         if (!hasOverflowWithSecondaries)
