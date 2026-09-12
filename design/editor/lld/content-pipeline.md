@@ -786,6 +786,11 @@ The transaction is a required ED-M07B contract, not a claim of current code.
    file handles. UI and authoring remain responsive. A standalone validation
    reader holds a project-output lease; publication waits for its exit or reports
    busy, without terminating another process or writing through its lease.
+   A registration gate and OS-held reader markers under `.build/cook/readers`
+   coordinate processes. The publisher holds the gate through replacement and
+   registers the resumed runtime's reader before releasing it. A marker is
+   reclaimable only after its file can be opened exclusively; a recorded PID or
+   an exit signal alone does not establish released file ownership.
 3. Retain previous roots under the same operation's `previous/<Mount>` directory,
    then install validated staging roots at the fixed `.cooked/<Mount>` locations.
    Same-volume directory renames and a journal protect replacement; all affected

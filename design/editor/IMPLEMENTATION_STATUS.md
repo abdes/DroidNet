@@ -546,7 +546,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;
-      the publication transaction and snapshot integration remain unwired.
+      private-root seeding now preserves unrelated bytes/timestamps and records
+      complete root identities. Output leases exclude competing publishers and
+      live readers, with atomic runtime-reader handoff and exited-reader cleanup.
+      Staging/lease/worker regressions pass 33/33. Journaled replacement/recovery
+      and integration with the live pipeline/runtime remain open.
 - [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
       The normal Interop build now records its native SDK in assembly metadata.
