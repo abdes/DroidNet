@@ -781,6 +781,10 @@ The transaction is a required ED-M07B contract, not a claim of current code.
    durable transaction journal at `.build/cook/<OperationId>/publication.json`.
    Use explicit states Prepared, OldRetained, RootsInstalled, RuntimeReady,
    Committed, and RolledBack. Each filesystem step is recoverable from the journal.
+   The journal retains prior and proposed bytes for both `.cooked/publication.json`
+   and `.build/cook/provenance.json`, so a failed generation cannot leave its
+   product cache ahead of the restored roots. Recovery resolves mount names within
+   the owning project rather than trusting paths stored in the journal.
 2. Announce `Publishing cooked content` and suspend preview at a runtime boundary.
    The runtime drains requests/reads using affected roots and releases conflicting
    file handles. UI and authoring remain responsive. A standalone validation
