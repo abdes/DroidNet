@@ -7,11 +7,14 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
+/// <summary>Checks concise operation feedback in the content browser.</summary>
 [TestClass]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class AssetsViewModelOperationResultTests
 {
+    /// <summary>The summary uses the actionable diagnostic and leaves technical output in diagnostics.</summary>
     [TestMethod]
-    public void BuildOperationMessage_WhenDiagnosticHasTechnicalDetails_ShouldExposeDetails()
+    public void OperationSummaryUsesActionableMessageInsteadOfStackTrace()
     {
         var message = AssetsViewModel.BuildOperationMessage(
             "Cook failed for the active project.",
@@ -22,12 +25,11 @@ public sealed class AssetsViewModelOperationResultTests
                     Domain = FailureDomain.AssetImport,
                     Severity = DiagnosticSeverity.Error,
                     Code = AssetImportDiagnosticCodes.ImportFailed,
-                    Message = "Native content import failed.",
-                    TechnicalMessage = "Material descriptor validation failed: alpha_mode is invalid.",
+                    Message = "Material 'Paint' has an invalid alpha mode.",
+                    TechnicalMessage = "System.InvalidOperationException: Invalid alpha mode.\n   at NativeImport()",
                 },
             ]);
 
-        _ = message.Should().Contain("Cook failed for the active project.");
-        _ = message.Should().Contain("Material descriptor validation failed");
+        _ = message.Should().Be("Cook failed for the active project. Material 'Paint' has an invalid alpha mode.");
     }
 }
