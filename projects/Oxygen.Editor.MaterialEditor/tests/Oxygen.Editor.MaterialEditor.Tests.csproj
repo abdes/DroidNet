@@ -9,6 +9,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
+        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryArtifactQualification.cs" Link="TemporaryArtifactQualification.cs" />
+        <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
     </ItemGroup>
 
 </Project>

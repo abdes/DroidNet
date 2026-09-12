@@ -5,6 +5,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;
@@ -125,6 +126,77 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.InputsAreCurrent.Should().BeFalse();
         _ = state.IsDirty.Should().BeTrue();
         _ = state.Revision.Should().Be(2);
+    }
+
+    /// <summary>The material facade keeps the shared captured operation and its later-change status.</summary>
+    /// <returns>The asynchronous material pipeline test.</returns>
+    [TestMethod]
+    public async Task MaterialHelperPreservesSharedSnapshotAndStaleOutcome()
+    {
+        using var workspace = new TempWorkspace();
+        const string source = "Content/Materials/Red.omat.json";
+        workspace.WriteMaterial(source, "Red");
+        var state = SavedState(Path.Combine(workspace.Root, source));
+        using var registration = workspace.Documents.Register(state.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
+        var inspection = SucceededInspection(workspace) with { Assets = [new("/Content/Materials/Red.omat", ContentCookAssetKind.Material)] };
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), inspection)
+        {
+            BeforeImport = (_, _) =>
+            {
+                state = state with { Revision = 2, IsDirty = true };
+                return Task.CompletedTask;
+            },
+        };
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
+
+        var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(MaterialCookState.Stale);
+        _ = result.Cook!.InputSnapshot.Should().NotBeNull();
+        _ = result.Cook.InputsAreCurrent.Should().BeFalse();
+        _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
+        _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
+        _ = state.IsDirty.Should().BeTrue();
+    }
+
+    /// <summary>An origin mismatch is rechecked after the request obtains the shared writer.</summary>
+    /// <returns>The asynchronous project-scope test.</returns>
+    [TestMethod]
+    public async Task AssetRequestCannotRunAgainstADifferentOriginatingProject()
+    {
+        using var workspace = new TempWorkspace();
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        var api = CreateSuccessfulApi(workspace);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var origin = workspace.ProjectContext with { ProjectId = Guid.NewGuid() };
+        var result = await service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken, origin).ConfigureAwait(false);
+        _ = result.Status.Should().Be(OperationStatus.Failed);
+        _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("originating project", StringComparison.Ordinal));
+        _ = api.ImportedManifest.Should().BeNull();
+    }
+
+    /// <summary>Worker startup failures become correlated results for the material command.</summary>
+    /// <returns>The asynchronous failure test.</returns>
+    [TestMethod]
+    public async Task MaterialWorkerStartupFailureReturnsTheSharedFailedOperation()
+    {
+        using var workspace = new TempWorkspace();
+        const string source = "Content/Materials/Red.omat.json";
+        workspace.WriteMaterial(source, "Red");
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
+        {
+            BeforeImport = (_, _) => Task.FromException(new System.ComponentModel.Win32Exception(2)),
+        };
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
+
+        var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(MaterialCookState.Failed);
+        _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
+        _ = result.Cook!.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.ExceptionType == typeof(System.ComponentModel.Win32Exception).FullName);
+        _ = workspace.CookCoordinator.Runs.Single().State.Should().Be(Cooking.CookRunState.Failed);
     }
 
     /// <summary>New folder assets make the completed captured scope visibly out of date.</summary>
