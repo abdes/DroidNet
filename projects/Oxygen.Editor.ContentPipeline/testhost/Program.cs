@@ -39,6 +39,11 @@ internal static class Program
             return int.Parse(args[1], CultureInfo.InvariantCulture);
         }
 
+        if (string.Equals(args[0], "hold-file", StringComparison.Ordinal))
+        {
+            return await HoldFileAsync(args[1]).ConfigureAwait(false);
+        }
+
         var root = args[1];
         var name = args.Length > 2 ? args[2] : "root";
         if (args[0] is "tree" or "orphan")
@@ -67,5 +72,15 @@ internal static class Program
             await Console.Error.WriteLineAsync(name).ConfigureAwait(false);
             await Task.Delay(10).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<int> HoldFileAsync(string path)
+    {
+        var held = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        await using var lifetime = held.ConfigureAwait(false);
+        await Console.Out.WriteLineAsync("ready").ConfigureAwait(false);
+        await Console.Out.FlushAsync().ConfigureAwait(false);
+        _ = await Console.In.ReadLineAsync().ConfigureAwait(false);
+        return 0;
     }
 }

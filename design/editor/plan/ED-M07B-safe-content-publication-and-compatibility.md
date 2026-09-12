@@ -122,6 +122,12 @@ coalesce to the latest saved revision; cancelled/failed work does not self-retry
 
 ### 07B.2 - Staging, Preview Pause, Publication And Recovery
 
+Private-root seeding and cross-process output leases are implemented. Tests cover
+preserved unrelated bytes/timestamps, failed seeding, competing readers/writers,
+runtime-reader handoff, and external reader exit/termination. The combined
+staging/lease/worker suite passes 33/33. Journaled replacement/recovery and live
+pipeline/runtime integration remain open.
+
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable
 journal/backups, preview pause/read drain, all-affected-root replacement, remount,
