@@ -20,5 +20,6 @@ using namespace System::Security::Permissions;
 [assembly:AssemblyCultureAttribute(L"")];
 
 [assembly:AssemblyVersionAttribute(L"1.0.0.0")];
+[assembly:AssemblyMetadataAttribute(L"Oxygen.NativeSdk", OXYGEN_NATIVE_SDK_RECEIPT)];
 
 [assembly:ComVisible(false)];
