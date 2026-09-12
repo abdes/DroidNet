@@ -28,7 +28,11 @@ public sealed partial class InspectorControlTests
         var view = CreateNumericView(model);
         var scroller = new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
-        var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
+        var number = (NumberBox)await FindInspectorControlAsync(
+            scroller,
+            () => view.FindDescendant<NumberBox>(element => Equals(element.Tag, field)),
+            field,
+            this.TestContext.CancellationToken).ConfigureAwait(true);
         var valueText = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, "PartValueTextBlock", StringComparison.Ordinal))!;
         var original = number.NumberValue;
         await PointerInput.WaitForTargetAsync(valueText, this.TestContext.CancellationToken).ConfigureAwait(true);

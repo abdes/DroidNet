@@ -33,7 +33,8 @@ public sealed partial class InspectorControlTests
                     if (label is { IsLoaded: true })
                     {
                         var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        if (VisualTreeHelper.FindElementsInHostCoordinates(center, scroller).Contains(label))
+                        var hostCenter = label.TransformToVisual(scroller.XamlRoot.Content).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
+                        if (VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
                         {
                             stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
                             previous = number;
