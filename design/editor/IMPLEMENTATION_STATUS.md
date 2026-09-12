@@ -591,6 +591,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
+      Compact type selection, the All icon, original property rows, full-text
+      tooltips and consistent icons are implemented. Packaged UI 177/177 and the
+      two final header-binding cases pass at 175% scaling. Hidden-section diagnostic continuity and remaining scaling
+      walkthroughs are open.
 - [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
       19 new worker/manifest cases pass; ContentPipeline is 64/64. Source/test
       diagnostic collection and cleanup passed for changed files. Evidence:

@@ -527,12 +527,16 @@ the affected component entry. A filter change itself does not dirty the document
 create undo history, synchronize values, or request a cook.
 
 Use friendly type labels such as Transform, Geometry, Camera, and Directional
-Light. Keep the node summary, component actions, and filter compact. Reduce
-repeated header/description blocks and padding; put explanatory prose in
-expandable help while leaving field labels, units, mixed values, and actionable
-diagnostics readable. No blank row is reserved for absent controls. Primary
-geometry/material controls must fit supported widths without horizontal clipping.
-Preserve keyboard target sizes, focus visibility, and the existing theme tokens.
+Light. Component rows use fixed type names, replacing component-instance renaming
+in this selector (accepted 2026-09-13). All components uses an icon-only compact
+toolbar toggle with the tooltip "Show all component properties". It precedes a
+thin separator and the single-node Add/Remove actions; multi-selection shows the
+All toggle without a separator or unavailable editing actions.
+Keep the node summary, component actions, and filter compact. Property editors
+retain their existing side-by-side label/value layout, spacing and inline
+descriptions. Clipping at constrained widths is allowed; tooltips expose the
+full text. Do not reflow property names onto separate rows or add description
+flyouts. Preserve keyboard target sizes, focus visibility and existing theme tokens.
 
 Validation covers single-node and multi-node selections with two/four components,
 common and non-common types, All -> Geometry -> Transform -> All, deselection,
