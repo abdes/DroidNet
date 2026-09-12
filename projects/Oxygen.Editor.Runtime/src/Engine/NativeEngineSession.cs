@@ -7,13 +7,15 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
+using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Retains each native owner until its deterministic destruction succeeds.</summary>
 /// <param name="hostingContext">The owning UI dispatcher, which must remain alive through native cleanup.</param>
+/// <param name="artifacts">Verified files retained until all native ownership is released.</param>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The service invokes explicit destruction stages independently and retains failed ownership for retry.")]
-internal sealed partial class NativeEngineSession(HostingContext hostingContext) : EngineSession
+internal sealed partial class NativeEngineSession(HostingContext hostingContext, QualifiedArtifactLease artifacts) : EngineSession
 {
     private EngineRunner? runner;
     private EngineContext? context;
@@ -117,6 +119,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext)
         this.context?.Dispose();
         this.context = null;
         this.commands = null!;
+        this.ReleaseArtifactsIfDestroyed();
     }
 
     /// <inheritdoc/>
@@ -129,6 +132,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext)
 
         this.runner?.Dispose();
         this.runner = null;
+        this.ReleaseArtifactsIfDestroyed();
     }
 
     private static (float scale, uint width, uint height) GetInitialDimensions(SwapChainPanel panel)
@@ -142,5 +146,13 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext)
         }
 
         return (scale, Convert.ToUInt32(Math.Min(uint.MaxValue, width)), Convert.ToUInt32(Math.Min(uint.MaxValue, height)));
+    }
+
+    private void ReleaseArtifactsIfDestroyed()
+    {
+        if (this.runner is null && this.context is null)
+        {
+            artifacts.Dispose();
+        }
     }
 }

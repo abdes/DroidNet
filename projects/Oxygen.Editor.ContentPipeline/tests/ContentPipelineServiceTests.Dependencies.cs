@@ -160,7 +160,8 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+        using var qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, qualification);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api);
 
         if (sceneCook)

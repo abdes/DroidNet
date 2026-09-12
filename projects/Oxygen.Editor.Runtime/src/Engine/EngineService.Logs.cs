@@ -11,6 +11,11 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public sealed partial class EngineService
 {
+    [LoggerMessage(Level = LogLevel.Error, Message = "Native artifact qualification failed: {Message}")]
+    private static partial void LogQualificationFailed(ILogger logger, string message, Exception? exception);
+
+    private void LogQualificationFailed(string message, Exception? exception) => LogQualificationFailed(this.logger, message, exception);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,

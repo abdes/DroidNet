@@ -43,6 +43,7 @@ public sealed partial class InspectorControlTests
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
         private readonly EngineService engine;
+        private readonly Oxygen.Testing.TemporaryArtifactQualification qualification = Oxygen.Testing.TemporaryArtifactQualification.ForInstalledEngine();
         private readonly SceneEngineSync sync;
         private readonly Mock<IDocumentService> documents = new();
         private readonly StrongReferenceMessenger messenger = new();
@@ -57,7 +58,7 @@ public sealed partial class InspectorControlTests
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
             var results = publisher.Object;
-            this.engine = new EngineService(this.hosting, results);
+            this.engine = new EngineService(this.hosting, results, artifactQualification: this.qualification);
             this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
             var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png")) { Name = "Environment fields" };
             var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
@@ -189,6 +190,7 @@ public sealed partial class InspectorControlTests
             }
             finally
             {
+                this.qualification.Dispose();
                 this.directory.Delete(recursive: true);
             }
         }
