@@ -15,4 +15,8 @@ public sealed record MaterialCookResult(
     Uri MaterialSourceUri,
     Uri? CookedMaterialUri,
     MaterialCookState State,
-    Guid? OperationId);
+    Guid? OperationId)
+{
+    /// <summary>Gets shared operation details, including captured inputs and their freshness.</summary>
+    public ContentCookResult? Cook { get; init; }
+}

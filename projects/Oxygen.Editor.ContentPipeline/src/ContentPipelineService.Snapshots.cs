@@ -14,6 +14,27 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Captures the complete saved scope before descriptor generation or native execution.</summary>
 public sealed partial class ContentPipelineService
 {
+    private static ContentCookResult CreateFailedCook(ContentCookOperation operation, CookTargetKind targetKind, Exception exception)
+        => new(
+            operation.OperationId,
+            targetKind,
+            OperationStatus.Failed,
+            [
+                new DiagnosticRecord
+                {
+                    OperationId = operation.OperationId,
+                    Domain = FailureDomain.ContentPipeline,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = AssetCookDiagnosticCodes.CookFailed,
+                    Message = exception.Message,
+                    TechnicalMessage = exception.ToString(),
+                    ExceptionType = exception.GetType().FullName,
+                },
+            ],
+            [],
+            Inspection: null,
+            Validation: null);
+
     private static Task ReleaseArtifactsAfterDrainAsync(Task drain, QualifiedArtifactLease artifacts)
         => drain.ContinueWith(
             async completed =>
@@ -56,8 +77,7 @@ public sealed partial class ContentPipelineService
         CookTargetKind targetKind,
         CancellationToken cancellationToken)
     {
-        var initialScopes = resolveScopes();
-        var primaryInputs = initialScopes.SelectMany(static scope => scope.Inputs).ToArray();
+        var primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
         if (primaryInputs.Length == 0)
         {
             return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
@@ -100,6 +120,14 @@ public sealed partial class ContentPipelineService
         {
             retainedDrain = ReleaseArtifactsAfterDrainAsync(failure.DrainCompletion, artifacts);
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
+        }
+        catch (ArtifactQualificationException failure)
+        {
+            return new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, failure.Diagnostics), [], Inspection: null, Validation: null);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException)
+        {
+            return CreateFailedCook(operation, targetKind, failure);
         }
         finally
         {

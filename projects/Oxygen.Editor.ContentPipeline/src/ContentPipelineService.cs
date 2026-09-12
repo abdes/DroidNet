@@ -63,12 +63,15 @@ public sealed partial class ContentPipelineService(
     }
 
     /// <inheritdoc />
-    public Task<ContentCookResult> CookAssetAsync(Uri assetUri, CancellationToken cancellationToken)
+    public Task<ContentCookResult> CookAssetAsync(Uri assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null)
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, assetUri),
-            (operation, token) => this.CookAssetCoreAsync(operation, assetUri, token),
+            (operation, token) => expectedProject is not null && (operation.Project.ProjectId != expectedProject.ProjectId
+                || !string.Equals(operation.Project.ProjectRoot, expectedProject.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+                ? Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The originating project is no longer active.")))
+                : this.CookAssetCoreAsync(operation, assetUri, token),
             cancellationToken);
     }
 

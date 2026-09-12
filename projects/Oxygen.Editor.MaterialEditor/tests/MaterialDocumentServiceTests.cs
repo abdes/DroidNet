@@ -12,7 +12,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -396,7 +395,11 @@ public sealed partial class MaterialDocumentServiceTests
 
         var cookedBytes = await File.ReadAllBytesAsync(
             Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = cookedBytes.Should().HaveCount(357);
+        var indexStream = File.OpenRead(Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin"));
+        await using var indexLifetime = indexStream.ConfigureAwait(false);
+        var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V1.LooseCookedIndex.Read(indexStream);
+        var materialEntry = index.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/RoundTrip.omat", StringComparison.Ordinal));
+        _ = cookedBytes.Should().HaveCount(checked((int)materialEntry.DescriptorSize));
         _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.25f, 0.0001f);
         _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(0.5f, 0.0001f);
         _ = ReadSingle(cookedBytes, 0x78).Should().BeApproximately(0.75f, 0.0001f);
@@ -407,7 +410,9 @@ public sealed partial class MaterialDocumentServiceTests
         _ = cookedBytes[0x67].Should().Be(3);
 
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x68, 4));
-        _ = flags.Should().Be((1u << 1) | (1u << 2));
+        const uint authoredFlags = (1u << 1) | (1u << 2);
+        _ = (flags & authoredFlags).Should().Be(authoredFlags);
+        _ = (flags & 1u).Should().Be(1u, "the native scalar material cook disables texture sampling");
     }
 
     /// <summary>
@@ -667,20 +672,11 @@ public sealed partial class MaterialDocumentServiceTests
         => new(new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore());
 
     private static MaterialDocumentService CreateCookingService(TempWorkspace workspace)
-    {
-        var registry = new ImporterRegistry();
-        registry.Register(new MaterialSourceImporter());
-        return new MaterialDocumentService(
+        => new(
             new TestResolver(workspace.Root),
-            new MaterialCookService(
-                new ImportService(registry),
-                workspace.CookCoordinator,
-                workspace.CookDocuments,
-                NullLogger<MaterialCookService>.Instance,
-                workspace.ContextService),
+            new MaterialCookService(workspace.NativePipeline.Pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance),
             workspace.CookDocuments,
             CreateFileStore());
-    }
 
     private static float ReadSingle(byte[] bytes, int offset)
     {
@@ -693,12 +689,14 @@ public sealed partial class MaterialDocumentServiceTests
 
     private sealed class RecordingCookService : IMaterialCookService
     {
+        public Task<MaterialCookResult>? Completion { get; init; }
+
         public MaterialCookRequest? LastRequest { get; private set; }
 
         public Task<MaterialCookResult> CookMaterialAsync(MaterialCookRequest request, CancellationToken cancellationToken = default)
         {
             this.LastRequest = request;
-            return Task.FromResult(
+            return this.Completion ?? Task.FromResult(
                 new MaterialCookResult(
                     request.MaterialSourceUri,
                     new Uri("asset:///Content/Materials/Test.omat"),
@@ -748,6 +746,8 @@ public sealed partial class MaterialDocumentServiceTests
 
     private sealed partial class TempWorkspace : IDisposable
     {
+        private Oxygen.Testing.NativeContentPipelineFixture? nativePipeline;
+
         public TempWorkspace()
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-material-editor-tests", Guid.NewGuid().ToString("N"));
@@ -765,12 +765,15 @@ public sealed partial class MaterialDocumentServiceTests
 
         public ContentCookCoordinator CookCoordinator { get; }
 
+        public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator, this.CookDocuments);
+
         public Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry CookDocuments { get; } = new();
 
         public void Dispose()
         {
             this.ContextService.Close();
             this.CookCoordinator.Dispose();
+            this.nativePipeline?.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

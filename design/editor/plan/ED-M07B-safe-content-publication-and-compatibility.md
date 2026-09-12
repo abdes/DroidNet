@@ -93,8 +93,13 @@ descriptors and relocated geometry media references use its private input root;
 the result records the qualified producer identity and captured/current state.
 Later edits do not block the captured cook or become clean. Qualified artifact
 ownership drains before the next writer starts after termination failure.
-Material-helper integration, complete imported-source discovery and incremental
-planning remain.
+Material-helper integration is implemented: its Cook action delegates to the
+same captured pipeline and preserves operation identity, snapshot details and
+later-change status. Project facts are checked before submission and the origin
+is checked inside the writer. Reopen queries existing cook state without cooking.
+ContentPipeline 144/144 and MaterialEditor 47/47 pass, including native scalar
+round trips, save/resume, newer edit/save completion races and worker startup
+failures. Complete imported-source discovery and incremental planning remain.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

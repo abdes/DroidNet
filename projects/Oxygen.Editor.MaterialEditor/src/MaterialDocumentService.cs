@@ -95,12 +95,13 @@ public sealed partial class MaterialDocumentService(
 
         var displayName = GetMaterialDisplayName(location.MaterialUri);
         var source = WithName(MaterialSourceReader.Read(snapshot.Content.ToArray()), displayName);
+        var cookState = await this.cookService.GetMaterialCookStateAsync(sourceUri, cancellationToken).ConfigureAwait(false);
 
         return this.Track(
             location,
             source,
             displayName,
-            MaterialCookState.NotCooked,
+            cookState,
             snapshot.Version);
     }
 
@@ -221,13 +222,14 @@ public sealed partial class MaterialDocumentService(
                 MountName: location.MountName,
                 SourceRelativePath: location.SourceRelativePath),
             cancellationToken).ConfigureAwait(false);
+        var capturedSavedRevision = result.Cook?.InputSnapshot?.Documents.FirstOrDefault(value => value.DocumentId == documentId)?.SavedRevision
+            ?? document.SavedRevision;
+        result = result with { State = this.SetCookState(documentId, result.State, capturedSavedRevision) };
         this.LogCookCompleted(
             document.DocumentId,
             document.MaterialUri,
             result.State,
             result.OperationId);
-
-        this.SetCookState(documentId, result.State);
 
         return result;
     }
@@ -636,14 +638,18 @@ public sealed partial class MaterialDocumentService(
         return document;
     }
 
-    private void SetCookState(Guid documentId, MaterialCookState state)
+    private MaterialCookState SetCookState(Guid documentId, MaterialCookState state, long capturedSavedRevision)
     {
         lock (this.sync)
         {
             if (this.documents.TryGetValue(documentId, out var current))
             {
+                state = state == MaterialCookState.Cooked && (current.IsDirty || current.SavedRevision != capturedSavedRevision)
+                    ? MaterialCookState.Stale : state;
                 this.documents[documentId] = current with { CookState = state };
             }
+
+            return state;
         }
     }
 

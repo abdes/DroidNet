@@ -534,7 +534,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       source set before generation, use private native inputs, carry the qualified
       producer fingerprint, and report later source/dirty changes. Geometry media
       references resolve to captured copies. ContentPipeline 137/137 passes.
-      The material helper, imported-source closure, incremental reuse and
+      The material helper now delegates to that same pipeline, retains operation
+      and snapshot details, and preserves newer edits/saves as stale. Material
+      reopen queries existing state without cooking. ContentPipeline 144/144 and
+      MaterialEditor 47/47 pass. Imported-source closure, incremental reuse and
       publication integration remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real

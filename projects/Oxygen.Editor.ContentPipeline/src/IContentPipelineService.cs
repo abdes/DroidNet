@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -24,8 +26,9 @@ public interface IContentPipelineService
     /// </summary>
     /// <param name="assetUri">The asset URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="expectedProject">Optional originating project facts, checked again inside the writer.</param>
     /// <returns>The cook result.</returns>
-    public Task<ContentCookResult> CookAssetAsync(Uri assetUri, CancellationToken cancellationToken);
+    public Task<ContentCookResult> CookAssetAsync(Uri assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null);
 
     /// <summary>
     /// Cooks all supported assets under a folder.

@@ -8,7 +8,6 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
@@ -40,6 +39,11 @@ public sealed partial class MaterialCookServiceTests
             CancellationToken.None).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
+        _ = result.Cook.Should().NotBeNull();
+        _ = result.Cook!.InputSnapshot.Should().NotBeNull();
+        _ = result.Cook.InputsAreCurrent.Should().BeTrue();
+        _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
+        _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
         _ = result.CookedMaterialUri.Should().Be(new Uri("asset:///Content/Materials/Wood.omat"));
         _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat")).Should().BeTrue();
 
@@ -134,13 +138,33 @@ public sealed partial class MaterialCookServiceTests
         _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Authoring", "Materials", "Gold.omat")).Should().BeFalse();
     }
 
-    private static MaterialCookService CreateService(TempWorkspace workspace)
+    /// <summary>Inconsistent project facts cannot target another source or create a cook run.</summary>
+    /// <param name="mismatch">The mismatched request field.</param>
+    /// <returns>The asynchronous validation test.</returns>
+    [TestMethod]
+    [DataRow("project")]
+    [DataRow("mount")]
+    [DataRow("source")]
+    [DataRow("kind")]
+    public async Task MaterialRequestMustMatchItsActiveProjectIdentity(string mismatch)
     {
-        var registry = new ImporterRegistry();
-        registry.Register(new MaterialSourceImporter());
-        var importService = new ImportService(registry);
-        return new MaterialCookService(importService, workspace.CookCoordinator, new Snapshots.CookDocumentRegistry(), NullLogger<MaterialCookService>.Instance, workspace.ContextService);
+        using var workspace = new TempWorkspace();
+        var request = new MaterialCookRequest(new("asset:///Content/Materials/Wood.omat.json"), workspace.Root, "Content", "Content/Materials/Wood.omat.json");
+        request = mismatch switch
+        {
+            "project" => request with { ProjectRoot = workspace.Root + "-other" },
+            "mount" => request with { MountName = "Other" },
+            "source" => request with { SourceRelativePath = "Content/Materials/Other.omat.json" },
+            _ => request with { MaterialSourceUri = new("asset:///Content/Geometry/Cube.ogeo.json") },
+        };
+
+        var result = await CreateService(workspace).CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
+        _ = result.State.Should().Be(MaterialCookState.Rejected);
+        _ = workspace.CookCoordinator.Runs.Should().BeEmpty();
     }
+
+    private static MaterialCookService CreateService(TempWorkspace workspace)
+        => new(workspace.NativePipeline.Pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 
     private static async Task WriteMaterialAsync(string path, MaterialSource material)
     {
@@ -177,6 +201,8 @@ public sealed partial class MaterialCookServiceTests
 
     private sealed partial class TempWorkspace : IDisposable
     {
+        private Oxygen.Testing.NativeContentPipelineFixture? nativePipeline;
+
         public TempWorkspace(string authoringFolder = "Content")
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
@@ -195,10 +221,15 @@ public sealed partial class MaterialCookServiceTests
 
         public ContentCookCoordinator CookCoordinator { get; }
 
+        public Snapshots.CookDocumentRegistry Documents { get; } = new();
+
+        public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator, this.Documents);
+
         public void Dispose()
         {
             this.ContextService.Close();
             this.CookCoordinator.Dispose();
+            this.nativePipeline?.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);
