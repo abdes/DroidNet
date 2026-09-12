@@ -5,10 +5,16 @@
 namespace Oxygen.Editor.ContentPipeline.Cooking;
 
 /// <summary>Exposes the coordinator's cook history and scoped controls to the workspace.</summary>
-public interface ICookRunService
+public interface ICookRunService : System.ComponentModel.INotifyPropertyChanged
 {
     /// <summary>Occurs when a run changes; callbacks may arrive on a worker thread.</summary>
     public event EventHandler<CookRunChangedEventArgs>? RunChanged;
+
+    /// <summary>Refreshes consumers of any pipeline result before its run completes and releases the writer.</summary>
+    public event CookCompletedHandler? CookCompleted;
+
+    /// <summary>Gets or sets a value indicating whether automatic cooks wait in the queue; active and explicit cooks continue.</summary>
+    public bool IsAutomaticCookingPaused { get; set; }
 
     /// <summary>Gets a consistent snapshot of this editor session's runs.</summary>
     public IReadOnlyList<CookRunSnapshot> Runs { get; }

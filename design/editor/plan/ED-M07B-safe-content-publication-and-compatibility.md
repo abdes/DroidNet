@@ -93,8 +93,12 @@ rebuilds its own product; current scene/geometry descriptors are reused. A
 same-size/timestamp descriptor corruption is detected and repaired, failed cooks
 do not advance provenance, and warnings remain attached to reused products.
 All engine built-ins retain source identities through repeated scene/project
-cooks. ContentPipeline 150/150 passes. Imported-source closure, request coalescing,
-automatic triggers and publication/runtime integration remain open.
+cooks. Saved-source scheduling now coalesces revisions, resumes scopes blocked by
+saved documents, and supports session pause without blocking explicit cooks.
+Consumer completion is awaited before the shared writer is released.
+ContentPipeline 166/166 passes. Imported-source closure, request priorities and
+observer cancellation, editor trigger wiring, and publication/runtime integration
+remain open.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

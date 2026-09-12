@@ -23,6 +23,9 @@ public sealed partial class ContentCookCoordinator
     public event EventHandler<CookRunChangedEventArgs>? RunChanged;
 
     /// <inheritdoc />
+    public event CookCompletedHandler? CookCompleted;
+
+    /// <inheritdoc />
     public IReadOnlyList<CookRunSnapshot> Runs
     {
         get
@@ -170,7 +173,7 @@ public sealed partial class ContentCookCoordinator
         this.PublishRun(snapshot);
     }
 
-    private void CompleteRun<T>(Guid operationId, T result)
+    private async Task CompleteRunAsync<T>(ContentCookOperation operation, T result, CancellationToken cancellationToken)
     {
         var state = CookRunState.Succeeded;
         IEnumerable<DiagnosticRecord> diagnostics = [];
@@ -193,7 +196,19 @@ public sealed partial class ContentCookCoordinator
             state = material.State == MaterialCookState.Cooked ? CookRunState.Succeeded : CookRunState.Failed;
         }
 
-        this.FinishRun(operationId, state, diagnostics, assets);
+        if (result is ContentCookResult completed)
+        {
+            if (this.CookCompleted is not null && completed.Validation is { Succeeded: true })
+            {
+                this.ReportRun(operation.OperationId, new(Message: "Refreshing cooked content.", State: CookRunState.Publishing));
+            }
+
+            await this.PublishCookCompletedAsync(new(operation.Project, completed)).ConfigureAwait(false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        this.VerifyCurrent(operation);
+        this.FinishRun(operation.OperationId, state, diagnostics, assets);
     }
 
     private void FailRun(Guid operationId, Exception exception)
@@ -316,6 +331,14 @@ public sealed partial class ContentCookCoordinator
             {
                 this.LogRunObserverFailure(ex);
             }
+        }
+    }
+
+    private async Task PublishCookCompletedAsync(CookCompletedEventArgs args)
+    {
+        foreach (var handler in this.CookCompleted?.GetInvocationList() ?? [])
+        {
+            await ((CookCompletedHandler)handler)(args).ConfigureAwait(false);
         }
     }
 

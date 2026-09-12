@@ -11,6 +11,70 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Verifies scoped history, cancellation, and explicit save recovery.</summary>
 public sealed partial class ContentCookCoordinatorTests
 {
+    /// <summary>Queued writers and cancellation wait until the current consumer refresh settles.</summary>
+    /// <returns>The asynchronous publication ordering regression.</returns>
+    [TestMethod]
+    public async Task ConsumerRefreshRetainsWriterUntilItSettles()
+    {
+        using var coordinator = CreateCoordinator(CreateContextService());
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.CookCompleted += args =>
+        {
+            _ = entered.TrySetResult();
+            return release.Task;
+        };
+        var first = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, new Uri("asset:///Content/Material.omat.json")),
+            (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
+            this.TestContext.CancellationToken);
+        await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var nextStarted = false;
+        var next = coordinator.RunAsync(
+            (_, _) =>
+            {
+                nextStarted = true;
+                return Task.FromResult(2);
+            },
+            this.TestContext.CancellationToken);
+        await coordinator.CancelAsync(coordinator.Runs.Single().OperationId).ConfigureAwait(false);
+        _ = nextStarted.Should().BeFalse();
+        _ = first.IsCompleted.Should().BeFalse();
+        release.SetResult();
+        Func<Task> cancelled = () => first;
+        _ = await cancelled.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = (await next.ConfigureAwait(false)).Should().Be(2);
+    }
+
+    /// <summary>Every UI scope and automatic Save delivers its result through the same workspace notification.</summary>
+    /// <param name="kind">The requested cook scope.</param>
+    /// <param name="automatic">Whether Save submitted the request.</param>
+    /// <returns>The asynchronous completion regression.</returns>
+    [TestMethod]
+    [DataRow(CookTargetKind.Asset, true)]
+    [DataRow(CookTargetKind.Asset, false)]
+    [DataRow(CookTargetKind.CurrentScene, false)]
+    [DataRow(CookTargetKind.Folder, false)]
+    [DataRow(CookTargetKind.Project, false)]
+    public async Task CompletedCooksShareOneProjectScopedNotification(CookTargetKind kind, bool automatic)
+    {
+        var projects = CreateContextService();
+        using var coordinator = CreateCoordinator(projects);
+        var notifications = new List<CookCompletedEventArgs>();
+        coordinator.CookCompleted += args =>
+        {
+            notifications.Add(args);
+            return Task.CompletedTask;
+        };
+        var result = await coordinator.RunCookAsync(
+            new(kind, new Uri("asset:///Content/Scope"), automatic),
+            (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, kind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
+            CancellationToken.None).ConfigureAwait(false);
+        _ = notifications.Should().ContainSingle();
+        _ = notifications[0].Project.Should().BeSameAs(projects.ActiveProject);
+        _ = notifications[0].Result.Should().BeSameAs(result);
+    }
+
     /// <summary>Catalog compatibility failures retain actionable artifact details in the selected cook.</summary>
     /// <returns>The asynchronous operation test.</returns>
     [TestMethod]

@@ -19,6 +19,33 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Checks real native output reuse across requests, source changes, and project reopen.</summary>
 public sealed partial class ContentPipelineServiceTests
 {
+    /// <summary>A saved scene produces a quiet automatic run, its assets, and reusable native output.</summary>
+    /// <returns>The asynchronous native background-cook regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task SavedSceneCookUsesSharedRunHistoryAndIncrementalOutput()
+    {
+        using var workspace = new TempWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        var revealed = false;
+        workspace.CookCoordinator.RunChanged += (_, args) => revealed |= args.Reveal;
+        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+
+        var result = await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        var run = workspace.CookCoordinator.Runs.Single();
+        _ = run.Request.IsAutomatic.Should().BeTrue();
+        _ = run.Request.ScopeUri.Should().Be(sceneUri);
+        _ = run.Assets.Should().NotBeEmpty();
+        _ = run.IsCompleted.Should().BeTrue();
+        _ = revealed.Should().BeFalse();
+        _ = (await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
     /// <summary>An unchanged project reuses all products and preserves output bytes and timestamps across service recreation.</summary>
     /// <returns>The asynchronous native regression.</returns>
     [TestMethod]

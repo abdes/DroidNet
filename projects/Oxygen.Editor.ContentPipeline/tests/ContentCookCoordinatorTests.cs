@@ -16,6 +16,33 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed partial class ContentCookCoordinatorTests
 {
+    /// <summary>Gets or sets the running test context.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Paused saves stay visible without holding the writer needed by explicit cooks.</summary>
+    /// <returns>The asynchronous pause regression.</returns>
+    [TestMethod]
+    public async Task PausedAutomaticWorkRemainsQueuedWhileExplicitCookRuns()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        coordinator.IsAutomaticCookingPaused = true;
+        var entered = false;
+        var background = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, new Uri("asset:///Content/Scene.oscene.json"), IsAutomatic: true),
+            (_, _) =>
+            {
+                entered = true;
+                return Task.FromResult(1);
+            },
+            this.TestContext.CancellationToken);
+        _ = entered.Should().BeFalse();
+        _ = coordinator.Runs.Single().State.Should().Be(Cooking.CookRunState.Queued);
+        _ = (await coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromResult(2), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(2);
+        coordinator.IsAutomaticCookingPaused = false;
+        _ = (await background.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(1);
+    }
+
     /// <summary>Prevents queued work from reading inputs before it owns the writer.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
