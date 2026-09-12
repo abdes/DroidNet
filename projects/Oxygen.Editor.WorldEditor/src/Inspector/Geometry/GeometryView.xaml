@@ -38,7 +38,7 @@
         HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
-        HeaderIcon="{ui:FontIcon Glyph='&#xE7C3;'}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
@@ -59,7 +59,8 @@
                         x:Name="AssetSplitButton"
                         Grid.Column="1"
                         HorizontalAlignment="Stretch"
-                        Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
+                        Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="AssetPickerFlyout">
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}">
@@ -151,7 +152,8 @@
                         x:Name="MaterialSplitButton"
                         Grid.Column="1"
                         HorizontalAlignment="Stretch"
-                        Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
+                        Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
                                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}">
