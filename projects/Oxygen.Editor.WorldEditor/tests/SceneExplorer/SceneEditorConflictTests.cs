@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -138,7 +138,8 @@ public sealed partial class SceneEditorConflictTests
                 new SceneCookInputRegistrar(
                     new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(),
                     Mock.Of<IProjectManagerService>(),
-                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! }),
+                    new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! },
+                    documents.Object),
                 conflictPrompt: this.Prompt.Object);
         }
 

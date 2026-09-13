@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Qualifies coordinated read ownership and registration lifetimes.</summary>
 [TestClass]
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class CookDocumentRegistryTests
+public sealed partial class CookDocumentRegistryTests
 {
     /// <summary>Acquires all owners in stable order and releases each exactly once in reverse order.</summary>
     /// <returns>The asynchronous test operation.</returns>

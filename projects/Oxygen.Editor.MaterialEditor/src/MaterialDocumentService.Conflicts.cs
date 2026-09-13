@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -54,6 +54,7 @@ public sealed partial class MaterialDocumentService
                 this.histories[documentId].Keeper.Clear();
                 this.histories[documentId].SavedSource = source;
                 this.documents[documentId] = reloaded;
+                this.PublishCookDocumentState(documentId);
                 return reloaded;
             }
         }

@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -50,7 +50,7 @@ public sealed partial class MaterialDocumentService(
     private readonly DocumentWriteCoordinator sourceWrites = new();
     private readonly IAtomicFileStore atomicFiles = atomicFiles;
     private readonly Dictionary<Guid, FileVersion> fileVersions = [];
-    private readonly Dictionary<Guid, IDisposable> cookRegistrations = [];
+    private readonly Dictionary<Guid, ICookDocumentRegistration> cookRegistrations = [];
     private readonly Lock sync = new();
     private MaterialSchemaValidator? cachedValidator;
     private bool validatorLoadAttempted;
@@ -187,6 +187,7 @@ public sealed partial class MaterialDocumentService(
                 this.histories[documentId].SavedSource = source;
                 var saved = current with { SavedRevision = document.Revision, IsDirty = !SameSource(current.Source, source) };
                 this.documents[documentId] = saved;
+                this.PublishCookDocumentState(documentId);
                 automaticCooking.NotifySaved(saved.SourcePath, this.fileVersions[documentId].Sha256, changed);
 
                 return new MaterialSaveResult(Succeeded: true, OperationId: null) { HasUnsavedChanges = saved.IsDirty };
@@ -640,6 +641,7 @@ public sealed partial class MaterialDocumentService(
             this.cookRegistrations[document.DocumentId] = cookDocuments.Register(
                 document.SourcePath,
                 token => this.AcquireCookReadAsync(document.DocumentId, token));
+            this.PublishCookDocumentState(document.DocumentId);
         }
 
         return document;
