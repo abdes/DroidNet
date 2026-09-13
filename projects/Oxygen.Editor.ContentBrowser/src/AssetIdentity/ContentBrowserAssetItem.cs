@@ -32,6 +32,9 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
     public AssetCookStatus? CookStatus { get; init; }
 
+    /// <summary>Gets the applicable queued, active or most recent cook.</summary>
+    public AssetCookActivity? CookActivity { get; init; }
+
     /// <summary>Gets the relationship to another name for the same native generator.</summary>
     public string AliasDescription => this.Generated is { } recipe && !string.Equals(recipe.CanonicalName, this.DisplayName, StringComparison.Ordinal)
         ? $"Alias of {recipe.CanonicalName}" : string.Empty;
@@ -46,10 +49,10 @@ public sealed record ContentBrowserAssetItem(
     };
 
     /// <summary>Gets the primary asset-state badge.</summary>
-    public string PrimaryBadge => GetBadge(this.PrimaryState);
+    public string PrimaryBadge => AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets the optional cooked-state badge.</summary>
-    public string? DerivedBadge => this.DerivedState is { } state ? GetBadge(state) : null;
+    public string? DerivedBadge => this.CookStatus is null && this.DerivedState is { } state ? GetBadge(state) : null;
 
     /// <summary>Gets a value indicating whether the asset has diagnostics.</summary>
     public bool HasDiagnostics => this.DiagnosticCodes.Count > 0;

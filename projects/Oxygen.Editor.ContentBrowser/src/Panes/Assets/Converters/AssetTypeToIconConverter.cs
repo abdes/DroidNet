@@ -23,7 +23,7 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetKind.Image => "\uE8B9",
                 AssetKind.Scene => "\uE914",
                 AssetKind.Geometry => "\uE8C1",
-                AssetKind.Material => "\uF515",
+                AssetKind.Material => "\uE790",
                 AssetKind.Texture => "\uE8B9",
                 AssetKind.Folder => "\uE8B7",
                 _ => "\uE8A5",
@@ -37,7 +37,7 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetType.Image => "\uE8B9", // image
                 AssetType.Scene => "\uE914", // scene
                 AssetType.Mesh => "\uE8C1", // mesh
-                AssetType.Material => "\uF515", // material (example glyph)
+                AssetType.Material => "\uE790", // material surface
                 AssetType.Texture => "\uE8B9", // texture (same as image for now)
                 AssetType.Folder => "\uE8B7", // folder (filled)
                 AssetType.ImportSettings => "\uE8A5", // use unknown glyph for now

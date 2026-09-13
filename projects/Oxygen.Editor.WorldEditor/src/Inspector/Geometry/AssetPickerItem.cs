@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -68,7 +68,7 @@ public sealed record MaterialPickerItem(
 /// </summary>
 /// <param name="Key">The group key used for identification.</param>
 /// <param name="Items">The items that belong to the group.</param>
-public sealed record MaterialGroup(string Key, IReadOnlyList<MaterialPickerItem> Items);
+public sealed record MaterialGroup(string Key, IReadOnlyList<MaterialPickerRow> Items);
 
 /// <summary>
 /// Lightweight header record used to represent a group header in UI lists.

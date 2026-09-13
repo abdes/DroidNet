@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -40,7 +40,7 @@ public abstract class AssetsLayoutViewModel(
     /// <summary>
     /// Gets the collection of content browser asset rows.
     /// </summary>
-    public ObservableCollection<ContentBrowserAssetItem> Assets { get; } = [];
+    public ObservableCollection<AssetBrowserRow> Assets { get; } = [];
 
     /// <summary>
     /// Gets or sets the currently selected asset row, if any.
@@ -54,6 +54,7 @@ public abstract class AssetsLayoutViewModel(
     /// <summary>
     /// Forces a refresh of <see cref="Assets"/> by re-querying the provider.
     /// </summary>
+    /// <returns>Completion of the shared refresh.</returns>
     public Task RefreshAsync() => this.assetProvider.RefreshAsync(AssetBrowserFilter.Default);
 
     /// <inheritdoc/>
@@ -73,70 +74,9 @@ public abstract class AssetsLayoutViewModel(
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    /// Releases the managed subscriptions.
-    /// </summary>
-    /// <param name="disposing">Whether managed resources should be released.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!this.disposed)
-        {
-            if (disposing)
-            {
-                this.subscription?.Dispose();
-                this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
-            }
-
-            this.disposed = true;
-        }
-    }
-
-    /// <summary>
-    /// Invokes the <see cref="ItemInvoked"/> event.
-    /// </summary>
-    /// <param name="item">The asset row that was invoked.</param>
-    protected void OnItemInvoked(ContentBrowserAssetItem item)
-        => this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(item));
-
-    private async Task InitializeAsync()
-    {
-        this.subscription = this.assetProvider.Items
-            .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(this.ReplaceItems);
-        this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
-        await this.RefreshAsync().ConfigureAwait(false);
-    }
-
-    private void ContentBrowserState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
-        {
-            this.ReplaceItems(this.latestItems);
-        }
-    }
-
-    private void ReplaceItems(IReadOnlyList<ContentBrowserAssetItem> items)
-    {
-        this.latestItems = items;
-        this.Assets.Clear();
-        foreach (var item in items.Where(this.IsInSelectedFolders))
-        {
-            this.Assets.Add(item);
-        }
-    }
-
-    private bool IsInSelectedFolders(ContentBrowserAssetItem asset)
-    {
-        var selectedFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
-        return IsInSelectedFolders(
-            asset.DisplayPath,
-            asset.IdentityUri.AbsolutePath,
-            selectedFolders,
-            this.projectContextService.ActiveProject is not null,
-            asset.CookedUri?.AbsolutePath,
-            HasCookedProjection(asset));
-    }
-
+    /// <summary>Normalizes folder selections without letting a root selection broaden a concrete scope.</summary>
+    /// <param name="folders">The selected virtual folder paths.</param>
+    /// <returns>The distinct normalized folders.</returns>
     internal static IReadOnlyList<string> NormalizeSelectedFolders(IEnumerable<string>? folders)
     {
         if (folders is null)
@@ -158,6 +98,14 @@ public abstract class AssetsLayoutViewModel(
         return normalized;
     }
 
+    /// <summary>Checks authored and cooked projections against the current browser scope.</summary>
+    /// <param name="displayPath">The row's display location.</param>
+    /// <param name="identityAbsolutePath">The authored virtual path.</param>
+    /// <param name="selectedFolders">The normalized selected folders.</param>
+    /// <param name="hasActiveProject">Whether the browser owns a project.</param>
+    /// <param name="cookedAbsolutePath">The known cooked virtual path.</param>
+    /// <param name="hasCookedProjection">Whether a cooked projection exists.</param>
+    /// <returns>Whether the asset belongs to this scope.</returns>
     internal static bool IsInSelectedFolders(
         string displayPath,
         string identityAbsolutePath,
@@ -202,6 +150,31 @@ public abstract class AssetsLayoutViewModel(
         return false;
     }
 
+    /// <summary>
+    /// Releases the managed subscriptions.
+    /// </summary>
+    /// <param name="disposing">Whether managed resources should be released.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                this.subscription?.Dispose();
+                this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
+            }
+
+            this.disposed = true;
+        }
+    }
+
+    /// <summary>
+    /// Invokes the <see cref="ItemInvoked"/> event.
+    /// </summary>
+    /// <param name="item">The asset row that was invoked.</param>
+    protected void OnItemInvoked(ContentBrowserAssetItem item)
+        => this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(item));
+
     private static bool HasCookedProjection(ContentBrowserAssetItem asset)
         => asset.PrimaryState is AssetState.Cooked
            || asset.DerivedState is AssetState.Cooked or AssetState.Stale
@@ -233,5 +206,65 @@ public abstract class AssetsLayoutViewModel(
 
         runtimePath = normalized.Length == cookedRoot.Length ? "/" : normalized[cookedRoot.Length..];
         return true;
+    }
+
+    private async Task InitializeAsync()
+    {
+        this.subscription = this.assetProvider.Items
+            .ObserveOn(this.hostingContext.DispatcherScheduler)
+            .Subscribe(this.ReplaceItems);
+        this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
+        await this.RefreshAsync().ConfigureAwait(false);
+    }
+
+    private void ContentBrowserState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
+        {
+            this.ReplaceItems(this.latestItems);
+        }
+    }
+
+    private void ReplaceItems(IReadOnlyList<ContentBrowserAssetItem> items)
+    {
+        this.latestItems = items;
+        var selectedUri = this.SelectedAsset?.IdentityUri;
+        var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
+        var visible = items.Where(this.IsInSelectedFolders).ToArray();
+        for (var index = 0; index < visible.Length; index++)
+        {
+            var item = visible[index];
+            if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
+            {
+                row.Update(item);
+                if (!ReferenceEquals(this.Assets[index], row))
+                {
+                    this.Assets.Move(this.Assets.IndexOf(row), index);
+                }
+            }
+            else
+            {
+                this.Assets.Insert(index, new(item));
+            }
+        }
+
+        while (this.Assets.Count > visible.Length)
+        {
+            this.Assets.RemoveAt(this.Assets.Count - 1);
+        }
+
+        this.SelectedAsset = visible.FirstOrDefault(item => string.Equals(item.IdentityUri.AbsoluteUri, selectedUri?.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool IsInSelectedFolders(ContentBrowserAssetItem asset)
+    {
+        var selectedFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
+        return IsInSelectedFolders(
+            asset.DisplayPath,
+            asset.IdentityUri.AbsolutePath,
+            selectedFolders,
+            this.projectContextService.ActiveProject is not null,
+            asset.CookedUri?.AbsolutePath,
+            HasCookedProjection(asset));
     }
 }

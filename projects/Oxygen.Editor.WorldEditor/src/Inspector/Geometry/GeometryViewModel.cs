@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -37,7 +37,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
     private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
-    private readonly ObservableCollection<MaterialPickerItem> contentMaterialItems = [];
+    private readonly ObservableCollection<MaterialPickerRow> contentMaterialItems = [];
     private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly DispatcherQueue dispatcherQueue;
 
@@ -405,17 +405,17 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             new AssetGroup("Content", contentItems),
         ];
 
-    private static IReadOnlyList<MaterialGroup> CreateMaterialGroups(ObservableCollection<MaterialPickerItem> contentMaterialItems)
+    private static IReadOnlyList<MaterialGroup> CreateMaterialGroups(ObservableCollection<MaterialPickerRow> contentMaterialItems)
         =>
         [
-            new MaterialGroup("Assignment", [CreateNoMaterialItem()]),
+            new MaterialGroup("Assignment", [new(CreateNoMaterialItem())]),
             new MaterialGroup(
                 "Engine",
                 [
-                    CreateEngineMaterialItem(
+                    new(CreateEngineMaterialItem(
                         "Default",
                         AssetUris.BuildGeneratedUri("Materials/Default"),
-                        "/Engine/Generated/Materials/Default"),
+                        "/Engine/Generated/Materials/Default")),
                 ]),
             new MaterialGroup("Content", contentMaterialItems),
         ];
@@ -572,7 +572,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         => new(
             Name: asset.DisplayName,
             Uri: asset.MaterialUri,
-            DisplayType: asset.DisplayState == AssetState.Missing ? "Missing material" : "Material",
+            DisplayType: $"Material · {asset.StatusText}",
             DisplayPath: asset.DescriptorPath ?? asset.CookedPath ?? AssetUriHelper.GetVirtualPath(asset.MaterialUri),
             Group: AssetPickerGroup.Content,
             IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
@@ -701,14 +701,33 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     private void ReplaceContentMaterialItems(IReadOnlyList<MaterialPickerResult> materials)
     {
-        this.contentMaterialItems.Clear();
+        var existing = this.contentMaterialItems.ToDictionary(static row => row.Item.Uri!.ToString(), StringComparer.OrdinalIgnoreCase);
         this.contentMaterialItemsByKey.Clear();
-
+        var index = 0;
         foreach (var material in materials.OrderBy(static m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
             var item = CreateContentMaterialItem(material);
-            this.contentMaterialItems.Add(item);
-            this.contentMaterialItemsByKey[material.MaterialUri.ToString()] = item;
+            var key = material.MaterialUri.ToString();
+            if (existing.TryGetValue(key, out var row))
+            {
+                row.Update(item);
+                if (!ReferenceEquals(this.contentMaterialItems[index], row))
+                {
+                    this.contentMaterialItems.Move(this.contentMaterialItems.IndexOf(row), index);
+                }
+            }
+            else
+            {
+                this.contentMaterialItems.Insert(index, new(item));
+            }
+
+            this.contentMaterialItemsByKey[key] = item;
+            index++;
+        }
+
+        while (this.contentMaterialItems.Count > index)
+        {
+            this.contentMaterialItems.RemoveAt(this.contentMaterialItems.Count - 1);
         }
     }
 

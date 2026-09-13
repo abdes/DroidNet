@@ -7,6 +7,8 @@ using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -24,6 +26,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
     private readonly IProjectCookScopeProvider projectCookScopeProvider;
     private readonly IAssetIdentityReducer reducer;
     private readonly IAssetCookStatusReader cookStatus;
+    private readonly ICookDocumentRegistry documents;
+    private readonly ICookRunService cooks;
     private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items = new([]);
     private readonly IDisposable changesSubscription;
     private readonly IDisposable projectSubscription;
@@ -37,6 +41,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
     /// <param name="projectCookScopeProvider">The published mount paths.</param>
     /// <param name="reducer">The source and output identity reducer.</param>
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
+    /// <param name="documents">Live authoring-state notifications.</param>
+    /// <param name="cooks">Cook progress and completion notifications.</param>
     /// <param name="logger">Background refresh diagnostics.</param>
     public ContentBrowserAssetProvider(
         IProjectAssetCatalog projectAssetCatalog,
@@ -44,6 +50,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         IProjectCookScopeProvider projectCookScopeProvider,
         IAssetIdentityReducer reducer,
         IAssetCookStatusReader cookStatus,
+        ICookDocumentRegistry documents,
+        ICookRunService cooks,
         ILogger<ContentBrowserAssetProvider>? logger = null)
     {
         this.projectAssetCatalog = projectAssetCatalog;
@@ -51,11 +59,15 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         this.projectCookScopeProvider = projectCookScopeProvider;
         this.reducer = reducer;
         this.cookStatus = cookStatus;
+        this.documents = documents;
+        this.cooks = cooks;
         this.logger = logger ?? NullLogger<ContentBrowserAssetProvider>.Instance;
         this.changesSubscription = this.projectAssetCatalog.Changes
             .Subscribe(_ => this.OnCatalogChanged());
         this.projectSubscription = this.projectContextService.ProjectChanged.Skip(1)
             .Subscribe(_ => this.OnProjectChanged());
+        this.documents.StateChanged += this.OnDocumentStateChanged;
+        this.cooks.RunChanged += this.OnCookRunChanged;
     }
 
     /// <inheritdoc />
@@ -132,6 +144,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
         this.changesSubscription.Dispose();
         this.projectSubscription.Dispose();
+        this.documents.StateChanged -= this.OnDocumentStateChanged;
+        this.cooks.RunChanged -= this.OnCookRunChanged;
     }
 
     private static ContentBrowserAssetItem ApplyCookStatus(ContentBrowserAssetItem item, AssetCookStatus state)

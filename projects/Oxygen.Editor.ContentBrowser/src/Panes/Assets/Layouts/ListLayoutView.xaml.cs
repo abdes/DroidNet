@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -33,13 +33,13 @@ public sealed partial class ListLayoutView
     /// <param name="args">The event data.</param>
     private void ListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        if (sender is not ListView { SelectedItem: ContentBrowserAssetItem selectedItem })
+        if (sender is not ListView { SelectedItem: AssetBrowserRow selectedItem })
         {
             return;
         }
 
         Debug.Assert(this.ViewModel is not null, "view must have a ViewModel");
-        this.ViewModel.InvokeItemCommand.Execute(selectedItem);
+        this.ViewModel.InvokeItemCommand.Execute(selectedItem.Item);
         args.Handled = true;
     }
 
@@ -51,7 +51,7 @@ public sealed partial class ListLayoutView
             return;
         }
 
-        this.ViewModel.SelectedAsset = listView.SelectedItem as ContentBrowserAssetItem;
+        this.ViewModel.SelectedAsset = (listView.SelectedItem as AssetBrowserRow)?.Item;
     }
 
     /// <summary>

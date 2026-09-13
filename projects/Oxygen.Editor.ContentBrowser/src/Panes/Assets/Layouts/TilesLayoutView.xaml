@@ -15,7 +15,7 @@
         <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
 
         <!--  Tile template: card with icon area, colored separator line, and details area  -->
-        <DataTemplate x:Key="GameAssetTemplate" x:DataType="identity:ContentBrowserAssetItem">
+        <DataTemplate x:Key="GameAssetTemplate" x:DataType="identity:AssetBrowserRow">
             <Grid Width="180">
                 <Border CornerRadius="8">
                     <Grid>
@@ -31,23 +31,24 @@
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 FontSize="48"
-                                Glyph="{x:Bind Kind, Converter={StaticResource AssetTypeToIconConverter}}" />
+                                Glyph="{x:Bind Item.Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}" />
                         </Grid>
 
                         <!--  Colored separator line per asset type  -->
                         <Border
                             Grid.Row="1"
                             Height="2"
-                            Background="{x:Bind Kind, Converter={StaticResource AssetTypeToBrushConverter}}" />
+                            Background="{x:Bind Item.Kind, Mode=OneWay, Converter={StaticResource AssetTypeToBrushConverter}}" />
 
                         <!--  Details  -->
                         <StackPanel Grid.Row="2" Padding="12,8,12,12">
                             <TextBlock
                                 MaxLines="1"
                                 Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind DisplayName}"
+                                Text="{x:Bind Item.DisplayName, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
+                                TextWrapping="NoWrap"
+                                ToolTipService.ToolTip="{x:Bind Item.DisplayName, Mode=OneWay}" />
                             <StackPanel
                                 Margin="0,2,0,0"
                                 Orientation="Horizontal"
@@ -56,16 +57,18 @@
                                     MaxLines="1"
                                     Opacity="0.8"
                                     Style="{ThemeResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind PrimaryBadge}"
+                                    Text="{x:Bind Item.PrimaryBadge, Mode=OneWay}"
                                     TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap" />
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{x:Bind Item.PrimaryBadge, Mode=OneWay}" />
                                 <TextBlock
                                     MaxLines="1"
                                     Opacity="0.8"
                                     Style="{ThemeResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind DerivedBadge}"
+                                    Text="{x:Bind Item.DerivedBadge, Mode=OneWay}"
                                     TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap" />
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{x:Bind Item.DerivedBadge, Mode=OneWay}" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>

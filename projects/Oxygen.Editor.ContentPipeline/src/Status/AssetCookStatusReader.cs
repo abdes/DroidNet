@@ -127,7 +127,11 @@ public sealed class AssetCookStatusReader(
             verified,
             published,
             [.. documents.Where(document => document.IsDirty && paths.Contains(document.SourcePath))],
-            [.. issues, .. nativeDiagnostics]);
+            [.. issues, .. nativeDiagnostics])
+        {
+            SourcePaths = [.. paths],
+            SavedSourceHash = graph.Files.FirstOrDefault(file => string.Equals(file.SourcePath, input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase))?.DiscoveryHash,
+        };
     }
 
     private static DiagnosticRecord StatusIssue(ContentCookInput input, string code, string message) => new()

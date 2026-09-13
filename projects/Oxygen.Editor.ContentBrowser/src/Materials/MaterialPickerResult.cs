@@ -31,6 +31,12 @@ public sealed record MaterialPickerResult(
     /// <summary>Gets the same cook facts shown by the browser for this material.</summary>
     public AssetCookStatus? CookStatus { get; init; }
 
+    /// <summary>Gets the applicable cook affecting this material.</summary>
+    public AssetCookActivity? CookActivity { get; init; }
+
+    /// <summary>Gets the same short status presented in the Content Browser.</summary>
+    public string StatusText => AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
+
     /// <summary>
     /// Gets the compact display state using the shared browser badge precedence.
     /// </summary>

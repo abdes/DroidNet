@@ -4,6 +4,7 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
@@ -24,6 +25,8 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
     private readonly Lock pinnedMaterialsSync = new();
     private readonly Dictionary<string, MaterialPickerResult> pinnedMaterials = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly IDisposable itemsSubscription;
+    private readonly Lock previewSync = new();
+    private readonly Dictionary<string, PreviewCacheEntry> previews = [with(StringComparer.OrdinalIgnoreCase)];
     private MaterialPickerFilter currentFilter = MaterialPickerFilter.Default;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private bool disposed;
@@ -65,7 +68,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
         }
 
         var item = await this.assetProvider.ResolveAsync(materialUri, cancellationToken).ConfigureAwait(false);
-        var result = item is null ? CreateMissingResult(materialUri) : CreateResult(item);
+        var result = item is null ? CreateMissingResult(materialUri) : this.CreateResult(item);
         if (result is not null)
         {
             lock (this.pinnedMaterialsSync)
@@ -91,17 +94,6 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
         this.itemsSubscription.Dispose();
         this.results.Dispose();
     }
-
-    private static MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
-        => item.Kind != AssetKind.Material ? null : new MaterialPickerResult(
-            item.IdentityUri,
-            item.DisplayName,
-            item.PrimaryState,
-            item.DerivedState,
-            item.RuntimeAvailability,
-            item.DescriptorPath,
-            item.CookedPath,
-            TryReadBaseColorPreview(item.DescriptorPath)) { CookStatus = item.CookStatus };
 
     private static MaterialPickerResult CreateMissingResult(Uri materialUri)
         => new(
@@ -185,7 +177,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
     private static bool UriValuesEqual(Uri left, Uri right)
         => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
-    private static MaterialPreviewColor? TryReadBaseColorPreview(string? descriptorPath)
+    private static MaterialPreviewColor? TryReadBaseColorPreview(string? descriptorPath, string? expectedHash = null)
     {
         if (descriptorPath is null || !File.Exists(descriptorPath))
         {
@@ -194,13 +186,55 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
 
         try
         {
-            var source = MaterialSourceReader.Read(File.ReadAllBytes(descriptorPath));
+            var bytes = File.ReadAllBytes(descriptorPath);
+            if (expectedHash is not null && !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), expectedHash, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var source = MaterialSourceReader.Read(bytes);
             var pbr = source.PbrMetallicRoughness;
             return new MaterialPreviewColor(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or System.Text.Json.JsonException)
         {
             return null;
+        }
+    }
+
+    private MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
+        => item.Kind != AssetKind.Material ? null : new MaterialPickerResult(
+            item.IdentityUri,
+            item.DisplayName,
+            item.PrimaryState,
+            item.DerivedState,
+            item.RuntimeAvailability,
+            item.DescriptorPath,
+            item.CookedPath,
+            this.GetBaseColorPreview(item)) { CookStatus = item.CookStatus, CookActivity = item.CookActivity };
+
+    private MaterialPreviewColor? GetBaseColorPreview(ContentBrowserAssetItem item)
+    {
+        if (item.PrimaryState is AssetState.Missing or AssetState.Broken)
+        {
+            return null;
+        }
+
+        if (item.DescriptorPath is not { } path || item.CookStatus?.SavedSourceHash is not { } hash)
+        {
+            return TryReadBaseColorPreview(item.DescriptorPath);
+        }
+
+        lock (this.previewSync)
+        {
+            if (this.previews.TryGetValue(path, out var cached) && string.Equals(cached.Hash, hash, StringComparison.Ordinal))
+            {
+                return cached.Color;
+            }
+
+            var preview = TryReadBaseColorPreview(path, hash);
+            this.previews[path] = new(hash, preview);
+            return preview;
         }
     }
 
@@ -214,7 +248,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
     {
         this.latestItems = items;
         var rows = items
-            .Select(CreateResult)
+            .Select(this.CreateResult)
             .OfType<MaterialPickerResult>()
             .Where(row => IsIncluded(row, this.currentFilter) && MatchesSearch(row, this.currentFilter.SearchText))
             .ToList();
@@ -264,4 +298,6 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
             }
         }
     }
+
+    private sealed record PreviewCacheEntry(string Hash, MaterialPreviewColor? Color);
 }

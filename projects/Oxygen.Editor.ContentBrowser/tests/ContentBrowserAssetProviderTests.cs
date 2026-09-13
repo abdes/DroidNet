@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
@@ -27,7 +28,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
@@ -47,7 +48,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog([]);
         catalog.SetRecordsOnRefresh([new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
@@ -69,7 +70,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
@@ -87,7 +88,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         using var workspace = new TempWorkspace();
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
         var uri = new Uri("asset:///Content/Materials/Missing.omat.json");
 
         var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -107,7 +108,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         await File.WriteAllTextAsync(descriptorPath, "{ invalid json", this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
         var uri = new Uri("asset:///Content/Materials/Lagged.omat.json");
 
         var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -128,7 +129,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
@@ -161,7 +162,7 @@ public sealed partial class ContentBrowserAssetProviderTests
                 new AssetRecord(new Uri("asset:///Content/Images/Preview.png")),
             ]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);

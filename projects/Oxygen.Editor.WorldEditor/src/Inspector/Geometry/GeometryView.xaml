@@ -117,7 +117,8 @@
                                                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                             Style="{ThemeResource CaptionTextBlockStyle}"
                                                                             Text="{Binding DisplayType}"
-                                                                            TextWrapping="NoWrap" />
+                                                                            TextWrapping="NoWrap"
+                                                                            ToolTipService.ToolTip="{Binding DisplayType}" />
                                                                     </StackPanel>
                                                                 </Grid>
                                                             </Button>
@@ -177,8 +178,8 @@
                                                                 Background="Transparent"
                                                                 BorderThickness="0"
                                                                 Click="OnMaterialPickerItemClicked"
-                                                                IsEnabled="{Binding IsEnabled}"
-                                                                ToolTipService.ToolTip="{Binding DisplayPath}">
+                                                                IsEnabled="{Binding Item.IsEnabled}"
+                                                                ToolTipService.ToolTip="{Binding Item.DisplayPath}">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto" />
@@ -194,7 +195,7 @@
                                                                         <controls:Thumbnail
                                                                             Width="32"
                                                                             Height="32"
-                                                                            Content="{Binding ThumbnailModel}"
+                                                                            Content="{Binding Item.ThumbnailModel}"
                                                                             ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
                                                                     </Border>
 
@@ -204,13 +205,14 @@
                                                                         VerticalAlignment="Center">
                                                                         <TextBlock
                                                                             Style="{ThemeResource BodyTextBlockStyle}"
-                                                                            Text="{Binding Name}"
+                                                                            Text="{Binding Item.Name}"
                                                                             TextWrapping="NoWrap" />
                                                                         <TextBlock
                                                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                             Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                            Text="{Binding DisplayType}"
-                                                                            TextWrapping="NoWrap" />
+                                                                            Text="{Binding Item.DisplayType}"
+                                                                            TextWrapping="NoWrap"
+                                                                            ToolTipService.ToolTip="{Binding Item.DisplayType}" />
                                                                     </StackPanel>
                                                                 </Grid>
                                                             </Button>
