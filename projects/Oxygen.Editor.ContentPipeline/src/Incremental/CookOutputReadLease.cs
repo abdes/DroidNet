@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
 /// <summary>Protects the exact output bytes inspected and validated by the native adapter.</summary>
-internal sealed class CookOutputReadLease : IAsyncDisposable
+internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposable
 {
     private readonly string root;
     private readonly Dictionary<string, FileStream> files = [with(StringComparer.Ordinal)];
@@ -86,6 +86,7 @@ internal sealed class CookOutputReadLease : IAsyncDisposable
         var proofs = new Dictionary<string, CookProvenance.FileProof>(StringComparer.Ordinal);
         foreach (var (relative, stream) in this.files)
         {
+            stream.Position = 0;
             var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
             proofs.Add(relative, new(relative, stream.Length, hash));
         }
@@ -93,6 +94,41 @@ internal sealed class CookOutputReadLease : IAsyncDisposable
         this.CheckMembership();
         this.hashes = proofs;
         return proofs;
+    }
+
+    /// <summary>Verifies indexed descriptors against the bytes protected by this reader.</summary>
+    /// <param name="records">Indexed asset identities and descriptor hashes.</param>
+    /// <param name="cancellationToken">Cancels verification.</param>
+    /// <returns>Completion after each recorded descriptor matches its digest and length.</returns>
+    public async Task VerifyDescriptorsAsync(IReadOnlyList<Oxygen.Managed.Assets.Catalog.AssetRecord> records, CancellationToken cancellationToken)
+    {
+        foreach (var record in records)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var metadata = record.Cooked ?? throw new InvalidDataException("The cooked index omitted asset metadata.");
+            if (!this.files.TryGetValue(metadata.DescriptorRelativePath, out var stream) || (ulong)stream.Length != metadata.DescriptorSize)
+            {
+                throw new InvalidDataException($"Cooked descriptor is missing or has changed: {metadata.DescriptorRelativePath}.");
+            }
+
+            stream.Position = 0;
+            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
+            if (!string.Equals(hash, metadata.DescriptorSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Cooked descriptor failed its integrity check: {metadata.DescriptorRelativePath}.");
+            }
+        }
+
+        this.CheckMembership();
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        foreach (var stream in this.files.Values)
+        {
+            stream.Dispose();
+        }
     }
 
     /// <inheritdoc />
