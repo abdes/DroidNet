@@ -67,7 +67,7 @@ public sealed partial class InspectorControlTests
         _ = listSelector.SelectedItem.Should().BeSameAs(selectedRow);
         _ = list.SelectedAsset.Should().Be(published);
         _ = FocusManager.GetFocusedElement(listView.XamlRoot).Should().BeSameAs(focused);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>Rapid filters and folder navigation cannot restore a hidden command target from an inactive layout.</summary>

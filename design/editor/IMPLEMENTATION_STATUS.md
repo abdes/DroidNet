@@ -593,6 +593,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] The selected asset and visible highlight follow list/tile switches. Catalog
         reordering preserves selection and keyboard focus. Filtered-out rows and
         unloaded layouts cannot restore or invoke an obsolete selection.
+        Routed layouts have outlet-owned lifetimes; the actual-router regression
+        verifies repeated tiles/list/tiles replacement without reusing disposed
+        models or rescanning the catalog.
   - [x] Search and Type/Status filters share one session query across list and tiles.
         Live status changes re-evaluate results without rescanning or cooking.
         Empty results expose reset, and empty Cooked folders link to source content.

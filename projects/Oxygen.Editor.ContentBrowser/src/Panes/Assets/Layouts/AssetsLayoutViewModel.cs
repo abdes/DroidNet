@@ -312,7 +312,21 @@ public abstract partial class AssetsLayoutViewModel(
             .Subscribe(this.ReplaceItems);
         this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
         this.Query.Changed += this.OnQueryChanged;
-        await this.RefreshAsync().ConfigureAwait(true);
+        var refresh = this.contentBrowserState.AssetInitialization ??= this.RefreshAsync();
+        try
+        {
+            await refresh.ConfigureAwait(true);
+        }
+        catch
+        {
+            if (ReferenceEquals(this.contentBrowserState.AssetInitialization, refresh))
+            {
+                this.contentBrowserState.AssetInitialization = null;
+            }
+
+            throw;
+        }
+
         this.isLoading = false;
         this.NotifyEmptyState();
     }
