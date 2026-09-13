@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -9,7 +9,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Explicit editor content-pipeline workflow service.
 /// </summary>
-public interface IContentPipelineService
+public interface IContentPipelineService : Status.IAssetCookStatusReader
 {
     /// <summary>Cooks an acknowledged saved asset as background work in its originating project.</summary>
     /// <param name="assetUri">The saved source identity.</param>
