@@ -104,7 +104,10 @@ automatic work and resets with the project lifetime. Equivalent pending scopes
 share one run, with independent caller cancellation and promotion when an
 explicit request joins. Running captures stay immutable; later requests queue
 separately. ContentPipeline 287/287 passes, including shared native publication.
-Imported-source closure and the remaining Import/demand triggers remain open.
+Assignment and scene activation now submit saved geometry/material demand through
+the shared transaction. Reference, document and selection changes retire obsolete
+observers; those notifications never launch cooks. Imported-source closure,
+Import/creation triggers and complete before/after preview journeys remain open.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

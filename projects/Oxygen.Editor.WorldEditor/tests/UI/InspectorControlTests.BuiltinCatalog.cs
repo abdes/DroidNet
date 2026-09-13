@@ -35,7 +35,7 @@ public sealed partial class InspectorControlTests
         var materials = new Mock<IMaterialPickerService>();
         _ = materials.SetupGet(value => value.Results).Returns(Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
         _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, materials.Object, discovery) { IsExpanded = true };
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, materials.Object, discovery, Mock.Of<Services.ISceneContentDemandService>()) { IsExpanded = true };
         var view = new GeometryView { ViewModel = model, Width = 440 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
