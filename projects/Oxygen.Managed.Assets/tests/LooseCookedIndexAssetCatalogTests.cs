@@ -65,7 +65,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
         _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/A.asset"));
         _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Engine/B.asset"));
         var first = results.Single(record => record.Uri == new Uri("asset:///Content/A.asset"));
-        _ = first.Cooked.Should().Be(new CookedAssetMetadata(@"C:\Cooked", "assets/A.asset", indexDoc.SourceGuid, new AssetKey(1, 2), 1, 0, new string('0', 64)));
+        _ = first.Cooked.Should().Be(new CookedAssetMetadata(@"C:\Cooked", "assets/A.asset", indexDoc.SourceGuid, new AssetKey(1, 2), 1, 0, new string('0', 64)) { VirtualPath = "/Content/A.asset" });
     }
 
     /// <summary>Reloaded records retain native types and content revisions without deriving them from a filename.</summary>
