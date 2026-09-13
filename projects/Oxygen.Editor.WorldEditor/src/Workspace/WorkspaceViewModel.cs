@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -31,7 +31,6 @@ using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -176,6 +175,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Resolve messenger instance from the child container so the view model can use it.
         this.messenger = childContainer.Resolve<IMessenger>();
         this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
+        this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
 
         // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
         // IDocumentService events before DocumentManager starts handling open requests.
@@ -295,71 +295,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             || string.Equals(scene.Id.ToString("D"), sceneName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void ValidateCookedIndexFiles(Oxygen.Managed.Assets.Persistence.LooseCooked.V1.Document document, string cookedRoot)
-    {
-        foreach (var asset in document.Assets)
-        {
-            if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
-            {
-                throw new InvalidDataException("Cooked index contains an asset without a descriptor path.");
-            }
-
-            var descriptorPath = System.IO.Path.Combine(
-                cookedRoot,
-                asset.DescriptorRelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
-            if (!System.IO.File.Exists(descriptorPath))
-            {
-                throw new FileNotFoundException("Cooked asset descriptor is missing.", descriptorPath);
-            }
-
-            var actualSize = new System.IO.FileInfo(descriptorPath).Length;
-            if (actualSize != (long)asset.DescriptorSize)
-            {
-                throw new InvalidDataException(
-                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Cooked descriptor size mismatch for '{asset.DescriptorRelativePath}': expected {asset.DescriptorSize}, found {actualSize}."));
-            }
-        }
-
-        foreach (var file in document.Files)
-        {
-            if (string.IsNullOrWhiteSpace(file.RelativePath))
-            {
-                throw new InvalidDataException("Cooked index contains a file record without a path.");
-            }
-
-            var filePath = System.IO.Path.Combine(
-                cookedRoot,
-                file.RelativePath.Replace('/', System.IO.Path.DirectorySeparatorChar));
-            if (!System.IO.File.Exists(filePath))
-            {
-                throw new FileNotFoundException("Cooked file record is missing.", filePath);
-            }
-
-            var actualSize = new System.IO.FileInfo(filePath).Length;
-            if (actualSize != (long)file.Size)
-            {
-                throw new InvalidDataException(
-                    string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Cooked file size mismatch for '{file.RelativePath}': expected {file.Size}, found {actualSize}."));
-            }
-        }
-    }
-
-    private static bool IsUnderRoot(string candidatePath, string rootPath)
-    {
-        var normalizedCandidate = System.IO.Path.GetFullPath(candidatePath)
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-        var normalizedRoot = System.IO.Path.GetFullPath(rootPath)
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-
-        return normalizedCandidate.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase)
-               || normalizedCandidate.StartsWith(
-                   normalizedRoot + System.IO.Path.DirectorySeparatorChar,
-                   StringComparison.OrdinalIgnoreCase)
-               || normalizedCandidate.StartsWith(
-                   normalizedRoot + System.IO.Path.AltDirectorySeparatorChar,
-                   StringComparison.OrdinalIgnoreCase);
-    }
-
     private void RegisterOutputPanels(IContainer childContainer)
     {
         this.cookHosting = childContainer.Resolve<DroidNet.Hosting.WinUI.HostingContext>();
@@ -387,117 +322,21 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return;
         }
 
-        IDisposable? reader = null;
         try
         {
-            reader = await this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()
+            var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
+            var roots = Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService.FindProjectRoots(project);
+            var reader = await this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()
                 .AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
-            var root = Path.Combine(project.ProjectRoot, ".cooked");
-            var candidates = File.Exists(Path.Combine(root, "container.index.bin"))
-                ? new[] { root }
-                : this.GetCookedMountPoints(project, root).Select(mount => Path.Combine(root, mount))
-                    .Where(path => File.Exists(Path.Combine(path, "container.index.bin"))).ToArray();
-            var roots = this.GetMountableRoots(candidates, root);
-            var acceptedReader = reader;
-            reader = null;
-            await this.engineService.RefreshProjectCookedRootsAsync(roots, acceptedReader).ConfigureAwait(true);
-            this.LogMountedRoots(roots);
+            var mounts = await mountService.PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
+            await this.engineService.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
+            this.LogMountedRoots(mounts.Roots);
         }
         catch (Exception exception)
         {
             this.PublishCookedRootWarning(AssetMountDiagnosticCodes.RefreshFailed, "Cooked content is unavailable", exception.Message, project.ProjectRoot, exception);
             await this.engineService.SuspendCookedContentAsync().ConfigureAwait(true);
         }
-        finally
-        {
-            reader?.Dispose();
-        }
-    }
-
-    private HashSet<string> GetCookedMountPoints(ProjectContext activeProject, string cookedBaseRoot)
-    {
-        var mountPoints = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var mount in activeProject.AuthoringMounts)
-        {
-            if (!string.IsNullOrWhiteSpace(mount.Name))
-            {
-                _ = mountPoints.Add(mount.Name);
-            }
-        }
-
-        try
-        {
-            if (!Directory.Exists(cookedBaseRoot))
-            {
-                return mountPoints;
-            }
-
-            foreach (var dir in System.IO.Directory.GetDirectories(cookedBaseRoot))
-            {
-                var name = System.IO.Path.GetFileName(dir);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    _ = mountPoints.Add(name);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException
-            or UnauthorizedAccessException
-            or ArgumentException
-            or NotSupportedException)
-        {
-            this.LogMountEnumerationFailed(ex, cookedBaseRoot);
-            this.PublishCookedRootWarning(
-                AssetMountDiagnosticCodes.RefreshFailed,
-                "Cooked roots could not be enumerated",
-                "The workspace opened, but cooked assets may not be available because the cooked root folders could not be enumerated.",
-                cookedBaseRoot,
-                ex);
-        }
-
-        return mountPoints;
-    }
-
-    private List<string> GetMountableRoots(IReadOnlyList<string> normalizedRoots, string cookedBaseRoot)
-    {
-        var mountableRoots = new List<string>();
-        foreach (var root in normalizedRoots)
-        {
-            if (!IsUnderRoot(root, cookedBaseRoot))
-            {
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Validated cooked root was rejected",
-                    "The validated cooked root is outside the active project's cooked output directory.",
-                    root);
-                continue;
-            }
-
-            var indexPath = System.IO.Path.Combine(root, "container.index.bin");
-            if (!System.IO.File.Exists(indexPath))
-            {
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Validated cooked index is missing",
-                    "The validated cooked root cannot be mounted because its loose cooked index is missing.",
-                    root);
-                continue;
-            }
-
-            if (!this.IsCookedIndexMountable(indexPath))
-            {
-                this.PublishCookedRootWarning(
-                    AssetMountDiagnosticCodes.RefreshFailed,
-                    "Validated cooked index is incompatible",
-                    "The validated cooked root cannot be mounted because its loose cooked index could not be read.",
-                    indexPath);
-                continue;
-            }
-
-            mountableRoots.Add(root);
-        }
-
-        return mountableRoots;
     }
 
     private async Task OpenInitialSceneAsync()
@@ -618,31 +457,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         finally
         {
             _ = this.engineStartupGate.Release();
-        }
-    }
-
-    private bool IsCookedIndexMountable(string indexPath)
-    {
-        try
-        {
-            using var stream = System.IO.File.OpenRead(indexPath);
-            var document = LooseCookedIndex.Read(stream);
-            var cookedRoot = System.IO.Path.GetDirectoryName(indexPath)
-                ?? throw new InvalidDataException("Cooked index path has no parent directory.");
-            ValidateCookedIndexFiles(document, cookedRoot);
-
-            return true;
-        }
-        catch (Exception ex) when (ex is InvalidDataException
-            or NotSupportedException
-            or FileNotFoundException
-            or IOException
-            or UnauthorizedAccessException
-            or ArgumentException
-            or FormatException)
-        {
-            this.LogCookedIndexRejected(ex, indexPath);
-            return false;
         }
     }
 

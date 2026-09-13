@@ -16,7 +16,6 @@ using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Projects;
@@ -29,7 +28,6 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Represents the ViewModel for the project layout in the content browser.
 ///     Acts as a mediator between the DynamicTree control and ContentBrowserState.
 /// </summary>
-/// <param name="projectManager">The project manager service for project manifest persistence.</param>
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
@@ -38,14 +36,12 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
 public partial class ProjectLayoutViewModel(
-    IProjectManagerService projectManager,
     IProjectContextService projectContextService,
     IStorageProvider storage,
     ContentBrowserState contentBrowserState,
     IDialogService dialogService,
     ViewModelToView vmToView,
     IMessenger messenger,
-    IProjectAssetCatalog projectAssetCatalog,
     ILoggerFactory? loggerFactory)
     : DynamicTreeViewModel(loggerFactory), IRoutingAware
 {
@@ -54,7 +50,6 @@ public partial class ProjectLayoutViewModel(
 
     private readonly ViewModelToView vmToView = vmToView;
     private readonly IMessenger messenger = messenger;
-    private readonly IProjectAssetCatalog projectAssetCatalog = projectAssetCatalog;
 
     private IActiveRoute? activeRoute;
     private bool isUpdatingFromState;
@@ -102,7 +97,7 @@ public partial class ProjectLayoutViewModel(
     /// </summary>
     public bool CanUnmountSelectedItem
     {
-        get => this.canUnmountSelectedItem;
+        get => !this.IsApplyingMounts && this.canUnmountSelectedItem;
         private set
         {
             if (this.SetProperty(ref this.canUnmountSelectedItem, value))
@@ -117,7 +112,7 @@ public partial class ProjectLayoutViewModel(
     /// </summary>
     public bool CanRenameSelectedItem
     {
-        get => this.canRenameSelectedItem;
+        get => !this.IsApplyingMounts && this.canRenameSelectedItem;
         private set
         {
             if (this.SetProperty(ref this.canRenameSelectedItem, value))
@@ -323,11 +318,6 @@ public partial class ProjectLayoutViewModel(
 
         foreach (var part in parts)
         {
-            if (!current.IsExpanded)
-            {
-                current.IsExpanded = true;
-            }
-
             var children = await current.Children.ConfigureAwait(true);
             TreeItemAdapter? next = null;
 
@@ -354,186 +344,92 @@ public partial class ProjectLayoutViewModel(
         return current as FolderTreeItemAdapter;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountKnownLocationAsync(KnownVirtualFolderMount kind)
     {
-        if (this.projectRoot is null)
+        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
         {
             return;
         }
 
-        var (mountPointName, projectRelativeBackingPath) = kind switch
+        var (name, path) = kind switch
         {
             KnownVirtualFolderMount.Cooked => ("Cooked", ".cooked"),
             KnownVirtualFolderMount.Imported => ("Imported", ".imported"),
             KnownVirtualFolderMount.Build => ("Build", ".build"),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, message: "Unknown mount kind."),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
-
-        try
+        var existing = candidate.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.RelativePath, path, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
         {
-            var mountRootLocation = storage.NormalizeRelativeTo(this.projectRoot.ProjectRootFolder.Location, projectRelativeBackingPath);
-            var mountRootFolder = await storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
-
-            VirtualFolderMountTreeItemAdapter? mount = null;
-            try
-            {
-                mount = new VirtualFolderMountTreeItemAdapter(
-                    this.logger,
-                    mountPointName,
-                    mountRootFolder,
-                    projectRelativeBackingPath,
-                    VirtualFolderMountBackingPathKind.ProjectRelative);
-
-                mount.PropertyChanged += this.OnMountPointPropertyChanged;
-
-                if (await this.projectRoot.MountVirtualFolderAsync(mount).ConfigureAwait(true))
-                {
-                    var mountedItem = mount;
-                    mount = null;
-
-                    await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);
-                    await this.ExpandItemAsync(mountedItem).ConfigureAwait(true);
-
-                    // Index the newly mounted folder so it shows up in asset browsing queries.
-                    _ = this.projectAssetCatalog.AddFolderAsync(mountRootFolder, mountedItem.VirtualRootPath.TrimStart('/'));
-
-                    this.HasUnsavedChanges = true;
-                }
-            }
-            finally
-            {
-                mount?.Dispose();
-            }
+            await this.ReloadMountTreeAsync().ConfigureAwait(true);
+            contentBrowserState.SetSelectedFolders(["/" + existing.Name]);
+            return;
         }
-        catch (Exception ex)
+
+        candidate.AuthoringMounts.Add(new(name, path));
+        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
+        if (projectContextService.ActiveProject?.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal) && string.Equals(mount.RelativePath, path, StringComparison.Ordinal)) == true)
         {
-            this.LogPreloadingProjectFoldersError(ex);
+            contentBrowserState.SetSelectedFolders(["/" + name]);
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountLocalFolderAsync()
     {
-        if (this.projectRoot is null)
+        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
         {
             return;
         }
 
-        try
+        var names = await this.GetExistingMountPointNamesAsync().ConfigureAwait(true);
+        var model = new LocalFolderMountDialogViewModel(dialogService, names);
+        if (!await this.ShowLocalMountDialogAsync(model).ConfigureAwait(true) || model.Result is not { } definition)
         {
-            var existingNames = await this.GetExistingMountPointNamesAsync().ConfigureAwait(true);
-            var vm = new LocalFolderMountDialogViewModel(dialogService, existingNames);
-
-            var definition = await this.ShowLocalMountDialogAsync(vm).ConfigureAwait(true) ? vm.Result : null;
-            if (definition is null)
-            {
-                return;
-            }
-
-            var mountRootFolder = await storage.GetFolderFromPathAsync(definition.AbsoluteFolderPath).ConfigureAwait(true);
-
-            VirtualFolderMountTreeItemAdapter? mount = null;
-            try
-            {
-                mount = new VirtualFolderMountTreeItemAdapter(
-                    this.logger,
-                    definition.MountPointName,
-                    mountRootFolder,
-                    definition.AbsoluteFolderPath,
-                    VirtualFolderMountBackingPathKind.Absolute);
-
-                mount.PropertyChanged += this.OnMountPointPropertyChanged;
-
-                if (await this.projectRoot.MountVirtualFolderAsync(mount).ConfigureAwait(true))
-                {
-                    var mountedItem = mount;
-                    mount = null;
-
-                    await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);
-                    await this.ExpandItemAsync(mountedItem).ConfigureAwait(true);
-
-                    // Index the newly mounted folder
-                    _ = this.projectAssetCatalog.AddFolderAsync(mountRootFolder, mountedItem.VirtualRootPath.TrimStart('/'));
-
-                    this.HasUnsavedChanges = true;
-                }
-            }
-            finally
-            {
-                mount?.Dispose();
-            }
+            return;
         }
-        catch (Exception ex)
+
+        var relative = GetRelativeMountPath(expected.ProjectRoot, definition.AbsoluteFolderPath);
+        var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, "container.index.bin")).ConfigureAwait(true);
+        if (relative is not null && !isCooked)
         {
-            this.LogPreloadingProjectFoldersError(ex);
+            candidate.AuthoringMounts.Add(new(definition.MountPointName, relative));
         }
+        else
+        {
+            candidate.LocalFolderMounts.Add(new(definition.MountPointName, definition.AbsoluteFolderPath));
+        }
+
+        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanUnmountSelectedItem))]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task UnmountSelectedItemAsync()
     {
-        if (this.projectRoot is null)
+        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
         {
             return;
         }
 
-        string? mountPointName = null;
-        ITreeItem? itemToRemove = null;
-
-        if (this.SelectedItem is VirtualFolderMountTreeItemAdapter virtualMount)
+        var name = this.SelectedItem switch
         {
-            mountPointName = virtualMount.MountPointName;
-            itemToRemove = virtualMount;
-        }
-        else if (this.SelectedItem is AuthoringMountPointTreeItemAdapter authoringMount)
-        {
-            mountPointName = authoringMount.MountPoint.Name;
-            itemToRemove = authoringMount;
-        }
-
-        if (mountPointName is null || itemToRemove is null)
+            VirtualFolderMountTreeItemAdapter mount => mount.MountPointName,
+            AuthoringMountPointTreeItemAdapter mount => mount.MountPoint.Name,
+            _ => null,
+        };
+        if (name is null)
         {
             return;
         }
 
-        try
-        {
-            // Try to unmount as virtual folder first (covers local mounts and newly added mounts)
-            var unmounted = await this.projectRoot.UnmountVirtualFolderAsync(mountPointName).ConfigureAwait(true);
-
-            // If not found in virtual mounts, it might be an authoring mount loaded from project info
-            if (!unmounted && this.SelectedItem is AuthoringMountPointTreeItemAdapter)
-            {
-                // Authoring mounts are direct children, so we can just remove them from the tree
-                // and then SaveProjectMountsAsync will handle the persistence update (by omitting it).
-                unmounted = true;
-            }
-
-            if (unmounted)
-            {
-                if (itemToRemove is INotifyPropertyChanged observable)
-                {
-                    observable.PropertyChanged -= this.OnMountPointPropertyChanged;
-                }
-
-                await this.RemoveItemAsync(itemToRemove, updateSelection: true).ConfigureAwait(true);
-
-                // This will rebuild the list of mounts from the current tree state, effectively removing the unmounted one.
-                this.HasUnsavedChanges = true;
-            }
-
-            // Ensure selection remains valid.
-            this.SelectionModel?.SelectItem(this.projectRoot);
-            this.UpdateSelectionDerivedState();
-        }
-        catch (Exception ex)
-        {
-            this.LogPreloadingProjectFoldersError(ex);
-        }
+        candidate.AuthoringMounts = candidate.AuthoringMounts.Where(mount => !string.Equals(mount.Name, name, StringComparison.Ordinal)).ToList();
+        candidate.LocalFolderMounts = candidate.LocalFolderMounts.Where(mount => !string.Equals(mount.Name, name, StringComparison.Ordinal)).ToList();
+        candidate.CookedContentOrder = candidate.CookedContentOrder.Where(source => source.Kind != CookedContentSourceKind.LocalFolder || !string.Equals(source.Name, name, StringComparison.Ordinal)).ToList();
+        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanRenameSelectedItem))]
@@ -568,7 +464,13 @@ public partial class ProjectLayoutViewModel(
     }
 
     private void OnMountRenamed(object? sender, VirtualFolderMountTreeItemAdapter mount)
-        => this.HasUnsavedChanges = true;
+    {
+        if (!this.IsApplyingMounts)
+        {
+            this.HasUnsavedChanges = true;
+            this.PendingMountChange = this.SaveProjectMountsAsync();
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(HasUnsavedChanges))]
     private async Task SaveProjectMountsAsync()
@@ -589,11 +491,8 @@ public partial class ProjectLayoutViewModel(
             this.AddMountToProjectInfo(projectInfo, child);
         }
 
-        if (await projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
-        {
-            projectContextService.Activate(ProjectContext.FromProjectInfo(projectInfo, activeProject.Scenes));
-            this.HasUnsavedChanges = false;
-        }
+        RemapPriorityNames(activeProject, projectInfo);
+        await this.ApplyMountCandidateAsync(activeProject, projectInfo).ConfigureAwait(true);
     }
 
     private async Task LoadPersistedMountsAsync(IStorageProvider storage, ProjectInfo projectInfo)
@@ -709,6 +608,11 @@ public partial class ProjectLayoutViewModel(
         foreach (var mount in context.LocalFolderMounts)
         {
             projectInfo.LocalFolderMounts.Add(mount);
+        }
+
+        foreach (var source in context.CookedContentOrder)
+        {
+            projectInfo.CookedContentOrder.Add(source);
         }
 
 #if DEBUG

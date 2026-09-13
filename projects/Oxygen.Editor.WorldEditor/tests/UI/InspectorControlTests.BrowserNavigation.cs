@@ -16,7 +16,7 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentBrowser.Shell;
@@ -108,14 +108,12 @@ public sealed partial class InspectorControlTests
         });
         var state = new ContentBrowserState(projects);
         using var model = new ProjectLayoutViewModel(
-            Mock.Of<IProjectManagerService>(),
             projects,
             storage.Object,
             state,
             Mock.Of<IDialogService>(),
             new ViewModelToView(Mock.Of<IViewLocator>()),
             new StrongReferenceMessenger(),
-            Mock.Of<IProjectAssetCatalog>(),
             NullLoggerFactory.Instance);
         try
         {
@@ -139,7 +137,7 @@ public sealed partial class InspectorControlTests
         }
     });
 
-    /// <summary>Restored mount kinds survive saving, and a failed save retains the pending edit.</summary>
+    /// <summary>A confirmed rename applies immediately; a failed change restores the accepted tree.</summary>
     /// <param name="succeeds">Whether project persistence accepts the save.</param>
     /// <returns>The asynchronous mount-persistence regression.</returns>
     [TestMethod]
@@ -165,29 +163,41 @@ public sealed partial class InspectorControlTests
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")], LocalFolderMounts = [new("Library", "D:/Library")], Scenes = [],
         };
         projects.Activate(project);
-        var manager = new Mock<IProjectManagerService>();
-        IProjectInfo? saved = null;
-        _ = manager.Setup(value => value.SaveProjectInfoAsync(It.IsAny<IProjectInfo>())).Callback<IProjectInfo>(value => saved = value).ReturnsAsync(succeeds);
+        var messenger = new StrongReferenceMessenger();
+        ProjectInfo? saved = null;
+        messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) =>
+        {
+            saved = message.Candidate;
+            if (succeeds)
+            {
+                projects.Activate(ProjectContext.FromProjectInfo(message.Candidate));
+            }
+
+            message.Reply(Task.FromResult(succeeds));
+        });
+        var state = new ContentBrowserState(projects);
         using var model = new ProjectLayoutViewModel(
-            manager.Object,
             projects,
             storage.Object,
-            new ContentBrowserState(projects),
+            state,
             Mock.Of<IDialogService>(),
             new ViewModelToView(Mock.Of<IViewLocator>()),
-            new StrongReferenceMessenger(),
-            Mock.Of<IProjectAssetCatalog>(),
+            messenger,
             NullLoggerFactory.Instance);
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
+        state.SetSelectedFolders(["/Library"]);
         renamed.Label = "LibraryRenamed";
-        await model.SaveProjectMountsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        await model.PendingMountChange.ConfigureAwait(true);
         _ = saved.Should().NotBeNull();
         _ = saved!.AuthoringMounts.Should().Contain(mount => mount.Name == "Content" && mount.RelativePath == "Content");
         _ = saved.AuthoringMounts.Should().Contain(mount => mount.Name == "Cooked" && mount.RelativePath == ".cooked");
         _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.AbsolutePath == "D:/Library");
-        _ = model.HasUnsavedChanges.Should().Be(!succeeds);
+        _ = model.HasUnsavedChanges.Should().BeFalse();
+        _ = state.SelectedFolders.Should().Equal(succeeds ? "/LibraryRenamed" : "/Library");
+        var restored = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
+        _ = restored.VirtualFolderMounts.Should().Contain(mount => mount.MountPointName == (succeeds ? "LibraryRenamed" : "Library"));
         if (!succeeds)
         {
             _ = projects.ActiveProject.Should().BeSameAs(project);

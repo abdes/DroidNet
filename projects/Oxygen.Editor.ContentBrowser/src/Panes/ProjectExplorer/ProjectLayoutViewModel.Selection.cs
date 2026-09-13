@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
+using DroidNet.Controls.Selection;
 using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -55,11 +56,19 @@ public partial class ProjectLayoutViewModel
                 }
             }
 
-            if (this.IsSelectionRequestCurrent(version, root))
+            if (this.IsSelectionRequestCurrent(version, root) && this.ShownItems.Contains(root)
+                && await this.RevealSelectedAncestorsAsync(selected, version, root).ConfigureAwait(true))
             {
                 this.isUpdatingFromState = true;
                 try
                 {
+                    if (this.SelectionModel is MultipleSelectionModel<ITreeItem> selection)
+                    {
+                        selection.SelectItemsAt(this.ShownItems.Select((item, index) => (item, index))
+                            .Where(pair => pair.item is TreeItemAdapter adapter && selected.Contains(adapter))
+                            .Select(static pair => pair.index).ToArray());
+                    }
+
                     ApplyLoadedSelection(root, selected);
                     this.UpdateSelectionDerivedState();
                 }
@@ -73,6 +82,29 @@ public partial class ProjectLayoutViewModel
         {
             // A retired tree cannot apply its delayed lookup to the new scope.
         }
+    }
+
+    private async Task<bool> RevealSelectedAncestorsAsync(HashSet<TreeItemAdapter> selected, long version, TreeItemAdapter root)
+    {
+        foreach (var target in selected)
+        {
+            var ancestors = new Stack<ITreeItem>();
+            for (var parent = target.Parent; parent is not null; parent = parent.Parent)
+            {
+                ancestors.Push(parent);
+            }
+
+            while (ancestors.TryPop(out var ancestor))
+            {
+                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
+                if (!this.IsSelectionRequestCurrent(version, root))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private bool IsSelectionRequestCurrent(long version, TreeItemAdapter root)

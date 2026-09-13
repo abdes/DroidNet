@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Docking;
 using DroidNet.Hosting.WinUI;
+using DryIoc;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Cooking;
@@ -145,7 +146,9 @@ public partial class WorkspaceViewModel
             if (this.IsCurrent && this.IsRuntimeAvailable)
             {
                 var reader = writer?.CreateReader() ?? CookOutputLease.AcquireRead(project.ProjectRoot);
-                await owner.engineService.RefreshProjectCookedRootsAsync(roots, reader, keepPaused: true).ConfigureAwait(true);
+                var mounts = await owner.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>()
+                    .PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
+                await owner.engineService.RefreshProjectCookedRootsAsync(mounts.Roots, mounts, keepPaused: true).ConfigureAwait(true);
             }
         });
 

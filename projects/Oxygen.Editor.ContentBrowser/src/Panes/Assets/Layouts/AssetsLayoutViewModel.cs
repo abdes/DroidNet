@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -35,6 +35,7 @@ public abstract partial class AssetsLayoutViewModel(
     private IDisposable? builtinChanges;
     private bool disposed;
     private Task? initialization;
+    private TaskCompletionSource? initialSnapshotCompletion;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private ContentBrowserAssetItem? selectedAsset;
     private bool isLoading = true;
@@ -271,6 +272,7 @@ public abstract partial class AssetsLayoutViewModel(
         {
             if (disposing)
             {
+                _ = this.initialSnapshotCompletion?.TrySetCanceled();
                 this.subscription?.Dispose();
                 this.builtinChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
@@ -334,6 +336,8 @@ public abstract partial class AssetsLayoutViewModel(
 
     private async Task InitializeAsync()
     {
+        var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.initialSnapshotCompletion = firstSnapshot;
         this.subscription?.Dispose();
         this.builtinChanges?.Dispose();
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
@@ -345,13 +349,21 @@ public abstract partial class AssetsLayoutViewModel(
             .Subscribe(_ => this.NotifyBuiltinStatus());
         this.subscription = this.assetProvider.Items
             .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(this.ReplaceItems);
+            .Subscribe(
+                items =>
+                {
+                    this.ReplaceItems(items);
+                    _ = firstSnapshot.TrySetResult();
+                },
+                exception => firstSnapshot.TrySetException(exception),
+                () => firstSnapshot.TrySetResult());
         this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
         this.Query.Changed += this.OnQueryChanged;
         var refresh = this.contentBrowserState.AssetInitialization ??= this.RefreshAsync();
         try
         {
             await refresh.ConfigureAwait(true);
+            await firstSnapshot.Task.ConfigureAwait(true);
         }
         catch
         {
