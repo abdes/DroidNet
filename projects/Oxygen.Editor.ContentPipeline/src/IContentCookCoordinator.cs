@@ -22,6 +22,12 @@ public interface IContentCookCoordinator
     /// <returns>The work's result after successful completion in the same project lifetime.</returns>
     public Task<T> RunAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken);
 
+    /// <summary>Serializes a confirmed configuration change that may replace the active project context after its commit point.</summary>
+    /// <param name="change">The change, which verifies its writer before committing and finishes native ownership transfer before returning.</param>
+    /// <param name="cancellationToken">Cancels queued or uncommitted work.</param>
+    /// <returns>Completion after the change releases its writer; replacing the context does not cancel an already committed change.</returns>
+    public Task RunProjectChangeAsync(Func<ContentCookOperation, CancellationToken, Task> change, CancellationToken cancellationToken);
+
     /// <summary>Rejects callbacks or publication belonging to a replaced or closed project.</summary>
     /// <param name="operation">The operation whose lifetime must still be current.</param>
     public void VerifyCurrent(ContentCookOperation operation);

@@ -618,6 +618,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         adding libraries, and reject invalid order entries. Confirmed configuration
         saves use atomic replacement and reject externally changed baselines;
         project persistence tests pass 65/65.
+  - [x] Ordered mount preparation validates library descriptor integrity and retains
+        file readers through native ownership. Project changes keep the cook writer
+        until refresh finishes, including context replacement. The 43-case focused
+        mount/coordinator suite covers priority, cancellation and reader release.
   - [ ] Finish source/output detail presentation and the remaining combined browser
         navigation/query qualification journeys.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,

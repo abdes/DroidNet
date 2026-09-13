@@ -37,6 +37,18 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         => this.RunCoreAsync(work, request: null, cancellationToken);
 
     /// <inheritdoc />
+    public Task RunProjectChangeAsync(Func<ContentCookOperation, CancellationToken, Task> change, CancellationToken cancellationToken)
+        => this.RunCoreAsync(
+            async (operation, token) =>
+            {
+                await change(operation, token).ConfigureAwait(false);
+                return true;
+            },
+            request: null,
+            cancellationToken,
+            verifyCurrentAfterWork: false);
+
+    /// <inheritdoc />
     public Task<T> RunCookAsync<T>(CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -106,11 +118,13 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 return;
             }
 
+            var sameProject = this.project is { } current && value is not null && current.ProjectId == value.ProjectId
+                && string.Equals(current.ProjectRoot, value.ProjectRoot, StringComparison.OrdinalIgnoreCase);
             previous = this.lifetimeCancellation;
             this.lifetimeCancellation = new();
             this.project = value;
             this.lifetime++;
-            this.automaticCookingPaused = false;
+            this.automaticCookingPaused = sameProject && this.automaticCookingPaused;
             this.DispatchNextWriter();
         }
 
@@ -128,7 +142,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         ((IObserver<ProjectContext?>)this).OnNext(value: null);
     }
 
-    private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken, SharedCook? shared = null)
+    private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken, SharedCook? shared = null, bool verifyCurrentAfterWork = true)
     {
         ArgumentNullException.ThrowIfNull(work);
         cancellationToken.ThrowIfCancellationRequested();
@@ -151,13 +165,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 try
                 {
                     var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
-                    if (result is not ContentCookResult { IsPublished: true })
-                    {
-                        requestCancellation.Token.ThrowIfCancellationRequested();
-                    }
-
-                    this.VerifyCurrent(operation);
-                    await this.CompleteRunAsync(operation, result, requestCancellation.Token).ConfigureAwait(false);
+                    await this.CompleteWorkAsync(operation, result, verifyCurrentAfterWork, requestCancellation.Token).ConfigureAwait(false);
                     return result;
                 }
                 catch (CookInputsNeedSaveException ex) when (progress is not null)
@@ -187,6 +195,22 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 this.CompleteRequest(acquired, requestCancellation);
             }
         }
+    }
+
+    private Task CompleteWorkAsync<T>(ContentCookOperation operation, T result, bool verifyCurrent, CancellationToken cancellationToken)
+    {
+        if (!verifyCurrent)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (result is not ContentCookResult { IsPublished: true })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        this.VerifyCurrent(operation);
+        return this.CompleteRunAsync(operation, result, cancellationToken);
     }
 
     private void ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, ContentPipelineTerminationException failure)
