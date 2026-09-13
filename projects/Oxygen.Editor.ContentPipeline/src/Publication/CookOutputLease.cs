@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -27,6 +27,7 @@ public static partial class CookOutputLease
         try
         {
             RemoveReleasedReaders(readers);
+            RemoveReleasedReaders(readers, "*.scan");
             var lease = new CookOutputWriteLease(root, readers, gate);
             gate = null;
             return lease;
@@ -39,10 +40,11 @@ public static partial class CookOutputLease
 
     /// <summary>Creates a reader while the caller owns the registration gate.</summary>
     /// <param name="directory">The project's reader directory.</param>
+    /// <param name="extension">Distinguishes persistent preview readers from finite status scans.</param>
     /// <returns>The live marker owner.</returns>
-    internal static IDisposable CreateReader(string directory)
+    internal static IDisposable CreateReader(string directory, string extension = ".lease")
     {
-        var path = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".lease");
+        var path = Path.Combine(directory, Guid.NewGuid().ToString("N") + extension);
         var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
         try
         {
@@ -125,9 +127,9 @@ public static partial class CookOutputLease
         }
     }
 
-    private static void RemoveReleasedReaders(string directory)
+    private static void RemoveReleasedReaders(string directory, string pattern = "*.lease")
     {
-        foreach (var path in Directory.EnumerateFiles(directory, "*.lease"))
+        foreach (var path in Directory.EnumerateFiles(directory, pattern))
         {
             if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _))
             {
