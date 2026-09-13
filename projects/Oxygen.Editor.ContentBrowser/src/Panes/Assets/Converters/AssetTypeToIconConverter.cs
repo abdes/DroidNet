@@ -22,7 +22,7 @@ public partial class AssetTypeToIconConverter : IValueConverter
             {
                 AssetKind.Image => "\uE8B9",
                 AssetKind.Scene => "\uE914",
-                AssetKind.Geometry => "\uE8C1",
+                AssetKind.Geometry => "\uF158",
                 AssetKind.Material => "\uE790",
                 AssetKind.Texture => "\uE8B9",
                 AssetKind.Folder => "\uE8B7",
@@ -36,7 +36,7 @@ public partial class AssetTypeToIconConverter : IValueConverter
             {
                 AssetType.Image => "\uE8B9", // image
                 AssetType.Scene => "\uE914", // scene
-                AssetType.Mesh => "\uE8C1", // mesh
+                AssetType.Mesh => "\uF158", // mesh
                 AssetType.Material => "\uE790", // material surface
                 AssetType.Texture => "\uE8B9", // texture (same as image for now)
                 AssetType.Folder => "\uE8B7", // folder (filled)

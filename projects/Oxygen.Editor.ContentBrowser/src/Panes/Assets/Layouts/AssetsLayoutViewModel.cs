@@ -189,6 +189,7 @@ public abstract partial class AssetsLayoutViewModel(
 
     private static bool HasCookedProjection(ContentBrowserAssetItem asset)
         => asset.PrimaryState is AssetState.Cooked
+           || (asset.BuiltinOriginUri is not null && asset.CookedUri is not null)
            || asset.DerivedState is AssetState.Cooked or AssetState.Stale
            || (asset.PrimaryState is AssetState.Broken && asset.CookedUri == asset.IdentityUri);
 

@@ -196,7 +196,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
     private async Task<IReadOnlyList<ContentBrowserAssetItem>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<ContentBrowserAssetItem> source, CancellationToken cancellationToken)
     {
-        var candidates = source.Where(static item => item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene).ToArray();
+        var candidates = source.Where(static item => item.Generated is not null || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene)).ToArray();
         if (candidates.Length == 0)
         {
             return source;
@@ -204,6 +204,15 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
         var states = (await this.cookStatus.ReadAsync(project, candidates.Select(static item => item.IdentityUri).ToArray(), cancellationToken).ConfigureAwait(false))
             .ToDictionary(static state => state.AssetUri);
-        return source.Select(item => states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(item, state) : item).ToArray();
+        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasVerifiedOutput)
+            .SelectMany(item => states[item.IdentityUri].Outputs.Select(output => (output.CookedAssetUri, Origin: item)))
+            .GroupBy(static entry => entry.CookedAssetUri)
+            .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)
+            .ToDictionary(static group => group.Key, static group => group.First().Origin);
+        return source.Select(item => item.IsBuiltin ? item
+            : item.SourcePath is null && item.DescriptorPath is null && item.CookedUri is { } cookedUri
+                && origins.TryGetValue(cookedUri, out var origin) && origin.Kind == item.Kind
+                ? item with { Generated = origin.Generated, BuiltinOriginUri = origin.IdentityUri, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
+                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(item, state) : item).ToArray();
     }
 }

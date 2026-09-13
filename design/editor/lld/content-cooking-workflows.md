@@ -92,6 +92,10 @@ OxygenEditor_Default as duplicate ordinary choices when they are proven derived
 companions. Do not deduplicate by filename or assume two defaults are equivalent.
 An independently authored asset remains distinct; existing explicit references
 to a derived identity remain resolvable and visible, without silent URI rewriting.
+The default material and every engine-generated shape display Built-in, including
+verified project copies. These rows own no source descriptor and offer no
+standalone Cook action. Engine and Cooked folders do not offer Cook Folder;
+project/scene publication maintains the required generated contributions.
 
 Default browsing includes valid uncooked and stale assets. Offer clear Type and
 Status filters, including Needs cooking, Out of date, and Problems. An empty

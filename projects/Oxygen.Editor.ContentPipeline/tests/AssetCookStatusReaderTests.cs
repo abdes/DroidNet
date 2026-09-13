@@ -106,6 +106,19 @@ public sealed partial class AssetCookStatusReaderTests
         native.VerifyNoOtherCalls();
     }
 
+    /// <summary>Built-ins without project contributions have no missing descriptor or native-tool requirement.</summary>
+    /// <returns>The asynchronous engine-identity inspection regression.</returns>
+    [TestMethod]
+    public async Task BuiltinsWithoutProjectOutputsDoNotRequireSourceDescriptors()
+    {
+        using var project = new StatusProject();
+        var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
+        Uri[] identities = [Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("BasicShapes/Cube"), Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("Materials/Default")];
+        var statuses = await project.CreateReader(native.Object).ReadAsync(project.Project, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = statuses.Should().HaveCount(2).And.OnlyContain(status => !status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
+        native.VerifyNoOtherCalls();
+    }
+
     private sealed partial class StatusProject : IDisposable
     {
         public static readonly Uri SourceUri = new("asset:///Content/Material.omat.json");

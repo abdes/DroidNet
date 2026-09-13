@@ -107,5 +107,24 @@ public sealed partial class ContentPipelineServiceTests
         {
             _ = repeated.ReusedAssets.Should().Contain(asset => asset.SourceAssetUri == definition.AssetUri);
         }
+
+        await this.VerifyBuiltinPublicationOriginsAsync(pipeline, workspace, catalog).ConfigureAwait(false);
+    }
+
+    private async Task VerifyBuiltinPublicationOriginsAsync(ContentPipelineService pipeline, TempWorkspace workspace, BuiltinGeometryCatalog catalog)
+    {
+        var identities = catalog.CreateCatalogRecords().Select(static record => record.Uri).ToArray();
+        var runCount = workspace.CookCoordinator.Runs.Count;
+        var statuses = await pipeline.ReadAsync(workspace.ProjectContext, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = statuses.Should().HaveCount(12).And.OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput);
+        _ = statuses.Should().OnlyContain(status => status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty && !status.Outputs.IsEmpty);
+        _ = statuses.Should().OnlyContain(status => status.Outputs.All(output => output.SourceAssetUri == status.AssetUri));
+        _ = workspace.CookCoordinator.Runs.Count.Should().Be(runCount, "origin discovery never cooks built-ins");
+        var shape = catalog.Geometries[0];
+        var path = Path.Combine(workspace.Root, ".cooked", shape.Contribution.VirtualPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        await File.WriteAllTextAsync(path, "unrelated replacement", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var changed = (await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
+        _ = changed.HasPublishedOutput.Should().BeTrue();
+        _ = changed.HasVerifiedOutput.Should().BeFalse("matching filenames do not prove an engine-owned output");
     }
 }

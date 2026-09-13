@@ -208,7 +208,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
             item.RuntimeAvailability,
             item.DescriptorPath,
             item.CookedPath,
-            this.GetBaseColorPreview(item)) { CookStatus = item.CookStatus, CookActivity = item.CookActivity, Generated = item.Generated };
+            this.GetBaseColorPreview(item)) { CookStatus = item.CookStatus, CookActivity = item.CookActivity, Generated = item.Generated, BuiltinOriginUri = item.BuiltinOriginUri };
 
     private MaterialPreviewColor? GetBaseColorPreview(ContentBrowserAssetItem item)
     {

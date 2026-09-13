@@ -37,8 +37,12 @@ public sealed record MaterialPickerResult(
     /// <summary>Gets engine discovery provenance, including last-known availability.</summary>
     public Oxygen.Managed.Assets.Catalog.GeneratedAssetMetadata? Generated { get; init; }
 
+    /// <summary>Gets the engine owner when this identity is a verified project copy of a built-in.</summary>
+    public Uri? BuiltinOriginUri { get; init; }
+
     /// <summary>Gets the same short status presented in the Content Browser.</summary>
     public string StatusText => this.Generated?.IsLastKnown == true ? "Preview unavailable"
+        : this.Generated is not null || this.PrimaryState == AssetState.Generated ? "Built-in"
         : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
 
     /// <summary>

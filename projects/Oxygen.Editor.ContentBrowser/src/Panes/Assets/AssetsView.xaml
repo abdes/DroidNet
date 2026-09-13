@@ -73,12 +73,18 @@
                     </dnc:ToolBarButton.Icon>
                     <dnc:ToolBarButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <MenuFlyoutItem Command="{x:Bind ViewModel.CookSelectedAssetCommand}" Text="Cook Selected Asset">
+                            <MenuFlyoutItem
+                                Command="{x:Bind ViewModel.CookSelectedAssetCommand}"
+                                Text="Cook Selected Asset"
+                                Visibility="{x:Bind ViewModel.CookSelectedAssetVisibility, Mode=OneWay}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE8A5;" />
                                 </MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem Command="{x:Bind ViewModel.CookSelectedFolderCommand}" Text="Cook Folder">
+                            <MenuFlyoutItem
+                                Command="{x:Bind ViewModel.CookSelectedFolderCommand}"
+                                Text="Cook Folder"
+                                Visibility="{x:Bind ViewModel.CookSelectedFolderVisibility, Mode=OneWay}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE8B7;" />
                                 </MenuFlyoutItem.Icon>
