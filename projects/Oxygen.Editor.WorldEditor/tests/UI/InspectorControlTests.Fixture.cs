@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -26,7 +26,7 @@ namespace Oxygen.Editor.World.Tests;
 /// <summary>Uses real authoring commands with a managed sync substitute, without claiming native presentation.</summary>
 public sealed partial class InspectorControlTests
 {
-    private static MaterialEditorViewModel CreateMaterialEditor()
+    private static MaterialEditorViewModel CreateMaterialEditor(Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assetProvider = null)
     {
         var uri = new Uri("asset:///Content/Materials/UI.omat.json");
         var source = new MaterialSource(
@@ -43,7 +43,7 @@ public sealed partial class InspectorControlTests
         var service = new Mock<IMaterialDocumentService>();
         _ = service.Setup(value => value.OpenAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(document);
         _ = service.Setup(value => value.GetDocument(document.DocumentId)).Returns(document);
-        return new(new MaterialDocumentMetadata(uri), service.Object);
+        return new(new MaterialDocumentMetadata(uri), service.Object, assetProvider ?? Oxygen.Testing.AssetStatusFixture.EmptyProvider, CreateStatusHosting().DispatcherScheduler);
     }
 
     private sealed partial class Fixture : IDisposable

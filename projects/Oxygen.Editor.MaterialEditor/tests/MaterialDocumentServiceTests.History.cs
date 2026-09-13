@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -151,9 +151,9 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var first = await service.CreateAsync(new Uri("asset:///Content/Materials/UiFirst.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.CreateAsync(new Uri("asset:///Content/Materials/UiSecond.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var firstEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(first.MaterialUri), service);
-        using var secondEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(second.MaterialUri), service);
-        await WaitForMaterialUiAsync(() => string.Equals(firstEditor.StatusText, "Cook: NotCooked", StringComparison.Ordinal) && string.Equals(secondEditor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var firstEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(first.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        using var secondEditor = new MaterialEditorViewModel(new MaterialDocumentMetadata(second.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        await WaitForMaterialUiAsync(() => firstEditor.IsLoaded && secondEditor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         secondEditor.RoughnessFactor = 0.2f;
         firstEditor.BeginEditSession("Base color", NumberBoxEditInteractionKind.PointerDrag);
         for (var index = 1; index <= 100; index++)
@@ -174,7 +174,7 @@ public sealed partial class MaterialDocumentServiceTests
         _ = firstEditor.BaseColorG.Should().Be(30f / 255);
         _ = firstEditor.BaseColorB.Should().Be(40f / 255);
         _ = firstEditor.BaseColorA.Should().Be(100f / 255);
-        _ = firstEditor.CookState.Should().Be(MaterialCookState.Stale);
+        _ = firstEditor.CookStatusText.Should().Be("Unsaved changes");
         firstEditor.Deactivate();
         _ = firstEditor.UndoCommand.CanExecute(parameter: null).Should().BeFalse();
         firstEditor.RoughnessFactor = 0.8f;
@@ -192,8 +192,8 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var service = CreateService(workspace);
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/UiWheel.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(original.MaterialUri), service);
-        await WaitForMaterialUiAsync(() => string.Equals(editor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(original.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         for (var index = 1; index <= 10; index++)
         {
             editor.BeginEditSession("Roughness", NumberBoxEditInteractionKind.MouseWheel);
@@ -227,8 +227,8 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Focused.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var committer = new FocusedInputCommitter();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, inputCommitter: committer);
-        await WaitForMaterialUiAsync(() => string.Equals(editor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, inputCommitter: committer);
+        await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.BeginEditSession("Roughness", NumberBoxEditInteractionKind.Text);
         committer.Flush = () => editor.RoughnessFactor = 0.67f;
 

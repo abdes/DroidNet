@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -22,8 +22,8 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Original.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var prompt = new RecordingConflictPrompt();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, conflictPrompt: prompt);
-        await WaitForMaterialUiAsync(() => string.Equals(editor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
+        await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.AppendAllTextAsync(original.SourcePath, "\n ", this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -55,8 +55,8 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Close.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var prompt = new RecordingConflictPrompt();
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service, conflictPrompt: prompt);
-        await WaitForMaterialUiAsync(() => string.Equals(editor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance, conflictPrompt: prompt);
+        await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.AppendAllTextAsync(original.SourcePath, "\n ", this.TestContext.CancellationToken).ConfigureAwait(false);
         await editor.PrepareForCloseAsync().ConfigureAwait(false);
@@ -86,8 +86,8 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Invalid.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var metadata = new MaterialDocumentMetadata(original.MaterialUri);
-        using var editor = new MaterialEditorViewModel(metadata, service);
-        await WaitForMaterialUiAsync(() => string.Equals(editor.StatusText, "Cook: NotCooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var editor = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
+        await WaitForMaterialUiAsync(() => editor.IsLoaded, this.TestContext.CancellationToken).ConfigureAwait(false);
         editor.RoughnessFactor = 0.8f;
         await File.WriteAllTextAsync(original.SourcePath, "{ invalid", this.TestContext.CancellationToken).ConfigureAwait(false);
         await editor.SaveAsync().ConfigureAwait(false);

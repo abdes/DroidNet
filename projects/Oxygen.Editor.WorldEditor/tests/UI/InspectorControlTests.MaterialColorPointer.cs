@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -39,7 +39,7 @@ public sealed partial class InspectorControlTests
                 new NativeAtomicFileStore(new RealFileSystem()));
             var document = await service.CreateAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(true);
             await service.CloseAsync(document.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(true);
-            using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service);
+            using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
             await model.PrepareForCloseAsync().ConfigureAwait(true);
             model.ResumeEditing();
             var flyout = await OpenColorFlyoutAsync(new MaterialEditorView { ViewModel = model }).ConfigureAwait(true);

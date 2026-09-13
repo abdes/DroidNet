@@ -321,6 +321,15 @@ ED-M05 surfaces:
 - descriptor/cook state strip.
 - output/result details for failed create/save/cook/preview.
 
+M07B presents cook status as one compact chip beside the material name, using
+WinUI semantic colors and a tooltip for the next action and prior-output facts.
+It observes the shared browser/picker feed, including automatic, folder and
+project cooks. Opening or switching back to a material does not
+replace current publication facts with the document's last explicit cook result.
+Unsaved edits remain visible; progress does not alter values, history or save
+errors. Routine success adds no banner or status row. Closing the document
+detaches its status subscription and pending read without cancelling shared work.
+
 Material picker:
 
 ```text

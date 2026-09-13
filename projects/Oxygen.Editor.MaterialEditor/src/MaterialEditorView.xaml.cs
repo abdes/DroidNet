@@ -19,6 +19,7 @@ public sealed partial class MaterialEditorView
 {
     private MaterialEditorViewModel? colorOwner;
     private bool colorGestureActive;
+    private MaterialEditorViewModel? statusOwner;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorView"/> class.
@@ -26,8 +27,46 @@ public sealed partial class MaterialEditorView
     public MaterialEditorView()
     {
         this.InitializeComponent();
-        this.Loaded += (_, _) => this.ViewModel?.Activate();
-        this.Unloaded += (_, _) => this.ViewModel?.Deactivate();
+        this.Loaded += (_, _) =>
+        {
+            this.ObserveCookStatus();
+            this.ViewModel?.Activate();
+        };
+        this.Unloaded += (_, _) =>
+        {
+            this.StopObservingCookStatus();
+            this.ViewModel?.Deactivate();
+        };
+        this.ViewModelChanged += (_, _) =>
+        {
+            if (this.IsLoaded)
+            {
+                this.ObserveCookStatus();
+            }
+        };
+    }
+
+    private void ObserveCookStatus()
+    {
+        this.StopObservingCookStatus();
+        this.statusOwner = this.ViewModel;
+        this.statusOwner?.PropertyChanged += this.OnCookStatusChanged;
+
+        _ = VisualStateManager.GoToState(this, this.statusOwner?.CookStatusTone ?? "Neutral", useTransitions: false);
+    }
+
+    private void StopObservingCookStatus()
+    {
+        this.statusOwner?.PropertyChanged -= this.OnCookStatusChanged;
+        this.statusOwner = null;
+    }
+
+    private void OnCookStatusChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(MaterialEditorViewModel.CookStatusTone), StringComparison.Ordinal))
+        {
+            _ = VisualStateManager.GoToState(this, this.ViewModel?.CookStatusTone ?? "Neutral", useTransitions: false);
+        }
     }
 
     private void BaseColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)

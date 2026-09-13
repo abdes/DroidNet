@@ -1,7 +1,9 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
@@ -10,7 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Import.Materials;
@@ -46,6 +48,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// </summary>
     /// <param name="metadata">The material document metadata.</param>
     /// <param name="documentService">The material document service.</param>
+    /// <param name="assetProvider">The shared source, publication and cooking status feed.</param>
+    /// <param name="uiScheduler">Marshals status updates to the document's UI thread.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="assetChanged">Optional callback used by the host to refresh content-browser projections.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
@@ -54,6 +58,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
+        IContentBrowserAssetProvider assetProvider,
+        IScheduler uiScheduler,
         ILoggerFactory? loggerFactory = null,
         Action<Uri>? assetChanged = null,
         IDocumentInputCommitter? inputCommitter = null,
@@ -69,6 +75,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.conflictPrompt = conflictPrompt;
         this.MaterialUriText = metadata.MaterialUri.ToString();
 
+        this.assetStatusSubscription = assetProvider.Items.ObserveOn(uiScheduler)
+            .Subscribe(this.ApplyAssetItems, this.OnAssetStatusFailed);
+        this.assetStatusRefresh = this.RefreshAssetStatusAsync(assetProvider, this.assetStatusLifetime.Token);
         this.loadTask = this.LoadAsync();
     }
 
@@ -76,6 +85,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// Gets the available alpha modes.
     /// </summary>
     public IReadOnlyList<string> AlphaModes { get; } = ["Opaque", "Mask", "Blend"];
+
+    /// <summary>Gets a value indicating whether the document's authored values have finished loading.</summary>
+    public bool IsLoaded => this.document is not null && !this.isLoading;
 
     /// <summary>
     /// Gets the color preview brush.
@@ -134,18 +146,17 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     public partial bool DoubleSided { get; set; }
 
     [ObservableProperty]
-    public partial MaterialCookState CookState { get; set; } = MaterialCookState.NotCooked;
-
-    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CookStatusText))]
+    [NotifyPropertyChangedFor(nameof(CookStatusTone))]
+    [NotifyPropertyChangedFor(nameof(CookStatusDescription))]
     public partial bool IsDirty { get; set; }
 
     [ObservableProperty]
-    public partial string StatusText { get; set; } = "Not loaded";
+    [NotifyPropertyChangedFor(nameof(StatusMessageVisibility))]
+    public partial string StatusText { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Gets the visibility of the dirty marker.
-    /// </summary>
-    public Visibility IsDirtyVisibility => this.IsDirty ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>Gets the visibility of an actionable document message or command acknowledgement.</summary>
+    public Visibility StatusMessageVisibility => string.IsNullOrEmpty(this.StatusText) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <inheritdoc />
     public void Dispose()
@@ -156,6 +167,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.isDisposed = true;
+        this.assetStatusSubscription.Dispose();
+        this.assetStatusLifetime.Cancel();
         this.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         _ = this.DisposeGateAsync();
     }
@@ -278,6 +291,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         try
         {
+            await this.assetStatusRefresh.ConfigureAwait(true);
             await this.loadTask.ConfigureAwait(true);
             if (this.pendingSave is { } save)
             {
@@ -294,6 +308,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         _ = this.editGate.Release();
         this.editGate.Dispose();
+        this.assetStatusLifetime.Dispose();
     }
 
     partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorR, value));
@@ -376,7 +391,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.RefreshDocument(current.DocumentId);
         this.HasSaveConflict = false;
-        this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : "Saved";
+        this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : string.Empty;
         this.assetChanged?.Invoke(this.metadata.MaterialUri);
         return !this.IsDirty;
     }
@@ -389,11 +404,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             return;
         }
 
-        var result = await this.documentService.CookAsync(this.document.DocumentId, CancellationToken.None).ConfigureAwait(true);
-        this.CookState = result.State;
-        this.StatusText = result.Cook?.IsUpToDate == true ? "Already up to date." : result.State == MaterialCookState.Rejected
-            ? "Save the material before cooking."
-            : $"Cook: {result.State}";
+        _ = await this.documentService.CookAsync(this.document.DocumentId, CancellationToken.None).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -423,10 +434,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogMaterialOpenFailed(this.logger, ex, this.metadata.MaterialUri);
+            this.StatusText = "The material could not be opened.";
         }
         finally
         {
             this.isLoading = false;
+            this.OnPropertyChanged(nameof(this.IsLoaded));
         }
     }
 
@@ -446,9 +459,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.AlphaMode = ToDisplayAlphaMode(source.AlphaMode);
         this.AlphaCutoff = source.AlphaCutoff;
         this.DoubleSided = source.DoubleSided;
-        this.CookState = value.CookState;
         this.IsDirty = value.IsDirty;
-        this.StatusText = $"Cook: {value.CookState}";
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));
         this.RefreshHistoryCommands();
@@ -505,18 +516,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
             this.RefreshDocument(current.DocumentId, refreshValues: !result.Succeeded);
             this.StatusText = result.Succeeded
-                ? (gesture is not null ? "Editing" : this.IsDirty ? "Unsaved changes" : "Unmodified")
+                ? string.Empty
                 : "The value was rejected. The previous value has been restored.";
         }
         finally
         {
             _ = this.editGate.Release();
         }
-    }
-
-    partial void OnIsDirtyChanged(bool value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.IsDirtyVisibility));
     }
 }
