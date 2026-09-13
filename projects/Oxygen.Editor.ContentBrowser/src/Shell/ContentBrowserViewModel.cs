@@ -16,13 +16,14 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
+using Oxygen.Managed.Core.Diagnostics;
 using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.ContentBrowser.Shell;
@@ -92,9 +93,11 @@ public sealed partial class ContentBrowserViewModel(
     private bool isDisposed;
     private bool isInitialized;
     private bool isNavigatingFromHistory;
+    private bool isApplyingRouteState;
 
     private IRouter? localRouter;
     private IDisposable? routerEventsSubscription;
+    private ContentBrowserState? browserState;
 
     /// <summary>
     ///     Gets a value indicating whether a refresh is currently in progress.
@@ -167,6 +170,7 @@ public sealed partial class ContentBrowserViewModel(
 
             // Subscribe to ContentBrowserState changes to update the navigation stack
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
+            this.browserState = contentBrowserState;
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
             var initialUrl = await this.GetInitialContentBrowserUrlAsync().ConfigureAwait(true);
@@ -180,9 +184,8 @@ public sealed partial class ContentBrowserViewModel(
 
         void InitializeChildContainer()
         {
-            this.childContainer = container
-                .CreateChild()
-                .WithMvvm()
+            this.childContainer = container.CreateChild();
+            _ = this.childContainer.WithMvvm()
                 .WithLocalRouting(
                     RoutesConfig,
                     new LocalRouterContext(navigationContext.NavigationTarget)
@@ -249,12 +252,7 @@ public sealed partial class ContentBrowserViewModel(
             this.isDisposed = true;
             this.routerEventsSubscription?.Dispose();
 
-            // Unsubscribe from ContentBrowserState
-            if (this.childContainer != null)
-            {
-                var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
-                contentBrowserState.PropertyChanged -= this.OnContentBrowserStateChanged;
-            }
+            this.browserState?.PropertyChanged -= this.OnContentBrowserStateChanged;
 
             this.childContainer?.Dispose();
         }
@@ -358,7 +356,8 @@ public sealed partial class ContentBrowserViewModel(
 
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal) && !this.isNavigatingFromHistory)
+        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal)
+            && !this.isNavigatingFromHistory && !this.isApplyingRouteState)
         {
             // Build the new URL for history tracking but DON'T navigate
             var currentUrl = this.BuildCurrentUrl();
@@ -399,9 +398,12 @@ public sealed partial class ContentBrowserViewModel(
     private async Task<string> GetInitialContentBrowserUrlAsync()
     {
         var project = projectContextService.ActiveProject;
+        var defaultUrl = project?.Scenes.Count > 0
+            ? DefaultLocalUrl + RouteStateMapping.BuildSelectedQuery(["Content/Scenes"])
+            : DefaultLocalUrl;
         if (project is null)
         {
-            return DefaultLocalUrl;
+            return defaultUrl;
         }
 
         try
@@ -409,19 +411,20 @@ public sealed partial class ContentBrowserViewModel(
             var usage = await projectUsage.GetProjectUsageAsync(project.Name, project.ProjectRoot).ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(usage?.ContentBrowserState))
             {
-                return DefaultLocalUrl;
+                return defaultUrl;
             }
 
             if (TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
             {
-                return restoredUrl;
+                return restoredUrl.Contains('?', StringComparison.Ordinal) ? restoredUrl
+                    : restoredUrl + RouteStateMapping.BuildSelectedQuery(project.Scenes.Count > 0 ? ["Content/Scenes"] : []);
             }
 
             this.PublishPartialRestoreResult(
                 DiagnosticCodes.WorkspacePrefix + "CONTENT_BROWSER_STATE_INVALID",
                 "The saved Content Browser state could not be restored.",
                 usage.ContentBrowserState);
-            return DefaultLocalUrl;
+            return defaultUrl;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -430,7 +433,7 @@ public sealed partial class ContentBrowserViewModel(
                 "The saved Content Browser state could not be loaded.",
                 project.ProjectRoot,
                 ex);
-            return DefaultLocalUrl;
+            return defaultUrl;
         }
     }
 
@@ -527,6 +530,19 @@ public sealed partial class ContentBrowserViewModel(
             this.currentAssetsViewPath = "assets/list";
         }
 
+        this.isApplyingRouteState = true;
+        try
+        {
+            if (this.childContainer?.Resolve<ContentBrowserState>() is { } state)
+            {
+                RouteStateMapping.ApplyNavigationScope(state, url);
+            }
+        }
+        finally
+        {
+            this.isApplyingRouteState = false;
+        }
+
         if (!this.isNavigatingFromHistory && !string.IsNullOrEmpty(navigationEnd.Url))
         {
             // Avoid pushing duplicate if it's identical to the current entry
@@ -543,11 +559,9 @@ public sealed partial class ContentBrowserViewModel(
 
         this.UpdateHistoryButtonStates();
 
-        // Ensure UI elements that depend on the current location update immediately.
-        // Rebuild breadcrumbs based on the URL we just navigated to. This avoids waiting
-        // for state propagation when navigation was initiated via router/URL (e.g., breadcrumb click).
-        var selectedFromUrl = RouteStateMapping.ParseFirstSelectedFromUrl(navigationEnd.Url);
-        this.UpdateBreadcrumbs(selectedFromUrl);
+        this.UpdateUpButtonState();
+        this.UpdateBreadcrumbs();
+        _ = this.PersistContentBrowserStateAsync(this.BuildCurrentUrl());
     }
 
     private void AddToHistory(string url)
@@ -764,7 +778,7 @@ public sealed partial class ContentBrowserViewModel(
             }
 
             // Swap the entire collection to minimize WinRT collection change handling issues
-            this.Breadcrumbs = new ObservableCollection<BreadcrumbEntry>(entries);
+            this.Breadcrumbs = [.. entries];
         }
 
         // Always enqueue to the UI dispatcher to avoid re-entrancy during input/layout handlers
@@ -836,9 +850,7 @@ public sealed partial class ContentBrowserViewModel(
             var projectLayout = this.childContainer.Resolve<ProjectLayoutViewModel>();
             await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
 
-            // Asset indexing runs automatically in background with file watching
-            // No manual refresh needed - just wait a moment for UI update
-            await Task.Delay(100).ConfigureAwait(true);
+            await this.childContainer.Resolve<IContentBrowserAssetProvider>().RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
         }
         finally
         {

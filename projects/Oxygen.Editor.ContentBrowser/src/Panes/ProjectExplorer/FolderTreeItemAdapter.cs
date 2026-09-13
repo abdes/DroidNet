@@ -4,9 +4,9 @@
 
 using System.ComponentModel;
 using DroidNet.Controls;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Core;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -89,8 +89,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     /// <inheritdoc />
     protected override async Task LoadChildren()
     {
-        await foreach (var child in this.Folder.GetFoldersAsync().ConfigureAwait(true).ConfigureAwait(false)
-                           .ConfigureAwait(false))
+        await foreach (var child in this.Folder.GetFoldersAsync().ConfigureAwait(true))
         {
             FolderTreeItemAdapter? item = null;
             try

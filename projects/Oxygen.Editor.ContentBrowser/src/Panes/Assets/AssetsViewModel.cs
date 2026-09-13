@@ -155,15 +155,6 @@ public partial class AssetsViewModel(
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
-
-            // If no browser state was restored, default to the scene assets folder.
-            // Workspace activation owns initial scene opening/restoration.
-            var activeContext = projectContextService.ActiveProject;
-            if (activeContext?.Scenes.Count > 0 && contentBrowserState.SelectedFolders.Count == 0)
-            {
-                // Navigate to the Scenes folder to show scene assets
-                contentBrowserState.SetSelectedFolders(["Content/Scenes"]);
-            }
         }
 
         // Asset indexing runs automatically in background with file watching

@@ -50,13 +50,13 @@ public sealed partial class ProjectLayoutView
         }
     }
 
-    private async void OnRenameRequested(object? sender, ITreeItem item)
+    private async void OnRenameRequested(object? sender, ProjectItemRenameRequestedEventArgs args)
     {
         if (this.ProjectTree is null)
         {
             return;
         }
 
-        _ = await this.ProjectTree.BeginRenameAsync(item).ConfigureAwait(true);
+        _ = await this.ProjectTree.BeginRenameAsync(args.Item).ConfigureAwait(true);
     }
 }
