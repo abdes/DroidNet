@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
 #include <memory>
 #include <thread>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -24,6 +26,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
@@ -78,6 +81,140 @@ protected:
     Signal(value);
   }
 };
+
+// The registry identifies this wrapper by address, while queues identify its
+// backend resource by a separate handle, just as the D3D12 backend does.
+class RegistryNativeResource final
+  : public oxygen::graphics::RegisteredResource,
+    public oxygen::Object {
+  OXYGEN_TYPED(RegistryNativeResource)
+public:
+  using ViewDescriptionT = oxygen::graphics::testing::TestViewDesc;
+
+  explicit RegistryNativeResource(const std::uint64_t native_id)
+    : native_ { native_id, ClassTypeId() }
+  {
+  }
+
+  [[nodiscard]] auto GetNativeResource() const
+    -> oxygen::graphics::NativeResource
+  {
+    return native_;
+  }
+
+  [[nodiscard]] auto GetNativeView(
+    const oxygen::graphics::DescriptorAllocationHandle& /*unused*/,
+    const ViewDescriptionT& /*unused*/) const -> NativeView
+  {
+    return {};
+  }
+
+private:
+  oxygen::graphics::NativeResource native_;
+};
+
+NOLINT_TEST(ResourceRegistryStateTest,
+  UnregisterForgetsBackendStateBeforeReleasingTheWrapper)
+{
+  auto queue = NiceMock<MockCommandQueue>("state-cache");
+  auto registry = oxygen::graphics::ResourceRegistry("state-cache");
+  auto resource = std::make_shared<RegistryNativeResource>(1U);
+  const auto native = resource->GetNativeResource();
+  const auto states
+    = std::array { CommandQueue::KnownResourceState { .resource = native,
+      .state = oxygen::graphics::ResourceStates::kShaderResource } };
+  queue.AdoptKnownResourceStates(states);
+  registry.Register(resource);
+  const auto weak = std::weak_ptr { resource };
+  auto* wrapper = resource.get();
+  resource.reset();
+  auto notified = false;
+  registry.SetResourceUnregisteredCallback([&](const auto& forgotten) -> void {
+    notified = true;
+    EXPECT_FALSE(weak.expired());
+    EXPECT_EQ(forgotten, native);
+    queue.ForgetKnownResourceState(forgotten);
+  });
+
+  registry.UnRegisterResource(*wrapper);
+
+  EXPECT_TRUE(notified);
+  EXPECT_TRUE(weak.expired());
+  // Reuse the native handle for a newly allocated resource. Its initial state
+  // must not inherit the shader-read state of the retired allocation.
+  auto replacement = std::make_shared<RegistryNativeResource>(1U);
+  EXPECT_FALSE(queue.TryGetKnownResourceState(replacement->GetNativeResource())
+      .has_value());
+}
+
+NOLINT_TEST(ResourceRegistryStateTest,
+  ReplaceForgetsOldBackendStateAndPreservesTheNewResource)
+{
+  for (const auto with_updater : { false, true }) {
+    SCOPED_TRACE(with_updater);
+    auto queue = NiceMock<MockCommandQueue>("replace-state");
+    auto registry = oxygen::graphics::ResourceRegistry("replace-state");
+    auto previous = std::make_shared<RegistryNativeResource>(1U);
+    auto replacement = std::make_shared<RegistryNativeResource>(2U);
+    const auto previous_native = previous->GetNativeResource();
+    const auto replacement_native = replacement->GetNativeResource();
+    const auto states = std::array {
+      CommandQueue::KnownResourceState { .resource = previous_native,
+        .state = oxygen::graphics::ResourceStates::kShaderResource },
+      CommandQueue::KnownResourceState { .resource = replacement_native,
+        .state = oxygen::graphics::ResourceStates::kDepthWrite },
+    };
+    queue.AdoptKnownResourceStates(states);
+    registry.Register(previous);
+    const auto weak = std::weak_ptr { previous };
+    auto* wrapper = previous.get();
+    previous.reset();
+    registry.SetResourceUnregisteredCallback(
+      [&](const auto& forgotten) -> void {
+        EXPECT_FALSE(weak.expired());
+        EXPECT_EQ(forgotten, previous_native);
+        queue.ForgetKnownResourceState(forgotten);
+      });
+
+    if (with_updater) {
+      registry.Replace(*wrapper, replacement,
+        [](const RegistryNativeResource::ViewDescriptionT& desc)
+          -> std::optional<RegistryNativeResource::ViewDescriptionT> {
+          return std::optional { desc };
+        });
+    } else {
+      registry.Replace(*wrapper, replacement, nullptr);
+    }
+
+    EXPECT_TRUE(weak.expired());
+    EXPECT_FALSE(queue.TryGetKnownResourceState(previous_native).has_value());
+    EXPECT_EQ(queue.TryGetKnownResourceState(replacement_native),
+      oxygen::graphics::ResourceStates::kDepthWrite);
+    EXPECT_TRUE(registry.Contains(*replacement));
+  }
+}
+
+NOLINT_TEST(
+  ResourceRegistryStateTest, RemovingOnlyViewsPreservesTheBackendResourceState)
+{
+  auto queue = NiceMock<MockCommandQueue>("view-state");
+  auto registry = oxygen::graphics::ResourceRegistry("view-state");
+  auto resource = std::make_shared<RegistryNativeResource>(1U);
+  const auto native = resource->GetNativeResource();
+  const auto states
+    = std::array { CommandQueue::KnownResourceState { .resource = native,
+      .state = oxygen::graphics::ResourceStates::kShaderResource } };
+  queue.AdoptKnownResourceStates(states);
+  registry.Register(resource);
+  registry.SetResourceUnregisteredCallback([&](const auto& forgotten) -> void {
+    queue.ForgetKnownResourceState(forgotten);
+  });
+
+  registry.UnRegisterViews(*resource);
+
+  EXPECT_EQ(queue.TryGetKnownResourceState(native),
+    oxygen::graphics::ResourceStates::kShaderResource);
+}
 
 // Mock CommandRecorder that can simulate End() failures
 // ReSharper disable once CppClassCanBeFinal - mocks cannot be final
@@ -208,7 +345,7 @@ protected:
 
   //! Factory method to create a mock command recorder with standard setup
   auto CreateMockCommandRecorder(
-    CommandListPtr command_list, const std::shared_ptr<MockCommandQueue> queue)
+    CommandListPtr command_list, const std::shared_ptr<MockCommandQueue>& queue)
     -> std::unique_ptr<MockCommandRecorder>
   {
 
@@ -227,22 +364,29 @@ private:
   //! Setup default behaviors for primary mock queues
   auto SetupDefaultQueueBehaviors() -> void
   {
+    constexpr auto kSecondaryFence = 100U;
+    constexpr auto kPrimaryFence = 200U;
     // Use ON_CALL for both NiceMock and StrictMock compatibility
     ON_CALL(*secondary_q, GetQueueRole())
       .WillByDefault(Return(Role::kGraphics));
     ON_CALL(*primary_q, GetQueueRole()).WillByDefault(Return(Role::kCompute));
-    ON_CALL(*secondary_q, GetCurrentValue()).WillByDefault(Return(100));
-    ON_CALL(*primary_q, GetCurrentValue()).WillByDefault(Return(200));
-    ON_CALL(*secondary_q, GetCompletedValue()).WillByDefault(Return(100));
-    ON_CALL(*primary_q, GetCompletedValue()).WillByDefault(Return(200));
+    ON_CALL(*secondary_q, GetCurrentValue())
+      .WillByDefault(Return(kSecondaryFence));
+    ON_CALL(*primary_q, GetCurrentValue()).WillByDefault(Return(kPrimaryFence));
+    ON_CALL(*secondary_q, GetCompletedValue())
+      .WillByDefault(Return(kSecondaryFence));
+    ON_CALL(*primary_q, GetCompletedValue())
+      .WillByDefault(Return(kPrimaryFence));
   }
 
 protected:
-  // Common members available to all derived fixtures
+  // Test fixture state is intentionally shared with derived test cases.
+  // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
   std::unique_ptr<DeferredReclaimer> real_reclaimer;
   std::unique_ptr<TestCommander> commander;
   std::shared_ptr<MockCommandQueue> secondary_q;
   std::shared_ptr<MockCommandQueue> primary_q;
+  // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 };
 
 //=== Submission Test Fixtures ===--------------------------------------------//
@@ -453,7 +597,8 @@ NOLINT_TEST_F(DeferredSubmissionTest, DeferredSubmission_OnExecutedFiresOnce)
   auto recorder_a = CreateMockCommandRecorder(list_a, secondary_q);
   auto recorder_b = CreateMockCommandRecorder(list_b, secondary_q);
 
-  testing::Sequence seq_a, seq_b;
+  testing::Sequence seq_a;
+  testing::Sequence seq_b;
   EXPECT_CALL(*recorder_a, End()).WillOnce(Return(list_a));
   EXPECT_CALL(*recorder_b, End()).WillOnce(Return(list_b));
   EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
@@ -487,7 +632,9 @@ NOLINT_TEST_F(DeferredSubmissionTest, DeferredSubmission_UnevenMultiQueueBatch)
   auto rec_p2 = CreateMockCommandRecorder(list_p2, primary_q);
   auto rec_s = CreateMockCommandRecorder(list_s, secondary_q);
 
-  testing::Sequence seq_p1, seq_p2, seq_s;
+  testing::Sequence seq_p1;
+  testing::Sequence seq_p2;
+  testing::Sequence seq_s;
   EXPECT_CALL(*rec_p1, End()).WillOnce(Return(list_p1));
   EXPECT_CALL(*rec_p2, End()).WillOnce(Return(list_p2));
   EXPECT_CALL(*rec_s, End()).WillOnce(Return(list_s));
@@ -591,8 +738,11 @@ protected:
   }
 
   // Convenience accessors for error test-specific members
+  // Test fixture state is intentionally shared with derived test cases.
+  // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
   std::shared_ptr<MockCommandList> mock_command_list;
   std::unique_ptr<MockCommandRecorder> mock_recorder;
+  // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 };
 
 //! Deferred failure: GIVEN a deferred list WHEN queue->Submit(span) throws
@@ -1073,7 +1223,7 @@ NOLINT_TEST_F(ConcurrencyTest, ConcurrentSubmission_ThreadSafe)
   // Act: Run concurrent submissions
   threads.reserve(3);
   for (int i = 0; i < 3; ++i) {
-    threads.emplace_back([this, &submission_count]() {
+    threads.emplace_back([this, &submission_count]() -> void {
       try {
         commander->SubmitDeferredCommandLists();
         submission_count.fetch_add(1);
@@ -1094,4 +1244,4 @@ NOLINT_TEST_F(ConcurrencyTest, ConcurrentSubmission_ThreadSafe)
   real_reclaimer->ProcessAllDeferredReleases();
 }
 
-} // anonymous namespace for additional tests
+} // namespace
