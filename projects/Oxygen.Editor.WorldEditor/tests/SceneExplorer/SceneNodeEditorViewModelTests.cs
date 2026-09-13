@@ -152,7 +152,7 @@ public sealed class SceneNodeEditorViewModelTests
             new Mock<ISceneDocumentCommandService>().Object,
             new Mock<IDocumentService>().Object,
             default,
-            new Mock<IAssetCatalog>().Object,
+            Oxygen.Testing.AssetStatusFixture.EmptyProvider,
             new Mock<IMaterialPickerService>().Object,
             sceneEngineSync,
             new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());

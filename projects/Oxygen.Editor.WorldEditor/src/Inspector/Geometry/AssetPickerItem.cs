@@ -42,7 +42,7 @@ public sealed record AssetPickerItem(
 /// </summary>
 /// <param name="Key">The group key used for identification (for example, "Engine" or "Content").</param>
 /// <param name="Items">The items that belong to the group.</param>
-public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerItem> Items);
+public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerRow> Items);
 
 /// <summary>
 /// Represents a single entry shown in the material assignment picker.

@@ -54,7 +54,7 @@ public sealed partial class GeometryViewModel
         var geometries = snapshot.Catalog?.Geometries.Select(definition =>
         {
             var alias = string.Equals(definition.Name, definition.CanonicalName, StringComparison.Ordinal) ? string.Empty : $" · Alias of {definition.CanonicalName}";
-            var availability = snapshot.IsLastKnown ? " · Preview unavailable" : string.Empty;
+            var availability = snapshot.IsLastKnown ? " · Preview unavailable" : this.BuiltinAvailability(definition.AssetUri);
             return CreateEngineItem(definition.Name, definition.AssetUri, definition.AssetUri.AbsolutePath)
                 with { DisplayType = "Built-in geometry" + alias + availability, };
         }).ToArray() ?? [];
@@ -62,11 +62,15 @@ public sealed partial class GeometryViewModel
         {
             if (index >= this.engineItems.Count)
             {
-                this.engineItems.Add(geometries[index]);
+                this.engineItems.Add(new(geometries[index]));
             }
-            else if (this.engineItems[index] != geometries[index])
+            else if (this.engineItems[index].Item.Uri == geometries[index].Uri)
             {
-                this.engineItems[index] = geometries[index];
+                this.engineItems[index].Update(geometries[index]);
+            }
+            else
+            {
+                this.engineItems[index] = new(geometries[index]);
             }
         }
 
@@ -82,7 +86,7 @@ public sealed partial class GeometryViewModel
         else
         {
             var material = CreateEngineMaterialItem("Default", AssetUris.BuildGeneratedUri("Materials/Default"), "/Engine/Generated/Materials/Default")
-                with { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material", };
+                with { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material" + this.BuiltinAvailability(AssetUris.BuildGeneratedUri("Materials/Default")), };
             if (this.engineMaterials.Count == 0)
             {
                 this.engineMaterials.Add(new(material));

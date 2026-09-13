@@ -176,9 +176,9 @@ public sealed partial class InspectorControlTests
                     ? new Oxygen.Editor.World.Inspector.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
             }
 
-            var catalog = new Mock<IAssetCatalog>();
-            _ = catalog.SetupGet(value => value.Changes).Returns(System.Reactive.Linq.Observable.Empty<AssetChange>());
-            _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
+            _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
+            _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             var materials = new Mock<IMaterialPickerService>();
             _ = materials.SetupGet(value => value.Results).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
             _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
