@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using DroidNet.Storage;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser;
@@ -33,6 +34,12 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// Gets the project root path.
     /// </summary>
     public string ProjectRootPath => projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
+
+    /// <summary>Gets or sets the selected identity retained when switching asset layouts.</summary>
+    internal Uri? SelectedAssetUri { get; set; }
+
+    /// <summary>Gets or sets the layout allowed to change the shared asset selection.</summary>
+    internal AssetsLayoutViewModel? ActiveAssetLayout { get; set; }
 
     /// <summary>
     /// Adds a folder to the set of selected folders.

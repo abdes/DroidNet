@@ -38,6 +38,8 @@ public abstract partial class AssetsLayoutViewModel(
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private ContentBrowserAssetItem? selectedAsset;
     private bool isLoading = true;
+    private bool isReplacingRows;
+    private bool hasSnapshot;
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
@@ -86,6 +88,11 @@ public abstract partial class AssetsLayoutViewModel(
         get => this.selectedAsset;
         set
         {
+            if (this.disposed || this.isReplacingRows)
+            {
+                return;
+            }
+
             if (value is null)
             {
                 _ = this.SetProperty(ref this.selectedAsset, newValue: null);
@@ -94,8 +101,19 @@ public abstract partial class AssetsLayoutViewModel(
             {
                 _ = this.SetProperty(ref this.selectedAsset, current.Item);
             }
+
+            if (ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
+            {
+                this.contentBrowserState.SelectedAssetUri = this.selectedAsset?.IdentityUri;
+            }
+
+            this.OnPropertyChanged(nameof(this.SelectedRow));
         }
     }
+
+    /// <summary>Gets the current visual row so programmatic selection is reflected in either layout.</summary>
+    public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected
+        ? this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, selected.IdentityUri)) : null;
 
     /// <summary>
     /// Forces a refresh of <see cref="Assets"/> by re-querying the provider.
@@ -106,9 +124,16 @@ public abstract partial class AssetsLayoutViewModel(
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
+        ObjectDisposedException.ThrowIf(this.disposed, this);
         try
         {
-            await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(false);
+            await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(true);
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            this.contentBrowserState.ActiveAssetLayout = this;
+            if (this.hasSnapshot)
+            {
+                this.RestoreSelection(this.contentBrowserState.SelectedAssetUri);
+            }
         }
         catch
         {
@@ -214,6 +239,10 @@ public abstract partial class AssetsLayoutViewModel(
                 this.builtinChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
+                if (ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
+                {
+                    this.contentBrowserState.ActiveAssetLayout = null;
+                }
             }
 
             this.disposed = true;
@@ -226,7 +255,8 @@ public abstract partial class AssetsLayoutViewModel(
     /// <param name="item">The asset row that was invoked.</param>
     protected void OnItemInvoked(ContentBrowserAssetItem item)
     {
-        if (!this.disposed && this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, item.IdentityUri)) is { } current)
+        if (!this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
+            && this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, item.IdentityUri)) is { } current)
         {
             this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
         }
@@ -304,34 +334,47 @@ public abstract partial class AssetsLayoutViewModel(
         }
 
         this.latestItems = items;
-        var selectedUri = this.SelectedAsset?.IdentityUri;
+        this.hasSnapshot = true;
+        var selectedUri = ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
+            ? this.contentBrowserState.SelectedAssetUri : this.SelectedAsset?.IdentityUri;
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
         var visible = AssetIdentityGrouping.GroupBuiltins(items.Where(this.IsInSelectedFolders)).Where(this.Query.Matches).ToArray();
-        for (var index = 0; index < visible.Length; index++)
+        this.isReplacingRows = true;
+        try
         {
-            var item = visible[index];
-            if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
+            for (var index = 0; index < visible.Length; index++)
             {
-                row.Update(item);
-                if (!ReferenceEquals(this.Assets[index], row))
+                var item = visible[index];
+                if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
                 {
-                    this.Assets.Move(this.Assets.IndexOf(row), index);
+                    row.Update(item);
+                    if (!ReferenceEquals(this.Assets[index], row))
+                    {
+                        this.Assets.Move(this.Assets.IndexOf(row), index);
+                    }
+                }
+                else
+                {
+                    this.Assets.Insert(index, new(item));
                 }
             }
-            else
+
+            while (this.Assets.Count > visible.Length)
             {
-                this.Assets.Insert(index, new(item));
+                this.Assets.RemoveAt(this.Assets.Count - 1);
             }
         }
-
-        while (this.Assets.Count > visible.Length)
+        finally
         {
-            this.Assets.RemoveAt(this.Assets.Count - 1);
+            this.isReplacingRows = false;
         }
 
-        this.SelectedAsset = selectedUri is null ? null : visible.FirstOrDefault(item => AssetIdentityGrouping.Represents(item, selectedUri));
+        this.RestoreSelection(selectedUri);
         this.NotifyEmptyState();
     }
+
+    private void RestoreSelection(Uri? identity)
+        => this.SelectedAsset = identity is null ? null : this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, identity))?.Item;
 
     private void OnQueryChanged(object? sender, EventArgs args) => this.ReplaceItems(this.latestItems);
 
