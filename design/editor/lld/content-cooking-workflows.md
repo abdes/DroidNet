@@ -113,6 +113,13 @@ Saved/unsaved authoring, cooked freshness, operation phase, and runtime readines
 are separate facts. Present the most useful short status on rows, and all relevant
 facts in details. Error and stale overlays must not erase the last good result.
 
+When the SDK cannot provide its built-in catalog, discovery uses the last valid
+engine-provided snapshot and marks those choices as last-known with a "Preview
+unavailable" notice. Without a valid snapshot, show the catalog problem and no
+engine choices. A successful SDK refresh replaces the derived cache and removes
+the notice. This authoring fallback does not supply cook recipes or qualify
+native operations.
+
 | Situation | What users see | What users can do |
 | --- | --- | --- |
 | Recognized source not imported | Not imported; source type/name | Import, inspect source details. Raw model source is not yet a geometry choice. |

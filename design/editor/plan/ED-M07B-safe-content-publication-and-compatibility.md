@@ -416,6 +416,14 @@ preview without requiring an explicit cook first. An authored ArrowGizmo asset i
 editor-only gizmo overlays remain transient. Preserve #5 request-generation and
 scene-mutation acceptance for all cached/procedural/async paths.
 
+Decision D3 (2026-09-13): retain the last valid engine-provided catalog as a
+derived authoring cache. If the SDK cannot provide its catalog, browser and
+picker choices use that snapshot with a clear last-known catalog and
+"Preview unavailable" notice. If no valid cached catalog exists, explain the
+unavailability and leave engine choices empty. A successful SDK catalog refresh
+replaces the snapshot and clears the notice. Cooking continues to require the
+current native catalog; cached discovery metadata cannot establish compatibility.
+
 Pass: every listed shape previews, saves/reopens, cooks and loads. Compare identity,
 bounds, topology/index counts, vertex semantics, default material and authored
 overrides through supported APIs; use the same parameter cases for live and
