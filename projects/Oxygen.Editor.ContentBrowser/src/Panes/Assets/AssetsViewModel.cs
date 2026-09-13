@@ -662,26 +662,27 @@ public partial class AssetsViewModel(
             .ConfigureAwait(true);
 
     [RelayCommand]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private async Task InspectCookedOutputAsync()
+    private Task InspectCookedOutputAsync() => this.OpenInspectionAsync(validate: false);
+
+    [RelayCommand]
+    private Task ValidateCookedOutputAsync() => this.OpenInspectionAsync(validate: true);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
+    private async Task OpenInspectionAsync(bool validate)
     {
         var scopeUri = this.GetSelectedFolderUri();
-        var operationId = Guid.NewGuid();
         try
         {
-            var result = await contentPipelineService.InspectCookedOutputAsync(scopeUri, CancellationToken.None)
-                .ConfigureAwait(true);
-            var message = result.Succeeded
-                ? $"Found {result.Assets.Count} cooked assets and {result.Files.Count} cooked files in {result.CookedRoot}."
-                : $"Cooked output inspection failed: {result.CookedRoot}.";
-            this.PublishOperation(
-                operationId,
-                ContentPipelineOperationKinds.CookedOutputInspect,
-                result.Succeeded ? OperationStatus.Succeeded : OperationStatus.Failed,
-                "Inspect Cooked Output",
-                message,
-                result.Diagnostics,
-                scopeUri);
+            if (projectContextService.ActiveProject is not { } project)
+            {
+                return;
+            }
+
+            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate));
+            if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+            {
+                throw new InvalidOperationException("The inspection document could not be opened in this workspace.");
+            }
         }
         catch (Exception ex)
         {
@@ -690,39 +691,6 @@ public partial class AssetsViewModel(
                 "Inspect Cooked Output",
                 ex.Message,
                 ContentPipelineDiagnosticCodes.InspectFailed,
-                scopeUri,
-                ex);
-        }
-    }
-
-    [RelayCommand]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private async Task ValidateCookedOutputAsync()
-    {
-        var scopeUri = this.GetSelectedFolderUri();
-        try
-        {
-            var result = await contentPipelineService.ValidateCookedOutputAsync(scopeUri, CancellationToken.None)
-                .ConfigureAwait(true);
-            var message = result.Succeeded
-                ? $"Cooked output validated: {result.CookedRoot}."
-                : $"Cooked output validation failed: {result.CookedRoot}.";
-            this.PublishOperation(
-                Guid.NewGuid(),
-                ContentPipelineOperationKinds.CookedOutputValidate,
-                result.Succeeded ? OperationStatus.Succeeded : OperationStatus.Failed,
-                "Validate Cooked Output",
-                message,
-                result.Diagnostics,
-                scopeUri);
-        }
-        catch (Exception ex)
-        {
-            this.PublishFailure(
-                ContentPipelineOperationKinds.CookedOutputValidate,
-                "Validate Cooked Output",
-                ex.Message,
-                ContentPipelineDiagnosticCodes.ValidateFailed,
                 scopeUri,
                 ex);
         }

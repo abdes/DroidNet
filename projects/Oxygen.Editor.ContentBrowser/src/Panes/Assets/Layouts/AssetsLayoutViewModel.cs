@@ -40,11 +40,15 @@ public abstract partial class AssetsLayoutViewModel(
     private bool isLoading = true;
     private bool isReplacingRows;
     private bool hasSnapshot;
+    private Uri? pendingReveal;
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
     /// </summary>
     public event EventHandler<AssetsViewItemInvokedEventArgs>? ItemInvoked;
+
+    /// <summary>Occurs when an explicit navigation asks the view to reveal its selected asset.</summary>
+    public event EventHandler? SelectionRevealRequested;
 
     /// <summary>
     /// Gets the collection of content browser asset rows.
@@ -107,6 +111,11 @@ public abstract partial class AssetsLayoutViewModel(
                 this.contentBrowserState.SelectedAssetUri = this.selectedAsset?.IdentityUri;
             }
 
+            if (this.pendingReveal != this.selectedAsset?.IdentityUri)
+            {
+                this.pendingReveal = null;
+            }
+
             this.OnPropertyChanged(nameof(this.SelectedRow));
         }
     }
@@ -114,6 +123,13 @@ public abstract partial class AssetsLayoutViewModel(
     /// <summary>Gets the current visual row so programmatic selection is reflected in either layout.</summary>
     public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected
         ? this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, selected.IdentityUri)) : null;
+
+    /// <summary>Requests one reveal for explicit navigation, including a view that has not loaded yet.</summary>
+    public void RevealSelection()
+    {
+        this.pendingReveal = this.SelectedAsset?.IdentityUri;
+        this.SelectionRevealRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Forces a refresh of <see cref="Assets"/> by re-querying the provider.
@@ -129,6 +145,11 @@ public abstract partial class AssetsLayoutViewModel(
         {
             await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(true);
             ObjectDisposedException.ThrowIf(this.disposed, this);
+            if (!ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
+            {
+                this.pendingReveal = null;
+            }
+
             this.contentBrowserState.ActiveAssetLayout = this;
             if (this.hasSnapshot)
             {
@@ -223,6 +244,21 @@ public abstract partial class AssetsLayoutViewModel(
         }
 
         return false;
+    }
+
+    /// <summary>Consumes a still-current reveal request when its view is ready.</summary>
+    /// <returns>The selected row to reveal, or null after superseding selection/navigation.</returns>
+    internal AssetBrowserRow? TakeSelectionToReveal()
+    {
+        var row = this.SelectedRow;
+        if (this.disposed || !ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
+            || row is null || this.pendingReveal is null || !AssetIdentityGrouping.Represents(row.Item, this.pendingReveal))
+        {
+            return null;
+        }
+
+        this.pendingReveal = null;
+        return row;
     }
 
     /// <summary>

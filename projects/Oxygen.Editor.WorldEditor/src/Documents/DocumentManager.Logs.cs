@@ -76,4 +76,10 @@ public partial class DocumentManager
 
     private void LogSceneOpeningAborted(World.Scene scene)
         => LogSceneOpeningAborted(this.logger, scene.Name, scene.Id, this.windowId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to create material {MaterialUri}.")]
+    private partial void LogMaterialCreationFailed(Exception exception, Uri materialUri);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
+    private partial void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName);
 }

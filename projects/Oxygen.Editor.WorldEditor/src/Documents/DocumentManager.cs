@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Inspection;
 
 namespace Oxygen.Editor.World.Documents;
 
@@ -32,6 +33,9 @@ public sealed partial class DocumentManager : IDisposable
     /// </summary>
     /// <param name="documentService">The service used to manage documents.</param>
     /// <param name="messenger">The messenger for inter-component communication.</param>
+    /// <param name="projectContextService">The active project and its activation lifetime.</param>
+    /// <param name="projectUsage">The workspace's recent-scene persistence.</param>
+    /// <param name="materialDocumentService">The material authoring service.</param>
     /// <param name="windowId">The identifier of the window associated with this manager.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     public DocumentManager(
@@ -55,6 +59,7 @@ public sealed partial class DocumentManager : IDisposable
         this.messenger.Register<OpenSceneRequestMessage>(this, this.OnOpenSceneRequested);
         this.messenger.Register<OpenMaterialRequestMessage>(this, this.OnOpenMaterialRequested);
         this.messenger.Register<CreateMaterialRequestMessage>(this, this.OnCreateMaterialRequested);
+        this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
     }
 
     /// <inheritdoc/>
@@ -145,10 +150,36 @@ public sealed partial class DocumentManager : IDisposable
         return openedId != Guid.Empty;
     }
 
+    private static bool UriValuesEqual(Uri left, Uri right)
+        => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
+
     private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
     {
         var opened = await this.OpenSceneAsync(message.Scene).ConfigureAwait(true);
         message.Reply(opened);
+    }
+
+    private async Task<bool> OpenInspectionAsync(OpenCookedInspectionRequestMessage request)
+    {
+        if (this.windowId.Value == 0 || !ReferenceEquals(request.Project, this.projectContextService.ActiveProject))
+        {
+            return false;
+        }
+
+        var existing = this.documentService.GetOpenDocuments(this.windowId).OfType<CookedInspectionDocumentMetadata>()
+            .FirstOrDefault(document => ReferenceEquals(document.Project, request.Project) && document.ScopeUri == request.ScopeUri);
+        if (existing is not null)
+        {
+            existing.RequestRefresh(request.Validate);
+            return await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
+        }
+
+        var name = request.ScopeUri is null ? request.Project.Name : Path.GetFileName(Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/'));
+        var metadata = new CookedInspectionDocumentMetadata(request.Project, request.ScopeUri, request.Validate)
+        {
+            Title = "Inspect · " + (string.IsNullOrEmpty(name) || string.Equals(name, "Cooked", StringComparison.OrdinalIgnoreCase) ? request.Project.Name : name),
+        };
+        return await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true) != Guid.Empty;
     }
 
     private async void OnOpenMaterialRequested(object recipient, OpenMaterialRequestMessage message)
@@ -169,13 +200,10 @@ public sealed partial class DocumentManager : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.logger.LogWarning(ex, "Failed to create material {MaterialUri}.", message.MaterialUri);
-            message.Reply(false);
+            this.LogMaterialCreationFailed(ex, message.MaterialUri);
+            message.Reply(response: false);
         }
     }
-
-    private static bool UriValuesEqual(Uri left, Uri right)
-        => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
     private async Task MarkSceneActivatedAsync(World.Scene scene)
     {
@@ -192,7 +220,7 @@ public sealed partial class DocumentManager : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.logger.LogWarning(ex, "Failed to persist last opened scene {SceneName} for project {ProjectName}.", scene.Name, project.Name);
+            this.LogSceneUsageUpdateFailed(ex, scene.Name, project.Name);
         }
     }
 }

@@ -378,6 +378,14 @@ not only counts and a filesystem path. Validate distinguishes output integrity
 from freshness and runtime availability. Reuse the existing details/results
 surfaces; neither command changes the selected asset or initiates a cook.
 
+The user selected an on-demand document tab for the full report on 2026-09-13.
+Use the existing document lifecycle, with no Save or dirty state. Keep a captured
+report stable until an explicit Refresh or Validate request. Assets can be
+searched and selected within the report; source/dependency navigation and copyable
+paths are explicit actions. Root-file and integrity results identify the physical
+root they describe, even when the requested asset list is folder-scoped. Closing
+the tab or project cancels and drains its inspection work.
+
 Every required action is keyboard reachable, has a meaningful accessible name,
 and displays its disabled reason outside hover-only tooltips. Use text/icons in
 addition to color, announce phase/result changes without reading every progress

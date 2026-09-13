@@ -25,4 +25,9 @@ public interface ICookingWorkspaceActions
     /// <param name="documentId">The listed document identity.</param>
     /// <returns>Whether the document could be activated.</returns>
     public Task<bool> OpenDocumentAsync(Guid documentId);
+
+    /// <summary>Opens a read-only report of the current published output for a completed cook's scope.</summary>
+    /// <param name="run">The selected cook and its original scope.</param>
+    /// <returns>Whether the report document was opened.</returns>
+    public Task<bool> InspectAsync(CookRunSnapshot run);
 }

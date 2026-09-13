@@ -21,6 +21,50 @@ public sealed partial class InspectorControlTests
 {
     private static readonly string[] BrowserSelectionQueries = ["Bl", "Cube", "Blu", "absent"];
 
+    /// <summary>An explicit reveal survives a hidden view and reaches a distant row without stealing a later focus change.</summary>
+    /// <param name="tiles">Whether to exercise tiles.</param>
+    /// <returns>The asynchronous rendered reveal regression.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task ExplicitBrowserRevealWaitsForViewAndPreservesNewerFocus(bool tiles) => EnqueueAsync(async () =>
+    {
+        var items = Enumerable.Range(0, 1000).Select(index => CreateNavigationAsset(
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/M{index}.omat.json"), AssetKind.Material)).ToArray();
+        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>(items);
+        var provider = CreateQueryProvider(updates);
+        var projects = CreateQueryProject();
+        var state = new ContentBrowserState(projects);
+        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins)
+            : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        model.SelectedAsset = items[^1];
+        model.RevealSelection();
+        UserControl view = tiles ? new TilesLayoutView { ViewModel = (TilesLayoutViewModel)model } : new ListLayoutView { ViewModel = (ListLayoutViewModel)model };
+        var root = new Grid { Width = 440, Height = 380 };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
+        var search = new TextBox();
+        root.Children.Add(search);
+        Grid.SetRow(view, 1);
+        root.Children.Add(view);
+        await LoadTestContentAsync(root).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var selector = view.FindDescendant<ListViewBase>()!;
+        _ = selector.SelectedItem.Should().BeSameAs(model.SelectedRow);
+        _ = selector.ContainerFromItem(model.SelectedRow).Should().NotBeNull();
+        _ = selector.FindDescendant<ScrollViewer>()!.VerticalOffset.Should().BePositive();
+        model.SelectedAsset = items[0];
+        model.RevealSelection();
+        _ = search.Focus(FocusState.Programmatic).Should().BeTrue();
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = FocusManager.GetFocusedElement(root.XamlRoot).Should().BeSameAs(search);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+    });
+
     /// <summary>Changing layouts retains the current asset instead of restoring each layout's old selection.</summary>
     /// <returns>The asynchronous rendered selection journey.</returns>
     [TestMethod]

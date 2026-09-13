@@ -27,6 +27,7 @@
             </InfoBar.ActionButton>
         </InfoBar>
         <ListView
+            x:Name="AssetList"
             Grid.Row="1"
             DoubleTapped="ListView_DoubleTapped"
             ItemsSource="{x:Bind ViewModel.Assets}"
