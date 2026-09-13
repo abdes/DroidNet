@@ -1,113 +1,156 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using Oxygen.Managed.Assets.Catalog;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 /// <summary>
 /// Shared ED-M06 browser asset provider over the composed project catalog.
 /// </summary>
-public sealed class ContentBrowserAssetProvider : IContentBrowserAssetProvider, IDisposable
+public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetProvider, IDisposable
 {
     private readonly IProjectAssetCatalog projectAssetCatalog;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectCookScopeProvider projectCookScopeProvider;
     private readonly IAssetIdentityReducer reducer;
+    private readonly IAssetCookStatusReader cookStatus;
     private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items = new([]);
     private readonly IDisposable changesSubscription;
+    private readonly IDisposable projectSubscription;
+    private readonly ILogger<ContentBrowserAssetProvider> logger;
+    private readonly CancellationTokenSource lifetime = new();
     private bool disposed;
 
+    /// <summary>Initializes a new instance of the <see cref="ContentBrowserAssetProvider"/> class.</summary>
+    /// <param name="projectAssetCatalog">The composed asset identities.</param>
+    /// <param name="projectContextService">The active project lifetime.</param>
+    /// <param name="projectCookScopeProvider">The published mount paths.</param>
+    /// <param name="reducer">The source and output identity reducer.</param>
+    /// <param name="cookStatus">The cook-owned freshness reader.</param>
+    /// <param name="logger">Background refresh diagnostics.</param>
     public ContentBrowserAssetProvider(
         IProjectAssetCatalog projectAssetCatalog,
         IProjectContextService projectContextService,
         IProjectCookScopeProvider projectCookScopeProvider,
-        IAssetIdentityReducer reducer)
+        IAssetIdentityReducer reducer,
+        IAssetCookStatusReader cookStatus,
+        ILogger<ContentBrowserAssetProvider>? logger = null)
     {
         this.projectAssetCatalog = projectAssetCatalog;
         this.projectContextService = projectContextService;
         this.projectCookScopeProvider = projectCookScopeProvider;
         this.reducer = reducer;
+        this.cookStatus = cookStatus;
+        this.logger = logger ?? NullLogger<ContentBrowserAssetProvider>.Instance;
         this.changesSubscription = this.projectAssetCatalog.Changes
-            .Subscribe(change => { _ = this.RefreshAsync(AssetBrowserFilter.Default); });
+            .Subscribe(_ => this.OnCatalogChanged());
+        this.projectSubscription = this.projectContextService.ProjectChanged.Skip(1)
+            .Subscribe(_ => this.OnProjectChanged());
     }
 
     /// <inheritdoc />
     public IObservable<IReadOnlyList<ContentBrowserAssetItem>> Items => this.items.AsObservable();
 
     /// <inheritdoc />
-    public async Task RefreshAsync(AssetBrowserFilter filter, CancellationToken cancellationToken = default)
+    public Task RefreshAsync(AssetBrowserFilter filter, CancellationToken cancellationToken = default)
     {
         _ = filter;
         cancellationToken.ThrowIfCancellationRequested();
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            this.items.OnNext([]);
-            return;
-        }
-
-        var query = new AssetQuery(AssetQueryScope.All);
-        await this.projectAssetCatalog.RefreshAsync(cancellationToken).ConfigureAwait(false);
-        var records = await this.projectAssetCatalog.QueryAsync(query, cancellationToken).ConfigureAwait(false);
-        var cookScope = this.projectCookScopeProvider.CreateScope(project);
-        var reduced = await Task.Run(
-                () => this.reducer.Reduce(records, project, cookScope, AssetBrowserFilter.Default),
-                cancellationToken)
-            .ConfigureAwait(false);
-        this.items.OnNext(reduced);
+        return this.RequestRefresh(invalidate: false).WaitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<ContentBrowserAssetItem?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(uri);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (this.projectContextService.ActiveProject is not { } project)
+        CancellationTokenSource cancellation;
+        lock (this.refreshSync)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetime.Token);
+        }
+
+        using var cancellationLifetime = cancellation;
+        await this.RefreshAsync(AssetBrowserFilter.Default, cancellation.Token).ConfigureAwait(false);
+        ProjectContext project;
+        lock (this.refreshSync)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            if (this.projectContextService.ActiveProject is not { } active)
+            {
+                return this.reducer.CreateMissing(uri);
+            }
+
+            project = active;
+            var logicalKey = GetLogicalKey(uri);
+            var match = this.items.Value.FirstOrDefault(item => string.Equals(GetLogicalKey(item.IdentityUri), logicalKey, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        if (TryResolveSourcePath(project, uri) is not { } sourcePath || !File.Exists(sourcePath))
         {
             return this.reducer.CreateMissing(uri);
         }
 
-        await this.projectAssetCatalog.RefreshAsync(cancellationToken).ConfigureAwait(false);
-        var records = await this.projectAssetCatalog
-            .QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken)
-            .ConfigureAwait(false);
-        var logicalKey = GetLogicalKey(uri);
-        var matches = records.Where(record => string.Equals(GetLogicalKey(record.Uri), logicalKey, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (matches.Count == 0)
-        {
-            if (TryResolveSourcePath(project, uri) is { } sourcePath && File.Exists(sourcePath))
-            {
-                matches.Add(new AssetRecord(uri));
-            }
-            else
-            {
-                return this.reducer.CreateMissing(uri);
-            }
-        }
-
+        AssetRecord[] matches = [new(uri)];
         var cookScope = this.projectCookScopeProvider.CreateScope(project);
-        return this.reducer
-            .Reduce(matches, project, cookScope, AssetBrowserFilter.Default with { IncludeMissing = true, IncludeBroken = true })
-            .FirstOrDefault();
+        var reduced = this.reducer.Reduce(matches, project, cookScope, AssetBrowserFilter.Default with { IncludeMissing = true, IncludeBroken = true });
+        var enriched = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token).ConfigureAwait(false);
+        return !this.disposed && ReferenceEquals(project, this.projectContextService.ActiveProject) && enriched.Count != 0 ? enriched[0] : null;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
+        lock (this.refreshSync)
         {
-            return;
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
+            this.scanCancellation?.Cancel();
+            this.lifetime.Cancel();
+            this.lifetime.Dispose();
+            _ = this.refreshCompletion?.TrySetCanceled(new CancellationToken(canceled: true));
+            this.items.Dispose();
         }
 
-        this.disposed = true;
         this.changesSubscription.Dispose();
-        this.items.Dispose();
+        this.projectSubscription.Dispose();
     }
+
+    private static ContentBrowserAssetItem ApplyCookStatus(ContentBrowserAssetItem item, AssetCookStatus state)
+        => item with
+        {
+            CookStatus = state,
+            DiagnosticCodes = item.DiagnosticCodes.Where(code => state.HasPublishedOutput || !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal))
+                .Concat(state.Diagnostics.Select(static diagnostic => diagnostic.Code)).Distinct(StringComparer.Ordinal).ToArray(),
+            PrimaryState = state.Freshness switch
+            {
+                AssetCookFreshness.MissingSource => AssetState.Missing,
+                AssetCookFreshness.InvalidSource => AssetState.Broken,
+                _ => AssetState.Descriptor,
+            },
+            DerivedState = !state.HasPublishedOutput ? null
+                : !state.HasVerifiedOutput ? AssetState.Broken
+                : state.Freshness == AssetCookFreshness.Current && !state.HasUnsavedChanges ? AssetState.Cooked : AssetState.Stale,
+            IsSelectable = state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
+        };
 
     private static string GetLogicalKey(Uri uri)
     {
@@ -134,11 +177,19 @@ public sealed class ContentBrowserAssetProvider : IContentBrowserAssetProvider, 
         var mountName = relative[..slash];
         var mountRelativePath = relative[(slash + 1)..];
         var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
+        return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
+    }
+
+    private async Task<IReadOnlyList<ContentBrowserAssetItem>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<ContentBrowserAssetItem> source, CancellationToken cancellationToken)
+    {
+        var candidates = source.Where(static item => item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene).ToArray();
+        if (candidates.Length == 0)
         {
-            return null;
+            return source;
         }
 
-        return Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
+        var states = (await this.cookStatus.ReadAsync(project, candidates.Select(static item => item.IdentityUri).ToArray(), cancellationToken).ConfigureAwait(false))
+            .ToDictionary(static state => state.AssetUri);
+        return source.Select(item => states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(item, state) : item).ToArray();
     }
 }

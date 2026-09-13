@@ -1,33 +1,36 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.Mvvm.Messaging;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Core;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Messages;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;
 
 /// <summary>
 /// Material picker projection over the shared ED-M06 Content Browser asset provider.
 /// </summary>
-public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
+public sealed partial class MaterialPickerService : IMaterialPickerService, IDisposable
 {
     private readonly IContentBrowserAssetProvider assetProvider;
     private readonly IMessenger? messenger;
     private readonly BehaviorSubject<IReadOnlyList<MaterialPickerResult>> results = new([]);
     private readonly Lock pinnedMaterialsSync = new();
-    private readonly Dictionary<string, MaterialPickerResult> pinnedMaterials = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialPickerResult> pinnedMaterials = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly IDisposable itemsSubscription;
     private MaterialPickerFilter currentFilter = MaterialPickerFilter.Default;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private bool disposed;
 
+    /// <summary>Initializes a new instance of the <see cref="MaterialPickerService"/> class.</summary>
+    /// <param name="assetProvider">The workspace asset status provider.</param>
+    /// <param name="messenger">Asset change notifications.</param>
     public MaterialPickerService(
         IContentBrowserAssetProvider assetProvider,
         IMessenger? messenger = null)
@@ -62,7 +65,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
         }
 
         var item = await this.assetProvider.ResolveAsync(materialUri, cancellationToken).ConfigureAwait(false);
-        var result = item is null ? CreateMissingResult(materialUri) : this.CreateResult(item);
+        var result = item is null ? CreateMissingResult(materialUri) : CreateResult(item);
         if (result is not null)
         {
             lock (this.pinnedMaterialsSync)
@@ -89,76 +92,8 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
         this.results.Dispose();
     }
 
-    private void OnAssetsChanged(AssetsChangedMessage message)
-    {
-        _ = message;
-        _ = this.RefreshAsync(this.currentFilter);
-    }
-
-    private void Publish(IReadOnlyList<ContentBrowserAssetItem> items)
-    {
-        this.latestItems = items;
-        var rows = items
-            .Select(this.CreateResult)
-            .OfType<MaterialPickerResult>()
-            .Where(row => IsIncluded(row, this.currentFilter))
-            .Where(row => MatchesSearch(row, this.currentFilter.SearchText))
-            .ToList();
-
-        var pinnedRows = this.ResolvePinnedMissingRows(rows);
-        rows.AddRange(pinnedRows);
-
-        if (this.currentFilter.IncludeGenerated && rows.All(static row => !IsDefaultMaterial(row.MaterialUri)))
-        {
-            rows.Insert(
-                0,
-                new MaterialPickerResult(
-                    AssetUris.BuildGeneratedUri("Materials/Default"),
-                    "Default",
-                    AssetState.Generated,
-                    DerivedState: null,
-                    AssetRuntimeAvailability.NotApplicable,
-                    DescriptorPath: null,
-                    CookedPath: null,
-                    BaseColorPreview: new MaterialPreviewColor(1.0f, 1.0f, 1.0f, 1.0f)));
-        }
-
-        this.results.OnNext(rows
-            .DistinctBy(static row => row.MaterialUri.ToString(), StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToList());
-    }
-
-    private IEnumerable<MaterialPickerResult> ResolvePinnedMissingRows(IReadOnlyList<MaterialPickerResult> rows)
-    {
-        MaterialPickerResult[] pinnedRows;
-        lock (this.pinnedMaterialsSync)
-        {
-            pinnedRows = this.pinnedMaterials.Values.ToArray();
-        }
-
-        foreach (var pinned in pinnedRows)
-        {
-            if (rows.Any(row => UriValuesEqual(row.MaterialUri, pinned.MaterialUri)))
-            {
-                continue;
-            }
-
-            if (MatchesSearch(pinned, this.currentFilter.SearchText))
-            {
-                yield return pinned;
-            }
-        }
-    }
-
-    private MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
-    {
-        if (item.Kind != AssetKind.Material)
-        {
-            return null;
-        }
-
-        return new MaterialPickerResult(
+    private static MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
+        => item.Kind != AssetKind.Material ? null : new MaterialPickerResult(
             item.IdentityUri,
             item.DisplayName,
             item.PrimaryState,
@@ -166,8 +101,7 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
             item.RuntimeAvailability,
             item.DescriptorPath,
             item.CookedPath,
-            TryReadBaseColorPreview(item.DescriptorPath));
-    }
+            TryReadBaseColorPreview(item.DescriptorPath)) { CookStatus = item.CookStatus };
 
     private static MaterialPickerResult CreateMissingResult(Uri materialUri)
         => new(
@@ -195,17 +129,10 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
         };
 
     private static bool MatchesSearch(MaterialPickerResult row, string? searchText)
-    {
-        if (string.IsNullOrWhiteSpace(searchText))
-        {
-            return true;
-        }
-
-        return row.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+        => string.IsNullOrWhiteSpace(searchText) || row.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
                || row.MaterialUri.ToString().Contains(searchText, StringComparison.OrdinalIgnoreCase)
                || (row.DescriptorPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true)
                || (row.CookedPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true);
-    }
 
     private static bool IsDefaultMaterial(Uri uri)
         => UriValuesEqual(uri, AssetUris.BuildGeneratedUri("Materials/Default"));
@@ -274,6 +201,67 @@ public sealed class MaterialPickerService : IMaterialPickerService, IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or System.Text.Json.JsonException)
         {
             return null;
+        }
+    }
+
+    private void OnAssetsChanged(AssetsChangedMessage message)
+    {
+        _ = message;
+        _ = this.RefreshAsync(this.currentFilter);
+    }
+
+    private void Publish(IReadOnlyList<ContentBrowserAssetItem> items)
+    {
+        this.latestItems = items;
+        var rows = items
+            .Select(CreateResult)
+            .OfType<MaterialPickerResult>()
+            .Where(row => IsIncluded(row, this.currentFilter) && MatchesSearch(row, this.currentFilter.SearchText))
+            .ToList();
+
+        var pinnedRows = this.ResolvePinnedMissingRows(rows);
+        rows.AddRange(pinnedRows);
+
+        if (this.currentFilter.IncludeGenerated && rows.TrueForAll(static row => !IsDefaultMaterial(row.MaterialUri)))
+        {
+            rows.Insert(
+                0,
+                new MaterialPickerResult(
+                    AssetUris.BuildGeneratedUri("Materials/Default"),
+                    "Default",
+                    AssetState.Generated,
+                    DerivedState: null,
+                    AssetRuntimeAvailability.NotApplicable,
+                    DescriptorPath: null,
+                    CookedPath: null,
+                    BaseColorPreview: new MaterialPreviewColor(1.0f, 1.0f, 1.0f, 1.0f)));
+        }
+
+        this.results.OnNext(rows
+            .DistinctBy(static row => row.MaterialUri.ToString(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList());
+    }
+
+    private IEnumerable<MaterialPickerResult> ResolvePinnedMissingRows(IReadOnlyList<MaterialPickerResult> rows)
+    {
+        MaterialPickerResult[] pinnedRows;
+        lock (this.pinnedMaterialsSync)
+        {
+            pinnedRows = this.pinnedMaterials.Values.ToArray();
+        }
+
+        foreach (var pinned in pinnedRows)
+        {
+            if (rows.Any(row => UriValuesEqual(row.MaterialUri, pinned.MaterialUri)))
+            {
+                continue;
+            }
+
+            if (MatchesSearch(pinned, this.currentFilter.SearchText))
+            {
+                yield return pinned;
+            }
         }
     }
 }
