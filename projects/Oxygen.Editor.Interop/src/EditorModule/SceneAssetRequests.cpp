@@ -57,12 +57,14 @@ struct SceneAssetRequests::State {
     bool apply = false;
     bool rejected_slot = false;
     FailureCallback on_failure;
+    SuccessCallback on_success;
   };
   struct Target {
     uint64_t geometry_generation = 0;
     std::string geometry_uri;
     bool geometry_pending = false;
     FailureCallback geometry_failure;
+    SuccessCallback geometry_success;
     std::unordered_map<std::size_t, Slot> slots;
   };
 
@@ -165,7 +167,8 @@ SceneAssetRequests::~SceneAssetRequests() = default;
 
 auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
                                        const std::string &uri,
-                                       FailureCallback on_failure)
+                                       FailureCallback on_failure,
+                                       SuccessCallback on_success)
     -> GeometryCompletion {
   auto &target = state_->targets[node];
   const auto generation = ++state_->generation;
@@ -173,6 +176,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
   target.geometry_uri = uri;
   target.geometry_pending = true;
   target.geometry_failure = std::move(on_failure);
+  target.geometry_success = std::move(on_success);
   return [inbox = std::weak_ptr(state_->inbox), node,
           generation](Geometry asset, std::string error) {
     if (auto queue = inbox.lock()) {
@@ -201,11 +205,13 @@ void SceneAssetRequests::LoadGeometry(const std::string &uri,
 
 void SceneAssetRequests::SetMaterial(scene::NodeHandle node, std::size_t slot,
                                      const std::string &uri,
-                                     FailureCallback on_failure) {
+                                     FailureCallback on_failure,
+                                     SuccessCallback on_success) {
   const auto generation = ++state_->generation;
   state_->targets[node].slots[slot] =
       State::Slot{.generation = generation, .uri = uri,
-                  .on_failure = std::move(on_failure)};
+                  .on_failure = std::move(on_failure),
+                  .on_success = std::move(on_success)};
   if (state_->loads_paused) {
     return;
   }
@@ -251,7 +257,7 @@ void SceneAssetRequests::Refresh(scene::Scene &scene) {
         !data::IsBuiltinGeometryUri(target.geometry_uri) &&
         state_->CanRefresh(target.geometry_uri, false)) {
       auto complete = BeginGeometry(handle, target.geometry_uri,
-                                    target.geometry_failure);
+                                    target.geometry_failure, target.geometry_success);
       state_->refresh_requests.insert(state_->generation);
       LoadGeometry(target.geometry_uri, std::move(complete));
     }
@@ -259,7 +265,7 @@ void SceneAssetRequests::Refresh(scene::Scene &scene) {
     const auto slots = target.slots;
     for (const auto &[index, slot] : slots) {
       if (!slot.rejected_slot && (slot.uri.empty() || state_->CanRefresh(slot.uri, true))) {
-        SetMaterial(handle, index, slot.uri, slot.on_failure);
+        SetMaterial(handle, index, slot.uri, slot.on_failure, slot.on_success);
         state_->refresh_requests.insert(state_->generation);
       }
     }
@@ -318,6 +324,9 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
         return;
       }
       node->GetRenderable().SetGeometry(std::move(result.geometry_asset));
+      if (target.geometry_success) {
+        target.geometry_success(result.generation);
+      }
       const auto geometry = node->GetRenderable().GetGeometry();
       const auto slot_count = geometry && geometry->LodCount() > 0 && geometry->MeshAt(0)
           ? geometry->MeshAt(0)->SubMeshes().size() : 0;
@@ -373,6 +382,8 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
         if (slot.material) {
           state_->Report(handle, slot.uri, "material slot is unavailable",
                          false, slot.generation, slot.on_failure, index);
+        } else if (slot.on_success) {
+          slot.on_success(slot.generation);
         }
         slot.material.reset();
         slot.rejected_slot = true;
@@ -384,6 +395,9 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
         renderable.ClearMaterialOverride(lod, index);
       }
       slot.material.reset();
+      if (slot.on_success) {
+        slot.on_success(slot.generation);
+      }
     }
   }
 }

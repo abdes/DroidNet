@@ -35,9 +35,17 @@ public sealed class RuntimeAssetFailureTests
         _ = failures.Should().HaveCount(2);
         _ = failures[1].Generation.Should().Be(43);
         _ = failures[1].Request.Should().BeSameAs(second);
+        _ = sut.AssetRequests.Should().ContainSingle().Which.Succeeded.Should().BeFalse();
+        _ = sut.IsCurrentAssetFailure(failures[1]).Should().BeTrue();
+        native.Raise(value => value.AssetLoadSucceeded += null, new RuntimeAssetLoadSucceededEventArgs(second, 44));
+        _ = sut.AssetRequests.Should().ContainSingle().Which.Succeeded.Should().BeTrue();
+        _ = sut.IsCurrentAssetFailure(failures[1]).Should().BeFalse("a successful native retry supersedes queued failure feedback");
+        native.Raise(value => value.AssetLoadFailed += null, new RuntimeAssetLoadFailedEventArgs(second, 43, "Old generation"));
+        _ = sut.AssetRequests.Should().ContainSingle().Which.Succeeded.Should().BeTrue();
         _ = sut.IsCurrentAssetRequest(first).Should().BeFalse("a queued UI diagnostic must recheck after replacement");
         _ = sut.IsCurrentAssetRequest(second).Should().BeTrue();
         sut.EndRun();
+        _ = sut.AssetRequests.Should().BeEmpty();
         native.Raise(value => value.AssetLoadFailed += null, new RuntimeAssetLoadFailedEventArgs(second, 43, "After shutdown"));
         _ = failures.Should().HaveCount(2);
     }
@@ -61,6 +69,7 @@ public sealed class RuntimeAssetFailureTests
         _ = sut.IsCurrentAssetRequest(otherSlot).Should().BeTrue();
         _ = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(node)), this.TestContext.CancellationToken);
         _ = sut.IsCurrentAssetRequest(otherSlot).Should().BeFalse();
+        _ = sut.AssetRequests.Should().BeEmpty();
     }
 
     private static Mock<IRuntimeCommandTransport> CreateTransport()

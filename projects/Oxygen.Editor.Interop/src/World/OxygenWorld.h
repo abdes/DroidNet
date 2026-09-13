@@ -99,8 +99,13 @@ namespace Oxygen::Interop::World {
     //! Queues geometry with a generation-correlated asynchronous failure sink.
     void SetGeometry(System::Guid nodeId, String^ assetUri,
       Action<System::UInt64, String^>^ onFailure);
+    void SetGeometry(System::Guid nodeId, String^ assetUri,
+      Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
     void SetMaterialOverride(System::Guid nodeId, int slotIndex,
       String^ materialUri, Action<System::UInt64, String^>^ onFailure);
+    void SetMaterialOverride(System::Guid nodeId, int slotIndex,
+      String^ materialUri, Action<System::UInt64, String^>^ onFailure,
+      Action<System::UInt64>^ onSuccess);
     //! Queues a scene-owned solid background without changing atmosphere.
     void SetBackgroundColor(System::Numerics::Vector3 color);
     //! Observes native background state after preceding queued mutations.

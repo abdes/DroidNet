@@ -88,5 +88,25 @@ public sealed partial class NativeLoopCleanupTests
         _ = failure.Generation.Should().BePositive();
         _ = failure.Message.Should().NotBeNullOrWhiteSpace();
         _ = commands.IsCurrentAssetRequest(failure.Request).Should().BeTrue();
+        _ = commands.IsCurrentAssetFailure(failure).Should().BeTrue();
+        var replacement = request with { OperationId = Guid.NewGuid(), Command = new RuntimeSetGeometry(nodeId, "asset:///Engine/Generated/BasicShapes/Cube") };
+        _ = commands.Execute(replacement, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
+        await this.WaitForAppliedAssetAsync(commands, replacement).ConfigureAwait(false);
+        _ = commands.IsCurrentAssetFailure(failure).Should().BeFalse();
+        var material = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(nodeId, 0, "asset:///Engine/Generated/Materials/Default"));
+        _ = commands.Execute(material, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
+        await this.WaitForAppliedAssetAsync(commands, material).ConfigureAwait(false);
+    }
+
+    private async Task WaitForAppliedAssetAsync(RuntimeCommandDispatcher commands, RuntimeWorldRequest request)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        while (!commands.AssetRequests.Any(status => status.Request == request && status.Succeeded == true))
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(false);
+        }
+
+        _ = commands.AssetRequests.Single(status => status.Request == request).Generation.Should().BePositive();
     }
 }

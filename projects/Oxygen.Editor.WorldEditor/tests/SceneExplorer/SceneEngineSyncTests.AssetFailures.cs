@@ -28,7 +28,7 @@ public sealed partial class SceneEngineSyncTests
                 return new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted);
             });
         var current = true;
-        _ = commands.Setup(value => value.IsCurrentAssetRequest(It.IsAny<RuntimeWorldRequest>())).Returns(() => current);
+        _ = commands.Setup(value => value.IsCurrentAssetFailure(It.IsAny<RuntimeAssetLoadFailedEventArgs>())).Returns(() => current);
         var results = new List<OperationResult>();
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(results.Add);

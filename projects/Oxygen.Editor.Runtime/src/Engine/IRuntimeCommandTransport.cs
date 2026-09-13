@@ -10,6 +10,9 @@ internal interface IRuntimeCommandTransport
     /// <summary>Occurs after native generation and target validation accepts a failure.</summary>
     public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
 
+    /// <summary>Occurs after a current asset has been applied in the native mutation phase.</summary>
+    public event EventHandler<RuntimeAssetLoadSucceededEventArgs>? AssetLoadSucceeded;
+
     /// <summary>Performs the native Execute operation.</summary>
     /// <param name="request">The command and its operation identity.</param>
     public void Execute(RuntimeWorldRequest request);

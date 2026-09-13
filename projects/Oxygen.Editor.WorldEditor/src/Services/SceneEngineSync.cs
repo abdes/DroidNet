@@ -866,7 +866,7 @@ public sealed partial class SceneEngineSync(
     {
         var scene = projection.Snapshot;
         cancellationToken.ThrowIfCancellationRequested();
-        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid());
+        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid()) { ProjectId = scene.Project.ProjectInfo?.Id ?? Guid.Empty };
         world = new WorldDispatch(world.Commands, target, cancellationToken);
         lock (this.documentGate)
         {

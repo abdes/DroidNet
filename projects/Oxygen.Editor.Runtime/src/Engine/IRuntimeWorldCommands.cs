@@ -10,8 +10,19 @@ public interface IRuntimeWorldCommands
     /// <summary>Occurs on the runtime thread when a current asynchronous asset request fails.</summary>
     public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
 
+    /// <summary>Reports changes to current asset intents and their native outcomes asynchronously.</summary>
+    public event EventHandler? AssetStatusChanged;
+
     /// <summary>Gets the current run identity, or empty when unavailable.</summary>
     public Guid RunId { get; }
+
+    /// <summary>Gets current asset intents and outcomes; superseded scenes, nodes and slots are excluded.</summary>
+    public IReadOnlyList<RuntimeAssetRequestStatus> AssetRequests { get; }
+
+    /// <summary>Checks that a failure still matches the current request and native completion generation.</summary>
+    /// <param name="failure">The failure being delivered after a thread hop.</param>
+    /// <returns>Whether the failure is still current.</returns>
+    public bool IsCurrentAssetFailure(RuntimeAssetLoadFailedEventArgs failure);
 
     /// <summary>Invalidates commands and notifications for the specified scene activation.</summary>
     /// <param name="target">The activation being closed or superseded.</param>

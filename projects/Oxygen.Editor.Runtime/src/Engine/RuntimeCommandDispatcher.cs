@@ -9,7 +9,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
 {
     private readonly Lock gate = new();
     private readonly Dictionary<ulong, RuntimeViewTarget> views = [];
-    private readonly Dictionary<(Guid nodeId, int slot), Guid> assetOperations = [];
+    private readonly Dictionary<(Guid nodeId, int slot), RuntimeAssetRequestStatus> assetOperations = [];
     private IRuntimeCommandTransport? transport;
     private Task? loop;
     private TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -47,6 +47,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             this.runId = Guid.NewGuid();
             this.transport = commandTransport;
             this.transport.AssetLoadFailed += this.OnAssetLoadFailed;
+            this.transport.AssetLoadSucceeded += this.OnAssetLoadSucceeded;
             this.loop = loopTask;
             this.ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
             return this.runId;
@@ -61,6 +62,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             if (this.transport is { } transport)
             {
                 transport.AssetLoadFailed -= this.OnAssetLoadFailed;
+                transport.AssetLoadSucceeded -= this.OnAssetLoadSucceeded;
             }
 
             this.transport = null;
@@ -68,6 +70,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             this.sceneReady = false;
             this.views.Clear();
             this.assetOperations.Clear();
+            this.NotifyAssetStatusChanged();
             _ = this.ended.TrySetResult();
             _ = this.sceneEnded.TrySetResult();
         }
@@ -83,6 +86,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                 this.scene = null;
                 this.sceneReady = false;
                 this.assetOperations.Clear();
+                this.NotifyAssetStatusChanged();
                 _ = this.sceneEnded.TrySetResult();
             }
         }
@@ -147,7 +151,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             return this.IsRunning && this.sceneReady && this.scene == request.Target
                 && AssetTarget(request.Command) is { } target
                 && this.assetOperations.TryGetValue(target, out var current)
-                && current == request.OperationId;
+                && current.Request.OperationId == request.OperationId;
         }
     }
 
@@ -198,6 +202,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             }
             catch (Exception exception) when (IsRecoverable(exception))
             {
+                _ = this.RecordAssetOutcome(request, 0, succeeded: false, exception.Message);
                 return Failure(request.OperationId, request.Target.RunId, exception);
             }
         }
@@ -254,6 +259,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             this.scene = target;
             this.sceneReady = false;
             this.assetOperations.Clear();
+            this.NotifyAssetStatusChanged();
             try
             {
                 creation = this.transport!.ActivateSceneAsync(name);
@@ -370,7 +376,8 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         // remains the sole authority that generates and accepts load generations.
         if (AssetTarget(request.Command) is { } target)
         {
-            this.assetOperations[target] = request.OperationId;
+            this.assetOperations[target] = new(request, 0, Succeeded: null);
+            this.NotifyAssetStatusChanged();
         }
         else if (request.Command is RuntimeDetachGeometry detach)
         {
@@ -395,11 +402,13 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         {
             _ = this.assetOperations.Remove(target);
         }
+
+        this.NotifyAssetStatusChanged();
     }
 
     private void OnAssetLoadFailed(object? sender, RuntimeAssetLoadFailedEventArgs args)
     {
-        if (this.IsCurrentAssetRequest(args.Request))
+        if (this.RecordAssetOutcome(args.Request, args.Generation, succeeded: false, args.Message))
         {
             this.AssetLoadFailed?.Invoke(this, args);
         }

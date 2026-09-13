@@ -654,7 +654,7 @@ view configuration value types are not permission to expose world/input behavior
 
 The managed implementation uses `RuntimeWorldRequest` with immutable
 `RuntimeWorldCommand` records and `RuntimeInputRequest` with immutable input records.
-`RuntimeSceneTarget` includes run, authored scene, open-document and activation IDs;
+`RuntimeSceneTarget` includes project, run, authored scene, open-document and activation IDs;
 each full scene projection creates a fresh activation. `RuntimeViewTarget` includes
 run, document, viewport, generation and the process-local view value. The service
 registers a new generation after native view creation and invalidates it before
@@ -669,8 +669,19 @@ physical viewport pixels. Scene sync keeps authoring policy and reduces managed
 results to its existing per-operation outcomes. Asynchronous asset failures retain their native generation and original immutable
 request. Native generation validation precedes the Runtime event; the feature
 rechecks request/scene/node validity after dispatching to the UI and publishes a
-LiveSync operation result. Runtime operation correlation only rejects stale
-notification delivery; it does not allocate or accept native load generations.
+LiveSync operation result. Success is reported only after native application,
+including refreshes of the same intent. Current request state retains the native
+generation; a newer successful refresh invalidates queued failure feedback.
+Runtime operation correlation rejects stale notification delivery; it does not
+allocate or accept native load generations.
+
+`IEngineService.ContentStatus` exposes the acknowledged root set and content
+revision. Queued synchronous mounts do not establish availability. Replacement
+and paused publication remain Updating until native resume completes; failure,
+loop exit and shutdown invalidate availability. Shared asset presentation combines
+these facts with publication/freshness and current project-scoped asset outcomes.
+Native changes update the existing presentation stream without cooking or reading
+source files again. Built-in identity stays separate from preview availability.
 
 ### Active Run Observer (#6, ED-M07A.7)
 

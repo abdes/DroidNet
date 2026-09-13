@@ -162,6 +162,34 @@ namespace Oxygen::Interop::World {
       msclr::gcroot<Action<System::UInt64, String^>^> callback_;
     };
 
+    class AssetSuccessObserver final {
+    public:
+      explicit AssetSuccessObserver(Action<System::UInt64>^ callback)
+        : callback_(callback) {}
+
+      void Invoke(uint64_t generation) const {
+        try {
+          callback_->Invoke(generation);
+        } catch (System::Exception^ exception) {
+          System::Diagnostics::Trace::TraceError(
+            "Runtime asset success observer threw: " + exception->Message);
+        }
+      }
+
+    private:
+      msclr::gcroot<Action<System::UInt64>^> callback_;
+    };
+
+    static SceneAssetRequests::SuccessCallback MakeAssetSuccessCallback(
+      Action<System::UInt64>^ on_success) {
+      if (on_success == nullptr) {
+        return {};
+      }
+      auto callback = std::shared_ptr<AssetSuccessObserver>(
+        new AssetSuccessObserver(on_success));
+      return [callback](uint64_t generation) { callback->Invoke(generation); };
+    }
+
     // Keep CLR types out of constrained shared_ptr forwarding constructors.
     // The native owner releases its gcroot on supersession or scene destruction.
     static SceneAssetRequests::FailureCallback MakeAssetFailureCallback(
@@ -619,6 +647,12 @@ namespace Oxygen::Interop::World {
 
   void OxygenWorld::SetGeometry(System::Guid nodeId, String^ assetUri,
     Action<System::UInt64, String^>^ onFailure) {
+    SetGeometry(nodeId, assetUri, onFailure, nullptr);
+  }
+
+  void OxygenWorld::SetGeometry(System::Guid nodeId, String^ assetUri,
+    Action<System::UInt64, String^>^ onFailure,
+    Action<System::UInt64>^ onSuccess) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
       throw gcnew InvalidOperationException("Runtime asset command has no engine context.");
@@ -644,12 +678,20 @@ namespace Oxygen::Interop::World {
     auto cmd = std::unique_ptr<SetGeometryCommand>(
       commandFactory_->CreateSetGeometry(handle, native_asset_uri));
     cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
+    cmd->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
   void OxygenWorld::SetMaterialOverride(
     System::Guid nodeId, int slotIndex, String^ materialUri,
     Action<System::UInt64, String^>^ onFailure) {
+    SetMaterialOverride(nodeId, slotIndex, materialUri, onFailure, nullptr);
+  }
+
+  void OxygenWorld::SetMaterialOverride(
+    System::Guid nodeId, int slotIndex, String^ materialUri,
+    Action<System::UInt64, String^>^ onFailure,
+    Action<System::UInt64>^ onSuccess) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
       throw gcnew InvalidOperationException("Runtime asset command has no engine context.");
@@ -681,6 +723,7 @@ namespace Oxygen::Interop::World {
       commandFactory_->CreateSetMaterialOverride(
         handle, static_cast<std::size_t>(slotIndex), native_material_uri));
     cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
+    cmd->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
