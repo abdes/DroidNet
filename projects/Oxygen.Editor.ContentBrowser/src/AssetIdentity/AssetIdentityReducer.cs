@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -60,6 +60,53 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             AssetGuid: null,
             DiagnosticCodes: [AssetIdentityDiagnosticCodes.ResolveMissing],
             IsSelectable: false);
+
+    /// <summary>Resolves a descriptor path only when it stays inside its indexed root.</summary>
+    /// <param name="metadata">The indexed physical source.</param>
+    /// <returns>The contained path, or null for an invalid descriptor path.</returns>
+    internal static string? TryResolveIndexedDescriptorPath(CookedAssetMetadata metadata)
+    {
+        try
+        {
+            var relative = metadata.DescriptorRelativePath.Replace('/', Path.DirectorySeparatorChar);
+            var root = Path.GetFullPath(metadata.RootFolderPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var path = Path.GetFullPath(Path.Combine(root, relative));
+            return !Path.IsPathRooted(relative) && path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path : null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Maps native asset types to browser types.</summary>
+    /// <param name="assetType">The native type identifier.</param>
+    /// <returns>The browser type, or Unknown for unsupported types.</returns>
+    internal static AssetKind GetCookedKind(byte assetType) => assetType switch
+    {
+        1 => AssetKind.Material,
+        2 => AssetKind.Geometry,
+        3 => AssetKind.Scene,
+        _ => AssetKind.Unknown,
+    };
+
+    /// <summary>Formats an asset name without descriptor suffixes.</summary>
+    /// <param name="uri">The source or cooked identity.</param>
+    /// <returns>The readable asset name.</returns>
+    internal static string GetDisplayName(Uri uri)
+    {
+        var path = AssetUriHelper.GetVirtualPath(uri);
+        var name = Path.GetFileName(path);
+        foreach (var suffix in new[] { ".omat.json", ".omat", ".ogeo.json", ".ogeo", ".oscene.json", ".oscene", ".otex.json", ".otex" })
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return name[..^suffix.Length];
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(name) ? uri.ToString() : name;
+    }
 
     private static ContentBrowserAssetItem CreateGeneratedItem(AssetRecord selected, GeneratedAssetMetadata recipe)
         => new(
@@ -125,6 +172,12 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             var mountRelativePath = mount.RelativePath.Replace('\\', '/').Trim('/');
             return path.Equals(mountRelativePath, StringComparison.OrdinalIgnoreCase)
                    || path.StartsWith(mountRelativePath + "/", StringComparison.OrdinalIgnoreCase);
+        })
+            && !project.LocalFolderMounts.Any(mount =>
+        {
+            var relative = Path.GetRelativePath(project.ProjectRoot, mount.AbsolutePath).Replace('\\', '/');
+            return relative is not "." and not ".." && !relative.StartsWith("../", StringComparison.Ordinal)
+                && (path.Equals(relative, StringComparison.OrdinalIgnoreCase) || path.StartsWith(relative + "/", StringComparison.OrdinalIgnoreCase));
         })));
     }
 
@@ -172,19 +225,11 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             : Path.Combine(cookScope.CookedOutputRoot, relative);
     }
 
-    private static string? TryResolveIndexedDescriptorPath(CookedAssetMetadata metadata)
+    private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
-        try
-        {
-            var relative = metadata.DescriptorRelativePath.Replace('/', Path.DirectorySeparatorChar);
-            var root = Path.GetFullPath(metadata.RootFolderPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            var path = Path.GetFullPath(Path.Combine(root, relative));
-            return !Path.IsPathRooted(relative) && path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path : null;
-        }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return null;
-        }
+        var local = selected.Cooked is { } cooked ? project.LocalFolderMounts.FirstOrDefault(mount =>
+            string.Equals(Path.GetFullPath(mount.AbsolutePath), Path.GetFullPath(cooked.RootFolderPath), StringComparison.OrdinalIgnoreCase)) : null;
+        return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : AssetUriHelper.GetVirtualPath(selected.Uri);
     }
 
     private static Uri ToCookedUri(Uri uri)
@@ -254,28 +299,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         };
     }
 
-    private static AssetKind GetKind(AssetRecord record) => record.Cooked is { } cooked ? cooked.AssetType switch
-    {
-        1 => AssetKind.Material,
-        2 => AssetKind.Geometry,
-        3 => AssetKind.Scene,
-        _ => AssetKind.Unknown,
-    } : GetKind(record.Uri);
-
-    private static string GetDisplayName(Uri uri)
-    {
-        var path = AssetUriHelper.GetVirtualPath(uri);
-        var name = Path.GetFileName(path);
-        foreach (var suffix in new[] { ".omat.json", ".omat", ".ogeo.json", ".ogeo", ".oscene.json", ".oscene", ".otex.json", ".otex" })
-        {
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return name[..^suffix.Length];
-            }
-        }
-
-        return string.IsNullOrWhiteSpace(name) ? uri.ToString() : name;
-    }
+    private static AssetKind GetKind(AssetRecord record) => record.Cooked is { } cooked ? GetCookedKind(cooked.AssetType) : GetKind(record.Uri);
 
     private ContentBrowserAssetItem? CreateItem(
         List<AssetRecord> records,
@@ -327,7 +351,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             PrimaryState: primaryState,
             DerivedState: derivedState,
             RuntimeAvailability: cookedUri is null ? AssetRuntimeAvailability.NotApplicable : AssetRuntimeAvailability.NotMounted,
-            DisplayPath: AssetUriHelper.GetVirtualPath(descriptor?.Uri ?? selected.Uri),
+            DisplayPath: GetDisplayPath(descriptor ?? cooked ?? selected, project),
             SourcePath: sourcePath,
             DescriptorPath: descriptorPath,
             CookedUri: cookedUri,
@@ -337,6 +361,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing)
         {
             CookedMetadata = cooked?.Cooked,
+            OverriddenCookedSources = cooked?.OverriddenCookedSources ?? [],
         };
     }
 

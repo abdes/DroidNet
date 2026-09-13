@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -31,6 +31,22 @@ public sealed record ContentBrowserAssetItem(
 
     /// <summary>Gets the indexed native identity and physical origin of the cooked representation.</summary>
     public CookedAssetMetadata? CookedMetadata { get; init; }
+
+    /// <summary>Gets the indexed sources masked by the resolved native asset.</summary>
+    public IReadOnlyList<CookedAssetMetadata> OverriddenCookedSources { get; init; } = [];
+
+    /// <summary>Gets verified engine origins for physical representations, including overridden project copies.</summary>
+    public IReadOnlyList<VerifiedBuiltinSource> VerifiedBuiltinSources { get; init; } = [];
+
+    /// <summary>Gets the effective source when this row explicitly displays a library's own representation.</summary>
+    public CookedAssetMetadata? EffectiveCookedSource { get; init; }
+
+    /// <summary>Gets the source label used to explain a masked library copy.</summary>
+    public string? EffectiveCookedSourceName { get; init; }
+
+    /// <summary>Gets a value indicating whether ordinary assignments resolve to a different source than this displayed library copy.</summary>
+    public bool IsCookedSourceOverridden => this.CookedMetadata is { } displayed && this.EffectiveCookedSource is { } effective
+        && (displayed.AssetKey != effective.AssetKey || !string.Equals(displayed.RootFolderPath, effective.RootFolderPath, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
     public Uri? BuiltinOriginUri { get; init; }
@@ -70,11 +86,13 @@ public sealed record ContentBrowserAssetItem(
     };
 
     /// <summary>Gets the primary asset-state badge.</summary>
-    public string PrimaryBadge => this.Generated?.IsLastKnown == true ? "Preview unavailable"
+    public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden" : this.Generated?.IsLastKnown == true ? "Preview unavailable"
         : this.IsBuiltin ? "Built-in" : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
-    public string PrimaryBadgeTooltip => this.IsBuiltin
+    public string PrimaryBadgeTooltip => this.IsCookedSourceOverridden
+        ? "Scene assignments use " + this.EffectiveCookedSourceName + " instead of this copy."
+        : this.IsBuiltin
         ? this.Generated?.IsLastKnown == true ? "Built-in asset from the last-known Oxygen catalog. Preview unavailable."
             : "Built-in asset provided by Oxygen. No separate cooking is needed." + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
         : AssetStatusPresentation.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);

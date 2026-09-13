@@ -115,7 +115,9 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
             project = active;
             var logicalKey = GetLogicalKey(uri);
-            var match = this.items.Value.FirstOrDefault(item => string.Equals(GetLogicalKey(item.IdentityUri), logicalKey, StringComparison.OrdinalIgnoreCase));
+            var match = this.items.Value.FirstOrDefault(item => item.IdentityUri == uri)
+                ?? this.items.Value.FirstOrDefault(item => item.CookedUri == uri)
+                ?? this.items.Value.FirstOrDefault(item => string.Equals(GetLogicalKey(item.IdentityUri), logicalKey, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
             {
                 return match;
@@ -221,14 +223,28 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         var states = (await this.cookStatus.ReadAsync(project, candidates.Select(static item => item.IdentityUri).ToArray(), cancellationToken).ConfigureAwait(false))
             .ToDictionary(static state => state.AssetUri);
         var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasVerifiedOutput)
-            .SelectMany(item => states[item.IdentityUri].Outputs.Select(output => (output.CookedAssetUri, Origin: item)))
-            .GroupBy(static entry => entry.CookedAssetUri)
+            .SelectMany(item => states[item.IdentityUri].Outputs.Select(output => new VerifiedBuiltinSource(Path.GetFullPath(Path.Combine(project.ProjectRoot, ".cooked", output.MountName)), output.CookedAssetUri, item)))
+            .GroupBy(static entry => entry.CookedUri)
             .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)
-            .ToDictionary(static group => group.Key, static group => group.First().Origin);
-        return source.Select(item => item.IsBuiltin ? item
-            : item.SourcePath is null && item.DescriptorPath is null && item.CookedUri is { } cookedUri
-                && origins.TryGetValue(cookedUri, out var origin) && origin.Kind == item.Kind
-                ? item with { Generated = origin.Generated, BuiltinOriginUri = origin.IdentityUri, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
-                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(item, state) : item).ToArray();
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+        return source.Select(item =>
+        {
+            if (item.IsBuiltin)
+            {
+                return item;
+            }
+
+            var proofs = origins.Values.SelectMany(static entries => entries).Where(proof =>
+                item.CookedUri == proof.CookedUri || string.Equals(item.CookedMetadata?.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal)
+                    || item.OverriddenCookedSources.Any(metadata => string.Equals(metadata.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal))).ToArray();
+            var projected = item with { VerifiedBuiltinSources = proofs };
+            var origin = proofs.FirstOrDefault(proof => proof.Origin.Kind == item.Kind
+                && (item.CookedMetadata is { } metadata ? string.Equals(Path.GetFullPath(metadata.RootFolderPath), proof.Root, StringComparison.OrdinalIgnoreCase)
+                    && (metadata.VirtualPath is null || string.Equals(metadata.VirtualPath, proof.CookedUri.AbsolutePath, StringComparison.Ordinal))
+                    : item.CookedPath is { } path && Path.GetFullPath(path).StartsWith(proof.Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))?.Origin;
+            return item.SourcePath is null && item.DescriptorPath is null && origin is not null
+                ? projected with { Generated = origin.Generated, BuiltinOriginUri = origin.IdentityUri, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
+                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(projected, state) : projected;
+        }).ToArray();
     }
 }

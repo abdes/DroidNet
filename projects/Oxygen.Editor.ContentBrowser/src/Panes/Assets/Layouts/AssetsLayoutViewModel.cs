@@ -388,7 +388,9 @@ public abstract partial class AssetsLayoutViewModel(
         var selectedUri = ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
             ? this.contentBrowserState.SelectedAssetUri : this.SelectedAsset?.IdentityUri;
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
-        var visible = AssetIdentityGrouping.GroupBuiltins(items.Where(this.IsInSelectedFolders)).Where(this.Query.Matches).ToArray();
+        var scopedItems = this.projectContextService.ActiveProject is { } project
+            ? CookedLibraryProjection.ForFolders(items, project, NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)) : items;
+        var visible = AssetIdentityGrouping.GroupBuiltins(scopedItems.Where(this.IsInSelectedFolders)).Where(this.Query.Matches).ToArray();
         this.isReplacingRows = true;
         try
         {
