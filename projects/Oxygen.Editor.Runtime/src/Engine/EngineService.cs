@@ -143,6 +143,7 @@ public sealed partial class EngineService(
     public void MountProjectCookedRoot(string path)
     {
         _ = this.EnsureIsRunning();
+        this.ChangeContentStatus(RuntimeContentState.Updating, []);
         this.session!.Commands.MountCookedRoot(path);
     }
 
@@ -150,6 +151,7 @@ public sealed partial class EngineService(
     public void UnmountProjectCookedRoot()
     {
         _ = this.EnsureIsRunning();
+        this.ChangeContentStatus(RuntimeContentState.Unmounted, []);
         this.session!.Commands.ClearCookedRoots();
     }
 

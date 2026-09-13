@@ -20,10 +20,16 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     public event EventHandler<EngineStateChangedEventArgs>? StateChanged;
 
+    /// <summary>Reports ordered content transitions asynchronously; UI consumers must dispatch to their UI thread.</summary>
+    public event EventHandler<RuntimeContentChangedEventArgs>? ContentStatusChanged;
+
     /// <summary>
     ///     Gets the current lifecycle state of the service.
     /// </summary>
     public EngineServiceState State { get; }
+
+    /// <summary>Gets acknowledged native content availability, separate from publication and freshness.</summary>
+    public RuntimeContentSnapshot ContentStatus { get; }
 
     /// <summary>
     ///     Gets or sets the current native engine logging verbosity. This operates only on the

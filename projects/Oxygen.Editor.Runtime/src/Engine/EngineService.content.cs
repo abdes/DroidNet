@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Retains output ownership through native refresh, suspension and teardown.</summary>
@@ -16,9 +18,11 @@ public sealed partial class EngineService
         var entered = false;
         try
         {
+            var requestedRoots = paths.ToImmutableArray();
             await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
             entered = true;
             var runtime = this.EnsureIsRunning();
+            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Roots);
             var previousReaders = this.cookedContentReaders.ToArray();
             if (readLease is not null)
             {
@@ -26,7 +30,8 @@ public sealed partial class EngineService
                 unclaimed = null;
             }
 
-            await this.AwaitRuntimeOperationAsync(runtime.Commands.ReplaceCookedRootsAsync(paths)).ConfigureAwait(true);
+            await this.AwaitRuntimeOperationAsync(runtime.Commands.ReplaceCookedRootsAsync(requestedRoots)).ConfigureAwait(true);
+            this.ChangeContentStatus(RuntimeContentState.Updating, requestedRoots);
             foreach (var reader in previousReaders)
             {
                 reader.Dispose();
@@ -36,7 +41,17 @@ public sealed partial class EngineService
             if (!keepPaused)
             {
                 await this.AwaitRuntimeOperationAsync(runtime.Commands.SetCookedContentPausedAsync(paused: false)).ConfigureAwait(true);
+                this.ChangeContentStatus(requestedRoots.IsEmpty ? RuntimeContentState.Unmounted : RuntimeContentState.Mounted, requestedRoots);
             }
+        }
+        catch (Exception exception)
+        {
+            if (entered)
+            {
+                this.FailContentStatus(exception);
+            }
+
+            throw;
         }
         finally
         {
@@ -61,8 +76,15 @@ public sealed partial class EngineService
         try
         {
             var runtime = this.EnsureIsRunning();
+            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Roots);
             await this.AwaitRuntimeOperationAsync(runtime.Commands.SetCookedContentPausedAsync(paused: true)).ConfigureAwait(true);
+            this.ChangeContentStatus(RuntimeContentState.Updating, []);
             this.ReleaseCookedContentReaders();
+        }
+        catch (Exception exception)
+        {
+            this.FailContentStatus(exception);
+            throw;
         }
         finally
         {
@@ -78,6 +100,13 @@ public sealed partial class EngineService
         {
             var runtime = this.EnsureIsRunning();
             await this.AwaitRuntimeOperationAsync(runtime.Commands.SetCookedContentPausedAsync(paused: false)).ConfigureAwait(true);
+            var roots = this.contentStatus.Roots;
+            this.ChangeContentStatus(roots.IsEmpty ? RuntimeContentState.Unmounted : RuntimeContentState.Mounted, roots);
+        }
+        catch (Exception exception)
+        {
+            this.FailContentStatus(exception);
+            throw;
         }
         finally
         {
