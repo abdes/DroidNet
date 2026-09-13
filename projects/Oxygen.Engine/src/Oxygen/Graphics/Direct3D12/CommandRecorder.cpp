@@ -369,7 +369,7 @@ auto CommandRecorder::SetupDescriptorTables(
   DCHECK_NOTNULL_F(d3d12_command_list);
 
   // Validate queue role supports the requested binding type
-  const auto queue_role = GetCommandList().GetQueueRole();
+  [[maybe_unused]] const auto queue_role = GetCommandList().GetQueueRole();
   DCHECK_F(
     queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
     "Invalid command list type for SetupDescriptorTables. Expected Graphics or "
@@ -476,7 +476,7 @@ auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
   const auto& command_list = GetConcreteCommandList();
   // D3D12 graphics queues can execute compute shaders (graphics > compute >
   // copy)
-  const auto queue_role = command_list.GetQueueRole();
+  [[maybe_unused]] const auto queue_role = command_list.GetQueueRole();
   DCHECK_F(
     queue_role == QueueRole::kCompute || queue_role == QueueRole::kGraphics,
     "Dispatch requires a compute or graphics queue");

@@ -45,7 +45,7 @@ public:
 
     auto& in_use = InUseFlagForSlot(slot);
     auto& context = ContextForSlot(slot);
-    const auto idx = static_cast<std::size_t>(slot.get());
+    [[maybe_unused]] const auto idx = static_cast<std::size_t>(slot.get());
     bool expected = false;
     if (!in_use.compare_exchange_strong(expected, true)) {
       LOG_F(WARNING,
@@ -63,7 +63,7 @@ public:
   {
     auto& context = ContextForSlot(slot);
     auto& in_use = InUseFlagForSlot(slot);
-    const auto idx = static_cast<std::size_t>(slot.get());
+    [[maybe_unused]] const auto idx = static_cast<std::size_t>(slot.get());
     context.Reset();
     in_use.store(false);
     DLOG_F(2, "RenderContextPool released slot {0}.", idx);
