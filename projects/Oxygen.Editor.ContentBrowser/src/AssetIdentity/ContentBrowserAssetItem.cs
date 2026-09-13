@@ -35,6 +35,9 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets verified cooked representations grouped with this logical built-in in discovery views.</summary>
     public IReadOnlyList<ContentBrowserAssetItem> CookedCompanions { get; init; } = [];
 
+    /// <summary>Gets supplemental information from this snapshot without starting discovery, loading or cooking.</summary>
+    public AssetInformation Information => AssetInformation.FromAsset(this);
+
     /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
     public string? RuntimeReason { get; init; }
 
