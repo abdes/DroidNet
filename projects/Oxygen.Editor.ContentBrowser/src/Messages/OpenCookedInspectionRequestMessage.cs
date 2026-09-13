@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentBrowser.Messages;
 
@@ -21,6 +22,12 @@ public sealed class OpenCookedInspectionRequestMessage(ProjectContext project, U
 
     /// <summary>Gets an optional asset identity whose catalog facts should accompany output inspection.</summary>
     public Uri? AssetUri { get; init; }
+
+    /// <summary>Gets the physical representation explicitly selected in a library view.</summary>
+    public CookedAssetMetadata? CookedSource { get; init; }
+
+    /// <summary>Gets the asset's browser label when a physical descriptor filename is not meaningful.</summary>
+    public string? DisplayName { get; init; }
 
     /// <summary>Gets a value indicating whether root integrity should be checked.</summary>
     public bool Validate { get; } = validate;

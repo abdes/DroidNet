@@ -147,6 +147,25 @@
                                     IsTextSelectionEnabled="True"
                                     Text="{x:Bind Root.Inspection.CookedRoot}"
                                     TextWrapping="Wrap" />
+                                <TextBlock
+                                    Text="{x:Bind ResolutionText}"
+                                    TextWrapping="Wrap"
+                                    Visibility="{x:Bind ResolutionVisibility}" />
+                                <Expander
+                                    HorizontalAlignment="Stretch"
+                                    Header="Other cooked sources"
+                                    Visibility="{x:Bind OtherSourcesVisibility}">
+                                    <ItemsControl ItemsSource="{x:Bind OtherSources}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock
+                                                    IsTextSelectionEnabled="True"
+                                                    Text="{Binding}"
+                                                    TextWrapping="Wrap" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Source" />
                                     <TextBlock

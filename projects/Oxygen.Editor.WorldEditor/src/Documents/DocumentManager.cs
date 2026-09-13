@@ -167,17 +167,21 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         var existing = this.documentService.GetOpenDocuments(this.windowId).OfType<CookedInspectionDocumentMetadata>()
-            .FirstOrDefault(document => ReferenceEquals(document.Project, request.Project) && document.ScopeUri == request.ScopeUri && document.AssetUri == request.AssetUri);
+            .FirstOrDefault(document => document.Project.ProjectId == request.Project.ProjectId
+                && string.Equals(document.Project.ProjectRoot, request.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+                && document.ScopeUri == request.ScopeUri && document.AssetUri == request.AssetUri
+                && string.Equals(document.CookedSource?.RootFolderPath, request.CookedSource?.RootFolderPath, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
             existing.RequestRefresh(request.Validate);
             return await this.documentService.SelectDocumentAsync(this.windowId, existing.DocumentId).ConfigureAwait(true);
         }
 
-        var name = request.ScopeUri is null ? request.Project.Name : Path.GetFileName(Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/'));
+        var name = request.DisplayName ?? (request.ScopeUri is null ? request.Project.Name : Path.GetFileName(Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/')));
         var metadata = new CookedInspectionDocumentMetadata(request.Project, request.ScopeUri, request.Validate)
         {
             AssetUri = request.AssetUri,
+            CookedSource = request.CookedSource,
             Title = "Inspect · " + (string.IsNullOrEmpty(name) || string.Equals(name, "Cooked", StringComparison.OrdinalIgnoreCase) ? request.Project.Name : name),
         };
         return await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true) != Guid.Empty;

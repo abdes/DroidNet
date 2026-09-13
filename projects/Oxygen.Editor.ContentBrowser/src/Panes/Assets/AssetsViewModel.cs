@@ -419,7 +419,7 @@ public partial class AssetsViewModel(
         if (args.InvokedItem.Kind != AssetKind.Folder
             && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.CookedUri is not null)))
         {
-            await this.OpenInspectionAsync(validate: false, args.InvokedItem.IdentityUri).ConfigureAwait(true);
+            await this.OpenInspectionAsync(validate: false, args.InvokedItem.IdentityUri, args.InvokedItem).ConfigureAwait(true);
         }
         else if (args.InvokedItem.Kind == AssetKind.Scene)
         {
@@ -673,9 +673,9 @@ public partial class AssetsViewModel(
     private Task ValidateCookedOutputAsync() => this.OpenInspectionAsync(validate: true);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
-    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null)
+    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null, ContentBrowserAssetItem? asset = null)
     {
-        var scopeUri = assetUri ?? this.GetSelectedFolderUri();
+        var scopeUri = asset?.CookedMetadata is not null ? new Uri(AssetUris.Scheme + "://" + asset.DisplayPath) : assetUri ?? this.GetSelectedFolderUri();
         try
         {
             if (projectContextService.ActiveProject is not { } project)
@@ -683,7 +683,10 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate) { AssetUri = assetUri });
+            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate)
+            {
+                AssetUri = assetUri, CookedSource = asset?.CookedMetadata, DisplayName = asset?.DisplayName,
+            });
             if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
             {
                 throw new InvalidOperationException("The inspection document could not be opened in this workspace.");

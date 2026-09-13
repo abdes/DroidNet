@@ -253,9 +253,10 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     {
         try
         {
-            if (uri is not null && !this.closed && !await this.showAsset(uri).ConfigureAwait(true))
+            if (uri is not null && !this.closed)
             {
-                this.Message = "This source is no longer available in the Content Browser.";
+                this.Message = await this.showAsset(uri).ConfigureAwait(true)
+                    ? string.Empty : "This source is no longer available in the Content Browser.";
             }
         }
         catch (Exception exception)
@@ -337,14 +338,23 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         {
             await previous.ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
-            this.VerifyProject();
-            var asset = this.metadata.AssetUri is { } uri ? await this.ResolveInspectedAssetAsync(uri, cancellation.Token).ConfigureAwait(true) : null;
+            var project = this.GetCurrentProject();
+            var asset = this.metadata.AssetUri is { } uri ? await this.ResolveInspectedAssetAsync(uri, project, cancellation.Token).ConfigureAwait(true) : null;
             var isUncopiedBuiltin = asset is { IsBuiltin: true, CookedUri: null, CookedCompanions.Count: 0 };
             var report = isUncopiedBuiltin
                 ? new CookedOutputReport(this.metadata.Project.ProjectId, this.metadata.ScopeUri, DateTimeOffset.UtcNow, [])
-                : await this.pipeline.InspectCookedOutputAsync(this.metadata.ScopeUri, cancellation.Token, validate, this.metadata.Project).ConfigureAwait(true);
+                : await this.pipeline.InspectCookedOutputAsync(this.metadata.ScopeUri, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
-            this.VerifyProject();
+            if (!ReferenceEquals(project, this.projects.ActiveProject))
+            {
+                throw new OperationCanceledException("The project configuration changed during inspection.");
+            }
+
+            if (this.metadata.CookedSource is not null && !report.Roots.Any(static root => root.Inspection.Assets.Count > 0))
+            {
+                asset = null;
+            }
+
             return (report, asset);
         }
         finally
@@ -358,17 +368,22 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         }
     }
 
-    private void VerifyProject()
-    {
-        if (!ReferenceEquals(this.projects.ActiveProject, this.metadata.Project))
-        {
-            throw new OperationCanceledException("The inspection's project was closed or replaced.");
-        }
-    }
+    private ProjectContext GetCurrentProject()
+        => this.projects.ActiveProject is { } project && project.ProjectId == this.metadata.Project.ProjectId
+            && string.Equals(project.ProjectRoot, this.metadata.Project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
 
-    private async Task<ContentBrowserAssetItem?> ResolveInspectedAssetAsync(Uri uri, CancellationToken cancellationToken)
+    private async Task<ContentBrowserAssetItem?> ResolveInspectedAssetAsync(Uri uri, ProjectContext project, CancellationToken cancellationToken)
     {
         var asset = await this.assetProvider.ResolveAsync(uri, cancellationToken).ConfigureAwait(true);
+        if (asset is not null && this.metadata.CookedSource is { } requested)
+        {
+            var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
+                .FirstOrDefault(candidate => string.Equals(candidate.RootFolderPath, requested.RootFolderPath, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(candidate.VirtualPath, requested.VirtualPath, StringComparison.Ordinal));
+            return source is null ? null : CookedLibraryProjection.Create(asset, source, project);
+        }
+
         if (asset is not { IsBuiltin: true, BuiltinOriginUri: null })
         {
             return asset;
@@ -381,8 +396,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     private void ApplyReport(CookedOutputReport report)
     {
         this.Report = report;
-        this.allAssets = report.Roots.SelectMany(root => root.Inspection.Assets.Select(asset => new InspectionAssetRow(
-            root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.AbsolutePath, asset.VirtualPath, StringComparison.Ordinal))))).ToArray();
+        this.allAssets = report.Roots.SelectMany(root => root.Inspection.Assets.Select(asset => this.CreateAssetRow(root, asset))).ToArray();
         this.allFiles = report.Roots.SelectMany(root => root.Inspection.Files.Select(file => new InspectionFileRow(root.Name, root.Inspection.CookedRoot, file))).ToArray();
         this.Issues = report.Roots.SelectMany(root => root.Inspection.Diagnostics.Concat(root.Validation?.Diagnostics ?? []).Select(issue => new InspectionIssueRow(root.Name, issue))).ToArray();
         this.StatusText = report.Roots.Any(static root => !root.Inspection.Succeeded || root.Validation?.Succeeded == false)
@@ -407,5 +421,17 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
         this.Assets = this.allAssets.Where(asset => asset.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || asset.Asset.VirtualPath.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         this.Files = this.allFiles.Where(file => file.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         this.SelectedAsset = this.Assets.FirstOrDefault(asset => string.Equals(asset.Key, selected, StringComparison.Ordinal)) ?? (this.Assets.Count > 0 ? this.Assets[0] : null);
+    }
+
+    private InspectionAssetRow CreateAssetRow(CookedRootReport root, CookedAssetEntry asset)
+    {
+        var scoped = this.ScopedAsset is { CookedMetadata: { } metadata } candidate
+            && string.Equals(metadata.RootFolderPath, root.Inspection.CookedRoot, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(metadata.VirtualPath ?? candidate.CookedUri?.AbsolutePath, asset.VirtualPath, StringComparison.Ordinal) ? candidate : null;
+        return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.AbsolutePath, asset.VirtualPath, StringComparison.Ordinal)))
+        {
+            ResolutionText = scoped?.IsCookedSourceOverridden == true ? scoped.PrimaryBadgeTooltip : string.Empty,
+            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [],
+        };
     }
 }
