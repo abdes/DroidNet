@@ -17,16 +17,14 @@ public static partial class CookOutputLease
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            try
+            var gate = WindowsCookFile.TryOpenExclusive(gatePath, FileMode.OpenOrCreate, out _);
+            if (gate is not null)
             {
-                var gate = OpenGate(gatePath);
                 await using var gateLifetime = gate.ConfigureAwait(false);
                 return CreateReader(readers, ".scan");
             }
-            catch (CookOutputBusyException)
-            {
-                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
-            }
+
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -41,19 +39,16 @@ public static partial class CookOutputLease
         var writer = new CookOutputWriteLease(root, readers, OpenGate(gatePath));
         try
         {
-            RemoveReleasedReaders(readers);
+            RequireReleasedReaders(readers);
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                try
+                if (TryRemoveReleasedReaders(readers, "*.scan"))
                 {
-                    RemoveReleasedReaders(readers, "*.scan");
                     break;
                 }
-                catch (CookOutputBusyException)
-                {
-                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
-                }
+
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             }
 
             return writer;

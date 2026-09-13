@@ -26,8 +26,8 @@ public static partial class CookOutputLease
         var gate = OpenGate(gatePath);
         try
         {
-            RemoveReleasedReaders(readers);
-            RemoveReleasedReaders(readers, "*.scan");
+            RequireReleasedReaders(readers);
+            RequireReleasedReaders(readers, "*.scan");
             var lease = new CookOutputWriteLease(root, readers, gate);
             gate = null;
             return lease;
@@ -45,17 +45,7 @@ public static partial class CookOutputLease
     internal static IDisposable CreateReader(string directory, string extension = ".lease")
     {
         var path = Path.Combine(directory, Guid.NewGuid().ToString("N") + extension);
-        var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
-        try
-        {
-            var reader = new ReaderLease(path, stream);
-            stream = null;
-            return reader;
-        }
-        finally
-        {
-            stream?.Dispose();
-        }
+        return new ReaderLease(path);
     }
 
     /// <summary>Rejects filesystem redirection in operation-owned paths.</summary>
@@ -116,18 +106,18 @@ public static partial class CookOutputLease
     }
 
     private static FileStream OpenGate(string path)
+        => WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _)
+            ?? throw new CookOutputBusyException("Another publication is using this project's cooked content. Retry when it finishes.");
+
+    private static void RequireReleasedReaders(string directory, string pattern = "*.lease")
     {
-        try
+        if (!TryRemoveReleasedReaders(directory, pattern))
         {
-            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        }
-        catch (IOException exception) when (IsSharingConflict(exception))
-        {
-            throw new CookOutputBusyException("Another publication is using this project's cooked content. Retry when it finishes.", exception);
+            throw new CookOutputBusyException("Another preview is reading cooked content. Close it and retry.");
         }
     }
 
-    private static void RemoveReleasedReaders(string directory, string pattern = "*.lease")
+    private static bool TryRemoveReleasedReaders(string directory, string pattern)
     {
         foreach (var path in Directory.EnumerateFiles(directory, pattern))
         {
@@ -137,36 +127,30 @@ public static partial class CookOutputLease
             }
 
             RejectReparsePoint(path);
-            try
+            if (!IsReleasedReader(path))
             {
-                using (var reader = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                {
-                    if (reader.Length != 0)
-                    {
-                        throw new InvalidDataException($"An invalid output-reader lease must be reviewed: '{path}'.");
-                    }
-                }
+                return false;
+            }
 
-                File.Delete(path);
-            }
-            catch (FileNotFoundException)
-            {
-                // The reader released and removed its marker after enumeration.
-                continue;
-            }
-            catch (IOException exception) when (IsSharingConflict(exception))
-            {
-                throw new CookOutputBusyException("Another preview is reading cooked content. Close it and retry.", exception);
-            }
+            WindowsCookFile.DeleteReleased(path);
         }
+
+        return true;
+    }
+
+    private static bool IsReleasedReader(string path)
+    {
+        using var reader = WindowsCookFile.TryOpenExclusive(path, FileMode.Open, out var busy);
+        return reader is { Length: not 0 }
+            ? throw new InvalidDataException($"An invalid output-reader lease must be reviewed: '{path}'.") : !busy;
     }
 
     private static bool IsSharingConflict(IOException exception) => (exception.HResult & 0xffff) is 32 or 33;
 
-    private sealed partial class ReaderLease(string path, FileStream stream) : IDisposable
+    private sealed partial class ReaderLease(string path) : IDisposable
     {
         private readonly Lock sync = new();
-        private FileStream? stream = stream;
+        private FileStream? stream = new(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
 
         public void Dispose()
         {
@@ -181,14 +165,7 @@ public static partial class CookOutputLease
                 this.stream = null;
             }
 
-            try
-            {
-                File.Delete(path);
-            }
-            catch (IOException exception) when (IsSharingConflict(exception))
-            {
-                // A writer has claimed the released marker and will remove it.
-            }
+            WindowsCookFile.DeleteReleased(path);
         }
     }
 }

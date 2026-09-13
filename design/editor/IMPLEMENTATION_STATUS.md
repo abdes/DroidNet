@@ -540,6 +540,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
+        Contended inspections and publication wait without throwing first-chance
+        exceptions; reader exclusion and cancellation regressions pass.
   - [x] Journaled root/receipt/provenance replacement and rollback/recovery cover
         failed publication, metadata writes, abandoned operations and corrupt receipts.
         Fifteen publisher-termination cases and the 39-case process/worker/lease
@@ -549,6 +551,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         The user confirmed recook/tab switching and leak-free native-debug shutdown.
   - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
         matrix, including the remaining import workflows.
+  - [ ] Resolve the reported native scene-switch failure and verify camera movement
+        without stutter.
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
       saved JSON, descriptors, native cooking/loading and hydration. Debug/Release
