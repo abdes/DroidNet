@@ -1,8 +1,9 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentPipeline.Status;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;
 
@@ -27,6 +28,9 @@ public sealed record MaterialPickerResult(
     string? CookedPath,
     MaterialPreviewColor? BaseColorPreview)
 {
+    /// <summary>Gets the same cook facts shown by the browser for this material.</summary>
+    public AssetCookStatus? CookStatus { get; init; }
+
     /// <summary>
     /// Gets the compact display state using the shared browser badge precedence.
     /// </summary>

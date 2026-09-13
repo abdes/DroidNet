@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -16,6 +16,27 @@ namespace Oxygen.Editor.ContentBrowser.Tests;
 [TestClass]
 public sealed partial class AssetIdentityReducerTests
 {
+    /// <summary>Timestamp-preserving source edits must invalidate parsed-descriptor results.</summary>
+    [TestMethod]
+    public void DescriptorValidationCacheUsesContentInsteadOfTimestamp()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.SourcePath("Content/Materials/Red.omat.json");
+        WriteMaterial(path);
+        var timestamp = File.GetLastWriteTimeUtc(path);
+        var project = CreateProjectContext(workspace);
+        var reducer = new AssetIdentityReducer();
+        var records = new[] { new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")) };
+        var scope = CreateCookScope(workspace, project);
+        _ = reducer.Reduce(records, project, scope, AssetBrowserFilter.Default).Single().PrimaryState.Should().Be(AssetState.Descriptor);
+        File.WriteAllText(path, "invalid");
+        File.SetLastWriteTimeUtc(path, timestamp);
+        _ = reducer.Reduce(records, project, scope, AssetBrowserFilter.Default).Single().PrimaryState.Should().Be(AssetState.Broken);
+        WriteMaterial(path);
+        File.SetLastWriteTimeUtc(path, timestamp);
+        _ = reducer.Reduce(records, project, scope, AssetBrowserFilter.Default).Single().PrimaryState.Should().Be(AssetState.Descriptor);
+    }
+
     /// <summary>Native generated assets are usable before cooking and retain alias provenance.</summary>
     [TestMethod]
     public void GeneratedRecordsRetainTheirEngineIdentityBeforeCooking()
@@ -44,7 +65,7 @@ public sealed partial class AssetIdentityReducerTests
     }
 
     [TestMethod]
-    public void Reduce_WhenDescriptorAndCookedExist_ShouldMergeAsDescriptorWithCookedDerivedState()
+    public void ReduceWhenDescriptorAndOutputExistRequiresFreshnessProof()
     {
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Red.omat.json");
@@ -64,7 +85,7 @@ public sealed partial class AssetIdentityReducerTests
 
         _ = rows.Should().ContainSingle();
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
-        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
         _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
     }
 
@@ -138,7 +159,7 @@ public sealed partial class AssetIdentityReducerTests
         _ = rows.Should().ContainSingle();
         _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
-        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
         _ = rows[0].DiagnosticCodes.Should().NotContain(AssetIdentityDiagnosticCodes.CookedMissing);
     }
 
@@ -187,7 +208,7 @@ public sealed partial class AssetIdentityReducerTests
 
         _ = rows.Should().ContainSingle();
         _ = rows[0].CookedPath.Should().Be(cookedPath);
-        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
     }
 
     [TestMethod]
@@ -215,7 +236,7 @@ public sealed partial class AssetIdentityReducerTests
 
         _ = rows.Should().ContainSingle();
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
-        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
     }
 
     [TestMethod]

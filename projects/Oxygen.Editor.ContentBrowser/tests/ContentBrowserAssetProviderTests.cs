@@ -1,21 +1,23 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using AwesomeAssertions;
+using DroidNet.Storage;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
 [TestClass]
-public sealed class ContentBrowserAssetProviderTests
+public sealed partial class ContentBrowserAssetProviderTests
 {
     [TestMethod]
     public async Task RefreshAsync_WhenProjectIsActive_ShouldPublishReducedRows()
@@ -25,16 +27,16 @@ public sealed class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
-        await provider.RefreshAsync(AssetBrowserFilter.Default);
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
-        Assert.AreEqual(AssetKind.Material, rows[0].Kind);
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Kind.Should().Be(AssetKind.Material);
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
     }
 
     [TestMethod]
@@ -45,16 +47,16 @@ public sealed class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog([]);
         catalog.SetRecordsOnRefresh([new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
 
-        await provider.RefreshAsync(AssetBrowserFilter.Default);
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(1, catalog.RefreshCount);
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
+        _ = catalog.RefreshCount.Should().Be(1);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
     }
 
     [TestMethod]
@@ -63,20 +65,20 @@ public sealed class ContentBrowserAssetProviderTests
         using var workspace = new TempWorkspace();
         var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
-        await File.WriteAllBytesAsync(cookedPath, [1]).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(cookedPath, [1], this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
-        await provider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(false);
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat"), rows[0].IdentityUri);
-        Assert.AreEqual(AssetState.Cooked, rows[0].PrimaryState);
-        Assert.AreEqual(cookedPath, rows[0].CookedPath);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat"));
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Cooked);
+        _ = rows[0].CookedPath.Should().Be(cookedPath);
     }
 
     [TestMethod]
@@ -85,15 +87,15 @@ public sealed class ContentBrowserAssetProviderTests
         using var workspace = new TempWorkspace();
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
         var uri = new Uri("asset:///Content/Materials/Missing.omat.json");
 
-        var row = await provider.ResolveAsync(uri);
+        var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsNotNull(row);
-        Assert.AreEqual(uri, row.IdentityUri);
-        Assert.AreEqual(AssetState.Missing, row.PrimaryState);
-        CollectionAssert.Contains(row.DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.ResolveMissing);
+        _ = row.Should().NotBeNull();
+        _ = row!.IdentityUri.Should().Be(uri);
+        _ = row!.PrimaryState.Should().Be(AssetState.Missing);
+        _ = row!.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
     }
 
     [TestMethod]
@@ -102,19 +104,19 @@ public sealed class ContentBrowserAssetProviderTests
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Lagged.omat.json");
         Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
-        await File.WriteAllTextAsync(descriptorPath, "{ invalid json");
+        await File.WriteAllTextAsync(descriptorPath, "{ invalid json", this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
         var uri = new Uri("asset:///Content/Materials/Lagged.omat.json");
 
-        var row = await provider.ResolveAsync(uri);
+        var row = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsNotNull(row);
-        Assert.AreEqual(uri, row.IdentityUri);
-        Assert.AreEqual(AssetState.Broken, row.PrimaryState);
-        Assert.AreEqual(descriptorPath, row.DescriptorPath);
-        CollectionAssert.Contains(row.DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.DescriptorBroken);
+        _ = row.Should().NotBeNull();
+        _ = row!.IdentityUri.Should().Be(uri);
+        _ = row!.PrimaryState.Should().Be(AssetState.Broken);
+        _ = row!.DescriptorPath.Should().Be(descriptorPath);
+        _ = row!.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.DescriptorBroken);
     }
 
     [TestMethod]
@@ -126,11 +128,11 @@ public sealed class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
-        await provider.RefreshAsync(AssetBrowserFilter.Default);
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         catalog.SetRecords(
             [
@@ -141,11 +143,11 @@ public sealed class ContentBrowserAssetProviderTests
 
         for (var i = 0; i < 20 && rows.Count < 2; i++)
         {
-            await Task.Delay(25).ConfigureAwait(false);
+            await Task.Delay(25, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        Assert.AreEqual(2, rows.Count);
-        Assert.IsTrue(rows.Any(row => row.IdentityUri == new Uri("asset:///Content/Materials/Blue.omat.json")));
+        _ = rows.Should().HaveCount(2);
+        _ = rows.Should().Contain(row => row!.IdentityUri == new Uri("asset:///Content/Materials/Blue.omat.json"));
     }
 
     [TestMethod]
@@ -159,18 +161,18 @@ public sealed class ContentBrowserAssetProviderTests
                 new AssetRecord(new Uri("asset:///Content/Images/Preview.png")),
             ]);
         var projectContext = CreateProjectContextService(workspace);
-        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer());
+        using var provider = new ContentBrowserAssetProvider(catalog, projectContext, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), new EmptyCookStatusReader());
 
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        using var subscription = provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value));
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
 
-        await provider.RefreshAsync(AssetBrowserFilter.Default with { Kinds = new HashSet<AssetKind> { AssetKind.Material } });
-        Assert.AreEqual(2, rows.Count);
+        await provider.RefreshAsync(AssetBrowserFilter.Default with { Kinds = new HashSet<AssetKind> { AssetKind.Material } }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = rows.Should().HaveCount(2);
 
-        await provider.RefreshAsync(AssetBrowserFilter.Default with { Kinds = new HashSet<AssetKind> { AssetKind.Image } });
-        Assert.AreEqual(2, rows.Count);
-        Assert.IsTrue(rows.Any(row => row.Kind == AssetKind.Material));
-        Assert.IsTrue(rows.Any(row => row.Kind == AssetKind.Image));
+        await provider.RefreshAsync(AssetBrowserFilter.Default with { Kinds = new HashSet<AssetKind> { AssetKind.Image } }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = rows.Should().HaveCount(2);
+        _ = rows.Should().Contain(row => row.Kind == AssetKind.Material);
+        _ = rows.Should().Contain(row => row.Kind == AssetKind.Image);
     }
 
     private static ProjectContextService CreateProjectContextService(TempWorkspace workspace)
@@ -269,7 +271,7 @@ public sealed class ContentBrowserAssetProviderTests
             => new(context.ProjectId, context.ProjectRoot, workspace.SourcePath(".cooked"));
     }
 
-    private sealed class ChangeObservable : IObservable<AssetChange>
+    private sealed partial class ChangeObservable : IObservable<AssetChange>
     {
         private readonly List<IObserver<AssetChange>> observers = [];
 
@@ -287,7 +289,7 @@ public sealed class ContentBrowserAssetProviderTests
             }
         }
 
-        private sealed class Subscription(List<IObserver<AssetChange>> observers, IObserver<AssetChange> observer) : IDisposable
+        private sealed partial class Subscription(List<IObserver<AssetChange>> observers, IObserver<AssetChange> observer) : IDisposable
         {
             public void Dispose() => observers.Remove(observer);
         }
@@ -299,15 +301,18 @@ public sealed class ContentBrowserAssetProviderTests
         {
         }
 
-        public void OnError(Exception error)
-        {
-            throw error;
-        }
+        public void OnError(Exception error) => throw error;
 
         public void OnNext(T value) => onNext(value);
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed class EmptyCookStatusReader : IAssetCookStatusReader
+    {
+        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AssetCookStatus>>([]);
+    }
+
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {

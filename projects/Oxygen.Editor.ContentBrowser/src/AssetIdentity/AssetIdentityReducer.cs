@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -324,11 +325,21 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             return true;
         }
 
-        var lastWriteUtc = File.GetLastWriteTimeUtc(descriptorPath);
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(descriptorPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        var contentHash = Convert.ToHexString(SHA256.HashData(bytes));
         lock (this.descriptorValidationSync)
         {
             if (this.descriptorValidationCache.TryGetValue(descriptorPath, out var cached)
-                && cached.LastWriteUtc == lastWriteUtc)
+                && string.Equals(cached.ContentHash, contentHash, StringComparison.Ordinal))
             {
                 return cached.CanRead;
             }
@@ -337,7 +348,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         bool canRead;
         try
         {
-            _ = MaterialSourceReader.Read(File.ReadAllBytes(descriptorPath));
+            _ = MaterialSourceReader.Read(bytes);
             canRead = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
@@ -347,7 +358,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
 
         lock (this.descriptorValidationSync)
         {
-            this.descriptorValidationCache[descriptorPath] = new DescriptorValidationEntry(lastWriteUtc, canRead);
+            this.descriptorValidationCache[descriptorPath] = new DescriptorValidationEntry(contentHash, canRead);
         }
 
         return canRead;
@@ -372,8 +383,9 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             return (AssetState.Descriptor, null);
         }
 
-        return (AssetState.Descriptor, File.GetLastWriteTimeUtc(descriptorPath) > File.GetLastWriteTimeUtc(cookedPath) ? AssetState.Stale : AssetState.Cooked);
+        // Presence alone does not establish freshness; the shared cook-status reader supplies that proof.
+        return (AssetState.Descriptor, AssetState.Stale);
     }
 
-    private sealed record DescriptorValidationEntry(DateTime LastWriteUtc, bool CanRead);
+    private sealed record DescriptorValidationEntry(string ContentHash, bool CanRead);
 }

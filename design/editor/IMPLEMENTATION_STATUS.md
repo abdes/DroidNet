@@ -578,9 +578,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Supported import and clean-copy reproduction remain open.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
-        Catalog initialization now publishes complete initial indexes, shares
-        concurrent waits, supports retry and cancels work on project disposal.
-        Content Browser tests pass 69/69, including six lifecycle cases.
+        Catalog initialization publishes complete indexes and supports retry and
+        disposal. Browser/picker refreshes share scans and discard superseded results.
+        They and material state queries now use ContentPipeline input/dependency
+        fingerprints and committed-output hashes. The shared model retains unsaved
+        owners separately from prior verified output. Content Browser 77/77 and
+        90 selected status/publication tests pass. Runtime availability, live status
+        events and the remaining browser/picker workflows are pending.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped

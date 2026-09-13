@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
@@ -27,6 +28,9 @@ public sealed record ContentBrowserAssetItem(
 {
     /// <summary>Gets the engine-provided recipe and identity mapping for generated assets.</summary>
     public GeneratedAssetMetadata? Generated { get; init; }
+
+    /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
+    public AssetCookStatus? CookStatus { get; init; }
 
     /// <summary>Gets the relationship to another name for the same native generator.</summary>
     public string AliasDescription => this.Generated is { } recipe && !string.Equals(recipe.CanonicalName, this.DisplayName, StringComparison.Ordinal)

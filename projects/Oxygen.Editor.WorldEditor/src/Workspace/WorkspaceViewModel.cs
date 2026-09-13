@@ -194,6 +194,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
         childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
         childContainer.Register<IAssetIdentityReducer, AssetIdentityReducer>(Reuse.Singleton);
+        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Status.IAssetCookStatusReader>(
+            resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
         childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
         childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
 
