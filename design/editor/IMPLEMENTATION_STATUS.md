@@ -38,7 +38,7 @@ in PRD sections 8-10.
 
 Current execution:
 
-1. Collect the already-pending ED-M02 supported single-viewport evidence.
+1. Finish the remaining ED-M02 single-viewport surface/resize evidence.
 2. Execute [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md):
    saved input/staging/publication/recovery, required native descriptor mappings,
    matched-build and portable-import guarantees.
@@ -185,10 +185,15 @@ Implementation:
 
 Validation:
 
-- [ ] One-pane viewport layout is validated after clean editor launch.
-- [ ] Correct surface presentation is validated for the supported live
-      viewport.
-- [ ] Engine FPS/runtime settings are validated in the embedded engine.
+- [x] One-pane viewport layout is validated after a fresh Debug editor launch;
+      repeated user restart/viewport checks and the live demand-cooking workflow
+      confirm the central scene viewport is usable.
+- [ ] Complete the supported single-viewport surface/resize qualification.
+      Rendered scene content and live material/background updates are confirmed;
+      the explicit window/dock-resize sweep remains to be recorded.
+- [x] Engine FPS/logging controls apply to the native session and report scoped
+      rejection after shutdown. Both packaged RuntimeSettingControls cases pass
+      in the 2026-09-13 Debug UI run.
 
 Exit evidence required:
 
@@ -522,143 +527,108 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 - [x] 07B.0 settle trigger policy and reconcile PRD/LLDs after the UX review.
 - [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
       coalescing and serialized project cooks.
-      Shared writer, snapshot capture and scene/material save-gate adapters are
-      implemented. Current Scene now uses the same saved-file path as other scene
-      scopes; scene/material preparation rechecks dirty state and acknowledged
-      hashes under save leases. Saved scene/geometry/material dependency discovery
-      now includes geometry buffers and import settings, tracks absent settings,
-      and collects independent input errors by asset. Source/native references
-      resolve to the same authored descriptor. ContentPipeline tests pass 127/127,
-      including native first-cook dependencies and discovery/capture races.
-      Explicit asset/folder/scene/project cooks now capture the complete saved
-      source set before generation, use private native inputs, carry the qualified
-      producer fingerprint, and report later source/dirty changes. Geometry media
-      references resolve to captured copies. ContentPipeline 137/137 passes.
-      Material helpers use the same pipeline and preserve newer edits/saves as
-      stale. Persisted product fingerprints and validated output hashes now reuse
-      current products across service recreation. Native tests cover unchanged
-      cooks with no workers/rewrites, one changed material, corrupt descriptors,
-      failed-run provenance, warning retention, and every built-in. ContentPipeline
-      166/166 passes. Saved-source scheduling coalesces revisions, resumes blocked
-      scopes, and supports session pause. Consumer completion is awaited before
-      releasing the writer. Explicit and preview-demand requests precede queued
-      background saves without preemption; pause resets with the project lifetime.
-      Equivalent pending scopes share one run and retain independent cancellation;
-      an explicit caller promotes a paused Save. Running snapshots stay immutable.
-      ContentPipeline 293/293 passes, including shared native publication.
-      Preview requests now use that transaction with asset-only scope and demand
-      priority. Native tests cover a dirty consuming scene and first-cook geometry
-      material dependencies. Assignment and scene activation submit only required
-      saved geometry/material assets through the shared demand path. Imported-source
-      closure and creation/import triggers remain.
+  - [x] Scene, material and geometry requests capture saved inputs and dependencies
+        under document read gates, preserve later edits, and use private native inputs.
+  - [x] Persisted source/dependency fingerprints and verified output hashes support
+        incremental reuse, corruption repair and current no-op cooks without workers,
+        output replacement or preview pause.
+  - [x] One writer owns queued work, project lifetimes and native drain. Pending
+        scopes coalesce with independent caller cancellation; explicit/demand work
+        precedes background saves. Pause/resume and later saved revisions are covered.
+  - [ ] Complete retained imported-source/subasset closure and foreign cooked-only
+        input validation/leases. These remain part of 07B.1 and 07B.4.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
-      Native execution now receives explicit input/output/operation paths. A real
-      native cook from private inputs into staging preserves published files;
-      private-root seeding now preserves unrelated bytes/timestamps and records
-      complete root identities. Output leases exclude competing publishers and
-      live readers, with atomic runtime-reader handoff and exited-reader cleanup.
-      The transaction core journals all affected roots and both publication/cache
-      metadata, restores failed replacements, and verifies recovery material before
-      changing files. Combined publication/staging/lease/worker regressions pass
-      69/69, including persisted interruption states between directory moves and
-      journal updates. Native cooks now write to private staging and commit roots,
-      receipt and provenance through the transaction. Recovery skips live operation
-      leases and restores abandoned journals; mounting holds a read lease through
-      verification. ContentPipeline 221/221 passes, including native cook followed
-      by failed preview restoration and receipt repair. Fifteen actual publisher
-      process-termination cases now cover prepared state, individual root moves,
-      metadata writes and completed commit; combined process/worker/lease tests
-      pass 39/39. Runtime now awaits native load drain, retains readers through
-      refresh and teardown, and refreshes existing scene bindings. Runtime 90/90
-      and focused packaged UI 14/14 pass, including same-key material colour
-      replacement without scene reload. The user confirmed recook/tab switching
-      and leak-free shutdown under native debugging. Workspace publication uses this boundary;
-      the remaining project-lifetime and recovery workflows are still open.
+  - [x] Private-root seeding preserves unrelated content; whole-root validation
+        precedes publication. Output leases exclude competing readers and writers.
+  - [x] Journaled root/receipt/provenance replacement and rollback/recovery cover
+        failed publication, metadata writes, abandoned operations and corrupt receipts.
+        Fifteen publisher-termination cases and the 39-case process/worker/lease
+        suite exercise interruption boundaries.
+  - [x] Runtime publication awaits pending loads, retains readers through refresh
+        and teardown, and refreshes current material bindings without scene reload.
+        The user confirmed recook/tab switching and leak-free native-debug shutdown.
+  - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
+        matrix, including the remaining import workflows.
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
-      saved JSON, descriptors, native cooking/loading and runtime hydration. Debug
-      and Release SDK/Interop builds are current. Native descriptor, loader and
-      hydration regressions pass; managed descriptor 16/16, Debug ContentPipeline
-      265/265, Runtime 90/90 and focused PakGen 43/43 pass. The full PakGen suite has
-      eight failures reproduced on the unchanged baseline. Visual parity is M08.
+      saved JSON, descriptors, native cooking/loading and hydration. Debug/Release
+      SDKs and Interop are updated; native descriptor/loader/hydration suites pass.
+      Managed descriptor cases pass 16/16 and focused PakGen cases pass 43/43.
+      Eight full-PakGen failures were reproduced on the unchanged baseline.
+      Standalone visual parity remains ED-M08.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
-      The normal Interop build now records its native SDK in assembly metadata.
-      Startup checks SDK compatibility independently of managed/UI edits; cooking
-      checks its own tools and schemas. Artifact leases follow native ownership
-      and worker drain. Qualification manifests, promotion commands and the
-      separately built startup probe are removed. Core 82/82, Runtime 83/83 and
-      ContentPipeline 145/145 pass, including native mismatch, managed-edit
-      independence, startup without Interop and installed cooker/schema preflight.
-      Supported import and clean-copy reproduction remain open.
+  - [x] Normal Interop builds record native SDK identity. Startup and cooking check
+        their compatibility boundaries independently of unrelated managed edits;
+        artifact leases follow native ownership and drain. No qualification manifest,
+        promotion command or separately built startup probe remains.
+        Core 82/82 and the installed-cooker/schema and mismatch cases pass.
+  - [ ] Complete supported static/scalar glTF/FBX import, retained settings,
+        collision/reimport behavior, unsupported-feature rejection and clean-copy
+        reproduction.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
-        authored/built-in/cooked presentation and typed picking.
-        Catalog initialization publishes complete indexes and supports retry and
-        disposal. Browser/picker status uses shared input/dependency fingerprints
-        and committed-output hashes. Document and cook events update short statuses;
-        saves and completion refresh evidence. Rows retain selection, focus and scroll,
-        and unchanged material swatches reuse their checked source hash. Validation:
-        Content Browser 89/89, ContentPipeline 274/274, managed MaterialEditor
-        56/56, SceneExplorer 171/171 and packaged UI 207/207 pass. Material documents
-        show the shared status in a compact header chip with a next-action tooltip;
-        automatic/folder/project cooks, later edits, Save/recook and reopen are covered.
-        Light/dark rendered checks preserve the property layout and color history.
-        Verified project copies of Default and all generated shapes retain their
-        engine origin, display Built-in with native names, and offer no standalone
-        cooking. Named authored assets remain distinct and cookable. List/tile
-        checks retain built-in copies under Cooked and verify contextual actions.
-        Acknowledged roots and current native outcomes now drive browser, material
-        picker and material-editor readiness without source rescans. Native asset
-        tests 28/28 and Runtime 95/95 cover application, retry generations and stale
-        feedback; project isolation and rendered chip updates pass. Geometry choices
-        now share those identities/statuses, retain focused rows during updates,
-        and preserve authored references while addressing cooked runtime geometry.
-        SceneExplorer 174/174 and focused geometry UI 13/13 pass, including all
-        eleven built-ins. Valid uncooked geometry is selectable, and geometry and
-        material assignments request saved dependencies after the history edit.
-        Remaining browser/picker and complete published-preview journeys are open.
+      authored/built-in/cooked presentation and typed picking.
+  - [x] Shared input/dependency and publication facts drive browser, material editor
+        and both pickers. Cook/document events update status; native root and asset
+        acknowledgments report preview availability separately. Current request
+        generations reject obsolete success/failure callbacks.
+  - [x] Material editor status is a compact header chip with a next-action tooltip.
+        Live updates, Save/recook/reopen, light/dark rendering and color history pass.
+  - [x] Verified built-in copies retain engine origin, native names and Built-in
+        labels, and expose no standalone Cook action. Independent authored assets
+        remain distinct. Geometry picker rows retain identity and focus on updates.
+  - [x] Valid uncooked geometry is assignable. Geometry/material picker assignments
+        request saved dependencies after the undoable edit; Undo, selection changes,
+        node removal, document closure and late callbacks retire obsolete observers.
+  - [x] Folder scope changes publish one complete snapshot. Completed navigation
+        updates the displayed scope; stale rows cannot become selection/action
+        targets, and delayed folder lookup cannot restore an obsolete selection.
+        List/tile and mount-persistence regressions pass on the UI dispatcher.
+  - [ ] Finish browser query/navigation qualification, Type/Status filters, empty
+        states, source/output details and companion presentation across both layouts.
+  - [ ] Finish cooked-only typed-use qualification and the complete assignment,
+        publication, cancellation and Save/reopen matrix.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
-      [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped
-      issues, cancellation, explicit save/resume, and Aerial Start navigation and
-      bounds are implemented. ContentPipeline 107/107, MaterialEditor 44/44, and
-      focused packaged controls 7/7 pass. Actual dock activation now passes eight
-      Cooking UI regressions and 192 Docking tests. Changed material/scene saves
-      now notify the shared automatic scheduler. Fourteen focused packaged UI tests
-      cover dock activation, automatic history, stale-banner removal and native
-      material refresh. Save Copy now schedules the acknowledged new material/scene
-      source without saving the original; failures schedule nothing. Scene tests
-      pass 170/170 and managed material tests 47/47. Active-scene demand now follows
-      document, reference and selection lifetimes. Picker/Undo, material Undo,
-      node removal, scene closure and late-completion regressions cover observer
-      retirement without cooking from change notifications. Packaged UI 216/216
-      and the final nine demand regressions pass; SceneExplorer 174/174 passes.
-      Remaining creation,
-      import and complete workflow gates are open.
+  - [x] The dockable Cooking panel owns session runs and scoped output, grouped
+        issues, selected-run cancellation, inline Save listed & Cook, Retry and
+        property navigation. Output/Assets use the shared details scroller.
+  - [x] Explicit cook actions reveal Cooking at submission, required input and queue
+        completion. Automatic work is visible without stealing focus; Show all
+        reveals routine successes. Stale browser cook banners are removed.
+  - [x] Changed material/scene Save and Save Copy trigger the shared scheduler;
+        failed saves do not. Unchanged saves can resume blocked cooks without
+        submitting another job.
+  - [x] Scene activation and accepted picker assignments request only required saved
+        geometry/material assets. The user confirmed that paused cooking, material
+        creation/assignment and Resume update the viewport without reloading or
+        saving the consuming scene.
+  - [x] Aerial Start validation and property navigation preserve invalid saved data,
+        enforce the finite minimum-zero bound and permit corrected publication.
+  - [ ] Complete creation/import/reimport triggers, useful Inspect/Validate detail
+        presentation and the remaining command/layout journeys.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
-      Compact type selection, the All icon, original property rows, full-text
-      tooltips and consistent icons are implemented. Hidden sections retain field
-      errors and pending results, and recycled controls detach from their models.
-      Packaged UI 196/196 passes at 175% scaling, including numeric/text/color edit
-      boundaries and mixed-target source corrections. Remaining scaling walkthroughs are open.
+  - [x] Compact fixed-type selection, the All icon/tooltip, original property rows,
+        clipping tooltips and consistent icons are implemented and tested. Hidden
+        sections retain feedback; recycled controls detach; gesture/history cases pass.
+  - [ ] Complete the specified 100%, 150% and 200% scaling walkthroughs.
+        Existing packaged rendering evidence at 175% does not cover this gate.
 - [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
-      19 new worker/manifest cases pass; ContentPipeline is 64/64. Source/test
-      diagnostic collection and cleanup passed for changed files. Evidence:
-      `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
-- [x] 07B.7 single procedural authority for the full engine generator catalog
-        and aliases; Cylinder and every picker choice pass scene/project cook (#11).
-        Browser and picker choices now use the full native catalog and its aliases;
-        independent managed lists are removed. A derived last-known catalog preserves
-        offline authoring with scoped availability notices and Retry. Discovery and
-        projection tests 11/11, Content Browser 85/85, managed assets 89/89, scene
-        tests 171/171 and packaged UI 201/201 pass, including native preview and
-        Save/reopen for every built-in. Native BuiltinGeometry/BuiltinGeometryCatalog
-        suites pass, comparing geometry attributes, bounds and default material
-        semantics. Issue #11 is resolved; cooked-companion grouping remains in 5c.
+      Cancellation retains ownership until workers and descendants drain, including
+      termination failures. Process, stream and manifest cases pass.
+- [x] 07B.7 single procedural authority for all eleven engine generator names
+      and aliases; Cylinder and every picker choice pass scene/project cook (#11).
+      Browser and picker discovery use the native catalog with the approved
+      last-known cache and unavailable-preview notice. Native comparison suites
+      verify geometry attributes, bounds and default material semantics; packaged
+      tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
 
-Startup correction: workspace commands now wait for native module registration.
-Runtime 75/75; the user confirmed project opening without the access violation.
+Current validation: ContentPipeline 293/293, Content Browser 92/92, Runtime 95/95,
+MaterialEditor 56/56, SceneExplorer 174/174, packaged UI 216/216 plus the final
+nine demand and five browser navigation/mount regressions.
+Native asset-request tests pass 28/28. The user confirmed startup without the
+access violation and the live demand-cooking workflow described above.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
@@ -780,7 +750,7 @@ rows. Do not add running notes; update the owning plan instead.
 | --- | --- | --- | --- |
 | `ED-M00` | `validated` | 2026-04-26 | Design package approved: README, RULES, PROJECT-LAYOUT, PRD, ARCHITECTURE, DESIGN, PLAN, LLD index/scaffolds, plan index, and status ledger are accepted as the V0.1 planning baseline. |
 | `ED-M01` | `validated` | 2026-04-26 | User validated Project Browser startup, recent/open/create/invalid project behavior, workspace activation, visible operation results, and best-effort workspace/content-browser restoration after ED-M01 implementation. |
-| `ED-M02` | `pending` | - | Not validated; pending scope is the supported single live viewport only. Multi-viewport stability remains deferred. |
+| `ED-M02` | `in_progress` | 2026-09-13 | Fresh Debug launches and single-pane rendered content are user-confirmed. Packaged FPS/logging controls verify native application and stopped-runtime diagnostics. Window/dock-resize surface qualification and the consolidated launch/discovery record remain open; multi-viewport stability stays deferred. |
 | `ED-M03` | `validated` | 2026-04-27 | User manually validated ED-M03 authoring foundation: quick-add, selection, dirty/save, rename undo/redo including in-place edit, save/reopen, and visible diagnostics expectations. Targeted test run passed 112/112 across Oxygen.Managed.Core.Tests, Oxygen.Editor.World.Tests, and Oxygen.Editor.WorldEditor.SceneExplorer.Tests. DynamicTree rename commit hook is deferred and non-blocking. |
 | `ED-M04` | `landed` | 2026-04-28 | Reopened after ED-M07 because accepted `property-inspector.md` and `environment-authoring.md` gates were overclaimed. All non-deferred gates from those LLDs must be implemented and validated before ED-M08 runtime parity; the only deferred feature is multi-viewport. Earlier manual validation remains partial evidence for Transform, Geometry asset switching, material slot persistence UI, camera/light/default inspector behavior, Geometry deletion, and save/reopen behavior. |
 | `ED-M05` | `validated` | 2026-04-28 | User manually validated scalar material authoring against the corrected ED-M06A project layout: material creation under `Content/Materials`, editor scalar/color editing with shared controls, save/reopen behavior, material picker refresh/filtering, geometry assignment by asset identity, asset URI/GUID identity display and copy affordances, and minimum cook/catalog behavior. |
@@ -788,7 +758,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 221/221; publisher/worker/lease process tests 39/39; Runtime 90/90; SceneExplorer 167/167; MaterialEditor 48/48; packaged UI 196/196, including component-filter feedback, text/drag/color boundaries and mixed-target corrections. Same-key material refresh preserves scene identity and history. User confirmed recook/tab switching and leak-free shutdown under native debugging. Remaining slice gates stay open above. |
+| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 293/293; Content Browser 92/92; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 216/216 plus nine demand and five navigation/mount regressions; native asset requests 28/28. User confirmed live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
