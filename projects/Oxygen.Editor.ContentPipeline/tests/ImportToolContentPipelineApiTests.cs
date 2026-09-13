@@ -79,13 +79,20 @@ public sealed partial class ImportToolContentPipelineApiTests
     }
 
     /// <summary>Verifies the workflow can read Loose Cooked Index.</summary>
+    /// <param name="assetType">The native type, independent of the virtual filename.</param>
+    /// <param name="expectedKind">The report kind.</param>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task InspectLooseCookedRootAsync_ShouldReadLooseCookedIndex()
+    [DataRow((byte)1, ContentCookAssetKind.Material)]
+    [DataRow((byte)2, ContentCookAssetKind.Geometry)]
+    [DataRow((byte)3, ContentCookAssetKind.Scene)]
+    [DataRow((byte)4, ContentCookAssetKind.Unknown)]
+    [DataRow((byte)255, ContentCookAssetKind.Unknown)]
+    public async Task InspectLooseCookedRootAsync_ShouldReadLooseCookedIndex(byte assetType, ContentCookAssetKind expectedKind)
     {
         using var workspace = new TempWorkspace();
         var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
-        WriteLooseCookedIndex(cookedRoot);
+        WriteLooseCookedIndex(cookedRoot, assetType: assetType);
         var api = CreateApi(workspace);
 
         var result = await api.InspectLooseCookedRootAsync(cookedRoot, CancellationToken.None).ConfigureAwait(false);
@@ -94,7 +101,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         _ = result.Diagnostics.Should().BeEmpty();
         _ = result.CookedRoot.Should().Be(cookedRoot);
         _ = result.Assets.Should().ContainSingle(asset =>
-            asset.VirtualPath == "/Content/Materials/Red.omat" && asset.Kind == ContentCookAssetKind.Material);
+            asset.VirtualPath == "/Content/Materials/Red.omat" && asset.Kind == expectedKind);
         _ = result.Files.Should().ContainSingle(file =>
             file.RelativePath == "materials.bin" && file.Size == 8);
     }
@@ -241,7 +248,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         ulong descriptorSize = 128,
         byte[]? actualDescriptorBytes = null,
         ulong fileSize = 8,
-        byte[]? actualFileBytes = null)
+        byte[]? actualFileBytes = null,
+        byte assetType = 1)
     {
         Directory.CreateDirectory(cookedRoot);
         Directory.CreateDirectory(Path.Combine(cookedRoot, "Content", "Materials"));
@@ -264,7 +272,7 @@ public sealed partial class ImportToolContentPipelineApiTests
                         new AssetKey(1, 2),
                         "Content/Materials/Red.omat",
                         "/Content/Materials/Red.omat",
-                        AssetType: 1,
+                        AssetType: assetType,
                         DescriptorSize: descriptorSize,
                         DescriptorSha256: new byte[32]),
                 ],
