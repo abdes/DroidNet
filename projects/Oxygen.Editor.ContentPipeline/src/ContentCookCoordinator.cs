@@ -40,7 +40,9 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
     public Task<T> RunCookAsync<T>(CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return this.RunCoreAsync(work, request, cancellationToken);
+        return request.CoalescePending
+            ? this.RunSharedAsync(request, work, cancellationToken)
+            : this.RunCoreAsync(work, request, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -126,21 +128,21 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         ((IObserver<ProjectContext?>)this).OnNext(value: null);
     }
 
-    private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken)
+    private async Task<T> RunCoreAsync<T>(Func<ContentCookOperation, CancellationToken, Task<T>> work, CookRunRequest? request, CancellationToken cancellationToken, SharedCook? shared = null)
     {
         ArgumentNullException.ThrowIfNull(work);
         cancellationToken.ThrowIfCancellationRequested();
-        var (operation, requestCancellation) = this.CreateRequest(cancellationToken);
+        var (operation, requestCancellation) = this.CreateRequest(cancellationToken, shared);
         IProgress<CookRunProgress>? progress = null;
         var acquired = false;
         var retained = false;
         try
         {
-            progress = request is null ? null : this.AddRun(operation, request, requestCancellation);
+            progress = request is null ? null : this.AddRun(operation, request, requestCancellation, shared);
             using var reporting = CookRunContext.Enter(progress);
             while (true)
             {
-                await this.AcquireWriterAsync(operation, request, requestCancellation.Token).ConfigureAwait(false);
+                await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
 
                 requestCancellation.Token.ThrowIfCancellationRequested();
@@ -199,14 +201,22 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-    private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken)
+    private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken, SharedCook? shared = null)
     {
         lock (this.stateLock)
         {
+            if (shared is not null && shared.Key.Lifetime != this.lifetime)
+            {
+                throw new OperationCanceledException("The shared cook's project was closed or replaced.", new CancellationToken(canceled: true));
+            }
+
             ObjectDisposedException.ThrowIf(this.disposed, this);
             var context = this.project ?? throw new InvalidOperationException("Cooking requires an active project.");
             var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeCancellation.Token);
-            return (new ContentCookOperation(Guid.NewGuid(), context, this.lifetime), requestCancellation);
+            var operation = new ContentCookOperation(Guid.NewGuid(), context, this.lifetime);
+            shared?.OperationId = operation.OperationId;
+
+            return (operation, requestCancellation);
         }
     }
 

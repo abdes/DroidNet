@@ -46,6 +46,31 @@ public sealed partial class ContentPipelineServiceTests
         _ = (await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
+    /// <summary>An explicit cook joins a paused Save through the real snapshot and native publication pipeline.</summary>
+    /// <returns>The asynchronous shared native workflow regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task ExplicitCookSharesPausedSavedScopeThroughNativePublication()
+    {
+        using var workspace = new TempWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
+        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        workspace.CookCoordinator.IsAutomaticCookingPaused = true;
+        var saved = pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken);
+        _ = saved.IsCompleted.Should().BeFalse();
+        var explicitCook = pipeline.CookAssetAsync(sceneUri, this.TestContext.CancellationToken);
+        var savedResult = await saved.ConfigureAwait(false);
+        var explicitResult = await explicitCook.ConfigureAwait(false);
+        AssertCookSucceeded(savedResult);
+        _ = explicitResult.Should().BeSameAs(savedResult);
+        var run = workspace.CookCoordinator.Runs.Should().ContainSingle().Subject;
+        _ = run.OperationId.Should().Be(savedResult.OperationId);
+        _ = run.Request.IsAutomatic.Should().BeFalse();
+        _ = run.IsCompleted.Should().BeTrue();
+    }
+
     /// <summary>An unchanged project reuses all products and preserves output bytes and timestamps across service recreation.</summary>
     /// <returns>The asynchronous native regression.</returns>
     [TestMethod]

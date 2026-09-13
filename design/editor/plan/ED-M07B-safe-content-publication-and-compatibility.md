@@ -100,9 +100,11 @@ ContentPipeline 166/166 passes. Successful changed material/scene saves now
 notify the shared scheduler; unchanged saves can resume blocked scopes without
 queuing another cook. Explicit and preview-demand requests now precede waiting
 background saves without preempting an active writer. Pause applies to queued
-automatic work and resets with the project lifetime. ContentPipeline 278/278
-passes. Imported-source closure, shared observer cancellation and the remaining
-Import/demand triggers remain open.
+automatic work and resets with the project lifetime. Equivalent pending scopes
+share one run, with independent caller cancellation and promotion when an
+explicit request joins. Running captures stay immutable; later requests queue
+separately. ContentPipeline 287/287 passes, including shared native publication.
+Imported-source closure and the remaining Import/demand triggers remain open.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and

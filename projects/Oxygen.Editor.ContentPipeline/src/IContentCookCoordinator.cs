@@ -10,8 +10,8 @@ public interface IContentCookCoordinator
     /// <summary>Queues an identified user-visible cook with session progress and scoped cancellation.</summary>
     /// <typeparam name="T">The workflow result.</typeparam>
     /// <param name="request">The original logical scope and trigger.</param>
-    /// <param name="work">Work invoked only while owning the shared writer.</param>
-    /// <param name="cancellationToken">Cancels the request and its owned work.</param>
+    /// <param name="work">Work invoked only while owning the shared writer. When pending scopes coalesce, the first delegate captures the latest saved inputs for every caller.</param>
+    /// <param name="cancellationToken">Cancels this caller. Coalesced work stops when its final caller detaches or the displayed operation is cancelled.</param>
     /// <returns>The workflow result after its owned work finishes.</returns>
     public Task<T> RunCookAsync<T>(Cooking.CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken);
 
