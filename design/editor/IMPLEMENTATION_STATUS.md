@@ -602,6 +602,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
 - [ ] 07B.7 single procedural authority for the full engine generator catalog
       and aliases; Cylinder and every picker choice pass scene/project cook (#11).
+        Native catalog projections retain all identities, aliases, recipe schemas,
+        cooked mappings and LOD/submesh metadata. Projection/descriptor tests 19/19,
+        identity tests 11/11 and managed assets 89/89 pass. Browser/picker wiring and
+        removal of their existing lists remain open.
 
 Startup correction: workspace commands now wait for native module registration.
 Runtime 75/75; the user confirmed project opening without the access violation.

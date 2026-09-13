@@ -21,10 +21,16 @@ public sealed class GeneratedAssetCatalog : IAssetCatalog
     /// Initializes a new instance of the <see cref="GeneratedAssetCatalog"/> class.
     /// </summary>
     public GeneratedAssetCatalog()
+        : this(BuiltInAssets.Create().Select(static asset => new AssetRecord(asset.Uri)))
     {
-        this.records = BuiltInAssets.Create()
-            .Select(a => new AssetRecord(a.Uri))
-            .ToFrozenSet();
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="GeneratedAssetCatalog"/> class from an engine-provided snapshot.</summary>
+    /// <param name="records">The complete generated asset records for the current engine catalog.</param>
+    public GeneratedAssetCatalog(IEnumerable<AssetRecord> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        this.records = records.ToFrozenSet();
     }
 
     /// <inheritdoc />
@@ -56,6 +62,7 @@ public sealed class GeneratedAssetCatalog : IAssetCatalog
     // Provider-defined semantics (intentionally small and stable).
     private static bool MatchesSearch(AssetRecord record, string term)
         => record.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+            || record.Generated?.CanonicalName.Contains(term, StringComparison.OrdinalIgnoreCase) == true
             || record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
             || AssetUriHelper.GetMountPoint(record.Uri).Contains(term, StringComparison.OrdinalIgnoreCase);
 }

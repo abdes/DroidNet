@@ -8,7 +8,7 @@ using System.Text.Json;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Preserves native descriptor payloads without projecting or duplicating their defaults.</summary>
-public sealed class BuiltinGeometryCatalog
+public sealed partial class BuiltinGeometryCatalog
 {
     private BuiltinGeometryCatalog(string mountName, BuiltinDescriptorContribution defaultMaterial, ImmutableArray<BuiltinGeometryDefinition> geometries)
     {

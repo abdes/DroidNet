@@ -2,19 +2,47 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using AwesomeAssertions;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
 [TestClass]
-public sealed class AssetIdentityReducerTests
+public sealed partial class AssetIdentityReducerTests
 {
+    /// <summary>Native generated assets are usable before cooking and retain alias provenance.</summary>
+    [TestMethod]
+    public void GeneratedRecordsRetainTheirEngineIdentityBeforeCooking()
+    {
+        using var workspace = new TempWorkspace();
+        var record = new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/GeodesicSphere"))
+        {
+            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", "/Content/Geometry/Engine_Generated_BasicShapes_GeodesicSphere.ogeo"),
+        };
+        var rows = Reduce(workspace, [record]);
+        _ = rows.Should().ContainSingle();
+        var row = rows[0];
+        _ = row.PrimaryState.Should().Be(AssetState.Generated);
+        _ = row.Kind.Should().Be(AssetKind.Geometry);
+        _ = row.IdentityUri.Should().Be(record.Uri);
+        _ = row.AliasDescription.Should().Be("Alias of IcoSphere");
+        _ = row.IsSelectable.Should().BeTrue();
+        _ = row.CookedUri.Should().BeNull();
+        _ = row.CookedPath.Should().BeNull();
+        _ = row.SourcePath.Should().BeNull();
+        _ = row.DiagnosticCodes.Should().BeEmpty();
+
+        var project = CreateProjectContext(workspace);
+        var searched = new AssetIdentityReducer().Reduce([record], project, CreateCookScope(workspace, project), AssetBrowserFilter.Default with { SearchText = "IcoSphere" });
+        _ = searched.Should().ContainSingle();
+    }
+
     [TestMethod]
     public void Reduce_WhenDescriptorAndCookedExist_ShouldMergeAsDescriptorWithCookedDerivedState()
     {
@@ -34,10 +62,10 @@ public sealed class AssetIdentityReducerTests
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
             ]);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
-        Assert.AreEqual(AssetState.Cooked, rows[0].DerivedState);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
     }
 
     [TestMethod]
@@ -53,9 +81,9 @@ public sealed class AssetIdentityReducerTests
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
             ]);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
     }
 
     [TestMethod]
@@ -72,9 +100,9 @@ public sealed class AssetIdentityReducerTests
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json.import.json")),
             ]);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
-        Assert.AreEqual(AssetKind.Material, rows[0].Kind);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].Kind.Should().Be(AssetKind.Material);
     }
 
     [TestMethod]
@@ -87,7 +115,7 @@ public sealed class AssetIdentityReducerTests
 
         var rows = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json.import.json"))]);
 
-        Assert.AreEqual(0, rows.Count);
+        _ = rows.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -107,11 +135,11 @@ public sealed class AssetIdentityReducerTests
                 new AssetRecord(new Uri("asset:///Cooked/Content/Materials/Red.omat")),
             ]);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(new Uri("asset:///Content/Materials/Red.omat.json"), rows[0].IdentityUri);
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
-        Assert.AreEqual(AssetState.Cooked, rows[0].DerivedState);
-        CollectionAssert.DoesNotContain(rows[0].DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.CookedMissing);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].IdentityUri.Should().Be(new Uri("asset:///Content/Materials/Red.omat.json"));
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
+        _ = rows[0].DiagnosticCodes.Should().NotContain(AssetIdentityDiagnosticCodes.CookedMissing);
     }
 
     [TestMethod]
@@ -133,8 +161,8 @@ public sealed class AssetIdentityReducerTests
                 new AssetRecord(new Uri("asset:///Content/Materials/Gold.omat")),
             ]);
 
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
-        Assert.AreEqual(AssetState.Stale, rows[0].DerivedState);
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Stale);
     }
 
     [TestMethod]
@@ -157,9 +185,9 @@ public sealed class AssetIdentityReducerTests
             new ProjectCookScope(project.ProjectId, project.ProjectRoot, workspace.SourcePath("custom-cooked")),
             AssetBrowserFilter.Default);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(cookedPath, rows[0].CookedPath);
-        Assert.AreEqual(AssetState.Cooked, rows[0].DerivedState);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].CookedPath.Should().Be(cookedPath);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
     }
 
     [TestMethod]
@@ -185,9 +213,9 @@ public sealed class AssetIdentityReducerTests
             CreateCookScope(workspace, project),
             filter);
 
-        Assert.AreEqual(1, rows.Count);
-        Assert.AreEqual(AssetState.Descriptor, rows[0].PrimaryState);
-        Assert.AreEqual(AssetState.Cooked, rows[0].DerivedState);
+        _ = rows.Should().ContainSingle();
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
+        _ = rows[0].DerivedState.Should().Be(AssetState.Cooked);
     }
 
     [TestMethod]
@@ -200,8 +228,8 @@ public sealed class AssetIdentityReducerTests
 
         var rows = Reduce(workspace, [new AssetRecord(new Uri("asset:///Content/Materials/Broken.omat.json"))]);
 
-        Assert.AreEqual(AssetState.Broken, rows[0].PrimaryState);
-        CollectionAssert.Contains(rows[0].DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.DescriptorBroken);
+        _ = rows[0].PrimaryState.Should().Be(AssetState.Broken);
+        _ = rows[0].DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.DescriptorBroken);
     }
 
     [TestMethod]
@@ -210,9 +238,9 @@ public sealed class AssetIdentityReducerTests
         var uri = new Uri("asset:///Content/Materials/Missing.omat.json");
         var row = new AssetIdentityReducer().CreateMissing(uri);
 
-        Assert.AreEqual(uri, row.IdentityUri);
-        Assert.AreEqual(AssetState.Missing, row.PrimaryState);
-        CollectionAssert.Contains(row.DiagnosticCodes.ToList(), AssetIdentityDiagnosticCodes.ResolveMissing);
+        _ = row.IdentityUri.Should().Be(uri);
+        _ = row.PrimaryState.Should().Be(AssetState.Missing);
+        _ = row.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
     }
 
     private static IReadOnlyList<ContentBrowserAssetItem> Reduce(TempWorkspace workspace, IReadOnlyList<AssetRecord> records)
@@ -226,8 +254,7 @@ public sealed class AssetIdentityReducerTests
     }
 
     private static ProjectContext CreateProjectContext(TempWorkspace workspace)
-    {
-        return new ProjectContext
+        => new()
         {
             ProjectId = Guid.NewGuid(),
             Name = "Test",
@@ -237,7 +264,6 @@ public sealed class AssetIdentityReducerTests
             LocalFolderMounts = [],
             Scenes = [],
         };
-    }
 
     private static ProjectCookScope CreateCookScope(TempWorkspace workspace, ProjectContext project)
         => new(project.ProjectId, project.ProjectRoot, workspace.SourcePath(".cooked"));
@@ -268,7 +294,7 @@ public sealed class AssetIdentityReducerTests
                 doubleSided: false));
     }
 
-    private sealed class TempWorkspace : IDisposable
+    private sealed partial class TempWorkspace : IDisposable
     {
         public TempWorkspace()
         {
