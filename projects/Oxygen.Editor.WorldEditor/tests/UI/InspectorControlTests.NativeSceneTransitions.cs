@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.TimeMachine;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
@@ -23,7 +24,7 @@ public sealed partial class InspectorControlTests
     [DataRow(10u)]
     public Task SceneSwitchImmediatelyAfterPublicationKeepsNativeLoopAlive(uint targetFps) => EnqueueAsync(async () =>
     {
-        var fixture = new NativeSceneFixture(automatic: false, scene => AddGeometryNode(scene, "Cube"));
+        var fixture = new NativeSceneFixture(automatic: false, scene => SeedShadowTransitionScene(scene, 4));
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
@@ -67,7 +68,7 @@ public sealed partial class InspectorControlTests
                 }
             }
 
-            await fixture.SwitchToNewSceneAsync(timeout.Token).ConfigureAwait(true);
+            await fixture.SwitchToNewSceneAsync(cycle % 2 == 0 ? 1 : 4, timeout.Token).ConfigureAwait(true);
             _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
         }
 
@@ -75,16 +76,25 @@ public sealed partial class InspectorControlTests
         _ = fixture.Results.Should().NotContain(result => result.OperationKind == RuntimeOperationKinds.Loop);
     });
 
+    private static void SeedShadowTransitionScene(Scene scene, int cascades)
+    {
+        AddGeometryNode(scene, "Cube");
+        var sun = new SceneNode(scene) { Name = "Sun" };
+        _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
+        scene.RootNodes.Add(sun);
+        scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { SunNodeId = sun.Id } });
+    }
+
     private sealed partial class NativeSceneFixture
     {
-        public async Task SwitchToNewSceneAsync(CancellationToken cancellationToken)
+        public async Task SwitchToNewSceneAsync(int cascades, CancellationToken cancellationToken)
         {
             this.Model.SetScene(value: null);
             this.sync.CloseDocument(this.Context.Metadata);
             this.Context.History.Clear();
             var project = this.Source.Project;
             this.Source = Scene.CreateAndHydrate(project, new SceneData { Id = Guid.NewGuid(), Name = "Next scene" });
-            AddGeometryNode(this.Source, "Cube");
+            SeedShadowTransitionScene(this.Source, cascades);
             project.Scenes.Add(this.Source);
             this.Context = new(this.Source.Id, new SceneDocumentMetadata(this.Source.Id), this.Source, UndoRedo.GetHistory(this.Source.Id));
             this.Model.SetScene(this.Source);

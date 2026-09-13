@@ -112,7 +112,7 @@ public sealed partial class InspectorControlTests
 
     private static async Task ObserveRenderedFramesAsync(NativeSceneFixture fixture, CancellationToken cancellationToken)
     {
-        var nodeId = fixture.Source.RootNodes.Single().Id;
+        var nodeId = fixture.Source.RootNodes[0].Id;
 
         // Each observation crosses SceneMutation on a later native frame. Continue
         // beyond GPU deferred-release latency after a viewport is destroyed.
