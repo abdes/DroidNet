@@ -111,6 +111,27 @@ Cooked-only geometry/materials can be assigned when their identity and native
 compatibility are valid; Edit/Reimport explains that source is unavailable.
 No action overwrites a cooked binary or fabricates editable source from it.
 
+### Cooked Library Priority
+
+Use Oxygen's last-mounted-wins policy for unqualified asset-key and virtual-path
+resolution across cooked sources. Project-owned output and local cooked libraries
+share one saved, adjustable priority order. A newly added library starts below
+project output and above older libraries, as selected by the user on 2026-09-13.
+Users may deliberately raise a library above project output. Refresh, recooking
+and reopening preserve the saved order; file timestamps and scan completion do
+not determine priority.
+
+The browser and runtime must use the same ordered source set. Tooltips and Inspect
+identify the winning source and overridden copies without treating ordinary
+overlap as a failed mount. Preserve native identities and physical source locations;
+do not rename references to avoid overlap or choose a winner by display name.
+Source-qualified dependencies retain Oxygen's parent-source semantics, so report
+the actual dependency origin rather than assuming the global winner supplies it.
+
+Pass: two libraries with overlapping paths and keys select the expected source;
+new-library insertion, explicit reordering, project recook and reopen preserve the
+chosen behavior. Source-qualified material dependencies retain their source.
+
 ### Visible State And Next Action
 
 Saved/unsaved authoring, cooked freshness, operation phase, and runtime readiness
