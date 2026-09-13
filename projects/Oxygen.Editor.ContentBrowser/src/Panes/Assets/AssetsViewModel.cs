@@ -13,6 +13,7 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DroidNet.Storage;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
@@ -90,6 +91,12 @@ public partial class AssetsViewModel(
 
     [ObservableProperty]
     public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
+
+    /// <summary>Gets the visibility of cooking for the selected authored input.</summary>
+    public Visibility CookSelectedAssetVisibility => this.CanCookSelectedAsset() ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the visibility of cooking for the selected authored folder.</summary>
+    public Visibility CookSelectedFolderVisibility => this.CanCookSelectedFolder() ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Maps a browser folder to an authored material destination.</summary>
     /// <param name="selected">The selected folder.</param>
@@ -265,7 +272,7 @@ public partial class AssetsViewModel(
     ///     true to release both managed and unmanaged resources; false to release only unmanaged
     ///     resources.
     /// </param>
-    protected new virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
         if (!this.disposed)
         {
@@ -279,14 +286,17 @@ public partial class AssetsViewModel(
                 this.PropertyChanged -= this.OnLayoutViewModelChanged;
 
                 // Cleanup layout view model if necessary
-                if (this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
+                if (this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
                 {
                     layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
+                    layoutViewModel.PropertyChanged -= this.OnAssetSelectionChanged;
                 }
             }
 
             this.disposed = true;
         }
+
+        base.Dispose(disposing);
     }
 
     private static bool TryMapSelectedAuthoringFolder(ProjectContext? project, string normalizedNoRoot, out string virtualFolder)
@@ -363,11 +373,6 @@ public partial class AssetsViewModel(
     private static string DescribeScope(Uri? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
 
-    private static bool IsCookableDescriptorSelection(ContentBrowserAssetItem asset)
-        => asset.IdentityUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
-           || asset.IdentityUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-           || asset.IdentityUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase);
-
     private static List<DiagnosticRecord> ToDiagnosticRecords(
         Guid operationId,
         IReadOnlyList<ImportDiagnostic> diagnostics)
@@ -403,6 +408,7 @@ public partial class AssetsViewModel(
     {
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
+            this.NotifyCookSelection();
             Debug.WriteLine(
                 $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
 
@@ -540,6 +546,7 @@ public partial class AssetsViewModel(
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
         {
             layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
+            layoutViewModel.PropertyChanged -= this.OnAssetSelectionChanged;
         }
     }
 
@@ -575,10 +582,43 @@ public partial class AssetsViewModel(
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
         {
             layoutViewModel.ItemInvoked += this.OnAssetItemInvoked;
+            layoutViewModel.PropertyChanged += this.OnAssetSelectionChanged;
+            this.NotifyCookSelection();
         }
     }
 
-    [RelayCommand]
+    private bool CanCookSelectedAsset()
+        => !this.disposed && this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanCook: true };
+
+    private bool CanCookSelectedFolder()
+    {
+        if (this.disposed || !this.isInitialized || projectContextService.ActiveProject is not { } project)
+        {
+            return false;
+        }
+
+        var path = this.GetSelectedFolderUri().AbsolutePath.TrimEnd('/');
+        return project.AuthoringMounts.Any(mount => string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(AssetsLayoutViewModel.SelectedAsset), StringComparison.Ordinal))
+        {
+            this.NotifyCookSelection();
+        }
+    }
+
+    private void NotifyCookSelection()
+    {
+        this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
+        this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
+        this.OnPropertyChanged(nameof(this.CookSelectedAssetVisibility));
+        this.OnPropertyChanged(nameof(this.CookSelectedFolderVisibility));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCookSelectedAsset))]
     private async Task CookSelectedAssetAsync()
     {
         if (this.LayoutViewModel is not AssetsLayoutViewModel { SelectedAsset: { } asset }
@@ -593,7 +633,7 @@ public partial class AssetsViewModel(
             return;
         }
 
-        if (!IsCookableDescriptorSelection(asset))
+        if (!asset.CanCook)
         {
             this.PublishFailure(
                 ContentPipelineOperationKinds.CookAsset,
@@ -612,7 +652,7 @@ public partial class AssetsViewModel(
             .ConfigureAwait(true);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCookSelectedFolder))]
     private async Task CookSelectedFolderAsync()
         => await this.RunCookAsync(
                 ContentPipelineOperationKinds.CookFolder,

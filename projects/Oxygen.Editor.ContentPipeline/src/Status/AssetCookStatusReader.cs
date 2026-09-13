@@ -19,7 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
 /// <param name="files">The atomic provenance reader.</param>
-public sealed class AssetCookStatusReader(
+public sealed partial class AssetCookStatusReader(
     ICookDocumentRegistry documents,
     CookPublicationService publication,
     INativeCompatibilityService nativeCompatibility,
@@ -47,8 +47,11 @@ public sealed class AssetCookStatusReader(
             prior = new(1, project.ProjectId, [], []);
         }
 
-        var inputs = assetUris.Distinct().Select(uri => CookInputResolver.Resolve(project, uri, ContentCookInputRole.Primary)).ToArray();
+        var requested = assetUris.Distinct().ToArray();
+        var builtins = requested.Where(IsBuiltinIdentity).ToImmutableArray();
+        var inputs = requested.Where(uri => !IsBuiltinIdentity(uri)).Select(uri => CookInputResolver.Resolve(project, uri, ContentCookInputRole.Primary)).ToArray();
         var graph = await new CookDependencyDiscovery(documents, allowUnsavedDocuments: true).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
+        graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
         var availableFiles = graph.Files.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
         var validGraph = graph with
         {
@@ -74,7 +77,7 @@ public sealed class AssetCookStatusReader(
                 native?.Succeeded != false,
                 native?.Diagnostics ?? [],
                 metadataUnavailable,
-                changed)).ToArray();
+                changed)).Concat(builtins.Select(uri => CreateBuiltinStatus(uri, products, plan, native?.Succeeded != false, metadataUnavailable))).ToArray();
         }
         finally
         {

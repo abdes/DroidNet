@@ -64,7 +64,7 @@
                                 Text="{x:Bind Item.PrimaryBadge, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
                                 TextWrapping="NoWrap"
-                                ToolTipService.ToolTip="{x:Bind Item.PrimaryBadge, Mode=OneWay}" />
+                                ToolTipService.ToolTip="{x:Bind Item.PrimaryBadgeTooltip, Mode=OneWay}" />
                             <TextBlock
                                 VerticalAlignment="Center"
                                 MaxLines="1"
