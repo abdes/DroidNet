@@ -19,7 +19,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.Data.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\Generators\src\Oxygen.Editor.Data.Generators.csproj" OutputItemType="Analyzer" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\Generators\src\Oxygen.Editor.Data.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
 </Project>
