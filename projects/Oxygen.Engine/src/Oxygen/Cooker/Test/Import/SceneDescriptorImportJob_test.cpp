@@ -14,6 +14,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -134,7 +136,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 3,
+      "version": 4,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -190,7 +192,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 3,
+      "version": 4,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -220,7 +222,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 3,
+      "version": 4,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -302,7 +304,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 3,
+      "version": 4,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -423,6 +425,134 @@ namespace {
     EXPECT_FLOAT_EQ(local_fog[0].radial_fog_extinction, 0.3F);
     EXPECT_EQ(local_fog[0].sort_priority, 2);
 
+    service.Stop();
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, CompletePostProcessAndBackgroundRoundTrip)
+  {
+    auto service = AsyncImportService(
+      AsyncImportService::Config { .thread_pool_size = 2U });
+    const auto root = MakeTempCookedRoot("complete_environment");
+    auto document = nlohmann::json::parse(
+      R"JSON(
+{
+  "version": 4,
+  "name": "Environment",
+  "nodes": [
+    {
+      "name": "Root"
+    }
+  ],
+  "environment": {
+    "post_process_volume": {
+      "tone_mapper": 1,
+      "exposure_mode": 2,
+      "exposure_enabled": false,
+      "exposure_compensation_ev": 1.25,
+      "exposure_key": 8.75,
+      "manual_exposure_ev": 11.5,
+      "auto_exposure_min_ev": -3.25,
+      "auto_exposure_max_ev": 12.75,
+      "auto_exposure_speed_up": 5.5,
+      "auto_exposure_speed_down": 1.75,
+      "auto_exposure_metering_mode": 0,
+      "auto_exposure_low_percentile": 0.2,
+      "auto_exposure_high_percentile": 0.85,
+      "auto_exposure_min_log_luminance": -10.5,
+      "auto_exposure_log_luminance_range": 21.25,
+      "auto_exposure_target_luminance": 0.27,
+      "auto_exposure_spot_meter_radius": 0.35,
+      "bloom_intensity": 0.6,
+      "bloom_threshold": 2.25,
+      "saturation": 0.8,
+      "contrast": 1.4,
+      "vignette_intensity": 0.3,
+      "display_gamma": 2.4,
+      "enabled": true
+    },
+    "background": {
+      "enabled": true,
+      "color_rgb": [
+        0.05,
+        0.25,
+        0.75
+      ]
+    }
+  }
+}
+)JSON");
+    for (uint32_t tone = 0; tone != 4; ++tone) {
+      for (uint32_t exposure = 0; exposure != 3; ++exposure) {
+        for (uint32_t metering = 0; metering != 3; ++metering) {
+          auto& input = document["environment"]["post_process_volume"];
+          input["tone_mapper"] = tone;
+          input["exposure_mode"] = exposure;
+          input["auto_exposure_metering_mode"] = metering;
+          input["exposure_enabled"] = exposure == 1;
+          SCOPED_TRACE(document.dump());
+          const auto report = SubmitAndWait(
+            service, MakeRequest(root, document.dump(), "Environment"));
+          ASSERT_TRUE(report.success);
+          EXPECT_EQ(report.scenes_written, 1U);
+          const auto path
+            = root / LooseCookedLayout {}.SceneDescriptorRelPath("Environment");
+          const auto bytes = ReadBinaryFile(path);
+          const auto scene = data::SceneAsset(
+            data::AssetKey {}, std::span<const std::byte>(bytes));
+          const auto post = scene.TryGetPostProcessVolumeEnvironment();
+          ASSERT_TRUE(post.has_value());
+          EXPECT_EQ(post->header.record_size, 104U);
+          EXPECT_EQ(static_cast<uint32_t>(post->tone_mapper), tone);
+          EXPECT_EQ(static_cast<uint32_t>(post->exposure_mode), exposure);
+          EXPECT_EQ(
+            static_cast<uint32_t>(post->auto_exposure_metering_mode), metering);
+          EXPECT_EQ(post->exposure_enabled, exposure == 1 ? 1U : 0U);
+          EXPECT_FLOAT_EQ(post->exposure_compensation_ev, 1.25F);
+          EXPECT_FLOAT_EQ(post->exposure_key, 8.75F);
+          EXPECT_FLOAT_EQ(post->manual_exposure_ev, 11.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_min_ev, -3.25F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_max_ev, 12.75F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_speed_up, 5.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_speed_down, 1.75F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_low_percentile, 0.2F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_high_percentile, 0.85F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_min_log_luminance, -10.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_log_luminance_range, 21.25F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_target_luminance, 0.27F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_spot_meter_radius, 0.35F);
+          EXPECT_FLOAT_EQ(post->bloom_intensity, 0.6F);
+          EXPECT_FLOAT_EQ(post->bloom_threshold, 2.25F);
+          EXPECT_FLOAT_EQ(post->saturation, 0.8F);
+          EXPECT_FLOAT_EQ(post->contrast, 1.4F);
+          EXPECT_FLOAT_EQ(post->vignette_intensity, 0.3F);
+          EXPECT_FLOAT_EQ(post->display_gamma, 2.4F);
+          const auto background = scene.TryGetBackgroundEnvironment();
+          ASSERT_TRUE(background.has_value());
+          EXPECT_EQ(background->enabled, 1U);
+          EXPECT_EQ(background->header.record_size, 24U);
+          EXPECT_FLOAT_EQ(background->color_rgb[0], 0.05F);
+          EXPECT_FLOAT_EQ(background->color_rgb[1], 0.25F);
+          EXPECT_FLOAT_EQ(background->color_rgb[2], 0.75F);
+        }
+      }
+    }
+    service.Stop();
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    RejectsPreviousSceneVersionWithRecookDiagnostic)
+  {
+    auto service = AsyncImportService(
+      AsyncImportService::Config { .thread_pool_size = 1U });
+    const auto root = MakeTempCookedRoot("previous_scene_version");
+    const auto report = SubmitAndWait(service,
+      MakeRequest(
+        root, R"({"version":3,"name":"Old","nodes":[{"name":"Root"}]})"));
+    EXPECT_FALSE(report.success);
+    EXPECT_EQ(report.scenes_written, 0U);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.recook_required"));
     service.Stop();
   }
 

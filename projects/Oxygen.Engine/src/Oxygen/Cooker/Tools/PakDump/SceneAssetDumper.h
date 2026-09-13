@@ -38,6 +38,7 @@ public:
   {
     using oxygen::data::ComponentType;
     using oxygen::data::pak::scripting::ScriptingComponentRecord;
+    using oxygen::data::pak::world::BackgroundEnvironmentRecord;
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
     using oxygen::data::pak::world::FogEnvironmentRecord;
@@ -367,6 +368,8 @@ public:
         return "SkySphere";
       case EnvironmentComponentType::kPostProcessVolume:
         return "PostProcessVolume";
+      case EnvironmentComponentType::kBackground:
+        return "Background";
       default:
         return "Unknown";
       }
@@ -485,6 +488,24 @@ public:
         oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
         auto packed = reader.ScopedAlignment(1);
         PostProcessVolumeEnvironmentRecord decoded {};
+        const auto res = reader.ReadInto(decoded);
+        if (!res) {
+          return std::nullopt;
+        }
+        return decoded;
+      };
+
+      const auto TryReadBackground = [&](const std::span<const std::byte> bytes)
+        -> std::optional<BackgroundEnvironmentRecord> {
+        if (bytes.size() != sizeof(BackgroundEnvironmentRecord)) {
+          return std::nullopt;
+        }
+        std::vector<std::byte> buffer;
+        buffer.assign(bytes.begin(), bytes.end());
+        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
+        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        auto packed = reader.ScopedAlignment(1);
+        BackgroundEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
         if (!res) {
           return std::nullopt;
@@ -700,6 +721,16 @@ public:
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
         break;
       }
+      case EnvironmentComponentType::kBackground: {
+        const auto rec = TryReadBackground(record.bytes);
+        if (!rec) {
+          fmt::print("        (failed to decode)\n");
+          break;
+        }
+        PrintUtils::Field("Linear SDR Color",
+          asset_dump_helpers::FormatVec3(rec->color_rgb), 10);
+        break;
+      }
       case EnvironmentComponentType::kPostProcessVolume: {
         const auto rec = TryReadPostProcess(record.bytes);
         if (!rec) {
@@ -726,6 +757,24 @@ public:
         PrintUtils::Field("Saturation", rec->saturation, 10);
         PrintUtils::Field("Contrast", rec->contrast, 10);
         PrintUtils::Field("Vignette Intensity", rec->vignette_intensity, 10);
+        PrintUtils::Field("Exposure Enabled", rec->exposure_enabled != 0U, 10);
+        PrintUtils::Field("Exposure Key", rec->exposure_key, 10);
+        PrintUtils::Field("Manual Exposure (EV)", rec->manual_exposure_ev, 10);
+        PrintUtils::Field("Metering Mode",
+          static_cast<int>(rec->auto_exposure_metering_mode), 10);
+        PrintUtils::Field(
+          "Low Percentile", rec->auto_exposure_low_percentile, 10);
+        PrintUtils::Field(
+          "High Percentile", rec->auto_exposure_high_percentile, 10);
+        PrintUtils::Field(
+          "Min Log Luminance", rec->auto_exposure_min_log_luminance, 10);
+        PrintUtils::Field(
+          "Log Luminance Range", rec->auto_exposure_log_luminance_range, 10);
+        PrintUtils::Field(
+          "Target Luminance", rec->auto_exposure_target_luminance, 10);
+        PrintUtils::Field(
+          "Spot Meter Radius", rec->auto_exposure_spot_meter_radius, 10);
+        PrintUtils::Field("Display Gamma", rec->display_gamma, 10);
         break;
       }
       default:

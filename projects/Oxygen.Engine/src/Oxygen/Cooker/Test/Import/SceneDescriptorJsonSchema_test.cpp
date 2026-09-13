@@ -118,7 +118,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "version": 3,
+    "version": 4,
     "name": "DemoScene",
     "nodes": [
       { "name": "Root", "transform": { "translation": [0, 0, 0] } },
@@ -157,7 +157,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 3,
+    "version": 4,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })");
@@ -174,7 +174,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 3,
+    "version": 4,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -208,7 +208,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 3,
+    "version": 4,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -333,6 +333,81 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsMissingV3Version)
 
   auto errors = std::string {};
   EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
+NOLINT_TEST(
+  SceneDescriptorJsonSchemaTest, PostProcessAndBackgroundRejectInvalidEncodings)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  const auto base = json::parse(
+    R"JSON(
+{
+  "version": 4,
+  "name": "Environment",
+  "nodes": [
+    {
+      "name": "Root"
+    }
+  ],
+  "environment": {
+    "post_process_volume": {
+      "tone_mapper": 1,
+      "exposure_mode": 2,
+      "exposure_enabled": false,
+      "exposure_compensation_ev": 1.25,
+      "exposure_key": 8.75,
+      "manual_exposure_ev": 11.5,
+      "auto_exposure_min_ev": -3.25,
+      "auto_exposure_max_ev": 12.75,
+      "auto_exposure_speed_up": 5.5,
+      "auto_exposure_speed_down": 1.75,
+      "auto_exposure_metering_mode": 0,
+      "auto_exposure_low_percentile": 0.2,
+      "auto_exposure_high_percentile": 0.85,
+      "auto_exposure_min_log_luminance": -10.5,
+      "auto_exposure_log_luminance_range": 21.25,
+      "auto_exposure_target_luminance": 0.27,
+      "auto_exposure_spot_meter_radius": 0.35,
+      "bloom_intensity": 0.6,
+      "bloom_threshold": 2.25,
+      "saturation": 0.8,
+      "contrast": 1.4,
+      "vignette_intensity": 0.3,
+      "display_gamma": 2.4,
+      "enabled": true
+    },
+    "background": {
+      "enabled": true,
+      "color_rgb": [
+        0.05,
+        0.25,
+        0.75
+      ]
+    }
+  }
+}
+)JSON");
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, base, errors)) << errors;
+  for (const auto& pointer : { "/environment/post_process_volume/tone_mapper",
+         "/environment/post_process_volume/exposure_mode",
+         "/environment/post_process_volume/auto_exposure_metering_mode" }) {
+    auto invalid = base;
+    invalid[json::json_pointer(pointer)] = 99;
+    EXPECT_FALSE(ValidateSchema(*schema, invalid, errors)) << pointer;
+  }
+  for (const float channel : { -0.1F, 1.1F }) {
+    auto invalid = base;
+    invalid["environment"]["background"]["color_rgb"][0] = channel;
+    EXPECT_FALSE(ValidateSchema(*schema, invalid, errors));
+  }
+  auto overflow = base;
+  overflow["environment"]["post_process_volume"]["manual_exposure_ev"] = 1e100;
+  EXPECT_FALSE(ValidateSchema(*schema, overflow, errors));
+  auto old = base;
+  old["version"] = 3;
+  EXPECT_FALSE(ValidateSchema(*schema, old, errors));
 }
 
 } // namespace

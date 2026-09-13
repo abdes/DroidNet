@@ -25,8 +25,6 @@ from .constants import (
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
-    DIRECTORY_ENTRY_SIZE,
-    FOOTER_SIZE,
     SHADER_REF_DESC_SIZE,
     SCENE_ASSET_VERSION_CURRENT,
     PHYSICS_RESOURCE_DESC_SIZE,
@@ -39,7 +37,6 @@ from .constants import (
     SOFT_BODY_BINDING_RECORD_SIZE,
     JOINT_BINDING_RECORD_SIZE,
     VEHICLE_BINDING_RECORD_SIZE,
-    VEHICLE_WHEEL_BINDING_RECORD_SIZE,
     AGGREGATE_BINDING_RECORD_SIZE,
     SCRIPT_SLOT_RECORD_SIZE,
 )
@@ -94,6 +91,7 @@ _ENV_SYSTEM_FOG = 2
 _ENV_SYSTEM_SKY_LIGHT = 3
 _ENV_SYSTEM_SKY_SPHERE = 4
 _ENV_SYSTEM_POST_PROCESS_VOLUME = 5
+_ENV_SYSTEM_BACKGROUND = 6
 
 _SCRIPT_PARAM_BOOL = 1
 _SCRIPT_PARAM_INT32 = 2
@@ -714,8 +712,8 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
 
 def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
     enabled = _u32_bool(spec.get("enabled"), 1)
-    tone_mapper = int(spec.get("tone_mapper", 0) or 0)
-    exposure_mode = int(spec.get("exposure_mode", 1) or 0)
+    tone_mapper = int(spec.get("tone_mapper", 1))
+    exposure_mode = int(spec.get("exposure_mode", 2))
     exposure_comp = _f(spec.get("exposure_compensation_ev"), 0.0)
     ae_min = _f(spec.get("auto_exposure_min_ev"), -6.0)
     ae_max = _f(spec.get("auto_exposure_max_ev"), 16.0)
@@ -727,7 +725,7 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
     contrast = _f(spec.get("contrast"), 1.0)
     vignette = _f(spec.get("vignette_intensity"), 0.0)
 
-    record_size = 60
+    record_size = 104
     out = (
         _pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
         + struct.pack("<I", int(enabled))
@@ -736,6 +734,20 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<ffff", ae_min, ae_max, ae_up, ae_down)
         + struct.pack("<ff", bloom_intensity, bloom_threshold)
         + struct.pack("<fff", saturation, contrast, vignette)
+        + struct.pack(
+            "<IffI6ff",
+            _u32_bool(spec.get("exposure_enabled"), 1),
+            _f(spec.get("exposure_key"), 10.0),
+            _f(spec.get("manual_exposure_ev"), 9.7),
+            int(spec.get("auto_exposure_metering_mode", 0)),
+            _f(spec.get("auto_exposure_low_percentile"), 0.1),
+            _f(spec.get("auto_exposure_high_percentile"), 0.9),
+            _f(spec.get("auto_exposure_min_log_luminance"), -12.0),
+            _f(spec.get("auto_exposure_log_luminance_range"), 25.0),
+            _f(spec.get("auto_exposure_target_luminance"), 0.18),
+            _f(spec.get("auto_exposure_spot_meter_radius"), 0.2),
+            _f(spec.get("display_gamma"), 2.2),
+        )
     )
     if len(out) != record_size:
         raise PakError(
@@ -743,6 +755,15 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
             f"PostProcessVolumeEnvironmentRecord size mismatch: {len(out)}",
         )
     return out
+
+
+def _pack_background_environment_record(spec: Dict[str, Any]) -> bytes:
+    return _pack_env_record_header(_ENV_SYSTEM_BACKGROUND, 24) + struct.pack(
+        "<I3f",
+        _u32_bool(spec.get("enabled"), 1),
+        *_vec3(spec.get("color_rgb", [0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]),
+    )
+
 
 
 def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
@@ -898,9 +919,7 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
         records.append(_pack_sky_atmosphere_environment_record(sky_atmosphere))
     volumetric_clouds = env.get("volumetric_clouds")
     if isinstance(volumetric_clouds, dict):
-        records.append(
-            _pack_volumetric_clouds_environment_record(volumetric_clouds)
-        )
+        records.append(_pack_volumetric_clouds_environment_record(volumetric_clouds))
     fog = env.get("fog")
     if isinstance(fog, dict):
         records.append(_pack_fog_environment_record(fog))
@@ -912,9 +931,10 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
         records.append(_pack_sky_sphere_environment_record(sky_sphere))
     post_process = env.get("post_process_volume")
     if isinstance(post_process, dict):
-        records.append(
-            _pack_post_process_volume_environment_record(post_process)
-        )
+        records.append(_pack_post_process_volume_environment_record(post_process))
+    background = env.get("background")
+    if isinstance(background, dict):
+        records.append(_pack_background_environment_record(background))
 
     records.sort(key=lambda b: struct.unpack_from("<I", b, 0)[0])
     systems_count = len(records)
@@ -1245,7 +1265,7 @@ def pack_scene_asset_descriptor_and_payload(
     if scene_version is not None and int(scene_version) != SCENE_ASSET_VERSION_CURRENT:
         raise PakError(
             "E_VERSION",
-            "Scene asset version 3 is required; re-cook authored scene content",
+            f"Scene asset version {SCENE_ASSET_VERSION_CURRENT} is required; re-cook authored scene content",
         )
 
     string_table, name_to_offset = _pack_scene_string_table(nodes)
@@ -1309,29 +1329,29 @@ def pack_scene_asset_descriptor_and_payload(
     directional_lights = scene.get("directional_lights", []) or []
     if not isinstance(directional_lights, list):
         raise PakError("E_TYPE", "scene.directional_lights must be a list")
-    directional_lights = [l for l in directional_lights if isinstance(l, dict)]
-    directional_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    directional_lights = [light for light in directional_lights if isinstance(light, dict)]
+    directional_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
     directional_light_records = b"".join(
-        _pack_directional_light_record(l, node_count=node_count)
-        for l in directional_lights
+        _pack_directional_light_record(light, node_count=node_count)
+        for light in directional_lights
     )
 
     point_lights = scene.get("point_lights", []) or []
     if not isinstance(point_lights, list):
         raise PakError("E_TYPE", "scene.point_lights must be a list")
-    point_lights = [l for l in point_lights if isinstance(l, dict)]
-    point_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    point_lights = [light for light in point_lights if isinstance(light, dict)]
+    point_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
     point_light_records = b"".join(
-        _pack_point_light_record(l, node_count=node_count) for l in point_lights
+        _pack_point_light_record(light, node_count=node_count) for light in point_lights
     )
 
     spot_lights = scene.get("spot_lights", []) or []
     if not isinstance(spot_lights, list):
         raise PakError("E_TYPE", "scene.spot_lights must be a list")
-    spot_lights = [l for l in spot_lights if isinstance(l, dict)]
-    spot_lights.sort(key=lambda l: int(l.get("node_index", 0) or 0))
+    spot_lights = [light for light in spot_lights if isinstance(light, dict)]
+    spot_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
     spot_light_records = b"".join(
-        _pack_spot_light_record(l, node_count=node_count) for l in spot_lights
+        _pack_spot_light_record(light, node_count=node_count) for light in spot_lights
     )
 
     # Offsets (relative to descriptor start)

@@ -567,6 +567,79 @@ namespace {
     };
   }
 
+  auto BuildPostProcessSystemRecord(const json& source)
+    -> SceneEnvironmentSystem
+  {
+    auto record = data::pak::world::PostProcessVolumeEnvironmentRecord {};
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    record.tone_mapper = static_cast<engine::ToneMapper>(
+      source.value("tone_mapper", static_cast<uint32_t>(record.tone_mapper)));
+    record.exposure_mode = static_cast<engine::ExposureMode>(source.value(
+      "exposure_mode", static_cast<uint32_t>(record.exposure_mode)));
+    record.exposure_enabled
+      = source.value("exposure_enabled", record.exposure_enabled != 0U) ? 1U
+                                                                        : 0U;
+    record.exposure_compensation_ev = source.value(
+      "exposure_compensation_ev", record.exposure_compensation_ev);
+    record.exposure_key = source.value("exposure_key", record.exposure_key);
+    record.manual_exposure_ev
+      = source.value("manual_exposure_ev", record.manual_exposure_ev);
+    record.auto_exposure_min_ev
+      = source.value("auto_exposure_min_ev", record.auto_exposure_min_ev);
+    record.auto_exposure_max_ev
+      = source.value("auto_exposure_max_ev", record.auto_exposure_max_ev);
+    record.auto_exposure_speed_up
+      = source.value("auto_exposure_speed_up", record.auto_exposure_speed_up);
+    record.auto_exposure_speed_down = source.value(
+      "auto_exposure_speed_down", record.auto_exposure_speed_down);
+    record.auto_exposure_metering_mode = static_cast<engine::MeteringMode>(
+      source.value("auto_exposure_metering_mode",
+        static_cast<uint32_t>(record.auto_exposure_metering_mode)));
+    record.auto_exposure_low_percentile = source.value(
+      "auto_exposure_low_percentile", record.auto_exposure_low_percentile);
+    record.auto_exposure_high_percentile = source.value(
+      "auto_exposure_high_percentile", record.auto_exposure_high_percentile);
+    record.auto_exposure_min_log_luminance
+      = source.value("auto_exposure_min_log_luminance",
+        record.auto_exposure_min_log_luminance);
+    record.auto_exposure_log_luminance_range
+      = source.value("auto_exposure_log_luminance_range",
+        record.auto_exposure_log_luminance_range);
+    record.auto_exposure_target_luminance = source.value(
+      "auto_exposure_target_luminance", record.auto_exposure_target_luminance);
+    record.auto_exposure_spot_meter_radius
+      = source.value("auto_exposure_spot_meter_radius",
+        record.auto_exposure_spot_meter_radius);
+    record.bloom_intensity
+      = source.value("bloom_intensity", record.bloom_intensity);
+    record.bloom_threshold
+      = source.value("bloom_threshold", record.bloom_threshold);
+    record.saturation = source.value("saturation", record.saturation);
+    record.contrast = source.value("contrast", record.contrast);
+    record.vignette_intensity
+      = source.value("vignette_intensity", record.vignette_intensity);
+    record.display_gamma = source.value("display_gamma", record.display_gamma);
+    return SceneEnvironmentSystem {
+      .system_type = static_cast<uint32_t>(
+        data::pak::world::EnvironmentComponentType::kPostProcessVolume),
+      .record_bytes = PackRecordBytes(record),
+    };
+  }
+
+  auto BuildBackgroundSystemRecord(const json& source) -> SceneEnvironmentSystem
+  {
+    auto record = data::pak::world::BackgroundEnvironmentRecord {};
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    if (source.contains("color_rgb")) {
+      CopyFloatArray(source.at("color_rgb"), record.color_rgb);
+    }
+    return SceneEnvironmentSystem {
+      .system_type = static_cast<uint32_t>(
+        data::pak::world::EnvironmentComponentType::kBackground),
+      .record_bytes = PackRecordBytes(record),
+    };
+  }
+
   auto ResolveAssetReference(SceneDescriptorExecutionContext& context,
     std::string_view virtual_path, std::optional<data::AssetType> expected_type,
     bool require_asset_key, std::string object_path)
@@ -1155,6 +1228,14 @@ namespace {
 
     if (descriptor_doc.contains("environment")) {
       const auto& environment_doc = descriptor_doc.at("environment");
+      if (environment_doc.contains("post_process_volume")) {
+        prepared.environment_systems.push_back(BuildPostProcessSystemRecord(
+          environment_doc.at("post_process_volume")));
+      }
+      if (environment_doc.contains("background")) {
+        prepared.environment_systems.push_back(
+          BuildBackgroundSystemRecord(environment_doc.at("background")));
+      }
       if (environment_doc.contains("sky_atmosphere")) {
         auto sky_record = BuildSkyAtmosphereSystemRecord(context,
           environment_doc.at("sky_atmosphere"), "environment.sky_atmosphere");

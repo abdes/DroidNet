@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -433,6 +434,21 @@ namespace {
   {
     target.SetToneMapper(source.tone_mapper);
     target.SetExposureMode(source.exposure_mode);
+    target.SetExposureEnabled(source.exposure_enabled != 0U);
+    target.SetExposureKey(source.exposure_key);
+    target.SetManualExposureEv(source.manual_exposure_ev);
+    target.SetAutoExposureMeteringMode(source.auto_exposure_metering_mode);
+    target.SetAutoExposureHistogramPercentiles(
+      source.auto_exposure_low_percentile,
+      source.auto_exposure_high_percentile);
+    target.SetAutoExposureHistogramWindow(
+      source.auto_exposure_min_log_luminance,
+      source.auto_exposure_log_luminance_range);
+    target.SetAutoExposureTargetLuminance(
+      source.auto_exposure_target_luminance);
+    target.SetAutoExposureSpotMeterRadius(
+      source.auto_exposure_spot_meter_radius);
+    target.SetDisplayGamma(source.display_gamma);
     target.SetExposureCompensationEv(source.exposure_compensation_ev);
     target.SetAutoExposureRangeEv(
       source.auto_exposure_min_ev, source.auto_exposure_max_ev);
@@ -722,6 +738,13 @@ namespace {
 auto EnvironmentSettingsService::HydrateEnvironment(
   scene::SceneEnvironment& target, const data::SceneAsset& source_asset) -> void
 {
+  if (const auto record = source_asset.TryGetBackgroundEnvironment();
+    IsEnabled(record)) {
+    auto& background = target.AddSystem<scene::environment::Background>();
+    background.SetColorRgb(
+      { record->color_rgb[0], record->color_rgb[1], record->color_rgb[2] });
+  }
+
   const auto sky_atmo_record = source_asset.TryGetSkyAtmosphereEnvironment();
   const auto sky_sphere_record = source_asset.TryGetSkySphereEnvironment();
 
@@ -980,8 +1003,8 @@ auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
   auto dirty_domains = ToMask(DirtyDomain::kAtmosphereModel);
   if (sky_sphere_enabled_ != sky_sphere_was_enabled) {
     skybox_dirty_ = true;
-    dirty_domains |= ToMask(DirtyDomain::kSkySphere)
-      | ToMask(DirtyDomain::kSkybox);
+    dirty_domains
+      |= ToMask(DirtyDomain::kSkySphere) | ToMask(DirtyDomain::kSkybox);
   }
   MarkDirty(dirty_domains);
 }

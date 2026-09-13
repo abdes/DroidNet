@@ -40,7 +40,7 @@ namespace oxygen::data::pak::world {
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 3;
+[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 4;
 
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
@@ -273,6 +273,7 @@ enum class EnvironmentComponentType : uint32_t { // NOLINT(*-enum-size)
   kSkyLight = 3,
   kSkySphere = 4,
   kPostProcessVolume = 5,
+  kBackground = 6,
 };
 
 //! Header for the trailing SceneEnvironment block.
@@ -518,9 +519,36 @@ struct PostProcessVolumeEnvironmentRecord {
   float saturation = 1.0F;
   float contrast = 1.0F;
   float vignette_intensity = 0.0F;
+
+  uint32_t exposure_enabled = 1;
+  float exposure_key = 10.0F;
+  float manual_exposure_ev = 9.7F;
+  engine::MeteringMode auto_exposure_metering_mode
+    = engine::MeteringMode::kAverage;
+  float auto_exposure_low_percentile = 0.1F;
+  float auto_exposure_high_percentile = 0.9F;
+  float auto_exposure_min_log_luminance = -12.0F;
+  float auto_exposure_log_luminance_range = 25.0F;
+  float auto_exposure_target_luminance = 0.18F;
+  float auto_exposure_spot_meter_radius = 0.2F;
+  float display_gamma = 2.2F;
 };
 #pragma pack(pop)
-static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 60);
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 104);
+
+//! Packed display background, in linear SDR RGB without lighting contribution.
+#pragma pack(push, 1)
+struct BackgroundEnvironmentRecord {
+  SceneEnvironmentSystemRecordHeader header = {
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kBackground),
+    .record_size = sizeof(BackgroundEnvironmentRecord),
+  };
+
+  uint32_t enabled = 1;
+  float color_rgb[3] = { 0.0F, 0.0F, 0.0F };
+};
+#pragma pack(pop)
+static_assert(sizeof(BackgroundEnvironmentRecord) == 24);
 
 //! Known SceneEnvironment record tags and their exact packed sizes.
 struct EnvironmentRecordSizeEntry {
@@ -555,6 +583,10 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
     .system_type
     = nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume),
     .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kBackground),
+    .record_size = sizeof(BackgroundEnvironmentRecord),
   },
 };
 

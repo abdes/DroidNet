@@ -1,4 +1,4 @@
-# Oxygen Editor Implementation Status
+﻿# Oxygen Editor Implementation Status
 
 Status: `authoritative tracker`
 
@@ -566,7 +566,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       replacement without scene reload. The user confirmed recook/tab switching
       and leak-free shutdown under native debugging. Workspace publication uses this boundary;
       the remaining project-lifetime and recovery workflows are still open.
-- [ ] 07B.3 required PostProcess/Background native descriptor/load mappings.
+- [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
+      Scene v4 carries all 23 post-process fields and display-background RGB through
+      saved JSON, descriptors, native cooking/loading and runtime hydration. Debug
+      and Release SDK/Interop builds are current. Native descriptor, loader and
+      hydration regressions pass; managed descriptor 16/16, Debug ContentPipeline
+      265/265, Runtime 90/90 and focused PakGen 43/43 pass. The full PakGen suite has
+      eight failures reproduced on the unchanged baseline. Visual parity is M08.
 - [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
       The normal Interop build now records its native SDK in assembly metadata.
       Startup checks SDK compatibility independently of managed/UI edits; cooking
@@ -577,7 +583,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       independence, startup without Interop and installed cooker/schema preflight.
       Supported import and clean-copy reproduction remain open.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
-      authored/built-in/cooked presentation and typed picking.
+        authored/built-in/cooked presentation and typed picking.
         Catalog initialization publishes complete indexes and supports retry and
         disposal. Browser/picker status uses shared input/dependency fingerprints
         and committed-output hashes. Document and cook events update short statuses;
@@ -613,7 +619,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       diagnostic collection and cleanup passed for changed files. Evidence:
       `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
 - [ ] 07B.7 single procedural authority for the full engine generator catalog
-      and aliases; Cylinder and every picker choice pass scene/project cook (#11).
+        and aliases; Cylinder and every picker choice pass scene/project cook (#11).
         Native catalog projections retain all identities, aliases, recipe schemas,
         cooked mappings and LOD/submesh metadata. Projection/descriptor tests 19/19,
         identity tests 11/11 and managed assets 89/89 pass. Browser/picker wiring and

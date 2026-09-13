@@ -326,7 +326,7 @@ assets:
   - name: "SpaceshipGeometry"
     type: "geometry"
     asset_key: "deadbeef-cafe-babe-dead-feeddeadbeef"
-    version: 3
+    version: 4
     streaming_priority: 255
     content_hash: 0x12345678
     variant_flags: 0

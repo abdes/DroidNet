@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -103,7 +103,39 @@ internal sealed record NativeSpotLight(
     [property: JsonPropertyName("outer_cone_angle_radians")] float OuterConeAngleRadians);
 
 internal sealed record NativeEnvironment(
-    [property: JsonPropertyName("sky_atmosphere")] NativeSkyAtmosphereEnvironment SkyAtmosphere);
+    [property: JsonPropertyName("sky_atmosphere")] NativeSkyAtmosphereEnvironment SkyAtmosphere,
+    [property: JsonPropertyName("post_process_volume")] NativePostProcessEnvironment PostProcess,
+    [property: JsonPropertyName("background")] NativeBackgroundEnvironment Background);
+
+internal sealed record NativeBackgroundEnvironment(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("color_rgb")] float[] ColorRgb);
+
+internal sealed record NativePostProcessEnvironment(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("tone_mapper")] int ToneMapper,
+    [property: JsonPropertyName("exposure_mode")] int ExposureMode,
+    [property: JsonPropertyName("exposure_enabled")] bool ExposureEnabled,
+    [property: JsonPropertyName("exposure_compensation_ev")] float ExposureCompensationEv,
+    [property: JsonPropertyName("exposure_key")] float ExposureKey,
+    [property: JsonPropertyName("manual_exposure_ev")] float ManualExposureEv,
+    [property: JsonPropertyName("auto_exposure_min_ev")] float AutoExposureMinEv,
+    [property: JsonPropertyName("auto_exposure_max_ev")] float AutoExposureMaxEv,
+    [property: JsonPropertyName("auto_exposure_speed_up")] float AutoExposureSpeedUp,
+    [property: JsonPropertyName("auto_exposure_speed_down")] float AutoExposureSpeedDown,
+    [property: JsonPropertyName("auto_exposure_metering_mode")] int AutoExposureMeteringMode,
+    [property: JsonPropertyName("auto_exposure_low_percentile")] float AutoExposureLowPercentile,
+    [property: JsonPropertyName("auto_exposure_high_percentile")] float AutoExposureHighPercentile,
+    [property: JsonPropertyName("auto_exposure_min_log_luminance")] float AutoExposureMinLogLuminance,
+    [property: JsonPropertyName("auto_exposure_log_luminance_range")] float AutoExposureLogLuminanceRange,
+    [property: JsonPropertyName("auto_exposure_target_luminance")] float AutoExposureTargetLuminance,
+    [property: JsonPropertyName("auto_exposure_spot_meter_radius")] float AutoExposureSpotMeterRadius,
+    [property: JsonPropertyName("bloom_intensity")] float BloomIntensity,
+    [property: JsonPropertyName("bloom_threshold")] float BloomThreshold,
+    [property: JsonPropertyName("saturation")] float Saturation,
+    [property: JsonPropertyName("contrast")] float Contrast,
+    [property: JsonPropertyName("vignette_intensity")] float VignetteIntensity,
+    [property: JsonPropertyName("display_gamma")] float DisplayGamma);
 
 internal sealed record NativeSkyAtmosphereEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,

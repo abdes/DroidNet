@@ -218,6 +218,10 @@ public:
   OXGN_DATA_NDAPI auto TryGetPostProcessVolumeEnvironment() const
     -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>;
 
+  //! Returns the authored display background when present.
+  OXGN_DATA_NDAPI auto TryGetBackgroundEnvironment() const
+    -> std::optional<pak::world::BackgroundEnvironmentRecord>;
+
   //=== Component Access ===--------------------------------------------------//
 
   //! Returns a view of all components of the specified type.

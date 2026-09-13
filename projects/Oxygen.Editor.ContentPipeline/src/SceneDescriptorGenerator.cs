@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -116,7 +116,6 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
         var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
         dependencyInputs.AddRange(ResolveGeometryDependencies(scene, scope));
         dependencyInputs.AddRange(ResolveMaterialDependencies(scene, scope));
-        AddEnvironmentDiagnostics();
 
         foreach (var root in scene.RootNodes)
         {
@@ -130,8 +129,8 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
                 Point: pointLights.Count == 0 ? null : pointLights,
                 Spot: spotLights.Count == 0 ? null : spotLights);
         var descriptor = new NativeSceneDescriptor(
-            Schema: "oxygen.scene-descriptor.v3",
-            Version: 3,
+            Schema: "oxygen.scene-descriptor.v4",
+            Version: 4,
             Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             Renderables: renderables.Count == 0 ? null : renderables,
@@ -312,44 +311,6 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
 
             renderables.Add(new NativeRenderable(nodeIndex, geometryRef, materialRef, node.IsVisible));
         }
-
-        void AddEnvironmentDiagnostics()
-        {
-            var postProcess = scene.Environment.PostProcess ?? new PostProcessEnvironmentData();
-            if (postProcess.ExposureMode != ExposureMode.Auto)
-            {
-                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ExposureMode"));
-            }
-
-            if (Math.Abs(postProcess.ManualExposureEv - new PostProcessEnvironmentData().ManualExposureEv) > float.Epsilon)
-            {
-                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ManualExposureEv"));
-            }
-
-            if (Math.Abs(postProcess.ExposureCompensationEv) > float.Epsilon)
-            {
-                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ExposureCompensation"));
-            }
-
-            if (postProcess.ToneMapper != ToneMappingMode.AcesFitted)
-            {
-                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.ToneMapping"));
-            }
-
-            if (scene.Environment.BackgroundColor != default)
-            {
-                diagnostics.Add(CreateUnsupportedFieldDiagnostic("Environment.BackgroundColor"));
-            }
-        }
-
-        DiagnosticRecord CreateUnsupportedFieldDiagnostic(string field)
-            => CreateDiagnostic(
-                operationId,
-                DiagnosticSeverity.Warning,
-                ContentPipelineDiagnosticCodes.SceneUnsupportedField,
-                $"Scene field `{field}` is not emitted by the ED-M07 descriptor slice.",
-                descriptorPath,
-                descriptorVirtualPath);
     }
 
     private static ContentCookInput FindSceneInput(ContentCookScope scope)
@@ -431,7 +392,37 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             : light.IsSunLight;
 
     private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
-        => new(CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()));
+        => new(
+            CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()),
+            CreatePostProcess(environment.PostProcess ?? new()),
+            new NativeBackgroundEnvironment(Enabled: true, ToArray(environment.BackgroundColor)));
+
+    private static NativePostProcessEnvironment CreatePostProcess(PostProcessEnvironmentData authored)
+        => new(
+            Enabled: true,
+            ToneMapper: (int)authored.ToneMapper,
+            ExposureMode: (int)authored.ExposureMode,
+            ExposureEnabled: authored.ExposureEnabled,
+            ExposureCompensationEv: authored.ExposureCompensationEv,
+            ExposureKey: authored.ExposureKey,
+            ManualExposureEv: authored.ManualExposureEv,
+            AutoExposureMinEv: authored.AutoExposureMinEv,
+            AutoExposureMaxEv: authored.AutoExposureMaxEv,
+            AutoExposureSpeedUp: authored.AutoExposureSpeedUp,
+            AutoExposureSpeedDown: authored.AutoExposureSpeedDown,
+            AutoExposureMeteringMode: (int)authored.AutoExposureMeteringMode,
+            AutoExposureLowPercentile: authored.AutoExposureLowPercentile,
+            AutoExposureHighPercentile: authored.AutoExposureHighPercentile,
+            AutoExposureMinLogLuminance: authored.AutoExposureMinLogLuminance,
+            AutoExposureLogLuminanceRange: authored.AutoExposureLogLuminanceRange,
+            AutoExposureTargetLuminance: authored.AutoExposureTargetLuminance,
+            AutoExposureSpotMeterRadius: authored.AutoExposureSpotMeterRadius,
+            BloomIntensity: authored.BloomIntensity,
+            BloomThreshold: authored.BloomThreshold,
+            Saturation: authored.Saturation,
+            Contrast: authored.Contrast,
+            VignetteIntensity: authored.VignetteIntensity,
+            DisplayGamma: authored.DisplayGamma);
 
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)
         => new(

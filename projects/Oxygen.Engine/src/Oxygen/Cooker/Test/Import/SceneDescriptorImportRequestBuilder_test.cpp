@@ -63,7 +63,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 3,
+      "version": 4,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
       "name": "DemoScene",
       "content_hashing": false,
@@ -103,7 +103,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "bad.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 3,
+      "version": 4,
       "name": "BadScene",
       "nodes": [
         { "name": "Root", "unexpected": true }
@@ -140,7 +140,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   const auto descriptor_path = dir / "Scenes" / "ok.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 3,
+      "version": 4,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");
@@ -174,8 +174,8 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("scene.descriptor.recook_required")
-      != std::string::npos)
+  EXPECT_TRUE(
+    errors.str().find("scene.descriptor.recook_required") != std::string::npos)
     << errors.str();
 }
 
