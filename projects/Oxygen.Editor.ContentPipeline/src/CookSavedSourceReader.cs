@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -15,12 +15,13 @@ internal static class CookSavedSourceReader
     /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The absolute source path.</param>
     /// <param name="cancellationToken">Cancels the protected read.</param>
+    /// <param name="allowUnsavedDocuments">Reads acknowledged saved bytes for status inspection while an owner has newer unsaved edits.</param>
     /// <returns>The saved bytes released from their source read lease.</returns>
-    public static async Task<byte[]> ReadAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken)
+    public static async Task<byte[]> ReadAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken, bool allowUnsavedDocuments = false)
     {
         using var reads = await documents.AcquireAsync([sourcePath], cancellationToken).ConfigureAwait(false);
         var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
-        if (dirty.Length != 0)
+        if (!allowUnsavedDocuments && dirty.Length != 0)
         {
             throw new CookInputsNeedSaveException(dirty);
         }

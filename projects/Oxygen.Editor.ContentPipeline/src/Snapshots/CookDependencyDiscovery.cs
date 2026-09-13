@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -19,7 +19,8 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
 /// <summary>Discovers saved scene, scalar material and static geometry dependencies without generating output.</summary>
 /// <param name="documents">Document owners coordinating saved-source reads.</param>
-public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
+/// <param name="allowUnsavedDocuments">Allows read-only inspection of saved inputs while their documents contain newer edits.</param>
+public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, bool allowUnsavedDocuments = false)
 {
     /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
     /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
@@ -30,7 +31,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(roots);
-        var discovery = new Discovery(project, documents);
+        var discovery = new Discovery(project, documents, allowUnsavedDocuments);
         foreach (var input in roots)
         {
             discovery.AddAsset(input);
@@ -39,7 +40,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
         return await discovery.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents)
+    private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
@@ -134,7 +135,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents)
             }
 
             var relative = this.RelativePath(path);
-            var bytes = await CookSavedSourceReader.ReadAsync(documents, path, cancellationToken).ConfigureAwait(false);
+            var bytes = await CookSavedSourceReader.ReadAsync(documents, path, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
             this.discoveredBytes.Add(path, bytes);
             _ = this.files.TryAdd(path, new(assetUri, path, relative, Convert.ToHexString(SHA256.HashData(bytes))));
             return bytes;

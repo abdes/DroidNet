@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -18,19 +19,30 @@ internal static class CookIncrementalPlanner
     /// <param name="previous">Previously accepted output provenance.</param>
     /// <param name="cancellationToken">Cancels file verification.</param>
     /// <returns>The products to reuse or rebuild.</returns>
-    public static async Task<CookIncrementalPlan> PlanAsync(CookInputSnapshot snapshot, CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
+    public static Task<CookIncrementalPlan> PlanAsync(CookInputSnapshot snapshot, CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
+        => PlanAsync(snapshot.Operation.Project, snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, cancellationToken);
+
+    /// <summary>Inspects saved inputs and published output without creating a cook operation or private staging.</summary>
+    /// <param name="project">The project whose published products are inspected.</param>
+    /// <param name="producer">The current native producer identity.</param>
+    /// <param name="inputs">The saved file identities.</param>
+    /// <param name="graph">The saved dependency graph.</param>
+    /// <param name="previous">The committed product provenance.</param>
+    /// <param name="cancellationToken">Cancels read-only verification.</param>
+    /// <returns>Current fingerprints, reusable products, and verified prior output.</returns>
+    public static async Task<CookIncrementalPlan> PlanAsync(ProjectContext project, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
     {
-        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, snapshot, graph));
+        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
         foreach (var builtin in CookIncrementalPlan.Builtins(graph))
         {
-            fingerprints = fingerprints.SetItem(builtin, GeneratedFingerprint(builtin, snapshot.BuildFingerprint));
+            fingerprints = fingerprints.SetItem(builtin, GeneratedFingerprint(builtin, producer));
         }
 
         var sharedRoots = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var validOutputs = new HashSet<(string root, string path)>();
         foreach (var root in previous.Roots)
         {
-            var (shared, assets) = await CheckRootAsync(snapshot.Operation.Project.ProjectRoot, root, cancellationToken).ConfigureAwait(false);
+            var (shared, assets) = await CheckRootAsync(project.ProjectRoot, root, cancellationToken).ConfigureAwait(false);
             if (!shared)
             {
                 continue;
@@ -49,7 +61,7 @@ internal static class CookIncrementalPlanner
             && product.Outputs.All(output => validOutputs.Contains((output.RootMount, output.Asset.VirtualPath))))
             .ToImmutableDictionary(static product => product.SourceUri);
 
-        return new(fingerprints, reused, sharedRoots.ToImmutable());
+        return new(fingerprints, reused, sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet() };
     }
 
     /// <summary>Builds an engine-generated product identity from its recipe owner and producer.</summary>
@@ -76,16 +88,16 @@ internal static class CookIncrementalPlanner
             ? path : throw new InvalidDataException("Cook provenance contains a file outside its output root.");
     }
 
-    private static string Fingerprint(ContentCookInput input, CookInputSnapshot snapshot, CookDependencyGraph graph)
+    private static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
-        var files = snapshot.Inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
+        var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         return Hash(new
         {
             Version = 1,
             Source = input.AssetUri.AbsoluteUri,
             input.Kind,
             input.OutputVirtualPath,
-            Producer = snapshot.BuildFingerprint,
+            Producer = producer,
             Files = graph.FileDependencies[input.AssetUri].Select(path => new { Path = path, files[path].DiscoveryHash, files[path].IsAbsent }),
 
             // Native descriptors refer to stable virtual asset identities; scalar material bytes do not alter their consumers.

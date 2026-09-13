@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -17,6 +17,9 @@ internal sealed record CookIncrementalPlan(
     ImmutableDictionary<Uri, CookProvenance.Product> Reusable,
     ImmutableHashSet<string> ValidSharedRoots)
 {
+    /// <summary>Gets output descriptors whose shared resources and own bytes remain verified.</summary>
+    public ImmutableHashSet<(string rootMount, string virtualPath)> VerifiedOutputs { get; init; } = [];
+
     /// <summary>Gets verified native paths for filtering jobs reintroduced by scene preparation.</summary>
     public ImmutableHashSet<string> ReusedVirtualPaths => this.Reusable.Values.SelectMany(static product => product.Outputs).Select(static output => output.Asset.VirtualPath).ToImmutableHashSet(StringComparer.Ordinal);
 
