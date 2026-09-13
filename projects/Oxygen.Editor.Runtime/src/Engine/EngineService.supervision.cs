@@ -105,6 +105,10 @@ public sealed partial class EngineService
         }
 
         this.state = next;
+        this.ChangeContentStatus(
+            next == EngineServiceState.Running ? RuntimeContentState.Unmounted : RuntimeContentState.Unavailable,
+            [],
+            next == EngineServiceState.Running ? null : result?.Message ?? exception?.Message ?? "The preview is not running.");
         this.stateChanges.Enqueue(new(this.currentRun?.Id ?? Guid.Empty, previous, next, result, exception));
     }
 
