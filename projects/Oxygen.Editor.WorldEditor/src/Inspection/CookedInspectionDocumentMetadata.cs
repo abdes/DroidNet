@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspection;
 
@@ -27,6 +28,9 @@ public sealed class CookedInspectionDocumentMetadata(ProjectContext project, Uri
 
     /// <summary>Gets an optional specific asset whose current catalog facts are inspected.</summary>
     public Uri? AssetUri { get; init; }
+
+    /// <summary>Gets the selected physical representation when inspecting a library copy.</summary>
+    public CookedAssetMetadata? CookedSource { get; init; }
 
     /// <summary>Gets a value indicating whether the current request includes integrity validation.</summary>
     public bool ValidateRequested { get; private set; } = validate;

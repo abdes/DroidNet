@@ -15,6 +15,18 @@ namespace Oxygen.Editor.World.Inspection;
 /// <param name="Origin">Verified source ownership, when available.</param>
 public sealed record InspectionAssetRow(CookedRootReport Root, CookedAssetEntry Asset, CookedAssetProvenance? Origin)
 {
+    /// <summary>Gets the assignment consequence of inspecting an overridden physical copy.</summary>
+    public string ResolutionText { get; init; } = string.Empty;
+
+    /// <summary>Gets lower-priority sources for this explicitly inspected asset.</summary>
+    public IReadOnlyList<string> OtherSources { get; init; } = [];
+
+    /// <summary>Gets assignment-resolution explanation visibility.</summary>
+    public Visibility ResolutionVisibility => this.ResolutionText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets optional source-list visibility.</summary>
+    public Visibility OtherSourcesVisibility => this.OtherSources.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>Gets the root-qualified row identity.</summary>
     public string Key => this.Root.Inspection.CookedRoot + "|" + this.Asset.VirtualPath;
 

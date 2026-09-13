@@ -18,6 +18,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World.Inspection;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
@@ -25,6 +26,49 @@ namespace Oxygen.Editor.World.Tests;
 /// <summary>Checks source-less asset opening without creating editable source or cooking built-ins.</summary>
 public sealed partial class InspectorControlTests
 {
+    /// <summary>Inspecting a masked library copy keeps that physical source and explains what assignments will use.</summary>
+    /// <returns>The asynchronous physical-source report regression.</returns>
+    [TestMethod]
+    public Task LibraryInspectionReportsTheSelectedCopyAndEffectiveSource() => EnqueueAsync(async () =>
+    {
+        var directory = Directory.CreateTempSubdirectory("Oxygen-LibraryInspection-");
+        try
+        {
+            var projects = CreateQueryProject();
+            var uri = new Uri("asset:///Content/Shared.omat");
+            await File.WriteAllBytesAsync(Path.Combine(directory.FullName, "Shared.omat"), [1], this.TestContext.CancellationToken).ConfigureAwait(true);
+            var low = new CookedAssetMetadata(directory.FullName, "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64)) { VirtualPath = uri.AbsolutePath };
+            var high = low with { RootFolderPath = Path.Combine(projects.ActiveProject!.ProjectRoot, ".cooked", "Content"), AssetKey = new(3, 4) };
+            var effective = new ContentBrowserAssetItem(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, Path.Combine(high.RootFolderPath, "Shared.omat"), AssetGuid: null, [], IsSelectable: true)
+            {
+                CookedMetadata = high, OverriddenCookedSources = [low],
+            };
+            var provider = new Mock<IContentBrowserAssetProvider>();
+            _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
+            var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, new("asset:///Library/Shared.omat"), validate: false) { AssetUri = uri, CookedSource = low };
+            var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(uri.AbsolutePath, ContentCookAssetKind.Material)], [], []);
+            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, metadata.ScopeUri, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
+            var pipeline = new Mock<IContentPipelineService>();
+            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
+            using var model = new CookedInspectionViewModel(metadata, pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
+            var view = new CookedInspectionView { ViewModel = model };
+            var root = new Grid { Width = 700, Height = 480, RequestedTheme = ElementTheme.Dark };
+            root.Children.Add(view);
+            await LoadTestContentAsync(root).ConfigureAwait(true);
+            await model.CurrentWork.ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            _ = model.ScopedAsset!.CookedMetadata.Should().Be(low);
+            _ = model.SelectedAsset!.ResolutionText.Should().Contain("project output");
+            _ = model.SelectedAsset.Root.Inspection.CookedRoot.Should().Be(directory.FullName);
+            _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text.Contains("project output", StringComparison.Ordinal));
+            await this.CaptureQueryLayoutAsync(root, "inspection-overridden-library.png").ConfigureAwait(true);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    });
+
     /// <summary>Cooked and built-in entries open inspection instead of silently doing nothing or selecting a same-named authored scene.</summary>
     /// <param name="kind">The asset type.</param>
     /// <param name="builtin">Whether the asset is engine-provided.</param>

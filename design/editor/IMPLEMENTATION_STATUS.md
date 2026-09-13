@@ -653,8 +653,15 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         no project copy show engine ownership and asset information without a cook
         or validation request. Refresh discovers verified project copies. Packaged
         invocation and rendered report cases cover this behavior.
+  - [x] Indexed local libraries expose their own read-only contents and effective
+        assignment source. Confirmed mount changes apply and save immediately with
+        rollback before commit; saved priority follows native last-mounted-wins.
+        New libraries default below project output and above older libraries.
+        Packaged tests cover the Cooked menu, tree restoration/selection, source
+        navigation, mount transactions and priority controls. Native material
+        priority changes and Save/reopen pass without reloading or authoring edits.
   - [ ] Complete creation/import/reimport triggers and the remaining command/layout
-        journeys, including local cooked-library discovery and typed-use qualification.
+        journeys, including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
