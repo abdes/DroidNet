@@ -41,6 +41,9 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <summary>Gets or sets the layout allowed to change the shared asset selection.</summary>
     internal AssetsLayoutViewModel? ActiveAssetLayout { get; set; }
 
+    /// <summary>Gets or sets initial shared discovery, so replacing a layout does not rescan the catalog.</summary>
+    internal Task? AssetInitialization { get; set; }
+
     /// <summary>
     /// Adds a folder to the set of selected folders.
     /// Publishes the resulting scope as one state change.

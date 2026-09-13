@@ -209,10 +209,7 @@ public sealed partial class ContentBrowserViewModel(
 
             this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
             this.childContainer.Register<AssetsView>(Reuse.Singleton);
-            this.childContainer.Register<ListLayoutViewModel>(Reuse.Singleton);
-            this.childContainer.Register<ListLayoutView>(Reuse.Singleton);
-            this.childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
-            this.childContainer.Register<TilesLayoutView>(Reuse.Singleton);
+            RegisterAssetLayouts(this.childContainer);
         }
     }
 
@@ -241,6 +238,16 @@ public sealed partial class ContentBrowserViewModel(
         }
 
         await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+    }
+
+    /// <summary>Registers layouts owned and disposed by their router outlet; session state is shared separately.</summary>
+    /// <param name="scope">The browser's local service container.</param>
+    internal static void RegisterAssetLayouts(IContainer scope)
+    {
+        scope.Register<ListLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<ListLayoutView>(Reuse.Transient);
+        scope.Register<TilesLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<TilesLayoutView>(Reuse.Transient);
     }
 
     /// <inheritdoc />

@@ -77,7 +77,7 @@ public sealed partial class InspectorControlTests
         _ = search.Text.Should().BeEmpty();
         _ = list.Assets.Should().HaveCount(3);
         _ = tile.Assets.Should().HaveCount(3);
-        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>An empty cooked folder points to its authored counterpart without scheduling cooking.</summary>
