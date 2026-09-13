@@ -146,6 +146,13 @@ because the last single-asset cook succeeded. A successful historical cook can
 coexist with Out of date relative to newer authoring.
 
 Details lead with name, type, location, status, next action, and a short reason.
+Quick asset information uses a structured, read-only tooltip in both list and
+tile views; it reserves no browser layout space. Show the full name/type and
+location, relevant status explanation, source location or engine ownership, and
+known cooked outputs. An engine recipe's expected path is not proof of a
+published project copy. Tooltip content follows the current catalog snapshot;
+opening it does not scan, load, import or cook. Keep long output lists summarized
+and leave interactive navigation and complete reports to explicit inspection.
 Show dependencies and source/output relationships read-only, with navigation to
 the blocking asset. Put hashes, operation IDs, schema/build fingerprints, and
 copyable source/generated/cooked paths under technical details. Paths for cleaned
