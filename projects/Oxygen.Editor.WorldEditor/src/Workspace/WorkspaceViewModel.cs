@@ -189,22 +189,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<DocumentManager>(Reuse.Singleton);
         this.documentManager = childContainer.Resolve<DocumentManager>();
 
-        // Register shared services at workspace level
-        childContainer.Register<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery, Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>(Reuse.Singleton);
-        childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
-        childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
-        childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
-        childContainer.Register<IAssetIdentityReducer, AssetIdentityReducer>(Reuse.Singleton);
-        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Status.IAssetCookStatusReader>(
-            resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
-        childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
-        childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
+        RegisterContentServices(childContainer);
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
         childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
         childContainer.Register<ISceneOrganizer, SceneOrganizer>(Reuse.Singleton);
         childContainer.Register<ISceneExplorerService, SceneExplorerService>(Reuse.Singleton);
+        childContainer.Register<ISceneContentDemandService, SceneContentDemandService>(Reuse.Singleton);
+        _ = childContainer.Resolve<ISceneContentDemandService>();
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
 
@@ -263,6 +256,19 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         }
 
         base.Dispose(disposing);
+    }
+
+    private static void RegisterContentServices(IContainer childContainer)
+    {
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery, Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>(Reuse.Singleton);
+        childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
+        childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
+        childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
+        childContainer.Register<IAssetIdentityReducer, AssetIdentityReducer>(Reuse.Singleton);
+        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Status.IAssetCookStatusReader>(
+            resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
+        childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
+        childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
     }
 
     private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)

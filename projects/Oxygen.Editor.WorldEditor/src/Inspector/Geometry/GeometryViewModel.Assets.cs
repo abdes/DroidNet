@@ -58,7 +58,7 @@ public sealed partial class GeometryViewModel
                 "Geometry · " + asset.PrimaryBadge,
                 asset.DisplayPath,
                 AssetPickerGroup.Content,
-                asset.IsSelectable && (asset.CookStatus?.HasVerifiedOutput == true || asset.PrimaryState == AssetState.Cooked),
+                asset.IsSelectable,
                 "\uF158");
             if (this.contentItemsByKey.TryGetValue(asset.IdentityUri.AbsoluteUri, out var row))
             {
@@ -83,6 +83,10 @@ public sealed partial class GeometryViewModel
             this.SelectedAssetName = current.DisplayName;
         }
     }
+
+    private string ResolveGeometryDisplayName(Uri uri)
+        => this.latestAssets.FirstOrDefault(asset => asset.IdentityUri == uri || asset.CookedUri == uri)?.DisplayName
+            ?? ExtractNameFromUriString(uri.ToString());
 
     private string BuiltinAvailability(Uri uri)
     {

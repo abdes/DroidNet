@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -34,6 +35,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly IContentBrowserAssetProvider assetProvider;
     private readonly IMaterialPickerService materialPickerService;
     private readonly IBuiltinCatalogDiscovery builtins;
+    private readonly ISceneContentDemandService contentDemand;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
     private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
@@ -59,6 +61,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
     /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
     /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
+    /// <param name="contentDemand">The lifetime owner for saved-asset preview requests.</param>
     /// <param name="commandService">Optional command service used to apply geometry edits.</param>
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
@@ -66,12 +69,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         IContentBrowserAssetProvider assetProvider,
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
+        ISceneContentDemandService contentDemand,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
         this.assetProvider = assetProvider;
         this.materialPickerService = materialPickerService;
         this.builtins = builtins;
+        this.contentDemand = contentDemand;
         this.commandService = commandService;
         this.commandContextProvider = commandContextProvider;
         this.dispatcherQueue = hosting.Dispatcher;
@@ -241,15 +246,16 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             edit,
             "Edit Geometry",
             EditSessionToken.OneShot).ConfigureAwait(true);
-        if (!result.Succeeded)
+        if (!result.Succeeded || !this.IsCurrentSelection(nodes))
         {
             return;
         }
 
         // Update viewmodel display
         this.SelectedAssetUriString = newUri.ToString();
-        this.SelectedAssetName = ExtractNameFromUriString(this.SelectedAssetUriString ?? string.Empty);
+        this.SelectedAssetName = item.Name;
         this.IsMixed = false;
+        this.contentDemand.RequestAssignment(context.Scene, nodes.ConvertAll(static node => node.Id), newUri, AssetKind.Geometry);
     }
 
     /// <summary>
@@ -300,12 +306,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             edit,
             "Edit Material Slot",
             EditSessionToken.OneShot).ConfigureAwait(true);
-        if (!result.Succeeded)
+        if (!result.Succeeded || !this.IsCurrentSelection(nodes))
         {
             return;
         }
 
         this.UpdateMaterialDisplay(item.Uri);
+        this.contentDemand.RequestAssignment(context.Scene, nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
     }
 
     /// <summary>
@@ -352,7 +359,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         {
             var selectedUri = this.geometryUriBinding.HasValue ? this.geometryUriBinding.Value : null;
             this.SelectedAssetUriString = selectedUri?.ToString();
-            this.SelectedAssetName = selectedUri is null ? "None" : ExtractNameFromUriString(selectedUri.ToString());
+            this.SelectedAssetName = selectedUri is null ? "None" : this.ResolveGeometryDisplayName(selectedUri);
         }
 
         this.materialSlot0UriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
@@ -454,6 +461,10 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             Group: AssetPickerGroup.Content,
             IsEnabled: asset.DisplayState is not AssetState.Missing and not AssetState.Broken,
             ThumbnailModel: "\uE8B9");
+
+    private bool IsCurrentSelection(List<SceneNode> nodes)
+        => !this.disposed && this.selectedItems?.Count == nodes.Count
+            && nodes.TrueForAll(node => this.selectedItems.Any(selected => ReferenceEquals(selected, node)));
 
     private void StartMaterialPickerSubscription()
     {

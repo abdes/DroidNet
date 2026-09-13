@@ -548,8 +548,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       ContentPipeline 293/293 passes, including shared native publication.
       Preview requests now use that transaction with asset-only scope and demand
       priority. Native tests cover a dirty consuming scene and first-cook geometry
-      material dependencies. Imported-source closure and the remaining Import,
-      assignment and scene-activation triggers remain.
+      material dependencies. Assignment and scene activation submit only required
+      saved geometry/material assets through the shared demand path. Imported-source
+      closure and creation/import triggers remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;
@@ -612,8 +613,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         now share those identities/statuses, retain focused rows during updates,
         and preserve authored references while addressing cooked runtime geometry.
         SceneExplorer 174/174 and focused geometry UI 13/13 pass, including all
-        eleven built-ins. Assignment before first cook and remaining browser/picker
-        workflows are pending.
+        eleven built-ins. Valid uncooked geometry is selectable, and geometry and
+        material assignments request saved dependencies after the history edit.
+        Remaining browser/picker and complete published-preview journeys are open.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped
@@ -625,8 +627,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       cover dock activation, automatic history, stale-banner removal and native
       material refresh. Save Copy now schedules the acknowledged new material/scene
       source without saving the original; failures schedule nothing. Scene tests
-      pass 170/170 and managed material tests 47/47. Remaining creation/import/demand
-      triggers and workflow gates are open.
+      pass 170/170 and managed material tests 47/47. Active-scene demand now follows
+      document, reference and selection lifetimes. Picker/Undo, material Undo,
+      node removal, scene closure and late-completion regressions cover observer
+      retirement without cooking from change notifications. Packaged UI 216/216
+      and the final nine demand regressions pass; SceneExplorer 174/174 passes.
+      Remaining creation,
+      import and complete workflow gates are open.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.

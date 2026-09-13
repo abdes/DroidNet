@@ -155,7 +155,8 @@ public sealed class SceneNodeEditorViewModelTests
             Oxygen.Testing.AssetStatusFixture.EmptyProvider,
             new Mock<IMaterialPickerService>().Object,
             sceneEngineSync,
-            new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
+            new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
+            Mock.Of<ISceneContentDemandService>());
     }
 
     private static Scene CreateScene()

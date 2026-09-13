@@ -162,7 +162,7 @@ public sealed partial class InspectorControlTests
 
     private sealed partial class Fixture
     {
-        public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null)
+        public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.WorldEditor.Documents.Commands.ISceneDocumentCommandService? commandService = null, ISceneContentDemandService? contentDemand = null, Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assetProvider = null)
         {
             IList<SceneNode> selection = string.Equals(kind, "Environment", StringComparison.Ordinal) ? [] : [this.Node];
             this.Messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
@@ -190,10 +190,11 @@ public sealed partial class InspectorControlTests
                 commandService ?? this.Commands,
                 this.Documents.Object,
                 default,
-                catalog.Object,
+                assetProvider ?? catalog.Object,
                 materials.Object,
                 this.Sync.Object,
-                new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
+                new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
+                contentDemand ?? Mock.Of<ISceneContentDemandService>());
         }
 
         public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)

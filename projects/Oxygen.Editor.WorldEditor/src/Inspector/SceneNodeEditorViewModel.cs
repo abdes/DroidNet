@@ -64,6 +64,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="materialPickerService">The material picker service for geometry material slots.</param>
     /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
     /// <param name="builtins">The shared native catalog for engine choices.</param>
+    /// <param name="contentDemand">The saved-asset preview request owner.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -79,6 +80,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IMaterialPickerService materialPickerService,
         ISceneEngineSync sceneEngineSync,
         IBuiltinCatalogDiscovery builtins,
+        ISceneContentDemandService contentDemand,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -99,6 +101,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             assetProvider,
             materialPickerService,
             builtins,
+            contentDemand,
             loggerFactory);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
 
@@ -361,6 +364,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IContentBrowserAssetProvider assetProvider,
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
+        ISceneContentDemandService contentDemand,
         ILoggerFactory? loggerFactory)
         => new()
         {
@@ -373,6 +377,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 assetProvider,
                 materialPickerService,
                 builtins,
+                contentDemand,
                 this.commandService,
                 this.CreateCommandContext),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(
