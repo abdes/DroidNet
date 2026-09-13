@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -10,11 +10,14 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Preserves native descriptor payloads without projecting or duplicating their defaults.</summary>
 public sealed partial class BuiltinGeometryCatalog
 {
-    private BuiltinGeometryCatalog(string mountName, BuiltinDescriptorContribution defaultMaterial, ImmutableArray<BuiltinGeometryDefinition> geometries)
+    private readonly JsonElement source;
+
+    private BuiltinGeometryCatalog(string mountName, BuiltinDescriptorContribution defaultMaterial, ImmutableArray<BuiltinGeometryDefinition> geometries, JsonElement source)
     {
         this.MountName = mountName;
         this.DefaultMaterial = defaultMaterial;
         this.Geometries = geometries;
+        this.source = source;
     }
 
     /// <summary>Gets the native output mount selected for this catalog.</summary>
@@ -48,8 +51,12 @@ public sealed partial class BuiltinGeometryCatalog
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         return geometries.Any(item => !identities.Add(item.AssetUri.AbsoluteUri))
             ? throw new InvalidDataException("The engine builtin catalog contains duplicate authored identities.")
-            : new(mount, material, geometries);
+            : new(mount, material, geometries, root.Clone());
     }
+
+    /// <summary>Preserves the complete native document for the derived discovery cache.</summary>
+    /// <returns>The native catalog JSON, including descriptor payloads and aliases.</returns>
+    public string ToJson() => this.source.GetRawText();
 
     /// <summary>Finds a native definition while preserving the caller's authored URI.</summary>
     /// <param name="assetUri">The requested built-in URI.</param>
