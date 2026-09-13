@@ -36,8 +36,16 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     /// with the default set of built-in assets.
     /// </summary>
     public GeneratedAssetResolver()
+        : this(BuiltInAssets.Create())
     {
-        this.assets = BuiltInAssets.Create().ToFrozenDictionary(a => a.Uri);
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="GeneratedAssetResolver"/> class from engine metadata.</summary>
+    /// <param name="assets">The assets to resolve, retaining their authored identities.</param>
+    public GeneratedAssetResolver(IEnumerable<Asset> assets)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+        this.assets = assets.ToFrozenDictionary(static asset => asset.Uri);
     }
 
     /// <inheritdoc/>

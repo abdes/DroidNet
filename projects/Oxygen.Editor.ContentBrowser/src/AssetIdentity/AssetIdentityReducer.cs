@@ -1,14 +1,14 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 
@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 public sealed class AssetIdentityReducer : IAssetIdentityReducer
 {
     private readonly Lock descriptorValidationSync = new();
-    private readonly Dictionary<string, DescriptorValidationEntry> descriptorValidationCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DescriptorValidationEntry> descriptorValidationCache = [with(StringComparer.OrdinalIgnoreCase)];
 
     /// <inheritdoc />
     public IReadOnlyList<ContentBrowserAssetItem> Reduce(
@@ -37,8 +37,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             .GroupBy(static record => GetLogicalKey(record.Uri), StringComparer.OrdinalIgnoreCase)
             .Select(group => this.CreateItem(group.ToList(), project, cookScope))
             .OfType<ContentBrowserAssetItem>()
-            .Where(item => IsIncluded(item, filter))
-            .Where(item => MatchesSearch(item, filter.SearchText))
+            .Where(item => IsIncluded(item, filter) && MatchesSearch(item, filter.SearchText))
             .OrderBy(static item => item.DisplayPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -61,97 +60,29 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             DiagnosticCodes: [AssetIdentityDiagnosticCodes.ResolveMissing],
             IsSelectable: false);
 
-    private ContentBrowserAssetItem? CreateItem(
-        IReadOnlyList<AssetRecord> records,
-        ProjectContext project,
-        ProjectCookScope cookScope)
-    {
-        if (records.Count == 0)
-        {
-            return null;
-        }
-
-        var descriptor = records.FirstOrDefault(static record => IsDescriptorUri(record.Uri));
-        var cooked = records.FirstOrDefault(static record => IsCookedUri(record.Uri));
-        var source = records.FirstOrDefault(static record => !IsDescriptorUri(record.Uri) && !IsCookedUri(record.Uri));
-        var selected = descriptor ?? source ?? cooked;
-        if (selected is null)
-        {
-            return null;
-        }
-
-        var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
-        var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
-        var cookedUri = cooked?.Uri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
-        var cookedPath = cookedUri is null ? null : TryResolveCookedPath(cookScope, cookedUri);
-        var diagnostics = new List<string>();
-
-        var primaryState = descriptor is not null
-            ? AssetState.Descriptor
-            : source is not null
-                ? AssetState.Source
-                : AssetState.Cooked;
-        AssetState? derivedState = null;
-
-        if (descriptor is not null)
-        {
-            if (descriptorPath is null || !File.Exists(descriptorPath))
-            {
-                primaryState = AssetState.Broken;
-                diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
-            }
-            else if (!this.CanReadMaterialDescriptor(descriptorPath))
-            {
-                primaryState = AssetState.Broken;
-                diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
-            }
-            else if (cookedUri is not null && cookedPath is not null)
-            {
-                if (!File.Exists(cookedPath))
-                {
-                    diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
-                }
-                else
-                {
-                    derivedState = File.GetLastWriteTimeUtc(descriptorPath) > File.GetLastWriteTimeUtc(cookedPath)
-                        ? AssetState.Stale
-                        : AssetState.Cooked;
-                }
-            }
-        }
-        else if (cooked is not null && cookedPath is not null && !File.Exists(cookedPath))
-        {
-            primaryState = AssetState.Broken;
-            diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
-        }
-
-        return new ContentBrowserAssetItem(
-            IdentityUri: descriptor?.Uri ?? selected.Uri,
-            DisplayName: GetDisplayName(descriptor?.Uri ?? selected.Uri),
-            Kind: GetKind(descriptor?.Uri ?? selected.Uri),
-            PrimaryState: primaryState,
-            DerivedState: derivedState,
-            RuntimeAvailability: cookedUri is null ? AssetRuntimeAvailability.NotApplicable : AssetRuntimeAvailability.NotMounted,
-            DisplayPath: AssetUriHelper.GetVirtualPath(descriptor?.Uri ?? selected.Uri),
-            SourcePath: sourcePath,
-            DescriptorPath: descriptorPath,
-            CookedUri: cookedUri,
-            CookedPath: cookedPath,
+    private static ContentBrowserAssetItem CreateGeneratedItem(AssetRecord selected, GeneratedAssetMetadata recipe)
+        => new(
+            IdentityUri: selected.Uri,
+            DisplayName: selected.Name,
+            Kind: GetKind(new Uri(AssetUris.Scheme + "://" + recipe.CookedVirtualPath)),
+            PrimaryState: AssetState.Generated,
+            DerivedState: null,
+            RuntimeAvailability: AssetRuntimeAvailability.Unknown,
+            DisplayPath: AssetUriHelper.GetVirtualPath(selected.Uri),
+            SourcePath: null,
+            DescriptorPath: null,
+            CookedUri: null,
+            CookedPath: null,
             AssetGuid: null,
-            DiagnosticCodes: diagnostics,
-            IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing);
-    }
+            DiagnosticCodes: [],
+            IsSelectable: true)
+        {
+            Generated = recipe,
+        };
 
     private static bool IsIncluded(ContentBrowserAssetItem item, AssetBrowserFilter filter)
-    {
-        if (filter.Kinds.Count > 0 && !filter.Kinds.Contains(item.Kind))
-        {
-            return false;
-        }
-
-        return StateIncluded(item.PrimaryState, filter)
-               || (item.DerivedState is { } derivedState && StateIncluded(derivedState, filter));
-    }
+        => (filter.Kinds.Count == 0 || filter.Kinds.Contains(item.Kind))
+            && (StateIncluded(item.PrimaryState, filter) || (item.DerivedState is { } derivedState && StateIncluded(derivedState, filter)));
 
     private static bool StateIncluded(AssetState state, AssetBrowserFilter filter)
         => state switch
@@ -167,17 +98,12 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         };
 
     private static bool MatchesSearch(ContentBrowserAssetItem item, string? searchText)
-    {
-        if (string.IsNullOrWhiteSpace(searchText))
-        {
-            return true;
-        }
-
-        return item.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+        => string.IsNullOrWhiteSpace(searchText)
+               || item.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+               || item.Generated?.CanonicalName.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true
                || item.IdentityUri.ToString().Contains(searchText, StringComparison.OrdinalIgnoreCase)
                || item.DisplayPath.Contains(searchText, StringComparison.OrdinalIgnoreCase)
                || (item.AssetGuid?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true);
-    }
 
     private static bool IsBrowsableRecord(Uri uri, ProjectContext project)
     {
@@ -188,29 +114,17 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         }
 
         var mountPoint = AssetUriHelper.GetMountPoint(uri);
-        if (IsDerivedRootMount(mountPoint))
-        {
-            return false;
-        }
-
-        if (!string.Equals(mountPoint, "project", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (path.StartsWith(".cooked/", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(".imported/", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(".build/", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return !project.AuthoringMounts.Any(mount =>
+        return !IsDerivedRootMount(mountPoint)
+            && (!string.Equals(mountPoint, "project", StringComparison.OrdinalIgnoreCase)
+            || (!path.StartsWith(".cooked/", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith(".imported/", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith(".build/", StringComparison.OrdinalIgnoreCase)
+            && !project.AuthoringMounts.Any(mount =>
         {
             var mountRelativePath = mount.RelativePath.Replace('\\', '/').Trim('/');
             return path.Equals(mountRelativePath, StringComparison.OrdinalIgnoreCase)
                    || path.StartsWith(mountRelativePath + "/", StringComparison.OrdinalIgnoreCase);
-        });
+        })));
     }
 
     private static bool IsImportSidecarPath(string path)
@@ -234,42 +148,6 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             : path;
     }
 
-    private bool CanReadMaterialDescriptor(string descriptorPath)
-    {
-        if (!descriptorPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var lastWriteUtc = File.GetLastWriteTimeUtc(descriptorPath);
-        lock (this.descriptorValidationSync)
-        {
-            if (this.descriptorValidationCache.TryGetValue(descriptorPath, out var cached)
-                && cached.LastWriteUtc == lastWriteUtc)
-            {
-                return cached.CanRead;
-            }
-        }
-
-        var canRead = false;
-        try
-        {
-            _ = MaterialSourceReader.Read(File.ReadAllBytes(descriptorPath));
-            canRead = true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
-        {
-            canRead = false;
-        }
-
-        lock (this.descriptorValidationSync)
-        {
-            this.descriptorValidationCache[descriptorPath] = new DescriptorValidationEntry(lastWriteUtc, canRead);
-        }
-
-        return canRead;
-    }
-
     private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
     {
         var relative = Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/');
@@ -282,12 +160,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         var mountName = relative[..slash];
         var mountRelativePath = relative[(slash + 1)..];
         var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            return null;
-        }
-
-        return Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
+        return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
     }
 
     private static string? TryResolveCookedPath(ProjectCookScope cookScope, Uri uri)
@@ -378,6 +251,128 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         }
 
         return string.IsNullOrWhiteSpace(name) ? uri.ToString() : name;
+    }
+
+    private ContentBrowserAssetItem? CreateItem(
+        List<AssetRecord> records,
+        ProjectContext project,
+        ProjectCookScope cookScope)
+    {
+        if (records.Count == 0)
+        {
+            return null;
+        }
+
+        var descriptor = records.FirstOrDefault(static record => IsDescriptorUri(record.Uri));
+        var cooked = records.FirstOrDefault(static record => IsCookedUri(record.Uri));
+        var source = records.FirstOrDefault(static record => !IsDescriptorUri(record.Uri) && !IsCookedUri(record.Uri));
+        var selected = descriptor ?? source ?? cooked;
+        if (selected is null)
+        {
+            return null;
+        }
+
+        if (selected.Generated is { } recipe)
+        {
+            return CreateGeneratedItem(selected, recipe);
+        }
+
+        var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
+        var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
+        var cookedUri = cooked?.Uri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
+        var cookedPath = cookedUri is null ? null : TryResolveCookedPath(cookScope, cookedUri);
+        var diagnostics = new List<string>();
+
+        var primaryState = descriptor is not null
+            ? AssetState.Descriptor
+            : source is not null
+                ? AssetState.Source
+                : AssetState.Cooked;
+        AssetState? derivedState = null;
+
+        if (descriptor is not null)
+        {
+            (primaryState, derivedState) = this.ReadDescriptorState(descriptorPath, cookedPath, diagnostics);
+        }
+        else if (cooked is not null && cookedPath is not null && !File.Exists(cookedPath))
+        {
+            primaryState = AssetState.Broken;
+            diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
+        }
+
+        return new ContentBrowserAssetItem(
+            IdentityUri: descriptor?.Uri ?? selected.Uri,
+            DisplayName: GetDisplayName(descriptor?.Uri ?? selected.Uri),
+            Kind: GetKind(descriptor?.Uri ?? selected.Uri),
+            PrimaryState: primaryState,
+            DerivedState: derivedState,
+            RuntimeAvailability: cookedUri is null ? AssetRuntimeAvailability.NotApplicable : AssetRuntimeAvailability.NotMounted,
+            DisplayPath: AssetUriHelper.GetVirtualPath(descriptor?.Uri ?? selected.Uri),
+            SourcePath: sourcePath,
+            DescriptorPath: descriptorPath,
+            CookedUri: cookedUri,
+            CookedPath: cookedPath,
+            AssetGuid: null,
+            DiagnosticCodes: diagnostics,
+            IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing);
+    }
+
+    private bool CanReadMaterialDescriptor(string descriptorPath)
+    {
+        if (!descriptorPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var lastWriteUtc = File.GetLastWriteTimeUtc(descriptorPath);
+        lock (this.descriptorValidationSync)
+        {
+            if (this.descriptorValidationCache.TryGetValue(descriptorPath, out var cached)
+                && cached.LastWriteUtc == lastWriteUtc)
+            {
+                return cached.CanRead;
+            }
+        }
+
+        bool canRead;
+        try
+        {
+            _ = MaterialSourceReader.Read(File.ReadAllBytes(descriptorPath));
+            canRead = true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            canRead = false;
+        }
+
+        lock (this.descriptorValidationSync)
+        {
+            this.descriptorValidationCache[descriptorPath] = new DescriptorValidationEntry(lastWriteUtc, canRead);
+        }
+
+        return canRead;
+    }
+
+    private (AssetState primary, AssetState? derived) ReadDescriptorState(string? descriptorPath, string? cookedPath, List<string> diagnostics)
+    {
+        if (descriptorPath is null || !File.Exists(descriptorPath) || !this.CanReadMaterialDescriptor(descriptorPath))
+        {
+            diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
+            return (AssetState.Broken, null);
+        }
+
+        if (cookedPath is null)
+        {
+            return (AssetState.Descriptor, null);
+        }
+
+        if (!File.Exists(cookedPath))
+        {
+            diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
+            return (AssetState.Descriptor, null);
+        }
+
+        return (AssetState.Descriptor, File.GetLastWriteTimeUtc(descriptorPath) > File.GetLastWriteTimeUtc(cookedPath) ? AssetState.Stale : AssetState.Cooked);
     }
 
     private sealed record DescriptorValidationEntry(DateTime LastWriteUtc, bool CanRead);

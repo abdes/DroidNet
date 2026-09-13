@@ -15,6 +15,9 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// </remarks>
 public sealed record AssetRecord(Uri Uri)
 {
+    /// <summary>Gets engine recipe metadata when this row represents a generated asset.</summary>
+    public GeneratedAssetMetadata? Generated { get; init; }
+
     /// <summary>
     /// Gets the asset name derived from the URI path.
     /// </summary>
