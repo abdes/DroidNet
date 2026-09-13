@@ -9,7 +9,7 @@
         },
         "version": {
             "type": "integer",
-            "const": 3
+            "const": 4
         },
         "name": {
             "$ref": "#/definitions/identifier"
@@ -676,6 +676,157 @@
                 "affect_reflections": { "type": "boolean" }
             }
         },
+        "post_process_volume_environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "tone_mapper": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "exposure_mode": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ]
+                },
+                "exposure_enabled": {
+                    "type": "boolean"
+                },
+                "exposure_compensation_ev": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "exposure_key": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "manual_exposure_ev": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_min_ev": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_max_ev": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_speed_up": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_speed_down": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_metering_mode": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ]
+                },
+                "auto_exposure_low_percentile": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_high_percentile": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_min_log_luminance": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_log_luminance_range": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_target_luminance": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "auto_exposure_spot_meter_radius": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "bloom_intensity": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "bloom_threshold": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "saturation": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "contrast": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "vignette_intensity": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                },
+                "display_gamma": {
+                    "type": "number",
+                    "minimum": -3.4028235e+38,
+                    "maximum": 3.4028235e+38
+                }
+            }
+        },
+        "background_environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "color_rgb": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                    }
+                }
+            }
+        },
         "environment": {
             "type": "object",
             "additionalProperties": false,
@@ -688,6 +839,12 @@
                 },
                 "sky_light": {
                     "$ref": "#/definitions/sky_light_environment"
+                },
+                "post_process_volume": {
+                    "$ref": "#/definitions/post_process_volume_environment"
+                },
+                "background": {
+                    "$ref": "#/definitions/background_environment"
                 }
             }
         },

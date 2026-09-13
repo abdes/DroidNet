@@ -76,7 +76,7 @@ SCENE_ASSET_VERSION_V2: Final = 1
 SCENE_ASSET_VERSION_V3: Final = 2
 SCENE_ASSET_VERSION_V4: Final = 2
 SCENE_ASSET_VERSION_V5: Final = 3
-SCENE_ASSET_VERSION_CURRENT: Final = SCENE_ASSET_VERSION_V5
+SCENE_ASSET_VERSION_CURRENT: Final = 4
 
 # YAML Schema version constants (for PakGen tool compatibility).
 # These govern the YAML specification format, not the binary PAK format.

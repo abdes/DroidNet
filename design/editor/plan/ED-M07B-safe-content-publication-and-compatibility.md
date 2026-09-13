@@ -173,6 +173,11 @@ initialization. Existing sky-atmosphere and sun/material mappings remain intact.
 Do not write guessed fields or editor-owned binary records. Missing required
 mapping is an error before publication, never an unsupported-field warning pass.
 
+Use scene descriptor version 4 for the complete post-process record and the
+display-background record. The PAK container remains version 7. Native readers
+reject older scene descriptors with a recook error under the engine's latest-only
+policy; generators, schemas and scene fixtures advance together.
+
 Pass: non-default values for every environment/post-process field survive saved
 JSON -> generated descriptor -> cook -> native load observation with units and
 ordinals preserved. Include all tone/exposure modes, background with atmosphere
@@ -476,7 +481,7 @@ its product semantics are settled in 07B.0 before implementation.
 - [ ] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
   coalescing and cancellation cases pass.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
-- [ ] 07B.3 every required field survives native cook/load observation.
+- [x] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [ ] 07B.7 all eleven engine generator names, including the sphere alias, use

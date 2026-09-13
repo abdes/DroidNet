@@ -4,20 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
@@ -414,8 +421,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(updated_sky_light->GetTintRgb(), glm::vec3(0.7F, 0.8F, 0.9F));
 }
 
-NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  EnablingSkyAtmosphereDisablesSceneSkySphere)
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, EnablingSkyAtmosphereDisablesSceneSkySphere)
 {
   ResetDemoSettings();
   auto scene = MakeScene("DemoShell.AtmosphereDisablesSkySphere");
@@ -1219,6 +1226,92 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   EXPECT_EQ(service_.GetLocalFogVolumeCount(), 0);
   EXPECT_TRUE(CollectLocalFogVolumeNodes(*scene).empty());
+}
+
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, HydratesCompletePostProcessAndBackground)
+{
+  namespace world = data::pak::world;
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+  descriptor.header.version = world::kSceneAssetVersion;
+  auto post = world::PostProcessVolumeEnvironmentRecord {};
+  post.tone_mapper = engine::ToneMapper::kReinhard;
+  post.exposure_mode = engine::ExposureMode::kManualCamera;
+  post.auto_exposure_metering_mode = engine::MeteringMode::kSpot;
+  post.exposure_enabled = 0;
+  post.exposure_compensation_ev = 1.25F;
+  post.exposure_key = 8.75F;
+  post.manual_exposure_ev = 11.5F;
+  post.auto_exposure_min_ev = -3.25F;
+  post.auto_exposure_max_ev = 12.75F;
+  post.auto_exposure_speed_up = 5.5F;
+  post.auto_exposure_speed_down = 1.75F;
+  post.auto_exposure_low_percentile = 0.2F;
+  post.auto_exposure_high_percentile = 0.85F;
+  post.auto_exposure_min_log_luminance = -10.5F;
+  post.auto_exposure_log_luminance_range = 21.25F;
+  post.auto_exposure_target_luminance = 0.27F;
+  post.auto_exposure_spot_meter_radius = 0.35F;
+  post.bloom_intensity = 0.6F;
+  post.bloom_threshold = 2.25F;
+  post.saturation = 0.8F;
+  post.contrast = 1.4F;
+  post.vignette_intensity = 0.3F;
+  post.display_gamma = 2.4F;
+  auto background = world::BackgroundEnvironmentRecord {};
+  background.color_rgb[0] = 0.05F;
+  background.color_rgb[1] = 0.25F;
+  background.color_rgb[2] = 0.75F;
+  const auto block = world::SceneEnvironmentBlockHeader {
+    .byte_size = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(post)
+      + sizeof(background),
+    .systems_count = 2,
+  };
+  auto bytes = std::vector<std::byte> {};
+  const auto append = [&bytes]<typename T>(const T& value) {
+    const auto offset = bytes.size();
+    bytes.resize(offset + sizeof(value));
+    std::memcpy(bytes.data() + offset, &value, sizeof(value));
+  };
+  append(descriptor);
+  append(block);
+  append(post);
+  append(background);
+  const auto asset = data::SceneAsset(data::AssetKey {}, std::move(bytes));
+  auto environment = scene::SceneEnvironment {};
+  EnvironmentSettingsService::HydrateEnvironment(environment, asset);
+  const auto volume
+    = environment.TryGetSystem<scene::environment::PostProcessVolume>();
+  ASSERT_TRUE(volume);
+  EXPECT_EQ(volume->GetToneMapper(), engine::ToneMapper::kReinhard);
+  EXPECT_EQ(volume->GetExposureMode(), engine::ExposureMode::kManualCamera);
+  EXPECT_EQ(volume->GetAutoExposureMeteringMode(), engine::MeteringMode::kSpot);
+  EXPECT_FALSE(volume->GetExposureEnabled());
+  EXPECT_FLOAT_EQ(volume->GetExposureCompensationEv(), 1.25F);
+  EXPECT_FLOAT_EQ(volume->GetExposureKey(), 8.75F);
+  EXPECT_FLOAT_EQ(volume->GetManualExposureEv(), 11.5F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureMinEv(), -3.25F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureMaxEv(), 12.75F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureSpeedUp(), 5.5F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureSpeedDown(), 1.75F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureLowPercentile(), 0.2F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureHighPercentile(), 0.85F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureMinLogLuminance(), -10.5F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureLogLuminanceRange(), 21.25F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureTargetLuminance(), 0.27F);
+  EXPECT_FLOAT_EQ(volume->GetAutoExposureSpotMeterRadius(), 0.35F);
+  EXPECT_FLOAT_EQ(volume->GetBloomIntensity(), 0.6F);
+  EXPECT_FLOAT_EQ(volume->GetBloomThreshold(), 2.25F);
+  EXPECT_FLOAT_EQ(volume->GetSaturation(), 0.8F);
+  EXPECT_FLOAT_EQ(volume->GetContrast(), 1.4F);
+  EXPECT_FLOAT_EQ(volume->GetVignetteIntensity(), 0.3F);
+  EXPECT_FLOAT_EQ(volume->GetDisplayGamma(), 2.4F);
+  const auto backdrop
+    = environment.TryGetSystem<scene::environment::Background>();
+  ASSERT_TRUE(backdrop);
+  EXPECT_EQ(backdrop->GetColorRgb(), Vec3(0.05F, 0.25F, 0.75F));
+  EXPECT_FALSE(environment.TryGetSystem<scene::environment::SkyAtmosphere>());
 }
 
 } // namespace oxygen::examples::testing

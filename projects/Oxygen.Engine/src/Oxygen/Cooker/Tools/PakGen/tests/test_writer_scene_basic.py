@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import struct
 
+import pytest
+
 from pakgen.api import BuildOptions, build_pak
 from pakgen.spec.validator import run_validation_pipeline
 
@@ -135,7 +137,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
     assert seen_scene
 
     scene_desc = _extract_scene_descriptor(data)
-    assert scene_desc[65] == 3
+    assert scene_desc[65] == 4
 
     tables = _extract_scene_component_tables(scene_desc)
     assert len(tables) == 1
@@ -160,7 +162,7 @@ def test_build_pak_with_v3_environment_and_local_fog_scene_asset(tmp_path: Path)
                 "type": "scene",
                 "name": "SceneEnvironmentV3",
                 "asset_key": "33" * 16,
-                "version": 3,
+                "version": 4,
                 "nodes": [
                     {"name": "Root", "parent": None},
                     {"name": "FogNode", "parent": 0},
@@ -249,11 +251,12 @@ def test_build_pak_with_v3_environment_and_local_fog_scene_asset(tmp_path: Path)
     build_pak(BuildOptions(input_spec=spec_path, output_path=out_path))
     scene_desc = _extract_scene_descriptor(out_path.read_bytes())
 
-    assert scene_desc[65] == 3
+    assert scene_desc[65] == 4
     assert b"LFOG" in scene_desc
 
 
-def test_scene_validation_rejects_non_v3_scene_asset_version():
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 5])
+def test_scene_validation_rejects_non_current_scene_asset_version(version):
     spec = {
         "version": 6,
         "content_version": 7,
@@ -265,7 +268,7 @@ def test_scene_validation_rejects_non_v3_scene_asset_version():
                 "type": "scene",
                 "name": "LegacyScene",
                 "asset_key": "33" * 16,
-                "version": 2,
+                "version": version,
                 "nodes": [{"name": "Root", "parent": None}],
             }
         ],

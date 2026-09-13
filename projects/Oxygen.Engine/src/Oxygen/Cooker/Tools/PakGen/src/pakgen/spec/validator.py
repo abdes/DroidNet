@@ -714,7 +714,6 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         if not isinstance(g, dict):
             continue
         _validate_bounds_vec3(errors, g, f"geometries[{gi}]")
-        lods = g.get("lods", []) or []
         lod_bounds_ok: List[bool] = []
         for li, lod in enumerate(g.get("lods", []) or []):
             if not isinstance(lod, dict):
@@ -1097,7 +1096,7 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
             _err(
                 errors,
                 "E_VERSION",
-                "Scene asset version 3 is required; re-cook authored scene content",
+                f"Scene asset version {SCENE_ASSET_VERSION_CURRENT} is required; re-cook authored scene content",
                 f"scenes[{si}].version",
             )
         nodes = s.get("nodes", []) or []

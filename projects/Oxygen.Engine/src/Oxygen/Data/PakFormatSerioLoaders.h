@@ -615,6 +615,30 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.saturation));
   CHECK_RESULT(reader.ReadInto(r.contrast));
   CHECK_RESULT(reader.ReadInto(r.vignette_intensity));
+  CHECK_RESULT(reader.ReadInto(r.exposure_enabled));
+  CHECK_RESULT(reader.ReadInto(r.exposure_key));
+  CHECK_RESULT(reader.ReadInto(r.manual_exposure_ev));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_metering_mode));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_low_percentile));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_high_percentile));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_min_log_luminance));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_log_luminance_range));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_target_luminance));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_spot_meter_radius));
+  CHECK_RESULT(reader.ReadInto(r.display_gamma));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::BackgroundEnvironmentRecord& r) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(r.header));
+  CHECK_RESULT(reader.ReadInto(r.enabled));
+  for (auto& value : r.color_rgb) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
 
   return {};
 }

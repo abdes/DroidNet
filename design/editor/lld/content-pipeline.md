@@ -48,7 +48,7 @@ editor-only JSON schemas for runtime content.
 - `diagnostics-operation-results.md`: pipeline operation kinds, failure
   domains, and diagnostic code prefixes.
 
-## 4. Current Baseline
+## 4. ED-M07 Baseline
 
 Reusable managed primitives already exist:
 
@@ -224,8 +224,8 @@ public enum ContentCookInputRole
 
 ### 7.3 Scene Descriptor Adapter
 
-ED-M07 needs a scene adapter from editor scene documents to native
-`oxygen.scene` v3 descriptors:
+The ED-M07 scene adapter is extended by ED-M07B to emit native
+`oxygen.scene` v4 descriptors from editor scene documents:
 
 ```csharp
 public interface ISceneDescriptorGenerator
@@ -257,7 +257,8 @@ Mapping requirements:
 | point/spot lights | best-effort descriptor output when component data exists; unsupported fields produce warnings, not silent drops |
 | `SceneEnvironmentData.AtmosphereEnabled` + `SkyAtmosphere` | full native `environment.sky_atmosphere` payload with authored V0.1 scalar/vector values overlaid onto fixed native defaults for fields not exposed by the editor |
 | `SceneEnvironmentData.SunNodeId` | encoded through the selected directional light's `is_sun_light` / `environment_contribution` fields, not through a separate editor-only environment field |
-| `SceneEnvironmentData.PostProcess` native `PostProcessVolume` fields and `BackgroundColor` | Required V0.1 native descriptor/runtime mapping. Missing schema/API coverage fails validation and blocks publication; extend the engine contract rather than inventing editor-owned runtime fields. |
+| `SceneEnvironmentData.PostProcess` | All 23 fields in `environment.post_process_volume`, including exposure enable/key/manual EV, metering/histogram values and display gamma; native enum ordinals are preserved. |
+| `SceneEnvironmentData.BackgroundColor` | `environment.background.color_rgb`, linear SDR RGB in [0, 1], with the display-background system enabled. |
 | unmapped editable V0.1 fields | One actionable error per field; fail before publication. Read-only/editor-only metadata is omitted only by its explicit contract. |
 
 The adapter must reject an empty scene descriptor because the native schema
@@ -270,8 +271,9 @@ SkyAtmosphere, PostProcess and LDR Background fields. Emit complete validated
 native scene-system payloads with the captured authored values. Never invent
 native fields, substitute defaults for authored values, or omit required systems
 with warnings. Missing native mapping is an actionable error before publication.
-The existing sky-only generator and its warnings are the identified baseline
-omission, not an alternate V0.1 completion policy.
+Scene v4 uses the complete 104-byte native post-process record and the 24-byte
+background record. Readers reject older scene versions with a recook diagnostic;
+the PAK container remains v7. The engine owns these records and their defaults.
 
 Scene descriptor `name` normalization:
 

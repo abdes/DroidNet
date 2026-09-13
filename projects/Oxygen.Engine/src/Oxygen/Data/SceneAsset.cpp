@@ -135,7 +135,8 @@ auto SceneAsset::ParseAndValidate() -> void
     data_.first(sizeof(pak::world::SceneAssetDesc)), "SceneAsset header");
 
   if (desc_.header.version != pak::world::kSceneAssetVersion) {
-    throw std::runtime_error("SceneAsset unsupported descriptor version");
+    throw std::runtime_error(
+      "SceneAsset unsupported descriptor version; re-cook the scene content");
   }
 
   auto range_ok
@@ -448,6 +449,13 @@ auto SceneAsset::TryGetPostProcessVolumeEnvironment() const
   return TryGetEnvironmentRecordAs<
     pak::world::PostProcessVolumeEnvironmentRecord>(
     pak::world::EnvironmentComponentType::kPostProcessVolume);
+}
+
+auto SceneAsset::TryGetBackgroundEnvironment() const
+  -> std::optional<pak::world::BackgroundEnvironmentRecord>
+{
+  return TryGetEnvironmentRecordAs<pak::world::BackgroundEnvironmentRecord>(
+    pak::world::EnvironmentComponentType::kBackground);
 }
 
 } // namespace oxygen::data

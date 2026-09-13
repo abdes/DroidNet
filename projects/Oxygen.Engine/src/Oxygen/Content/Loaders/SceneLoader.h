@@ -34,9 +34,8 @@ namespace oxygen::content::loaders {
 namespace detail {
 
   template <typename RecordT>
-  inline auto ReadPackedRecord(
-    const std::span<const std::byte> bytes, const std::string_view what)
-    -> RecordT
+  inline auto ReadPackedRecord(const std::span<const std::byte> bytes,
+    const std::string_view what) -> RecordT
   {
     std::vector<std::byte> buffer;
     buffer.assign(bytes.begin(), bytes.end());
@@ -192,8 +191,7 @@ namespace detail {
       const auto record_header = ReadPackedRecord<
         oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader>(
         bytes.subspan(cursor,
-          sizeof(
-            oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)),
+          sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)),
         "scene environment record header");
 
       const uint32_t record_type = record_header.system_type;
@@ -261,8 +259,10 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // independent from the PAK container format version.
   // Scene descriptors include a trailing SceneEnvironment block (empty
   // allowed).
-  const bool expects_environment_block
-    = desc.header.version >= oxygen::data::pak::world::kSceneAssetVersion;
+  if (desc.header.version != data::pak::world::kSceneAssetVersion) {
+    throw std::runtime_error(
+      "scene descriptor version is not current; re-cook the scene content");
+  }
 
   // Compute the full payload size from the descriptor ranges.
   size_t end = sizeof(data::pak::world::SceneAssetDesc);
@@ -321,7 +321,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   std::vector<std::byte> bytes = std::move(*blob_res);
 
   const size_t payload_end = end;
-  if (expects_environment_block) {
+  {
     data::pak::world::SceneEnvironmentBlockHeader env_header {};
     const auto header_res = reader.ReadBlob(sizeof(env_header));
     CheckLoaderResult(
@@ -405,13 +405,12 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
       // Dependency collection is identity-only.
       for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record
-          = detail::ReadPackedRecord<oxygen::data::pak::world::RenderableRecord>(
-            table_bytes.subspan(
-              static_cast<size_t>(i)
-                * sizeof(oxygen::data::pak::world::RenderableRecord),
-              sizeof(oxygen::data::pak::world::RenderableRecord)),
-            "scene renderable record");
+        const auto record = detail::ReadPackedRecord<
+          oxygen::data::pak::world::RenderableRecord>(
+          table_bytes.subspan(static_cast<size_t>(i)
+              * sizeof(oxygen::data::pak::world::RenderableRecord),
+            sizeof(oxygen::data::pak::world::RenderableRecord)),
+          "scene renderable record");
         geometry_deps.insert(record.geometry_key);
         if (record.material_key != oxygen::data::AssetKey {}) {
           material_deps.insert(record.material_key);
@@ -454,9 +453,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
         for (uint32_t i = 0; i < entry.table.count; ++i) {
           const auto record = detail::ReadPackedRecord<
             oxygen::data::pak::scripting::ScriptingComponentRecord>(
-            table_bytes.subspan(
-              static_cast<size_t>(i)
-                * sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord),
+            table_bytes.subspan(static_cast<size_t>(i)
+                * sizeof(
+                  oxygen::data::pak::scripting::ScriptingComponentRecord),
               sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord)),
             "scene scripting component record");
 

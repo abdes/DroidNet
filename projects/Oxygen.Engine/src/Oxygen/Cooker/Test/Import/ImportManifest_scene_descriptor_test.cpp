@@ -52,7 +52,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 3,
+      "version": 4,
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
@@ -116,7 +116,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 3,
+      "version": 4,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");

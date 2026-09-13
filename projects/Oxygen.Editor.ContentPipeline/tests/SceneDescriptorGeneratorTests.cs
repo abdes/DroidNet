@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -111,7 +111,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(3);
+        _ = root.GetProperty("version").GetInt32().Should().Be(4);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
@@ -180,10 +180,10 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = atmosphere.GetProperty("sun_disk_enabled").GetBoolean().Should().BeFalse();
     }
 
-    /// <summary>Reports omitted manual exposure with a field-specific diagnostic.</summary>
+    /// <summary>Emits manual exposure without an unsupported-field warning.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsyncShouldWarnForUnsupportedManualExposureField()
+    public async Task GenerateAsyncShouldEmitManualExposureWithoutWarnings()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -207,9 +207,9 @@ public sealed partial class SceneDescriptorGeneratorTests
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = result.Diagnostics.Should().Contain(diagnostic =>
-            diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField
-            && diagnostic.Message.Contains("Environment.ManualExposureEv", StringComparison.Ordinal));
+        _ = result.Diagnostics.Should().NotContain(diagnostic => diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField);
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = document.RootElement.GetProperty("environment").GetProperty("post_process_volume").GetProperty("manual_exposure_ev").GetSingle().Should().Be(4.0f);
     }
 
     /// <summary>Includes authored geometry descriptors in the dependency set.</summary>
