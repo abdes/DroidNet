@@ -167,7 +167,7 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         var existing = this.documentService.GetOpenDocuments(this.windowId).OfType<CookedInspectionDocumentMetadata>()
-            .FirstOrDefault(document => ReferenceEquals(document.Project, request.Project) && document.ScopeUri == request.ScopeUri);
+            .FirstOrDefault(document => ReferenceEquals(document.Project, request.Project) && document.ScopeUri == request.ScopeUri && document.AssetUri == request.AssetUri);
         if (existing is not null)
         {
             existing.RequestRefresh(request.Validate);
@@ -177,6 +177,7 @@ public sealed partial class DocumentManager : IDisposable
         var name = request.ScopeUri is null ? request.Project.Name : Path.GetFileName(Uri.UnescapeDataString(request.ScopeUri.AbsolutePath).TrimEnd('/'));
         var metadata = new CookedInspectionDocumentMetadata(request.Project, request.ScopeUri, request.Validate)
         {
+            AssetUri = request.AssetUri,
             Title = "Inspect · " + (string.IsNullOrEmpty(name) || string.Equals(name, "Cooked", StringComparison.OrdinalIgnoreCase) ? request.Project.Name : name),
         };
         return await this.documentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true) != Guid.Empty;

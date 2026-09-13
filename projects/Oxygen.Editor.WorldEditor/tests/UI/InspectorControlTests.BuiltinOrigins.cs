@@ -105,7 +105,7 @@ public sealed partial class InspectorControlTests
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
     }
 
-    private static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView)
+    private static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null)
     {
         var catalog = new Mock<IAssetCatalog>();
         _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
@@ -124,7 +124,7 @@ public sealed partial class InspectorControlTests
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
-            new StrongReferenceMessenger(),
+            messenger ?? new StrongReferenceMessenger(),
             Mock.Of<Oxygen.Managed.Assets.Import.IImportService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>());
     }

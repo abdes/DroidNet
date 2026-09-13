@@ -416,7 +416,12 @@ public partial class AssetsViewModel(
         Debug.WriteLine(
             $"[AssetsViewModel] Item invoked: {args.InvokedItem.DisplayName}, Kind: {args.InvokedItem.Kind}, URI: {args.InvokedItem.IdentityUri}");
 
-        if (args.InvokedItem.Kind == AssetKind.Scene)
+        if (args.InvokedItem.Kind != AssetKind.Folder
+            && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.CookedUri is not null)))
+        {
+            await this.OpenInspectionAsync(validate: false, args.InvokedItem.IdentityUri).ConfigureAwait(true);
+        }
+        else if (args.InvokedItem.Kind == AssetKind.Scene)
         {
             var currentProject = projectManagerService.CurrentProject;
             if (currentProject is null)
@@ -668,9 +673,9 @@ public partial class AssetsViewModel(
     private Task ValidateCookedOutputAsync() => this.OpenInspectionAsync(validate: true);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
-    private async Task OpenInspectionAsync(bool validate)
+    private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null)
     {
-        var scopeUri = this.GetSelectedFolderUri();
+        var scopeUri = assetUri ?? this.GetSelectedFolderUri();
         try
         {
             if (projectContextService.ActiveProject is not { } project)
@@ -678,7 +683,7 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate));
+            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate) { AssetUri = assetUri });
             if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
             {
                 throw new InvalidOperationException("The inspection document could not be opened in this workspace.");

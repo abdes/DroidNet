@@ -5,12 +5,12 @@
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 /// <summary>Groups proven engine contributions without merging independently authored identities or generator aliases.</summary>
-internal static class AssetIdentityGrouping
+public static class AssetIdentityGrouping
 {
     /// <summary>Returns one row per logical identity within the supplied browser scope.</summary>
     /// <param name="items">Rows already restricted to the relevant folder scope.</param>
     /// <returns>Canonical built-ins with their verified cooked companions, and all independent assets.</returns>
-    internal static IReadOnlyList<ContentBrowserAssetItem> GroupBuiltins(IEnumerable<ContentBrowserAssetItem> items)
+    public static IReadOnlyList<ContentBrowserAssetItem> GroupBuiltins(IEnumerable<ContentBrowserAssetItem> items)
         => items.GroupBy(static item => (item.Kind, Identity: item.IsBuiltin ? item.BuiltinOriginUri ?? item.IdentityUri : item.IdentityUri))
             .Select(static group => Combine(group.Key.Identity, group.ToArray())).ToArray();
 

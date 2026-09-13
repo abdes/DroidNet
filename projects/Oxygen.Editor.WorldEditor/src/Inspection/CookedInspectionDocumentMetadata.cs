@@ -25,6 +25,9 @@ public sealed class CookedInspectionDocumentMetadata(ProjectContext project, Uri
     /// <summary>Gets the inspected scope.</summary>
     public Uri? ScopeUri { get; } = scopeUri;
 
+    /// <summary>Gets an optional specific asset whose current catalog facts are inspected.</summary>
+    public Uri? AssetUri { get; init; }
+
     /// <summary>Gets a value indicating whether the current request includes integrity validation.</summary>
     public bool ValidateRequested { get; private set; } = validate;
 

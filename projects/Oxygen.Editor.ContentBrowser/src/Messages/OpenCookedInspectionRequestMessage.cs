@@ -19,6 +19,9 @@ public sealed class OpenCookedInspectionRequestMessage(ProjectContext project, U
     /// <summary>Gets the requested scope.</summary>
     public Uri? ScopeUri { get; } = scopeUri;
 
+    /// <summary>Gets an optional asset identity whose catalog facts should accompany output inspection.</summary>
+    public Uri? AssetUri { get; init; }
+
     /// <summary>Gets a value indicating whether root integrity should be checked.</summary>
     public bool Validate { get; } = validate;
 }
