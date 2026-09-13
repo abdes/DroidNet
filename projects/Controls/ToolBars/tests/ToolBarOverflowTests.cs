@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 
 namespace DroidNet.Controls.ToolBars.Tests;
 
@@ -15,6 +16,56 @@ namespace DroidNet.Controls.ToolBars.Tests;
 [TestCategory("UITest")]
 public sealed class ToolBarOverflowTests : VisualUserInterfaceTests
 {
+    /// <summary>Overflow changes containers without overwriting a command's visibility binding or exposing hidden menu entries.</summary>
+    /// <param name="secondary">Whether the conditional command belongs to the secondary group.</param>
+    /// <returns>The asynchronous visibility and resize regression.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task HiddenCommandsStayHiddenAcrossOverflowAndBindingChanges(bool secondary) => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 240, Padding = new Thickness(0) };
+        toolbar.PrimaryItems.Add(new ToolBarButton { Label = "One", Width = 80 });
+        toolbar.PrimaryItems.Add(new ToolBarButton { Label = "Two", Width = 80 });
+        var source = new Border { Visibility = Visibility.Collapsed };
+        var conditional = new ToolBarButton { Label = "Conditional", Width = 80 };
+        conditional.SetBinding(UIElement.VisibilityProperty, new Binding { Source = source, Path = new PropertyPath(nameof(UIElement.Visibility)), Mode = BindingMode.OneWay });
+        var group = secondary ? toolbar.SecondaryItems : toolbar.PrimaryItems;
+        group.Add(conditional);
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var items = GetPartOrFail<ItemsControl>(toolbar, secondary ? ToolBar.SecondaryItemsControlPartName : ToolBar.PrimaryItemsControlPartName);
+        var container = (FrameworkElement)items.ContainerFromItem(conditional);
+        _ = container.Should().NotBeSameAs(conditional);
+        _ = conditional.Visibility.Should().Be(Visibility.Collapsed);
+        _ = container.Visibility.Should().Be(Visibility.Collapsed);
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
+
+        toolbar.Width = 60;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var overflow = (MenuFlyout)GetPartOrFail<Button>(toolbar, ToolBar.OverflowButtonPartName).Flyout;
+        _ = overflow.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).Should().NotContain("Conditional");
+        _ = conditional.Visibility.Should().Be(Visibility.Collapsed);
+
+        source.Visibility = Visibility.Visible;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = conditional.Visibility.Should().Be(Visibility.Visible);
+        _ = overflow.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).Should().Contain("Conditional");
+
+        source.Visibility = Visibility.Collapsed;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = overflow.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).Should().NotContain("Conditional");
+        toolbar.Width = 360;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = conditional.Visibility.Should().Be(Visibility.Collapsed);
+        _ = container.Visibility.Should().Be(Visibility.Collapsed);
+        source.Visibility = Visibility.Visible;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = container.Visibility.Should().Be(Visibility.Visible);
+        _ = conditional.ActualWidth.Should().BePositive();
+        _ = toolbar.OverflowButtonVisibility.Should().Be(Visibility.Collapsed);
+    });
+
     /// <summary>A compact icon in an Auto column stays visible beside a selection summary.</summary>
     /// <returns>The asynchronous toolbar layout regression.</returns>
     [TestMethod]
