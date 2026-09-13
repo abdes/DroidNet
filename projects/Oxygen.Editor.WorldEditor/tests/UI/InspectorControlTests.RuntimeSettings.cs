@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -116,7 +116,7 @@ public sealed partial class InspectorControlTests
                 Mock.Of<IContentPipelineService>(),
                 container,
                 this.messenger,
-                new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting));
+                new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting, this.documents.Object));
         }
     }
 }

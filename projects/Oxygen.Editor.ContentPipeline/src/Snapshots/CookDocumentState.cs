@@ -1,10 +1,10 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Immutable document facts captured while its saved file is protected.</summary>
+/// <summary>Immutable owner-reported authoring revision and acknowledged saved-file identity.</summary>
 /// <param name="DocumentId">The document identity.</param>
 /// <param name="SourcePath">The canonical source file path.</param>
 /// <param name="DisplayName">The user-visible document name.</param>

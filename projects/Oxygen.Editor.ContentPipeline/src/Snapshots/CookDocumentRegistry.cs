@@ -1,18 +1,36 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
 /// <summary>Acquires document read leases in stable order without holding registry locks across callbacks.</summary>
-public sealed partial class CookDocumentRegistry : ICookDocumentRegistry
+/// <param name="logger">Presentation observer diagnostics.</param>
+public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? logger = null) : ICookDocumentRegistry
 {
     private readonly Lock sync = new();
     private readonly Dictionary<long, Registration> registrations = [];
+    private readonly ILogger<CookDocumentRegistry> logger = logger ?? NullLogger<CookDocumentRegistry>.Instance;
     private long nextId;
+    private long stateVersion;
 
     /// <inheritdoc />
-    public IDisposable Register(string sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire)
+    public event EventHandler<CookDocumentStateChangedEventArgs>? StateChanged;
+
+    /// <inheritdoc />
+    public CookDocumentRegistrySnapshot GetState()
+    {
+        lock (this.sync)
+        {
+            return this.CaptureState();
+        }
+    }
+
+    /// <inheritdoc />
+    public ICookDocumentRegistration Register(string sourcePath, Func<CancellationToken, Task<CookDocumentReadLease?>> acquire)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentNullException.ThrowIfNull(acquire);
@@ -67,9 +85,20 @@ public sealed partial class CookDocumentRegistry : ICookDocumentRegistry
 
     private void Remove(long id)
     {
+        CookDocumentStateChangedEventArgs? change = null;
         lock (this.sync)
         {
-            _ = this.registrations.Remove(id);
+            var before = this.registrations.GetValueOrDefault(id)?.State;
+            if (this.registrations.Remove(id) && before is not null)
+            {
+                this.stateVersion++;
+                change = new(before, after: null, this.CaptureState());
+            }
+        }
+
+        if (change is not null)
+        {
+            this.PublishState(change);
         }
     }
 
@@ -77,7 +106,7 @@ public sealed partial class CookDocumentRegistry : ICookDocumentRegistry
         CookDocumentRegistry owner,
         long id,
         string sourcePath,
-        Func<CancellationToken, Task<CookDocumentReadLease?>> acquire) : IDisposable
+        Func<CancellationToken, Task<CookDocumentReadLease?>> acquire) : ICookDocumentRegistration
     {
         private CookDocumentRegistry? owner = owner;
 
@@ -86,6 +115,10 @@ public sealed partial class CookDocumentRegistry : ICookDocumentRegistry
         public string SourcePath { get; } = sourcePath;
 
         public Func<CancellationToken, Task<CookDocumentReadLease?>> Acquire { get; } = acquire;
+
+        public CookDocumentState? State { get; set; }
+
+        public void UpdateState(CookDocumentState state) => Volatile.Read(ref this.owner)?.UpdateState(this.Id, state);
 
         public void Dispose() => Interlocked.Exchange(ref this.owner, value: null)?.Remove(this.Id);
     }

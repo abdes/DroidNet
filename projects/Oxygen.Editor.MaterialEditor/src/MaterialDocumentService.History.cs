@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -64,6 +64,7 @@ public sealed partial class MaterialDocumentService
                 CookState = SameSource(history.Active.Before, state.Source) ? history.Active.CookState : MaterialCookState.Stale,
             };
             history.Groups.RecordPreview(history.Active.Group.Key, CaptureMaterialProperties(document.DocumentId, state.Source));
+            this.PublishCookDocumentState(document.DocumentId);
             return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
         }
     }
@@ -166,6 +167,7 @@ public sealed partial class MaterialDocumentService
             CookState = MaterialCookState.Stale,
         };
         this.RecordMaterialHistory(document.DocumentId, document.Source, label);
+        this.PublishCookDocumentState(document.DocumentId);
     }
 
     private MaterialEditResult? ValidateHistorySource(Guid documentId, bool undo)
@@ -209,6 +211,8 @@ public sealed partial class MaterialDocumentService
         {
             this.CommitMaterialSource(before, document.Source, gesture.Group.Label);
         }
+
+        this.PublishCookDocumentState(documentId);
     }
 
     private sealed class MaterialHistory

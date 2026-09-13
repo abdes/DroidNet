@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -31,14 +31,7 @@ public sealed partial class MaterialDocumentService
                     return null;
                 }
 
-                var state = new CookDocumentState(
-                    document.DocumentId,
-                    Path.GetFullPath(document.SourcePath),
-                    document.DisplayName,
-                    document.Revision,
-                    document.SavedRevision,
-                    !SameSource(this.histories[documentId].SavedSource, document.Source),
-                    this.fileVersions[documentId].Sha256);
+                var state = this.CreateCookDocumentState(document);
                 var lease = new CookDocumentReadLease(state, () => gate.Release());
                 transferred = true;
                 return lease;
@@ -50,6 +43,24 @@ public sealed partial class MaterialDocumentService
             {
                 _ = gate.Release();
             }
+        }
+    }
+
+    private CookDocumentState CreateCookDocumentState(MaterialDocument document)
+        => new(
+            document.DocumentId,
+            Path.GetFullPath(document.SourcePath),
+            document.DisplayName,
+            document.Revision,
+            document.SavedRevision,
+            !SameSource(this.histories[document.DocumentId].SavedSource, document.Source),
+            this.fileVersions[document.DocumentId].Sha256);
+
+    private void PublishCookDocumentState(Guid documentId)
+    {
+        if (this.cookRegistrations.TryGetValue(documentId, out var registration))
+        {
+            registration.UpdateState(this.CreateCookDocumentState(this.documents[documentId]));
         }
     }
 }
