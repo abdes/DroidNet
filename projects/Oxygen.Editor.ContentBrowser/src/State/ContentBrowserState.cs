@@ -26,6 +26,9 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// </summary>
     public IReadOnlySet<string> SelectedFolders => this.selectedFolders;
 
+    /// <summary>Gets the search and filter state shared by this browser's layouts.</summary>
+    public AssetBrowserQuery Query { get; init; } = new();
+
     /// <summary>
     /// Gets the project root path.
     /// </summary>

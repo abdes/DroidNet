@@ -76,7 +76,11 @@ public sealed partial class InspectorControlTests
             }
 
             await this.CaptureComponentLayoutAsync(view, $"builtin-origin-{geometry}-{tiles}.png").ConfigureAwait(true);
-            await VerifyBuiltinCookingActionsAsync(view, browser, state, layout).ConfigureAwait(true);
+            var authoredUri = new Uri("asset:///Content/Materials/Authored.omat.json");
+            var authored = CreateStatusAsset(0) with { IdentityUri = authoredUri, DisplayPath = authoredUri.AbsolutePath };
+            updates.OnNext([item, authored]);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            await VerifyBuiltinCookingActionsAsync(view, browser, state, layout, authored).ConfigureAwait(true);
         }
         finally
         {
@@ -84,7 +88,7 @@ public sealed partial class InspectorControlTests
         }
     });
 
-    private static async Task VerifyBuiltinCookingActionsAsync(AssetsView view, AssetsViewModel browser, ContentBrowserState state, AssetsLayoutViewModel layout)
+    private static async Task VerifyBuiltinCookingActionsAsync(AssetsView view, AssetsViewModel browser, ContentBrowserState state, AssetsLayoutViewModel layout, ContentBrowserAssetItem authored)
     {
         var menu = (MenuFlyout)view.FindDescendant<ToolBarButton>(button => string.Equals(button.Label, "Cook", StringComparison.Ordinal))!.Flyout;
         var assetAction = menu.Items.OfType<MenuFlyoutItem>().Single(action => ReferenceEquals(action.Command, browser.CookSelectedAssetCommand));
@@ -92,7 +96,7 @@ public sealed partial class InspectorControlTests
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = browser.CookSelectedFolderCommand.CanExecute(parameter: null).Should().BeFalse();
         state.SetSelectedFolders(["/Content/Materials"]);
-        layout.SelectedAsset = CreateStatusAsset(0);
+        layout.SelectedAsset = authored;
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = assetAction.Visibility.Should().Be(Visibility.Visible);
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeTrue();

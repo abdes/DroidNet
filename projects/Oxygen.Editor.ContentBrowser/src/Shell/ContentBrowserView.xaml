@@ -1,10 +1,12 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.ContentBrowser.Shell.ContentBrowserView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:assets="using:Oxygen.Editor.ContentBrowser.Panes.Assets"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.ContentBrowser.Shell"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:router="using:DroidNet.Routing.WinUI"
@@ -31,7 +33,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="2*" MinWidth="120" />
                 <ColumnDefinition Width="*" MinWidth="120" />
-                <ColumnDefinition Width="0.5*" MaxWidth="100" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel
                 Grid.Column="0"
@@ -85,53 +87,28 @@
                 </BreadcrumbBar>
             </Border>
 
-            <Grid Grid.Column="2" HorizontalAlignment="Stretch">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <AutoSuggestBox
-                    Grid.Column="1"
-                    Height="32"
-                    HorizontalAlignment="Stretch"
-                    PlaceholderText="Search">
-                    <AutoSuggestBox.QueryIcon>
-                        <SymbolIcon Symbol="Find" />
-                    </AutoSuggestBox.QueryIcon>
-                </AutoSuggestBox>
-            </Grid>
+            <assets:AssetQueryView Grid.Column="2" ViewModel="{x:Bind ViewModel.Query}" />
 
-            <CommandBar
+            <dnc:ToolBar
                 Grid.Column="3"
-                Background="Transparent"
-                DefaultLabelPosition="Collapsed"
-                IsOpen="False">
+                Margin="8,0,0,0"
+                Background="Transparent">
 
-                <CommandBar.PrimaryCommands>
-                    <AppBarButton Icon="Filter" Label="Filter" />
-                </CommandBar.PrimaryCommands>
-                <CommandBar.SecondaryCommands>
-                    <!--  View switching commands  -->
-                    <AppBarButton Command="{x:Bind ViewModel.SwitchToListViewCommand}" Label="List view">
-                        <AppBarButton.Icon>
-                            <!--  Segoe Fluent Icons: List (EA37)  -->
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xEA37;" />
-                        </AppBarButton.Icon>
-                    </AppBarButton>
-                    <AppBarButton Command="{x:Bind ViewModel.SwitchToDetailViewCommand}" Label="Tiles">
-                        <AppBarButton.Icon>
-                            <!--  Segoe Fluent Icons: Tiles (ECA5)  -->
-                            <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xECA5;" />
-                        </AppBarButton.Icon>
-                    </AppBarButton>
-                    <AppBarSeparator />
-                    <AppBarButton Icon="Setting" Label="Settings">
-                        <AppBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator Key="I" Modifiers="Control" />
-                        </AppBarButton.KeyboardAccelerators>
-                    </AppBarButton>
-                </CommandBar.SecondaryCommands>
-            </CommandBar>
+                <dnc:ToolBarButton
+                    Label="View"
+                    ToolBarLabelPosition="Collapsed"
+                    ToolTipService.ToolTip="Choose list or tiles view">
+                    <dnc:ToolBarButton.Icon>
+                        <FontIconSource Glyph="&#xECA5;" />
+                    </dnc:ToolBarButton.Icon>
+                    <dnc:ToolBarButton.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.SwitchToListViewCommand}" Text="List view" />
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.SwitchToDetailViewCommand}" Text="Tiles" />
+                        </MenuFlyout>
+                    </dnc:ToolBarButton.Flyout>
+                </dnc:ToolBarButton>
+            </dnc:ToolBar>
 
         </Grid>
         <Grid Grid.Row="1">
