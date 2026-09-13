@@ -144,7 +144,7 @@ public sealed partial class ContentBrowserAssetProvider
             }
 
             this.refreshCompletion = null;
-            this.items.OnNext(snapshot);
+            this.items.OnNext(this.ApplyLiveState(snapshot));
             _ = completion.TrySetResult();
             return true;
         }

@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -33,13 +33,13 @@ public sealed partial class TilesLayoutView
     /// <param name="args">The event data.</param>
     private void GridView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        if (sender is not GridView { SelectedItem: ContentBrowserAssetItem selectedItem })
+        if (sender is not GridView { SelectedItem: AssetBrowserRow selectedItem })
         {
             return;
         }
 
         Debug.Assert(this.ViewModel is not null, "view must have a ViewModel");
-        this.ViewModel.InvokeItemCommand.Execute(selectedItem);
+        this.ViewModel.InvokeItemCommand.Execute(selectedItem.Item);
         args.Handled = true;
     }
 
@@ -51,7 +51,7 @@ public sealed partial class TilesLayoutView
             return;
         }
 
-        this.ViewModel.SelectedAsset = gridView.SelectedItem as ContentBrowserAssetItem;
+        this.ViewModel.SelectedAsset = (gridView.SelectedItem as AssetBrowserRow)?.Item;
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -39,12 +39,12 @@ public partial class GeometryView
     {
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling material picker item click.");
 
-        if (sender is not FrameworkElement fe || fe.DataContext is not MaterialPickerItem item)
+        if (sender is not FrameworkElement fe || fe.DataContext is not MaterialPickerRow row)
         {
             return;
         }
 
-        await this.ViewModel.ApplyMaterialAsync(item).ConfigureAwait(true);
+        await this.ViewModel.ApplyMaterialAsync(row.Item).ConfigureAwait(true);
         this.MaterialPickerFlyout.Hide();
     }
 

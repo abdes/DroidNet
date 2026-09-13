@@ -25,6 +25,12 @@ public sealed record AssetCookStatus(
     ImmutableArray<CookDocumentState> UnsavedDocuments,
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
+    /// <summary>Gets saved authoring paths in this asset's dependency closure, for live document overlays.</summary>
+    public ImmutableArray<string> SourcePaths { get; init; } = [];
+
+    /// <summary>Gets the hash of source bytes used by this status check, for cached source previews.</summary>
+    public string? SavedSourceHash { get; init; }
+
     /// <summary>Gets a value indicating whether an owner has newer unsaved input.</summary>
     public bool HasUnsavedChanges => !this.UnsavedDocuments.IsEmpty;
 }

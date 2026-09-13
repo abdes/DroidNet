@@ -19,7 +19,7 @@
             SelectionChanged="ListView_SelectionChanged"
             SelectionMode="Extended">
             <ListView.ItemTemplate>
-                <DataTemplate x:DataType="identity:ContentBrowserAssetItem">
+                <DataTemplate x:DataType="identity:AssetBrowserRow">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -30,15 +30,16 @@
                             Width="32"
                             Height="32"
                             Margin="5,0"
-                            Foreground="{x:Bind Kind, Converter={StaticResource AssetTypeToBrushConverter}}"
-                            Glyph="{x:Bind Kind, Converter={StaticResource AssetTypeToIconConverter}}" />
+                            Foreground="{x:Bind Item.Kind, Mode=OneWay, Converter={StaticResource AssetTypeToBrushConverter}}"
+                            Glyph="{x:Bind Item.Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}" />
                         <TextBlock
                             Grid.Column="1"
                             VerticalAlignment="Center"
                             MaxLines="1"
-                            Text="{x:Bind DisplayName}"
+                            Text="{x:Bind Item.DisplayName, Mode=OneWay}"
                             TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap" />
+                            TextWrapping="NoWrap"
+                            ToolTipService.ToolTip="{x:Bind Item.DisplayName, Mode=OneWay}" />
                         <StackPanel
                             Grid.Column="2"
                             Orientation="Horizontal"
@@ -46,15 +47,17 @@
                             <TextBlock
                                 VerticalAlignment="Center"
                                 MaxLines="1"
-                                Text="{x:Bind PrimaryBadge}"
+                                Text="{x:Bind Item.PrimaryBadge, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
+                                TextWrapping="NoWrap"
+                                ToolTipService.ToolTip="{x:Bind Item.PrimaryBadge, Mode=OneWay}" />
                             <TextBlock
                                 VerticalAlignment="Center"
                                 MaxLines="1"
-                                Text="{x:Bind DerivedBadge}"
+                                Text="{x:Bind Item.DerivedBadge, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
+                                TextWrapping="NoWrap"
+                                ToolTipService.ToolTip="{x:Bind Item.DerivedBadge, Mode=OneWay}" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>

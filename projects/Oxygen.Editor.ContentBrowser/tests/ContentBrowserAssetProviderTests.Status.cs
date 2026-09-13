@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -36,7 +39,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var state = new AssetCookStatus(uri, freshness, published, verified, [], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
-        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader);
+        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns());
         using var picker = new MaterialPickerService(provider);
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         IReadOnlyList<MaterialPickerResult> choices = [];
@@ -76,7 +79,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             return [];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red)]);
-        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader);
+        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns());
         var snapshots = new List<IReadOnlyList<ContentBrowserAssetItem>>();
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(snapshots.Add), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken);
@@ -127,7 +130,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         });
         var context = CreateProjectContextService(workspace);
         var catalog = new TestProjectAssetCatalog([new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json"))]);
-        using var provider = new ContentBrowserAssetProvider(catalog, context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader);
+        using var provider = new ContentBrowserAssetProvider(catalog, context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns());
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken);
@@ -146,6 +149,8 @@ public sealed partial class ContentBrowserAssetProviderTests
         await drained.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = rows.Should().BeEmpty();
     }
+
+    private static ICookRunService EmptyCookRuns() => Mock.Of<ICookRunService>(runs => runs.Runs == Array.Empty<CookRunSnapshot>());
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {

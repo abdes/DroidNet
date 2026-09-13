@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -144,7 +144,7 @@ public sealed partial class InspectorControlTests
                 _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
                 cancellationToken.ThrowIfCancellationRequested();
                 choice = flyout.Content.FindDescendant<Button>(button => material
-                    ? button.DataContext is MaterialPickerItem item && string.Equals(item.Name, name, StringComparison.Ordinal)
+                    ? button.DataContext is MaterialPickerRow row && string.Equals(row.Item.Name, name, StringComparison.Ordinal)
                     : button.DataContext is AssetPickerItem asset && string.Equals(asset.Name, name, StringComparison.Ordinal));
             }
 
