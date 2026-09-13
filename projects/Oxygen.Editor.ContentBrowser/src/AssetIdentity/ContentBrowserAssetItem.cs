@@ -29,6 +29,9 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets the engine-provided recipe and identity mapping for generated assets.</summary>
     public GeneratedAssetMetadata? Generated { get; init; }
 
+    /// <summary>Gets the indexed native identity and physical origin of the cooked representation.</summary>
+    public CookedAssetMetadata? CookedMetadata { get; init; }
+
     /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
     public Uri? BuiltinOriginUri { get; init; }
 

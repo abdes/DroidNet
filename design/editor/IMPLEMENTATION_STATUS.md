@@ -607,6 +607,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] List/tile asset tooltips show full names/locations, source or built-in
         ownership and known cooked outputs. Information follows publication without
         scanning, cooking or changing selection. Light/dark rendered cases pass.
+  - [x] Cooked catalog snapshots retain native keys, container identities, types,
+        descriptor locations and revisions. Browser type/location follows those
+        records even when filenames differ; invalid descriptor paths remain
+        unselectable. Catalog, browser and inspection adapter regressions pass.
+  - [ ] Connect local cooked-library discovery, saved source priority, winning-source
+        details and runtime mounting. The accepted default places new libraries
+        below project output and above older libraries; explicit reordering is allowed.
   - [ ] Finish source/output detail presentation and the remaining combined browser
         navigation/query qualification journeys.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,
@@ -658,7 +665,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       verify geometry attributes, bounds and default material semantics; packaged
       tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
 
-Current validation: ContentPipeline 311/311, Content Browser 104/104, Runtime 95/95,
+Current validation: ContentPipeline 311/311 and the expanded inspection adapter
+suite 25/25; Managed.Assets 91/91, Content Browser 110/110, Runtime 95/95,
 MaterialEditor 56/56, SceneExplorer 174/174. Packaged UI validated 252 cases: 240 passed in the full run; the four query
 expectations corrected for shared initialization and eight new cooked-asset opening
 cases pass in the final 32-case browser/inspection/Cooking rerun. The shared
@@ -794,7 +802,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 311/311; Content Browser 104/104; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 311/311 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

@@ -18,6 +18,9 @@ public sealed record AssetRecord(Uri Uri)
     /// <summary>Gets engine recipe metadata when this row represents a generated asset.</summary>
     public GeneratedAssetMetadata? Generated { get; init; }
 
+    /// <summary>Gets indexed cooked identity, type and location without inferring them from the virtual filename.</summary>
+    public CookedAssetMetadata? Cooked { get; init; }
+
     /// <summary>
     /// Gets the asset name derived from the URI path.
     /// </summary>

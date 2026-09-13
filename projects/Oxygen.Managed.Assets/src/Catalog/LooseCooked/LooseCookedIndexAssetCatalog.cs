@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Concurrent;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -28,9 +27,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
     private readonly IFileSystemCatalogEventSource eventSource;
 
     private readonly Subject<AssetChange> changes = new();
-    private readonly ConcurrentDictionary<Uri, AssetEntry> entriesByUri = new();
     private readonly IDisposable eventSubscription;
 
+    private IReadOnlyDictionary<Uri, AssetRecord> entriesByUri = new Dictionary<Uri, AssetRecord>();
     private volatile bool isInitialized;
     private string cookedRoot = string.Empty;
 
@@ -116,18 +115,16 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         ArgumentNullException.ThrowIfNull(query);
         await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        IEnumerable<Uri> uris = this.entriesByUri.Keys;
-        uris = uris.Where(uri => AssetQueryScopeMatcher.IsMatch(query.Scope, uri));
+        var records = Volatile.Read(ref this.entriesByUri).Values.Where(record => AssetQueryScopeMatcher.IsMatch(query.Scope, record.Uri));
 
         if (!string.IsNullOrWhiteSpace(query.SearchText))
         {
             var term = query.SearchText.Trim();
-            uris = uris.Where(uri => uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase));
+            records = records.Where(record => record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase));
         }
 
-        return uris
-            .OrderBy(u => u.ToString(), StringComparer.Ordinal)
-            .Select(u => new AssetRecord(u))
+        return records
+            .OrderBy(record => record.Uri.ToString(), StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -211,9 +208,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         {
             await this.EnsureInitializedAsync(CancellationToken.None).ConfigureAwait(false);
 
-            var before = this.entriesByUri.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            var before = Volatile.Read(ref this.entriesByUri);
             await this.ReloadSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
-            var after = this.entriesByUri.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            var after = Volatile.Read(ref this.entriesByUri);
 
             foreach (var removed in before.Keys.Except(after.Keys))
             {
@@ -236,8 +233,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             // If anything goes wrong while reloading/diffing, fall back to clearing.
-            var beforeUris = this.entriesByUri.Keys.ToArray();
-            this.entriesByUri.Clear();
+            var beforeUris = Interlocked.Exchange(ref this.entriesByUri, new Dictionary<Uri, AssetRecord>()).Keys;
             foreach (var uri in beforeUris)
             {
                 this.changes.OnNext(new AssetChange(AssetChangeKind.Removed, uri));
@@ -254,14 +250,15 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
 
         if (!await indexDoc.ExistsAsync().ConfigureAwait(false))
         {
-            this.entriesByUri.Clear();
+            Volatile.Write(ref this.entriesByUri, new Dictionary<Uri, AssetRecord>());
             return;
         }
 
-        using var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+        var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+        await using var streamLifetime = stream.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(stream);
 
-        var next = new Dictionary<Uri, AssetEntry>();
+        var next = new Dictionary<Uri, AssetRecord>();
         foreach (var entry in document.Assets)
         {
             if (string.IsNullOrWhiteSpace(entry.VirtualPath))
@@ -270,14 +267,17 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             }
 
             var uri = VirtualPathToAssetUri(entry.VirtualPath);
-            next[uri] = entry;
+            var record = new AssetRecord(uri)
+            {
+                Cooked = new(this.cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)),
+            };
+            if (!next.TryAdd(uri, record))
+            {
+                throw new InvalidDataException($"Cooked index contains duplicate virtual path '{entry.VirtualPath}'.");
+            }
         }
 
-        this.entriesByUri.Clear();
-        foreach (var kvp in next)
-        {
-            _ = this.entriesByUri.TryAdd(kvp.Key, kvp.Value);
-        }
+        Volatile.Write(ref this.entriesByUri, next);
     }
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource

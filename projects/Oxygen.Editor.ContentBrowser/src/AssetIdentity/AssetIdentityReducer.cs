@@ -35,7 +35,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
 
         return records
             .Where(record => IsBrowsableRecord(record.Uri, project))
-            .GroupBy(static record => GetLogicalKey(record.Uri), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static record => record.Cooked is null ? GetLogicalKey(record.Uri) : AssetUriHelper.GetVirtualPath(record.Uri), StringComparer.OrdinalIgnoreCase)
             .Select(group => this.CreateItem(group.ToList(), project, cookScope))
             .OfType<ContentBrowserAssetItem>()
             .Where(item => IsIncluded(item, filter) && MatchesSearch(item, filter.SearchText))
@@ -172,6 +172,21 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             : Path.Combine(cookScope.CookedOutputRoot, relative);
     }
 
+    private static string? TryResolveIndexedDescriptorPath(CookedAssetMetadata metadata)
+    {
+        try
+        {
+            var relative = metadata.DescriptorRelativePath.Replace('/', Path.DirectorySeparatorChar);
+            var root = Path.GetFullPath(metadata.RootFolderPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var path = Path.GetFullPath(Path.Combine(root, relative));
+            return !Path.IsPathRooted(relative) && path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path : null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
     private static Uri ToCookedUri(Uri uri)
     {
         var path = uri.AbsolutePath;
@@ -239,6 +254,14 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         };
     }
 
+    private static AssetKind GetKind(AssetRecord record) => record.Cooked is { } cooked ? cooked.AssetType switch
+    {
+        1 => AssetKind.Material,
+        2 => AssetKind.Geometry,
+        3 => AssetKind.Scene,
+        _ => AssetKind.Unknown,
+    } : GetKind(record.Uri);
+
     private static string GetDisplayName(Uri uri)
     {
         var path = AssetUriHelper.GetVirtualPath(uri);
@@ -259,14 +282,9 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         ProjectContext project,
         ProjectCookScope cookScope)
     {
-        if (records.Count == 0)
-        {
-            return null;
-        }
-
-        var descriptor = records.FirstOrDefault(static record => IsDescriptorUri(record.Uri));
-        var cooked = records.FirstOrDefault(static record => IsCookedUri(record.Uri));
-        var source = records.FirstOrDefault(static record => !IsDescriptorUri(record.Uri) && !IsCookedUri(record.Uri));
+        var descriptor = records.FirstOrDefault(static record => record.Cooked is null && IsDescriptorUri(record.Uri));
+        var cooked = records.FirstOrDefault(static record => record.Cooked is not null) ?? records.FirstOrDefault(static record => IsCookedUri(record.Uri));
+        var source = records.FirstOrDefault(static record => record.Cooked is null && !IsDescriptorUri(record.Uri) && !IsCookedUri(record.Uri));
         var selected = descriptor ?? source ?? cooked;
         if (selected is null)
         {
@@ -281,7 +299,8 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
         var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
         var cookedUri = cooked?.Uri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
-        var cookedPath = cookedUri is null ? null : TryResolveCookedPath(cookScope, cookedUri);
+        var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata)
+            : cookedUri is null ? null : TryResolveCookedPath(cookScope, cookedUri);
         var diagnostics = new List<string>();
 
         var primaryState = descriptor is not null
@@ -295,16 +314,16 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         {
             (primaryState, derivedState) = this.ReadDescriptorState(descriptorPath, cookedPath, diagnostics);
         }
-        else if (cooked is not null && cookedPath is not null && !File.Exists(cookedPath))
+        else if (cooked is not null && (cookedPath is null || !File.Exists(cookedPath)))
         {
             primaryState = AssetState.Broken;
-            diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
+            diagnostics.Add(cookedPath is null ? AssetIdentityDiagnosticCodes.DescriptorBroken : AssetIdentityDiagnosticCodes.CookedMissing);
         }
 
         return new ContentBrowserAssetItem(
             IdentityUri: descriptor?.Uri ?? selected.Uri,
             DisplayName: GetDisplayName(descriptor?.Uri ?? selected.Uri),
-            Kind: GetKind(descriptor?.Uri ?? selected.Uri),
+            Kind: GetKind(descriptor ?? cooked ?? selected),
             PrimaryState: primaryState,
             DerivedState: derivedState,
             RuntimeAvailability: cookedUri is null ? AssetRuntimeAvailability.NotApplicable : AssetRuntimeAvailability.NotMounted,
@@ -315,7 +334,10 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             CookedPath: cookedPath,
             AssetGuid: null,
             DiagnosticCodes: diagnostics,
-            IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing);
+            IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing)
+        {
+            CookedMetadata = cooked?.Cooked,
+        };
     }
 
     private bool CanReadMaterialDescriptor(string descriptorPath)
