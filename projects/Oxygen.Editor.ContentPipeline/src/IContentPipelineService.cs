@@ -11,6 +11,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public interface IContentPipelineService : Status.IAssetCookStatusReader
 {
+    /// <summary>Cooks saved content needed by an active preview, ahead of queued background saves.</summary>
+    /// <param name="assetUri">The required authored geometry or material identity.</param>
+    /// <param name="expectedProject">The project that owns the preview request.</param>
+    /// <param name="cancellationToken">Detaches this preview observer without cancelling other callers sharing the cook.</param>
+    /// <returns>The shared pipeline's incremental result.</returns>
+    public Task<ContentCookResult> CookPreviewAssetAsync(Uri assetUri, ProjectContext expectedProject, CancellationToken cancellationToken);
+
     /// <summary>Cooks an acknowledged saved asset as background work in its originating project.</summary>
     /// <param name="assetUri">The saved source identity.</param>
     /// <param name="expectedProject">The project that owned the Save.</param>
