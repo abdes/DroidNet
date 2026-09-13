@@ -215,6 +215,13 @@ supported formats, handle collisions explicitly, and protect dirty authored
 assets. Report retained-source success separately from failed cooking so Retry
 does not require reselecting/copying the source.
 
+The tested source-retention transaction reuses coherent input capture and the
+project writer. It installs each complete discovered bundle beneath SourceMedia,
+preserves relative dependency paths and hashes, and refuses destination collisions.
+Source discovery, retained settings, replacement/reimport decisions and the native
+import/UI integration remain to be connected; the older browser import path still
+copies individual files and bypasses native publication.
+
 Pass: wrong/missing artifact or schema fails safely; small unit/axis/handedness
 fixtures import consistently; unsupported animated/skinned/texture-bearing
 qualified imports fail before publishing without destroying sources. Delete
