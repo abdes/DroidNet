@@ -12,7 +12,6 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentCookCoordinator : IContentCookCoordinator, ICookRunService, IObserver<ProjectContext?>, IDisposable
 {
     private readonly Lock stateLock = new();
-    private readonly SemaphoreSlim writer = new(1, 1);
     private readonly IProjectContextService projectContextService;
     private readonly ILogger<ContentCookCoordinator> logger;
     private readonly IDisposable subscription;
@@ -20,7 +19,6 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
     private ProjectContext? project;
     private ContentCookOperation? activeOperation;
     private long lifetime;
-    private int outstandingRequests;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="ContentCookCoordinator"/> class.</summary>
@@ -77,7 +75,6 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
     public void Dispose()
     {
         CancellationTokenSource cancellation;
-        bool disposeWriter;
         lock (this.stateLock)
         {
             if (this.disposed)
@@ -89,15 +86,11 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             this.project = null;
             this.lifetime++;
             cancellation = this.lifetimeCancellation;
-            disposeWriter = this.outstandingRequests == 0;
+            this.DispatchNextWriter();
         }
 
         this.subscription.Dispose();
         _ = this.CancelLifetimeAsync(cancellation);
-        if (disposeWriter)
-        {
-            this.writer.Dispose();
-        }
     }
 
     /// <inheritdoc />
@@ -115,9 +108,12 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             this.lifetimeCancellation = new();
             this.project = value;
             this.lifetime++;
+            this.automaticCookingPaused = false;
+            this.DispatchNextWriter();
         }
 
         _ = this.CancelLifetimeAsync(previous);
+        this.PropertyChanged?.Invoke(this, new(nameof(this.IsAutomaticCookingPaused)));
     }
 
     /// <inheritdoc />
@@ -144,7 +140,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             using var reporting = CookRunContext.Enter(progress);
             while (true)
             {
-                await this.AcquireWriterAsync(operation, request?.IsAutomatic == true, requestCancellation.Token).ConfigureAwait(false);
+                await this.AcquireWriterAsync(operation, request, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
 
                 requestCancellation.Token.ThrowIfCancellationRequested();
@@ -210,7 +206,6 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             ObjectDisposedException.ThrowIf(this.disposed, this);
             var context = this.project ?? throw new InvalidOperationException("Cooking requires an active project.");
             var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeCancellation.Token);
-            this.outstandingRequests++;
             return (new ContentCookOperation(Guid.NewGuid(), context, this.lifetime), requestCancellation);
         }
     }
@@ -222,15 +217,6 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         {
             this.ReleaseWriter();
         }
-
-        lock (this.stateLock)
-        {
-            this.outstandingRequests--;
-            if (this.disposed && this.outstandingRequests == 0)
-            {
-                this.writer.Dispose();
-            }
-        }
     }
 
     private void ReleaseWriter()
@@ -238,9 +224,8 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         lock (this.stateLock)
         {
             this.activeOperation = null;
+            this.DispatchNextWriter();
         }
-
-        _ = this.writer.Release();
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Observe and log cancellation callback failures while always releasing the retired project token.")]

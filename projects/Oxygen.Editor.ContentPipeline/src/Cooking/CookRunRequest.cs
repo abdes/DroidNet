@@ -8,4 +8,8 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <param name="TargetKind">Whether the request cooks an asset, scene, folder, or project.</param>
 /// <param name="ScopeUri">The source asset/folder identity; null for the entire project.</param>
 /// <param name="IsAutomatic">Whether the request must remain quiet in the workspace.</param>
-public sealed record CookRunRequest(CookTargetKind TargetKind, Uri? ScopeUri, bool IsAutomatic = false);
+public sealed record CookRunRequest(CookTargetKind TargetKind, Uri? ScopeUri, bool IsAutomatic = false)
+{
+    /// <summary>Gets a value indicating whether active preview needs this request ahead of background saves.</summary>
+    public bool IsDemand { get; init; }
+}

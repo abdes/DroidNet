@@ -145,7 +145,8 @@ public sealed partial class ContentCookCoordinator
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }
 
-        snapshot = Append(snapshot, new(Message: "Cook queued."));
+        snapshot = Append(snapshot, new(Message: request.IsDemand ? "Queued for the active preview."
+            : request.IsAutomatic ? "Queued after saving." : "Cook queued."));
         lock (this.stateLock)
         {
             this.runs.Add(operation.OperationId, new(snapshot, cancellation));
