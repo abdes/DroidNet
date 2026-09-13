@@ -78,6 +78,9 @@ public interface IProjectInfo
     /// </remarks>
     public IList<LocalFolderMount> LocalFolderMounts { get; }
 
+    /// <summary>Gets cooked-content source groups in mount order, from lowest to highest priority.</summary>
+    public IList<CookedContentSource> CookedContentOrder { get; }
+
     /// <summary>
     ///     Gets or sets the last used date of the project.
     /// </summary>

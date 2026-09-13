@@ -126,9 +126,11 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
-        var documentMock = new Mock<IDocument>();
-        _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync(It.IsAny<string>(), CancellationToken.None))
-            .ReturnsAsync(documentMock.Object);
+        var atomic = new Mock<IAtomicFileStore>();
+        _ = this.mockStorage.SetupGet(value => value.AtomicFiles).Returns(atomic.Object);
+        _ = this.mockStorage.Setup(value => value.NormalizeRelativeTo(projectInfo.Location!, Constants.ProjectFileName)).Returns("valid/path/Project.oxy");
+        _ = atomic.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(new FileSnapshot([], FileVersion.Missing));
+        _ = atomic.Setup(value => value.WriteAsync(It.IsAny<string>(), It.IsAny<ReadOnlyMemory<byte>>(), FileVersion.Missing, It.IsAny<CancellationToken>())).ReturnsAsync(new FileVersion(Exists: true, "saved"));
 
         // Act
         var result = await this.projectManagerService.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
@@ -137,7 +139,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         // Assert
         _ = result.Should().BeTrue();
         var expectedJson = ProjectInfo.ToJson(projectInfo);
-        documentMock.Verify(d => d.WriteAllTextAsync(expectedJson, It.IsAny<CancellationToken>()), Times.Once);
+        atomic.Verify(value => value.WriteAsync("valid/path/Project.oxy", It.Is<ReadOnlyMemory<byte>>(bytes => System.Text.Encoding.UTF8.GetString(bytes.ToArray()) == expectedJson), FileVersion.Missing, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [TestMethod]
@@ -148,7 +150,9 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string exceptionMessage = "Some error";
         _ = this.mockStorage.Setup(s => s.NormalizeRelativeTo(projectInfo.Location!, Constants.ProjectFileName))
             .Returns("normalized/path");
-        _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync("normalized/path", CancellationToken.None))
+        var atomic = new Mock<IAtomicFileStore>();
+        _ = this.mockStorage.SetupGet(value => value.AtomicFiles).Returns(atomic.Object);
+        _ = atomic.Setup(s => s.ReadAsync("normalized/path", CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
         _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);

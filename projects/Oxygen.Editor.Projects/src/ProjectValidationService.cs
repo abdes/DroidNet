@@ -100,6 +100,15 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         Oxygen.Editor.World.IProjectInfo projectInfo,
         CancellationToken cancellationToken)
     {
+        try
+        {
+            _ = CookedContentOrdering.Resolve(projectInfo.LocalFolderMounts, projectInfo.CookedContentOrder);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
+        {
+            return ProjectValidationResult.Failure(ProjectValidationState.InvalidContentRoots, projectRoot, exception.Message);
+        }
+
         if (projectInfo.AuthoringMounts.Count == 0)
         {
             return ProjectValidationResult.Failure(
@@ -130,6 +139,11 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
                     ProjectValidationState.InvalidContentRoots,
                     projectRoot,
                     "Project manifest declares an invalid authoring mount root.");
+            }
+
+            if (mount.RelativePath.Trim().Replace('\\', '/').Trim('/') is ".cooked" or ".imported" or ".build")
+            {
+                continue;
             }
 
             if (Path.IsPathRooted(mount.RelativePath))

@@ -46,6 +46,9 @@ public sealed record ProjectContext
     /// </summary>
     public required IReadOnlyList<LocalFolderMount> LocalFolderMounts { get; init; }
 
+    /// <summary>Gets the saved source order, from lowest to highest priority.</summary>
+    public IReadOnlyList<CookedContentSource> CookedContentOrder { get; init; } = [];
+
     /// <summary>
     ///     Gets the currently known scene metadata.
     /// </summary>
@@ -94,6 +97,7 @@ public sealed record ProjectContext
             Thumbnail = info.Thumbnail,
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],
+            CookedContentOrder = [.. info.CookedContentOrder],
             Scenes = [.. scenes ?? []],
         };
     }

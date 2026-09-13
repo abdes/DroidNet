@@ -39,6 +39,13 @@ public interface IProjectManagerService
     /// </returns>
     public Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
 
+    /// <summary>Atomically saves a candidate only while the persisted project still matches the accepted configuration.</summary>
+    /// <param name="projectInfo">The candidate project configuration.</param>
+    /// <param name="expected">The configuration accepted by the workspace before the edit.</param>
+    /// <param name="cancellationToken">Cancels before replacement.</param>
+    /// <returns>Completion of the committed save; conflicts and write failures are propagated.</returns>
+    public Task SaveProjectInfoAsync(IProjectInfo projectInfo, IProjectInfo expected, CancellationToken cancellationToken);
+
     /// <summary>
     /// Loads a project asynchronously based on the provided project information.
     /// </summary>

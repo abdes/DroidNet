@@ -106,10 +106,13 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public string? Thumbnail { get; set; }
 
     /// <inheritdoc />
-    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = new List<ProjectMountPoint>();
+    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = [];
 
     /// <inheritdoc />
-    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = new List<LocalFolderMount>();
+    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = [];
+
+    /// <inheritdoc />
+    public IList<CookedContentSource> CookedContentOrder { get; set; } = [];
 
     /// <inheritdoc />
     [JsonIgnore]
@@ -183,6 +186,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             Thumbnail = projectInfo.Thumbnail,
             AuthoringMounts = [.. projectInfo.AuthoringMounts],
             LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
+            CookedContentOrder = [.. projectInfo.CookedContentOrder],
         };
         return JsonSerializer.Serialize(descriptor, JsonOptions);
     }
@@ -202,5 +206,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         public IList<ProjectMountPoint> AuthoringMounts { get; init; } = [];
 
         public IList<LocalFolderMount> LocalFolderMounts { get; init; } = [];
+
+        public IList<CookedContentSource> CookedContentOrder { get; init; } = [];
     }
 }

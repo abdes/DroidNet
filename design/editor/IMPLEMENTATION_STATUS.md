@@ -614,6 +614,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [ ] Connect local cooked-library discovery, saved source priority, winning-source
         details and runtime mounting. The accepted default places new libraries
         below project output and above older libraries; explicit reordering is allowed.
+  - [x] Project manifests persist that priority order, retain explicit overrides when
+        adding libraries, and reject invalid order entries. Confirmed configuration
+        saves use atomic replacement and reject externally changed baselines;
+        project persistence tests pass 65/65.
   - [ ] Finish source/output detail presentation and the remaining combined browser
         navigation/query qualification journeys.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,
