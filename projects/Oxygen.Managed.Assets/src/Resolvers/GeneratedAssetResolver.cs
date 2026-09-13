@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -13,15 +13,7 @@ namespace Oxygen.Managed.Assets.Resolvers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This resolver maintains a thread-safe, frozen dictionary of built-in assets that are
-/// always available in memory. For Phase 4, it provides:
-/// <list type="bullet">
-/// <item>Basic shape geometries: Cube, Sphere, Plane, Cylinder</item>
-/// <item>Default material</item>
-/// </list>
-/// </para>
-/// <para>
-/// The assets are registered at construction time and cannot be modified at runtime,
+/// Engine-provided assets are registered at construction time and cannot be modified at runtime,
 /// ensuring thread safety without locking.
 /// </para>
 /// </remarks>
@@ -30,15 +22,6 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     private const string MountPoint = AssetUris.EngineMountPoint;
 
     private readonly FrozenDictionary<Uri, Asset> assets;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GeneratedAssetResolver"/> class
-    /// with the default set of built-in assets.
-    /// </summary>
-    public GeneratedAssetResolver()
-        : this(BuiltInAssets.Create())
-    {
-    }
 
     /// <summary>Initializes a new instance of the <see cref="GeneratedAssetResolver"/> class from engine metadata.</summary>
     /// <param name="assets">The assets to resolve, retaining their authored identities.</param>

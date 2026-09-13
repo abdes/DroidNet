@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -127,7 +127,7 @@ public sealed partial class InspectorControlTests
         public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection)
         {
             this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, this.AssetCatalog.Object, this.MaterialPicker.Object, this.sync);
+            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, this.AssetCatalog.Object, this.MaterialPicker.Object, this.sync, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         }
 
         public async Task InitializeAsync(CancellationToken cancellationToken, string? cookedRoot = null)

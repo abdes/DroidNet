@@ -63,72 +63,84 @@
                         ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="AssetPickerFlyout">
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}">
-                                    <ItemsRepeater.Layout>
-                                        <StackLayout Spacing="0" />
-                                    </ItemsRepeater.Layout>
-                                    <ItemsRepeater.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel>
-                                                <TextBlock
-                                                    Margin="8,8,8,4"
-                                                    Style="{ThemeResource CaptionTextBlockStyle}"
-                                                    Text="{Binding Key}" />
-                                                <ItemsRepeater ItemsSource="{Binding Items}">
-                                                    <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Button
-                                                                Padding="8,6"
-                                                                HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Left"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Click="OnPickerItemClicked"
-                                                                IsEnabled="{Binding IsEnabled}"
-                                                                ToolTipService.ToolTip="{Binding DisplayPath}">
-                                                                <Grid>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto" />
-                                                                        <ColumnDefinition Width="*" />
-                                                                    </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <InfoBar
+                                        IsClosable="False"
+                                        IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                        Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                        Severity="Warning">
+                                        <InfoBar.ActionButton>
+                                            <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
+                                        </InfoBar.ActionButton>
+                                    </InfoBar>
 
-                                                                    <Border
-                                                                        Width="32"
-                                                                        Height="32"
-                                                                        VerticalAlignment="Center"
-                                                                        BorderBrush="{ThemeResource PropertyCardBorderBrush}"
-                                                                        BorderThickness="1">
-                                                                        <controls:Thumbnail
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout Spacing="0" />
+                                        </ItemsRepeater.Layout>
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock
+                                                        Margin="8,8,8,4"
+                                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                                        Text="{Binding Key}" />
+                                                    <ItemsRepeater ItemsSource="{Binding Items}">
+                                                        <ItemsRepeater.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button
+                                                                    Padding="8,6"
+                                                                    HorizontalAlignment="Stretch"
+                                                                    HorizontalContentAlignment="Left"
+                                                                    Background="Transparent"
+                                                                    BorderThickness="0"
+                                                                    Click="OnPickerItemClicked"
+                                                                    IsEnabled="{Binding IsEnabled}"
+                                                                    ToolTipService.ToolTip="{Binding DisplayPath}">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <Border
                                                                             Width="32"
                                                                             Height="32"
-                                                                            Content="{Binding ThumbnailModel}"
-                                                                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
-                                                                    </Border>
+                                                                            VerticalAlignment="Center"
+                                                                            BorderBrush="{ThemeResource PropertyCardBorderBrush}"
+                                                                            BorderThickness="1">
+                                                                            <controls:Thumbnail
+                                                                                Width="32"
+                                                                                Height="32"
+                                                                                Content="{Binding ThumbnailModel}"
+                                                                                ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+                                                                        </Border>
 
-                                                                    <StackPanel
-                                                                        Grid.Column="1"
-                                                                        Margin="8,0,0,0"
-                                                                        VerticalAlignment="Center">
-                                                                        <TextBlock
-                                                                            Style="{ThemeResource BodyTextBlockStyle}"
-                                                                            Text="{Binding Name}"
-                                                                            TextWrapping="NoWrap" />
-                                                                        <TextBlock
-                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                            Text="{Binding DisplayType}"
-                                                                            TextWrapping="NoWrap"
-                                                                            ToolTipService.ToolTip="{Binding DisplayType}" />
-                                                                    </StackPanel>
-                                                                </Grid>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsRepeater.ItemTemplate>
-                                                </ItemsRepeater>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                </ItemsRepeater>
+                                                                        <StackPanel
+                                                                            Grid.Column="1"
+                                                                            Margin="8,0,0,0"
+                                                                            VerticalAlignment="Center">
+                                                                            <TextBlock
+                                                                                Style="{ThemeResource BodyTextBlockStyle}"
+                                                                                Text="{Binding Name}"
+                                                                                TextWrapping="NoWrap" />
+                                                                            <TextBlock
+                                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                                Text="{Binding DisplayType}"
+                                                                                TextWrapping="NoWrap"
+                                                                                ToolTipService.ToolTip="{Binding DisplayType}" />
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsRepeater.ItemTemplate>
+                                                    </ItemsRepeater>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </StackPanel>
                             </Flyout>
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>
@@ -157,72 +169,84 @@
                         ToolTipService.ToolTip="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}">
-                                    <ItemsRepeater.Layout>
-                                        <StackLayout Spacing="0" />
-                                    </ItemsRepeater.Layout>
-                                    <ItemsRepeater.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel>
-                                                <TextBlock
-                                                    Margin="8,8,8,4"
-                                                    Style="{ThemeResource CaptionTextBlockStyle}"
-                                                    Text="{Binding Key}" />
-                                                <ItemsRepeater ItemsSource="{Binding Items}">
-                                                    <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Button
-                                                                Padding="8,6"
-                                                                HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Left"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Click="OnMaterialPickerItemClicked"
-                                                                IsEnabled="{Binding Item.IsEnabled}"
-                                                                ToolTipService.ToolTip="{Binding Item.DisplayPath}">
-                                                                <Grid>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto" />
-                                                                        <ColumnDefinition Width="*" />
-                                                                    </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <InfoBar
+                                        IsClosable="False"
+                                        IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                        Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                        Severity="Warning">
+                                        <InfoBar.ActionButton>
+                                            <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
+                                        </InfoBar.ActionButton>
+                                    </InfoBar>
 
-                                                                    <Border
-                                                                        Width="32"
-                                                                        Height="32"
-                                                                        VerticalAlignment="Center"
-                                                                        BorderBrush="{ThemeResource PropertyCardBorderBrush}"
-                                                                        BorderThickness="1">
-                                                                        <controls:Thumbnail
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout Spacing="0" />
+                                        </ItemsRepeater.Layout>
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock
+                                                        Margin="8,8,8,4"
+                                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                                        Text="{Binding Key}" />
+                                                    <ItemsRepeater ItemsSource="{Binding Items}">
+                                                        <ItemsRepeater.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button
+                                                                    Padding="8,6"
+                                                                    HorizontalAlignment="Stretch"
+                                                                    HorizontalContentAlignment="Left"
+                                                                    Background="Transparent"
+                                                                    BorderThickness="0"
+                                                                    Click="OnMaterialPickerItemClicked"
+                                                                    IsEnabled="{Binding Item.IsEnabled}"
+                                                                    ToolTipService.ToolTip="{Binding Item.DisplayPath}">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+
+                                                                        <Border
                                                                             Width="32"
                                                                             Height="32"
-                                                                            Content="{Binding Item.ThumbnailModel}"
-                                                                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
-                                                                    </Border>
+                                                                            VerticalAlignment="Center"
+                                                                            BorderBrush="{ThemeResource PropertyCardBorderBrush}"
+                                                                            BorderThickness="1">
+                                                                            <controls:Thumbnail
+                                                                                Width="32"
+                                                                                Height="32"
+                                                                                Content="{Binding Item.ThumbnailModel}"
+                                                                                ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+                                                                        </Border>
 
-                                                                    <StackPanel
-                                                                        Grid.Column="1"
-                                                                        Margin="8,0,0,0"
-                                                                        VerticalAlignment="Center">
-                                                                        <TextBlock
-                                                                            Style="{ThemeResource BodyTextBlockStyle}"
-                                                                            Text="{Binding Item.Name}"
-                                                                            TextWrapping="NoWrap" />
-                                                                        <TextBlock
-                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                            Text="{Binding Item.DisplayType}"
-                                                                            TextWrapping="NoWrap"
-                                                                            ToolTipService.ToolTip="{Binding Item.DisplayType}" />
-                                                                    </StackPanel>
-                                                                </Grid>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsRepeater.ItemTemplate>
-                                                </ItemsRepeater>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                </ItemsRepeater>
+                                                                        <StackPanel
+                                                                            Grid.Column="1"
+                                                                            Margin="8,0,0,0"
+                                                                            VerticalAlignment="Center">
+                                                                            <TextBlock
+                                                                                Style="{ThemeResource BodyTextBlockStyle}"
+                                                                                Text="{Binding Item.Name}"
+                                                                                TextWrapping="NoWrap" />
+                                                                            <TextBlock
+                                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                                Text="{Binding Item.DisplayType}"
+                                                                                TextWrapping="NoWrap"
+                                                                                ToolTipService.ToolTip="{Binding Item.DisplayType}" />
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsRepeater.ItemTemplate>
+                                                    </ItemsRepeater>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </StackPanel>
                             </Flyout>
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>

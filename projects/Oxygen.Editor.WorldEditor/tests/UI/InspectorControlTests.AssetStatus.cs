@@ -43,7 +43,7 @@ public sealed partial class InspectorControlTests
         var projects = new ProjectContextService();
         var state = new ContentBrowserState(projects);
         var hosting = CreateStatusHosting();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) : new ListLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         FrameworkElement view = tiles ? new TilesLayoutView { ViewModel = (TilesLayoutViewModel)model } : new ListLayoutView { ViewModel = (ListLayoutViewModel)model };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         host.Width = 460;
@@ -104,7 +104,7 @@ public sealed partial class InspectorControlTests
         var catalog = new Mock<IAssetCatalog>();
         _ = catalog.SetupGet(value => value.Changes).Returns(System.Reactive.Linq.Observable.Empty<AssetChange>());
         _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, picker.Object) { IsExpanded = true };
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, picker.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) { IsExpanded = true };
         var view = new GeometryView { ViewModel = model, Width = 440 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

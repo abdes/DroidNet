@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -190,6 +190,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.documentManager = childContainer.Resolve<DocumentManager>();
 
         // Register shared services at workspace level
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery, Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>(Reuse.Singleton);
         childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
         childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();

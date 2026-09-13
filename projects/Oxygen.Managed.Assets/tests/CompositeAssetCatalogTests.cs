@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -22,7 +22,7 @@ public sealed class CompositeAssetCatalogTests
     public async Task QueryAsync_ShouldMergeAndDeduplicateByUri()
     {
         // Arrange
-        var generated = new GeneratedAssetCatalog();
+        var generated = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
 
         var extra = new TestCatalog(
             new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/Cube")), // duplicate

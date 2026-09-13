@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -62,6 +63,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="assetCatalog">The asset catalog for Content browser integration.</param>
     /// <param name="materialPickerService">The material picker service for geometry material slots.</param>
     /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
+    /// <param name="builtins">The shared native catalog for engine choices.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -76,6 +78,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IAssetCatalog assetCatalog,
         IMaterialPickerService materialPickerService,
         ISceneEngineSync sceneEngineSync,
+        IBuiltinCatalogDiscovery builtins,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -95,6 +98,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             hosting,
             assetCatalog,
             materialPickerService,
+            builtins,
             loggerFactory);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
 
@@ -356,6 +360,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         HostingContext hosting,
         IAssetCatalog assetCatalog,
         IMaterialPickerService materialPickerService,
+        IBuiltinCatalogDiscovery builtins,
         ILoggerFactory? loggerFactory)
         => new()
         {
@@ -367,6 +372,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 hosting,
                 assetCatalog,
                 materialPickerService,
+                builtins,
                 this.commandService,
                 this.CreateCommandContext),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(

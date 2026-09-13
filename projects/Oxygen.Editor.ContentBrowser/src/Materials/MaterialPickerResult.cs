@@ -34,8 +34,12 @@ public sealed record MaterialPickerResult(
     /// <summary>Gets the applicable cook affecting this material.</summary>
     public AssetCookActivity? CookActivity { get; init; }
 
+    /// <summary>Gets engine discovery provenance, including last-known availability.</summary>
+    public Oxygen.Managed.Assets.Catalog.GeneratedAssetMetadata? Generated { get; init; }
+
     /// <summary>Gets the same short status presented in the Content Browser.</summary>
-    public string StatusText => AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
+    public string StatusText => this.Generated?.IsLastKnown == true ? "Preview unavailable"
+        : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
 
     /// <summary>
     /// Gets the compact display state using the shared browser badge precedence.

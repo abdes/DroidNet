@@ -492,7 +492,7 @@ its product semantics are settled in 07B.0 before implementation.
 - [x] 07B.3 every required field survives native cook/load observation.
 - [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
-- [ ] 07B.7 all eleven engine generator names, including the sphere alias, use
+- [x] 07B.7 all eleven engine generator names, including the sphere alias, use
   one semantic authority; every selectable shape passes scene/project cook (#11).
 - [ ] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
   presentation and typed assignment before/after cooking pass.

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
@@ -25,4 +25,8 @@
         <PackageReference Include="Moq" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\BuiltinCatalogDiscoveryFixture.cs" Link="BuiltinCatalogDiscoveryFixture.cs" />
+        <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

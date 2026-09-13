@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Storage;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
@@ -192,7 +193,15 @@ public sealed class ProjectAssetCatalogTests
 
         public Exception? RootFailure { get; set; }
 
-        public ProjectAssetCatalog CreateCatalog() => new(this.context.Object, this.storage.Object);
+        public ProjectAssetCatalog CreateCatalog()
+        {
+            var empty = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
+            var discovery = new Mock<IBuiltinCatalogDiscovery>();
+            _ = discovery.SetupGet(value => value.Snapshot).Returns(empty);
+            _ = discovery.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
+            _ = discovery.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
+            return new(this.context.Object, this.storage.Object, discovery.Object);
+        }
 
         public void SetProjectAvailable(bool available)
             => _ = this.context.SetupGet(static value => value.ActiveProject).Returns(available ? this.project : null);

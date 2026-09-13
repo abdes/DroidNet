@@ -1,0 +1,96 @@
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.World.Inspector.Geometry;
+
+/// <summary>Projects engine-owned names, aliases and catalog availability into the typed pickers.</summary>
+public sealed partial class GeometryViewModel
+{
+    /// <summary>Gets or sets the availability notice for engine choices.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBuiltinCatalogNotice))]
+    public partial string? BuiltinCatalogNotice { get; set; }
+
+    /// <summary>Gets a value indicating whether engine discovery needs attention.</summary>
+    public bool HasBuiltinCatalogNotice => !string.IsNullOrEmpty(this.BuiltinCatalogNotice);
+
+    private async Task InitializeBuiltinsAsync()
+    {
+        try
+        {
+            _ = await this.builtins.GetAsync(CancellationToken.None).ConfigureAwait(false);
+            this.OnBuiltinCatalogChanged(this, EventArgs.Empty);
+        }
+        catch (OperationCanceledException)
+        {
+            // Closing the workspace cancels its discovery source.
+        }
+    }
+
+    [RelayCommand]
+    private async Task RetryBuiltinCatalogAsync()
+    {
+        _ = await this.builtins.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+        this.ApplyBuiltinCatalog();
+    }
+
+    private void OnBuiltinCatalogChanged(object? sender, EventArgs args)
+        => this.DispatchOnUi(this.ApplyBuiltinCatalog);
+
+    private void ApplyBuiltinCatalog()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        var snapshot = this.builtins.Snapshot;
+        this.BuiltinCatalogNotice = snapshot.Notice;
+        var geometries = snapshot.Catalog?.Geometries.Select(definition =>
+        {
+            var alias = string.Equals(definition.Name, definition.CanonicalName, StringComparison.Ordinal) ? string.Empty : $" · Alias of {definition.CanonicalName}";
+            var availability = snapshot.IsLastKnown ? " · Preview unavailable" : string.Empty;
+            return CreateEngineItem(definition.Name, definition.AssetUri, definition.AssetUri.AbsolutePath)
+                with { DisplayType = "Built-in geometry" + alias + availability, };
+        }).ToArray() ?? [];
+        for (var index = 0; index < geometries.Length; index++)
+        {
+            if (index >= this.engineItems.Count)
+            {
+                this.engineItems.Add(geometries[index]);
+            }
+            else if (this.engineItems[index] != geometries[index])
+            {
+                this.engineItems[index] = geometries[index];
+            }
+        }
+
+        while (this.engineItems.Count > geometries.Length)
+        {
+            this.engineItems.RemoveAt(this.engineItems.Count - 1);
+        }
+
+        if (snapshot.Catalog is null)
+        {
+            this.engineMaterials.Clear();
+        }
+        else
+        {
+            var material = CreateEngineMaterialItem("Default", AssetUris.BuildGeneratedUri("Materials/Default"), "/Engine/Generated/Materials/Default")
+                with { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material", };
+            if (this.engineMaterials.Count == 0)
+            {
+                this.engineMaterials.Add(new(material));
+            }
+            else
+            {
+                this.engineMaterials[0].Update(material);
+            }
+        }
+    }
+}

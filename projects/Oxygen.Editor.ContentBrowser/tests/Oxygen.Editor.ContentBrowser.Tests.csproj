@@ -10,6 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <PackageReference Include="Moq" />
         <ProjectReference Include="..\src\Oxygen.Editor.ContentBrowser.csproj" />
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />

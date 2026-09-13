@@ -951,12 +951,18 @@ Use engine-owned defaults; this does not add a raw generator-parameter editor.
 Future engine additions require an explicit catalog/qualification update rather
 than silently expanding the matched release's capabilities.
 
-Existing URIs remain authored identity. The current native interop branch handles
-the eight existing picker entries but constructs pak descriptors/defaults itself;
-the managed descriptor service only handles Cube/Sphere/Plane. It skips Cylinder,
-which then fails scene descriptor resolution as unsupported geometry. M07B covers
-the additional SubdividedCube and IcoSphere/GeodesicSphere capabilities as well
-as cooking every existing picker choice.
+Existing URIs remain authored identity. SetGeometryCommand registers the native
+request generation and resolves built-ins through Oxygen.Data. Browser and picker
+choices come from the complete native catalog, including SubdividedCube and both
+IcoSphere names; managed catalogs and resolvers require supplied metadata instead
+of constructing their own built-in lists.
+
+Discovery retains the complete native catalog under the editor's derived
+`cache/builtins/<configuration>` state directory. SDK identity changes refresh the
+snapshot; an unavailable SDK uses the last valid snapshot with the approved
+last-known/preview-unavailable notice. Invalid metadata cannot replace the cache.
+Query output uses temporary storage, and catalog discovery never publishes cooked
+project output. The strict native provider remains the cook recipe source.
 
 The review also found different default cylinder/cone segment counts in the
 public mesh factory and descriptor importer (32 versus 16). The shared engine

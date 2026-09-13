@@ -78,8 +78,22 @@
     </UserControl.Resources>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <InfoBar
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+            Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
+            </InfoBar.ActionButton>
+        </InfoBar>
         <GridView
             x:Name="BasicGridView"
+            Grid.Row="1"
             DoubleTapped="GridView_DoubleTapped"
             IsItemClickEnabled="True"
             ItemTemplate="{StaticResource GameAssetTemplate}"

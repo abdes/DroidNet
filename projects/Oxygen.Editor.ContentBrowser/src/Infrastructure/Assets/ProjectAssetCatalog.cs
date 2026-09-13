@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Storage;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
@@ -20,6 +21,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
 {
     private readonly IProjectContextService projectContextService;
     private readonly IStorageProvider storage;
+    private readonly IBuiltinCatalogDiscovery builtins;
     private readonly Lock stateLock = new();
     private readonly Lock notificationLock = new();
     private readonly List<Registration> catalogs = [];
@@ -32,10 +34,12 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
     /// <summary>Initializes a new instance of the <see cref="ProjectAssetCatalog"/> class.</summary>
     /// <param name="projectContextService">The active project context.</param>
     /// <param name="storage">The storage provider for indexed folders.</param>
-    public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage)
+    /// <param name="builtins">The engine-owned discovery catalog.</param>
+    public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage, IBuiltinCatalogDiscovery builtins)
     {
         this.projectContextService = projectContextService;
         this.storage = storage;
+        this.builtins = builtins;
         this.lifetimeToken = this.lifetime.Token;
     }
 
@@ -181,7 +185,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
         try
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
-            candidates.Add(await this.PrepareCatalogAsync(new GeneratedAssetCatalog()).ConfigureAwait(false));
+            candidates.Add(await this.PrepareCatalogAsync(new EngineBuiltinAssetCatalog(this.builtins)).ConfigureAwait(false));
             if (!string.IsNullOrEmpty(project.ProjectRoot))
             {
                 candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
