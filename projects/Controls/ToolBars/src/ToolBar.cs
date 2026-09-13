@@ -8,6 +8,8 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Markup;
 using Windows.Foundation;
 
@@ -160,7 +162,7 @@ public partial class ToolBar : Control
         return 0.0;
     }
 
-    private static MenuFlyoutItem? CreateMenuItemForCommand(object commandItem)
+    private static MenuFlyoutItem? CreateMenuItemForCommand(object commandItem, ToolBar owner)
     {
         if (commandItem is ToolBarButton button)
         {
@@ -170,6 +172,11 @@ public partial class ToolBar : Control
                 Command = button.Command,
                 CommandParameter = button.CommandParameter,
             };
+            menuItem.SetBinding(IsEnabledProperty, new Binding { Source = button, Path = new PropertyPath(nameof(IsEnabled)), Mode = BindingMode.OneWay });
+            if (button.Flyout is { } flyout)
+            {
+                menuItem.Click += (_, _) => owner.ShowOverflowedFlyout(flyout);
+            }
 
             if (button.Icon != null)
             {
@@ -305,6 +312,18 @@ public partial class ToolBar : Control
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         => this.UpdateOverflow();
+
+    private void ShowOverflowedFlyout(FlyoutBase flyout)
+    {
+        this.overflowMenuFlyout?.Hide();
+        _ = this.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (this.IsLoaded && this.overflowButton is { } anchor)
+            {
+                flyout.ShowAt(anchor);
+            }
+        });
+    }
 
     private void OnItemsLoaded(object sender, RoutedEventArgs e) => this.UpdateOverflow();
 
@@ -658,7 +677,7 @@ public partial class ToolBar : Control
 
                 if (item is ToolBarButton or ToolBarToggleButton)
                 {
-                    if (CreateMenuItemForCommand(item) is MenuFlyoutItem menuItem)
+                    if (CreateMenuItemForCommand(item, this) is MenuFlyoutItem menuItem)
                     {
                         this.overflowMenuFlyout!.Items.Add(menuItem);
                         lastAdded = item;

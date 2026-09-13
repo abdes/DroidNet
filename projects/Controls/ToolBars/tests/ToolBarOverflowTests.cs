@@ -6,6 +6,8 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
@@ -16,6 +18,35 @@ namespace DroidNet.Controls.ToolBars.Tests;
 [TestCategory("UITest")]
 public sealed class ToolBarOverflowTests : VisualUserInterfaceTests
 {
+    /// <summary>Gets or sets the context supplied by the test runner.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>An overflowed button keeps its original flyout, including commands and click handlers.</summary>
+    /// <returns>The asynchronous flyout activation regression.</returns>
+    [TestMethod]
+    public Task OverflowedFlyoutButtonOpensItsOriginalMenu() => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 60 };
+        var original = new MenuFlyout();
+        original.Items.Add(new MenuFlyoutItem { Text = "Add local folder" });
+        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        original.Opened += (_, _) => opened.TrySetResult();
+        var mount = new ToolBarButton { Label = "Mount", Width = 120, Flyout = original };
+        toolbar.PrimaryItems.Add(mount);
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var overflowButton = GetPartOrFail<Button>(toolbar, ToolBar.OverflowButtonPartName);
+        var overflow = (MenuFlyout)overflowButton.Flyout;
+        overflow.ShowAt(overflowButton);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var item = overflow.Items.OfType<MenuFlyoutItem>().Single();
+        var peer = new MenuFlyoutItemAutomationPeer(item);
+        ((IInvokeProvider)peer.GetPattern(PatternInterface.Invoke)).Invoke();
+        await opened.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = mount.Flyout.Should().BeSameAs(original);
+        original.Hide();
+    });
+
     /// <summary>Overflow changes containers without overwriting a command's visibility binding or exposing hidden menu entries.</summary>
     /// <param name="secondary">Whether the conditional command belongs to the secondary group.</param>
     /// <returns>The asynchronous visibility and resize regression.</returns>
