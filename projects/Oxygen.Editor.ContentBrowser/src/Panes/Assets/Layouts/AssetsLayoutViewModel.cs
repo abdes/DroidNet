@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
+using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
@@ -36,6 +37,7 @@ public abstract partial class AssetsLayoutViewModel(
     private Task? initialization;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private ContentBrowserAssetItem? selectedAsset;
+    private bool isLoading = true;
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
@@ -46,6 +48,29 @@ public abstract partial class AssetsLayoutViewModel(
     /// Gets the collection of content browser asset rows.
     /// </summary>
     public ObservableCollection<AssetBrowserRow> Assets { get; } = [];
+
+    /// <summary>Gets the shared session query used by every layout.</summary>
+    public AssetBrowserQuery Query => this.contentBrowserState.Query;
+
+    /// <summary>Gets the empty-state visibility after initial discovery.</summary>
+    public Visibility EmptyVisibility => !this.isLoading && this.Assets.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the initial discovery indicator visibility.</summary>
+    public Visibility LoadingVisibility => this.isLoading ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the empty-state heading for this scope and query.</summary>
+    public string EmptyTitle => this.Query.IsActive ? "No matching assets" : this.IsCookedScope() ? "No cooked assets here" : "This folder is empty";
+
+    /// <summary>Gets the next action for an empty scope.</summary>
+    public string EmptyMessage => this.Query.IsActive ? "Try another search or clear the filters."
+        : this.IsCookedScope() ? "Cook authored content to see its published output here."
+        : "Create a material or import content using the toolbar above.";
+
+    /// <summary>Gets the reset action visibility for filtered emptiness.</summary>
+    public Visibility ClearQueryVisibility => this.Query.IsActive ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the source-navigation action visibility in an empty derived view.</summary>
+    public Visibility BrowseSourceVisibility => !this.Query.IsActive && this.IsCookedScope() ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Gets the catalog availability notice when the current scope includes engine assets.</summary>
     public string? BuiltinCatalogNotice => this.IncludesEngineChoices() ? this.builtins.Snapshot.Notice : null;
@@ -188,6 +213,7 @@ public abstract partial class AssetsLayoutViewModel(
                 this.subscription?.Dispose();
                 this.builtinChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
+                this.Query.Changed -= this.OnQueryChanged;
             }
 
             this.disposed = true;
@@ -245,6 +271,7 @@ public abstract partial class AssetsLayoutViewModel(
         this.subscription?.Dispose();
         this.builtinChanges?.Dispose();
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
+        this.Query.Changed -= this.OnQueryChanged;
         this.builtinChanges = Observable.FromEventPattern(
                 handler => this.builtins.Changed += handler,
                 handler => this.builtins.Changed -= handler)
@@ -254,7 +281,10 @@ public abstract partial class AssetsLayoutViewModel(
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(this.ReplaceItems);
         this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
-        await this.RefreshAsync().ConfigureAwait(false);
+        this.Query.Changed += this.OnQueryChanged;
+        await this.RefreshAsync().ConfigureAwait(true);
+        this.isLoading = false;
+        this.NotifyEmptyState();
     }
 
     private void ContentBrowserState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -276,7 +306,7 @@ public abstract partial class AssetsLayoutViewModel(
         this.latestItems = items;
         var selectedUri = this.SelectedAsset?.IdentityUri;
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
-        var visible = items.Where(this.IsInSelectedFolders).ToArray();
+        var visible = items.Where(item => this.IsInSelectedFolders(item) && this.Query.Matches(item)).ToArray();
         for (var index = 0; index < visible.Length; index++)
         {
             var item = visible[index];
@@ -300,6 +330,44 @@ public abstract partial class AssetsLayoutViewModel(
         }
 
         this.SelectedAsset = visible.FirstOrDefault(item => string.Equals(item.IdentityUri.AbsoluteUri, selectedUri?.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+        this.NotifyEmptyState();
+    }
+
+    private void OnQueryChanged(object? sender, EventArgs args) => this.ReplaceItems(this.latestItems);
+
+    [RelayCommand]
+    private void BrowseSource()
+    {
+        var sourceFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)
+            .Select(static folder => TryMapCookedSelectionToRuntimePath(folder, out var source) ? source : folder)
+            .ToArray();
+        if (sourceFolders.Contains("/", StringComparer.Ordinal))
+        {
+            var mounts = this.projectContextService.ActiveProject?.AuthoringMounts
+                .Where(static mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount))
+                .Select(static mount => "/" + mount.Name).ToArray() ?? [];
+            this.contentBrowserState.SetSelectedFolders(mounts.Length == 0 ? ["/"] : mounts);
+        }
+        else
+        {
+            this.contentBrowserState.SetSelectedFolders(sourceFolders);
+        }
+    }
+
+    private bool IsCookedScope()
+        => NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders).Any(static folder => TryMapCookedSelectionToRuntimePath(folder, out _));
+
+    private void NotifyEmptyState()
+    {
+        if (!this.disposed)
+        {
+            this.OnPropertyChanged(nameof(this.EmptyVisibility));
+            this.OnPropertyChanged(nameof(this.LoadingVisibility));
+            this.OnPropertyChanged(nameof(this.EmptyTitle));
+            this.OnPropertyChanged(nameof(this.EmptyMessage));
+            this.OnPropertyChanged(nameof(this.ClearQueryVisibility));
+            this.OnPropertyChanged(nameof(this.BrowseSourceVisibility));
+        }
     }
 
     private bool IsInSelectedFolders(ContentBrowserAssetItem asset)

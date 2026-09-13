@@ -106,6 +106,9 @@ public sealed partial class ContentBrowserViewModel(
     [ObservableProperty]
     public partial bool IsRefreshing { get; set; }
 
+    /// <summary>Gets the session search and filters shared with both asset layouts.</summary>
+    public AssetBrowserQuery Query { get; } = new();
+
     // Breadcrumbs
     [ObservableProperty]
     public partial ObservableCollection<BreadcrumbEntry> Breadcrumbs { get; set; } = [];
@@ -194,7 +197,8 @@ public sealed partial class ContentBrowserViewModel(
                         RootViewModel = this,
                     });
 
-            this.childContainer.Register<ContentBrowserState>(Reuse.Singleton);
+            this.childContainer.RegisterDelegate<ContentBrowserState>(
+                _ => new(projectContextService) { Query = this.Query }, Reuse.Singleton);
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
             this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);

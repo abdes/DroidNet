@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.AssetQueryView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:browser="using:Oxygen.Editor.ContentBrowser"
+    xmlns:dnc="using:DroidNet.Controls">
+    <Grid ColumnSpacing="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="100" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <AutoSuggestBox
+            x:Name="AssetSearch"
+            Height="32"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Search assets"
+            PlaceholderText="Search assets"
+            Text="{x:Bind ViewModel.SearchText, Mode=TwoWay}">
+            <AutoSuggestBox.QueryIcon>
+                <SymbolIcon Symbol="Find" />
+            </AutoSuggestBox.QueryIcon>
+        </AutoSuggestBox>
+        <dnc:ToolBar Grid.Column="1" Background="Transparent">
+            <dnc:ToolBarButton
+                x:Name="AssetFilterButton"
+                Label="{x:Bind ViewModel.FilterLabel, Mode=OneWay}"
+                ToolTipService.ToolTip="Filter assets by type and status">
+                <dnc:ToolBarButton.Icon>
+                    <SymbolIconSource Symbol="Filter" />
+                </dnc:ToolBarButton.Icon>
+                <dnc:ToolBarButton.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedRight">
+                        <StackPanel Spacing="12">
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Show all when none are selected." />
+                            <Grid ColumnSpacing="24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Type" />
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.TypeOptions, Mode=OneWay}">
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate x:DataType="browser:AssetFilterOption">
+                                                <CheckBox
+                                                    MinHeight="32"
+                                                    Content="{x:Bind Label}"
+                                                    IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Status" />
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.StatusOptions, Mode=OneWay}">
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate x:DataType="browser:AssetFilterOption">
+                                                <CheckBox
+                                                    MinHeight="32"
+                                                    Content="{x:Bind Label}"
+                                                    IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                </StackPanel>
+                            </Grid>
+                            <Button Command="{x:Bind ViewModel.ClearFiltersCommand, Mode=OneWay}" Content="Clear filters" />
+                        </StackPanel>
+                    </Flyout>
+                </dnc:ToolBarButton.Flyout>
+            </dnc:ToolBarButton>
+        </dnc:ToolBar>
+    </Grid>
+</UserControl>

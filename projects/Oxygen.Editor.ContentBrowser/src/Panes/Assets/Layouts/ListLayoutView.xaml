@@ -77,5 +77,40 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+        <TextBlock
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Loading assets…"
+            Visibility="{x:Bind ViewModel.LoadingVisibility, Mode=OneWay}" />
+        <StackPanel
+            Grid.Row="1"
+            MaxWidth="380"
+            Margin="24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.EmptyVisibility, Mode=OneWay}">
+            <TextBlock
+                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind ViewModel.EmptyTitle, Mode=OneWay}"
+                TextAlignment="Center" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.EmptyMessage, Mode=OneWay}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+            <Button
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.Query.ClearAllCommand}"
+                Content="{x:Bind ViewModel.Query.ClearQueryLabel, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.ClearQueryVisibility, Mode=OneWay}" />
+            <Button
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.BrowseSourceCommand}"
+                Content="Browse source content"
+                Visibility="{x:Bind ViewModel.BrowseSourceVisibility, Mode=OneWay}" />
+        </StackPanel>
     </Grid>
 </UserControl>
