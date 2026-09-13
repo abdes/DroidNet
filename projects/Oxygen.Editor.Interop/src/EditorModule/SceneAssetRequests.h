@@ -46,6 +46,8 @@ public:
   //! Reports a current failure with the native request generation.
   using FailureCallback =
       std::function<void(uint64_t, const std::string &)>;
+  //! Reports application of a current request, including native refresh retries.
+  using SuccessCallback = std::function<void(uint64_t)>;
 
   SceneAssetRequests(content::IAssetLoader &loader,
                      content::VirtualPathResolver &resolver);
@@ -59,11 +61,12 @@ public:
 
   //! Begin before resolving or consulting caches, so failed requests supersede.
   auto BeginGeometry(scene::NodeHandle node, const std::string &uri,
-                     FailureCallback on_failure = {})
+                     FailureCallback on_failure = {}, SuccessCallback on_success = {})
       -> GeometryCompletion;
   void LoadGeometry(const std::string &uri, GeometryCompletion complete);
   void SetMaterial(scene::NodeHandle node, std::size_t slot,
-                   const std::string &uri, FailureCallback on_failure = {});
+                   const std::string &uri, FailureCallback on_failure = {},
+                   SuccessCallback on_success = {});
   void Detach(scene::NodeHandle node);
 
   //! Re-request current bindings after mounted sources have been refreshed.

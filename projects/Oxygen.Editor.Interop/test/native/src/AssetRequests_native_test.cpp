@@ -622,9 +622,70 @@ void PublicationRefreshWorksWhileAuthoringLoadsStaySuspended() {
   Require(f.CurrentMaterial() == f.red, "resume did not apply the newer authoring intent");
 }
 
+void SuccessfulRefreshAcknowledgesCurrentGeneration() {
+  Fixture f;
+  f.Attach();
+  uint64_t failed = 0;
+  std::vector<uint64_t> applied;
+  SetMaterialOverrideCommand material(f.node.GetHandle(), 0, "retry");
+  material.SetFailureCallback([&](uint64_t generation, const std::string&) {
+    failed = generation;
+  });
+  material.SetSuccessCallback([&](uint64_t generation) {
+    Require(f.CurrentMaterial() == f.red, "success preceded material application");
+    applied.push_back(generation);
+  });
+  f.Execute(material);
+  f.material_loads.back()({}, "first attempt failed");
+  f.Drain();
+  Require(failed > 0 && applied.empty(), "failed load was acknowledged as applied");
+  f.material_cache["retry"] = f.red;
+  f.requests->Refresh(*f.scene);
+  Require(applied.empty(), "refresh escaped the mutation boundary");
+  f.Drain();
+  Require(applied.size() == 1 && applied[0] > failed,
+          "retry did not report its newly applied native generation");
+  f.material_loads.front()({}, "late failure");
+  f.Drain();
+  Require(applied.size() == 1, "obsolete completion produced another acknowledgement");
+}
+
+void SuccessWaitsForCurrentGeometryAndMaterialApplication() {
+  Fixture f;
+  int geometry_count = 0;
+  int material_count = 0;
+  SetGeometryCommand geometry(f.node.GetHandle(), "geometry");
+  geometry.SetSuccessCallback([&](uint64_t) {
+    Require(f.Geometry() == f.a, "geometry success preceded application");
+    ++geometry_count;
+  });
+  SetMaterialOverrideCommand material(f.node.GetHandle(), 0, "material");
+  material.SetSuccessCallback([&](uint64_t) {
+    Require(f.CurrentMaterial() == f.red, "material success preceded application");
+    ++material_count;
+  });
+  f.Execute(geometry);
+  f.Execute(material);
+  f.material_loads.back()(f.red, {});
+  f.Drain();
+  Require(material_count == 0, "material waiting for geometry was acknowledged");
+  f.geometry_loads.back()(f.a, {});
+  f.Drain();
+  Require(geometry_count == 1 && material_count == 1, "current applications were not acknowledged");
+  f.geometry_loads.back()(f.b, {});
+  f.Drain();
+  Require(geometry_count == 1, "duplicate geometry completion was acknowledged");
+}
+
 auto RunScenario(int scenario) -> const char * {
   try {
     switch (scenario) {
+    case 26:
+      SuccessfulRefreshAcknowledgesCurrentGeneration();
+      break;
+    case 27:
+      SuccessWaitsForCurrentGeometryAndMaterialApplication();
+      break;
     case 24:
       SuspendedLoadsRetainLatestIntentAndClear();
       break;
@@ -730,6 +791,12 @@ private:
   }
 
 public:
+  [TestMethod]
+  void SuccessfulRefreshAcknowledgesCurrentGeneration() { Check(26); }
+
+  [TestMethod]
+  void SuccessWaitsForCurrentGeometryAndMaterialApplication() { Check(27); }
+
   [TestMethod]
   void SuspendedLoadsRetainLatestIntentAndClear() { Check(24); }
 

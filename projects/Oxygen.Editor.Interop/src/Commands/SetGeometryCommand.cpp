@@ -37,7 +37,7 @@ void SetGeometryCommand::Execute(CommandContext &context) {
         "Geometry command requires scene asset request state");
   }
   auto complete = context.AssetRequests->BeginGeometry(
-      node_, assetUri_, std::move(failure_callback_));
+      node_, assetUri_, std::move(failure_callback_), std::move(success_callback_));
   std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
   try {
 

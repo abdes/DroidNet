@@ -55,7 +55,7 @@ public sealed partial class SceneEngineSync
     {
         var request = args.Request;
         if (!ReferenceEquals(commands, this.observedWorld) || this.activeWorld?.Target != request.Target
-            || this.activeScene is not { } scene || !commands.IsCurrentAssetRequest(request))
+            || this.activeScene is not { } scene || !commands.IsCurrentAssetFailure(args))
         {
             return;
         }

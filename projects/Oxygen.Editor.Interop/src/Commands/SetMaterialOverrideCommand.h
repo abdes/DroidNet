@@ -37,11 +37,17 @@ namespace oxygen::interop::module {
       failure_callback_ = std::move(callback);
     }
 
+    //! Observes application of this material intent and its refreshes.
+    void SetSuccessCallback(SceneAssetRequests::SuccessCallback callback) {
+      success_callback_ = std::move(callback);
+    }
+
   private:
     oxygen::scene::NodeHandle node_;
     std::size_t slot_index_ { 0 };
     std::string material_uri_;
     SceneAssetRequests::FailureCallback failure_callback_;
+    SceneAssetRequests::SuccessCallback success_callback_;
   };
 
 } // namespace oxygen::interop::module

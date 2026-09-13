@@ -130,6 +130,7 @@ public sealed class RuntimeCommandDispatcherTests
         _ = mutation.Status.Should().Be(RuntimeCommandStatus.Cancelled);
         _ = input.Status.Should().Be(RuntimeCommandStatus.Cancelled);
         native.VerifyAdd(value => value.AssetLoadFailed += It.IsAny<EventHandler<RuntimeAssetLoadFailedEventArgs>>(), Times.Once);
+        native.VerifyAdd(value => value.AssetLoadSucceeded += It.IsAny<EventHandler<RuntimeAssetLoadSucceededEventArgs>>(), Times.Once);
         native.VerifyNoOtherCalls();
     }
 

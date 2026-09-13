@@ -17,6 +17,9 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
     /// <inheritdoc/>
     public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
 
+    /// <inheritdoc />
+    public event EventHandler<RuntimeAssetLoadSucceededEventArgs>? AssetLoadSucceeded;
+
     /// <inheritdoc/>
     public void Execute(RuntimeWorldRequest request)
     {
@@ -35,10 +38,10 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
                 this.world.SetProperties(value.NodeId, RuntimeTransportConversion.ToNative(value.Entries));
                 break;
             case RuntimeSetGeometry value:
-                this.world.SetGeometry(value.NodeId, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message));
+                this.world.SetGeometry(value.NodeId, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetMaterialOverride value:
-                this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message));
+                this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetBackgroundColor value:
                 this.world.SetBackgroundColor(value.Color);
@@ -135,6 +138,9 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
 
     private void OnAssetLoadFailed(RuntimeWorldRequest request, ulong generation, string message)
         => this.AssetLoadFailed?.Invoke(this, new RuntimeAssetLoadFailedEventArgs(request, generation, message));
+
+    private void OnAssetLoadSucceeded(RuntimeWorldRequest request, ulong generation)
+        => this.AssetLoadSucceeded?.Invoke(this, new RuntimeAssetLoadSucceededEventArgs(request, generation));
 
     private void ExecuteComponent(RuntimeWorldCommand command)
     {
