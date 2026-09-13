@@ -48,6 +48,7 @@ public sealed partial class SceneDocumentCommandService
 
             var copy = Scene.CreateAndHydrate(context.Scene.Project, data);
             context.Scene.Project.Scenes.Add(copy);
+            this.NotifySceneSaved(copy, previousHash: null);
             _ = this.messenger.Send(new AssetsChangedMessage());
             return SceneCommandResults.Success(copy);
         }

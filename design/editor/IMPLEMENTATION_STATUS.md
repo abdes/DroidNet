@@ -590,7 +590,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Cooking UI regressions and 192 Docking tests. Changed material/scene saves
       now notify the shared automatic scheduler. Fourteen focused packaged UI tests
       cover dock activation, automatic history, stale-banner removal and native
-      material refresh. Remaining Import/demand triggers and workflow gates are open.
+      material refresh. Save Copy now schedules the acknowledged new material/scene
+      source without saving the original; failures schedule nothing. Scene tests
+      pass 170/170 and managed material tests 47/47. Remaining creation/import/demand
+      triggers and workflow gates are open.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.

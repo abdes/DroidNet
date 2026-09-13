@@ -1416,7 +1416,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
         long sequence = 0;
@@ -1428,7 +1428,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             .ReturnsAsync(value: true);
         var results = new CapturingOperationResultPublisher();
         var sut = new SceneDocumentCommandService(
-            Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
+            automaticCooking ?? Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
             synchronization ?? sync.Object,
