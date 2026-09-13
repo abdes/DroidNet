@@ -90,7 +90,7 @@ public abstract partial class AssetsLayoutViewModel(
             {
                 _ = this.SetProperty(ref this.selectedAsset, newValue: null);
             }
-            else if (this.Assets.FirstOrDefault(row => row.Item.IdentityUri == value.IdentityUri) is { } current)
+            else if (this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, value.IdentityUri)) is { } current)
             {
                 _ = this.SetProperty(ref this.selectedAsset, current.Item);
             }
@@ -226,7 +226,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// <param name="item">The asset row that was invoked.</param>
     protected void OnItemInvoked(ContentBrowserAssetItem item)
     {
-        if (!this.disposed && this.Assets.FirstOrDefault(row => row.Item.IdentityUri == item.IdentityUri) is { } current)
+        if (!this.disposed && this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, item.IdentityUri)) is { } current)
         {
             this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
         }
@@ -306,7 +306,7 @@ public abstract partial class AssetsLayoutViewModel(
         this.latestItems = items;
         var selectedUri = this.SelectedAsset?.IdentityUri;
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
-        var visible = items.Where(item => this.IsInSelectedFolders(item) && this.Query.Matches(item)).ToArray();
+        var visible = AssetIdentityGrouping.GroupBuiltins(items.Where(this.IsInSelectedFolders)).Where(this.Query.Matches).ToArray();
         for (var index = 0; index < visible.Length; index++)
         {
             var item = visible[index];
@@ -329,7 +329,7 @@ public abstract partial class AssetsLayoutViewModel(
             this.Assets.RemoveAt(this.Assets.Count - 1);
         }
 
-        this.SelectedAsset = visible.FirstOrDefault(item => string.Equals(item.IdentityUri.AbsoluteUri, selectedUri?.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+        this.SelectedAsset = selectedUri is null ? null : visible.FirstOrDefault(item => AssetIdentityGrouping.Represents(item, selectedUri));
         this.NotifyEmptyState();
     }
 

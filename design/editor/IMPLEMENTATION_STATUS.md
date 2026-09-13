@@ -583,8 +583,16 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         updates the displayed scope; stale rows cannot become selection/action
         targets, and delayed folder lookup cannot restore an obsolete selection.
         List/tile and mount-persistence regressions pass on the UI dispatcher.
-  - [ ] Finish browser query/navigation qualification, Type/Status filters, empty
-        states, source/output details and companion presentation across both layouts.
+  - [x] Search and Type/Status filters share one session query across list and tiles.
+        Live status changes re-evaluate results without rescanning or cooking.
+        Empty results expose reset, and empty Cooked folders link to source content.
+        Light/dark rendered controls and query semantics pass.
+  - [x] Proven cooked companions are grouped with their logical built-ins without
+        merging same-named authored assets or generator aliases. Existing cooked
+        references remain resolvable. The user confirmed that Default appears once
+        when filtering Vortex for materials and scenes.
+  - [ ] Finish source/output detail presentation and the remaining combined browser
+        navigation/query qualification journeys.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,
         publication, cancellation and Save/reopen matrix.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
@@ -624,9 +632,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       verify geometry attributes, bounds and default material semantics; packaged
       tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
 
-Current validation: ContentPipeline 293/293, Content Browser 92/92, Runtime 95/95,
-MaterialEditor 56/56, SceneExplorer 174/174, packaged UI 216/216 plus the final
-nine demand and five browser navigation/mount regressions.
+Current validation: ContentPipeline 293/293, Content Browser 100/100, Runtime 95/95,
+MaterialEditor 56/56, SceneExplorer 174/174. Packaged UI validated 229 cases:
+228 passed in the full run; the remaining pointer case passed in a six-case rerun.
 Native asset-request tests pass 28/28. The user confirmed startup without the
 access violation and the live demand-cooking workflow described above.
 
@@ -758,7 +766,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 293/293; Content Browser 92/92; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 216/216 plus nine demand and five navigation/mount regressions; native asset requests 28/28. User confirmed live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 293/293; Content Browser 100/100; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 229 cases validated (228 in the full run, remaining pointer case in a six-case rerun); native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

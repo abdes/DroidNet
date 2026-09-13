@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -101,6 +102,52 @@ public sealed partial class InspectorControlTests
         _ = state.SelectedFolders.Should().Equal("/Content/Materials");
         _ = model.Assets.Should().ContainSingle();
         provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+    });
+
+    /// <summary>Materials-and-scenes filtering shows one Default for its built-in and cooked representations.</summary>
+    /// <param name="tiles">Whether to render tiles.</param>
+    /// <returns>The asynchronous duplicate-row regression.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task MaterialAndSceneFiltersShowDefaultOnceAcrossScopes(bool tiles) => EnqueueAsync(async () =>
+    {
+        var origin = CreateQueryAsset("Default", AssetKind.Material, AssetCookFreshness.Current) with
+        {
+            IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"), DisplayPath = "/Engine/Generated/Materials/Default",
+            PrimaryState = AssetState.Generated, SourcePath = null, DescriptorPath = null, CookStatus = null,
+            Generated = new("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat"),
+        };
+        var copy = origin with
+        {
+            IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), BuiltinOriginUri = origin.IdentityUri,
+            DisplayPath = "/Content/Materials/OxygenEditor_Default.omat", CookedUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"),
+            CookedPath = "C:/Query/.cooked/Content/Materials/OxygenEditor_Default.omat",
+        };
+        var scenes = new[] { CreateQueryAsset("Main", AssetKind.Scene, AssetCookFreshness.Current), CreateQueryAsset("Second", AssetKind.Scene, AssetCookFreshness.Current) };
+        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([origin, copy, .. scenes]);
+        var provider = CreateQueryProvider(updates);
+        var projects = CreateQueryProject();
+        var state = new ContentBrowserState(projects);
+        state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Materials", StringComparison.Ordinal)).IsSelected = true;
+        state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Scenes", StringComparison.Ordinal)).IsSelected = true;
+        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins)
+            : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        UserControl view = tiles ? new TilesLayoutView { ViewModel = (TilesLayoutViewModel)model } : new ListLayoutView { ViewModel = (ListLayoutViewModel)model };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = model.Assets.Should().HaveCount(3);
+        _ = model.Assets.Should().ContainSingle(row => row.Item.IsBuiltin);
+        model.SelectedAsset = copy;
+        _ = model.SelectedAsset!.IdentityUri.Should().Be(origin.IdentityUri);
+        updates.OnNext([copy, .. scenes, origin]);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = model.Assets.Should().HaveCount(3);
+        _ = model.SelectedAsset!.IdentityUri.Should().Be(origin.IdentityUri);
+        state.SetSelectedFolders(["/Cooked/Content/Materials"]);
+        _ = model.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(copy.IdentityUri);
     });
 
     private static Grid CreateQueryTestRoot(AssetQueryView queryView, UserControl assetsView, bool light)

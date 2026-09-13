@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Linq;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
@@ -44,6 +45,8 @@ public sealed partial class ContentBrowserAssetProviderTests
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
         using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([.. originals, .. copies]), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
         using var picker = new MaterialPickerService(provider);
+        IReadOnlyList<MaterialPickerResult> choices = [];
+        using var subscription = picker.Results.Subscribe(value => choices = value);
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
         foreach (var (original, copy) in originals.Zip(copies))
         {
@@ -60,6 +63,9 @@ public sealed partial class ContentBrowserAssetProviderTests
         var material = await picker.ResolveAsync(new Uri("asset://" + native.DefaultMaterial.VirtualPath), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = material!.StatusText.Should().Be("Built-in");
         _ = material.BuiltinOriginUri.Should().Be(Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("Materials/Default"));
+        _ = choices.Should().ContainSingle().Which.MaterialUri.Should().Be(Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("Materials/Default"));
+        await picker.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = choices.Should().BeEmpty("a pinned cooked copy must not become a duplicate ordinary material choice");
     }
 
     /// <summary>Similar names and authored descriptors cannot be mistaken for engine-owned content.</summary>

@@ -244,7 +244,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
     private void Publish(IReadOnlyList<ContentBrowserAssetItem> items)
     {
         this.latestItems = items;
-        var rows = items
+        var rows = AssetIdentityGrouping.GroupBuiltins(items)
             .Select(this.CreateResult)
             .OfType<MaterialPickerResult>()
             .Where(row => IsIncluded(row, this.currentFilter) && MatchesSearch(row, this.currentFilter.SearchText))
@@ -269,7 +269,11 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
 
         foreach (var pinned in pinnedRows)
         {
-            if (rows.Any(row => UriValuesEqual(row.MaterialUri, pinned.MaterialUri)))
+            var origin = pinned.BuiltinOriginUri ?? (pinned.Generated is not null ? pinned.MaterialUri : null);
+            if (rows.Any(row => UriValuesEqual(row.MaterialUri, pinned.MaterialUri)
+                || (origin is not null && (row.MaterialUri == origin || row.BuiltinOriginUri == origin)))
+                || (origin is not null && !this.currentFilter.IncludeGenerated
+                    && this.latestItems.Any(item => item.IsBuiltin && (item.IdentityUri == origin || item.BuiltinOriginUri == origin))))
             {
                 continue;
             }

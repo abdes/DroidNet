@@ -87,7 +87,8 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         ArgumentNullException.ThrowIfNull(asset);
         var search = this.SearchText.Trim();
         return (search.Length == 0 || asset.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)
-            || asset.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase))
+            || asset.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase)
+            || asset.CookedCompanions.Any(companion => companion.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase)))
             && MatchesGroup(this.TypeOptions, asset) && MatchesGroup(this.StatusOptions, asset);
     }
 
