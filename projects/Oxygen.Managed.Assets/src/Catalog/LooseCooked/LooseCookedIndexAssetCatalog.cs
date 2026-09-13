@@ -269,7 +269,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             var uri = VirtualPathToAssetUri(entry.VirtualPath);
             var record = new AssetRecord(uri)
             {
-                Cooked = new(this.cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)),
+                Cooked = new(this.cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)) { VirtualPath = entry.VirtualPath },
             };
             if (!next.TryAdd(uri, record))
             {

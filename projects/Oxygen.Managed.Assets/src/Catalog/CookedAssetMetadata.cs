@@ -21,4 +21,8 @@ public sealed record CookedAssetMetadata(
     AssetKey AssetKey,
     byte AssetType,
     ulong DescriptorSize,
-    string DescriptorSha256);
+    string DescriptorSha256)
+{
+    /// <summary>Gets the native virtual path declared by this representation, including aliases of a shared asset key.</summary>
+    public string? VirtualPath { get; init; }
+}

@@ -21,6 +21,9 @@ public sealed record AssetRecord(Uri Uri)
     /// <summary>Gets indexed cooked identity, type and location without inferring them from the virtual filename.</summary>
     public CookedAssetMetadata? Cooked { get; init; }
 
+    /// <summary>Gets lower-priority indexed representations masked by this asset's resolved source.</summary>
+    public IReadOnlyList<CookedAssetMetadata> OverriddenCookedSources { get; init; } = [];
+
     /// <summary>
     /// Gets the asset name derived from the URI path.
     /// </summary>
