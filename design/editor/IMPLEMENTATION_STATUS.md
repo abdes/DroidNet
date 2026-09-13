@@ -545,8 +545,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       background saves without preemption; pause resets with the project lifetime.
       Equivalent pending scopes share one run and retain independent cancellation;
       an explicit caller promotes a paused Save. Running snapshots stay immutable.
-      ContentPipeline 287/287 passes, including shared native publication.
-      Imported-source closure and the remaining Import/demand triggers remain.
+      ContentPipeline 293/293 passes, including shared native publication.
+      Preview requests now use that transaction with asset-only scope and demand
+      priority. Native tests cover a dirty consuming scene and first-cook geometry
+      material dependencies. Imported-source closure and the remaining Import,
+      assignment and scene-activation triggers remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
       native cook from private inputs into staging preserves published files;
