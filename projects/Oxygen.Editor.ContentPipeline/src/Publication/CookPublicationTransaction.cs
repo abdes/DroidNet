@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -133,7 +133,7 @@ internal sealed partial class CookPublicationTransaction
                 await preview.PrepareReplacementAsync().ConfigureAwait(false);
             }
 
-            writer = CookOutputLease.AcquireWrite(this.project.ProjectRoot);
+            writer = await CookOutputLease.AcquireWriteAsync(this.project.ProjectRoot, cancellationToken).ConfigureAwait(false);
             await this.VerifyBaselinesAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             verifyOwner();

@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -63,6 +63,15 @@ public sealed partial class CookPublicationService
     internal async Task<bool> HasCommittedMetadataAsync(ProjectContext project, CancellationToken cancellationToken)
     {
         using var reader = CookOutputLease.AcquireRead(project.ProjectRoot);
+        return await this.HasCommittedMetadataUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Verifies metadata while the caller already protects the published generation.</summary>
+    /// <param name="project">The owning project.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Whether the receipt and committed journal agree.</returns>
+    internal async Task<bool> HasCommittedMetadataUnderLeaseAsync(ProjectContext project, CancellationToken cancellationToken)
+    {
         try
         {
             var snapshot = await files.ReadAsync(Path.Combine(project.ProjectRoot, CookPublicationTransaction.PublicationMetadata), cancellationToken).ConfigureAwait(false);
@@ -152,7 +161,7 @@ public sealed partial class CookPublicationService
                 await preview.PrepareReplacementAsync().ConfigureAwait(false);
             }
 
-            using var writer = CookOutputLease.AcquireWrite(project.ProjectRoot);
+            using var writer = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
             var transaction = await CookPublicationTransaction.LoadAsync(project, operationId, files, writer, cancellationToken).ConfigureAwait(false);
             await transaction.RecoverAsync(writer).ConfigureAwait(false);
             if (preview is not null)
