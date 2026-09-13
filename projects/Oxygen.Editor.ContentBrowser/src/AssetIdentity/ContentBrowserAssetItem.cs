@@ -32,6 +32,9 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
     public Uri? BuiltinOriginUri { get; init; }
 
+    /// <summary>Gets verified cooked representations grouped with this logical built-in in discovery views.</summary>
+    public IReadOnlyList<ContentBrowserAssetItem> CookedCompanions { get; init; } = [];
+
     /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
     public string? RuntimeReason { get; init; }
 
