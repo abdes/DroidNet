@@ -114,7 +114,7 @@ public sealed partial class MaterialEditorViewModel
             var result = cancellingGesture ? new MaterialEditResult(Succeeded: true, OperationId: null)
                 : undo ? this.documentService.Undo(current.DocumentId) : this.documentService.Redo(current.DocumentId);
             this.RefreshDocument(current.DocumentId);
-            this.StatusText = result.Succeeded ? (this.IsDirty ? "Unsaved changes" : "Unmodified") : "The history change was rejected.";
+            this.StatusText = result.Succeeded ? string.Empty : "The history change was rejected.";
         }
         finally
         {
@@ -172,7 +172,6 @@ public sealed partial class MaterialEditorViewModel
         this.document = this.documentService.GetDocument(documentId);
         this.metadata.IsDirty = this.document.IsDirty;
         this.IsDirty = this.document.IsDirty;
-        this.CookState = this.document.CookState;
         if (refreshValues)
         {
             this.isLoading = true;

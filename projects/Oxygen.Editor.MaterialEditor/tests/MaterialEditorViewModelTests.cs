@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -16,8 +16,11 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 /// </summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers these public test classes using the repository's default discovery configuration.")]
-public sealed class MaterialEditorViewModelTests
+public sealed partial class MaterialEditorViewModelTests
 {
+    /// <summary>Gets or sets cancellation for asynchronous regression tests.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Verifies saving a snapshot keeps newer edits dirty and requires another save before closing.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
@@ -26,7 +29,7 @@ public sealed class MaterialEditorViewModelTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var service = new RecordingDocumentService(CreateDocument()) { PendingWrite = release.Task };
         var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
-        using var sut = new MaterialEditorViewModel(metadata, service);
+        using var sut = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.25f;
         var save = sut.SaveAsync();
@@ -50,7 +53,7 @@ public sealed class MaterialEditorViewModelTests
     public async Task DisposalDoesNotCloseOrDiscardTheMaterial()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service);
+        var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.75f;
         await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
@@ -69,7 +72,7 @@ public sealed class MaterialEditorViewModelTests
         var editCompleted = new TaskCompletionSource<MaterialEditResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         service.PendingEdit = editCompleted.Task;
         var metadata = new MaterialDocumentMetadata(service.Document.MaterialUri);
-        using var sut = new MaterialEditorViewModel(metadata, service);
+        using var sut = new MaterialEditorViewModel(metadata, service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
         sut.MetallicFactor = 0.75f;
 
@@ -94,7 +97,7 @@ public sealed class MaterialEditorViewModelTests
     public async Task ScalarPropertyChangesUseSchemaPropertyEdit()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service);
+        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
 
         sut.MetallicFactor = 0.75f;
@@ -105,7 +108,7 @@ public sealed class MaterialEditorViewModelTests
         _ = service.PropertyEdits[0].GetTyped(MaterialDescriptors.Metalness, out var value).Should().BeTrue();
         _ = value.Should().Be(0.75f);
         _ = sut.IsDirty.Should().BeTrue();
-        _ = sut.CookState.Should().Be(MaterialCookState.Stale);
+        _ = sut.CookStatusText.Should().Be("Unsaved changes");
     }
 
     /// <summary>
@@ -116,7 +119,7 @@ public sealed class MaterialEditorViewModelTests
     public async Task SetBaseColorBatchesChannelsIntoOneSchemaPropertyEdit()
     {
         var service = new RecordingDocumentService(CreateDocument());
-        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service);
+        using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
 
         sut.SetBaseColor(Color.FromArgb(128, 64, 128, 255));
@@ -136,7 +139,7 @@ public sealed class MaterialEditorViewModelTests
     }
 
     private static async Task WaitForLoadAsync(MaterialEditorViewModel viewModel)
-        => await WaitUntilAsync(() => string.Equals(viewModel.StatusText, "Cook: NotCooked", StringComparison.Ordinal)).ConfigureAwait(false);
+        => await WaitUntilAsync(() => viewModel.IsLoaded).ConfigureAwait(false);
 
     private static async Task WaitForEditAsync(RecordingDocumentService service, int expectedCount)
         => await WaitUntilAsync(() => service.PropertyEditCount >= expectedCount).ConfigureAwait(false);

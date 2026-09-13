@@ -225,6 +225,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             editor = new MaterialEditorViewModel(
                 materialMeta,
                 this.container.Resolve<IMaterialDocumentService>(),
+                this.container.Resolve<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>(),
+                this.container.Resolve<DroidNet.Hosting.WinUI.HostingContext>().DispatcherScheduler,
                 this.loggerFactory,
                 assetChanged: uri =>
                 {
