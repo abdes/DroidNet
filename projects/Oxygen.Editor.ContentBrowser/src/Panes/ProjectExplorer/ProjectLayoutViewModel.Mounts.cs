@@ -43,7 +43,7 @@ public partial class ProjectLayoutViewModel
 
         var spec = new DialogSpec("Mount Local Folder", view)
         {
-            PrimaryButtonText = "OK", SecondaryButtonText = "Cancel", CloseButtonText = string.Empty, DefaultButton = DialogButton.Primary,
+            PrimaryButtonText = "Add", SecondaryButtonText = "Cancel", CloseButtonText = string.Empty, DefaultButton = DialogButton.Primary,
         };
         return await dialogService.ShowAsync(spec).ConfigureAwait(true) == DialogButton.Primary;
     }
@@ -69,7 +69,12 @@ public partial class ProjectLayoutViewModel
                 return;
         }
 
-        relative ??= GetRelativeMountPath(this.projectRoot!.ProjectRootFolder.Location, path);
+        var wasLocal = projectContextService.ActiveProject?.LocalFolderMounts.Any(mount => string.Equals(mount.AbsolutePath, path, StringComparison.OrdinalIgnoreCase)) == true;
+        if (!wasLocal)
+        {
+            relative ??= GetRelativeMountPath(this.projectRoot!.ProjectRootFolder.Location, path);
+        }
+
         if (relative is not null)
         {
             projectInfo.AuthoringMounts.Add(new ProjectMountPoint(name, relative, child.IsExpanded));
@@ -99,11 +104,6 @@ public partial class ProjectLayoutViewModel
                 {
                     var mounted = mount;
                     mount = null;
-                    if (!isProjectRelative)
-                    {
-                        _ = this.projectAssetCatalog.AddFolderAsync(folder, mounted.VirtualRootPath.TrimStart('/'));
-                    }
-
                     if (this.projectRoot.AreChildrenLoaded)
                     {
                         await this.InsertItemAsync(mounted, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);

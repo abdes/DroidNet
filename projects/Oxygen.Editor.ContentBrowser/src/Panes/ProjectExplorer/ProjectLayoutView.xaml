@@ -67,21 +67,34 @@
             <dnc:DynamicTree
                 x:Name="ProjectTree"
                 Grid.Row="0"
+                IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
                 ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
                 ViewModel="{x:Bind ViewModel}" />
 
             <dnc:ToolBar
                 Grid.Row="1"
                 DefaultLabelPosition="Right"
+                IsCompact="True"
+                IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
                 OverflowButtonVisibility="Collapsed">
                 <dnc:ToolBar.PrimaryItems>
                     <dnc:ToolBarElementHost>
-                        <TextBlock VerticalAlignment="Center" Text="Virtual folders" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ProgressRing
+                                Width="16"
+                                Height="16"
+                                IsActive="{x:Bind ViewModel.IsApplyingMounts, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.MountProgressVisibility, Mode=OneWay}" />
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.MountStatusText, Mode=OneWay}" />
+                        </StackPanel>
                     </dnc:ToolBarElementHost>
                 </dnc:ToolBar.PrimaryItems>
 
                 <dnc:ToolBar.SecondaryItems>
-                    <dnc:ToolBarButton Label="Mount" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton
+                        Label="Mount"
+                        ToolBarLabelPosition="Collapsed"
+                        ToolTipService.ToolTip="Add content folder">
                         <dnc:ToolBarButton.Icon>
                             <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CE;" />
                         </dnc:ToolBarButton.Icon>
@@ -130,12 +143,12 @@
                     <dnc:ToolBarSeparator />
 
                     <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.SaveProjectMountsCommand}"
-                        IsEnabled="{x:Bind ViewModel.HasUnsavedChanges, Mode=OneWay}"
-                        Label="Save"
-                        ToolBarLabelPosition="Collapsed">
+                        Command="{x:Bind ViewModel.ContentPriorityCommand}"
+                        Label="Content priority"
+                        ToolBarLabelPosition="Collapsed"
+                        ToolTipService.ToolTip="Content priority">
                         <dnc:ToolBarButton.Icon>
-                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE74E;" />
+                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CB;" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
                 </dnc:ToolBar.SecondaryItems>

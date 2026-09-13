@@ -15,10 +15,11 @@ public sealed partial class InspectorControlTests
 {
     private sealed partial class NativeSceneFixture
     {
-        public async Task<(Uri uri, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null)
+        public async Task<(Uri uri, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null, string? projectRoot = null)
         {
+            var root = projectRoot ?? this.ProjectRoot;
             var relative = $"Content/Materials/{name}.omat.json";
-            var path = Path.Combine(this.ProjectRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var color = baseColor ?? System.Numerics.Vector4.One;
             var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
@@ -31,13 +32,17 @@ public sealed partial class InspectorControlTests
             registry.Register(new MaterialSourceImporter());
             var importer = new ImportService(registry);
             var result = await importer.ImportAsync(
-                new ImportRequest(this.ProjectRoot, [new ImportInput(relative, "Content")], new ImportOptions(FailFast: true)),
+                new ImportRequest(root, [new ImportInput(relative, "Content")], new ImportOptions(FailFast: true)),
                 cancellationToken).ConfigureAwait(true);
             _ = result.Succeeded.Should().BeTrue("the material fixture must be cooked by the production importer");
             var asset = result.Imported.Should().ContainSingle().Which;
             var uri = new Uri($"asset:///{relative}");
-            var row = new MaterialPickerResult(uri, name, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, path, Path.Combine(this.ProjectRoot, ".cooked", "Content", "Materials", $"{name}.omat"), BaseColorPreview: null);
-            this.SetMaterialChoices(this.materialChoices.Value.Append(row).ToArray());
+            if (projectRoot is null)
+            {
+                var row = new MaterialPickerResult(uri, name, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, path, Path.Combine(root, ".cooked", "Content", "Materials", $"{name}.omat"), BaseColorPreview: null);
+                this.SetMaterialChoices(this.materialChoices.Value.Append(row).ToArray());
+            }
+
             var keyBytes = new byte[16];
             asset.AssetKey.WriteBytes(keyBytes);
             return (uri, new Guid(keyBytes, bigEndian: true).ToString());

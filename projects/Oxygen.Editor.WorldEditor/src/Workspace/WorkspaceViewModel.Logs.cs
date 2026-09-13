@@ -67,7 +67,7 @@ public partial class WorkspaceViewModel
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipping incompatible cooked index {IndexPath}. Re-cook the project to regenerate this mount point.")]
     private partial void LogCookedIndexRejected(Exception exception, string? indexPath);
 
-    private void LogMountedRoots(List<string> roots, bool validated = false)
+    private void LogMountedRoots(IReadOnlyList<string> roots, bool validated = false)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {

@@ -29,7 +29,9 @@ public partial class WorkspaceViewModel
 
     private async Task<bool> ShowInspectionAssetAsync(ShowAssetRequestMessage request)
     {
-        if (!ReferenceEquals(request.Project, this.projectContextService.ActiveProject)
+        if (this.projectContextService.ActiveProject is not { } project
+            || request.Project.ProjectId != project.ProjectId
+            || !string.Equals(request.Project.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
             || Dockable.FromId("cb") is not { ViewModel: ContentBrowserViewModel browser } dockable
             || !await browser.ShowAssetAsync(request.AssetUri).ConfigureAwait(true))
         {
