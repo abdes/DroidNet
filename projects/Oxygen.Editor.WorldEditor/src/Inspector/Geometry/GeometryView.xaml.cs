@@ -26,12 +26,12 @@ public partial class GeometryView
     {
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling picker item click.");
 
-        if (sender is not FrameworkElement fe || fe.DataContext is not AssetPickerItem item)
+        if (sender is not FrameworkElement fe || fe.DataContext is not AssetPickerRow row)
         {
             return;
         }
 
-        await this.ViewModel.ApplyAssetAsync(item).ConfigureAwait(true);
+        await this.ViewModel.ApplyAssetAsync(row.Item).ConfigureAwait(true);
         this.AssetPickerFlyout.Hide();
     }
 

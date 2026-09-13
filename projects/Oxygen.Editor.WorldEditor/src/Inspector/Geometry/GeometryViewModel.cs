@@ -31,17 +31,17 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// </remarks>
 public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
-    private readonly IAssetCatalog assetCatalog;
+    private readonly IContentBrowserAssetProvider assetProvider;
     private readonly IMaterialPickerService materialPickerService;
     private readonly IBuiltinCatalogDiscovery builtins;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
     private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
     private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
-    private readonly ObservableCollection<AssetPickerItem> contentItems = [];
-    private readonly ObservableCollection<AssetPickerItem> engineItems = [];
+    private readonly ObservableCollection<AssetPickerRow> contentItems = [];
+    private readonly ObservableCollection<AssetPickerRow> engineItems = [];
     private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
-    private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<string, AssetPickerRow> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly ObservableCollection<MaterialPickerRow> contentMaterialItems = [];
     private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly DispatcherQueue dispatcherQueue;
@@ -56,20 +56,20 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// Initializes a new instance of the <see cref="GeometryViewModel"/> class.
     /// </summary>
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
-    /// <param name="assetCatalog">Asset catalog used to populate and subscribe to mesh assets.</param>
+    /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
     /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
     /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
     /// <param name="commandService">Optional command service used to apply geometry edits.</param>
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
         HostingContext hosting,
-        IAssetCatalog assetCatalog,
+        IContentBrowserAssetProvider assetProvider,
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
-        this.assetCatalog = assetCatalog;
+        this.assetProvider = assetProvider;
         this.materialPickerService = materialPickerService;
         this.builtins = builtins;
         this.commandService = commandService;
@@ -87,7 +87,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     /// <summary>
     /// Gets the collection of geometry asset groups shown to the user. Each group contains
-    /// a list of <see cref="AssetPickerItem"/> instances.
+    /// a list of stable <see cref="AssetPickerRow"/> instances.
     /// </summary>
     [ObservableProperty]
     public partial IReadOnlyList<AssetGroup> Groups { get; set; } = [];
@@ -175,7 +175,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 return string.Empty; // Empty placeholder
             }
 
-            return "\uE7C3"; // Geometry
+            return "\uF158"; // Geometry
         }
     }
 
@@ -196,7 +196,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 return string.Empty;
             }
 
-            return "\uE8B9"; // Material
+            return "\uE790"; // Material
         }
     }
 
@@ -401,21 +401,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         return name;
     }
 
-    private static Dictionary<string, AssetRecord> BuildPreferredMeshAssets(IEnumerable<AssetRecord> meshAssets)
-    {
-        var selectedByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in meshAssets)
-        {
-            var key = GetMeshLogicalKey(asset.Uri);
-            if (!selectedByKey.TryGetValue(key, out var existing) || IsPreferredMeshUri(asset.Uri, existing.Uri))
-            {
-                selectedByKey[key] = asset;
-            }
-        }
-
-        return selectedByKey;
-    }
-
     private static string ExtractNameFromUriString(string uriString)
     {
         if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
@@ -435,72 +420,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             DisplayPath: displayPath,
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
-            ThumbnailModel: "\uE7C3");
-
-    private static bool IsSelectableCookedMesh(Uri uri)
-    {
-        // Geometry picker should list only runtime-consumable (cooked) assets that resolve
-        // to canonical asset:/// URIs under the authoring mount point.
-        // The aggregated ProjectAssetCatalog also includes:
-        //  - project-root files (asset:///project/...) including .cooked/.imported
-        //  - optionally mounted utility roots (Cooked/Imported/Build)
-        //  - engine assets (handled separately in this view model)
-        // We must exclude these to avoid duplicates and ensure applied URIs resolve correctly.
-        var mountPoint = AssetUriHelper.GetMountPoint(uri);
-        if (string.IsNullOrWhiteSpace(mountPoint))
-        {
-            return false;
-        }
-
-        if (IsExcludedMountPoint(mountPoint))
-        {
-            return false;
-        }
-
-        // Asset URIs can include mount points and may have a leading "//" in AbsolutePath.
-        // Use the relative path when possible to make extension detection resilient.
-        var path = AssetUriHelper.GetRelativePath(uri);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = uri.AbsolutePath;
-        }
-
-        var ext = Path.GetExtension(path).ToUpperInvariant();
-        return ext is ".MESH" or ".OGEO";
-
-        static bool IsExcludedMountPoint(string mountPoint)
-            => mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase)
-               || mountPoint.Equals("Engine", StringComparison.OrdinalIgnoreCase)
-               || mountPoint.Equals("Cooked", StringComparison.OrdinalIgnoreCase)
-               || mountPoint.Equals("Imported", StringComparison.OrdinalIgnoreCase)
-               || mountPoint.Equals("Build", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetMeshLogicalKey(Uri uri)
-    {
-        // Dedupe mesh variants that share the same virtual path but differ by extension.
-        // Example: "/Content/Models/Foo.mesh" and "/Content/Models/Foo.ogeo" -> "/Content/Models/Foo"
-        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
-        if (string.IsNullOrWhiteSpace(virtualPath))
-        {
-            virtualPath = uri.AbsolutePath;
-        }
-
-        var ext = Path.GetExtension(virtualPath);
-        return string.IsNullOrEmpty(ext)
-            ? virtualPath
-            : virtualPath[..^ext.Length];
-    }
-
-    private static bool IsPreferredMeshUri(Uri candidate, Uri existing)
-    {
-        // Prefer canonical cooked .ogeo assets over legacy/raw .mesh when both exist.
-        var candidateExt = Path.GetExtension(AssetUriHelper.GetRelativePath(candidate)).ToUpperInvariant();
-        var existingExt = Path.GetExtension(AssetUriHelper.GetRelativePath(existing)).ToUpperInvariant();
-
-        return !string.Equals(candidateExt, existingExt, StringComparison.Ordinal)
-            && string.Equals(candidateExt, ".OGEO", StringComparison.Ordinal);
-    }
+            ThumbnailModel: "\uF158");
 
     private static MaterialPickerItem CreateNoMaterialItem()
         => new(
@@ -520,34 +440,10 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             DisplayPath: displayPath,
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
-            ThumbnailModel: "\uE8B9");
+            ThumbnailModel: "\uE790");
 
     private static bool UriValuesEqual(Uri? left, Uri? right)
         => string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
-
-    private static AssetPickerItem CreateContentItem(AssetRecord asset)
-    {
-        string displayPath;
-        var mountPoint = AssetUriHelper.GetMountPoint(asset.Uri);
-
-        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
-        {
-            displayPath = "/" + AssetUriHelper.GetRelativePath(asset.Uri);
-        }
-        else
-        {
-            displayPath = AssetUriHelper.GetVirtualPath(asset.Uri);
-        }
-
-        return new AssetPickerItem(
-            Name: asset.Name,
-            Uri: asset.Uri,
-            DisplayType: "Static Mesh",
-            DisplayPath: displayPath,
-            Group: AssetPickerGroup.Content,
-            IsEnabled: true,
-            ThumbnailModel: "\uE7C3");
-    }
 
     private static MaterialPickerItem CreateContentMaterialItem(MaterialPickerResult asset)
         => new(
@@ -565,92 +461,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             rows => this.DispatchOnUi(() => this.ReplaceContentMaterialItems(rows)),
             ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
         _ = this.materialPickerService.RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false });
-    }
-
-    private void StartAssetCatalogSubscription()
-    {
-        Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
-        var initializeTask = Task.Run(this.InitializeContentAssetsAsync);
-        _ = initializeTask.ContinueWith(
-            static task => Debug.WriteLine($"[GeometryViewModel] Failed to initialize content assets: {task.Exception}"),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            TaskScheduler.Default);
-    }
-
-    private async Task InitializeContentAssetsAsync()
-    {
-        var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
-        var meshAssets = allAssets.Where(static asset => IsSelectableCookedMesh(asset.Uri)).ToList();
-        Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
-
-        var selectedByKey = BuildPreferredMeshAssets(meshAssets);
-        this.DispatchOnUi(() => this.PopulateInitialContentItems(selectedByKey.Values));
-        this.assetChangesSubscription = this.assetCatalog.Changes
-            .Where(static notification => IsSelectableCookedMesh(notification.Uri))
-            .Subscribe(
-                notification => this.DispatchOnUi(() => this.ApplyAssetChange(notification)),
-                ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex}"));
-    }
-
-    private void PopulateInitialContentItems(IEnumerable<AssetRecord> assets)
-    {
-        foreach (var asset in assets.OrderBy(static asset => AssetUriHelper.GetVirtualPath(asset.Uri), StringComparer.OrdinalIgnoreCase))
-        {
-            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name} ({asset.Uri})");
-            var item = CreateContentItem(asset);
-            var key = GetMeshLogicalKey(asset.Uri);
-            this.contentItemsByKey[key] = item;
-            this.contentItems.Add(item);
-        }
-    }
-
-    private void ApplyAssetChange(AssetChange notification)
-    {
-        if (notification.Kind == AssetChangeKind.Added)
-        {
-            var key = GetMeshLogicalKey(notification.Uri);
-
-            if (!this.contentItemsByKey.TryGetValue(key, out var existingItem))
-            {
-                Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
-                var record = new AssetRecord(notification.Uri);
-                var newItem = CreateContentItem(record);
-                this.contentItemsByKey[key] = newItem;
-                this.contentItems.Add(newItem);
-                return;
-            }
-
-            if (IsPreferredMeshUri(notification.Uri, existingItem.Uri))
-            {
-                Debug.WriteLine($"[GeometryViewModel] Replacing mesh asset for key '{key}': {existingItem.Uri} -> {notification.Uri}");
-                var record = new AssetRecord(notification.Uri);
-                var newItem = CreateContentItem(record);
-
-                var idx = this.contentItems.IndexOf(existingItem);
-                if (idx >= 0)
-                {
-                    this.contentItems[idx] = newItem;
-                }
-                else
-                {
-                    this.contentItems.Add(newItem);
-                }
-
-                this.contentItemsByKey[key] = newItem;
-            }
-        }
-        else if (notification.Kind == AssetChangeKind.Removed)
-        {
-            var key = GetMeshLogicalKey(notification.Uri);
-            if (this.contentItemsByKey.TryGetValue(key, out var existingItem)
-                && existingItem.Uri == notification.Uri)
-            {
-                Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
-                _ = this.contentItems.Remove(existingItem);
-                _ = this.contentItemsByKey.Remove(key);
-            }
-        }
     }
 
     private void UpdateMaterialDisplay(Uri? uri)

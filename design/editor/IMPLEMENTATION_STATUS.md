@@ -601,8 +601,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Acknowledged roots and current native outcomes now drive browser, material
         picker and material-editor readiness without source rescans. Native asset
         tests 28/28 and Runtime 95/95 cover application, retry generations and stale
-        feedback; project isolation and rendered chip updates pass. Geometry-picker
-        status integration and remaining browser/picker workflows are pending.
+        feedback; project isolation and rendered chip updates pass. Geometry choices
+        now share those identities/statuses, retain focused rows during updates,
+        and preserve authored references while addressing cooked runtime geometry.
+        SceneExplorer 174/174 and focused geometry UI 13/13 pass, including all
+        eleven built-ins. Assignment before first cook and remaining browser/picker
+        workflows are pending.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped

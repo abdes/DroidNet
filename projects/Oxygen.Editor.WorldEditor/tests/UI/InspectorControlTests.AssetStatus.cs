@@ -101,9 +101,9 @@ public sealed partial class InspectorControlTests
         var picker = new Mock<IMaterialPickerService>();
         _ = picker.SetupGet(value => value.Results).Returns(updates);
         _ = picker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var catalog = new Mock<IAssetCatalog>();
-        _ = catalog.SetupGet(value => value.Changes).Returns(System.Reactive.Linq.Observable.Empty<AssetChange>());
-        _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
+        _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
+        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, picker.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) { IsExpanded = true };
         var view = new GeometryView { ViewModel = model, Width = 440 };
         await LoadTestContentAsync(view).ConfigureAwait(true);

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.Geometry.GeometryView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -95,8 +95,8 @@
                                                                     Background="Transparent"
                                                                     BorderThickness="0"
                                                                     Click="OnPickerItemClicked"
-                                                                    IsEnabled="{Binding IsEnabled}"
-                                                                    ToolTipService.ToolTip="{Binding DisplayPath}">
+                                                                    IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
+                                                                    ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
                                                                     <Grid>
                                                                         <Grid.ColumnDefinitions>
                                                                             <ColumnDefinition Width="Auto" />
@@ -112,7 +112,7 @@
                                                                             <controls:Thumbnail
                                                                                 Width="32"
                                                                                 Height="32"
-                                                                                Content="{Binding ThumbnailModel}"
+                                                                                Content="{Binding Item.ThumbnailModel, Mode=OneWay}"
                                                                                 ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
                                                                         </Border>
 
@@ -122,14 +122,14 @@
                                                                             VerticalAlignment="Center">
                                                                             <TextBlock
                                                                                 Style="{ThemeResource BodyTextBlockStyle}"
-                                                                                Text="{Binding Name}"
+                                                                                Text="{Binding Item.Name, Mode=OneWay}"
                                                                                 TextWrapping="NoWrap" />
                                                                             <TextBlock
                                                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                                 Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                                Text="{Binding DisplayType}"
+                                                                                Text="{Binding Item.DisplayType, Mode=OneWay}"
                                                                                 TextWrapping="NoWrap"
-                                                                                ToolTipService.ToolTip="{Binding DisplayType}" />
+                                                                                ToolTipService.ToolTip="{Binding Item.DisplayType, Mode=OneWay}" />
                                                                         </StackPanel>
                                                                     </Grid>
                                                                 </Button>

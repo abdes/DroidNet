@@ -29,9 +29,9 @@ public sealed partial class InspectorControlTests
         var discovery = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         var live = discovery.Snapshot;
         discovery.SetSnapshot(new(live.Catalog, IsLastKnown: true, "Using the last-known engine catalog. Preview unavailable."));
-        var catalog = new Mock<IAssetCatalog>();
-        _ = catalog.SetupGet(value => value.Changes).Returns(Observable.Empty<AssetChange>());
-        _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var catalog = new Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>();
+        _ = catalog.SetupGet(value => value.Items).Returns(Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
+        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var materials = new Mock<IMaterialPickerService>();
         _ = materials.SetupGet(value => value.Results).Returns(Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
         _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -40,9 +40,9 @@ public sealed partial class InspectorControlTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var engine = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal));
-        _ = engine.Items.Should().Equal(live.Catalog!.Geometries, (item, definition) => item.Uri == definition.AssetUri);
-        _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => item.IsEnabled);
-        _ = engine.Items.Single(item => string.Equals(item.Name, "GeodesicSphere", StringComparison.Ordinal)).DisplayType.Should().Contain("Alias of IcoSphere");
+        _ = engine.Items.Should().Equal(live.Catalog!.Geometries, (item, definition) => item.Item.Uri == definition.AssetUri);
+        _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => item.Item.IsEnabled);
+        _ = engine.Items.Single(item => string.Equals(item.Item.Name, "GeodesicSphere", StringComparison.Ordinal)).Item.DisplayType.Should().Contain("Alias of IcoSphere");
         var owner = (SplitButton)view.FindName("AssetSplitButton");
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
@@ -57,7 +57,7 @@ public sealed partial class InspectorControlTests
             await model.RetryBuiltinCatalogCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = notice.IsOpen.Should().BeFalse();
-            _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => !item.DisplayType.Contains("Preview unavailable", StringComparison.Ordinal));
+            _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => !item.Item.DisplayType.Contains("Preview unavailable", StringComparison.Ordinal));
         }
         finally
         {

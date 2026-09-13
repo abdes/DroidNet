@@ -215,7 +215,7 @@ public sealed partial class SceneEngineSync
     {
         if (geometry.Geometry?.Uri != null)
         {
-            var enginePath = AssetUriHelper.GetEnginePath(geometry.Geometry.Uri);
+            var enginePath = GeometryPathMapper.ToEnginePath(geometry.Geometry.Uri);
             world.Execute(new RuntimeSetGeometry(node.Id, enginePath));
             ApplyMaterialOverrides(world, node, geometry);
         }

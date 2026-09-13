@@ -11,6 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="..\..\..\Oxygen.Editor.ContentBrowser\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
       <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
     </ItemGroup>
 

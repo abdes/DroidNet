@@ -74,8 +74,8 @@ public sealed partial class InspectorControlTests
             _ = this.documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
             _ = this.documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => [this.Context.Metadata]);
             _ = this.documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(() => this.Source.Id);
-            _ = this.AssetCatalog.Setup(value => value.Changes).Returns(Observable.Empty<AssetChange>());
-            _ = this.AssetCatalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            _ = this.AssetCatalog.Setup(value => value.Items).Returns(Observable.Empty<IReadOnlyList<Oxygen.Editor.ContentBrowser.AssetIdentity.ContentBrowserAssetItem>>());
+            _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             _ = this.MaterialPicker.Setup(value => value.Results).Returns(this.materialChoices);
             _ = this.MaterialPicker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Commands = new SceneDocumentCommandService(
@@ -108,7 +108,7 @@ public sealed partial class InspectorControlTests
 
         public SceneDocumentCommandService Commands { get; }
 
-        public Mock<IAssetCatalog> AssetCatalog { get; } = new();
+        public Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider> AssetCatalog { get; } = new();
 
         public Mock<IMaterialPickerService> MaterialPicker { get; } = new();
 

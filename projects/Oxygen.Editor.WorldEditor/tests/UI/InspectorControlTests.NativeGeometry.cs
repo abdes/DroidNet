@@ -145,7 +145,7 @@ public sealed partial class InspectorControlTests
                 cancellationToken.ThrowIfCancellationRequested();
                 choice = flyout.Content.FindDescendant<Button>(button => material
                     ? button.DataContext is MaterialPickerRow row && string.Equals(row.Item.Name, name, StringComparison.Ordinal)
-                    : button.DataContext is AssetPickerItem asset && string.Equals(asset.Name, name, StringComparison.Ordinal));
+                    : button.DataContext is AssetPickerRow asset && string.Equals(asset.Item.Name, name, StringComparison.Ordinal));
             }
 
             _ = choice.IsEnabled.Should().BeTrue();

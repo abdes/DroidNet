@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.World.Components;
@@ -22,7 +23,6 @@ using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -60,7 +60,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="commandService">The scene document command service.</param>
     /// <param name="documentService">The document service used by scene commands.</param>
     /// <param name="windowId">The WinUI window id used for document operations.</param>
-    /// <param name="assetCatalog">The asset catalog for Content browser integration.</param>
+    /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="materialPickerService">The material picker service for geometry material slots.</param>
     /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
     /// <param name="builtins">The shared native catalog for engine choices.</param>
@@ -75,7 +75,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneDocumentCommandService commandService,
         IDocumentService documentService,
         WindowId windowId,
-        IAssetCatalog assetCatalog,
+        IContentBrowserAssetProvider assetProvider,
         IMaterialPickerService materialPickerService,
         ISceneEngineSync sceneEngineSync,
         IBuiltinCatalogDiscovery builtins,
@@ -96,7 +96,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.propertyEditorFactories = this.CreatePropertyEditorFactories(
             hosting,
-            assetCatalog,
+            assetProvider,
             materialPickerService,
             builtins,
             loggerFactory);
@@ -358,7 +358,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> CreatePropertyEditorFactories(
         HostingContext hosting,
-        IAssetCatalog assetCatalog,
+        IContentBrowserAssetProvider assetProvider,
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
         ILoggerFactory? loggerFactory)
@@ -370,7 +370,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 commandContextProvider: this.CreateCommandContext),
             [typeof(GeometryComponent)] = _ => new GeometryViewModel(
                 hosting,
-                assetCatalog,
+                assetProvider,
                 materialPickerService,
                 builtins,
                 this.commandService,
