@@ -16,6 +16,46 @@ namespace Oxygen.Editor.ContentBrowser.Tests;
 /// <summary>Uses verified publication ownership, rather than filenames, to recognize engine-provided project copies.</summary>
 public sealed partial class ContentBrowserAssetProviderTests
 {
+    /// <summary>A foreign override is not labelled built-in, while its verified masked project copy retains its origin.</summary>
+    /// <returns>The asynchronous source-qualified provenance regression.</returns>
+    [TestMethod]
+    public async Task ForeignOverrideCannotBorrowBuiltinProvenanceFromAnotherRoot()
+    {
+        using var workspace = new TempWorkspace();
+        var engineUri = Oxygen.Managed.Core.AssetUris.BuildGeneratedUri("Materials/Default");
+        var cookedUri = new Uri("asset:///Content/Materials/OxygenEditor_Default.omat");
+        var projectRoot = workspace.SourcePath(".cooked/Content");
+        var libraryRoot = workspace.SourcePath("Library");
+        const string descriptor = "Materials/OxygenEditor_Default.omat";
+        foreach (var root in new[] { projectRoot, libraryRoot })
+        {
+            _ = Directory.CreateDirectory(Path.Combine(root, "Materials"));
+            await File.WriteAllTextAsync(Path.Combine(root, descriptor), "output", this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        var own = new CookedAssetMetadata(projectRoot, descriptor, Guid.CreateVersion7(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = cookedUri.AbsolutePath };
+        var foreign = own with { RootFolderPath = libraryRoot, SourceIdentity = Guid.CreateVersion7(), AssetKey = new(3, 4) };
+        AssetRecord[] records =
+        [
+            new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath) },
+            new(cookedUri) { Cooked = foreign, OverriddenCookedSources = [own] },
+        ];
+        var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
+        var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
+        var projects = CreateProjectContextService(workspace);
+        var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = runtime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog(records), projects, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        var resolved = (await provider.ResolveAsync(cookedUri, this.TestContext.CancellationToken).ConfigureAwait(false))!;
+        _ = resolved.IsBuiltin.Should().BeFalse();
+        _ = resolved.BuiltinOriginUri.Should().BeNull();
+        var projectCopy = CookedLibraryProjection.Create(resolved, own, projects.ActiveProject!);
+        _ = projectCopy.IsBuiltin.Should().BeTrue();
+        _ = projectCopy.BuiltinOriginUri.Should().Be(engineUri);
+        _ = projectCopy.IsCookedSourceOverridden.Should().BeTrue();
+        _ = projectCopy.CanCook.Should().BeFalse();
+    }
+
     /// <summary>Default material and every generated shape retain built-in identity and cannot expose standalone cooking.</summary>
     /// <returns>The asynchronous catalog and picker regression.</returns>
     [TestMethod]

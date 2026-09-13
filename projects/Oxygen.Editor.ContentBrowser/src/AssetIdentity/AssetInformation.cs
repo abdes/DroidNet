@@ -39,6 +39,22 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
             facts.Add(new("Source", "Unavailable · read-only"));
         }
 
+        if (asset.CookedMetadata is { } cooked)
+        {
+            facts.Add(new("Cooked source", cooked.RootFolderPath));
+            if (asset.OverriddenCookedSources.Count > 0)
+            {
+                facts.Add(new("Overrides", string.Join(Environment.NewLine, asset.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct(StringComparer.OrdinalIgnoreCase))));
+            }
+        }
+
+        AddOutputFacts(asset, facts);
+
+        return new($"{asset.DisplayName} ({asset.TypeDisplayName})", asset.Kind, asset.DisplayPath, GetDescription(asset), facts);
+    }
+
+    private static void AddOutputFacts(ContentBrowserAssetItem asset, List<AssetInformationFact> facts)
+    {
         var outputs = asset.CookedCompanions.Prepend(asset)
             .Select(static item => item.CookedUri)
             .OfType<Uri>()
@@ -56,8 +72,11 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
             facts.Add(new(asset.IsBuiltin ? "Project copy" : "Cooked output", text));
         }
+    }
 
-        var description = asset.IsBuiltin || asset.CookStatus is not null ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
+    private static string GetDescription(ContentBrowserAssetItem asset)
+    {
+        var description = asset.IsBuiltin || asset.IsCookedSourceOverridden || asset.CookStatus is not null ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
         {
             AssetState.Missing => "The referenced asset could not be found.",
             AssetState.Broken => "The asset could not be read or validated.",
@@ -71,6 +90,6 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
             description = (description + " " + asset.RuntimeReason).Trim();
         }
 
-        return new($"{asset.DisplayName} ({asset.TypeDisplayName})", asset.Kind, asset.DisplayPath, description, facts);
+        return description;
     }
 }
