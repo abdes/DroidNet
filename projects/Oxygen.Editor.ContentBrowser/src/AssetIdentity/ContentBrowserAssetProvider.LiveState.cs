@@ -84,7 +84,7 @@ public sealed partial class ContentBrowserAssetProvider
         var project = this.projectContextService.ActiveProject;
         var runs = this.cooks.Runs.Where(run => run.ProjectId == project?.ProjectId && string.Equals(run.ProjectRoot, project?.ProjectRoot, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(ActivityPriority).ThenByDescending(static run => run.StartedAt).ToArray();
-        return source.Select(item =>
+        var authored = source.Select(item =>
         {
             if (item.CookStatus is not { } status)
             {
@@ -104,5 +104,6 @@ public sealed partial class ContentBrowserAssetProvider
             return ReferenceEquals(status, item.CookStatus) && status.UnsavedDocuments.SequenceEqual(dirty) && item.CookActivity == activity
                 ? item : ApplyCookStatus(item, status with { UnsavedDocuments = [.. dirty] }) with { CookActivity = activity };
         }).ToArray();
+        return this.ApplyRuntimeState(authored, project);
     }
 }

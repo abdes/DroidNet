@@ -39,6 +39,8 @@ public sealed partial class MaterialDocumentServiceTests
         _ = catalog.SetupGet(value => value.Changes).Returns(Observable.Empty<AssetChange>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([new AssetRecord(uri)]);
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
         using var provider = new ContentBrowserAssetProvider(
             catalog.Object,
             workspace.ContextService,
@@ -46,7 +48,8 @@ public sealed partial class MaterialDocumentServiceTests
             new AssetIdentityReducer(),
             pipeline,
             workspace.CookDocuments,
-            workspace.CookCoordinator);
+            workspace.CookCoordinator,
+            unavailableRuntime);
         using var picker = new MaterialPickerService(provider);
         using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, provider, ImmediateScheduler.Instance);
         await WaitForMaterialUiAsync(() => editor.IsLoaded && string.Equals(editor.CookStatusText, "Needs cooking", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);

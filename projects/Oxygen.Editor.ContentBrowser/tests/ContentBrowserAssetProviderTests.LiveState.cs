@@ -39,7 +39,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
-        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, documents, EmptyCookRuns());
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, documents, EmptyCookRuns(), unavailableRuntime);
         using var picker = new MaterialPickerService(provider);
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         IReadOnlyList<MaterialPickerResult> choices = [];
@@ -93,7 +95,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])).ToArray());
         });
-        using var provider = new ContentBrowserAssetProvider(catalog, context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), cookService.Object);
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(catalog, context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), cookService.Object, unavailableRuntime);
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         var notifications = 0;
         provider.Items.Subscribe(
@@ -152,7 +156,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             return [new(uri, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
-        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, documents, EmptyCookRuns());
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, documents, EmptyCookRuns(), unavailableRuntime);
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value =>
@@ -197,7 +203,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             var complete = Interlocked.Increment(ref reads) > 1;
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])]);
         });
-        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), cooks.Object);
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime);
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<ContentBrowserAssetItem>>(items =>
         {

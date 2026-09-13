@@ -28,14 +28,14 @@ public sealed partial class MaterialEditorViewModel
     public partial bool IsCheckingCookStatus { get; set; } = true;
 
     /// <summary>Gets the concise source and cook status, including edits newer than the published content.</summary>
-    public string CookStatusText => AssetStatusPresentation.GetText(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty)
+    public string CookStatusText => AssetStatusPresentation.GetText(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown)
         ?? (this.IsCheckingCookStatus ? "Checking status" : "Status unavailable");
 
     /// <summary>Gets the semantic theme state for the compact cook-status chip.</summary>
-    public string CookStatusTone => AssetStatusPresentation.GetTone(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty);
+    public string CookStatusTone => AssetStatusPresentation.GetTone(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown);
 
     /// <summary>Gets the next action and previous-output facts for the status tooltip.</summary>
-    public string CookStatusDescription => AssetStatusPresentation.GetDescription(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty);
+    public string CookStatusDescription => AssetStatusPresentation.GetDescription(this.AssetStatus?.CookStatus, this.AssetStatus?.CookActivity, this.IsDirty, this.AssetStatus?.RuntimeAvailability ?? AssetRuntimeAvailability.Unknown, this.AssetStatus?.RuntimeReason);
 
     private void ApplyAssetItems(IReadOnlyList<ContentBrowserAssetItem> items)
     {

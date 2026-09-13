@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -28,6 +29,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
     private readonly IAssetCookStatusReader cookStatus;
     private readonly ICookDocumentRegistry documents;
     private readonly ICookRunService cooks;
+    private readonly IEngineService engine;
+    private readonly IRuntimeWorldCommands runtimeWorld;
     private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items = new([]);
     private readonly IDisposable changesSubscription;
     private readonly IDisposable projectSubscription;
@@ -43,6 +46,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
     /// <param name="documents">Live authoring-state notifications.</param>
     /// <param name="cooks">Cook progress and completion notifications.</param>
+    /// <param name="engine">Acknowledged native mounts and current asset requests.</param>
     /// <param name="logger">Background refresh diagnostics.</param>
     public ContentBrowserAssetProvider(
         IProjectAssetCatalog projectAssetCatalog,
@@ -52,6 +56,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         IAssetCookStatusReader cookStatus,
         ICookDocumentRegistry documents,
         ICookRunService cooks,
+        IEngineService engine,
         ILogger<ContentBrowserAssetProvider>? logger = null)
     {
         this.projectAssetCatalog = projectAssetCatalog;
@@ -61,6 +66,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         this.cookStatus = cookStatus;
         this.documents = documents;
         this.cooks = cooks;
+        this.engine = engine;
+        this.runtimeWorld = engine.WorldCommands;
         this.logger = logger ?? NullLogger<ContentBrowserAssetProvider>.Instance;
         this.changesSubscription = this.projectAssetCatalog.Changes
             .Subscribe(_ => this.OnCatalogChanged());
@@ -68,6 +75,9 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             .Subscribe(_ => this.OnProjectChanged());
         this.documents.StateChanged += this.OnDocumentStateChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
+        this.engine.ContentStatusChanged += this.OnRuntimeContentChanged;
+        this.engine.StateChanged += this.OnRuntimeStateChanged;
+        this.runtimeWorld.AssetStatusChanged += this.OnRuntimeAssetStatusChanged;
     }
 
     /// <inheritdoc />
@@ -121,7 +131,10 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         var cookScope = this.projectCookScopeProvider.CreateScope(project);
         var reduced = this.reducer.Reduce(matches, project, cookScope, AssetBrowserFilter.Default with { IncludeMissing = true, IncludeBroken = true });
         var enriched = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token).ConfigureAwait(false);
-        return !this.disposed && ReferenceEquals(project, this.projectContextService.ActiveProject) && enriched.Count != 0 ? enriched[0] : null;
+        lock (this.refreshSync)
+        {
+            return !this.disposed && ReferenceEquals(project, this.projectContextService.ActiveProject) && enriched.Count != 0 ? this.ApplyLiveState(enriched)[0] : null;
+        }
     }
 
     /// <inheritdoc />
@@ -146,6 +159,9 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         this.projectSubscription.Dispose();
         this.documents.StateChanged -= this.OnDocumentStateChanged;
         this.cooks.RunChanged -= this.OnCookRunChanged;
+        this.engine.ContentStatusChanged -= this.OnRuntimeContentChanged;
+        this.engine.StateChanged -= this.OnRuntimeStateChanged;
+        this.runtimeWorld.AssetStatusChanged -= this.OnRuntimeAssetStatusChanged;
     }
 
     private static ContentBrowserAssetItem ApplyCookStatus(ContentBrowserAssetItem item, AssetCookStatus state)

@@ -64,6 +64,15 @@ public sealed partial class InspectorControlTests
                 _ = model.RoughnessFactor.Should().Be(0.5f);
                 _ = model.IsDirty.Should().BeFalse();
             }
+
+            foreach (var (availability, text) in new[] { (AssetRuntimeAvailability.Mounted, "Ready"), (AssetRuntimeAvailability.Failed, "Preview issue"), (AssetRuntimeAvailability.Unavailable, "Cooked") })
+            {
+                await Task.Run(() => updates.OnNext([item with { RuntimeAvailability = availability, RuntimeReason = "Native availability detail" }]), this.TestContext.CancellationToken).ConfigureAwait(true);
+                await WaitForRenderAsync().ConfigureAwait(true);
+                _ = label.Text.Should().Be(text);
+                _ = ToolTipService.GetToolTip(chip).Should().Be(model.CookStatusDescription);
+                _ = model.CookStatusDescription.Should().Contain("Native availability detail");
+            }
         }
         finally
         {

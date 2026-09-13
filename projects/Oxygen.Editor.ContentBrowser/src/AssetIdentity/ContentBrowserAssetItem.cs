@@ -32,6 +32,9 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
     public Uri? BuiltinOriginUri { get; init; }
 
+    /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
+    public string? RuntimeReason { get; init; }
+
     /// <summary>Gets a value indicating whether this is engine-provided content rather than authored source.</summary>
     public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
 
@@ -59,16 +62,24 @@ public sealed record ContentBrowserAssetItem(
 
     /// <summary>Gets the primary asset-state badge.</summary>
     public string PrimaryBadge => this.Generated?.IsLastKnown == true ? "Preview unavailable"
-        : this.IsBuiltin ? "Built-in" : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? GetBadge(this.PrimaryState);
+        : this.IsBuiltin ? "Built-in" : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
     public string PrimaryBadgeTooltip => this.IsBuiltin
         ? this.Generated?.IsLastKnown == true ? "Built-in asset from the last-known Oxygen catalog. Preview unavailable."
-            : "Built-in asset provided by Oxygen. No separate cooking is needed."
-        : this.PrimaryBadge;
+            : "Built-in asset provided by Oxygen. No separate cooking is needed." + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
+        : AssetStatusPresentation.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
     /// <summary>Gets the optional cooked-state badge.</summary>
-    public string? DerivedBadge => this.CookStatus is null && this.DerivedState is { } state ? GetBadge(state) : null;
+    public string? DerivedBadge => this.IsBuiltin && this.Generated?.IsLastKnown != true
+        ? this.RuntimeAvailability switch
+        {
+            AssetRuntimeAvailability.Unavailable => "Preview unavailable",
+            AssetRuntimeAvailability.Updating => "Updating preview",
+            AssetRuntimeAvailability.Failed => "Preview issue",
+            _ => null,
+        }
+        : this.CookStatus is null && this.DerivedState is { } state ? GetBadge(state) : null;
 
     /// <summary>Gets a value indicating whether the asset has diagnostics.</summary>
     public bool HasDiagnostics => this.DiagnosticCodes.Count > 0;

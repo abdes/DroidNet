@@ -14,8 +14,9 @@ public static class AssetStatusPresentation
     /// <param name="status">Saved-source and publication facts.</param>
     /// <param name="activity">The selected applicable cook, if any.</param>
     /// <param name="hasUnsavedChanges">An immediate edit in the consuming document, before its shared notification arrives.</param>
+    /// <param name="runtimeAvailability">Acknowledged native availability for this identity.</param>
     /// <returns>A short status, or null when this identity has no authored cook status.</returns>
-    public static string? GetText(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false)
+    public static string? GetText(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
         => activity?.State is CookRunState.NeedsSave ? "Needs save"
             : hasUnsavedChanges || status?.HasUnsavedChanges == true ? "Unsaved changes"
             : status is null ? null : activity?.State switch
@@ -33,6 +34,9 @@ public static class AssetStatusPresentation
                 _ when status.HasPublishedOutput && !status.HasVerifiedOutput => "Cooked content invalid",
                 AssetCookFreshness.NeedsCooking => "Needs cooking",
                 AssetCookFreshness.OutOfDate => "Out of date",
+                AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Failed => "Preview issue",
+                AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Updating => "Updating preview",
+                AssetCookFreshness.Current when status.HasVerifiedOutput && runtimeAvailability == AssetRuntimeAvailability.Mounted => "Ready",
                 AssetCookFreshness.Current => "Cooked",
                 _ => null,
             },
@@ -42,13 +46,14 @@ public static class AssetStatusPresentation
     /// <param name="status">Saved-source and publication facts.</param>
     /// <param name="activity">The applicable cook.</param>
     /// <param name="hasUnsavedChanges">Whether the consuming document has newer edits.</param>
+    /// <param name="runtimeAvailability">Acknowledged native availability for this identity.</param>
     /// <returns>The neutral, caution, critical or success visual state.</returns>
-    public static string GetTone(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false)
-        => GetText(status, activity, hasUnsavedChanges) switch
+    public static string GetTone(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
+        => GetText(status, activity, hasUnsavedChanges, runtimeAvailability) switch
         {
             "Unsaved changes" or "Needs save" or "Out of date" => "Caution",
-            "Cook failed" or "Source missing" or "Invalid source" or "Cooked content invalid" => "Critical",
-            "Cooked" => "Success",
+            "Cook failed" or "Source missing" or "Invalid source" or "Cooked content invalid" or "Preview issue" => "Critical",
+            "Cooked" or "Ready" => "Success",
             _ => "Neutral",
         };
 
@@ -56,10 +61,12 @@ public static class AssetStatusPresentation
     /// <param name="status">Saved-source and publication facts.</param>
     /// <param name="activity">The applicable cook.</param>
     /// <param name="hasUnsavedChanges">Whether the consuming document has newer edits.</param>
+    /// <param name="runtimeAvailability">Acknowledged native availability for this identity.</param>
+    /// <param name="runtimeReason">The runtime's current availability explanation.</param>
     /// <returns>A tooltip suitable for a compact asset status.</returns>
-    public static string GetDescription(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false)
+    public static string GetDescription(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown, string? runtimeReason = null)
     {
-        var text = GetText(status, activity, hasUnsavedChanges);
+        var text = GetText(status, activity, hasUnsavedChanges, runtimeAvailability);
         var description = text switch
         {
             "Needs save" => "Cooking is waiting for unsaved documents. Open Cooking to review them.",
@@ -75,9 +82,15 @@ public static class AssetStatusPresentation
             "Needs cooking" => "No cooked content yet. Cooking is needed to use this asset in the viewport.",
             "Out of date" => "Saved inputs have changed. Cooking is needed to update the output.",
             "Cooked" => "Cooked content matches the saved inputs. No cooking is needed.",
+            "Ready" => "Cooked content matches the saved inputs and is available in the preview.",
+            "Preview issue" => "Cooked content is current, but a native load or application failed.",
             _ => "Cooking status is unavailable.",
         };
-        return text is not ("Cooked" or "Updating preview") && status?.HasVerifiedOutput == true
-            ? description + " Previously cooked content remains available." : description;
+        if (text is not ("Cooked" or "Ready" or "Updating preview") && status?.HasVerifiedOutput == true)
+        {
+            description += " Previously cooked content remains available.";
+        }
+
+        return string.IsNullOrEmpty(runtimeReason) ? description : description + " Preview: " + runtimeReason;
     }
 }
