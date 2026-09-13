@@ -80,12 +80,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Debug.Assert(projectInfo.Location != null, "The project location must be valid!");
         try
         {
-            var json = ProjectInfo.ToJson(projectInfo);
-
-            var documentPath = storage.NormalizeRelativeTo(projectInfo.Location, Constants.ProjectFileName);
-            var document = await storage.GetDocumentFromPathAsync(documentPath).ConfigureAwait(true);
-
-            await document.WriteAllTextAsync(json).ConfigureAwait(true);
+            _ = await this.SaveProjectInfoCoreAsync(projectInfo, expected: null, CancellationToken.None).ConfigureAwait(true);
             return true;
         }
         catch (Exception error)
@@ -95,6 +90,10 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
 
         return false;
     }
+
+    /// <inheritdoc />
+    public Task SaveProjectInfoAsync(IProjectInfo projectInfo, IProjectInfo expected, CancellationToken cancellationToken)
+        => this.SaveProjectInfoCoreAsync(projectInfo, expected, cancellationToken);
 
     /// <inheritdoc />
     [SuppressMessage(

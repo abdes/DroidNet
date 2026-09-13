@@ -121,6 +121,16 @@ Users may deliberately raise a library above project output. Refresh, recooking
 and reopening preserve the saved order; file timestamps and scan completion do
 not determine priority.
 
+`Project.oxy` persists `CookedContentOrder` from lowest to highest priority.
+Entries identify `ProjectOutput` or a named `LocalFolder` declaration. An omitted
+order uses the default above; new declarations are inserted directly below the
+project entry without moving explicit overrides above it. Confirmed additions,
+removals and reorderings validate, apply and save immediately, as selected by the
+user on 2026-09-13. A separate Save mounts action is not part of the workflow.
+Atomic manifest replacement rejects an edit based on externally changed project
+configuration. Native refresh completes before that commit point; a failed change
+restores the previously accepted roots before returning control.
+
 The browser and runtime must use the same ordered source set. Tooltips and Inspect
 identify the winning source and overridden copies without treating ordinary
 overlap as a failed mount. Preserve native identities and physical source locations;
