@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using Oxygen.Editor.ContentPipeline.Cooking;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>Applies the session pause to automatic requests before they acquire a writer.</summary>
+/// <summary>Prioritizes explicit and preview work while retaining one project writer.</summary>
 public sealed partial class ContentCookCoordinator
 {
-    private TaskCompletionSource? automaticResume;
+    private readonly List<WriterRequest> waitingWriters = [];
+    private bool automaticCookingPaused;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -21,61 +23,102 @@ public sealed partial class ContentCookCoordinator
         {
             lock (this.stateLock)
             {
-                return this.automaticResume is not null;
+                return this.automaticCookingPaused;
             }
         }
 
         set
         {
-            TaskCompletionSource? resume;
             lock (this.stateLock)
             {
-                if (value == (this.automaticResume is not null))
+                if (value == this.automaticCookingPaused)
                 {
                     return;
                 }
 
-                resume = this.automaticResume;
-                this.automaticResume = value ? new(TaskCreationOptions.RunContinuationsAsynchronously) : null;
+                this.automaticCookingPaused = value;
+                this.DispatchNextWriter();
             }
 
-            _ = resume?.TrySetResult();
             this.PropertyChanged?.Invoke(this, new(nameof(this.IsAutomaticCookingPaused)));
         }
     }
 
-    private async Task WaitForAutomaticResumeAsync(CancellationToken cancellationToken)
+    private async Task AcquireWriterAsync(ContentCookOperation operation, CookRunRequest? request, CancellationToken cancellationToken)
     {
-        Task resumed;
+        var waiting = new WriterRequest(operation, request, cancellationToken);
         lock (this.stateLock)
         {
-            resumed = this.automaticResume?.Task ?? Task.CompletedTask;
+            this.waitingWriters.Add(waiting);
+            this.DispatchNextWriter();
         }
 
-        await resumed.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Cancellation removes only a waiter. Once granted, RunCore owns release,
+        // including cancellation between the grant and continuation resumption.
+        var registration = cancellationToken.Register(() => this.CancelWaitingWriter(waiting));
+        await using var registrationLifetime = registration.ConfigureAwait(false);
+        await waiting.Granted.Task.ConfigureAwait(false);
     }
 
-    private async Task AcquireWriterAsync(ContentCookOperation operation, bool automatic, CancellationToken cancellationToken)
+    private void CancelWaitingWriter(WriterRequest waiting)
     {
-        while (true)
+        lock (this.stateLock)
         {
-            if (automatic)
+            if (this.waitingWriters.Remove(waiting))
             {
-                await this.WaitForAutomaticResumeAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await this.writer.WaitAsync(cancellationToken).ConfigureAwait(false);
-            lock (this.stateLock)
-            {
-                if (automatic && this.automaticResume is not null)
-                {
-                    _ = this.writer.Release();
-                    continue;
-                }
-
-                this.activeOperation = operation;
-                return;
+                _ = waiting.Granted.TrySetCanceled(waiting.CancellationToken);
+                this.DispatchNextWriter();
             }
         }
+    }
+
+    // Queue mutation and writer grants occur under stateLock. Continuations run
+    // asynchronously so neither input capture nor user callbacks own this lock.
+    private void DispatchNextWriter()
+    {
+        for (var index = this.waitingWriters.Count - 1; index >= 0; index--)
+        {
+            var waiting = this.waitingWriters[index];
+            if (this.disposed || waiting.Operation.ProjectLifetime != this.lifetime || waiting.CancellationToken.IsCancellationRequested)
+            {
+                this.waitingWriters.RemoveAt(index);
+                _ = waiting.Granted.TrySetCanceled(new CancellationToken(canceled: true));
+            }
+        }
+
+        if (this.activeOperation is not null || this.waitingWriters.Count == 0)
+        {
+            return;
+        }
+
+        var next = this.waitingWriters.FindIndex(waiting => this.CanStart(waiting) && waiting.IsForeground);
+        if (next < 0)
+        {
+            next = this.waitingWriters.FindIndex(this.CanStart);
+        }
+
+        if (next >= 0)
+        {
+            var waiting = this.waitingWriters[next];
+            this.waitingWriters.RemoveAt(next);
+            this.activeOperation = waiting.Operation;
+            _ = waiting.Granted.TrySetResult();
+        }
+    }
+
+    private bool CanStart(WriterRequest waiting)
+        => !this.automaticCookingPaused || waiting.Request?.IsAutomatic != true;
+
+    private sealed class WriterRequest(ContentCookOperation operation, CookRunRequest? request, CancellationToken cancellationToken)
+    {
+        public ContentCookOperation Operation { get; } = operation;
+
+        public CookRunRequest? Request { get; } = request;
+
+        public CancellationToken CancellationToken { get; } = cancellationToken;
+
+        public bool IsForeground => this.Request?.IsAutomatic != true || this.Request.IsDemand;
+
+        public TaskCompletionSource Granted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

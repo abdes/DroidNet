@@ -541,7 +541,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       failed-run provenance, warning retention, and every built-in. ContentPipeline
       166/166 passes. Saved-source scheduling coalesces revisions, resumes blocked
       scopes, and supports session pause. Consumer completion is awaited before
-      releasing the writer. Imported-source closure, priorities/observer
+      releasing the writer. Explicit and preview-demand requests precede queued
+      background saves without preemption; pause resets with the project lifetime.
+      ContentPipeline 278/278 passes. Imported-source closure, shared observer
       cancellation and the remaining Import/demand triggers remain.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
       Native execution now receives explicit input/output/operation paths. A real
