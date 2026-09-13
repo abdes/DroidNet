@@ -39,13 +39,14 @@ public sealed partial class InspectorControlTests
     [DataRow(560d, true)]
     public Task InspectionDocumentShowsScopedAssetsFilesAndSourceLinks(double width, bool light) => EnqueueAsync(async () =>
     {
-        var project = CreateQueryProject().ActiveProject!;
+        var projects = CreateQueryProject();
+        var project = projects.ActiveProject!;
         var metadata = new CookedInspectionDocumentMetadata(project, new("asset:///Content"), validate: false);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(metadata.ScopeUri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project))
             .Returns((Uri? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
         Uri? navigated = null;
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, uri =>
+        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Oxygen.Testing.AssetStatusFixture.EmptyProvider, projects, uri =>
         {
             navigated = uri;
             return Task.FromResult(true);
@@ -84,7 +85,8 @@ public sealed partial class InspectorControlTests
     [TestMethod]
     public Task InspectionDocumentDrainsSupersededAndClosedRequests() => EnqueueAsync(async () =>
     {
-        var project = CreateQueryProject().ActiveProject!;
+        var projects = CreateQueryProject();
+        var project = projects.ActiveProject!;
         var metadata = new CookedInspectionDocumentMetadata(project, scopeUri: null, validate: false);
         var first = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         var second = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -92,7 +94,7 @@ public sealed partial class InspectorControlTests
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.Is<Uri?>(scope => scope == null), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project))
             .Returns(() => ++calls == 1 ? first.Task : second.Task);
-        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, _ => Task.FromResult(false));
+        using var model = new CookedInspectionViewModel(metadata, pipeline.Object, Oxygen.Testing.AssetStatusFixture.EmptyProvider, projects, _ => Task.FromResult(false));
         var original = model.InitializeAsync();
         metadata.RequestRefresh(validate: true);
         _ = calls.Should().Be(1);
@@ -125,6 +127,8 @@ public sealed partial class InspectorControlTests
         var container = new Container();
         await using var containerLifetime = container.ConfigureAwait(true);
         container.RegisterInstance(pipeline.Object);
+        container.RegisterInstance<IProjectContextService>(projects);
+        container.RegisterInstance(Oxygen.Testing.AssetStatusFixture.EmptyProvider);
         container.RegisterInstance<IMessenger>(messenger);
         var windowId = new WindowId(501);
         var open = new List<IDocumentMetadata>();

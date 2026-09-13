@@ -242,6 +242,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
             editor = new Inspection.CookedInspectionViewModel(
                 inspection,
                 this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+                this.container.Resolve<IContentBrowserAssetProvider>(),
+                this.container.Resolve<Oxygen.Editor.Projects.IProjectContextService>(),
                 async uri =>
                 {
                     var request = this.container.Resolve<IMessenger>().Send(new ShowAssetRequestMessage(inspection.Project, uri));
