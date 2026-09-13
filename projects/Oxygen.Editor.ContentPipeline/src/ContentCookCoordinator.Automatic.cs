@@ -44,9 +44,9 @@ public sealed partial class ContentCookCoordinator
         }
     }
 
-    private async Task AcquireWriterAsync(ContentCookOperation operation, CookRunRequest? request, CancellationToken cancellationToken)
+    private async Task AcquireWriterAsync(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {
-        var waiting = new WriterRequest(operation, request, cancellationToken);
+        var waiting = new WriterRequest(operation, request, shared, cancellationToken);
         lock (this.stateLock)
         {
             this.waitingWriters.Add(waiting);
@@ -102,6 +102,11 @@ public sealed partial class ContentCookCoordinator
             var waiting = this.waitingWriters[next];
             this.waitingWriters.RemoveAt(next);
             this.activeOperation = waiting.Operation;
+            if (waiting.Shared is { } shared)
+            {
+                this.RemovePendingShared(shared);
+            }
+
             _ = waiting.Granted.TrySetResult();
         }
     }
@@ -109,11 +114,13 @@ public sealed partial class ContentCookCoordinator
     private bool CanStart(WriterRequest waiting)
         => !this.automaticCookingPaused || waiting.Request?.IsAutomatic != true;
 
-    private sealed class WriterRequest(ContentCookOperation operation, CookRunRequest? request, CancellationToken cancellationToken)
+    private sealed class WriterRequest(ContentCookOperation operation, CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {
         public ContentCookOperation Operation { get; } = operation;
 
-        public CookRunRequest? Request { get; } = request;
+        public CookRunRequest? Request => this.Shared?.Request ?? request;
+
+        public SharedCook? Shared { get; } = shared;
 
         public CancellationToken CancellationToken { get; } = cancellationToken;
 

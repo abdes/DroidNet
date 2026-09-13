@@ -65,7 +65,7 @@ public sealed partial class ContentPipelineService(
         ArgumentNullException.ThrowIfNull(assetUri);
         ArgumentNullException.ThrowIfNull(expectedProject);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.Asset, assetUri, IsAutomatic: true),
+            new(CookTargetKind.Asset, assetUri, IsAutomatic: true) { CoalescePending = true, OriginContext = expectedProject },
             (operation, token) => ReferenceEquals(operation.Project, expectedProject)
                 ? this.CookAssetCoreAsync(operation, assetUri, token)
                 : throw new OperationCanceledException("The saved source's project is no longer active.", token),
@@ -77,7 +77,7 @@ public sealed partial class ContentPipelineService(
     {
         ArgumentNullException.ThrowIfNull(sceneAssetUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.CurrentScene, sceneAssetUri),
+            new(CookTargetKind.CurrentScene, sceneAssetUri) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject },
             (operation, token) => this.CookCurrentSceneCoreAsync(operation, sceneAssetUri, token),
             cancellationToken);
     }
@@ -87,7 +87,7 @@ public sealed partial class ContentPipelineService(
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.Asset, assetUri),
+            new(CookTargetKind.Asset, assetUri) { CoalescePending = true, OriginContext = expectedProject ?? this.projectContextService.ActiveProject },
             (operation, token) => expectedProject is not null && (operation.Project.ProjectId != expectedProject.ProjectId
                 || !string.Equals(operation.Project.ProjectRoot, expectedProject.ProjectRoot, StringComparison.OrdinalIgnoreCase))
                 ? Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The originating project is no longer active.")))
@@ -100,14 +100,14 @@ public sealed partial class ContentPipelineService(
     {
         ArgumentNullException.ThrowIfNull(folderUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.Folder, folderUri),
+            new(CookTargetKind.Folder, folderUri) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject },
             (operation, token) => this.CookFolderCoreAsync(operation, folderUri, token),
             cancellationToken);
     }
 
     /// <inheritdoc />
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
-        => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), this.CookProjectCoreAsync, cancellationToken);
+        => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
 
     /// <inheritdoc />
     public async Task<CookInspectionResult> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)

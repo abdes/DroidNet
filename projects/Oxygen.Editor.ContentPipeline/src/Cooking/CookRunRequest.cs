@@ -12,4 +12,10 @@ public sealed record CookRunRequest(CookTargetKind TargetKind, Uri? ScopeUri, bo
 {
     /// <summary>Gets a value indicating whether active preview needs this request ahead of background saves.</summary>
     public bool IsDemand { get; init; }
+
+    /// <summary>Gets a value indicating whether equivalent pending scopes can share work before input capture.</summary>
+    public bool CoalescePending { get; init; }
+
+    /// <summary>Gets the originating context so coalescing cannot bypass a caller's project check.</summary>
+    internal Projects.ProjectContext? OriginContext { get; init; }
 }

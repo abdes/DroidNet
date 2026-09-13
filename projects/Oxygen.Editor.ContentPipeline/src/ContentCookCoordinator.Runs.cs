@@ -126,7 +126,7 @@ public sealed partial class ContentCookCoordinator
         return resume;
     }
 
-    private RunProgress AddRun(ContentCookOperation operation, CookRunRequest request, CancellationTokenSource cancellation)
+    private RunProgress AddRun(ContentCookOperation operation, CookRunRequest request, CancellationTokenSource cancellation, SharedCook? shared)
     {
         var snapshot = new CookRunSnapshot
         {
@@ -149,12 +149,13 @@ public sealed partial class ContentCookCoordinator
             : request.IsAutomatic ? "Queued after saving." : "Cook queued."));
         lock (this.stateLock)
         {
+            snapshot = snapshot with { Request = shared?.Request ?? request };
             this.runs.Add(operation.OperationId, new(snapshot, cancellation));
             _ = this.currentQueue.Add(operation.OperationId);
-            this.revealQueueOutcome |= !request.IsAutomatic;
+            this.revealQueueOutcome |= !snapshot.Request.IsAutomatic;
         }
 
-        this.PublishRun(snapshot, reveal: !request.IsAutomatic);
+        this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
         return new RunProgress(this, operation.OperationId);
     }
 
