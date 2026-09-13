@@ -1,228 +1,372 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Reactive.Disposables;
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using DroidNet.Storage;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
-public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
+/// <summary>Publishes the project catalog after all initial indexes are ready.</summary>
+public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
 {
     private readonly IProjectContextService projectContextService;
     private readonly IStorageProvider storage;
-    private readonly List<IAssetCatalog> catalogs = new();
+    private readonly Lock stateLock = new();
+    private readonly Lock notificationLock = new();
+    private readonly List<Registration> catalogs = [];
     private readonly Subject<AssetChange> changes = new();
-    private readonly CompositeDisposable catalogSubscriptions = new();
-    private readonly SemaphoreSlim lockObj = new(1, 1);
-    private bool isDisposed;
-    private bool isInitialized;
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly CancellationToken lifetimeToken;
+    private Task? initialization;
+    private volatile bool isDisposed;
 
+    /// <summary>Initializes a new instance of the <see cref="ProjectAssetCatalog"/> class.</summary>
+    /// <param name="projectContextService">The active project context.</param>
+    /// <param name="storage">The storage provider for indexed folders.</param>
     public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage)
     {
         this.projectContextService = projectContextService;
         this.storage = storage;
+        this.lifetimeToken = this.lifetime.Token;
     }
 
+    /// <inheritdoc />
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
 
-    public async Task InitializeAsync()
+    /// <inheritdoc />
+    public Task InitializeAsync()
     {
-        if (this.isInitialized)
+        ProjectContext project;
+        TaskCompletionSource completion;
+        lock (this.stateLock)
         {
-            return;
-        }
-
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            Debug.WriteLine("[ProjectAssetCatalog] InitializeAsync skipped: no active project context");
-            return;
-        }
-
-        await this.lockObj.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (this.isInitialized)
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
+            if (this.initialization is { } existing)
             {
-                return;
+                return existing;
             }
 
-            this.isInitialized = true;
-        }
-        finally
-        {
-            this.lockObj.Release();
-        }
-
-        Debug.WriteLine($"[ProjectAssetCatalog] Initializing for project at '{project.ProjectRoot}'");
-
-        // Always provide engine-generated assets (e.g. /Engine/Generated/BasicShapes/*) to pickers.
-        await this.AddCatalogAsync(new GeneratedAssetCatalog()).ConfigureAwait(false);
-
-        // Index project root
-        if (!string.IsNullOrEmpty(project.ProjectRoot))
-        {
-            var rootOptions = new FileSystemAssetCatalogOptions
+            if (this.projectContextService.ActiveProject is not { } active)
             {
-                RootFolderPath = project.ProjectRoot,
-                MountPoint = "project",
-            };
-            var rootCatalog = new FileSystemAssetCatalog(this.storage, rootOptions);
-            await this.AddCatalogAsync(rootCatalog).ConfigureAwait(false);
-        }
-
-        // Index mount points
-        foreach (var mount in project.AuthoringMounts)
-        {
-            if (IsDerivedRootMount(mount))
-            {
-                continue;
+                return Task.CompletedTask;
             }
 
-            try
-            {
-                var mountRootLocation = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
-
-                var mountOptions = new FileSystemAssetCatalogOptions
-                {
-                    RootFolderPath = mountRootLocation,
-                    MountPoint = mount.Name,
-                };
-                var mountCatalog = new FileSystemAssetCatalog(this.storage, mountOptions);
-                await this.AddCatalogAsync(mountCatalog).ConfigureAwait(false);
-
-                // Index cooked outputs for this mount point via the authoritative loose cooked index:
-                //   .cooked/<MountPoint>/container.index.bin
-                // This is what exposes runtime-consumable assets like .ogeo/.omat/.otex/.oscene as canonical asset:/// URIs.
-                var cookedRootLocation = this.storage.NormalizeRelativeTo(project.ProjectRoot, $".cooked/{mount.Name}");
-                var cookedOptions = new LooseCookedIndexAssetCatalogOptions
-                {
-                    CookedRootFolderPath = cookedRootLocation,
-                };
-
-                var cookedCatalog = new LooseCookedIndexAssetCatalog(this.storage, cookedOptions);
-                await this.AddCatalogAsync(cookedCatalog).ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                // Log error?
-            }
+            project = active;
+            completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.initialization = completion.Task;
         }
+
+        _ = this.InitializeCoreAsync(project, completion);
+        return completion.Task;
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
     {
-        // Ensure this catalog is initialized when queried.
-        // This is important because some consumers (property editors) are created before the Content Browser triggers initialization.
-        await this.InitializeAsync().ConfigureAwait(false);
-
-        List<IAssetCatalog> currentCatalogs;
-        await this.lockObj.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            currentCatalogs = this.catalogs.ToList();
-        }
-        finally
-        {
-            this.lockObj.Release();
-        }
-
-        var tasks = currentCatalogs.Select(c => c.QueryAsync(query, cancellationToken));
-        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-
-        return results.SelectMany(r => r)
-            .DistinctBy(r => r.Uri)
-            .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal)
-            .ToList();
+        ArgumentNullException.ThrowIfNull(query);
+        using var operation = this.CreateOperationCancellation(cancellationToken);
+        operation.Token.ThrowIfCancellationRequested();
+        await this.InitializeAsync().WaitAsync(operation.Token).ConfigureAwait(false);
+        var results = await Task.WhenAll(this.SnapshotCatalogs().Select(catalog => catalog.QueryAsync(query, operation.Token))).ConfigureAwait(false);
+        operation.Token.ThrowIfCancellationRequested();
+        return results.SelectMany(static records => records).DistinctBy(static record => record.Uri)
+            .OrderBy(static record => record.Uri.ToString(), StringComparer.Ordinal).ToArray();
     }
 
     /// <inheritdoc />
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        await this.InitializeAsync().ConfigureAwait(false);
+        using var operation = this.CreateOperationCancellation(cancellationToken);
+        operation.Token.ThrowIfCancellationRequested();
+        await this.InitializeAsync().WaitAsync(operation.Token).ConfigureAwait(false);
+        foreach (var catalog in this.SnapshotCatalogs().OfType<IRefreshableAssetCatalog>())
+        {
+            await catalog.RefreshAsync(operation.Token).ConfigureAwait(false);
+        }
 
-        List<IRefreshableAssetCatalog> refreshableCatalogs;
-        await this.lockObj.WaitAsync(cancellationToken).ConfigureAwait(false);
+        operation.Token.ThrowIfCancellationRequested();
+    }
+
+    /// <inheritdoc />
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync transfers catalog ownership to Registration; failed preparation or installation disposes it, and installed registrations are disposed with the project.")]
+    public async Task AddFolderAsync(IFolder folder, string mountPoint)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        using var operation = this.CreateOperationCancellation(CancellationToken.None);
+        await this.InitializeAsync().WaitAsync(operation.Token).ConfigureAwait(false);
+        var candidate = await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
+            this.storage,
+            new FileSystemAssetCatalogOptions { RootFolderPath = folder.Location, MountPoint = mountPoint })).ConfigureAwait(false);
         try
         {
-            refreshableCatalogs = this.catalogs.OfType<IRefreshableAssetCatalog>().ToList();
+            this.InstallCatalogs([candidate]);
         }
-        finally
+        catch when (!candidate.Published)
         {
-            this.lockObj.Release();
-        }
-
-        foreach (var catalog in refreshableCatalogs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await catalog.RefreshAsync(cancellationToken).ConfigureAwait(false);
+            candidate.Dispose();
+            throw;
         }
     }
 
-    public async Task AddFolderAsync(DroidNet.Storage.IFolder folder, string mountPoint)
-    {
-        var options = new FileSystemAssetCatalogOptions
-        {
-            RootFolderPath = folder.Location,
-            MountPoint = mountPoint,
-        };
-
-        var catalog = new FileSystemAssetCatalog(this.storage, options);
-        await this.AddCatalogAsync(catalog).ConfigureAwait(false);
-    }
-
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (this.isDisposed)
+        Registration[] snapshot;
+        Task? pending;
+        lock (this.stateLock)
         {
-            return;
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            this.isDisposed = true;
+            snapshot = this.catalogs.ToArray();
+            this.catalogs.Clear();
+            pending = this.initialization;
         }
 
-        this.isDisposed = true;
-        this.changes.Dispose();
-        this.catalogSubscriptions.Dispose();
-        this.lockObj.Dispose();
+        this.lifetime.Cancel();
+        foreach (var catalog in snapshot)
+        {
+            catalog.Dispose();
+        }
+
+        lock (this.notificationLock)
+        {
+            this.changes.OnCompleted();
+            this.changes.Dispose();
+        }
+
+        if (pending?.IsCompleted != false)
+        {
+            this.lifetime.Dispose();
+        }
+        else
+        {
+            _ = pending.ContinueWith(
+                task =>
+                {
+                    _ = task.Exception;
+                    this.lifetime.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
     }
 
     private static bool IsDerivedRootMount(ProjectMountPoint mount)
     {
-        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
-        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
+        var path = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
+        return path.Equals(".cooked", StringComparison.OrdinalIgnoreCase)
+            || path.Equals(".imported", StringComparison.OrdinalIgnoreCase)
+            || path.Equals(".build", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task AddCatalogAsync(IAssetCatalog catalog)
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Prepared registrations transfer to the project catalog or are disposed in the initialization finally block.")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every initialization failure must complete the shared promise so callers can observe it and retry; observer failures after publication do not roll back an installed catalog.")]
+    private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion)
     {
-        await this.lockObj.WaitAsync().ConfigureAwait(false);
+        var candidates = new List<Registration>();
         try
         {
-            this.catalogs.Add(catalog);
-            var sub = catalog.Changes.Subscribe(this.changes);
-            this.catalogSubscriptions.Add(sub);
-            if (catalog is IDisposable d)
+            this.lifetimeToken.ThrowIfCancellationRequested();
+            candidates.Add(await this.PrepareCatalogAsync(new GeneratedAssetCatalog()).ConfigureAwait(false));
+            if (!string.IsNullOrEmpty(project.ProjectRoot))
             {
-                this.catalogSubscriptions.Add(d);
+                candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
+                    this.storage,
+                    new FileSystemAssetCatalogOptions { RootFolderPath = project.ProjectRoot, MountPoint = "project" })).ConfigureAwait(false));
             }
+
+            await this.PrepareMountsAsync(project, candidates).ConfigureAwait(false);
+            this.InstallCatalogs(candidates, completion);
+        }
+        catch (OperationCanceledException) when (this.lifetimeToken.IsCancellationRequested)
+        {
+            _ = completion.TrySetCanceled(this.lifetimeToken);
+            return;
+        }
+        catch (Exception exception)
+        {
+            if (completion.Task.IsCompletedSuccessfully)
+            {
+                Debug.WriteLine($"[ProjectAssetCatalog] A catalog observer failed: {exception}");
+                return;
+            }
+
+            lock (this.stateLock)
+            {
+                if (ReferenceEquals(this.initialization, completion.Task))
+                {
+                    this.initialization = null;
+                }
+            }
+
+            _ = completion.TrySetException(exception);
+            return;
         }
         finally
         {
-            this.lockObj.Release();
+            foreach (var candidate in candidates)
+            {
+                candidate.Dispose();
+            }
+        }
+    }
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns each child catalog through Registration and disposes it on preparation failure.")]
+    private async Task PrepareMountsAsync(ProjectContext project, List<Registration> candidates)
+    {
+        foreach (var mount in project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount)))
+        {
+            this.lifetimeToken.ThrowIfCancellationRequested();
+            try
+            {
+                var root = this.storage.NormalizeRelativeTo(project.ProjectRoot, mount.RelativePath);
+                candidates.Add(await this.PrepareCatalogAsync(new FileSystemAssetCatalog(
+                    this.storage,
+                    new FileSystemAssetCatalogOptions { RootFolderPath = root, MountPoint = mount.Name })).ConfigureAwait(false));
+                var cookedRoot = this.storage.NormalizeRelativeTo(project.ProjectRoot, $".cooked/{mount.Name}");
+                candidates.Add(await this.PrepareCatalogAsync(new LooseCookedIndexAssetCatalog(
+                    this.storage,
+                    new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = cookedRoot })).ConfigureAwait(false));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Debug.WriteLine($"[ProjectAssetCatalog] Could not index mount '{mount.Name}': {exception}");
+            }
+        }
+    }
+
+    private async Task<Registration> PrepareCatalogAsync(IAssetCatalog catalog)
+    {
+        var registration = new Registration(catalog);
+        try
+        {
+            registration.Subscription = catalog.Changes.Subscribe(change => this.OnCatalogChange(registration, change));
+            registration.Initial = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.lifetimeToken).ConfigureAwait(false);
+            this.lifetimeToken.ThrowIfCancellationRequested();
+            return registration;
+        }
+        catch
+        {
+            registration.Dispose();
+            throw;
+        }
+    }
+
+    private void InstallCatalogs(List<Registration> candidates, TaskCompletionSource? completion = null)
+    {
+        lock (this.notificationLock)
+        {
+            var notifications = this.CommitCatalogs(candidates, completion);
+            candidates.Clear();
+            this.PublishChanges(notifications);
+        }
+    }
+
+    private List<AssetChange> CommitCatalogs(IReadOnlyList<Registration> candidates, TaskCompletionSource? completion)
+    {
+        var notifications = new List<AssetChange>();
+        lock (this.stateLock)
+        {
+            this.lifetimeToken.ThrowIfCancellationRequested();
+            foreach (var candidate in candidates)
+            {
+                this.catalogs.Add(candidate);
+                candidate.Published = true;
+                notifications.AddRange(candidate.Initial.Select(static record => new AssetChange(AssetChangeKind.Added, record.Uri)));
+                candidate.Initial = [];
+                notifications.AddRange(candidate.Pending);
+                candidate.Pending.Clear();
+            }
+
+            _ = completion?.TrySetResult();
         }
 
-        // Emit Added events for existing items
-        var items = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
-        foreach (var item in items)
+        return notifications;
+    }
+
+    private void OnCatalogChange(Registration registration, AssetChange change)
+    {
+        lock (this.stateLock)
         {
-            this.changes.OnNext(new AssetChange(AssetChangeKind.Added, item.Uri));
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            if (!registration.Published)
+            {
+                registration.Pending.Add(change);
+                return;
+            }
+        }
+
+        this.PublishChanges([change]);
+    }
+
+    private void PublishChanges(IReadOnlyList<AssetChange> notifications)
+    {
+        lock (this.notificationLock)
+        {
+            foreach (var notification in notifications)
+            {
+                if (this.isDisposed)
+                {
+                    return;
+                }
+
+                this.changes.OnNext(notification);
+            }
+        }
+    }
+
+    private IAssetCatalog[] SnapshotCatalogs()
+    {
+        lock (this.stateLock)
+        {
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
+            return this.catalogs.Select(static entry => entry.Catalog).ToArray();
+        }
+    }
+
+    private CancellationTokenSource CreateOperationCancellation(CancellationToken cancellationToken)
+    {
+        lock (this.stateLock)
+        {
+            ObjectDisposedException.ThrowIf(this.isDisposed, this);
+            return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeToken);
+        }
+    }
+
+    private sealed partial class Registration(IAssetCatalog catalog) : IDisposable
+    {
+        public IAssetCatalog Catalog { get; } = catalog;
+
+        public IDisposable? Subscription { get; set; }
+
+        public IReadOnlyList<AssetRecord> Initial { get; set; } = [];
+
+        public List<AssetChange> Pending { get; } = [];
+
+        public bool Published { get; set; }
+
+        public void Dispose()
+        {
+            this.Subscription?.Dispose();
+            (this.Catalog as IDisposable)?.Dispose();
         }
     }
 }

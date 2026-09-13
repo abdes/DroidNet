@@ -578,6 +578,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Supported import and clean-copy reproduction remain open.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
+        Catalog initialization now publishes complete initial indexes, shares
+        concurrent waits, supports retry and cancels work on project disposal.
+        Content Browser tests pass 69/69, including six lifecycle cases.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped
