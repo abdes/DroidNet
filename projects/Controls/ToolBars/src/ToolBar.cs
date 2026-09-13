@@ -48,6 +48,7 @@ public partial class ToolBar : Control
     /// </summary>
     public const string RootGridPartName = "RootGrid";
 
+    private readonly Dictionary<UIElement, long> visibilitySubscriptions = [];
     private ILogger? logger;
     private ItemsControl? primaryItemsControl;
     private ItemsControl? secondaryItemsControl;
@@ -69,16 +70,23 @@ public partial class ToolBar : Control
         this.SecondaryItems.CollectionChanged += this.SecondaryItems_CollectionChanged;
 
         this.SizeChanged += this.OnSizeChanged;
+        this.Loaded += this.OnLoaded;
+        this.Unloaded += this.OnUnloaded;
     }
 
     /// <summary>
     /// Gets a value indicating whether the toolbar has secondary items.
     /// </summary>
-    public bool HasSecondaryItems => this.SecondaryItems.Count > 0;
+    public bool HasSecondaryItems => this.SecondaryItems.Any(IsItemVisible);
 
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
+        if (this.primaryItemsControl is { } previousPrimary)
+        {
+            previousPrimary.Loaded -= this.OnItemsLoaded;
+        }
+
         base.OnApplyTemplate();
 
         this.primaryItemsControl = this.GetTemplateChild(PrimaryItemsControlPartName) as ItemsControl;
@@ -89,7 +97,7 @@ public partial class ToolBar : Control
 
         if (this.primaryItemsControl is { } primaryControl)
         {
-            primaryControl.Loaded += (s, e) => this.UpdateOverflow();
+            primaryControl.Loaded += this.OnItemsLoaded;
         }
 
         this.UpdateOverflow();
@@ -293,8 +301,50 @@ public partial class ToolBar : Control
         }
     }
 
+    private static bool IsItemVisible(object item) => item is not UIElement { Visibility: Visibility.Collapsed };
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         => this.UpdateOverflow();
+
+    private void OnItemsLoaded(object sender, RoutedEventArgs e) => this.UpdateOverflow();
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        this.RefreshVisibilitySubscriptions();
+        this.UpdateOverflow();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => this.ClearVisibilitySubscriptions();
+
+    private void ClearVisibilitySubscriptions()
+    {
+        foreach (var (item, token) in this.visibilitySubscriptions)
+        {
+            item.UnregisterPropertyChangedCallback(VisibilityProperty, token);
+        }
+
+        this.visibilitySubscriptions.Clear();
+    }
+
+    private void RefreshVisibilitySubscriptions()
+    {
+        this.ClearVisibilitySubscriptions();
+        if (!this.IsLoaded)
+        {
+            return;
+        }
+
+        foreach (var item in this.PrimaryItems.Concat(this.SecondaryItems).OfType<UIElement>().Distinct())
+        {
+            this.visibilitySubscriptions.Add(item, item.RegisterPropertyChangedCallback(VisibilityProperty, this.OnItemVisibilityChanged));
+        }
+    }
+
+    private void OnItemVisibilityChanged(DependencyObject sender, DependencyProperty property)
+    {
+        this.cachedSecondaryItemsWidth = 0;
+        this.UpdateOverflow();
+    }
 
     private void OnIsCompactChanged()
     {
@@ -310,6 +360,7 @@ public partial class ToolBar : Control
         oldCollection?.CollectionChanged -= this.PrimaryItems_CollectionChanged;
         newCollection?.CollectionChanged += this.PrimaryItems_CollectionChanged;
 
+        this.RefreshVisibilitySubscriptions();
         this.UpdateOverflow();
     }
 
@@ -318,6 +369,7 @@ public partial class ToolBar : Control
         oldCollection?.CollectionChanged -= this.SecondaryItems_CollectionChanged;
         newCollection?.CollectionChanged += this.SecondaryItems_CollectionChanged;
 
+        this.RefreshVisibilitySubscriptions();
         this.cachedSecondaryItemsWidth = 0;
         this.UpdateOverflow();
     }
@@ -361,9 +413,11 @@ public partial class ToolBar : Control
     private void PrimaryItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         this.LogPrimaryItemsChanged(e.Action.ToString());
+        this.RefreshVisibilitySubscriptions();
 
         if (e.NewItems == null)
         {
+            this.UpdateOverflow();
             return;
         }
 
@@ -389,12 +443,14 @@ public partial class ToolBar : Control
     private void SecondaryItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         this.LogSecondaryItemsChanged(e.Action.ToString());
+        this.RefreshVisibilitySubscriptions();
 
         // Reset cache when items are added/removed
         this.cachedSecondaryItemsWidth = 0;
 
         if (e.NewItems == null)
         {
+            this.UpdateOverflow();
             return;
         }
 
@@ -450,20 +506,26 @@ public partial class ToolBar : Control
 
     private ToolbarMeasurements MeasureSecondaryItems(ToolbarMeasurements measurements)
     {
-        if (!this.HasSecondaryItems || this.secondaryItemsControl == null)
+        if (this.SecondaryItems.Count == 0 || this.secondaryItemsControl == null)
         {
             return measurements with { Secondary = 0, SecondaryIsCached = false };
         }
 
         // We only measure the actual width of secondary items if they are visible;
         // Otherwise, we will use the cached width from the last measurement.
-        if (this.secondaryItemsControl.Visibility == Visibility.Visible)
+        if (this.secondaryItemsControl.Visibility == Visibility.Visible || this.cachedSecondaryItemsWidth == 0)
         {
             var width = 0.0;
             for (var i = 0; i < this.SecondaryItems!.Count; i++)
             {
                 if (this.secondaryItemsControl.ContainerFromIndex(i) is FrameworkElement container)
                 {
+                    container.Visibility = IsItemVisible(this.SecondaryItems[i]) ? Visibility.Visible : Visibility.Collapsed;
+                    if (container.Visibility == Visibility.Collapsed)
+                    {
+                        continue;
+                    }
+
                     container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                     width += container.DesiredSize.Width + GetElementSpacing(container);
                 }
@@ -488,6 +550,12 @@ public partial class ToolBar : Control
             }
 
             var isSupported = item is ToolBarButton or ToolBarToggleButton or ToolBarSeparator;
+
+            if (!IsItemVisible(item))
+            {
+                container.Visibility = Visibility.Collapsed;
+                continue;
+            }
 
             // Temporarily make collapsed containers visible for measurement, then restore.
             var wasCollapsed = container.Visibility == Visibility.Collapsed;
@@ -550,10 +618,9 @@ public partial class ToolBar : Control
 
         void SetAllPrimaryItemsVisible()
         {
-            for (var i = 0; i < this.PrimaryItems.Count; i++)
+            foreach (var (_, container, _, _) in measurements.PrimaryItemInfos)
             {
-                var container = this.primaryItemsControl!.ContainerFromIndex(i) as FrameworkElement;
-                _ = container?.Visibility = Visibility.Visible;
+                container.Visibility = Visibility.Visible;
             }
         }
     }
@@ -584,6 +651,11 @@ public partial class ToolBar : Control
             object? lastAdded = null;
             foreach (var item in items)
             {
+                if (!IsItemVisible(item))
+                {
+                    continue;
+                }
+
                 if (item is ToolBarButton or ToolBarToggleButton)
                 {
                     if (CreateMenuItemForCommand(item) is MenuFlyoutItem menuItem)
@@ -611,7 +683,7 @@ public partial class ToolBar : Control
         }
     }
 
-    private record ToolbarMeasurements(
+    private sealed record ToolbarMeasurements(
         double Total,
         double Secondary,
         bool SecondaryIsCached,
@@ -619,5 +691,5 @@ public partial class ToolBar : Control
         List<(object item, FrameworkElement container, double width, bool isSupported)> PrimaryItemInfos,
         double PrimaryTotal);
 
-    private record OverflowState(bool ShowSecondaries, bool ShowOverflow, List<object> ItemsToOverflow);
+    private sealed record OverflowState(bool ShowSecondaries, bool ShowOverflow, List<object> ItemsToOverflow);
 }

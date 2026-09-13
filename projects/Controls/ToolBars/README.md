@@ -91,6 +91,11 @@ graph TB
 - Each button binds to a command; the toolbar doesn't execute code directly
 - `DefaultLabelPosition="Right"` propagates to children unless overridden
 - Icons use `IconSource` (FontIconSource, SymbolIconSource, etc.)
+- An item's `Visibility` binding controls whether it is available in either the
+  toolbar or its overflow menu. Collapsed items consume no toolbar space.
+- Custom toolbar templates should use `ToolBarItemsControl` for the primary and
+  secondary item hosts. It gives each item a separate container, allowing overflow
+  to hide the container without replacing the item's visibility binding.
 
 ### Icon Sources
 
