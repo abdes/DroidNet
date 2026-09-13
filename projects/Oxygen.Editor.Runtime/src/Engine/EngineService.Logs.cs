@@ -95,8 +95,7 @@ public sealed partial class EngineService
         => LogSetLoggingVerbosityFailed(this.logger, verbosity, exception);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
+        Level = LogLevel.Debug,
         Message = "Requesting view ('{Name}'/'{Purpose}') from the engine: Extent={Width}x{Height}, {TargetInfo}")]
     private static partial void LogCreateView(ILogger logger, string name, string purpose, uint? width, uint? height, string targetInfo);
 
@@ -107,8 +106,7 @@ public sealed partial class EngineService
     }
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to be destroyed.")]
     private static partial void LogDestroyView(ILogger logger, ulong viewId);
 
@@ -116,8 +114,7 @@ public sealed partial class EngineService
         => LogDestroyView(this.logger, viewId.Value);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to be hidden.")]
     private static partial void LogHideView(ILogger logger, ulong viewId);
 
@@ -125,8 +122,7 @@ public sealed partial class EngineService
         => LogHideView(this.logger, viewId.Value);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to be shown.")]
     private static partial void LogShowView(ILogger logger, ulong viewId);
 
@@ -134,8 +130,7 @@ public sealed partial class EngineService
         => LogShowView(this.logger, viewId.Value);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera preset to '{Preset}'.")]
     private static partial void LogSetViewCameraPreset(ILogger logger, ulong viewId, CameraViewPreset preset);
 
@@ -143,8 +138,7 @@ public sealed partial class EngineService
         => LogSetViewCameraPreset(this.logger, viewId.Value, preset);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera control mode to '{Mode}'.")]
     private static partial void LogSetViewCameraControlMode(ILogger logger, ulong viewId, CameraControlMode mode);
 
@@ -152,8 +146,7 @@ public sealed partial class EngineService
         => LogSetViewCameraControlMode(this.logger, viewId.Value, mode);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera movement speed to '{SpeedUnitsPerSecond}'.")]
     private static partial void LogSetViewCameraMovementSpeed(ILogger logger, ulong viewId, float speedUnitsPerSecond);
 
@@ -161,8 +154,7 @@ public sealed partial class EngineService
         => LogSetViewCameraMovementSpeed(this.logger, viewId.Value, speedUnitsPerSecond);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera settings to fov '{FieldOfViewDegrees}', near '{NearPlane}', far '{FarPlane}'.")]
     private static partial void LogSetViewCameraSettings(ILogger logger, ulong viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 
