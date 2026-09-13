@@ -126,9 +126,6 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
                || (row.DescriptorPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true)
                || (row.CookedPath?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true);
 
-    private static bool IsDefaultMaterial(Uri uri)
-        => UriValuesEqual(uri, AssetUris.BuildGeneratedUri("Materials/Default"));
-
     private static bool IsMaterialUri(Uri uri)
     {
         if (!string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
@@ -211,7 +208,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
             item.RuntimeAvailability,
             item.DescriptorPath,
             item.CookedPath,
-            this.GetBaseColorPreview(item)) { CookStatus = item.CookStatus, CookActivity = item.CookActivity };
+            this.GetBaseColorPreview(item)) { CookStatus = item.CookStatus, CookActivity = item.CookActivity, Generated = item.Generated };
 
     private MaterialPreviewColor? GetBaseColorPreview(ContentBrowserAssetItem item)
     {
@@ -255,21 +252,6 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
 
         var pinnedRows = this.ResolvePinnedMissingRows(rows);
         rows.AddRange(pinnedRows);
-
-        if (this.currentFilter.IncludeGenerated && rows.TrueForAll(static row => !IsDefaultMaterial(row.MaterialUri)))
-        {
-            rows.Insert(
-                0,
-                new MaterialPickerResult(
-                    AssetUris.BuildGeneratedUri("Materials/Default"),
-                    "Default",
-                    AssetState.Generated,
-                    DerivedState: null,
-                    AssetRuntimeAvailability.NotApplicable,
-                    DescriptorPath: null,
-                    CookedPath: null,
-                    BaseColorPreview: new MaterialPreviewColor(1.0f, 1.0f, 1.0f, 1.0f)));
-        }
 
         this.results.OnNext(rows
             .DistinctBy(static row => row.MaterialUri.ToString(), StringComparer.OrdinalIgnoreCase)

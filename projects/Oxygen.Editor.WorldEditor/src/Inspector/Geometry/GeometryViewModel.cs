@@ -6,10 +6,12 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -31,11 +33,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 {
     private readonly IAssetCatalog assetCatalog;
     private readonly IMaterialPickerService materialPickerService;
+    private readonly IBuiltinCatalogDiscovery builtins;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
     private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
     private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
+    private readonly ObservableCollection<AssetPickerItem> engineItems = [];
+    private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
     private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
     private readonly ObservableCollection<MaterialPickerRow> contentMaterialItems = [];
     private readonly Dictionary<string, MaterialPickerItem> contentMaterialItemsByKey = [with(StringComparer.OrdinalIgnoreCase)];
@@ -45,6 +50,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private IDisposable? materialResultsSubscription;
 
     private ICollection<SceneNode>? selectedItems;
+    private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GeometryViewModel"/> class.
@@ -52,23 +58,29 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetCatalog">Asset catalog used to populate and subscribe to mesh assets.</param>
     /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
+    /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
     /// <param name="commandService">Optional command service used to apply geometry edits.</param>
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetCatalog assetCatalog,
         IMaterialPickerService materialPickerService,
+        IBuiltinCatalogDiscovery builtins,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
         this.assetCatalog = assetCatalog;
         this.materialPickerService = materialPickerService;
+        this.builtins = builtins;
         this.commandService = commandService;
         this.commandContextProvider = commandContextProvider;
         this.dispatcherQueue = hosting.Dispatcher;
 
-        this.Groups = CreateGeometryGroups(this.contentItems);
-        this.MaterialGroups = CreateMaterialGroups(this.contentMaterialItems);
+        this.Groups = [new AssetGroup("Engine", this.engineItems), new AssetGroup("Content", this.contentItems)];
+        this.MaterialGroups = [new MaterialGroup("Assignment", [new(CreateNoMaterialItem())]), new MaterialGroup("Engine", this.engineMaterials), new MaterialGroup("Content", this.contentMaterialItems)];
+        this.builtins.Changed += this.OnBuiltinCatalogChanged;
+        this.ApplyBuiltinCatalog();
+        _ = this.InitializeBuiltinsAsync();
         this.StartMaterialPickerSubscription();
         this.StartAssetCatalogSubscription();
     }
@@ -363,6 +375,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <inheritdoc />
     public void Dispose()
     {
+        this.disposed = true;
+        this.builtins.Changed -= this.OnBuiltinCatalogChanged;
         this.assetChangesSubscription?.Dispose();
         this.materialResultsSubscription?.Dispose();
         GC.SuppressFinalize(this);
@@ -386,39 +400,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         return name;
     }
-
-    private static IReadOnlyList<AssetGroup> CreateGeometryGroups(ObservableCollection<AssetPickerItem> contentItems)
-        =>
-        [
-            new AssetGroup(
-                "Engine",
-                [
-                    CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("BasicShapes/Cube"), "/Engine/Generated/BasicShapes/Cube"),
-                    CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), "/Engine/Generated/BasicShapes/Sphere"),
-                    CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("BasicShapes/Plane"), "/Engine/Generated/BasicShapes/Plane"),
-                    CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("BasicShapes/Cylinder"), "/Engine/Generated/BasicShapes/Cylinder"),
-                    CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("BasicShapes/Cone"), "/Engine/Generated/BasicShapes/Cone"),
-                    CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("BasicShapes/Quad"), "/Engine/Generated/BasicShapes/Quad"),
-                    CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("BasicShapes/Torus"), "/Engine/Generated/BasicShapes/Torus"),
-                    CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo"), "/Engine/Generated/BasicShapes/ArrowGizmo"),
-                ]),
-            new AssetGroup("Content", contentItems),
-        ];
-
-    private static IReadOnlyList<MaterialGroup> CreateMaterialGroups(ObservableCollection<MaterialPickerRow> contentMaterialItems)
-        =>
-        [
-            new MaterialGroup("Assignment", [new(CreateNoMaterialItem())]),
-            new MaterialGroup(
-                "Engine",
-                [
-                    new(CreateEngineMaterialItem(
-                        "Default",
-                        AssetUris.BuildGeneratedUri("Materials/Default"),
-                        "/Engine/Generated/Materials/Default")),
-                ]),
-            new MaterialGroup("Content", contentMaterialItems),
-        ];
 
     private static Dictionary<string, AssetRecord> BuildPreferredMeshAssets(IEnumerable<AssetRecord> meshAssets)
     {

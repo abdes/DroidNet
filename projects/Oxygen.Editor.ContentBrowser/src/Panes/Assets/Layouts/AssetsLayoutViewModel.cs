@@ -5,9 +5,11 @@
 using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -15,18 +17,21 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <summary>
 /// A base ViewModel for the assets view layout.
 /// </summary>
-public abstract class AssetsLayoutViewModel(
+public abstract partial class AssetsLayoutViewModel(
     IContentBrowserAssetProvider assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
-    HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
+    HostingContext hostingContext,
+    IBuiltinCatalogDiscovery builtins) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IContentBrowserAssetProvider assetProvider = assetProvider;
     private readonly IProjectContextService projectContextService = projectContextService;
     private readonly ContentBrowserState contentBrowserState = contentBrowserState;
     private readonly HostingContext hostingContext = hostingContext;
+    private readonly IBuiltinCatalogDiscovery builtins = builtins;
 
     private IDisposable? subscription;
+    private IDisposable? builtinChanges;
     private bool disposed;
     private bool initialized;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
@@ -41,6 +46,12 @@ public abstract class AssetsLayoutViewModel(
     /// Gets the collection of content browser asset rows.
     /// </summary>
     public ObservableCollection<AssetBrowserRow> Assets { get; } = [];
+
+    /// <summary>Gets the catalog availability notice when the current scope includes engine assets.</summary>
+    public string? BuiltinCatalogNotice => this.IncludesEngineChoices() ? this.builtins.Snapshot.Notice : null;
+
+    /// <summary>Gets a value indicating whether the current scope needs a catalog notice.</summary>
+    public bool HasBuiltinCatalogNotice => !string.IsNullOrEmpty(this.BuiltinCatalogNotice);
 
     /// <summary>
     /// Gets or sets the currently selected asset row, if any.
@@ -161,6 +172,7 @@ public abstract class AssetsLayoutViewModel(
             if (disposing)
             {
                 this.subscription?.Dispose();
+                this.builtinChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
             }
 
@@ -210,6 +222,11 @@ public abstract class AssetsLayoutViewModel(
 
     private async Task InitializeAsync()
     {
+        this.builtinChanges = Observable.FromEventPattern(
+                handler => this.builtins.Changed += handler,
+                handler => this.builtins.Changed -= handler)
+            .ObserveOn(this.hostingContext.DispatcherScheduler)
+            .Subscribe(_ => this.NotifyBuiltinStatus());
         this.subscription = this.assetProvider.Items
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(this.ReplaceItems);
@@ -222,6 +239,7 @@ public abstract class AssetsLayoutViewModel(
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
             this.ReplaceItems(this.latestItems);
+            this.NotifyBuiltinStatus();
         }
     }
 
@@ -266,5 +284,29 @@ public abstract class AssetsLayoutViewModel(
             this.projectContextService.ActiveProject is not null,
             asset.CookedUri?.AbsolutePath,
             HasCookedProjection(asset));
+    }
+
+    [RelayCommand]
+    private async Task RetryBuiltinCatalogAsync()
+    {
+        _ = await this.builtins.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+        await this.RefreshAsync().ConfigureAwait(true);
+    }
+
+    private bool IncludesEngineChoices()
+    {
+        var folders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders);
+        return folders.Count == 0 || folders.Any(static folder => folder is "/" or "."
+            || folder.Equals("/Engine", StringComparison.OrdinalIgnoreCase)
+            || folder.StartsWith("/Engine/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void NotifyBuiltinStatus()
+    {
+        if (!this.disposed)
+        {
+            this.OnPropertyChanged(nameof(this.BuiltinCatalogNotice));
+            this.OnPropertyChanged(nameof(this.HasBuiltinCatalogNotice));
+        }
     }
 }

@@ -618,12 +618,16 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       19 new worker/manifest cases pass; ContentPipeline is 64/64. Source/test
       diagnostic collection and cleanup passed for changed files. Evidence:
       `artifacts/m07b-worker-final-tests.log`; integration with staging is 07B.1/2.
-- [ ] 07B.7 single procedural authority for the full engine generator catalog
+- [x] 07B.7 single procedural authority for the full engine generator catalog
         and aliases; Cylinder and every picker choice pass scene/project cook (#11).
-        Native catalog projections retain all identities, aliases, recipe schemas,
-        cooked mappings and LOD/submesh metadata. Projection/descriptor tests 19/19,
-        identity tests 11/11 and managed assets 89/89 pass. Browser/picker wiring and
-        removal of their existing lists remain open.
+        Browser and picker choices now use the full native catalog and its aliases;
+        independent managed lists are removed. A derived last-known catalog preserves
+        offline authoring with scoped availability notices and Retry. Discovery and
+        projection tests 11/11, Content Browser 85/85, managed assets 89/89, scene
+        tests 171/171 and packaged UI 201/201 pass, including native preview and
+        Save/reopen for every built-in. Native BuiltinGeometry/BuiltinGeometryCatalog
+        suites pass, comparing geometry attributes, bounds and default material
+        semantics. Issue #11 is resolved; cooked-companion grouping remains in 5c.
 
 Startup correction: workspace commands now wait for native module registration.
 Runtime 75/75; the user confirmed project opening without the access violation.

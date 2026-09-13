@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -21,7 +21,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithAllScope_ShouldReturnAllBuiltIns()
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
         var query = new AssetQuery(AssetQueryScope.All);
 
         // Act
@@ -43,7 +43,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithMountRootDescendants_ShouldReturnAllGeneratedAssets()
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
         var scope = new AssetQueryScope(
             Roots: [new Uri("asset:///Engine/Generated/")],
             Traversal: AssetQueryTraversal.Descendants);
@@ -59,7 +59,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithFolderRootDescendants_ShouldFilterToFolder()
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
         var scope = new AssetQueryScope(
             Roots: [new Uri("asset:///Engine/Generated/BasicShapes/")],
             Traversal: AssetQueryTraversal.Descendants);
@@ -76,7 +76,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithSelfTraversal_ShouldMatchExactUriOnly()
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
         var scope = new AssetQueryScope(
             Roots: [new Uri("asset:///Engine/Generated/Materials/Default")],
             Traversal: AssetQueryTraversal.Self);
@@ -93,7 +93,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithChildrenTraversal_ShouldMatchImmediateChildrenOnly()
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
         var scope = new AssetQueryScope(
             Roots: [new Uri("asset:///Engine/Generated/BasicShapes/")],
             Traversal: AssetQueryTraversal.Children);
@@ -117,7 +117,7 @@ public sealed class GeneratedAssetCatalogTests
     public async Task QueryAsync_WithSearchText_ShouldFilterResults(string term)
     {
         // Arrange
-        var catalog = new GeneratedAssetCatalog();
+        var catalog = new GeneratedAssetCatalog(GeneratedAssetFixtures.Create().Select(static asset => new AssetRecord(asset.Uri)));
 
         // Act
         var results = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All, SearchText: term), this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -192,7 +192,8 @@ public sealed partial class InspectorControlTests
                 default,
                 catalog.Object,
                 materials.Object,
-                this.Sync.Object);
+                this.Sync.Object,
+                new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         }
 
         public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)

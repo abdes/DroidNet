@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -16,14 +16,6 @@ namespace Oxygen.Managed.Assets.Catalog;
 public sealed class GeneratedAssetCatalog : IAssetCatalog
 {
     private readonly FrozenSet<AssetRecord> records;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GeneratedAssetCatalog"/> class.
-    /// </summary>
-    public GeneratedAssetCatalog()
-        : this(BuiltInAssets.Create().Select(static asset => new AssetRecord(asset.Uri)))
-    {
-    }
 
     /// <summary>Initializes a new instance of the <see cref="GeneratedAssetCatalog"/> class from an engine-provided snapshot.</summary>
     /// <param name="records">The complete generated asset records for the current engine catalog.</param>

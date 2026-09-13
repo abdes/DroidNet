@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -154,7 +154,8 @@ public sealed class SceneNodeEditorViewModelTests
             default,
             new Mock<IAssetCatalog>().Object,
             new Mock<IMaterialPickerService>().Object,
-            sceneEngineSync);
+            sceneEngineSync,
+            new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
     }
 
     private static Scene CreateScene()

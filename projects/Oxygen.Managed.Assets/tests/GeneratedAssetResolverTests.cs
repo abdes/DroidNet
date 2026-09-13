@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -22,7 +22,7 @@ public sealed class GeneratedAssetResolverTests
     public void CanResolve_WithEngineMountPoint_ShouldReturnTrue(string mountPoint)
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
 
         // Act
         var result = resolver.CanResolve(mountPoint);
@@ -38,7 +38,7 @@ public sealed class GeneratedAssetResolverTests
     public void CanResolve_WithOtherMountPoint_ShouldReturnFalse(string mountPoint)
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
 
         // Act
         var result = resolver.CanResolve(mountPoint);
@@ -56,7 +56,7 @@ public sealed class GeneratedAssetResolverTests
     public async Task ResolveAsync_WithBuiltInGeometry_ShouldReturnGeometryAsset(string uri)
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
 
         // Act
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
@@ -76,7 +76,7 @@ public sealed class GeneratedAssetResolverTests
     public async Task ResolveAsync_WithDefaultMaterial_ShouldReturnMaterialAsset()
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
         const string uri = "asset:///Engine/Generated/Materials/Default";
 
         // Act
@@ -92,7 +92,7 @@ public sealed class GeneratedAssetResolverTests
     public async Task ResolveAsync_WithUnknownUri_ShouldReturnNull()
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
         const string uri = "asset:///Engine/Generated/Unknown/Asset";
 
         // Act
@@ -106,7 +106,7 @@ public sealed class GeneratedAssetResolverTests
     public async Task ResolveAsync_IsCaseSitive()
     {
         // Arrange
-        var resolver = new GeneratedAssetResolver();
+        var resolver = new GeneratedAssetResolver(GeneratedAssetFixtures.Create());
         const string uri = "asset:///ENGINE/GENERATED/BASICSHAPES/CUBE";
 
         // Act

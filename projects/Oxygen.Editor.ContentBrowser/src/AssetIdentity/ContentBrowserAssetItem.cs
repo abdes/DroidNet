@@ -49,7 +49,8 @@ public sealed record ContentBrowserAssetItem(
     };
 
     /// <summary>Gets the primary asset-state badge.</summary>
-    public string PrimaryBadge => AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? GetBadge(this.PrimaryState);
+    public string PrimaryBadge => this.Generated?.IsLastKnown == true ? "Preview unavailable"
+        : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets the optional cooked-state badge.</summary>
     public string? DerivedBadge => this.CookStatus is null && this.DerivedState is { } state ? GetBadge(state) : null;
