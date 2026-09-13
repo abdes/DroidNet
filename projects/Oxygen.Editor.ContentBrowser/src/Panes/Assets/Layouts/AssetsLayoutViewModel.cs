@@ -33,7 +33,7 @@ public abstract partial class AssetsLayoutViewModel(
     private IDisposable? subscription;
     private IDisposable? builtinChanges;
     private bool disposed;
-    private bool initialized;
+    private Task? initialization;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
     private ContentBrowserAssetItem? selectedAsset;
 
@@ -59,7 +59,17 @@ public abstract partial class AssetsLayoutViewModel(
     public ContentBrowserAssetItem? SelectedAsset
     {
         get => this.selectedAsset;
-        set => this.SetProperty(ref this.selectedAsset, value);
+        set
+        {
+            if (value is null)
+            {
+                _ = this.SetProperty(ref this.selectedAsset, newValue: null);
+            }
+            else if (this.Assets.FirstOrDefault(row => row.Item.IdentityUri == value.IdentityUri) is { } current)
+            {
+                _ = this.SetProperty(ref this.selectedAsset, current.Item);
+            }
+        }
     }
 
     /// <summary>
@@ -71,10 +81,14 @@ public abstract partial class AssetsLayoutViewModel(
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        if (!this.initialized)
+        try
         {
-            await this.InitializeAsync().ConfigureAwait(false);
-            this.initialized = true;
+            await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(false);
+        }
+        catch
+        {
+            this.initialization = null;
+            throw;
         }
     }
 
@@ -185,7 +199,12 @@ public abstract partial class AssetsLayoutViewModel(
     /// </summary>
     /// <param name="item">The asset row that was invoked.</param>
     protected void OnItemInvoked(ContentBrowserAssetItem item)
-        => this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(item));
+    {
+        if (!this.disposed && this.Assets.FirstOrDefault(row => row.Item.IdentityUri == item.IdentityUri) is { } current)
+        {
+            this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
+        }
+    }
 
     private static bool HasCookedProjection(ContentBrowserAssetItem asset)
         => asset.PrimaryState is AssetState.Cooked
@@ -196,7 +215,7 @@ public abstract partial class AssetsLayoutViewModel(
     private static string NormalizeFolderPath(string value)
     {
         var normalized = value.Replace('\\', '/').Trim('/');
-        return string.IsNullOrEmpty(normalized) ? "/" : "/" + normalized;
+        return string.IsNullOrEmpty(normalized) || string.Equals(normalized, ".", StringComparison.Ordinal) ? "/" : "/" + normalized;
     }
 
     private static bool IsSameOrChildPath(string candidate, string folder)
@@ -223,6 +242,9 @@ public abstract partial class AssetsLayoutViewModel(
 
     private async Task InitializeAsync()
     {
+        this.subscription?.Dispose();
+        this.builtinChanges?.Dispose();
+        this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
         this.builtinChanges = Observable.FromEventPattern(
                 handler => this.builtins.Changed += handler,
                 handler => this.builtins.Changed -= handler)
@@ -246,6 +268,11 @@ public abstract partial class AssetsLayoutViewModel(
 
     private void ReplaceItems(IReadOnlyList<ContentBrowserAssetItem> items)
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.latestItems = items;
         var selectedUri = this.SelectedAsset?.IdentityUri;
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);

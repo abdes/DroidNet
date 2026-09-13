@@ -12,16 +12,16 @@ using DroidNet.Controls;
 using DroidNet.Controls.Selection;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Oxygen.Managed.Assets.Filesystem;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using DroidNet.Storage;
+using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -71,7 +71,7 @@ public partial class ProjectLayoutViewModel(
     ///     Raised when the UI should begin in-place rename for the selected item.
     ///     The view handles this request and triggers the DynamicTree in-place rename UI.
     /// </summary>
-    public event EventHandler<ITreeItem>? RenameRequested;
+    public event EventHandler<ProjectItemRenameRequestedEventArgs>? RenameRequested;
 
     /// <summary>
     ///     Gets the currently selected tree item when there is exactly one selected item.
@@ -128,6 +128,7 @@ public partial class ProjectLayoutViewModel(
     }
 
     /// <inheritdoc />
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
@@ -177,7 +178,7 @@ public partial class ProjectLayoutViewModel(
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to navigate to folder");
+                this.LogFolderNavigationFailure(ex);
             }
         }
     }
@@ -190,76 +191,43 @@ public partial class ProjectLayoutViewModel(
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
     public async Task RefreshTreeAsync()
     {
-        // Rebuild the project root to force a fresh load of children
         try
         {
-            // Preserve the current selection BEFORE we touch the tree (InitializeRootAsync clears selection)
-            var previousSelection = contentBrowserState.SelectedFolders.ToList();
-
-            // Temporarily suppress tree selection updates causing state churn while we rebuild
-            this.suppressTreeSelectionEvents = true;
-
-            var projectInfo = this.GetActiveProjectInfo() ??
-                              throw new InvalidOperationException("Project Layout used with no CurrentProject");
-
+            var context = projectContextService.ActiveProject;
+            var projectInfo = this.GetActiveProjectInfo()
+                ?? throw new InvalidOperationException("Project Layout used with no CurrentProject");
             var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-
-            // Dispose previous root to release resources
-            if (this.projectRoot is not null)
+            if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
             {
-                this.projectRoot.MountRenamed -= this.OnMountRenamed;
-                this.projectRoot.Dispose();
+                return;
             }
 
-            this.projectRoot = new ProjectRootTreeItemAdapter(this.logger, storage, projectInfo, folder)
+            this.suppressTreeSelectionEvents = true;
+            try
             {
-                IsExpanded = true,
-            };
-
-            // Load persisted local folder mounts
-            await this.LoadPersistedMountsAsync(storage, projectInfo).ConfigureAwait(true);
-
-            this.projectRoot.MountRenamed += this.OnMountRenamed;
-
-            // Ensure the root children are loading to avoid assertion in DoGetChildrenCount
-            // when logging accesses ChildrenCount before the lazy loader is triggered.
-            _ = this.projectRoot.Children;
-
-            // Reinitialize the tree UI
-            await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
-
-            // Allow selection changes to flow again for the explicit selection we apply next
-            this.suppressTreeSelectionEvents = false;
-
-            // Reapply previous selection if it still exists, prioritizing non-root paths
-            var candidates = previousSelection
-                .Where(p => !string.IsNullOrEmpty(p) && !string.Equals(p, ".", StringComparison.Ordinal))
-                .Order(StringComparer.Ordinal)
-                .ToList();
-
-            ITreeItem? target = null;
-            if (candidates.Count > 0 && this.projectRoot is not null)
-            {
-                foreach (var path in candidates)
+                if (this.projectRoot is not null)
                 {
-                    var adapter = await FindFolderAdapterAsync(this.projectRoot, path).ConfigureAwait(true);
-                    if (adapter is not null)
-                    {
-                        target = adapter;
-                        break;
-                    }
+                    this.projectRoot.MountRenamed -= this.OnMountRenamed;
+                    this.projectRoot.Dispose();
                 }
+
+                this.projectRoot = new ProjectRootTreeItemAdapter(this.logger, storage, projectInfo, folder) { IsExpanded = true };
+                await this.LoadPersistedMountsAsync(storage, projectInfo).ConfigureAwait(true);
+                if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
+                {
+                    return;
+                }
+
+                this.projectRoot.MountRenamed += this.OnMountRenamed;
+                _ = this.projectRoot.Children;
+                await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
             }
-
-            // Fallback to root if none of the candidates were found, or if previous selection explicitly was root
-            target ??= this.projectRoot;
-
-            if (target is not null)
+            finally
             {
-                this.SelectionModel?.SelectItem(target);
+                this.suppressTreeSelectionEvents = false;
             }
 
-            this.UpdateSelectionDerivedState();
+            await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -291,6 +259,17 @@ public partial class ProjectLayoutViewModel(
         }
     }
 
+    /// <summary>Identifies derived roots retained as project-relative virtual mounts.</summary>
+    /// <param name="mount">The persisted mount declaration.</param>
+    /// <returns>Whether the mount is a derived project root.</returns>
+    internal static bool IsPersistedProjectRelativeVirtualMount(ProjectMountPoint mount)
+    {
+        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
+        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     ///     Protected dispose pattern implementation.
     /// </summary>
@@ -301,6 +280,8 @@ public partial class ProjectLayoutViewModel(
 
         if (disposing)
         {
+            this.selectionDisposed = true;
+            this.selectionRequestVersion++;
             this.messenger.UnregisterAll(this);
             contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
             this.projectRoot?.Dispose();
@@ -315,16 +296,10 @@ public partial class ProjectLayoutViewModel(
         base.OnSelectionModelChanged(oldValue);
 
         // Unsubscribe from old selection model
-        if (oldValue is not null)
-        {
-            oldValue.PropertyChanged -= this.OnTreeSelectionChanged;
-        }
+        oldValue?.PropertyChanged -= this.OnTreeSelectionChanged;
 
         // Subscribe to new selection model
-        if (this.SelectionModel is not null)
-        {
-            this.SelectionModel.PropertyChanged += this.OnTreeSelectionChanged;
-        }
+        this.SelectionModel?.PropertyChanged += this.OnTreeSelectionChanged;
     }
 
     /// <summary>
@@ -379,21 +354,8 @@ public partial class ProjectLayoutViewModel(
         return current as FolderTreeItemAdapter;
     }
 
-    /// <summary>
-    ///     Recursively sets the IsSelected property on tree items.
-    /// </summary>
-    private static async Task SetTreeItemSelectionRecursively(TreeItemAdapter adapter, bool isSelected)
-    {
-        adapter.IsSelected = isSelected;
-
-        var children = await adapter.Children.ConfigureAwait(true);
-        foreach (var child in children.OfType<TreeItemAdapter>())
-        {
-            await SetTreeItemSelectionRecursively(child, isSelected).ConfigureAwait(true);
-        }
-    }
-
     [RelayCommand]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountKnownLocationAsync(KnownVirtualFolderMount kind)
     {
         if (this.projectRoot is null)
@@ -452,6 +414,7 @@ public partial class ProjectLayoutViewModel(
     }
 
     [RelayCommand]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountLocalFolderAsync()
     {
         if (this.projectRoot is null)
@@ -464,28 +427,7 @@ public partial class ProjectLayoutViewModel(
             var existingNames = await this.GetExistingMountPointNamesAsync().ConfigureAwait(true);
             var vm = new LocalFolderMountDialogViewModel(dialogService, existingNames);
 
-            // Resolve view for the dialog using the locally-scoped ViewModelToView converter.
-            if (this.vmToView.Convert(vm, typeof(object), parameter: null, language: System.Globalization.CultureInfo.CurrentUICulture.Name) is not UIElement view)
-            {
-                throw new InvalidOperationException("VmToViewConverter returned null UIElement for LocalFolderMountDialogViewModel");
-            }
-
-            // Ensure the view's ViewModel property is set (IViewFor<T>).
-            if (view is DroidNet.Mvvm.IViewFor vf)
-            {
-                vf.ViewModel = vm;
-            }
-
-            var spec = new DialogSpec("Mount Local Folder", view)
-            {
-                PrimaryButtonText = "OK",
-                SecondaryButtonText = "Cancel",
-                CloseButtonText = string.Empty,
-                DefaultButton = DialogButton.Primary,
-            };
-
-            var button = await dialogService.ShowAsync(spec).ConfigureAwait(true);
-            var definition = button == DialogButton.Primary ? vm.Result : null;
+            var definition = await this.ShowLocalMountDialogAsync(vm).ConfigureAwait(true) ? vm.Result : null;
             if (definition is null)
             {
                 return;
@@ -531,6 +473,7 @@ public partial class ProjectLayoutViewModel(
     }
 
     [RelayCommand(CanExecute = nameof(CanUnmountSelectedItem))]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task UnmountSelectedItemAsync()
     {
         if (this.projectRoot is null)
@@ -602,7 +545,7 @@ public partial class ProjectLayoutViewModel(
         }
 
         // Rename is performed via the DynamicTree in-place rename UI.
-        this.RenameRequested?.Invoke(this, this.SelectedItem);
+        this.RenameRequested?.Invoke(this, new(this.SelectedItem));
     }
 
     private void RestoreState()
@@ -640,83 +583,17 @@ public partial class ProjectLayoutViewModel(
         projectInfo.LocalFolderMounts.Clear();
         projectInfo.AuthoringMounts.Clear();
 
-        // Rebuild AuthoringMounts and LocalFolderMounts from the current tree state.
-        // We need to iterate over ALL mount items in the tree, not just VirtualFolderMounts.
-        // The tree contains both AuthoringMountPointTreeItemAdapter and VirtualFolderMountTreeItemAdapter.
         var children = await this.projectRoot.Children.ConfigureAwait(true);
         foreach (var child in children)
         {
-            string mountName;
-            string backingPath;
-            bool isProjectRelative;
-            if (child is VirtualFolderMountTreeItemAdapter virtualMount)
-            {
-                mountName = virtualMount.MountPointName;
-                backingPath = virtualMount.RootFolder.Location;
-                isProjectRelative = virtualMount.BackingPathKind == VirtualFolderMountBackingPathKind.ProjectRelative;
-            }
-            else if (child is AuthoringMountPointTreeItemAdapter authoringMount)
-            {
-                mountName = authoringMount.MountPoint.Name;
-                backingPath = authoringMount.RootFolder.Location;
-
-                // Authoring mounts are by definition project relative, but we need to re-calculate the relative path
-                // or use the one from the mount point if we trust it hasn't changed.
-                // Let's treat it as absolute for now and let the logic below re-relativize it to be safe/consistent.
-                isProjectRelative = false;
-            }
-            else
-            {
-                continue;
-            }
-
-            string? relativePath = null;
-
-            if (isProjectRelative)
-            {
-                // If it was already marked relative (e.g. .cooked), keep it relative path
-                // Note: VirtualFolderMountTreeItemAdapter stores the relative path in BackingPath if kind is ProjectRelative
-                if (child is VirtualFolderMountTreeItemAdapter vm)
-                {
-                    relativePath = vm.BackingPath;
-                }
-            }
-
-            if (relativePath == null)
-            {
-                // Try to make it relative if it is inside the project root
-                var projectRootPath = this.projectRoot.ProjectRootFolder.Location;
-
-                try
-                {
-                    var rel = System.IO.Path.GetRelativePath(projectRootPath, backingPath);
-                    if (!rel.StartsWith("..", StringComparison.Ordinal) && !System.IO.Path.IsPathRooted(rel))
-                    {
-                        relativePath = rel.Replace('\\', '/');
-                    }
-                }
-                catch (Exception)
-                {
-                    // Ignore path errors, treat as absolute
-                }
-            }
-
-            if (relativePath != null)
-            {
-                projectInfo.AuthoringMounts.Add(new ProjectMountPoint(mountName, relativePath, child.IsExpanded));
-            }
-            else
-            {
-                projectInfo.LocalFolderMounts.Add(new LocalFolderMount(mountName, backingPath, child.IsExpanded));
-            }
+            this.AddMountToProjectInfo(projectInfo, child);
         }
 
         if (await projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
         {
             projectContextService.Activate(ProjectContext.FromProjectInfo(projectInfo, activeProject.Scenes));
+            this.HasUnsavedChanges = false;
         }
-
-        this.HasUnsavedChanges = false;
     }
 
     private async Task LoadPersistedMountsAsync(IStorageProvider storage, ProjectInfo projectInfo)
@@ -726,104 +603,15 @@ public partial class ProjectLayoutViewModel(
             return;
         }
 
-        foreach (var projectRelativeMount in projectInfo.AuthoringMounts.Where(IsPersistedProjectRelativeVirtualMount))
+        foreach (var mount in projectInfo.AuthoringMounts.Where(IsPersistedProjectRelativeVirtualMount))
         {
-            try
-            {
-                var mountRootLocation = storage.NormalizeRelativeTo(
-                    this.projectRoot.ProjectRootFolder.Location,
-                    projectRelativeMount.RelativePath);
-                var mountRootFolder = await storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
-                VirtualFolderMountTreeItemAdapter? mount = null;
-                try
-                {
-                    mount = new VirtualFolderMountTreeItemAdapter(
-                        this.logger,
-                        projectRelativeMount.Name,
-                        mountRootFolder,
-                        projectRelativeMount.RelativePath,
-                        VirtualFolderMountBackingPathKind.ProjectRelative)
-                    {
-                        IsExpanded = projectRelativeMount.IsExpanded,
-                    };
-
-                    mount.PropertyChanged += this.OnMountPointPropertyChanged;
-
-                    if (await this.projectRoot.MountVirtualFolderAsync(mount).ConfigureAwait(true))
-                    {
-                        var mountedItem = mount;
-                        mount = null;
-
-                        if (this.projectRoot.AreChildrenLoaded)
-                        {
-                            await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount)
-                                .ConfigureAwait(true);
-                        }
-                    }
-                }
-                finally
-                {
-                    mount?.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                this.logger.LogError(ex, "Failed to load project-relative virtual folder mount {Name}", projectRelativeMount.Name);
-            }
+            await this.RestoreMountAsync(storage, mount.Name, mount.RelativePath, isProjectRelative: true, mount.IsExpanded).ConfigureAwait(true);
         }
 
-        foreach (var localMount in projectInfo.LocalFolderMounts)
+        foreach (var mount in projectInfo.LocalFolderMounts)
         {
-            try
-            {
-                var mountRootFolder = await storage.GetFolderFromPathAsync(localMount.AbsolutePath).ConfigureAwait(true);
-                VirtualFolderMountTreeItemAdapter? mount = null;
-                try
-                {
-                    mount = new VirtualFolderMountTreeItemAdapter(
-                        this.logger,
-                        localMount.Name,
-                        mountRootFolder,
-                        localMount.AbsolutePath,
-                        VirtualFolderMountBackingPathKind.Absolute)
-                    {
-                        IsExpanded = localMount.IsExpanded,
-                    };
-
-                    mount.PropertyChanged += this.OnMountPointPropertyChanged;
-
-                    if (await this.projectRoot.MountVirtualFolderAsync(mount).ConfigureAwait(true))
-                    {
-                        var mountedItem = mount;
-                        mount = null;
-
-                        // Index the newly mounted folder
-                        _ = this.projectAssetCatalog.AddFolderAsync(mountRootFolder, mountedItem.VirtualRootPath.TrimStart('/'));
-
-                        if (this.projectRoot.AreChildrenLoaded)
-                        {
-                            await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);
-                        }
-                    }
-                }
-                finally
-                {
-                    mount?.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                this.logger.LogError(ex, "Failed to load local folder mount {Name}", localMount.Name);
-            }
+            await this.RestoreMountAsync(storage, mount.Name, mount.AbsolutePath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }
-    }
-
-    internal static bool IsPersistedProjectRelativeVirtualMount(ProjectMountPoint mount)
-    {
-        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
-        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
@@ -991,80 +779,6 @@ public partial class ProjectLayoutViewModel(
         }
     }
 
-    /// <summary>
-    ///     Updates tree selection to match ContentBrowserState.
-    ///     Uses atomic operations to prevent feedback loops and duplicate history entries.
-    /// </summary>
-    private async Task UpdateTreeSelectionFromStateAsync()
-    {
-        if (this.projectRoot == null)
-        {
-            this.LogUpdateTreeSelectionProjectRootNull();
-            return;
-        }
-
-        this.LogUpdateTreeSelectionStart();
-
-        try
-        {
-            this.isUpdatingFromState = true;
-            this.LogSetIsUpdatingFromState(value: true);
-
-            var selectedPaths = contentBrowserState.SelectedFolders.ToList();
-            this.LogSelectedPathsToSync(string.Join(", ", selectedPaths));
-
-            // First, clear all current selections in the tree items
-            await this.ClearAllTreeItemSelections().ConfigureAwait(true);
-            this.LogClearedTreeItemSelections();
-
-            // Then set IsSelected=true for the items that should be selected
-            foreach (var path in selectedPaths)
-            {
-                // Skip empty paths - they cause issues
-                if (string.IsNullOrEmpty(path))
-                {
-                    this.LogSkippingEmptyPath();
-                    continue;
-                }
-
-                ITreeItem? target;
-                if (string.Equals(path, "/", StringComparison.Ordinal) || string.Equals(path, ".", StringComparison.Ordinal))
-                {
-                    target = this.projectRoot;
-                }
-                else if (VirtualPath.IsCanonicalAbsolute(path))
-                {
-                    // Find the adapter by virtual path
-                    target = await this.FindAdapterByVirtualPathAsync(path).ConfigureAwait(true);
-                }
-                else
-                {
-                    // Fallback for project-relative OS paths (legacy/non-authoring)
-                    target = await FindFolderAdapterAsync(this.projectRoot, path).ConfigureAwait(true);
-                }
-
-                if (target is TreeItemAdapter adapter)
-                {
-                    this.LogSettingIsSelected(path);
-                    adapter.IsSelected = true;
-                }
-                else
-                {
-                    this.LogFolderAdapterNotFound(path);
-                }
-            }
-
-            this.LogUpdateTreeSelectionCompleted();
-
-            this.UpdateSelectionDerivedState();
-        }
-        finally
-        {
-            this.isUpdatingFromState = false;
-            this.LogSetIsUpdatingFromState(value: false);
-        }
-    }
-
     private void UpdateSelectionDerivedState()
     {
         if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
@@ -1150,19 +864,6 @@ public partial class ProjectLayoutViewModel(
         }
 
         return result;
-    }
-
-    /// <summary>
-    ///     Clears the IsSelected property on all tree items.
-    /// </summary>
-    private async Task ClearAllTreeItemSelections()
-    {
-        if (this.projectRoot == null)
-        {
-            return;
-        }
-
-        await SetTreeItemSelectionRecursively(this.projectRoot, isSelected: false).ConfigureAwait(true);
     }
 
     private string? GetVirtualPath(ITreeItem item)

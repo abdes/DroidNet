@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using Oxygen.Editor.Projects;
 using DroidNet.Storage;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -14,6 +14,8 @@ namespace Oxygen.Editor.ContentBrowser;
 /// </summary>
 public sealed partial class ContentBrowserState(IProjectContextService projectContextService) : INotifyPropertyChanged
 {
+    private readonly HashSet<string> selectedFolders = [with(StringComparer.Ordinal)];
+
     /// <summary>
     /// Occurs when a property changes.
     /// </summary>
@@ -22,7 +24,7 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <summary>
     /// Gets the set of selected folders.
     /// </summary>
-    public ISet<string> SelectedFolders { get; } = new HashSet<string>(StringComparer.Ordinal);
+    public IReadOnlySet<string> SelectedFolders => this.selectedFolders;
 
     /// <summary>
     /// Gets the project root path.
@@ -31,13 +33,13 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
 
     /// <summary>
     /// Adds a folder to the set of selected folders.
-    /// This is a passive operation - no events are fired.
+    /// Publishes the resulting scope as one state change.
     /// </summary>
     /// <param name="folder">The folder to add.</param>
     public void AddSelectedFolder(IFolder folder)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        if (this.SelectedFolders.Add(pathRelativeToProjectRoot))
+        if (this.selectedFolders.Add(pathRelativeToProjectRoot))
         {
             this.OnPropertyChanged(nameof(this.SelectedFolders));
         }
@@ -45,13 +47,13 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
 
     /// <summary>
     /// Removes a folder from the set of selected folders.
-    /// This is a passive operation - no events are fired.
+    /// Publishes the resulting scope as one state change.
     /// </summary>
     /// <param name="folder">The folder to remove.</param>
     public void RemoveSelectedFolder(IFolder folder)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        if (this.SelectedFolders.Remove(pathRelativeToProjectRoot))
+        if (this.selectedFolders.Remove(pathRelativeToProjectRoot))
         {
             this.OnPropertyChanged(nameof(this.SelectedFolders));
         }
@@ -59,26 +61,24 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
 
     /// <summary>
     /// Sets the selected folders to contain only the specified folder.
-    /// This is a passive operation - no events are fired.
+    /// Publishes the resulting scope as one state change.
     /// </summary>
     /// <param name="folder">The folder to select.</param>
     public void SetSelectedFolder(IFolder folder)
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
-        this.SelectedFolders.Clear();
-        _ = this.SelectedFolders.Add(pathRelativeToProjectRoot);
-        this.OnPropertyChanged(nameof(this.SelectedFolders));
+        this.SetSelectedFolders([pathRelativeToProjectRoot]);
     }
 
     /// <summary>
     /// Clears all selected folders.
-    /// This is a passive operation - no events are fired.
+    /// Publishes an empty scope when selection changes.
     /// </summary>
     public void ClearSelection()
     {
         if (this.SelectedFolders.Count > 0)
         {
-            this.SelectedFolders.Clear();
+            this.selectedFolders.Clear();
             this.OnPropertyChanged(nameof(this.SelectedFolders));
         }
     }
@@ -89,12 +89,15 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <param name="relativePaths">The relative paths to set as selected.</param>
     public void SetSelectedFolders(IEnumerable<string> relativePaths)
     {
-        this.SelectedFolders.Clear();
-        foreach (var path in relativePaths)
+        ArgumentNullException.ThrowIfNull(relativePaths);
+        var replacement = relativePaths.Where(static path => !string.IsNullOrWhiteSpace(path)).ToHashSet(StringComparer.Ordinal);
+        if (this.selectedFolders.SetEquals(replacement))
         {
-            _ = this.SelectedFolders.Add(path);
+            return;
         }
 
+        this.selectedFolders.Clear();
+        this.selectedFolders.UnionWith(replacement);
         this.OnPropertyChanged(nameof(this.SelectedFolders));
     }
 
