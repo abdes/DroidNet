@@ -403,10 +403,10 @@ public sealed partial class ContentPipelineServiceTests
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
-        _ = await service.InspectCookedOutputAsync(new Uri("asset:///Cooked/Content"), CancellationToken.None)
+        var report = await service.InspectCookedOutputAsync(new Uri("asset:///Cooked/Content"), CancellationToken.None)
             .ConfigureAwait(false);
 
-        _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
     }
 
     /// <summary>Skips derived mounts when choosing the default inspection root.</summary>
@@ -424,10 +424,10 @@ public sealed partial class ContentPipelineServiceTests
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
-        _ = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
+        var report = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
             .ConfigureAwait(false);
 
-        _ = api.InspectedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
     }
 
     private static ContentPipelineService CreateService(

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -24,6 +25,45 @@ public sealed partial class TilesLayoutView
     public TilesLayoutView()
     {
         this.InitializeComponent();
+        this.Loaded += (_, _) =>
+        {
+            this.ViewModelChanged += this.OnViewModelChanged;
+            if (this.ViewModel is { } model)
+            {
+                model.SelectionRevealRequested += this.OnSelectionRevealRequested;
+                AssetSelectionReveal.Apply(this.BasicGridView, model);
+            }
+        };
+        this.Unloaded += (_, _) =>
+        {
+            this.ViewModelChanged -= this.OnViewModelChanged;
+            if (this.ViewModel is { } model)
+            {
+                model.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+            }
+        };
+    }
+
+    private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<TilesLayoutViewModel> args)
+    {
+        if (args.OldValue is { } previous)
+        {
+            previous.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+        }
+
+        if (this.ViewModel is { } current)
+        {
+            current.SelectionRevealRequested += this.OnSelectionRevealRequested;
+            AssetSelectionReveal.Apply(this.BasicGridView, current);
+        }
+    }
+
+    private void OnSelectionRevealRequested(object? sender, EventArgs args)
+    {
+        if (this.ViewModel is { } model)
+        {
+            AssetSelectionReveal.Apply(this.BasicGridView, model);
+        }
     }
 
     /// <summary>

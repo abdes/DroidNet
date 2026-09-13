@@ -64,14 +64,8 @@ public interface IContentPipelineService : Status.IAssetCookStatusReader
     /// </summary>
     /// <param name="scopeUri">The optional scope URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The inspection result.</returns>
-    public Task<CookInspectionResult> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Validates cooked output for the requested scope.
-    /// </summary>
-    /// <param name="scopeUri">The optional scope URI.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The validation result.</returns>
-    public Task<CookValidationResult> ValidateCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken);
+    /// <param name="validate">Whether to validate root integrity under the same read lease.</param>
+    /// <param name="expectedProject">Optional originating project, preventing a delayed request from inspecting another activation.</param>
+    /// <returns>The captured scope report.</returns>
+    public Task<Inspection.CookedOutputReport> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken, bool validate = false, ProjectContext? expectedProject = null);
 }

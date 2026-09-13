@@ -96,24 +96,6 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
         => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
 
-    /// <inheritdoc />
-    public async Task<CookInspectionResult> InspectCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var cookedRoot = this.ResolveCookedRoot(scopeUri);
-        using var reader = Publication.CookOutputLease.AcquireRead(this.projectContextService.ActiveProject!.ProjectRoot);
-        return await this.engineContentPipelineApi.InspectLooseCookedRootAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task<CookValidationResult> ValidateCookedOutputAsync(Uri? scopeUri, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var cookedRoot = this.ResolveCookedRoot(scopeUri);
-        using var reader = Publication.CookOutputLease.AcquireRead(this.projectContextService.ActiveProject!.ProjectRoot);
-        return await this.engineContentPipelineApi.ValidateLooseCookedRootAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
-    }
-
     private static ContentCookResult MergeProjectResults(
         Guid operationId,
         IReadOnlyList<ContentCookResult> results)
@@ -357,34 +339,6 @@ public sealed partial class ContentPipelineService(
         return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
                || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
                || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? GetDefaultCookedMountName(ProjectContext project)
-        => project.AuthoringMounts.FirstOrDefault(static mount => !IsDerivedRootMount(mount))?.Name;
-
-    private static string? GetCookedMountName(ProjectContext project, string virtualPath)
-    {
-        var normalized = virtualPath.Trim('/').Replace('\\', '/');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return GetDefaultCookedMountName(project);
-        }
-
-        var slash = normalized.IndexOf('/', StringComparison.Ordinal);
-        var root = slash <= 0 ? normalized : normalized[..slash];
-        if (!string.Equals(root, "Cooked", StringComparison.OrdinalIgnoreCase))
-        {
-            return root;
-        }
-
-        if (slash <= 0 || slash == normalized.Length - 1)
-        {
-            return GetDefaultCookedMountName(project);
-        }
-
-        var remaining = normalized[(slash + 1)..];
-        var nextSlash = remaining.IndexOf('/', StringComparison.Ordinal);
-        return nextSlash <= 0 ? remaining : remaining[..nextSlash];
     }
 
     private static string GetGeneratedMaterialDescriptorPath(string projectRoot, ContentCookInput input)
@@ -815,17 +769,6 @@ public sealed partial class ContentPipelineService(
         IReadOnlyList<ContentCookInput> inputs,
         CookTargetKind targetKind)
         => new(project, this.cookScopeProvider.CreateScope(project), inputs, targetKind);
-
-    private string ResolveCookedRoot(Uri? scopeUri)
-    {
-        var project = this.RequireActiveProject();
-        var mountName = scopeUri is null
-            ? GetDefaultCookedMountName(project)
-            : GetCookedMountName(project, Uri.UnescapeDataString(scopeUri.AbsolutePath));
-        return string.IsNullOrWhiteSpace(mountName)
-            ? throw new InvalidOperationException("Content pipeline requires at least one authoring mount.")
-            : ContentPipelinePaths.GetCookedMountRoot(project.ProjectRoot, mountName);
-    }
 
     private sealed record PreparedInput(ContentCookInput Input, IReadOnlyList<DiagnosticRecord> Diagnostics);
 

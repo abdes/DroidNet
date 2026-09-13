@@ -105,7 +105,12 @@ Selection rules:
 Keep the following order:
 
 1. One compact header: Main (Scene), a status pill such as Failed, then the
-   applicable Retry/Cancel action inline. Use WinUI semantic status colours for
+   applicable Retry/Cancel action inline. Completed runs also offer Inspect in
+   this same action row, after the recovery controls. Inspect opens the current
+   published output for the selected run's original scope in a read-only document
+   tab; it does not cook or alter run selection. Its tooltip identifies that scope.
+   The existing Content Browser menu entry remains available.
+   Use WinUI semantic status colours for
    the pill and list icons, including the critical colour for failures. Cancel
    applies to pending/active work, Retry to failed/cancelled work, and
    Save listed & Cook to blocked unsaved inputs.

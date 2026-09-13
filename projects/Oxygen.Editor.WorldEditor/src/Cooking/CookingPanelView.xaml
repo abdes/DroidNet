@@ -205,6 +205,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock
@@ -239,6 +240,15 @@
                     Content="Cancel"
                     IsEnabled="{x:Bind ViewModel.SelectedRun.CanCancel, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.SelectedRun.CancelVisibility, Mode=OneWay}" />
+                <Button
+                    x:Name="InspectButton"
+                    Grid.Column="4"
+                    MinHeight="28"
+                    Padding="8,3"
+                    Command="{x:Bind ViewModel.InspectCommand}"
+                    Content="Inspect"
+                    ToolTipService.ToolTip="Inspect the currently published output for this cook's scope"
+                    Visibility="{x:Bind ViewModel.SelectedRun.InspectVisibility, Mode=OneWay}" />
             </Grid>
             <ProgressBar
                 Grid.Row="1"

@@ -175,6 +175,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // Resolve messenger instance from the child container so the view model can use it.
         this.messenger = childContainer.Resolve<IMessenger>();
+        this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
 
         // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
         // IDocumentService events before DocumentManager starts handling open requests.
@@ -211,6 +212,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
+        childContainer.Register<Oxygen.Editor.World.Inspection.CookedInspectionView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
         childContainer.Register<PerspectiveCameraViewModel>(Reuse.Transient);

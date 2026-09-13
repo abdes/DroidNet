@@ -237,6 +237,17 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 windowId: this.windowId,
                 conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
         }
+        else if (metadata is Inspection.CookedInspectionDocumentMetadata inspection)
+        {
+            editor = new Inspection.CookedInspectionViewModel(
+                inspection,
+                this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+                async uri =>
+                {
+                    var request = this.container.Resolve<IMessenger>().Send(new ShowAssetRequestMessage(inspection.Project, uri));
+                    return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
+                });
+        }
         else
         {
             this.LogUnknownMetadataType(metadata.GetType().Name);

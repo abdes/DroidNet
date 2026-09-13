@@ -66,6 +66,9 @@ public sealed partial class CookingRunViewModel : ObservableObject
     /// <summary>Gets visibility for cancellation while work remains owned.</summary>
     public Visibility CancelVisibility => this.snapshot.IsCompleted ? Visibility.Collapsed : Visibility.Visible;
 
+    /// <summary>Gets visibility of published-output inspection after the selected operation has finished.</summary>
+    public Visibility InspectVisibility => this.snapshot.IsCompleted ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>Gets a value indicating whether cancellation can still be requested.</summary>
     public bool CanCancel => !this.snapshot.IsCompleted && this.snapshot.State != CookRunState.Cancelling;
 

@@ -22,10 +22,11 @@ internal sealed class CookOutputReadLease : IAsyncDisposable
     /// <summary>Opens all existing output files without permitting replacement during validation.</summary>
     /// <param name="root">The physical cooked root.</param>
     /// <param name="cancellationToken">Cancels acquisition.</param>
+    /// <param name="requireIndex">Whether an absent index should yield an empty lease; explicit reports also inspect incomplete roots.</param>
     /// <returns>The acquired lease; an adapter without physical output yields an empty lease.</returns>
-    public static async Task<CookOutputReadLease> AcquireAsync(string root, CancellationToken cancellationToken)
+    public static async Task<CookOutputReadLease> AcquireAsync(string root, CancellationToken cancellationToken, bool requireIndex = true)
     {
-        if (!Directory.Exists(root) || !File.Exists(Path.Combine(root, "container.index.bin")))
+        if (!Directory.Exists(root) || (requireIndex && !File.Exists(Path.Combine(root, "container.index.bin"))))
         {
             return new(root);
         }
@@ -47,6 +48,15 @@ internal sealed class CookOutputReadLease : IAsyncDisposable
             await lease.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>Returns the actual protected file set, including files not represented by index file records.</summary>
+    /// <returns>Root-relative paths and sizes without reading file contents.</returns>
+    public IReadOnlyList<CookedFileEntry> GetFiles()
+    {
+        this.CheckMembership();
+        return this.files.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+            .Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length))).ToArray();
     }
 
     /// <summary>Captures output identities after successful validation of the protected bytes.</summary>

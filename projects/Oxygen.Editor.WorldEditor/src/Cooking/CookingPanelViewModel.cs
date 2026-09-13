@@ -188,6 +188,33 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
             ? this.ExecuteCookAsync(selected.Snapshot.Request with { IsAutomatic = false }) : Task.CompletedTask;
 
     [RelayCommand]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed report-opening action stays with the selected cook and does not change its outcome.")]
+    private async Task InspectAsync()
+    {
+        if (this.SelectedRun is not { Snapshot.IsCompleted: true } selected
+            || selected.Snapshot.ProjectId != this.projects.ActiveProject?.ProjectId)
+        {
+            return;
+        }
+
+        var run = selected.Snapshot;
+        try
+        {
+            if (!await this.workspace.InspectAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            {
+                this.ActionError = "The inspection document could not be opened.";
+            }
+        }
+        catch (Exception exception)
+        {
+            if (this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            {
+                this.ActionError = exception.Message;
+            }
+        }
+    }
+
+    [RelayCommand]
     private async Task CancelAsync()
     {
         if (this.SelectedRun is { CanCancel: true } selected)

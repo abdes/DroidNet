@@ -95,6 +95,41 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         AssertResponsiveLayout(view, toolbar, issue, scroller, width);
     });
 
+    /// <summary>Inspection is inline with the selected run's recovery actions and does not submit another cook.</summary>
+    /// <param name="width">The panel width in DIPs.</param>
+    /// <returns>The asynchronous scoped-action regression.</returns>
+    [TestMethod]
+    [DataRow(360d)]
+    [DataRow(960d)]
+    public Task InspectButtonBelongsToTheSelectedRunHeader(double width) => EnqueueAsync(async () =>
+    {
+        var actions = new Mock<ICookingWorkspaceActions>();
+        _ = actions.Setup(value => value.InspectAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
+        using var model = CreateModel(actions.Object);
+        var selected = model.SelectedRun!;
+        var snapshot = selected.Snapshot;
+        var view = new CookingPanelView { ViewModel = model, Width = width, Height = 360 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var inspect = view.FindDescendant<Button>(button => string.Equals(button.Name, "InspectButton", StringComparison.Ordinal))!;
+        var retry = view.FindDescendant<Button>(button => string.Equals(button.Name, "RetryButton", StringComparison.Ordinal))!;
+        _ = inspect.Visibility.Should().Be(Visibility.Visible);
+        var inspectPoint = inspect.TransformToVisual(view).TransformPoint(default);
+        var retryPoint = retry.TransformToVisual(view).TransformPoint(default);
+        _ = Math.Abs(inspectPoint.Y - retryPoint.Y).Should().BeLessThan(10);
+        _ = inspectPoint.X.Should().BeGreaterThanOrEqualTo(retryPoint.X + retry.ActualWidth);
+        _ = (inspectPoint.X + inspect.ActualWidth).Should().BeLessThanOrEqualTo(width);
+        await model.InspectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        actions.Verify(value => value.InspectAsync(snapshot), Times.Once);
+        _ = model.SelectedRun.Should().BeSameAs(selected);
+        _ = selected.Snapshot.Should().BeSameAs(snapshot);
+        selected.Apply(snapshot with { Revision = snapshot.Revision + 1, State = CookRunState.Cooking, CompletedAt = null });
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = inspect.Visibility.Should().Be(Visibility.Collapsed);
+        await model.InspectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        actions.Verify(value => value.InspectAsync(It.IsAny<CookRunSnapshot>()), Times.Once);
+    });
+
     /// <summary>Failure icons use the platform's semantic critical brush in both themes.</summary>
     /// <param name="theme">The theme to resolve.</param>
     /// <returns>The asynchronous UI test.</returns>
