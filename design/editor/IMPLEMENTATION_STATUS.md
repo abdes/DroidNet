@@ -551,8 +551,14 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         The user confirmed recook/tab switching and leak-free native-debug shutdown.
   - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
         matrix, including the remaining import workflows.
-  - [ ] Resolve the reported native scene-switch failure and verify camera movement
-        without stutter.
+  - [x] The UI Automation exception flood was isolated to the computer-use helper;
+        the user confirmed it disappears with the helper stopped.
+  - [ ] Close the reported native scene-switch shadow-barrier failure. The native
+        registry now forgets backend state before retiring a resource; its cache
+        regression fails before the fix and passes afterward; 121 native cases pass
+        in both Debug and Release. Shadow-enabled
+        publication/scene-switch tests pass at 60 and 10 FPS; the intermittent
+        reported transition is not reproduced by that editor test.
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
       saved JSON, descriptors, native cooking/loading and hydration. Debug/Release
@@ -615,9 +621,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         descriptor locations and revisions. Browser type/location follows those
         records even when filenames differ; invalid descriptor paths remain
         unselectable. Catalog, browser and inspection adapter regressions pass.
-  - [ ] Connect local cooked-library discovery, saved source priority, winning-source
-        details and runtime mounting. The accepted default places new libraries
-        below project output and above older libraries; explicit reordering is allowed.
+  - [x] Local cooked-library discovery, saved priority, winning-source details and
+        runtime mounting are connected. New libraries default below project output
+        and above older libraries; explicit reordering is preserved. The user
+        confirmed the browser mounting and inspection workflows.
   - [x] Project manifests persist that priority order, retain explicit overrides when
         adding libraries, and reject invalid order entries. Confirmed configuration
         saves use atomic replacement and reject externally changed baselines;
@@ -821,7 +828,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-13 | ContentPipeline 311/311 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 311/311 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
