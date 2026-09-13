@@ -15,7 +15,7 @@ public enum AssetRuntimeAvailability
     NotApplicable,
 
     /// <summary>
-    /// Runtime availability is not known in this milestone.
+    /// Runtime availability has not been established.
     /// </summary>
     Unknown,
 
@@ -28,4 +28,13 @@ public enum AssetRuntimeAvailability
     /// Asset is mounted in the runtime.
     /// </summary>
     Mounted,
+
+    /// <summary>The native preview is not running or is incompatible.</summary>
+    Unavailable,
+
+    /// <summary>Native roots or current asset bindings are being updated.</summary>
+    Updating,
+
+    /// <summary>A current native load or application failed.</summary>
+    Failed,
 }

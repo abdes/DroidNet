@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -40,7 +40,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             [],
             [])).ToArray();
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>(statuses));
-        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([.. originals, .. copies]), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns());
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([.. originals, .. copies]), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
         using var picker = new MaterialPickerService(provider);
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
         foreach (var (original, copy) in originals.Zip(copies))
@@ -89,7 +91,9 @@ public sealed partial class ContentBrowserAssetProviderTests
 
         var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, verified, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
-        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog(records), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns());
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog(records), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime);
         var row = await provider.ResolveAsync(authored ? descriptorUri : cookedUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row!.IsBuiltin.Should().BeFalse();
         _ = row.BuiltinOriginUri.Should().BeNull();

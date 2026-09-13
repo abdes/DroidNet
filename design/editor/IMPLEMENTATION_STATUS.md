@@ -589,7 +589,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         and committed-output hashes. Document and cook events update short statuses;
         saves and completion refresh evidence. Rows retain selection, focus and scroll,
         and unchanged material swatches reuse their checked source hash. Validation:
-        Content Browser 88/88, ContentPipeline 274/274, managed MaterialEditor
+        Content Browser 89/89, ContentPipeline 274/274, managed MaterialEditor
         56/56, SceneExplorer 171/171 and packaged UI 207/207 pass. Material documents
         show the shared status in a compact header chip with a next-action tooltip;
         automatic/folder/project cooks, later edits, Save/recook and reopen are covered.
@@ -598,7 +598,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         engine origin, display Built-in with native names, and offer no standalone
         cooking. Named authored assets remain distinct and cookable. List/tile
         checks retain built-in copies under Cooked and verify contextual actions.
-        Runtime availability and remaining browser/picker workflows are pending.
+        Acknowledged roots and current native outcomes now drive browser, material
+        picker and material-editor readiness without source rescans. Native asset
+        tests 28/28 and Runtime 95/95 cover application, retry generations and stale
+        feedback; project isolation and rendered chip updates pass. Geometry-picker
+        status integration and remaining browser/picker workflows are pending.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
       [Cooking panel](lld/cooking-panel.md) run history, scoped output, grouped

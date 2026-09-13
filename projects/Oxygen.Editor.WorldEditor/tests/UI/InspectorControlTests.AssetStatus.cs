@@ -143,7 +143,7 @@ public sealed partial class InspectorControlTests
         _ = model.SelectedAsset.Should().BeSameAs(expected);
         var status = container.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Queued", StringComparison.Ordinal));
         _ = status.Should().NotBeNull();
-        _ = ToolTipService.GetToolTip(status!).Should().Be("Queued");
+        _ = ToolTipService.GetToolTip(status!).Should().Be(expected.PrimaryBadgeTooltip);
         var position = status!.TransformToVisual(selector).TransformPoint(new(0, 0));
         _ = position.Y.Should().BeInRange(0, selector.ActualHeight - status.ActualHeight + 1);
     }

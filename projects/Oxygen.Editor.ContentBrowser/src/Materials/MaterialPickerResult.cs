@@ -40,10 +40,13 @@ public sealed record MaterialPickerResult(
     /// <summary>Gets the engine owner when this identity is a verified project copy of a built-in.</summary>
     public Uri? BuiltinOriginUri { get; init; }
 
+    /// <summary>Gets the shared native availability explanation.</summary>
+    public string? RuntimeReason { get; init; }
+
     /// <summary>Gets the same short status presented in the Content Browser.</summary>
     public string StatusText => this.Generated?.IsLastKnown == true ? "Preview unavailable"
         : this.Generated is not null || this.PrimaryState == AssetState.Generated ? "Built-in"
-        : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
+        : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? ContentBrowserAssetItem.GetBadge(this.DisplayState);
 
     /// <summary>
     /// Gets the compact display state using the shared browser badge precedence.
