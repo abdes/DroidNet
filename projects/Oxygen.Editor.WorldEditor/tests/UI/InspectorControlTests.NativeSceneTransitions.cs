@@ -32,8 +32,9 @@ public sealed partial class InspectorControlTests
         fixture.Runtime.TargetFps = targetFps;
         var panel = new SwapChainPanel { Width = 640, Height = 360 };
         await LoadTestContentAsync(panel).ConfigureAwait(true);
-        for (var cycle = 0; cycle < 6; ++cycle)
+        for (var cycle = 0; cycle < 30; ++cycle)
         {
+            _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(0);
             var request = new ViewportSurfaceRequest
             {
                 DocumentId = fixture.Context.DocumentId,
@@ -42,6 +43,7 @@ public sealed partial class InspectorControlTests
                 IsPrimary = true,
             };
             var surface = await fixture.Runtime.AttachViewportAsync(request, panel, timeout.Token).ConfigureAwait(true);
+            _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(1);
             await using (surface.ConfigureAwait(true))
             {
                 await surface.ResizeAsync(3213, 1271, timeout.Token).ConfigureAwait(true);
@@ -64,10 +66,12 @@ public sealed partial class InspectorControlTests
                 }
                 finally
                 {
-                    _ = await fixture.Runtime.DestroyViewAsync(view).ConfigureAwait(true);
+                    _ = (await fixture.Runtime.DestroyViewAsync(view).ConfigureAwait(true)).Should().BeTrue();
                 }
             }
 
+            _ = surface.IsAttached.Should().BeFalse();
+            _ = fixture.Runtime.ActiveSurfaceCount.Should().Be(0);
             await fixture.SwitchToNewSceneAsync(cycle % 2 == 0 ? 1 : 4, timeout.Token).ConfigureAwait(true);
             _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
         }
@@ -79,7 +83,11 @@ public sealed partial class InspectorControlTests
     private static void SeedShadowTransitionScene(Scene scene, int cascades)
     {
         AddGeometryNode(scene, "Cube");
-        var sun = new SceneNode(scene) { Name = "Sun" };
+        var cube = scene.RootNodes[^1];
+        cube.IsActive = true;
+        cube.CastsShadows = true;
+        cube.ReceivesShadows = true;
+        var sun = new SceneNode(scene) { Name = "Sun", IsActive = true };
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
         scene.RootNodes.Add(sun);
         scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { SunNodeId = sun.Id } });

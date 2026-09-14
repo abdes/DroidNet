@@ -596,7 +596,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         registry now forgets backend state before retiring a resource; its cache
         regression fails before the fix and passes afterward; 121 native cases pass
         in both Debug and Release. Shadow-enabled
-        publication/scene-switch tests pass at 60 and 10 FPS; the intermittent
+        publication/scene-switch tests pass at 60 and 10 FPS. Release stress runs
+        cover 30 cycles at each cadence with active shadow casters, successful
+        view destruction and zero retained surface leases after every cycle. The intermittent
         reported transition is not reproduced by that editor test.
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
