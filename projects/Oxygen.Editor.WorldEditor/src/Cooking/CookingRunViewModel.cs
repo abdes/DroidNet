@@ -33,7 +33,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
     public string Name => this.snapshot.DisplayName;
 
     /// <summary>Gets concise secondary scope information.</summary>
-    public string Kind => this.snapshot.Request.TargetKind switch
+    public string Kind => this.snapshot.Request.Import is not null || this.snapshot.Request.IsReimport || (Path.GetExtension(this.snapshot.Request.ScopeUri?.AbsolutePath) ?? string.Empty).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX" ? "Source" : this.snapshot.Request.TargetKind switch
     {
         CookTargetKind.Project => "Project",
         CookTargetKind.Folder => "Folder",

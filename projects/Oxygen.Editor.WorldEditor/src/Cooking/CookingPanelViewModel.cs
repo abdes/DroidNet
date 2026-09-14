@@ -265,6 +265,18 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
         this.ActionError = string.Empty;
         try
         {
+            if (request.Import is { } import)
+            {
+                _ = await this.pipeline.ImportSourceAsync(import, CancellationToken.None).ConfigureAwait(true);
+                return;
+            }
+
+            if (request.IsReimport && this.projects.ActiveProject is { } project)
+            {
+                _ = await this.pipeline.ReimportSourceAsync(request.ScopeUri!, project, CancellationToken.None).ConfigureAwait(true);
+                return;
+            }
+
             _ = request.TargetKind switch
             {
                 CookTargetKind.Project => await this.pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(true),

@@ -17,7 +17,7 @@ namespace Oxygen.Editor.World.Tests;
 [TestClass]
 [TestCategory("UITest")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository configuration.")]
-public sealed class ContentBrowserCookFeedbackTests : VisualUserInterfaceTests
+public sealed partial class ContentBrowserCookFeedbackTests : VisualUserInterfaceTests
 {
     /// <summary>A pending cook clears the old banner; its final outcome stays in Cooking and releases the menu command.</summary>
     /// <returns>The asynchronous command regression.</returns>
@@ -42,7 +42,7 @@ public sealed class ContentBrowserCookFeedbackTests : VisualUserInterfaceTests
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
             new StrongReferenceMessenger(),
-            Mock.Of<Oxygen.Managed.Assets.Import.IImportService>(),
+            Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>())
         {
             IsOperationResultVisible = true,

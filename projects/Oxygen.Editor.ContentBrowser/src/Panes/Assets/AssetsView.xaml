@@ -74,6 +74,14 @@
                     <dnc:ToolBarButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedLeft">
                             <MenuFlyoutItem
+                                Command="{x:Bind ViewModel.ReimportSelectedSourceCommand}"
+                                Text="Reimport source"
+                                Visibility="{x:Bind ViewModel.ReimportSelectedSourceVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <SymbolIcon Symbol="Import" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
                                 Command="{x:Bind ViewModel.CookSelectedAssetCommand}"
                                 Text="Cook Selected Asset"
                                 Visibility="{x:Bind ViewModel.CookSelectedAssetVisibility, Mode=OneWay}">

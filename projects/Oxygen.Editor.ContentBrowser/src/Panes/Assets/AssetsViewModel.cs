@@ -8,6 +8,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
@@ -16,13 +17,14 @@ using DroidNet.Storage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.Storage.Pickers;
@@ -44,7 +46,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="operationResults">The operation-result publisher.</param>
 /// <param name="statusReducer">The operation status reducer.</param>
 /// <param name="storage">The storage provider.</param>
-/// <param name="importService">The import service.</param>
+/// <param name="dialogService">The existing dialog and folder-picker service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
@@ -60,7 +62,7 @@ public partial class AssetsViewModel(
     IStatusReducer statusReducer,
     IStorageProvider storage,
     IMessenger messenger,
-    IImportService importService,
+    IDialogService dialogService,
     IWindowManagerService windowManagerService) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
@@ -97,6 +99,9 @@ public partial class AssetsViewModel(
 
     /// <summary>Gets the visibility of cooking for the selected authored folder.</summary>
     public Visibility CookSelectedFolderVisibility => this.CanCookSelectedFolder() ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the visibility of reimport for the selected retained model source.</summary>
+    public Visibility ReimportSelectedSourceVisibility => this.CanReimportSelectedSource() ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Maps a browser folder to an authored material destination.</summary>
     /// <param name="selected">The selected folder.</param>
@@ -255,6 +260,50 @@ public partial class AssetsViewModel(
         => string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputInspect, StringComparison.Ordinal)
            || string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputValidate, StringComparison.Ordinal);
 
+    /// <summary>Reviews and imports a source selected by the picker or the browser.</summary>
+    /// <param name="project">The originating project.</param>
+    /// <param name="sourcePath">The selected primary source.</param>
+    /// <returns>The review and visible import operation.</returns>
+    internal async Task ImportSourceFileAsync(ProjectContext project, string sourcePath)
+    {
+        try
+        {
+            if (!ReferenceEquals(projectContextService.ActiveProject, project))
+            {
+                await dialogService.ShowMessageAsync("Import model", "The project changed. Select the source again in the current project.").ConfigureAwait(true);
+                return;
+            }
+
+            var selected = this.GetSelectedFolderUri();
+            var destination = Uri.UnescapeDataString(selected.AbsolutePath);
+            try
+            {
+                _ = SceneImportTarget.Resolve(project, selected, Path.GetFileNameWithoutExtension(sourcePath));
+            }
+            catch (ArgumentException)
+            {
+                destination = "/Content/Models";
+            }
+
+            var model = new SceneImportDialogViewModel(project, sourcePath, destination, dialogService);
+            var view = this.VmToViewConverter.Convert(model, typeof(object), parameter: null, language: CultureInfo.CurrentUICulture.Name)
+                ?? throw new InvalidOperationException("The import review view is unavailable.");
+            var button = await dialogService.ShowAsync(new DialogSpec("Import model", view)
+            {
+                PrimaryButtonText = "Import", CloseButtonText = "Cancel", DefaultButton = DialogButton.Primary,
+                PrimaryAction = () => Task.FromResult(model.Validate()),
+            }).ConfigureAwait(true);
+            if (button == DialogButton.Primary && model.Request is { } request)
+            {
+                await this.RunSourceImportAsync(project, () => contentPipelineService.ImportSourceAsync(request, CancellationToken.None)).ConfigureAwait(true);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
+        {
+            await dialogService.ShowMessageAsync("Import model", error.Message).ConfigureAwait(true);
+        }
+    }
+
     /// <summary>
     ///     Releases the unmanaged resources used by the <see cref="AssetsViewModel" /> and optionally releases the managed
     ///     resources.
@@ -364,29 +413,6 @@ public partial class AssetsViewModel(
     private static string DescribeScope(Uri? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
 
-    private static List<DiagnosticRecord> ToDiagnosticRecords(
-        Guid operationId,
-        IReadOnlyList<ImportDiagnostic> diagnostics)
-        => diagnostics.Select(diagnostic => new DiagnosticRecord
-            {
-                OperationId = operationId,
-                Domain = FailureDomain.AssetImport,
-                Severity = diagnostic.Severity switch
-                {
-                    ImportDiagnosticSeverity.Error => DiagnosticSeverity.Error,
-                    ImportDiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
-                    ImportDiagnosticSeverity.Info => DiagnosticSeverity.Info,
-                    _ => DiagnosticSeverity.Info,
-                },
-                Code = string.IsNullOrWhiteSpace(diagnostic.Code)
-                    ? AssetImportDiagnosticCodes.ImportFailed
-                    : diagnostic.Code,
-                Message = diagnostic.Message,
-                AffectedPath = diagnostic.SourcePath,
-                AffectedVirtualPath = diagnostic.VirtualPath,
-            })
-            .ToList();
-
     private void OnAssetsChanged()
     {
         if (this.LayoutViewModel is AssetsLayoutViewModel layout)
@@ -445,6 +471,17 @@ public partial class AssetsViewModel(
             // Navigate into the folder
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.DisplayPath}");
             await this.NavigateToFolder(args.InvokedItem.DisplayPath).ConfigureAwait(false);
+        }
+        else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath } && projectContextService.ActiveProject is { } project)
+        {
+            if (File.Exists(sourcePath + NativeSceneImportSettings.SidecarSuffix))
+            {
+                await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.IdentityUri, project, CancellationToken.None)).ConfigureAwait(true);
+            }
+            else
+            {
+                await this.ImportSourceFileAsync(project, sourcePath).ConfigureAwait(true);
+            }
         }
         else if (args.InvokedItem.Kind == AssetKind.Material
                  && args.InvokedItem.IdentityUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
@@ -608,6 +645,8 @@ public partial class AssetsViewModel(
 
     private void NotifyCookSelection()
     {
+        this.ReimportSelectedSourceCommand.NotifyCanExecuteChanged();
+        this.OnPropertyChanged(nameof(this.ReimportSelectedSourceVisibility));
         this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
         this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
         this.OnPropertyChanged(nameof(this.CookSelectedAssetVisibility));
@@ -854,182 +893,71 @@ public partial class AssetsViewModel(
     [RelayCommand]
     private async Task ImportAsync()
     {
-        var window = windowManagerService.ActiveWindow?.Window;
-        if (window is null)
-        {
-            return;
-        }
-
-        var picker = new FileOpenPicker();
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
-        picker.ViewMode = PickerViewMode.List;
-        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-        picker.FileTypeFilter.Add("*");
-
-        var file = await picker.PickSingleFileAsync();
-        if (file is null)
-        {
-            return;
-        }
-
-        var projectRoot = contentBrowserState.ProjectRootPath;
-        if (string.IsNullOrEmpty(projectRoot))
-        {
-            Debug.WriteLine("[AssetsViewModel] Project root path is missing.");
-            return;
-        }
-
-        var relativePath = this.RetainImportSource(projectRoot, file.Path);
-        if (relativePath is not null)
-        {
-            await this.ImportRetainedSourceAsync(projectRoot, relativePath).ConfigureAwait(true);
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private string? RetainImportSource(string projectRoot, string sourcePath)
-    {
-        string relativePath;
         try
         {
-            relativePath = Path.GetRelativePath(projectRoot, sourcePath);
-        }
-        catch
-        {
-            Debug.WriteLine("[AssetsViewModel] File is not in project directory.");
-            return null;
-        }
-
-        if (relativePath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relativePath))
-        {
-            var destinationFolder = contentBrowserState.SelectedFolders.FirstOrDefault() ?? "Content";
-
-            destinationFolder = destinationFolder.TrimStart('/', '\\');
-
-            var fileName = Path.GetFileName(sourcePath);
-            var destinationPath = Path.Combine(projectRoot, destinationFolder, fileName);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-
-            try
+            var project = projectContextService.ActiveProject;
+            var window = windowManagerService.ActiveWindow?.Window;
+            if (project is null || window is null)
             {
-                File.Copy(sourcePath, destinationPath, overwrite: true);
-                Debug.WriteLine($"[AssetsViewModel] Copied {sourcePath} to {destinationPath}");
-
-                relativePath = Path.GetRelativePath(projectRoot, destinationPath);
+                return;
             }
-            catch (Exception ex)
+
+            var picker = new FileOpenPicker();
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+            picker.ViewMode = PickerViewMode.List;
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            foreach (var extension in new[] { ".gltf", ".glb", ".fbx" })
             {
-                Debug.WriteLine($"[AssetsViewModel] Failed to copy file: {ex.Message}");
-                return null;
+                picker.FileTypeFilter.Add(extension);
+            }
+
+            if (await picker.PickSingleFileAsync() is { } file)
+            {
+                await this.ImportSourceFileAsync(project, file.Path).ConfigureAwait(true);
             }
         }
-
-        if (Path.IsPathRooted(relativePath))
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
         {
-            Debug.WriteLine($"[AssetsViewModel] Import failed: relative path '{relativePath}' is still absolute. Check project root and destination paths.");
-            return null;
+            await dialogService.ShowMessageAsync("Import model", error.Message).ConfigureAwait(true);
         }
-
-        return relativePath.Replace('\\', '/');
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private async Task ImportRetainedSourceAsync(string projectRoot, string relativePath)
-    {
-        var operationId = Guid.NewGuid();
-        var input = new ImportInput(relativePath, this.ResolveImportMountName());
-        var request = new ImportRequest(projectRoot, [input], new ImportOptions());
+    private bool CanReimportSelectedSource() => !this.disposed && this.isInitialized
+        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: AssetKind.ForeignSource, SourcePath: { } path } }
+        && File.Exists(path + NativeSceneImportSettings.SidecarSuffix);
 
+    [RelayCommand(CanExecute = nameof(CanReimportSelectedSource))]
+    private async Task ReimportSelectedSourceAsync()
+    {
+        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { } source })
+        {
+            await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source.IdentityUri, project, CancellationToken.None)).ConfigureAwait(true);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This user-command boundary reports failures; the coordinator owns native work and scoped recovery.")]
+    private async Task RunSourceImportAsync(ProjectContext project, Func<Task<ContentCookResult>> import)
+    {
+        this.IsOperationResultVisible = false;
         try
         {
-            var result = await importService.ImportAsync(request).ConfigureAwait(true);
-            await this.PublishImportResultAsync(operationId, relativePath, result).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[AssetsViewModel] Import exception: {ex}");
-            this.PublishFailure(
-                ContentPipelineOperationKinds.Import,
-                "Import Asset",
-                ex.Message,
-                AssetImportDiagnosticCodes.ImportFailed,
-                this.GetSelectedFolderUri(),
-                ex);
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
-    private async Task PublishImportResultAsync(Guid operationId, string relativePath, ImportResult result)
-    {
-        if (result.Succeeded)
-        {
-            Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
-            var diagnostics = ToDiagnosticRecords(operationId, result.Diagnostics);
-            var status = OperationStatus.Succeeded;
-            try
+            var result = await import().ConfigureAwait(true);
+            if (ReferenceEquals(projectContextService.ActiveProject, project))
             {
                 await assetProvider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
                 _ = messenger.Send(new AssetsChangedMessage());
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                status = OperationStatus.PartiallySucceeded;
-                diagnostics.Add(this.CreateCatalogRefreshDiagnostic(operationId, ex, this.GetSelectedFolderUri()));
+                this.NotifyCookSelection();
             }
 
-            this.PublishOperation(
-                operationId,
-                ContentPipelineOperationKinds.Import,
-                status,
-                "Import Asset",
-                $"Imported {relativePath}.",
-                diagnostics,
-                this.GetSelectedFolderUri());
+            this.PublishCookResult(ContentPipelineOperationKinds.Import, "Import model", result, result.RetainedSourceUri);
         }
-        else
+        catch (OperationCanceledException)
         {
-            Debug.WriteLine($"[AssetsViewModel] Import failed for {relativePath}");
-            foreach (var diag in result.Diagnostics)
-            {
-                Debug.WriteLine($"[Import] {diag.Severity}: {diag.Message}");
-            }
-
-            this.PublishOperation(
-                operationId,
-                ContentPipelineOperationKinds.Import,
-                OperationStatus.Failed,
-                "Import Asset",
-                $"Import failed for {relativePath}.",
-                ToDiagnosticRecords(operationId, result.Diagnostics),
-                this.GetSelectedFolderUri());
+            // The Cooking run retains the cancellation outcome.
+        }
+        catch (Exception error)
+        {
+            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import model", error.Message, AssetImportDiagnosticCodes.ImportFailed, scopeUri: null, error, showInBrowser: false);
         }
     }
-
-    private string ResolveImportMountName()
-    {
-        var folderUri = this.GetSelectedFolderUri();
-        var path = Uri.UnescapeDataString(folderUri.AbsolutePath).Trim('/');
-        var slash = path.IndexOf('/', StringComparison.Ordinal);
-        var mountName = slash < 0 ? path : path[..slash];
-        var mounts = projectContextService.ActiveProject?.AuthoringMounts;
-        return !string.IsNullOrWhiteSpace(mountName) ? mountName
-            : mounts is { Count: > 0 } ? mounts[0].Name : "Content";
-    }
-
-    private DiagnosticRecord CreateCatalogRefreshDiagnostic(
-        Guid operationId,
-        Exception exception,
-        Uri? scopeUri)
-        => new()
-        {
-            OperationId = operationId,
-            Domain = FailureDomain.AssetIdentity,
-            Severity = DiagnosticSeverity.Error,
-            Code = AssetIdentityDiagnosticCodes.RefreshFailed,
-            Message = "Asset catalog refresh failed after import.",
-            TechnicalMessage = exception.Message,
-            ExceptionType = exception.GetType().FullName,
-            AffectedEntity = this.CreateAffectedScope(scopeUri),
-        };
 }
