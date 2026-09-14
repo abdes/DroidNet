@@ -4,6 +4,7 @@
 
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
@@ -61,6 +62,11 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
                 if (isLibrary)
                 {
                     await files.VerifyDescriptorsAsync(records, cancellationToken).ConfigureAwait(false);
+                    if (native is ICookedDependencyInspector inspector)
+                    {
+                        var fingerprint = await CookedDependencyCache.FingerprintAsync(files, cancellationToken).ConfigureAwait(false);
+                        _ = await CookedDependencyCache.EnsureAsync(project.ProjectRoot, path, fingerprint, records, inspector, Path.Combine(project.ProjectRoot, ".build", "cook", Guid.NewGuid().ToString("N")), cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 var validation = await native.ValidateLooseCookedRootAsync(path, cancellationToken).ConfigureAwait(false);
@@ -72,6 +78,13 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
 
             return new(roots.Select(static root => root.path).ToArray(), readers);
         }
+        catch (ContentPipelineTerminationException failure)
+        {
+            var retained = readers.ToArray();
+            readers.Clear();
+            var drain = ReleaseAfterInspectionAsync(failure.DrainCompletion, retained);
+            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
+        }
         catch
         {
             foreach (var reader in readers.AsEnumerable().Reverse())
@@ -80,6 +93,21 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
             }
 
             throw;
+        }
+    }
+
+    private static async Task ReleaseAfterInspectionAsync(Task drain, IReadOnlyList<IDisposable> readers)
+    {
+        try
+        {
+            await drain.ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var reader in readers.Reverse())
+            {
+                reader.Dispose();
+            }
         }
     }
 

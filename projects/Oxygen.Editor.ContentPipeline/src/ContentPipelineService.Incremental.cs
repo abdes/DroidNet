@@ -140,6 +140,11 @@ public sealed partial class ContentPipelineService
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, graph, cancellationToken).ConfigureAwait(false);
         try
         {
+            if (this.engineContentPipelineApi is Inspection.ICookedDependencyInspector inspector)
+            {
+                await libraries.PopulateDependenciesAsync(graph, inspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, cancellationToken).ConfigureAwait(false);
+            }
+
             graph = libraries.Apply(graph);
             if (HasError(graph.Diagnostics))
             {

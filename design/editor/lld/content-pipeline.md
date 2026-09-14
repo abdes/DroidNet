@@ -949,6 +949,22 @@ through native work, publication and failed-worker drain. Source priority is
 resolved from the saved project order for both cooking and preview; no library is
 copied into project authoring or claimed as a newly produced project asset.
 
+Dependency inspection uses the existing native Inspector in metadata-only mode.
+Cache its versioned report under `.build/cache/cooked-dependencies-v1`, keyed by
+the verified container-file fingerprint. Validate the report schema, cached-report
+digest, container identity and indexed asset keys/types/paths before reuse.
+Missing or damaged cache entries require inspection; they cannot prove freshness.
+Cooking and mount preparation populate cache misses while retaining library and
+native-tool readers through worker completion or failed-termination drain.
+Status reads consume cached facts without starting native processes. A known
+changed library remains Out of date while further inspection is pending.
+
+Follow asset-key dependencies across declared libraries using the saved source
+order. Capture every reached library in consumer provenance, including materials
+reached through cooked geometry. Incomplete or missing native dependencies are
+scoped diagnostics. Release candidate-library readers that are outside the
+resolved dependency set before native cooking.
+
 Explicit replacement of an existing retained source keeps the reviewed source
 and settings intact during discovery and native cooking. Capture the incoming
 bundle into private inputs under the existing source identity and output

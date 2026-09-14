@@ -72,7 +72,7 @@ public sealed partial class ContentPipelineServiceTests
         }
     }
 
-    private async Task AssertReaderRetainedUntilDrainAsync(Task<ContentCookResult> work, TempWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
+    private async Task AssertReaderRetainedUntilDrainAsync(Task work, TempWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
     {
         Func<Task> observe = () => work;
         var failure = await observe.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
@@ -96,8 +96,15 @@ public sealed partial class ContentPipelineServiceTests
 
         public Func<Task>? BeforeBatch { get; set; }
 
+        public Func<Task>? BeforeDependencyInspection { get; set; }
+
         public async Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
         {
+            if (this.BeforeDependencyInspection is not null && request.Arguments.Contains("dependencies", StringComparer.Ordinal))
+            {
+                await this.BeforeDependencyInspection().ConfigureAwait(false);
+            }
+
             if (this.BeforeBatch is not null && request.Arguments.Contains("batch", StringComparer.Ordinal))
             {
                 await this.BeforeBatch().ConfigureAwait(false);
