@@ -54,24 +54,12 @@ public sealed partial class ImportToolContentPipelineApi(
         var artifacts = compatibility.Artifacts!;
         var manifest = execution.Manifest;
         var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
+        var reportPath = manifest.Jobs.Any(static job => job.Type is "gltf" or "fbx") ? manifestPath + ".report.json" : null;
         Task? retainedWorkerDrain = null;
 
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var toolPath = this.GetCompatibleToolPath(artifacts);
-            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-            await WriteManifestAsync(manifest, manifestPath, cancellationToken).ConfigureAwait(false);
-            var request = CreateImportRequest(toolPath, manifest.Output, manifestPath, execution.InputRoot) with
-            {
-                Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
-            };
-
-            this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
-            var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
-            return result.ExitCode == 0
-                ? new NativeImportResult(Succeeded: true, Diagnostics: [])
-                : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
+            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException ex)
         {
@@ -88,10 +76,14 @@ public sealed partial class ImportToolContentPipelineApi(
                 }
 
                 TryDeleteFile(manifestPath);
+                if (reportPath is not null)
+                {
+                    TryDeleteFile(reportPath);
+                }
             }
             else
             {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, execution.Artifacts is null ? artifacts : null);
+                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, execution.Artifacts is null ? artifacts : null, reportPath);
             }
         }
     }
@@ -199,7 +191,7 @@ public sealed partial class ImportToolContentPipelineApi(
                 .OrderBy(static asset => asset.VirtualPath, StringComparer.Ordinal)
                 .Select(static asset => new CookedAssetEntry(
                     asset.VirtualPath ?? asset.DescriptorRelativePath,
-                    MapAssetKind(asset.AssetType)) { DescriptorRelativePath = asset.DescriptorRelativePath })
+                    MapAssetKind(asset.AssetType)) { DescriptorRelativePath = asset.DescriptorRelativePath, AssetKey = asset.AssetKey.ToString() })
                 .ToList(),
             document.Files
                 .OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
@@ -417,6 +409,33 @@ public sealed partial class ImportToolContentPipelineApi(
         Level = LogLevel.Information,
         Message = "Invoking ImportTool '{ToolPath}' with manifest '{ManifestPath}' in '{WorkingDirectory}'.")]
     private partial void LogImportToolInvoked(string toolPath, string manifestPath, string workingDirectory);
+
+    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string? reportPath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var toolPath = this.GetCompatibleToolPath(artifacts);
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        await WriteManifestAsync(execution.Manifest, manifestPath, cancellationToken).ConfigureAwait(false);
+        var request = CreateImportRequest(toolPath, execution.Manifest.Output, manifestPath, execution.InputRoot) with
+        {
+            Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
+        };
+
+        if (reportPath is not null)
+        {
+            request = request with { Arguments = [.. request.Arguments, "--report", reportPath] };
+        }
+
+        this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
+        var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
+        return reportPath is not null && File.Exists(reportPath)
+            ? Import.NativeImportReportReader.Read(await File.ReadAllTextAsync(reportPath, cancellationToken).ConfigureAwait(false), execution, result.ExitCode)
+            : reportPath is not null && result.ExitCode == 0
+            ? throw new InvalidDataException("Native source import did not produce its required output report.")
+            : result.ExitCode == 0
+            ? new NativeImportResult(Succeeded: true, Diagnostics: [])
+            : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
+    }
 
     private sealed class CookOutput(IProgress<CookRunProgress> progress) : IProgress<ContentPipelineProcessOutput>
     {

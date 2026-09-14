@@ -13,4 +13,7 @@ public sealed record CookedAssetEntry(string VirtualPath, ContentCookAssetKind K
 {
     /// <summary>Gets the descriptor's physical path within the inspected root, as recorded by the native index.</summary>
     public string? DescriptorRelativePath { get; init; }
+
+    /// <summary>Gets the native identity recorded in the cooked index.</summary>
+    public string? AssetKey { get; init; }
 }
