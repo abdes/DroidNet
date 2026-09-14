@@ -58,6 +58,7 @@ internal sealed partial class CookPublicationTransaction
     /// <param name="files">The atomic metadata store.</param>
     /// <param name="cancellationToken">Cancels before publication.</param>
     /// <param name="checkpoint">Optional controlled boundary observer.</param>
+    /// <param name="sourceReplacement">The reviewed source bundle and its original bytes, when replacing an import.</param>
     /// <returns>The durable prepared transaction.</returns>
     public static async Task<CookPublicationTransaction> PrepareAsync(
         ContentCookOperation operation,
@@ -65,7 +66,8 @@ internal sealed partial class CookPublicationTransaction
         IReadOnlyDictionary<string, byte[]> metadata,
         IAtomicFileStore files,
         CancellationToken cancellationToken,
-        Func<string, Task>? checkpoint = null)
+        Func<string, Task>? checkpoint = null,
+        CookSourceReplacement? sourceReplacement = null)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(staging);
@@ -103,7 +105,10 @@ internal sealed partial class CookPublicationTransaction
             metadataFiles.Add(new(relative, before.Version.Exists ? before.Content.ToArray() : null, bytes.ToArray()));
         }
 
-        var preparedJournal = new CookPublicationJournal(1, operation.Project.ProjectId, operation.OperationId, CookPublicationPhase.Prepared, roots.ToImmutable(), metadataFiles.ToImmutable());
+        var preparedJournal = new CookPublicationJournal(1, operation.Project.ProjectId, operation.OperationId, CookPublicationPhase.Prepared, roots.ToImmutable(), metadataFiles.ToImmutable())
+        {
+            SourceReplacement = sourceReplacement is null ? null : await CaptureSourceReplacementAsync(operation, sourceReplacement, cancellationToken).ConfigureAwait(false),
+        };
         var transaction = new CookPublicationTransaction(operation.Project, files, preparedJournal, FileVersion.Missing, checkpoint);
         await transaction.WriteJournalAsync(CookPublicationPhase.Prepared, cancellationToken).ConfigureAwait(false);
         staging.RetainForPublication();
@@ -255,13 +260,13 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task VerifyBaselinesAsync(CancellationToken cancellationToken)
     {
-        foreach (var root in this.journal.Roots)
+        foreach (var root in this.Directories())
         {
-            var current = await CookRootImage.CaptureAsync(this.RootPath("published", root.Mount), copyTo: null, cancellationToken).ConfigureAwait(false);
-            var staged = await CookRootImage.CaptureAsync(this.RootPath("output", root.Mount), copyTo: null, cancellationToken).ConfigureAwait(false);
+            var current = await CookRootImage.CaptureAsync(root.Published, copyTo: null, cancellationToken).ConfigureAwait(false);
+            var staged = await CookRootImage.CaptureAsync(root.Staged, copyTo: null, cancellationToken).ConfigureAwait(false);
             if (!root.Before.Matches(current) || !root.After.Matches(staged))
             {
-                throw new IOException($"Cooked content changed after staging '{root.Mount}'. Retry the cook.");
+                throw new IOException($"Content changed after staging '{root.Name}'. Review the import or retry the cook.");
             }
         }
 
@@ -276,23 +281,23 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task InstallRootsAsync(Action verifyOwner)
     {
-        foreach (var root in this.journal.Roots)
+        foreach (var root in this.Directories())
         {
             verifyOwner();
             if (root.Before.Exists)
             {
-                MoveOwnedRoot(this.RootPath("published", root.Mount), this.RootPath("previous", root.Mount));
-                await this.checkpoint("Retained:" + root.Mount).ConfigureAwait(false);
+                MoveOwnedRoot(root.Published, root.Previous);
+                await this.checkpoint("Retained:" + root.Name).ConfigureAwait(false);
             }
         }
 
         await this.WriteJournalAsync(CookPublicationPhase.OldRetained, CancellationToken.None).ConfigureAwait(false);
         await this.checkpoint("OldRetained").ConfigureAwait(false);
-        foreach (var root in this.journal.Roots)
+        foreach (var root in this.Directories())
         {
             verifyOwner();
-            MoveOwnedRoot(this.RootPath("output", root.Mount), this.RootPath("published", root.Mount));
-            await this.checkpoint("Installed:" + root.Mount).ConfigureAwait(false);
+            MoveOwnedRoot(root.Staged, root.Published);
+            await this.checkpoint("Installed:" + root.Name).ConfigureAwait(false);
         }
 
         await this.WriteJournalAsync(CookPublicationPhase.RootsInstalled, CancellationToken.None).ConfigureAwait(false);

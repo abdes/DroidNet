@@ -43,6 +43,15 @@ internal sealed record CookPublicationJournal(
     ImmutableArray<CookPublicationJournal.Root> Roots,
     ImmutableArray<CookPublicationJournal.MetadataFile> Metadata)
 {
+    /// <summary>Gets the reviewed retained-source directory installed with this generation.</summary>
+    public SourceBundle? SourceReplacement { get; init; }
+
+    /// <summary>A retained source bundle and the complete before/after directory identities.</summary>
+    /// <param name="BundleName">The single retained-source directory name.</param>
+    /// <param name="Before">The reviewed original source and settings.</param>
+    /// <param name="After">The privately captured replacement source and settings.</param>
+    public sealed record SourceBundle(string BundleName, CookRootImage Before, CookRootImage After);
+
     /// <summary>Identities before and after native staging validation.</summary>
     /// <param name="Mount">One physical mount directory name.</param>
     /// <param name="Before">The previously published content.</param>

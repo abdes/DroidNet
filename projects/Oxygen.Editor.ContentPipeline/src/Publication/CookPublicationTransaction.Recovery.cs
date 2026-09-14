@@ -51,23 +51,22 @@ internal sealed partial class CookPublicationTransaction
         }
 
         var owned = new List<string>();
-        foreach (var root in this.journal.Roots)
+        foreach (var root in this.Directories())
         {
-            foreach (var area in new[] { "previous", "discarded", "output" })
+            foreach (var (path, expected) in new[] { (root.Previous, root.Before), (root.Discarded, root.After), (root.Staged, root.After) })
             {
-                var image = await this.ReadAreaAsync(area, root.Mount).ConfigureAwait(false);
+                var image = await CookRootImage.CaptureAsync(path, copyTo: null, CancellationToken.None).ConfigureAwait(false);
                 if (!image.Exists)
                 {
                     continue;
                 }
 
-                var expected = string.Equals(area, "previous", StringComparison.Ordinal) ? root.Before : root.After;
                 if (!image.Matches(expected))
                 {
                     throw new InvalidDataException("Private publication files changed; cleanup retained them for review.");
                 }
 
-                owned.Add(this.RootPath(area, root.Mount));
+                owned.Add(path);
             }
         }
 
@@ -148,6 +147,25 @@ internal sealed partial class CookPublicationTransaction
         var loadedJournal = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
             ?? throw new InvalidDataException("The publication recovery journal is empty.");
         ValidateJournal(loadedJournal, project.ProjectId, operationId);
+        if (loadedJournal.SourceReplacement is { } source)
+        {
+            try
+            {
+                _ = Import.ImportSourceRetention.ResolveDestination(project, source.BundleName);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("The source replacement journal contains an invalid bundle name.", exception);
+            }
+
+            ValidateImage(source.Before);
+            ValidateImage(source.After);
+            if (!source.Before.Exists || source.Before.Files.IsEmpty || !source.After.Exists || source.After.Files.IsEmpty)
+            {
+                throw new InvalidDataException("The source replacement journal has incomplete bundle identities.");
+            }
+        }
+
         return new(project, files, loadedJournal, snapshot.Version, checkpoint: null);
     }
 
@@ -202,24 +220,24 @@ internal sealed partial class CookPublicationTransaction
     private async Task RestoreFilesAsync()
     {
         // Verify all recovery material before changing any root.
-        foreach (var root in this.journal.Roots)
+        foreach (var root in this.Directories())
         {
-            var previous = await this.ReadAreaAsync("previous", root.Mount).ConfigureAwait(false);
-            var published = await this.ReadAreaAsync("published", root.Mount).ConfigureAwait(false);
-            var staged = await this.ReadAreaAsync("output", root.Mount).ConfigureAwait(false);
+            var previous = await CookRootImage.CaptureAsync(root.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            var published = await CookRootImage.CaptureAsync(root.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            var staged = await CookRootImage.CaptureAsync(root.Staged, copyTo: null, CancellationToken.None).ConfigureAwait(false);
             if ((previous.Exists && !previous.Matches(root.Before))
                 || (root.Before.Exists && !previous.Exists && !published.Matches(root.Before))
                 || (!root.Before.Exists && published.Exists && staged.Exists)
                 || (published.Exists && !published.Matches(root.Before) && !published.Matches(root.After)))
             {
-                throw new InvalidDataException($"Recovery material for '{root.Mount}' is missing or changed. Files have been retained.");
+                throw new InvalidDataException($"Recovery material for '{root.Name}' is missing or changed. Files have been retained.");
             }
         }
 
-        foreach (var root in this.journal.Roots.Reverse())
+        foreach (var root in this.Directories().Reverse())
         {
-            var previous = await this.ReadAreaAsync("previous", root.Mount).ConfigureAwait(false);
-            var published = await this.ReadAreaAsync("published", root.Mount).ConfigureAwait(false);
+            var previous = await CookRootImage.CaptureAsync(root.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            var published = await CookRootImage.CaptureAsync(root.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
             if (published.Matches(root.Before))
             {
                 continue;
@@ -227,12 +245,12 @@ internal sealed partial class CookPublicationTransaction
 
             if (published.Exists)
             {
-                MoveOwnedRoot(this.RootPath("published", root.Mount), this.RootPath("discarded", root.Mount));
+                MoveOwnedRoot(root.Published, root.Discarded);
             }
 
             if (previous.Exists)
             {
-                MoveOwnedRoot(this.RootPath("previous", root.Mount), this.RootPath("published", root.Mount));
+                MoveOwnedRoot(root.Previous, root.Published);
             }
         }
 
