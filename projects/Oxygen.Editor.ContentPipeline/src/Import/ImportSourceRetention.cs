@@ -80,33 +80,11 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         }
     }
 
-    private static string ValidateBundle(ImportSourceBundle bundle)
-    {
-        if (string.IsNullOrWhiteSpace(bundle.PrimaryRelativePath))
-        {
-            throw new InvalidDataException("Source discovery did not identify its primary file.");
-        }
-
-        var primary = bundle.PrimaryRelativePath.Replace('\\', '/');
-        return bundle.Files.Any(static file => file.IsAbsent)
-            || !bundle.Files.Any(file => string.Equals(file.RelativePath.Replace('\\', '/'), primary, StringComparison.OrdinalIgnoreCase))
-            ? throw new InvalidDataException("Source retention requires the selected file and every discovered dependency to be present.")
-            : primary;
-    }
-
-    private static async Task ReleaseAfterDrainAsync(Task drain, FileStream ownership)
-    {
-        try
-        {
-            await drain.ConfigureAwait(false);
-        }
-        finally
-        {
-            await ownership.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    private static string ResolveDestination(ProjectContext project, string bundleName)
+    /// <summary>Resolves a retained-source directory within the declared Content authoring mount.</summary>
+    /// <param name="project">The project owning the source bundle.</param>
+    /// <param name="bundleName">One directory name beneath SourceMedia/DCC.</param>
+    /// <returns>The contained absolute source directory.</returns>
+    internal static string ResolveDestination(ProjectContext project, string bundleName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleName);
         if (bundleName is "." or ".." || bundleName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
@@ -135,6 +113,32 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         }
 
         return Path.Combine(sourceRoot, bundleName);
+    }
+
+    private static string ValidateBundle(ImportSourceBundle bundle)
+    {
+        if (string.IsNullOrWhiteSpace(bundle.PrimaryRelativePath))
+        {
+            throw new InvalidDataException("Source discovery did not identify its primary file.");
+        }
+
+        var primary = bundle.PrimaryRelativePath.Replace('\\', '/');
+        return bundle.Files.Any(static file => file.IsAbsent)
+            || !bundle.Files.Any(file => string.Equals(file.RelativePath.Replace('\\', '/'), primary, StringComparison.OrdinalIgnoreCase))
+            ? throw new InvalidDataException("Source retention requires the selected file and every discovered dependency to be present.")
+            : primary;
+    }
+
+    private static async Task ReleaseAfterDrainAsync(Task drain, FileStream ownership)
+    {
+        try
+        {
+            await drain.ConfigureAwait(false);
+        }
+        finally
+        {
+            await ownership.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private static void EnsureAvailable(string destination)

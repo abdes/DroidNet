@@ -37,7 +37,7 @@ public sealed partial class CookPublicationTransactionTests
         Action competing = () => CookOutputLease.AcquireWrite(project.Root).Dispose();
         _ = competing.Should().Throw<CookOutputBusyException>();
         await preview.DisposeAsync().ConfigureAwait(false);
-        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         await loaded.VerifyCommittedAsync(writer).ConfigureAwait(false);
         await loaded.CleanupAsync(writer).ConfigureAwait(false);
@@ -113,7 +113,7 @@ public sealed partial class CookPublicationTransactionTests
         _ = preview.Resumed.Should().BeFalse();
         _ = transaction.Phase.Should().NotBe(CookPublicationPhase.RolledBack);
         await preview.DisposeAsync().ConfigureAwait(false);
-        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         await recovery.RecoverAsync(writer).ConfigureAwait(false);
         await recovery.CleanupAsync(writer).ConfigureAwait(false);
@@ -301,7 +301,7 @@ public sealed partial class CookPublicationTransactionTests
             return staging;
         }
 
-        public Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken, Func<string, Task>? checkpoint = null)
+        public Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken, Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null)
             => CookPublicationTransaction.PrepareAsync(
                 this.Operation,
                 staging,
@@ -312,7 +312,8 @@ public sealed partial class CookPublicationTransactionTests
                 },
                 this.Files,
                 cancellationToken,
-                checkpoint);
+                checkpoint,
+                sourceReplacement);
 
         public void AssertOld()
         {

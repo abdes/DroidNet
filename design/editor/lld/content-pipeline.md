@@ -949,6 +949,19 @@ through native work, publication and failed-worker drain. Source priority is
 resolved from the saved project order for both cooking and preview; no library is
 copied into project authoring or claimed as a newly produced project asset.
 
+Explicit replacement of an existing retained source keeps the reviewed source
+and settings intact during discovery and native cooking. Capture the incoming
+bundle into private inputs under the existing source identity and output
+namespace. The publication journal includes the source directory alongside its
+cooked roots: verify the reviewed source baseline, retain every old directory,
+install the new source and output, and commit only after preview accepts the
+generation. Failure or interrupted publication restores both source and output.
+Source changes after a committed import are ordinary authoring changes; they do
+not invalidate the integrity of that earlier cooked generation. Cleanup removes
+only journal-verified private bundles. Dirty owners, ambiguous source ownership,
+unowned files in a replacement bundle and changed reviewed baselines block the
+replacement before mutation.
+
 Published model provenance records a source/settings/dependency fingerprint
 independent of the producer fingerprint. Automatic Save and preview demand may
 regenerate unchanged model inputs for a new producer, but changed model inputs
