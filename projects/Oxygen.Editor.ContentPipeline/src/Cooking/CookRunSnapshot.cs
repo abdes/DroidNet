@@ -23,7 +23,7 @@ public sealed record CookRunSnapshot
     /// <summary>Gets the user-visible scope name.</summary>
     public required string DisplayName { get; init; }
 
-    /// <summary>Gets the original logical request used by Retry.</summary>
+    /// <summary>Gets the logical request used by Retry, updated after source retention.</summary>
     public required CookRunRequest Request { get; init; }
 
     /// <summary>Gets the monotonic presentation revision.</summary>

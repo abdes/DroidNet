@@ -17,4 +17,8 @@ public sealed record CookRunProgress(
     DiagnosticSeverity Severity = DiagnosticSeverity.Info,
     CookRunState? State = null,
     CookRunAsset? Asset = null,
-    DiagnosticRecord? Diagnostic = null);
+    DiagnosticRecord? Diagnostic = null)
+{
+    /// <summary>Gets the recovery scope after original source has been retained.</summary>
+    public CookRunRequest? RecoveryRequest { get; init; }
+}
