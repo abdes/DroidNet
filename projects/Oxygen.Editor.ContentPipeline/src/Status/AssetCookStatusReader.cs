@@ -120,12 +120,15 @@ public sealed partial class AssetCookStatusReader(
         var inputChanged = graph.Assets.Any(asset => closure.Contains(asset.AssetUri)
             && graph.FileDependencies.TryGetValue(asset.AssetUri, out var dependencies) && dependencies.Any(changed.Contains));
         _ = products.TryGetValue(input.AssetUri, out var prior);
+        var inspectionPending = issues.Any(static issue => string.Equals(issue.Code, "asset_cook.library_inspection_required", StringComparison.Ordinal));
+        var changedLibrary = prior?.CookedDependencies.Any(dependency => graph.CookedDependencies.TryGetValue(dependency.AssetUri, out var current) && current != dependency) == true;
         var published = prior?.Outputs.Select(static output => output.Asset).ToImmutableArray() ?? [];
         var verified = prior is not null && VerifyPriorClosure(prior.SourceUri, products, plan.VerifiedOutputs, graph.CookedDependencies, []);
         var needsDiscovery = closure.Overlaps(graph.ImportsNeedingDiscovery);
         var freshness = issues.Any(static issue => string.Equals(issue.Code, AssetImportDiagnosticCodes.SourceMissing, StringComparison.Ordinal)) ? AssetCookFreshness.MissingSource
             : issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error) ? AssetCookFreshness.InvalidSource
             : metadataUnavailable || !nativeAvailable || inputChanged ? AssetCookFreshness.Unknown
+            : inspectionPending ? changedLibrary ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Unknown
             : prior is null ? AssetCookFreshness.NeedsCooking
             : needsDiscovery ? AssetCookFreshness.OutOfDate
             : closure.All(uri => plan.Reusable.ContainsKey(uri) || graph.CookedDependencies.ContainsKey(uri)) && verified ? AssetCookFreshness.Current

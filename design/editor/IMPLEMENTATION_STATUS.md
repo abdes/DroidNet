@@ -571,9 +571,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Debug and Release, with both SDK configurations installed.
   - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
         in 07B.1 and 07B.4.
-        Native Inspector dependency reports now reuse metadata-only descriptor
-        decoding; loader suites pass 39/39 in Debug and Release. The approved
-        derived-cache integration and transitive-library workflows are in progress.
+  - [x] Cache native Inspector dependency reports by verified library contents.
+        Cooked geometry captures a material supplied by another library; changing
+        that material invalidates its consuming scene. Native keys retain their
+        binary identity across report/index representations. Corrupt cache entries
+        become misses, status reads start no native processes, and failed worker
+        termination retains readers and the project writer until drain. Native
+        loader suites pass 39/39 in Debug and Release; ContentPipeline passes 432/432.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.

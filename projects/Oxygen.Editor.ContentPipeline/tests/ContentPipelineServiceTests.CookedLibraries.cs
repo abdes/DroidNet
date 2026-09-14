@@ -47,7 +47,8 @@ public sealed partial class ContentPipelineServiceTests
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         var updated = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updated.IsPublished.Should().BeTrue();
-        _ = updated.InputSnapshot!.CookedDependencies.Single().ContentFingerprint.Should().NotBe(result.InputSnapshot!.CookedDependencies.Single().ContentFingerprint);
+        _ = updated.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.ContentFingerprint).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which
+            .Should().NotBe(result.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.ContentFingerprint).Distinct(StringComparer.Ordinal).Single());
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
 
         await this.AssertLibraryFailuresPreserveOutputAsync(consumer, context, library.Root, root, service, scene).ConfigureAwait(false);
@@ -82,7 +83,7 @@ public sealed partial class ContentPipelineServiceTests
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var first = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
-        _ = first.InputSnapshot!.CookedDependencies.Single().SourceName.Should().Be("Newer");
+        _ = first.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Newer");
         var changed = context with { CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.ProjectOutput)] };
         consumer.ContextService.Activate(changed);
         var workers = runner.Count;
@@ -90,7 +91,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = runner.Count.Should().Be(workers, "status checks must not start a native process");
         var second = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = second.IsPublished.Should().BeTrue();
-        _ = second.InputSnapshot!.CookedDependencies.Single().SourceName.Should().Be("Older");
+        _ = second.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Older");
     }
 
     private async Task AssertLibraryFailuresPreserveOutputAsync(TempWorkspace consumer, Oxygen.Editor.Projects.ProjectContext context, string libraryProject, string root, ContentPipelineService service, Uri scene)
