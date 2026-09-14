@@ -24,12 +24,16 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="importedSources">Previously published native dependency layouts for exact source revisions.</param>
 /// <param name="discoverImported">Optional native rediscovery used only by an owned cook operation.</param>
 /// <param name="resolveImported">Resolves native output references to their retained source owner.</param>
+/// <param name="preferCookedReference">Tests whether a library overrides the corresponding project source.</param>
+/// <param name="expandCookedReferences">Expands verified library dependencies before resolving authored owners.</param>
 public sealed class CookDependencyDiscovery(
     ICookDocumentRegistry documents,
     bool allowUnsavedDocuments = false,
     IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? importedSources = null,
     Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null,
-    Func<Uri, ContentCookInput?>? resolveImported = null)
+    Func<Uri, ContentCookInput?>? resolveImported = null,
+    Func<Uri, bool>? preferCookedReference = null,
+    Func<IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<Uri>>>? expandCookedReferences = null)
 {
     /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
     /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
@@ -40,7 +44,7 @@ public sealed class CookDependencyDiscovery(
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(roots);
-        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported, resolveImported);
+        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported, resolveImported, preferCookedReference, expandCookedReferences);
         foreach (var input in roots)
         {
             discovery.AddAsset(input);
@@ -59,7 +63,9 @@ public sealed class CookDependencyDiscovery(
     private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments,
         IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? priorImports,
         Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported,
-        Func<Uri, ContentCookInput?>? resolveImported)
+        Func<Uri, ContentCookInput?>? resolveImported,
+        Func<Uri, bool>? preferCookedReference,
+        Func<IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<Uri>>>? expandCookedReferences)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
@@ -154,13 +160,18 @@ public sealed class CookDependencyDiscovery(
 
             var bytes = await this.ReadFileAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             await this.ReadSettingsAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-            var references = input.Kind switch
+            IReadOnlyList<Uri> references = input.Kind switch
             {
                 ContentCookAssetKind.Scene => await this.ReadSceneAsync(bytes, cancellationToken).ConfigureAwait(false),
                 ContentCookAssetKind.Geometry => await this.ReadGeometryAsync(input, bytes, cancellationToken).ConfigureAwait(false),
                 ContentCookAssetKind.Material => ReadMaterial(input, bytes),
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };
+            if (expandCookedReferences is not null)
+            {
+                references = await expandCookedReferences(references, cancellationToken).ConfigureAwait(false);
+            }
+
             this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
             this.dependencies[input.AssetUri] = [.. references.Select(this.ResolveReference).Distinct().OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
         }
@@ -348,6 +359,13 @@ public sealed class CookDependencyDiscovery(
             {
                 _ = this.builtins.Add(uri);
                 return uri;
+            }
+
+            if (preferCookedReference?.Invoke(uri) == true)
+            {
+                var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+                _ = this.published.Add(nativeUri);
+                return nativeUri;
             }
 
             if (resolveImported?.Invoke(uri) is { } owner)

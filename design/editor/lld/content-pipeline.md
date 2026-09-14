@@ -968,7 +968,13 @@ Follow asset-key dependencies across declared libraries using the saved source
 order. Capture every reached library in consumer provenance, including materials
 reached through cooked geometry. Incomplete or missing native dependencies are
 scoped diagnostics. Release candidate-library readers that are outside the
-resolved dependency set before native cooking.
+resolved dependency set before native cooking. Expand those identities during
+saved-input discovery, before coherent capture. A project-owned material reached
+through library geometry participates in the same snapshot and cook closure when
+project output wins. A higher-priority library excludes the shadowed source from
+that consumer closure. Final binding selection uses captured ownership; changes
+to a shadowed version do not invalidate the consumer. Status uses the same
+resolution with cached metadata and never starts an Inspector process.
 
 Explicit replacement of an existing retained source keeps the reviewed source
 and settings intact during discovery and native cooking. Capture the incoming

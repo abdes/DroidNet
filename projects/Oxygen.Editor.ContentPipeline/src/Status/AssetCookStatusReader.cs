@@ -52,13 +52,9 @@ public sealed partial class AssetCookStatusReader(
         var imports = await ImportedSourceIndex.ReadAsync(project, documents, prior, cancellationToken).ConfigureAwait(false);
         var mapped = requested.Where(uri => !IsBuiltinIdentity(uri)).Select(uri => (Requested: uri, Resolution: imports.ResolveOutputFacts(project, uri, ContentCookInputRole.Primary))).ToArray();
         var inputs = mapped.Select(item => item.Resolution.Source ?? CookInputResolver.Resolve(project, item.Requested, ContentCookInputRole.Primary)).ToArray();
-        var graph = await new CookDependencyDiscovery(
-            documents,
-            allowUnsavedDocuments: true,
-            importedSources: prior.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
-            resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency)).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency)).ConfigureAwait(false);
+        var graph = await this.CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, graph, cancellationToken).ConfigureAwait(false);
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var native = prior.Products.IsEmpty ? null : await nativeCompatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
@@ -263,4 +259,13 @@ public sealed partial class AssetCookStatusReader(
 
         return changed;
     }
+
+    private CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, ImportedSourceIndex imports, CookedLibraryReadSet libraries)
+        => new(
+            documents,
+            allowUnsavedDocuments: true,
+            importedSources: prior.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
+            resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
+            preferCookedReference: libraries.IsLibraryPreferred,
+            expandCookedReferences: (references, token) => libraries.ExpandReferencesAsync(references, inspector: null, operationRoot: string.Empty, artifacts: null, token));
 }
