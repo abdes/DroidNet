@@ -45,7 +45,14 @@
             MaxWidth="920"
             Padding="20"
             Spacing="12">
-            <Grid ColumnSpacing="16">
+            <Grid
+                x:Name="MaterialHeader"
+                ColumnSpacing="16"
+                SizeChanged="MaterialHeader_SizeChanged">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -62,6 +69,7 @@
                     CornerRadius="4" />
 
                 <StackPanel
+                    x:Name="MaterialIdentity"
                     Grid.Column="1"
                     MinWidth="0"
                     Spacing="4">
@@ -74,6 +82,7 @@
                             Style="{ThemeResource TitleTextBlockStyle}"
                             Text="{x:Bind ViewModel.DisplayName, Mode=OneWay}"
                             TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap"
                             ToolTipService.ToolTip="{x:Bind ViewModel.DisplayName, Mode=OneWay}" />
                         <Border
                             x:Name="CookStatusChip"
@@ -105,6 +114,7 @@
                 </StackPanel>
 
                 <StackPanel
+                    x:Name="MaterialActions"
                     Grid.Column="2"
                     HorizontalAlignment="Right"
                     Orientation="Horizontal"
