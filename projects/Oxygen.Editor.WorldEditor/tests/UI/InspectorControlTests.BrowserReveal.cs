@@ -102,11 +102,14 @@ public sealed partial class InspectorControlTests
     });
 
     /// <summary>Imported output navigation opens the cooked tree and reveals all participating folders without per-row discovery.</summary>
+    /// <param name="cookedAlias">An already saved output mount name, or null to create the default mount.</param>
     /// <returns>The asynchronous complete-browser imported-output regression.</returns>
     [TestMethod]
-    public Task ImportedOutputsOpenTogetherWithoutManualMounting() => EnqueueAsync(async () =>
+    [DataRow(null)]
+    [DataRow("Published")]
+    public Task ImportedOutputsOpenTogetherWithoutManualMounting(string? cookedAlias) => EnqueueAsync(async () =>
     {
-        using var fixture = new BrowserRevealFixture();
+        using var fixture = new BrowserRevealFixture(persisted: cookedAlias is not null, cookedAlias ?? "Cooked");
         var outputs = new[]
         {
             CreateNavigationAsset("/Content/Models/Crate/Materials/Paint.omat", AssetKind.Material),
@@ -116,7 +119,7 @@ public sealed partial class InspectorControlTests
         await fixture.OpenAsync().ConfigureAwait(true);
         fixture.Browser.Query.SearchText = "hidden";
         _ = (await fixture.Browser.ShowAssetsAsync(outputs.Select(static item => item.IdentityUri).ToArray()).ConfigureAwait(true)).Should().BeTrue(fixture.Diagnostics);
-        _ = fixture.MountChanges.Should().Be(1);
+        _ = fixture.MountChanges.Should().Be(cookedAlias is null ? 1 : 0);
         _ = fixture.Layout.Assets.Select(static row => row.Item.IdentityUri).Should().BeEquivalentTo(outputs.Select(static item => item.IdentityUri));
         _ = fixture.Browser.Query.SearchText.Should().BeEmpty();
         _ = fixture.Layout.SelectedAsset!.IdentityUri.Should().Be(outputs[0].IdentityUri);
@@ -130,7 +133,7 @@ public sealed partial class InspectorControlTests
         private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items;
         private readonly Mock<ILogger> logger = new();
 
-        public BrowserRevealFixture(bool persisted = false)
+        public BrowserRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
         {
             _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", "Materials"));
             _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, ".cooked", "Content", "Materials"));
@@ -142,7 +145,7 @@ public sealed partial class InspectorControlTests
             var info = new ProjectInfo("Browser", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
             if (persisted)
             {
-                info.AuthoringMounts.Add(new("Cooked", ".cooked"));
+                info.AuthoringMounts.Add(new(cookedAlias, ".cooked"));
             }
 
             this.Projects.Activate(ProjectContext.FromProjectInfo(info));

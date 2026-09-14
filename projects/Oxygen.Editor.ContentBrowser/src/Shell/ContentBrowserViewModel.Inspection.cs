@@ -57,7 +57,7 @@ public sealed partial class ContentBrowserViewModel
     private async Task<bool> RevealAssetsAsync(ProjectContext project, ContentBrowserAssetItem[] items)
     {
         var needsCooked = items.Any(static item => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin);
-        if (needsCooked && !project.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath, ".cooked", StringComparison.OrdinalIgnoreCase)))
+        if (needsCooked && ProjectCookedFolders.Roots(project).Length == 0)
         {
             await this.localRouter!.NavigateAsync("/(left:project//right:" + this.currentAssetsViewPath + ")").ConfigureAwait(true);
             if (this.LeftPaneViewModel is not ProjectLayoutViewModel explorer || !ReferenceEquals(project, projectContextService.ActiveProject))
@@ -68,7 +68,7 @@ public sealed partial class ContentBrowserViewModel
             await explorer.MountKnownLocationCommand.ExecuteAsync(KnownVirtualFolderMount.Cooked).ConfigureAwait(true);
             if (projectContextService.ActiveProject is not { } mounted || mounted.ProjectId != project.ProjectId
                 || !string.Equals(mounted.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
-                || !mounted.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath, ".cooked", StringComparison.OrdinalIgnoreCase)))
+                || ProjectCookedFolders.Roots(mounted).Length == 0)
             {
                 return false;
             }
@@ -76,11 +76,12 @@ public sealed partial class ContentBrowserViewModel
             project = mounted;
         }
 
+        var cookedFolder = ProjectCookedFolders.Roots(project).FirstOrDefault();
         var folders = items.Select(item =>
         {
             var path = AssetUriHelper.GetVirtualPath(item.IdentityUri);
             var folder = path[..path.LastIndexOf('/')];
-            return item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin ? "/Cooked" + folder : folder;
+            return item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin ? cookedFolder + folder : folder;
         }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (items.Any(item => !this.Query.Matches(item)))
         {
