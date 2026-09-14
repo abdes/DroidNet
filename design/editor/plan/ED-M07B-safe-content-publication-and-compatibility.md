@@ -211,7 +211,8 @@ parsed source formats before emission. Preserve REQ-009 perspective cameras and
 directional lights while rejecting excluded component types and source features
 and ambiguous FBX units/axes. Native source inspection and its managed adapter
 now report coordinates, supported features and external dependencies without
-cooking. Coherent bundle discovery, retained settings, editor import integration
+cooking. Coherent bundle discovery now captures native-discovered files through the
+existing retention transaction. Retained settings, editor import integration
 and clean-copy reproduction from pipeline section 17 remain open.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
@@ -221,10 +222,10 @@ assets. Report retained-source success separately from failed cooking so Retry
 does not require reselecting/copying the source.
 
 The tested source-retention transaction reuses coherent input capture and the
-project writer. It installs each complete discovered bundle beneath SourceMedia,
+project writer. It installs each complete discovered model bundle beneath `Content/SourceMedia/DCC`,
 preserves relative dependency paths and hashes, and refuses destination collisions.
-Source discovery, retained settings, replacement/reimport decisions and the native
-import/UI integration remain to be connected; the older browser import path still
+Retained settings, replacement/reimport decisions and native publication/UI
+integration remain to be connected; the older browser import path still
 copies individual files and bypasses native publication.
 
 Pass: wrong/missing artifact or schema fails safely; small unit/axis/handedness

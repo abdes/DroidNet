@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
@@ -34,7 +35,7 @@ public sealed partial class ImportSourceRetentionTests
         var operation = () => workspace.Coordinator.RunAsync<int>(
             async (owner, token) =>
             {
-                retained = (await workspace.Retention.RetainAsync(owner, "Model", primary.RelativePath, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>([primary, buffer]), token).ConfigureAwait(false)).Source;
+                retained = (await workspace.Retention.RetainAsync(owner, "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false)).Source;
                 throw new InvalidDataException("Subsequent native cook failed.");
             },
             this.TestContext.CancellationToken);
@@ -42,7 +43,7 @@ public sealed partial class ImportSourceRetentionTests
         File.Delete(primary.SourcePath);
         File.Delete(buffer.SourcePath);
         _ = retained.Should().NotBeNull();
-        _ = retained!.DirectoryRelativePath.Should().Be("SourceMedia/Model");
+        _ = retained!.DirectoryRelativePath.Should().Be("Content/SourceMedia/DCC/Model");
         _ = retained.PrimaryRelativePath.Should().Be("model.gltf");
         _ = retained.Files.Should().Contain(new RetainedImportSourceFile("buffers/data.bin", buffer.DiscoveryHash));
         var retainedBuffer = Path.Combine(workspace.ProjectRoot, retained.DirectoryRelativePath, "buffers/data.bin");
@@ -61,7 +62,20 @@ public sealed partial class ImportSourceRetentionTests
         var replacement = workspace.Write("model.glb", "replacement");
         var retry = () => workspace.RetainAsync("Model", [replacement], this.TestContext.CancellationToken);
         _ = await retry.Should().ThrowAsync<IOException>().WithMessage("*already exists*").ConfigureAwait(false);
-        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "SourceMedia/Model/model.glb"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("original");
+        _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model/model.glb"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("original");
+    }
+
+    /// <summary>Source placement follows the declared Content mount while retaining its canonical source-media location.</summary>
+    /// <returns>The asynchronous authoring-mount test.</returns>
+    [TestMethod]
+    public async Task RetentionUsesDeclaredContentMountRoot()
+    {
+        using var workspace = new RetentionWorkspace();
+        workspace.Projects.Activate(workspace.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Authoring")] });
+        var input = workspace.Write("model.glb", "source");
+        var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Source!.DirectoryRelativePath.Should().Be("Authoring/SourceMedia/DCC/Model");
+        _ = File.Exists(Path.Combine(workspace.ProjectRoot, result.Source.DirectoryRelativePath, "model.glb")).Should().BeTrue();
     }
 
     /// <summary>Incomplete or changing discovery cannot expose a partially retained source folder.</summary>
@@ -86,7 +100,7 @@ public sealed partial class ImportSourceRetentionTests
 
         var retain = () => workspace.RetainAsync("Model", [primary, dependency], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<IOException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "SourceMedia/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
         _ = File.Exists(primary.SourcePath).Should().BeTrue();
     }
 
@@ -101,16 +115,15 @@ public sealed partial class ImportSourceRetentionTests
             (owner, token) => workspace.Retention.RetainAsync(
                 owner,
                 "Model",
-                input.RelativePath,
                 _ =>
                 {
                     workspace.Projects.Close();
-                    return Task.FromResult<IReadOnlyList<CookSnapshotInput>>([input]);
+                    return Task.FromResult(new ImportSourceBundle(input.RelativePath, [input]));
                 },
                 token),
             this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "SourceMedia/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
     }
 
     /// <summary>Unsafe bundle destinations are rejected before exposure.</summary>
@@ -127,7 +140,7 @@ public sealed partial class ImportSourceRetentionTests
         var input = workspace.Write("model.glb", "source");
         var retain = () => workspace.RetainAsync(bundleName, [input], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "SourceMedia")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC")).Should().BeFalse();
     }
 
     /// <summary>Dirty participating source documents retain their existing save workflow and do not copy transient state.</summary>
@@ -142,7 +155,7 @@ public sealed partial class ImportSourceRetentionTests
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Source.Should().BeNull();
         _ = result.NeedsSave.Should().ContainSingle().Which.Should().Be(document);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "SourceMedia")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC")).Should().BeFalse();
     }
 
     /// <summary>A missing primary source or an ambiguous destination cannot become a retained bundle.</summary>
@@ -157,7 +170,7 @@ public sealed partial class ImportSourceRetentionTests
         var input = workspace.Write("model.glb", "source");
         IReadOnlyList<CookSnapshotInput> files = missingPrimary ? [input] : [input, input with { RelativePath = "MODEL.glb" }];
         var retain = () => workspace.Coordinator.RunAsync(
-            (owner, token) => workspace.Retention.RetainAsync(owner, "Model", missingPrimary ? "missing.glb" : input.RelativePath, _ => Task.FromResult(files), token),
+            (owner, token) => workspace.Retention.RetainAsync(owner, "Model", _ => Task.FromResult(new ImportSourceBundle(missingPrimary ? "missing.glb" : input.RelativePath, [.. files])), token),
             this.TestContext.CancellationToken);
         if (missingPrimary)
         {
@@ -168,7 +181,7 @@ public sealed partial class ImportSourceRetentionTests
             _ = await retain.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         }
 
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "SourceMedia/Model")).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
     }
 
     private sealed partial class RetentionWorkspace : IDisposable
@@ -206,7 +219,7 @@ public sealed partial class ImportSourceRetentionTests
         }
 
         public Task<ImportSourceRetentionResult> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)
-            => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, name, inputs[0].RelativePath, _ => Task.FromResult(inputs), token), cancellationToken);
+            => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, inputs.ToImmutableArray())), token), cancellationToken);
 
         public void Dispose()
         {

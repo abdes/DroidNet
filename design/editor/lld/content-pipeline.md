@@ -892,11 +892,15 @@ buffers; supported FBX has no external scalar/geometry dependencies. The managed
 adapter validates the matched schema and retains worker/artifact ownership
 through cancellation and termination failure.
 
-Coherent bundle discovery must inspect a private copy of the primary file and
-use that copy's hash when capturing the complete original file set. Relative
+Coherent bundle discovery inspects a private copy of the primary file and
+uses that copy's hash when capturing the complete original file set. Relative
 paths stay relative to the primary source; embedded data needs no extra file.
 Missing references are reported by retention, and unsupported source content
-cannot enter publication. The report destination cannot overwrite the source,
+cannot enter publication. Each discovery attempt supplies its primary-relative
+path with the complete file set, so a retry can change the bundle's common root.
+Retained model bundles live under `Content/SourceMedia/DCC` through the declared
+Content mount. Operation ownership and the private primary copy survive a failed
+worker termination until native drain and cleanup complete. The report destination cannot overwrite the source,
 its hard-link alias, or a declared buffer.
 
 Importer version/options, source hashes, and source-relative dependency paths
@@ -906,7 +910,7 @@ rename/move/reference repair UI is excluded; externally missing references remai
 visible and retain their URIs. External source edits trigger stale state and an
 explicit reimport/cook; they cannot silently replace a dirty authored material.
 
-Portable project truth is Project.oxy, authored Content, retained SourceMedia,
+Portable project truth is Project.oxy, authored Content, retained `Content/SourceMedia`,
 import descriptors/settings, and Config. `.cooked`, `.imported`, `.pipeline`,
 `.build`, and `.oxygen` are reproducible/local and excluded from version control.
 Absolute local mounts are explicit nonportable dependencies, reported as such;
