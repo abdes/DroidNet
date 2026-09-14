@@ -10,6 +10,12 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <param name="IsAutomatic">Whether the request must remain quiet in the workspace.</param>
 public sealed record CookRunRequest(CookTargetKind TargetKind, Uri? ScopeUri, bool IsAutomatic = false)
 {
+    /// <summary>Gets an initial or partially retained import request used by Retry.</summary>
+    public Import.SceneImportRequest? Import { get; init; }
+
+    /// <summary>Gets a value indicating whether the request explicitly reimports retained source.</summary>
+    public bool IsReimport { get; init; }
+
     /// <summary>Gets a value indicating whether active preview needs this request ahead of background saves.</summary>
     public bool IsDemand { get; init; }
 

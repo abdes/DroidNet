@@ -11,6 +11,19 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public interface IContentPipelineService : Status.IAssetCookStatusReader
 {
+    /// <summary>Retains a reviewed model source, creates settings, then cooks through the shared writer.</summary>
+    /// <param name="request">The reviewed source and destination.</param>
+    /// <param name="cancellationToken">Cancels the import and owned native work.</param>
+    /// <returns>The cook result, including retained-source recovery when cooking fails.</returns>
+    public Task<ContentCookResult> ImportSourceAsync(Import.SceneImportRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Reimports the latest saved retained source with its existing settings and identities.</summary>
+    /// <param name="sourceUri">The retained source identity.</param>
+    /// <param name="expectedProject">The project that originated the action.</param>
+    /// <param name="cancellationToken">Cancels the selected request.</param>
+    /// <returns>The shared incremental publication result.</returns>
+    public Task<ContentCookResult> ReimportSourceAsync(Uri sourceUri, ProjectContext expectedProject, CancellationToken cancellationToken);
+
     /// <summary>Cooks saved content needed by an active preview, ahead of queued background saves.</summary>
     /// <param name="assetUri">The required authored geometry or material identity.</param>
     /// <param name="expectedProject">The project that owns the preview request.</param>

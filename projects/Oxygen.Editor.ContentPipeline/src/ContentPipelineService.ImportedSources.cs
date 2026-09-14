@@ -79,7 +79,7 @@ public sealed partial class ContentPipelineService
             ],
         };
 
-    private async Task<DiscoveredSceneSource> DiscoverChangedImportedSourceAsync(ContentCookOperation operation, ContentCookInput input, NativeArtifactLease artifacts, CancellationToken cancellationToken)
+    private async Task<DiscoveredSceneSource> DiscoverChangedImportedSourceAsync(ContentCookOperation operation, ContentCookInput input, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
         var inspector = this.engineContentPipelineApi as ISceneSourceInspector
             ?? throw new InvalidOperationException("The native pipeline cannot inspect changed model sources.");

@@ -82,6 +82,12 @@ public sealed partial class ContentCookCoordinator
 
     private static CookRunSnapshot Append(CookRunSnapshot snapshot, CookRunProgress progress)
     {
+        if (progress.RecoveryRequest is { } recovery)
+        {
+            var assets = snapshot.Request.ScopeUri is { } prior && prior != recovery.ScopeUri ? snapshot.Assets.Remove(prior) : snapshot.Assets;
+            snapshot = snapshot with { Request = recovery, Assets = assets };
+        }
+
         var messages = snapshot.Messages;
         if (!string.IsNullOrWhiteSpace(progress.Message))
         {
@@ -98,8 +104,29 @@ public sealed partial class ContentCookCoordinator
         };
     }
 
+    private static IEnumerable<CookRunAsset> FinishedAssets(IEnumerable<ContentCookedAsset> cooked, CookAssetState state)
+    {
+        var sources = new HashSet<Uri>();
+        foreach (var asset in cooked)
+        {
+            var imported = IsModelSource(asset.SourceAssetUri);
+            yield return new(imported ? asset.CookedAssetUri : asset.SourceAssetUri, asset.Kind, state);
+            if (imported && sources.Add(asset.SourceAssetUri))
+            {
+                yield return new(asset.SourceAssetUri, ContentCookAssetKind.ForeignSource, state);
+            }
+        }
+    }
+
+    private static bool IsModelSource(Uri uri) => Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+
     private static string GetScopeName(ContentCookOperation operation, CookRunRequest request)
     {
+        if (request.Import is { } import)
+        {
+            return import.Name;
+        }
+
         if (request.TargetKind == CookTargetKind.Project || request.ScopeUri is null)
         {
             return operation.Project.Name;
@@ -141,7 +168,7 @@ public sealed partial class ContentCookCoordinator
             var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
                 ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
                     ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-                        ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Unknown;
+                        ? ContentCookAssetKind.Geometry : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }
 
@@ -190,8 +217,8 @@ public sealed partial class ContentCookCoordinator
                 _ => CookRunState.Failed,
             };
             diagnostics = content.Diagnostics;
-            assets = content.CookedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Updated))
-                .Concat(content.ReusedAssets.Select(static asset => new CookRunAsset(asset.SourceAssetUri, asset.Kind, CookAssetState.Reused)));
+            assets = FinishedAssets(content.CookedAssets, CookAssetState.Updated)
+                .Concat(FinishedAssets(content.ReusedAssets, CookAssetState.Reused));
         }
         else if (result is MaterialCookResult material)
         {

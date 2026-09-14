@@ -26,6 +26,9 @@ public sealed record ContentCookResult(
     CookInspectionResult? Inspection,
     CookValidationResult? Validation)
 {
+    /// <summary>Gets the retained source that remains available after an import, including failed cooking.</summary>
+    public Uri? RetainedSourceUri { get; init; }
+
     /// <summary>Gets the saved inputs and compatible producer fingerprint used by this cook.</summary>
     public CookInputSnapshot? InputSnapshot { get; init; }
 
