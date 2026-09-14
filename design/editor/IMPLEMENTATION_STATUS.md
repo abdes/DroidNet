@@ -572,11 +572,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         artifact leases follow native ownership and drain. No qualification manifest,
         promotion command or separately built startup probe remains.
         Core 82/82 and the installed-cooker/schema and mismatch cases pass.
-  - [x] The source-retention transaction captures a complete supplied bundle under
-        the existing project writer and saved-input gates, then installs it under
-        SourceMedia without overwriting an existing bundle. Twelve tests cover
-        relative dependencies, collisions, changed/missing files, dirty documents,
-        project closure and retention after a later cook failure.
+  - [x] Native discovery and source retention capture a coherent bundle under the
+        project writer and saved-input gates. A private primary copy and captured
+        hashes preserve relative paths through changed-discovery retries. Sources
+        remain under `Content/SourceMedia/DCC` in the declared Content mount without
+        overwriting an existing bundle. All 23 retention cases pass, including
+        native glTF/FBX, missing/changed inputs, cancellation, project closure and
+        retaining the copy/operation marker through failed native termination.
   - [x] Native manifest scene imports can require static geometry and scalar
         materials. Both adapters reject unsupported source features and ambiguous
         FBX coordinate metadata before emission; ordinary imports retain their
@@ -587,12 +589,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         validates the shared schema and preserves worker/artifact ownership.
         Combined native suites pass 21/21 in Debug and Release; managed source
         cases pass 9/9, including both installed native formats,
-        and compatibility cases pass 10/10. Coherent bundle discovery and UI
+        and compatibility cases pass 10/10. Retained settings, imported output lineage and UI
         integration remain below.
   - [ ] Complete supported static/scalar glTF/FBX import, retained settings,
         collision/reimport behavior, unsupported-feature rejection and clean-copy
-        reproduction. Connect source discovery and the import UI to the retention
-        transaction and native publication path; the browser still uses the older
+        reproduction. Connect retained settings and the import UI to the
+        source-retention transaction and native publication path; the browser still uses the older
         managed import entry point.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
@@ -840,7 +842,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 332/332 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 343/343 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
