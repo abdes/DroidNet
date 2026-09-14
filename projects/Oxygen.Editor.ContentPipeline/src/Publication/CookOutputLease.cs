@@ -44,6 +44,16 @@ public static partial class CookOutputLease
     /// <returns>The live marker owner.</returns>
     internal static IDisposable CreateReader(string directory, string extension = ".lease")
     {
+        // Reclaim closed markers while holding the gate, never from reader
+        // disposal where deletion can race another gate owner's probe.
+        foreach (var marker in Directory.EnumerateFiles(directory).Where(static path => Path.GetExtension(path) is ".lease" or ".scan"))
+        {
+            if (IsReleasedReader(marker))
+            {
+                WindowsCookFile.DeleteReleased(marker);
+            }
+        }
+
         var path = Path.Combine(directory, Guid.NewGuid().ToString("N") + extension);
         return new ReaderLease(path);
     }
@@ -121,12 +131,6 @@ public static partial class CookOutputLease
     {
         foreach (var path in Directory.EnumerateFiles(directory, pattern))
         {
-            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _))
-            {
-                throw new InvalidDataException($"An unrecognized output-reader lease must be reviewed: '{path}'.");
-            }
-
-            RejectReparsePoint(path);
             if (!IsReleasedReader(path))
             {
                 return false;
@@ -140,6 +144,12 @@ public static partial class CookOutputLease
 
     private static bool IsReleasedReader(string path)
     {
+        if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _))
+        {
+            throw new InvalidDataException($"An unrecognized output-reader lease must be reviewed: '{path}'.");
+        }
+
+        RejectReparsePoint(path);
         using var reader = WindowsCookFile.TryOpenExclusive(path, FileMode.Open, out var busy);
         return reader is { Length: not 0 }
             ? throw new InvalidDataException($"An invalid output-reader lease must be reviewed: '{path}'.") : !busy;
@@ -165,7 +175,8 @@ public static partial class CookOutputLease
                 this.stream = null;
             }
 
-            WindowsCookFile.DeleteReleased(path);
+            // The next gate owner reclaims this marker. Closing the handle is
+            // sufficient to release ownership immediately.
         }
     }
 }

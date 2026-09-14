@@ -85,6 +85,24 @@ public sealed partial class CookOutputLeaseTests
         }
     }
 
+    /// <summary>Reader release leaves deletion to a gate owner, and new registrations reclaim retired markers.</summary>
+    [TestMethod]
+    public void ReleasedReadersAreReclaimedOnlyUnderTheRegistrationGate()
+    {
+        using var project = new ProjectDirectory();
+        var first = CookOutputLease.AcquireRead(project.Root);
+        var directory = Path.Combine(project.Root, ".build", "cook", "readers");
+        var marker = Directory.EnumerateFiles(directory, "*.lease").Single();
+        first.Dispose();
+        _ = File.Exists(marker).Should().BeTrue("release must not race a gate owner's check by deleting its marker");
+        using var next = CookOutputLease.AcquireRead(project.Root);
+        _ = File.Exists(marker).Should().BeFalse();
+        _ = Directory.EnumerateFiles(directory, "*.lease").Should().ContainSingle();
+        next.Dispose();
+        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        _ = Directory.EnumerateFiles(directory, "*.lease").Should().BeEmpty();
+    }
+
     private static async Task<IDisposable> AcquireWaitingAsync(string projectRoot, bool publisherWaits, CancellationToken cancellationToken)
         => publisherWaits
             ? await CookOutputLease.AcquireWriteAsync(projectRoot, cancellationToken).ConfigureAwait(false)
