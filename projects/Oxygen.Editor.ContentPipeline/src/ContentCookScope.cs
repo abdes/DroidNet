@@ -21,6 +21,9 @@ public sealed record ContentCookScope(
     IReadOnlyList<ContentCookInput> Inputs,
     CookTargetKind TargetKind)
 {
+    /// <summary>Gets the requested asset or folder identity before mapping imported output to its source.</summary>
+    public Uri? ScopeUri { get; init; }
+
     /// <summary>Gets the coherent saved input set when preparation belongs to a cook operation.</summary>
     public CookInputSnapshot? Snapshot { get; init; }
 
@@ -32,6 +35,12 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets the private native output root when the cook is preparing a publication.</summary>
     public string? StagingOutputRoot { get; init; }
+
+    /// <summary>Gets exact imported outputs that must exist before this request can succeed.</summary>
+    internal System.Collections.Immutable.ImmutableArray<Uri> RequiredImportedOutputs { get; init; } = [];
+
+    /// <summary>Gets a value indicating whether explicit user intent permits changed retained model inputs.</summary>
+    internal bool AllowImportedSourceChanges { get; init; } = true;
 
     /// <summary>Gets sources whose validated products should be omitted from native manifests.</summary>
     internal System.Collections.Immutable.ImmutableHashSet<Uri> ReusableSources { get; init; } = [];

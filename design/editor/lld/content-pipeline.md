@@ -921,6 +921,22 @@ be claimed as new outputs. Existing source ownership and native identities are
 checked before publication. Identity-changing replacement remains blocked with
 an actionable result; failed imports preserve published roots.
 
+Resolve imported output requests through their retained source ownership, not a
+guessed JSON descriptor. Verified provenance supplies exact prior output owners;
+saved native import settings supply exclusive output namespaces when derived
+metadata is absent. Namespace ownership identifies work to run, not proof that a
+particular named asset exists. Asset and scene requests retain the exact output
+URI and require that output in the verified emitted/reused set before publication.
+Folder cooks include sources whose output namespace intersects the selected
+folder. Capture and freshness checks use the same resolved source scope. Read-only
+status uses saved settings and prior output evidence without native discovery.
+
+Published model provenance records a source/settings/dependency fingerprint
+independent of the producer fingerprint. Automatic Save and preview demand may
+regenerate unchanged model inputs for a new producer, but changed model inputs
+require explicit Reimport or Cook before replacing output. An outdated prior
+product without the source fingerprint requires that explicit confirmation too.
+
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
 facts; name/ID changes cannot silently redirect existing scene references. File

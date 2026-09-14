@@ -23,11 +23,13 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="allowUnsavedDocuments">Allows read-only inspection of saved inputs while their documents contain newer edits.</param>
 /// <param name="importedSources">Previously published native dependency layouts for exact source revisions.</param>
 /// <param name="discoverImported">Optional native rediscovery used only by an owned cook operation.</param>
+/// <param name="resolveImported">Resolves native output references to their retained source owner.</param>
 public sealed class CookDependencyDiscovery(
     ICookDocumentRegistry documents,
     bool allowUnsavedDocuments = false,
     IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? importedSources = null,
-    Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null)
+    Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null,
+    Func<Uri, ContentCookInput?>? resolveImported = null)
 {
     /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
     /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
@@ -38,7 +40,7 @@ public sealed class CookDependencyDiscovery(
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(roots);
-        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported);
+        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported, resolveImported);
         foreach (var input in roots)
         {
             discovery.AddAsset(input);
@@ -49,7 +51,8 @@ public sealed class CookDependencyDiscovery(
 
     private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments,
         IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? priorImports,
-        Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported)
+        Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported,
+        Func<Uri, ContentCookInput?>? resolveImported)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
@@ -58,6 +61,8 @@ public sealed class CookDependencyDiscovery(
         private readonly Dictionary<Uri, HashSet<string>> fileDependencies = [];
         private readonly HashSet<Uri> builtins = [];
         private readonly HashSet<Uri> published = [];
+        private readonly HashSet<Uri> importedReferences = [];
+        private readonly HashSet<Uri> importsNeedingDiscovery = [];
         private readonly Queue<ContentCookInput> pending = new();
         private readonly List<DiagnosticRecord> diagnostics = [];
         private readonly Dictionary<Uri, ImportedSourceDependencyState> imported = [];
@@ -110,8 +115,16 @@ public sealed class CookDependencyDiscovery(
                 this.fileDependencies.ToImmutableDictionary(static pair => pair.Key, static pair => pair.Value.Order(StringComparer.Ordinal).ToImmutableArray()),
                 [.. this.builtins.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
                 [.. this.published.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
-                [.. this.diagnostics]) { ImportedSources = this.imported.ToImmutableDictionary() };
+                [.. this.diagnostics])
+            {
+                ImportedSources = this.imported.ToImmutableDictionary(), ImportedReferences = [.. this.importedReferences],
+                ImportsNeedingDiscovery = this.importsNeedingDiscovery.ToImmutableHashSet(),
+            };
         }
+
+        private static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
+            => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
+                .Select(static file => new { file.RelativePath, file.DiscoveryHash }))));
 
         private static Uri[] ReadMaterial(ContentCookInput input, byte[] bytes)
         {
@@ -181,7 +194,13 @@ public sealed class CookDependencyDiscovery(
             }
             else
             {
-                throw new InvalidDataException("The imported source changed. Cook or reimport it to update its saved dependency information.");
+                if (!allowUnsavedDocuments)
+                {
+                    throw new InvalidDataException("The imported source changed. Cook or reimport it to update its saved dependency information.");
+                }
+
+                _ = this.importsNeedingDiscovery.Add(input.AssetUri);
+                return;
             }
 
             var knownPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -196,7 +215,10 @@ public sealed class CookDependencyDiscovery(
             }
 
             this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = input with { MountName = settings.MountPoint, OutputVirtualPath = settings.OutputPrefix };
-            this.imported[input.AssetUri] = new(primaryHash, knownPaths.Select(this.RelativePath).Order(StringComparer.Ordinal).ToImmutableArray());
+            this.imported[input.AssetUri] = new(primaryHash, knownPaths.Select(this.RelativePath).Order(StringComparer.Ordinal).ToImmutableArray())
+            {
+                ContentFingerprint = FingerprintImportedContent(knownPaths.Append(input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix).Select(path => this.files[Path.GetFullPath(path)])),
+            };
         }
 
         private async Task<string> ReadHashAsync(Uri? assetUri, string path, CancellationToken cancellationToken)
@@ -320,6 +342,13 @@ public sealed class CookDependencyDiscovery(
             {
                 _ = this.builtins.Add(uri);
                 return uri;
+            }
+
+            if (resolveImported?.Invoke(uri) is { } owner)
+            {
+                _ = this.importedReferences.Add(uri);
+                this.AddAsset(owner);
+                return this.assets[Path.GetFullPath(owner.SourceAbsolutePath)].AssetUri;
             }
 
             var input = CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency);

@@ -24,6 +24,12 @@ public sealed record CookDependencyGraph(
     ImmutableArray<Uri> PublishedReferences,
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
+    /// <summary>Gets exact imported output references whose retained owners participate in this closure.</summary>
+    public ImmutableArray<Uri> ImportedReferences { get; init; } = [];
+
+    /// <summary>Gets changed model sources whose dependency layout needs explicit native discovery.</summary>
+    public ImmutableHashSet<Uri> ImportsNeedingDiscovery { get; init; } = [];
+
     /// <summary>Gets source-revision dependency facts retained with successful imported products.</summary>
     public ImmutableDictionary<Uri, Import.ImportedSourceDependencyState> ImportedSources { get; init; } = ImmutableDictionary<Uri, Import.ImportedSourceDependencyState>.Empty;
 }

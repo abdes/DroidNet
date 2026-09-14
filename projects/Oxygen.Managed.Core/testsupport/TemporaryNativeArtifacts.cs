@@ -36,8 +36,9 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
     }
 
     /// <summary>Creates a private test receipt for the installed native binaries and current Interop copy.</summary>
+    /// <param name="additional">Optional fixture-owned producer inputs.</param>
     /// <returns>The fixture-owned compatibility service.</returns>
-    public static TemporaryNativeArtifacts ForInstalledEngine()
+    public static TemporaryNativeArtifacts ForInstalledEngine(IEnumerable<NativeArtifactLocation>? additional = null)
     {
         var installation = EditorNativeInstallation.Discover(AppContext.BaseDirectory, EditorNativeCompatibilityService.CurrentConfiguration);
         var bin = Path.Combine(installation.EngineRoot, "bin");
@@ -57,6 +58,11 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
         if (File.Exists(interop))
         {
             nativeFiles.Add(new(NativeArtifactInventory.InteropId, interop));
+        }
+
+        if (additional is not null)
+        {
+            nativeFiles.AddRange(additional);
         }
 
         return new(nativeFiles);
