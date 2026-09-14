@@ -10,6 +10,7 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
@@ -31,13 +32,22 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
     /// <summary>The compact review shows source/name/destination and updates errors without leaving the dialog.</summary>
     /// <param name="theme">The editor theme.</param>
     /// <param name="replacement">Whether an existing retained source requires explicit replacement.</param>
+    /// <param name="rasterizationScale">The effective XAML scale.</param>
     /// <returns>The asynchronous rendered review test.</returns>
     [TestMethod]
-    [DataRow(ElementTheme.Dark, false)]
-    [DataRow(ElementTheme.Light, false)]
-    [DataRow(ElementTheme.Dark, true)]
-    [DataRow(ElementTheme.Light, true)]
-    public Task ModelImportReviewShowsInlineValidation(ElementTheme theme, bool replacement) => EnqueueAsync(async () =>
+    [DataRow(ElementTheme.Dark, false, 1d)]
+    [DataRow(ElementTheme.Dark, false, 1.5d)]
+    [DataRow(ElementTheme.Dark, false, 2d)]
+    [DataRow(ElementTheme.Light, false, 1d)]
+    [DataRow(ElementTheme.Light, false, 1.5d)]
+    [DataRow(ElementTheme.Light, false, 2d)]
+    [DataRow(ElementTheme.Dark, true, 1d)]
+    [DataRow(ElementTheme.Dark, true, 1.5d)]
+    [DataRow(ElementTheme.Dark, true, 2d)]
+    [DataRow(ElementTheme.Light, true, 1d)]
+    [DataRow(ElementTheme.Light, true, 1.5d)]
+    [DataRow(ElementTheme.Light, true, 2d)]
+    public Task ModelImportReviewShowsInlineValidation(ElementTheme theme, bool replacement, double rasterizationScale) => EnqueueAsync(async () =>
     {
         var project = new ProjectContext
         {
@@ -57,11 +67,9 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         host.Width = 512;
         host.VerticalAlignment = VerticalAlignment.Top;
         host.Child = view;
-        await LoadTestContentAsync(host).ConfigureAwait(true);
-        var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
-        var original = window.Size;
-        var scale = view.XamlRoot.RasterizationScale;
-        window.Resize(new((int)(560 * scale), (int)(500 * scale)));
+        var surface = new Grid { Width = 512, Height = 600, Children = { host } };
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(surface, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
         try
         {
             await Task.Delay(350, this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -70,7 +78,6 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         }
         finally
         {
-            window.Resize(original);
             if (Directory.Exists(project.ProjectRoot))
             {
                 Directory.Delete(project.ProjectRoot, recursive: true);
@@ -86,12 +93,16 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         _ = destination.Text.Should().Be("/Content/Models");
         _ = model.CanAccept.Should().Be(!replacement);
         _ = view.ActualHeight.Should().BeLessThan(replacement ? 500 : 360);
-        model.Name = "../invalid";
+        using var keyboard = InspectorControlTests.PointerInput.Capture();
+        _ = name.Focus(FocusState.Keyboard).Should().BeTrue();
+        await InspectorControlTests.PointerInput.KeyAsync(0x09).ConfigureAwait(true);
+        _ = FocusManager.GetFocusedElement(view.XamlRoot).Should().BeSameAs(destination);
+        name.Text = "../invalid";
         await Task.Yield();
         var error = view.FindDescendant<TextBlock>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportError", StringComparison.Ordinal))!;
         _ = model.CanAccept.Should().BeFalse();
         _ = error.Text.Should().NotBeEmpty();
-        model.Name = "Crate";
+        name.Text = "Crate";
         await Task.Yield();
         _ = model.CanAccept.Should().Be(!replacement);
         if (replacement)
@@ -131,7 +142,7 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         await bitmap.RenderAsync(view);
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();
         var folder = Directory.CreateTempSubdirectory("OxygenImportReviewRender-");
-        var path = Path.Combine(folder.FullName, "import-review-" + theme + ".png");
+        var path = Path.Combine(folder.FullName, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"import-review-{theme}-{view.XamlRoot.RasterizationScale}.png"));
         var file = File.Create(path);
         await using var lifetime = file.ConfigureAwait(false);
         using var stream = file.AsRandomAccessStream();

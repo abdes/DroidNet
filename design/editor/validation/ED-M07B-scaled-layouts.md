@@ -25,3 +25,28 @@ Evidence:
 This closes the inspector's remaining scale requirement alongside its existing
 selection/lifetime/edit coverage. Import dialogs, browser command journeys and
 the full viewport qualification retain their own validation gates.
+
+## Import, browser and material document checks
+
+Validated 2026-09-15 with the same per-host XAML scales (1, 1.5 and 2).
+
+- Import review: normal and replacement flows in both themes, UI-entered name
+  validation, real Windows Tab input from Name to Destination, and readable
+  source/destination/replacement information.
+- Browser: list and tile layouts in both themes, narrow/wide widths, keyboard
+  focus and accessible search name, type/status filters, publication updates,
+  empty-state reset and no extra catalog scan.
+- Material document: 360/560/920 DIP widths, status updates from background cooks,
+  accessible status tooltip, unchanged edit values/dirty state and reachable
+  Undo/Redo/Save/Cook actions. At narrow widths the actions use a second header
+  line; the title/status and original property rows retain their arrangement.
+
+All **33/33 packaged Release cases pass**. Captures reviewed include the narrow
+material header at 200%, wide material header at 150%, import replacement at
+200% and narrow browser reset state at 200%.
+
+Evidence: `artifacts/TestResults/m07b-ui-scale-commit.trx`; reviewed captures in
+`artifacts/TestResults/abdes_GIGA_2026-09-15_02_39_14/In/`; final build/analyzers
+in `artifacts/m07b-ui-scale-commit-build.log`. Changed files have no unsuppressed
+analyzer or IDE diagnostics. The failing narrow-header baseline is
+`artifacts/TestResults/m07b-ui-scale-workflows-baseline.trx`.

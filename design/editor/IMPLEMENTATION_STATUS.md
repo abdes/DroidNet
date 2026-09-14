@@ -817,8 +817,14 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         links now reveal their supplying mount's physical folder without adding
         project output. Combined routed navigation and live native priority checks
         pass 8/8 with the installed Inspector.
-  - [ ] Complete the remaining creation/import/reimport command/layout
-        journeys, including cooked-library dependency cooking and typed-use qualification.
+  - [x] Import/replacement review, browser list/tile query controls and material
+        status/actions pass at 100%, 150% and 200% XAML scale in both themes.
+        Actual Tab input traverses import fields; UI edits validate in place.
+        The narrow material header preserves title/status and all four actions.
+        Packaged Release passes 33/33 with reviewed captures and clean diagnostics;
+        [scale evidence](validation/ED-M07B-scaled-layouts.md).
+  - [ ] Complete the remaining combined creation/import/reimport command journeys,
+        including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.

@@ -29,13 +29,22 @@ public sealed partial class InspectorControlTests
     /// <summary>Search/filter changes and later cook status update both layouts without a new catalog scan.</summary>
     /// <param name="tiles">Whether tiles are the visible layout.</param>
     /// <param name="light">Whether to render the light theme.</param>
+    /// <param name="rasterizationScale">The effective XAML scale.</param>
     /// <returns>The asynchronous rendered-query regression.</returns>
     [TestMethod]
-    [DataRow(false, false)]
-    [DataRow(false, true)]
-    [DataRow(true, false)]
-    [DataRow(true, true)]
-    public Task BrowserQueryControlsFilterBothLayoutsAndResetEmptyResults(bool tiles, bool light) => EnqueueAsync(async () =>
+    [DataRow(false, false, 1d)]
+    [DataRow(false, false, 1.5d)]
+    [DataRow(false, false, 2d)]
+    [DataRow(false, true, 1d)]
+    [DataRow(false, true, 1.5d)]
+    [DataRow(false, true, 2d)]
+    [DataRow(true, false, 1d)]
+    [DataRow(true, false, 1.5d)]
+    [DataRow(true, false, 2d)]
+    [DataRow(true, true, 1d)]
+    [DataRow(true, true, 1.5d)]
+    [DataRow(true, true, 2d)]
+    public Task BrowserQueryControlsFilterBothLayoutsAndResetEmptyResults(bool tiles, bool light, double rasterizationScale) => EnqueueAsync(async () =>
     {
         var material = CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking);
         var other = CreateQueryAsset("Red", AssetKind.Material, AssetCookFreshness.Current);
@@ -53,24 +62,24 @@ public sealed partial class InspectorControlTests
         var queryView = new AssetQueryView { ViewModel = state.Query };
         UserControl assetsView = tiles ? new TilesLayoutView { ViewModel = tile } : new ListLayoutView { ViewModel = list };
         var root = CreateQueryTestRoot(queryView, assetsView, light);
-        await LoadTestContentAsync(root).ConfigureAwait(true);
+        root.Width = light ? 360 : 620;
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(root, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         await SelectBrowserFiltersAsync(queryView, "Materials", "Needs cooking").ConfigureAwait(true);
         _ = state.Query.FilterCount.Should().Be(2);
 
         var search = (AutoSuggestBox)queryView.FindName("AssetSearch");
+        _ = search.Focus(FocusState.Keyboard).Should().BeTrue();
+        _ = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(search).Should().Be("Search assets");
         search.Text = "Blue";
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = list.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
         _ = tile.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
         updates.OnNext([material with { CookStatus = material.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, HasVerifiedOutput = true } }, other, mesh]);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = list.Assets.Should().BeEmpty();
-        _ = tile.Assets.Should().BeEmpty();
-        _ = list.EmptyTitle.Should().Be("No matching assets");
-        var clear = assetsView.FindDescendant<Button>(button => string.Equals(button.Content as string, "Clear search and filters", StringComparison.Ordinal))!;
-        _ = clear.Should().NotBeNull();
-        await this.CaptureQueryLayoutAsync(root, "browser-query-empty-" + tiles + "-" + light + ".png").ConfigureAwait(true);
+        var clear = FindEmptyQueryReset(list, tile, assetsView);
+        await this.CaptureQueryLayoutAsync(root, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"browser-query-empty-{tiles}-{light}-{rasterizationScale}.png")).ConfigureAwait(true);
         ((IInvokeProvider)new ButtonAutomationPeer(clear).GetPattern(PatternInterface.Invoke)).Invoke();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = state.Query.IsActive.Should().BeFalse();
@@ -149,6 +158,16 @@ public sealed partial class InspectorControlTests
         state.SetSelectedFolders(["/Cooked/Content/Materials"]);
         _ = model.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(copy.IdentityUri);
     });
+
+    private static Button FindEmptyQueryReset(ListLayoutViewModel list, TilesLayoutViewModel tile, UserControl assetsView)
+    {
+        _ = list.Assets.Should().BeEmpty();
+        _ = tile.Assets.Should().BeEmpty();
+        _ = list.EmptyTitle.Should().Be("No matching assets");
+        var clear = assetsView.FindDescendant<Button>(button => string.Equals(button.Content as string, "Clear search and filters", StringComparison.Ordinal))!;
+        _ = clear.Should().NotBeNull();
+        return clear;
+    }
 
     private static Grid CreateQueryTestRoot(AssetQueryView queryView, UserControl assetsView, bool light)
     {
