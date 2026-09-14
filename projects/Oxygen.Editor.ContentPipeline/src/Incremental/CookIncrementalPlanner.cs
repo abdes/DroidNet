@@ -91,7 +91,7 @@ internal static class CookIncrementalPlanner
     private static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
-        return Hash(new
+        var authored = Hash(new
         {
             Version = 1,
             Source = input.AssetUri.AbsoluteUri,
@@ -103,6 +103,9 @@ internal static class CookIncrementalPlanner
             // Native descriptors refer to stable virtual asset identities; scalar material bytes do not alter their consumers.
             Dependencies = graph.Dependencies[input.AssetUri].Select(static uri => uri.AbsoluteUri),
         });
+        var libraries = graph.NativeReferences.GetValueOrDefault(input.AssetUri, []).Where(graph.CookedDependencies.ContainsKey)
+            .Select(uri => graph.CookedDependencies[uri]).OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ToArray();
+        return libraries.Length == 0 ? authored : Hash(new { Authored = authored, Libraries = libraries });
     }
 
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));

@@ -71,7 +71,7 @@ public sealed partial class ContentPipelineService
         CookIncrementalPlan plan,
         IReadOnlyList<ContentCookInput> dirtyInputs,
         CookStagingArea staging,
-        CookReferenceRoots references,
+        IReadOnlyList<string> referenceRoots,
         CancellationToken cancellationToken)
     {
         var remaining = dirtyInputs.ToDictionary(static input => input.AssetUri);
@@ -108,7 +108,7 @@ public sealed partial class ContentPipelineService
                 {
                     Snapshot = snapshot, Artifacts = artifacts, ReusableSources = completed.ToImmutableHashSet(), PreviousProvenance = previous,
                     StagingOutputRoot = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)).StagingPath,
-                    CookedContextRoots = references.Paths,
+                    CookedContextRoots = referenceRoots,
                 };
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);

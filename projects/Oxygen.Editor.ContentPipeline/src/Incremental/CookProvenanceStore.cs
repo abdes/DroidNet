@@ -70,7 +70,10 @@ internal sealed class CookProvenanceStore(IAtomicFileStore files)
         if (cache.Version != 1 || cache.ProjectId != project.ProjectId || cache.Roots.IsDefault || cache.Products.IsDefault
             || cache.Roots.Any(static root => root?.SharedFiles.IsDefaultOrEmpty != false || root.SharedFiles.Any(static file => file is null) || root.Assets.IsDefault)
             || cache.Roots.Any(static root => root.Assets.Any(static asset => asset is null || asset.Entry is null || string.IsNullOrWhiteSpace(asset.Entry.VirtualPath) || asset.File is null))
-            || cache.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null))
+            || cache.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null)
+                || product.CookedDependencies.IsDefault || product.CookedDependencies.Any(static dependency => dependency?.AssetUri?.IsAbsoluteUri != true
+                    || string.IsNullOrWhiteSpace(dependency.SourceName) || !Path.IsPathFullyQualified(dependency.RootPath)
+                    || string.IsNullOrWhiteSpace(dependency.AssetKey) || dependency.ContentFingerprint is not { Length: 64 } || !dependency.ContentFingerprint.All(Uri.IsHexDigit)))
             || cache.Roots.Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal).Count != cache.Roots.Length
             || cache.Products.Select(static product => product.SourceUri).ToHashSet().Count != cache.Products.Length)
         {

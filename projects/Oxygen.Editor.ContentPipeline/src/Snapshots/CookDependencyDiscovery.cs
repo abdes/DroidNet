@@ -58,6 +58,7 @@ public sealed class CookDependencyDiscovery(
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, byte[]> discoveredBytes = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> dependencies = [];
+        private readonly Dictionary<Uri, ImmutableArray<Uri>> nativeReferences = [];
         private readonly Dictionary<Uri, HashSet<string>> fileDependencies = [];
         private readonly HashSet<Uri> builtins = [];
         private readonly HashSet<Uri> published = [];
@@ -119,6 +120,7 @@ public sealed class CookDependencyDiscovery(
             {
                 ImportedSources = this.imported.ToImmutableDictionary(), ImportedReferences = [.. this.importedReferences],
                 ImportsNeedingDiscovery = this.importsNeedingDiscovery.ToImmutableHashSet(),
+                NativeReferences = this.nativeReferences.ToImmutableDictionary(),
             };
         }
 
@@ -156,6 +158,7 @@ public sealed class CookDependencyDiscovery(
                 ContentCookAssetKind.Material => ReadMaterial(input, bytes),
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };
+            this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
             this.dependencies[input.AssetUri] = [.. references.Select(this.ResolveReference).Distinct().OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
         }
 
@@ -349,6 +352,12 @@ public sealed class CookDependencyDiscovery(
                 _ = this.importedReferences.Add(uri);
                 this.AddAsset(owner);
                 return this.assets[Path.GetFullPath(owner.SourceAbsolutePath)].AssetUri;
+            }
+
+            if (!CookInputResolver.IsAuthoringUri(project, uri) && !uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                _ = this.published.Add(uri);
+                return uri;
             }
 
             var input = CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency);

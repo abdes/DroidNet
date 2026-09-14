@@ -29,4 +29,8 @@ internal sealed record CookPublicationReceipt(
     ImmutableArray<CookSnapshotInput> Inputs,
     ImmutableArray<CookDocumentState> Documents,
     ImmutableArray<CookProvenance.Root> Roots,
-    bool WasMounted);
+    bool WasMounted)
+{
+    /// <summary>Gets the selected foreign cooked inputs consumed by this generation.</summary>
+    public ImmutableArray<CookedDependencySnapshot> CookedDependencies { get; init; } = [];
+}

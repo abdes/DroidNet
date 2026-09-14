@@ -351,7 +351,8 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
 
     private static ContentCookInput? TryResolveAuthoringInput(ContentCookScope scope, Uri assetUri)
     {
-        if (assetUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase))
+        if (assetUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)
+            || !CookInputResolver.IsAuthoringUri(scope.Project, assetUri))
         {
             return null;
         }
