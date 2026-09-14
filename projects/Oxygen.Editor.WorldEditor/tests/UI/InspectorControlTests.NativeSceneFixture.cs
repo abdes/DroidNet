@@ -51,14 +51,16 @@ public sealed partial class InspectorControlTests
         private readonly BehaviorSubject<IReadOnlyList<MaterialPickerResult>> materialChoices = new([]);
         private RuntimeSceneTarget? target;
 
-        public NativeSceneFixture(bool automatic, Action<Scene>? seed = null)
+        public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null)
         {
             var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
             this.hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new DispatcherQueueScheduler(dispatcher), IsRunning = true };
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
             var results = publisher.Object;
-            this.engine = new EngineService(this.hosting, results, nativeCompatibility: this.compatibility);
+            var settings = new Mock<DroidNet.Config.ISettingsService<IEngineSettings>>();
+            _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineSettings());
+            this.engine = new EngineService(this.hosting, results, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
             this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
             var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png")) { Name = "Environment fields" };
             var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;

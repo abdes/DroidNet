@@ -14,6 +14,7 @@
         <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\BuiltinCatalogDiscoveryFixture.cs" Link="BuiltinCatalogDiscoveryFixture.cs" />
         <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.gltf" Link="Fixtures\static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
         <None Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">
