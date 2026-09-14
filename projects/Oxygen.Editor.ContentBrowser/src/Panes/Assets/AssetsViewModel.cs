@@ -103,6 +103,9 @@ public partial class AssetsViewModel(
     /// <summary>Gets the visibility of reimport for the selected retained model source.</summary>
     public Visibility ReimportSelectedSourceVisibility => this.CanReimportSelectedSource() ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>Gets the visibility of navigation from an imported output to its retained source.</summary>
+    public Visibility ShowImportSourceVisibility => this.CanShowImportSource() ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>Maps a browser folder to an authored material destination.</summary>
     /// <param name="selected">The selected folder.</param>
     /// <param name="project">Optional project mount declarations.</param>
@@ -646,7 +649,9 @@ public partial class AssetsViewModel(
     private void NotifyCookSelection()
     {
         this.ReimportSelectedSourceCommand.NotifyCanExecuteChanged();
+        this.ShowImportSourceCommand.NotifyCanExecuteChanged();
         this.OnPropertyChanged(nameof(this.ReimportSelectedSourceVisibility));
+        this.OnPropertyChanged(nameof(this.ShowImportSourceVisibility));
         this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
         this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
         this.OnPropertyChanged(nameof(this.CookSelectedAssetVisibility));
@@ -673,7 +678,7 @@ public partial class AssetsViewModel(
             this.PublishFailure(
                 ContentPipelineOperationKinds.CookAsset,
                 "Cook Asset",
-                "Select an authored descriptor asset, not cooked output.",
+                "Select an asset with retained source content.",
                 AssetCookDiagnosticCodes.CookFailed,
                 asset.IdentityUri);
             return;
@@ -706,10 +711,14 @@ public partial class AssetsViewModel(
             .ConfigureAwait(true);
 
     [RelayCommand]
-    private Task InspectCookedOutputAsync() => this.OpenInspectionAsync(validate: false);
+    private Task InspectCookedOutputAsync() => this.OpenSelectedInspectionAsync(validate: false);
 
     [RelayCommand]
-    private Task ValidateCookedOutputAsync() => this.OpenInspectionAsync(validate: true);
+    private Task ValidateCookedOutputAsync() => this.OpenSelectedInspectionAsync(validate: true);
+
+    private Task OpenSelectedInspectionAsync(bool validate)
+        => this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: not AssetKind.Folder } asset }
+            ? this.OpenInspectionAsync(validate, asset.IdentityUri, asset) : this.OpenInspectionAsync(validate);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
     private async Task OpenInspectionAsync(bool validate, Uri? assetUri = null, ContentBrowserAssetItem? asset = null)
@@ -923,15 +932,42 @@ public partial class AssetsViewModel(
     }
 
     private bool CanReimportSelectedSource() => !this.disposed && this.isInitialized
-        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: AssetKind.ForeignSource, SourcePath: { } path } }
-        && File.Exists(path + NativeSceneImportSettings.SidecarSuffix);
+        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanReimport: true };
+
+    private bool CanShowImportSource() => !this.disposed && this.isInitialized
+        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { ImportSourceUri: { } source } asset } && source != asset.IdentityUri;
+
+    [RelayCommand(CanExecute = nameof(CanShowImportSource))]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Source navigation reports failures at its user-command boundary.")]
+    private async Task ShowImportSourceAsync()
+    {
+        try
+        {
+            if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSourceUri: { } source })
+            {
+                var request = messenger.Send(new ShowAssetRequestMessage(project, source));
+                if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+                {
+                    await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Browser.").ConfigureAwait(true);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded navigation leaves the current project selection intact.
+        }
+        catch (Exception error)
+        {
+            await dialogService.ShowMessageAsync("Show source", error.Message).ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanReimportSelectedSource))]
     private async Task ReimportSelectedSourceAsync()
     {
-        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { } source })
+        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSourceUri: { } source })
         {
-            await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source.IdentityUri, project, CancellationToken.None)).ConfigureAwait(true);
+            await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source, project, CancellationToken.None)).ConfigureAwait(true);
         }
     }
 

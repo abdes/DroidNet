@@ -26,6 +26,15 @@ public sealed record ContentBrowserAssetItem(
     IReadOnlyList<string> DiagnosticCodes,
     bool IsSelectable)
 {
+    /// <summary>Gets the retained model that owns this source row or project-produced output.</summary>
+    public Uri? ImportSourceUri { get; init; }
+
+    /// <summary>Gets the retained model file for information and source navigation, not descriptor editing.</summary>
+    public string? ImportSourcePath { get; init; }
+
+    /// <summary>Gets a value indicating whether explicit reimport can target the retained model.</summary>
+    public bool CanReimport => this.ImportSourceUri is not null && !this.IsBuiltin;
+
     /// <summary>Gets the engine-provided recipe and identity mapping for generated assets.</summary>
     public GeneratedAssetMetadata? Generated { get; init; }
 
@@ -64,7 +73,7 @@ public sealed record ContentBrowserAssetItem(
     public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
 
     /// <summary>Gets a value indicating whether this selection owns an authored cook input.</summary>
-    public bool CanCook => !this.IsBuiltin && this.DescriptorPath is not null && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene;
+    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSourceUri is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene;
 
     /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
     public AssetCookStatus? CookStatus { get; init; }
@@ -79,7 +88,7 @@ public sealed record ContentBrowserAssetItem(
     /// <summary>Gets the user-facing asset type.</summary>
     public string TypeDisplayName => this.Kind switch
     {
-        AssetKind.ForeignSource => "Foreign Source",
+        AssetKind.ForeignSource => Path.GetExtension(this.IdentityUri.AbsolutePath).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
         AssetKind.CookedData => "Cooked Data",
         AssetKind.CookedTable => "Cooked Table",
         _ => this.Kind.ToString(),
@@ -87,7 +96,8 @@ public sealed record ContentBrowserAssetItem(
 
     /// <summary>Gets the primary asset-state badge.</summary>
     public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden" : this.Generated?.IsLastKnown == true ? "Preview unavailable"
-        : this.IsBuiltin ? "Built-in" : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
+        : this.IsBuiltin ? "Built-in" : this.Kind == AssetKind.ForeignSource && this.ImportSourceUri is null ? "Not imported"
+        : AssetStatusPresentation.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
     public string PrimaryBadgeTooltip => this.IsCookedSourceOverridden
@@ -95,6 +105,7 @@ public sealed record ContentBrowserAssetItem(
         : this.IsBuiltin
         ? this.Generated?.IsLastKnown == true ? "Built-in asset from the last-known Oxygen catalog. Preview unavailable."
             : "Built-in asset provided by Oxygen. No separate cooking is needed." + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
+        : this.Kind == AssetKind.ForeignSource && this.ImportSourceUri is null ? "Import this model to create usable geometry, materials and scenes."
         : AssetStatusPresentation.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
     /// <summary>Gets the optional cooked-state badge.</summary>

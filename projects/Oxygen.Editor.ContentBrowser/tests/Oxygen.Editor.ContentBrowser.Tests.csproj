@@ -11,6 +11,8 @@
 
     <ItemGroup>
         <Compile Include="..\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
+        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
+        <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.gltf" Link="Fixtures\static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <PackageReference Include="Moq" />
         <ProjectReference Include="..\src\Oxygen.Editor.ContentBrowser.csproj" />

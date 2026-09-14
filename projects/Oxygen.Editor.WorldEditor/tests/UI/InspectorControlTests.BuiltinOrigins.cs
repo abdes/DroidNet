@@ -105,7 +105,7 @@ public sealed partial class InspectorControlTests
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
     }
 
-    private static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null)
+    private static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null, IContentPipelineService? pipeline = null)
     {
         var catalog = new Mock<IAssetCatalog>();
         _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
@@ -119,7 +119,7 @@ public sealed partial class InspectorControlTests
             projects,
             Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
-            Mock.Of<IContentPipelineService>(),
+            pipeline ?? Mock.Of<IContentPipelineService>(),
             provider,
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),

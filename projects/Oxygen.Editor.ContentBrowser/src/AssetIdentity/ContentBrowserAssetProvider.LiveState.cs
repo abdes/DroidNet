@@ -15,7 +15,7 @@ public sealed partial class ContentBrowserAssetProvider
 
     private static bool Includes(CookRunSnapshot run, ContentBrowserAssetItem item)
     {
-        if (run.Assets.ContainsKey(item.IdentityUri))
+        if (run.Assets.ContainsKey(item.IdentityUri) || (item.ImportSourceUri is { } source && (run.Request.ScopeUri == source || run.Assets.ContainsKey(source))))
         {
             return true;
         }
