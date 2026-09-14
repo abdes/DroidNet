@@ -717,9 +717,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         browser/picker/menu cases pass in light/dark themes.
   - [ ] Finish the remaining combined browser navigation/query qualification
         journeys, including the 1,000-entry workload.
-        The production catalog/status component passes with 1,000 real scalar
-        descriptors in Debug and Release (Release cold 1.19 s, warm filter p95
-        0.05 ms). The PRD's 100-node live-viewport workload remains open.
+  - [x] Measure rendered list/tile response with 1,000 authored inputs and a live
+        100-node viewport. Release cold loading is 1.98/1.73 s; search p95 is
+        18.42/19.09 ms. The native cook, loaded geometry, current statuses and
+        mount acknowledgment pass. [Fixture, profile and evidence](validation/ED-M07B-browser-workload.md)
+        record the scope of this CPU/UI measurement.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,
         publication, cancellation and Save/reopen matrix.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
