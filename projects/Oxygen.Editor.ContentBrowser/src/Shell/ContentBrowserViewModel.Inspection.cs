@@ -54,9 +54,33 @@ public sealed partial class ContentBrowserViewModel
             && await this.RevealAssetsAsync(project, available).ConfigureAwait(true);
     }
 
+    private static bool IsCookedOnly(ContentBrowserAssetItem item)
+        => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin;
+
+    private static string? LibraryFolder(ProjectContext project, ContentBrowserAssetItem item)
+    {
+        if (item.CookedMetadata is not { } source)
+        {
+            return null;
+        }
+
+        var library = project.LocalFolderMounts.FirstOrDefault(mount => string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(mount.AbsolutePath)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(source.RootFolderPath)),
+            StringComparison.OrdinalIgnoreCase));
+        if (library is null)
+        {
+            return null;
+        }
+
+        var relative = source.DescriptorRelativePath.Replace('\\', '/');
+        var slash = relative.LastIndexOf('/');
+        return "/" + library.Name + (slash < 0 ? string.Empty : "/" + relative[..slash]);
+    }
+
     private async Task<bool> RevealAssetsAsync(ProjectContext project, ContentBrowserAssetItem[] items)
     {
-        var needsCooked = items.Any(static item => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin);
+        var needsCooked = items.Any(item => IsCookedOnly(item) && LibraryFolder(project, item) is null);
         if (needsCooked && ProjectCookedFolders.Roots(project).Length == 0)
         {
             await this.localRouter!.NavigateAsync("/(left:project//right:" + this.currentAssetsViewPath + ")").ConfigureAwait(true);
@@ -81,7 +105,7 @@ public sealed partial class ContentBrowserViewModel
         {
             var path = AssetUriHelper.GetVirtualPath(item.IdentityUri);
             var folder = path[..path.LastIndexOf('/')];
-            return item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin ? cookedFolder + folder : folder;
+            return IsCookedOnly(item) ? (LibraryFolder(project, item) ?? (cookedFolder + folder)) : folder;
         }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (items.Any(item => !this.Query.Matches(item)))
         {

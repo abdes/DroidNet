@@ -804,7 +804,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         20/20; narrow/wide captures are verified. Revealing imported outputs also
         follows renamed project-output mounts; an authored folder named Cooked
         keeps its ordinary semantics. Routed UI checks pass 5/5 and the Content
-        Browser suite passes 134/134 in Release.
+        Browser suite passes 134/134 in Release. Library-only Inspect and output
+        links now reveal their supplying mount's physical folder without adding
+        project output. Combined routed navigation and live native priority checks
+        pass 8/8 with the installed Inspector.
   - [ ] Complete the remaining creation/import/reimport command/layout
         journeys, including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
