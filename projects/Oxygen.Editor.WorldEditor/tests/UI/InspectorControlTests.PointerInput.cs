@@ -12,11 +12,16 @@ using Windows.Foundation;
 
 namespace Oxygen.Editor.World.Tests;
 
-/// <summary>Delivers mouse input through Windows to the realized test controls.</summary>
+/// <summary>Delivers pointer and keyboard input through Windows to the realized test controls.</summary>
 public sealed partial class InspectorControlTests
 {
-    private static partial class PointerInput
+    /// <summary>Shares the existing Windows input path with packaged keyboard and pointer workflows.</summary>
+    internal static partial class PointerInput
     {
+        /// <summary>Waits for stable, hittable control geometry.</summary>
+        /// <param name="element">The control to interact with.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <returns>The task completing when the control is ready.</returns>
         public static async Task WaitForTargetAsync(FrameworkElement element, CancellationToken cancellationToken)
         {
             var root = VisualUserInterfaceTestsApp.ContentRoot!;
@@ -41,6 +46,8 @@ public sealed partial class InspectorControlTests
             }
         }
 
+        /// <summary>Owns the foreground test window and restores the pointer afterward.</summary>
+        /// <returns>The gesture lifetime.</returns>
         public static IDisposable Capture()
         {
             var window = WinRT.Interop.WindowNative.GetWindowHandle(VisualUserInterfaceTestsApp.MainWindow);
@@ -51,6 +58,11 @@ public sealed partial class InspectorControlTests
             return System.Reactive.Disposables.Disposable.Create(() => _ = SetCursorPos(previous.X, previous.Y));
         }
 
+        /// <summary>Moves the pointer to a relative position in the control.</summary>
+        /// <param name="element">The target control.</param>
+        /// <param name="x">The horizontal fraction.</param>
+        /// <param name="y">The vertical fraction.</param>
+        /// <returns>The input-settle task.</returns>
         public static async Task MoveAsync(FrameworkElement element, double x, double y)
         {
             var position = element.TransformToVisual(VisualUserInterfaceTestsApp.ContentRoot).TransformPoint(new Point(element.ActualWidth * x, element.ActualHeight * y));
@@ -67,6 +79,9 @@ public sealed partial class InspectorControlTests
             await SettleAsync().ConfigureAwait(true);
         }
 
+        /// <summary>Presses or releases the primary pointer button.</summary>
+        /// <param name="down">Whether to press the button.</param>
+        /// <returns>The input-settle task.</returns>
         public static async Task ButtonAsync(bool down)
         {
             var input = new NativeInput { Flags = down ? 0x0002u : 0x0004u };
@@ -74,6 +89,9 @@ public sealed partial class InspectorControlTests
             await SettleAsync().ConfigureAwait(true);
         }
 
+        /// <summary>Presses and releases a Windows virtual key.</summary>
+        /// <param name="key">The virtual-key code.</param>
+        /// <returns>The input-settle task.</returns>
         public static async Task KeyAsync(ushort key)
         {
             var input = new NativeInput { Type = 1, VirtualKey = key };
