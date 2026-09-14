@@ -68,7 +68,7 @@ public sealed partial class AssetCookStatusReader(
             var changed = await this.FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
             using var owners = await documents.AcquireAsync(graph.Assets.Select(static asset => asset.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
             var products = prior.Products.ToDictionary(static product => product.SourceUri);
-            return inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, CreateStatus(
+            var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
                 input,
                 graph,
                 plan,
@@ -77,7 +77,9 @@ public sealed partial class AssetCookStatusReader(
                 native?.Succeeded != false,
                 native?.Diagnostics ?? [],
                 metadataUnavailable,
-                changed))).Concat(builtins.Select(uri => CreateBuiltinStatus(uri, products, plan, native?.Succeeded != false, metadataUnavailable))).ToArray();
+                changed));
+            return inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
+                .Concat(builtins.Select(uri => CreateBuiltinStatus(uri, products, plan, native?.Succeeded != false, metadataUnavailable))).ToArray();
         }
         finally
         {

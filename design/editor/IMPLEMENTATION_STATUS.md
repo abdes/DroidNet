@@ -541,6 +541,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         required before publication; ambiguous owners and authored descriptor
         collisions fail before native work. Status follows source changes without
         starting a native worker or buffering entire model dependencies.
+        Bulk reads evaluate each shared source once and retain per-output
+        availability; a native model with 258 outputs covers valid and missing
+        output requests in the same read.
   - [x] Cross-mount project dependencies cook in order, retaining same-mount
         batching and reusing completed work. Scene/geometry manifests use ordered
         native lookup roots. Reused roots remain leased through native work and
