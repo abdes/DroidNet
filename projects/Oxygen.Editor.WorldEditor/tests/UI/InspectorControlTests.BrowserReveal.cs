@@ -126,6 +126,28 @@ public sealed partial class InspectorControlTests
         fixture.Provider.Verify(value => value.ResolveAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>()), Times.Never);
     });
 
+    /// <summary>Inspection and multi-output reveal navigate to the supplying library without mounting project output.</summary>
+    /// <param name="fromInspection">Whether to use the single-asset inspection navigation.</param>
+    /// <returns>The asynchronous library-folder navigation regression.</returns>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public Task CookedLibraryRevealUsesItsMountedPhysicalFolder(bool fromInspection) => EnqueueAsync(async () =>
+    {
+        using var fixture = new BrowserRevealFixture();
+        var item = fixture.SetLibraryOutput();
+        await fixture.OpenAsync().ConfigureAwait(true);
+        fixture.Browser.Query.SearchText = "hidden";
+        var revealed = fromInspection ? await fixture.Browser.ShowAssetAsync(item.IdentityUri).ConfigureAwait(true)
+            : await fixture.Browser.ShowAssetsAsync([item.IdentityUri]).ConfigureAwait(true);
+        _ = revealed.Should().BeTrue(fixture.Diagnostics);
+        _ = fixture.MountChanges.Should().Be(0);
+        _ = fixture.Layout.SelectedAsset!.IdentityUri.Should().Be(item.IdentityUri);
+        _ = fixture.Layout.SelectedAsset.DisplayPath.Should().Be("/Library/Materials/Shared.omat");
+        _ = fixture.Browser.Query.SearchText.Should().BeEmpty();
+        _ = fixture.Projects.ActiveProject!.AuthoringMounts.Should().NotContain(mount => mount.RelativePath == ".cooked");
+    });
+
     private sealed partial class BrowserRevealFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-BrowserReveal-");
@@ -205,6 +227,24 @@ public sealed partial class InspectorControlTests
             }
 
             this.items.OnNext(outputs);
+        }
+
+        public ContentBrowserAssetItem SetLibraryOutput()
+        {
+            var root = Path.Combine(this.directory.FullName, "Library");
+            _ = Directory.CreateDirectory(Path.Combine(root, "Materials"));
+            File.WriteAllBytes(Path.Combine(root, "Materials/Shared.omat"), [1]);
+            File.WriteAllBytes(Path.Combine(root, "container.index.bin"), [1]);
+            var item = CreateNavigationAsset("/Art/Shared.omat", AssetKind.Material) with
+            {
+                SourcePath = null, DescriptorPath = null, PrimaryState = AssetState.Cooked,
+                CookedUri = new("asset:///Art/Shared.omat"),
+                CookedMetadata = new(root, "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64)) { VirtualPath = "/Art/Shared.omat" },
+            };
+            this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", root)] });
+            _ = this.Provider.Setup(provider => provider.ResolveAsync(item.IdentityUri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
+            this.items.OnNext([item]);
+            return item;
         }
 
         public async Task OpenAsync()
