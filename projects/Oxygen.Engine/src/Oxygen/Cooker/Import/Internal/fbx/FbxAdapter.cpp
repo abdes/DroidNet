@@ -2628,7 +2628,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       new_parent_index = static_cast<uint32_t>(old_to_new[parent]);
     }
 
-    if (new_parent_index != new_index) {
+    // A retained parent needs only index remapping, never transform
+    // reparenting.
+    if (new_parent_index != new_index && parent != node.parent_index) {
       const auto parent_old_index = kept_indices[new_parent_index];
       const auto& parent_world = nodes[parent_old_index].world_matrix;
 

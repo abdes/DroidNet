@@ -2476,7 +2476,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       new_parent_index = static_cast<uint32_t>(old_to_new[parent]);
     }
 
-    if (new_parent_index != new_index) {
+    // A retained parent needs only index remapping, never transform
+    // reparenting.
+    if (new_parent_index != new_index && parent != node.parent_index) {
       const auto parent_old_index = kept_indices[new_parent_index];
       const auto& parent_world = nodes[parent_old_index].world_matrix;
 
@@ -2583,16 +2585,17 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     if (gltf_node != nullptr && gltf_node->camera != nullptr) {
       const auto& cam = *gltf_node->camera;
+      const auto unit_scale = ComputeUnitScale(request.options.coordinate);
       if (cam.type == cgltf_camera_type_perspective) {
         const auto& perspective = cam.data.perspective;
         const float fov_y = perspective.yfov;
         const float aspect_ratio = perspective.has_aspect_ratio
           ? static_cast<float>(perspective.aspect_ratio)
           : 1.0F;
-        const float near_plane = perspective.znear;
+        const float near_plane = perspective.znear * unit_scale;
         const float far_plane = perspective.has_zfar
-          ? static_cast<float>(perspective.zfar)
-          : near_plane + 1000.0F;
+          ? static_cast<float>(perspective.zfar) * unit_scale
+          : near_plane + 1000.0F * unit_scale;
 
         build.perspective_cameras.push_back(PerspectiveCameraRecord {
           .node_index = i,
@@ -2603,10 +2606,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         });
       } else if (cam.type == cgltf_camera_type_orthographic) {
         const auto& ortho = cam.data.orthographic;
-        const float half_w = static_cast<float>(ortho.xmag) * 0.5F;
-        const float half_h = static_cast<float>(ortho.ymag) * 0.5F;
-        const float near_plane = ortho.znear;
-        const float far_plane = ortho.zfar;
+        const float half_w = static_cast<float>(ortho.xmag) * 0.5F * unit_scale;
+        const float half_h = static_cast<float>(ortho.ymag) * 0.5F * unit_scale;
+        const float near_plane = ortho.znear * unit_scale;
+        const float far_plane = ortho.zfar * unit_scale;
 
         build.orthographic_cameras.push_back(OrthographicCameraRecord {
           .node_index = i,

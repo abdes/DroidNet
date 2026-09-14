@@ -672,8 +672,14 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         cases cover external buffers, missing-source repair, changed baselines,
         authored conflicts, late unsaved edits, native failure and publication
         rollback. Retry uses the captured candidate after external files disappear.
-  - [ ] Complete source/output catalog and typed-use integration, and full
-        conversion/loaded-value/clean-copy qualification.
+  - [x] glTF external buffers, GLB binary chunks and FBX load expected geometry,
+        normals, winding, bounds, hierarchy, camera and scalar material/light
+        values across unit/handedness variations and clean source copies. The
+        camera-unit and retained-parent defects are fixed. Related native suites
+        pass 23/23 in both configurations; 16 final profiles validate both source
+        copies. [Numeric import evidence](validation/ED-M07B-import-values.md).
+  - [ ] Complete source/output catalog and typed-use integration and the remaining
+        combined import qualification journeys.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
   - [x] Shared input/dependency and publication facts drive browser, material editor

@@ -224,8 +224,11 @@ Editor import now retains source, saves settings and cooks as one coordinator ru
 The review dialog exposes supported formats, name and authoring destination;
 configured source rows offer Reimport. Retry and Save/resume preserve retained
 source after a partial failure. Collision replacement, source/output catalog and
-typed-use integration, and complete loaded-value/conversion qualification from
-pipeline section 17 remain open.
+typed-use integration and combined workflow qualification remain open. Native
+numeric loading now covers glTF external buffers, GLB binary chunks and FBX,
+including unit/handedness changes, rotated parents, scalar properties and clean
+source copies. Camera-unit and retained-parent defects were reproduced and fixed;
+[validation evidence](../validation/ED-M07B-import-values.md) records the cases.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and
