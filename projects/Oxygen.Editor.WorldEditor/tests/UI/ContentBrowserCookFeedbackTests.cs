@@ -30,7 +30,6 @@ public sealed partial class ContentBrowserCookFeedbackTests : VisualUserInterfac
         var projects = new ProjectContextService();
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
-            Mock.Of<Oxygen.Managed.Assets.Catalog.IAssetCatalog>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             new ContentBrowserState(projects),
             projects,

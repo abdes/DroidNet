@@ -107,13 +107,10 @@ public sealed partial class InspectorControlTests
 
     private static AssetsViewModel CreateBuiltinBrowserModel(IContentBrowserAssetProvider provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null, IContentPipelineService? pipeline = null)
     {
-        var catalog = new Mock<IAssetCatalog>();
-        _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var locator = new Mock<DroidNet.Mvvm.IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
         return new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
-            catalog.Object,
             new DroidNet.Mvvm.Converters.ViewModelToView(locator.Object),
             state,
             projects,

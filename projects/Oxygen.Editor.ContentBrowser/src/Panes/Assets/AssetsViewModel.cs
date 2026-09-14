@@ -36,7 +36,6 @@ namespace Oxygen.Editor.ContentBrowser;
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
 /// <param name="cookRuns">The session cooking controls.</param>
-/// <param name="assetCatalog">The asset catalog.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectContextService">The active project context service.</param>
@@ -50,7 +49,6 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
-    IAssetCatalog assetCatalog,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectContextService projectContextService,
@@ -424,17 +422,11 @@ public partial class AssetsViewModel(
         }
     }
 
-    private async void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
+        if (!this.disposed && string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
             this.NotifyCookSelection();
-            Debug.WriteLine(
-                $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
-
-            // Asset indexing runs automatically in background - no manual refresh needed
-            var assetCount = await assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
-            Debug.WriteLine($"[AssetsViewModel] Assets available: {assetCount.Count}");
         }
     }
 

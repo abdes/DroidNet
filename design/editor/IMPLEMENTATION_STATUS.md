@@ -660,6 +660,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Multi-folder scopes now use the router's query parser after navigation,
         preserving the full selection when repeated parameters are serialized
         as one multi-value parameter.
+        Folder selection updates command state synchronously without a diagnostic
+        catalog query; combined browser/Cooking tests cover the former unhandled
+        callback failure.
   - [x] The selected asset and visible highlight follow list/tile switches. Catalog
         reordering preserves selection and keyboard focus. Filtered-out rows and
         unloaded layouts cannot restore or invoke an obsolete selection.
