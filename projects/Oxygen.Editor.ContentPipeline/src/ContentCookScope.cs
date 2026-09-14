@@ -50,4 +50,10 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets prior source ownership used to reject imported-output collisions.</summary>
     internal Incremental.CookProvenance? PreviousProvenance { get; init; }
+
+    /// <summary>Gets the explicit source replacement captured instead of the currently retained bytes.</summary>
+    internal Import.SceneImportRequest? ImportReplacement { get; init; }
+
+    /// <summary>Gets the owning run's callback for retaining an incoming replacement candidate for Retry.</summary>
+    internal Action<Import.SceneImportRequest>? RetainReplacementCandidate { get; init; }
 }

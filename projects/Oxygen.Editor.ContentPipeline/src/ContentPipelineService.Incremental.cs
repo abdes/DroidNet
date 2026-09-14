@@ -264,7 +264,18 @@ public sealed partial class ContentPipelineService
         {
             references.Verify();
             libraries.Verify();
+            using var sourceOwners = snapshot.SourceReplacement is null ? null
+                : await cookDocuments.AcquireAsync(snapshot.Inputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
+            if (sourceOwners?.Documents.Any(static document => document.IsDirty) == true)
+            {
+                throw new InvalidOperationException("The retained source has unsaved edits. Save or discard them and review the replacement again.");
+            }
+
             result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results), cancellationToken).ConfigureAwait(false);
+            if (!result.IsPublished && resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
+            {
+                RetainRolledBackReplacement(replacement, snapshot);
+            }
         }
         else if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
         {

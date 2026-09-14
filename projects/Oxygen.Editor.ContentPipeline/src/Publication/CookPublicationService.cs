@@ -69,7 +69,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                 [CookPublicationTransaction.PublicationMetadata] = JsonSerializer.SerializeToUtf8Bytes(receipt),
                 [CookPublicationTransaction.ProvenanceMetadata] = CookProvenanceStore.Serialize(operation.Project, provenance),
             };
-            var transaction = await CookPublicationTransaction.PrepareAsync(operation, staging, metadata, files, cancellationToken).ConfigureAwait(false);
+            var transaction = await CookPublicationTransaction.PrepareAsync(operation, staging, metadata, files, cancellationToken, sourceReplacement: snapshot.SourceReplacement).ConfigureAwait(false);
             CookRunContext.Report(new(Message: "Publishing cooked content.", State: CookRunState.Publishing));
             await transaction.PublishAsync(preview, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
             if (transaction.CleanupFailure is { } cleanup)

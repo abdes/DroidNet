@@ -49,6 +49,13 @@ public sealed class CookDependencyDiscovery(
         return await discovery.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Fingerprints a retained model independently of the native producer version.</summary>
+    /// <param name="inputs">The complete source, dependency and settings inputs.</param>
+    /// <returns>The source content fingerprint used by automatic-cook policy.</returns>
+    internal static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
+        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
+            .Select(static file => new { file.RelativePath, file.DiscoveryHash }))));
+
     private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments,
         IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? priorImports,
         Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported,
@@ -123,10 +130,6 @@ public sealed class CookDependencyDiscovery(
                 NativeReferences = this.nativeReferences.ToImmutableDictionary(),
             };
         }
-
-        private static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
-            => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
-                .Select(static file => new { file.RelativePath, file.DiscoveryHash }))));
 
         private static Uri[] ReadMaterial(ContentCookInput input, byte[] bytes)
         {

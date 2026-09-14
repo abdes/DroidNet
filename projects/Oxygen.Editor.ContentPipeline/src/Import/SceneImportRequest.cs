@@ -13,6 +13,12 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="DestinationFolder">The authoring folder containing this model's output folder.</param>
 public sealed record SceneImportRequest(ProjectContext Project, string SourcePath, string Name, Uri DestinationFolder)
 {
+    /// <summary>Gets the existing source explicitly reviewed for replacement, or null for a new import.</summary>
+    public SceneImportReplacement? Replacement { get; init; }
+
+    /// <summary>Gets private incoming source preserved by a previous failed replacement attempt.</summary>
+    internal string? ReplacementCandidatePath { get; init; }
+
     /// <summary>Gets source facts retained by an earlier attempt in this editor session.</summary>
     internal RetainedImportSource? RetainedSource { get; init; }
 }
