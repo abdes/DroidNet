@@ -588,7 +588,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         reached through indexed library dependencies now enter saved-input capture
         and cooking; saved priority selects the winner, and shadowed versions do
         not invalidate consumers. Both orders and status transitions pass; the
-        ContentPipeline suite passes 441/441.
+        ContentPipeline suite passes 442/442. Embedded native keys remain distinct
+        from authored path references: a same-path project material with a different
+        key cannot replace a cooked mesh dependency. Per-consumer provenance and
+        two-scene freshness regressions preserve both identities independently.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.

@@ -24,7 +24,7 @@ public sealed partial class AssetCookStatusReader
         bool metadataUnavailable)
     {
         _ = products.TryGetValue(uri, out var product);
-        var verified = product is not null && VerifyPriorClosure(uri, products, plan.VerifiedOutputs, ImmutableDictionary<Uri, CookedDependencySnapshot>.Empty, []);
+        var verified = product is not null && VerifyPriorClosure(uri, products, plan.VerifiedOutputs, ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>>.Empty, []);
         var freshness = metadataUnavailable || !nativeAvailable ? AssetCookFreshness.Unknown
             : product is null ? AssetCookFreshness.NeedsCooking
             : verified && plan.Reusable.ContainsKey(uri) ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate;

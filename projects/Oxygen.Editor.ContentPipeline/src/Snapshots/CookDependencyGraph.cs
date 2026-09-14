@@ -27,8 +27,8 @@ public sealed record CookDependencyGraph(
     /// <summary>Gets the exact runtime references authored by each source before source-owner resolution.</summary>
     public ImmutableDictionary<Uri, ImmutableArray<Uri>> NativeReferences { get; init; } = ImmutableDictionary<Uri, ImmutableArray<Uri>>.Empty;
 
-    /// <summary>Gets verified foreign cooked inputs selected by saved source priority.</summary>
-    public ImmutableDictionary<Uri, CookedDependencySnapshot> CookedDependencies { get; init; } = ImmutableDictionary<Uri, CookedDependencySnapshot>.Empty;
+    /// <summary>Gets verified native library identities required by each consuming source.</summary>
+    public ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>> CookedDependencies { get; init; } = ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>>.Empty;
 
     /// <summary>Gets exact imported output references whose retained owners participate in this closure.</summary>
     public ImmutableArray<Uri> ImportedReferences { get; init; } = [];

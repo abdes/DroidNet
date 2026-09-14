@@ -192,7 +192,7 @@ public sealed partial class ContentPipelineService
                     discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken),
                     resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
                     preferCookedReference: libraries.IsLibraryPreferred,
-                    expandCookedReferences: (references, queryToken) => libraries.ExpandReferencesAsync(references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, queryToken))
+                    expandCookedReferences: (input, references, queryToken) => libraries.ExpandReferencesAsync(input, references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, queryToken))
                     .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
