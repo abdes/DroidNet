@@ -43,11 +43,16 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
     /// <summary>Wide and narrow docks keep controls scoped and expanded content reachable.</summary>
     /// <param name="width">The dock width in device-independent pixels.</param>
     /// <param name="theme">The WinUI theme to render.</param>
+    /// <param name="rasterizationScale">The effective XAML rasterization scale.</param>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
-    [DataRow(960d, ElementTheme.Dark)]
-    [DataRow(360d, ElementTheme.Light)]
-    public Task CookingLayoutKeepsRecoveryAndOutputReachable(double width, ElementTheme theme) => EnqueueAsync(async () =>
+    [DataRow(960d, ElementTheme.Dark, 1d)]
+    [DataRow(960d, ElementTheme.Dark, 1.5d)]
+    [DataRow(960d, ElementTheme.Dark, 2d)]
+    [DataRow(360d, ElementTheme.Light, 1d)]
+    [DataRow(360d, ElementTheme.Light, 1.5d)]
+    [DataRow(360d, ElementTheme.Light, 2d)]
+    public Task CookingLayoutKeepsRecoveryAndOutputReachable(double width, ElementTheme theme, double rasterizationScale) => EnqueueAsync(async () =>
     {
         using var model = CreateModel();
         model.SelectedRun!.IsAssetsExpanded = true;
@@ -57,12 +62,13 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         host.Width = width;
         host.Height = 340;
         host.Child = view;
-        await LoadTestContentAsync(host).ConfigureAwait(true);
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(host, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
         var scale = view.XamlRoot.RasterizationScale;
         VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * scale) + 40, (int)(340 * scale) + 80));
         await WaitForRenderAsync().ConfigureAwait(true);
         view.UpdateLayout();
-        await this.CaptureAsync(host, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"cooking-{width}-{theme}.png")).ConfigureAwait(true);
+        await this.CaptureAsync(host, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"cooking-{width}-{theme}-{rasterizationScale}.png")).ConfigureAwait(true);
 
         var toolbar = view.FindDescendant<DroidNet.Controls.ToolBar>()!;
         _ = toolbar.IsCompact.Should().BeTrue();
@@ -75,14 +81,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
 
         AssertCompactHeader(view);
 
-        var output = view.FindDescendant<DroidNet.Controls.OutputConsole.OutputConsoleView>()!;
-        var assets = view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookAssets", StringComparison.Ordinal))!;
-        _ = output.ActualHeight.Should().BeGreaterThanOrEqualTo(160);
-        _ = assets.ActualHeight.Should().BeGreaterThanOrEqualTo(120);
-        _ = output.IsScrollEnabled.Should().BeFalse();
-        _ = ScrollViewer.GetVerticalScrollBarVisibility(assets).Should().Be(ScrollBarVisibility.Disabled);
-        _ = ScrollViewer.GetVerticalScrollMode(assets).Should().Be(ScrollMode.Disabled);
-        _ = assets.Items.Should().HaveCount(model.SelectedRun.Assets.Count).And.NotBeEmpty();
+        AssertExpandedContent(view);
         var scroller = view.FindDescendant<ScrollViewer>(element => string.Equals(element.Name, "DetailsScroller", StringComparison.Ordinal))!;
         _ = scroller.ScrollableHeight.Should().BePositive();
         _ = view.FindDescendants().OfType<Expander>().Should().Contain(element => Equals(element.Header, "Issues · Main (1)"));
@@ -93,6 +92,8 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = issue.ActionButton.Visibility.Should().Be(Visibility.Visible);
 
         AssertResponsiveLayout(view, toolbar, issue, scroller, width);
+        await ScaledXamlHost.ScrollToEndAsync(scroller).ConfigureAwait(true);
+        await this.CaptureAsync(host, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"cooking-bottom-{width}-{theme}-{rasterizationScale}.png")).ConfigureAwait(true);
     });
 
     /// <summary>Inspection is inline with the selected run's recovery actions and does not submit another cook.</summary>
@@ -394,6 +395,18 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
             _ = panel.FindDescendants().Should().Contain(cookingView).And.NotContain(browserView);
             _ = dock.Dockables.Count(value => value.IsActive).Should().Be(1);
         }
+    }
+
+    private static void AssertExpandedContent(CookingPanelView view)
+    {
+        var output = view.FindDescendant<DroidNet.Controls.OutputConsole.OutputConsoleView>()!;
+        var assets = view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookAssets", StringComparison.Ordinal))!;
+        _ = output.ActualHeight.Should().BeGreaterThanOrEqualTo(160);
+        _ = assets.ActualHeight.Should().BeGreaterThanOrEqualTo(120);
+        _ = output.IsScrollEnabled.Should().BeFalse();
+        _ = ScrollViewer.GetVerticalScrollBarVisibility(assets).Should().Be(ScrollBarVisibility.Disabled);
+        _ = ScrollViewer.GetVerticalScrollMode(assets).Should().Be(ScrollMode.Disabled);
+        _ = assets.Items.Should().HaveCount(view.ViewModel!.SelectedRun!.Assets.Count).And.NotBeEmpty();
     }
 
     private static void AssertCompactHeader(CookingPanelView view)
