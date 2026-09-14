@@ -357,6 +357,11 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
         }
 
         var input = CookInputResolver.Resolve(scope.Project, assetUri, ContentCookInputRole.Dependency);
+        if (scope.ReusableSources.Contains(input.AssetUri))
+        {
+            return null;
+        }
+
         input = input with { SourceAbsolutePath = Path.Combine(scope.InputRoot, input.SourceRelativePath) };
         return File.Exists(input.SourceAbsolutePath) || assetUri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? input : null;

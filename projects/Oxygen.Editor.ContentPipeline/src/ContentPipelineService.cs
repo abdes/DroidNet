@@ -673,7 +673,14 @@ public sealed partial class ContentPipelineService(
             .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
         var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.Source)).ToArray();
         var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
-        manifest = manifest with { Jobs = keptJobs.Select(job => job with { DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray() }).ToArray() };
+        manifest = manifest with
+        {
+            Jobs = keptJobs.Select(job => job with
+            {
+                DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
+                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
+            }).ToArray(),
+        };
         scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
