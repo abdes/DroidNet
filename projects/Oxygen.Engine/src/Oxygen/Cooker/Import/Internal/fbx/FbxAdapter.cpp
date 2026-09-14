@@ -1647,6 +1647,61 @@ namespace {
 
 } // namespace
 
+auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
+  const AdapterInput& input) -> SceneSourceInspection
+{
+  SceneSourceInspection result;
+  result.format = "fbx";
+  const auto scene = LoadSceneFromFile(source_path, input, result.diagnostics);
+  if (!scene) {
+    return result;
+  }
+  result.parsed = true;
+  result.supported = internal::ValidateStaticScalarSource(
+    *scene, input.source_id_prefix, result.diagnostics);
+  const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
+    switch (axis) {
+    case UFBX_COORDINATE_AXIS_POSITIVE_X:
+      return "+X";
+    case UFBX_COORDINATE_AXIS_NEGATIVE_X:
+      return "-X";
+    case UFBX_COORDINATE_AXIS_POSITIVE_Y:
+      return "+Y";
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
+      return "-Y";
+    case UFBX_COORDINATE_AXIS_POSITIVE_Z:
+      return "+Z";
+    case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
+      return "-Z";
+    default:
+      return "unknown";
+    }
+  };
+  const auto& axes = scene->settings.axes;
+  result.source_right = axis_name(axes.right);
+  result.source_up = axis_name(axes.up);
+  result.source_front = axis_name(axes.front);
+  if (ufbx_coordinate_axes_valid(axes)) {
+    result.source_left_handed = IsLeftHandedAxes(axes);
+  }
+  const auto* units = ufbx_find_prop(&scene->settings.props, "UnitScaleFactor");
+  if (units != nullptr
+    && (units->flags & (UFBX_PROP_FLAG_NOT_FOUND | UFBX_PROP_FLAG_SYNTHETIC))
+      == 0
+    && std::isfinite(scene->settings.unit_meters)
+    && scene->settings.unit_meters > 0.0) {
+    result.source_unit_meters = scene->settings.unit_meters;
+  }
+  result.reverses_winding
+    = scene->metadata.mirror_axis != UFBX_MIRROR_AXIS_NONE;
+  result.mesh_count = scene->meshes.count;
+  result.material_count = scene->materials.count;
+  result.node_count = scene->nodes.count;
+  // Supported scalar FBX contains its geometry and materials in the primary
+  // file. External textures/caches are rejected by the policy above.
+  return result;
+}
+
 auto FbxAdapter::Parse(const std::filesystem::path& source_path,
   const AdapterInput& input) -> ParseResult
 {

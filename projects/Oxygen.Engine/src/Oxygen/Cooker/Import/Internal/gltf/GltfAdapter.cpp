@@ -194,8 +194,8 @@ namespace {
   using CgltfDataPtr = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
   [[nodiscard]] auto LoadDataFromFile(const std::filesystem::path& path,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
-    -> CgltfDataPtr
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
+    const bool load_external_buffers = true) -> CgltfDataPtr
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(
@@ -214,6 +214,10 @@ namespace {
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, parse_result));
       return { nullptr, &cgltf_free };
+    }
+
+    if (!load_external_buffers) {
+      return { data, &cgltf_free };
     }
 
     const auto load_result
@@ -1714,6 +1718,56 @@ namespace {
   }
 
 } // namespace
+
+auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
+  const AdapterInput& input) -> SceneSourceInspection
+{
+  SceneSourceInspection result;
+  result.format = "gltf";
+  const auto data
+    = LoadDataFromFile(source_path, input, result.diagnostics, false);
+  if (!data) {
+    return result;
+  }
+  if (input.stop_token.stop_requested()) {
+    result.diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
+    return result;
+  }
+  result.parsed = true;
+  result.supported = internal::ValidateStaticScalarSource(
+    *data, input.source_id_prefix, result.diagnostics);
+  result.source_unit_meters = 1.0;
+  result.source_right = "+X";
+  result.source_up = "+Y";
+  result.source_front = "+Z";
+  result.source_left_handed = false;
+  result.mesh_count = data->meshes_count;
+  result.material_count = data->materials_count;
+  result.node_count = data->nodes_count;
+  for (const auto& buffer : std::span(data->buffers, data->buffers_count)) {
+    if (buffer.uri == nullptr
+      || std::string_view(buffer.uri).starts_with("data:")) {
+      continue;
+    }
+    std::string uri(buffer.uri);
+    uri.resize(cgltf_decode_uri(uri.data()));
+    if (uri.empty() || uri.contains(':') || uri.contains('\0')
+      || uri.starts_with('/') || uri.starts_with('\\')) {
+      result.supported = false;
+      result.diagnostics.push_back(
+        MakeErrorDiagnostic("import.source.nonlocal_dependency",
+          "A glTF buffer must use a relative file URI or embedded data.",
+          input.source_id_prefix, "/buffers"));
+      continue;
+    }
+    std::ranges::replace(uri, '\\', '/');
+    result.external_files.push_back(std::move(uri));
+  }
+  std::ranges::sort(result.external_files);
+  const auto duplicates = std::ranges::unique(result.external_files);
+  result.external_files.erase(duplicates.begin(), duplicates.end());
+  return result;
+}
 
 auto GltfAdapter::Parse(const std::filesystem::path& source_path,
   const AdapterInput& input) -> ParseResult

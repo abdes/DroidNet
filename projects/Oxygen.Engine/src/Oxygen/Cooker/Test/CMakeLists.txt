@@ -287,6 +287,14 @@ m_gtest_program(
     "Import/AsyncImporterFullTestBase.h"
     "Import/AsyncGltfImporter_test.cpp"
     "Import/StaticScalarImport_test.cpp"
+    "Import/SceneSourceInspection_test.cpp"
+)
+
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportGltf.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
 )
 
 m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")
