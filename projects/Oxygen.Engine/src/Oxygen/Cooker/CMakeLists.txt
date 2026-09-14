@@ -131,6 +131,7 @@ set(
   "Import/ScriptImportRequestBuilder.h"
   "Import/ScriptImportSettings.h"
   "Import/SceneImportSettings.h"
+  "Import/SceneSourceInspection.h"
   "Import/SceneDescriptorImportRequestBuilder.h"
   "Import/SceneDescriptorImportSettings.h"
   "Import/ScratchImage.h"
@@ -251,6 +252,7 @@ set(
   OXYGEN_COOKER_PRIVATE_SOURCES
   "Import/AsyncImportService.cpp"
   "Import/BuiltinGeometryCatalog.cpp"
+  "Import/SceneSourceInspection.cpp"
   "Import/FileError.cpp"
   "Import/ImportManifest.cpp"
   "Import/ImportOptions.cpp"
@@ -428,6 +430,7 @@ if(${META_PROJECT_ID}_INSTALL)
   set(
     _oxygen_cooker_schema_files
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scene-source-inspection.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"

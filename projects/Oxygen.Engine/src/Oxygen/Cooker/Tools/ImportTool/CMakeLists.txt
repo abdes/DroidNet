@@ -54,6 +54,8 @@ add_executable(
   "PhysicsSidecarCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
+  "SourceInspectionCommand.cpp"
+  "SourceInspectionCommand.h"
   "ScriptCommand.cpp"
   "ScriptCommand.h"
   "ScriptingSidecarCommand.cpp"

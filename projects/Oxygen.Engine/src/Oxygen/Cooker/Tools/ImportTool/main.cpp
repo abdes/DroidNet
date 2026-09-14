@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceInspectionCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
 
 // Create and inject concrete writers. The concrete implementations live
@@ -701,6 +702,8 @@ auto main(int argc, char** argv) -> int
     BatchCommand batch_command(&global_options);
     oxygen::content::import::tool::BuiltinCatalogCommand
       builtin_catalog_command;
+    oxygen::content::import::tool::SourceInspectionCommand
+      source_inspection_command;
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
@@ -718,6 +721,7 @@ auto main(int argc, char** argv) -> int
       &physics_sidecar_command,
       &batch_command,
       &builtin_catalog_command,
+      &source_inspection_command,
     };
 
     AsyncImportService::Config service_config {};

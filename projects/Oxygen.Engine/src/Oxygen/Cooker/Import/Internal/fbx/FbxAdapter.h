@@ -13,6 +13,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import::adapters {
@@ -31,6 +32,11 @@ public:
     std::string texture_id;
     std::filesystem::path resolved_path;
   };
+
+  //! Inspect source metadata without generating any pipeline work.
+  OXGN_COOK_NDAPI static auto InspectSource(
+    const std::filesystem::path& source_path, const AdapterInput& input)
+    -> SceneSourceInspection;
 
   FbxAdapter();
   ~FbxAdapter();
