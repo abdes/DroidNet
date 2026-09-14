@@ -708,6 +708,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         browser/picker/menu cases pass in light/dark themes.
   - [ ] Finish the remaining combined browser navigation/query qualification
         journeys, including the 1,000-entry workload.
+        The production catalog/status component passes with 1,000 real scalar
+        descriptors in Debug and Release (Release cold 1.19 s, warm filter p95
+        0.05 ms). The PRD's 100-node live-viewport workload remains open.
   - [ ] Finish cooked-only typed-use qualification and the complete assignment,
         publication, cancellation and Save/reopen matrix.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
