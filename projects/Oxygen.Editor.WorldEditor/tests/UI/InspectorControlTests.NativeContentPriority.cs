@@ -6,7 +6,6 @@ using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -64,7 +63,7 @@ public sealed partial class InspectorControlTests
     {
         public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
         {
-            var api = new ImportToolContentPipelineApi(Mock.Of<IEngineContentPipelineToolLocator>(), Mock.Of<IContentPipelineProcessRunner>(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
             var service = new CookedContentMountService(new NativeStorageProvider(new RealFileSystem()), api);
             var mounts = await service.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), CookOutputLease.AcquireRead(project.ProjectRoot), cancellationToken).ConfigureAwait(true);
             await this.engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
