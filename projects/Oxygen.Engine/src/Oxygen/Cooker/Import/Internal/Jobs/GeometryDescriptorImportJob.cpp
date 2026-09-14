@@ -362,50 +362,47 @@ namespace {
       return it->second;
     }
 
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (!it->inspection.has_value()) {
-        continue;
-      }
-      for (const auto& asset : it->inspection->Assets()) {
-        if (asset.virtual_path != virtual_path) {
-          continue;
-        }
-
-        const auto type = static_cast<data::AssetType>(asset.asset_type);
-        if (type != data::AssetType::kMaterial) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.material.type_mismatch",
-            "Virtual path does not reference a material descriptor",
-            object_path);
-          return std::nullopt;
-        }
-
-        context.material_cache.insert_or_assign(
-          std::string(virtual_path), asset.key);
-        return asset.key;
-      }
-    }
-
     auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          context.request, virtual_path, relpath)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.material.virtual_path_unmounted",
-        "Material reference virtual_path is outside mounted cooked roots",
-        std::move(object_path));
-      return std::nullopt;
-    }
-
+    const auto is_mounted = internal::TryVirtualPathToRelPath(
+      context.request, virtual_path, relpath);
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
+      if (it->inspection.has_value()) {
+        for (const auto& asset : it->inspection->Assets()) {
+          if (asset.virtual_path != virtual_path) {
+            continue;
+          }
+
+          const auto type = static_cast<data::AssetType>(asset.asset_type);
+          if (type != data::AssetType::kMaterial) {
+            AddDiagnostic(context.session, context.request,
+              ImportSeverity::kError, "geometry.material.type_mismatch",
+              "Virtual path does not reference a material descriptor",
+              object_path);
+            return std::nullopt;
+          }
+
+          context.material_cache.insert_or_assign(
+            std::string(virtual_path), asset.key);
+          return asset.key;
+        }
+      }
       const auto descriptor_path = it->root / std::filesystem::path(relpath);
       std::error_code ec;
-      if (!std::filesystem::exists(descriptor_path, ec)) {
+      if (!is_mounted || !std::filesystem::exists(descriptor_path, ec)) {
         continue;
       }
 
       const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
       context.material_cache.insert_or_assign(std::string(virtual_path), key);
       return key;
+    }
+
+    if (!is_mounted) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "geometry.material.virtual_path_unmounted",
+        "Material reference virtual_path is outside mounted cooked roots",
+        std::move(object_path));
+      return std::nullopt;
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,
@@ -428,35 +425,32 @@ namespace {
       return std::nullopt;
     }
 
+    auto relpath = std::string {};
+    const auto is_mounted = internal::TryVirtualPathToRelPath(
+      context.request, virtual_path, relpath);
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (!it->inspection.has_value()) {
-        continue;
-      }
-      for (const auto& asset : it->inspection->Assets()) {
-        if (asset.virtual_path == virtual_path) {
-          return asset.key;
+      if (it->inspection.has_value()) {
+        for (const auto& asset : it->inspection->Assets()) {
+          if (asset.virtual_path == virtual_path) {
+            return asset.key;
+          }
         }
       }
+      const auto descriptor_path = it->root / std::filesystem::path(relpath);
+      std::error_code ec;
+      if (!is_mounted || !std::filesystem::exists(descriptor_path, ec)) {
+        continue;
+      }
+
+      return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
     }
 
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          context.request, virtual_path, relpath)) {
+    if (!is_mounted) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.asset.virtual_path_unmounted",
         "Asset reference virtual_path is outside mounted cooked roots",
         std::move(object_path));
       return std::nullopt;
-    }
-
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      const auto descriptor_path = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
-      if (!std::filesystem::exists(descriptor_path, ec)) {
-        continue;
-      }
-
-      return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,

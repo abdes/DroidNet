@@ -167,6 +167,41 @@ namespace {
     service.Stop();
   }
 
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    NewDescriptorRespectsPriorityBeforeIndexPublication)
+  {
+    const auto output = MakeTempCookedRoot("unindexed_output");
+    const auto library = MakeTempCookedRoot("unindexed_library");
+    const auto own_key
+      = data::AssetKey::FromVirtualPath("/Art/Geometry/Mesh.ogeo");
+    const auto library_key
+      = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
+    WriteTextFile(output / "Geometry/Mesh.ogeo", "new descriptor");
+    WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
+    auto service = AsyncImportService {};
+    const auto descriptor
+      = R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+    for (const auto own_wins : { true, false }) {
+      auto request = MakeRequest(output, descriptor);
+      request.loose_cooked_layout.virtual_mount_root = "/Art";
+      request.cooked_context_roots = own_wins
+        ? std::vector<std::filesystem::path> { library, output }
+        : std::vector<std::filesystem::path> { output, library };
+      const auto report = SubmitAndWait(service, std::move(request));
+      ASSERT_TRUE(report.success);
+      const auto bytes = ReadBinaryFile(
+        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto scene = data::SceneAsset(
+        data::AssetKey {}, std::span<const std::byte>(bytes));
+      const auto renderables
+        = scene.GetComponents<data::pak::world::RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      EXPECT_EQ(renderables[0].geometry_key, own_wins ? own_key : library_key);
+    }
+    service.Stop();
+  }
+
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, WinningRootTypeMismatchDoesNotFallBack)
   {

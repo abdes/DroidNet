@@ -552,9 +552,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         in snapshots, provenance and status. Library updates and saved priority
         changes invalidate consumers; missing/corrupt inputs report scoped errors
         and preserve published output. Readers survive failed native termination.
-  - [ ] Complete the remaining foreign dependency/typed-use qualification matrix,
-        including native precedence between indexed and newly generated roots.
-        These remain part of 07B.1 and 07B.4.
+  - [x] Native scene/geometry lookup preserves source priority before index
+        publication. Newly written project descriptors beat lower-priority
+        indexed libraries; explicitly higher libraries still win. Scene and
+        material key regressions and related native suites pass 43/43 in both
+        Debug and Release, with both SDK configurations installed.
+  - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
+        in 07B.1 and 07B.4.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
@@ -748,8 +752,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       verify geometry attributes, bounds and default material semantics; packaged
       tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
 
-Current validation: ContentPipeline 311/311 and the expanded inspection adapter
-suite 25/25; Managed.Assets 91/91, Content Browser 110/110, Runtime 95/95,
+Current validation: ContentPipeline 396/396 and the expanded inspection adapter
+suite 25/25; Managed.Assets 91/91, Content Browser 129/129, Runtime 95/95,
 MaterialEditor 56/56, SceneExplorer 174/174. Packaged UI validated 252 cases: 240 passed in the full run; the four query
 expectations corrected for shared initialization and eight new cooked-asset opening
 cases pass in the final 32-case browser/inspection/Cooking rerun. The shared

@@ -938,7 +938,9 @@ and retain published roots for reused dependencies. Reference lookup follows the
 saved content priority; explicitly listing the destination root places it at that
 position, with the last occurrence of a duplicate root winning. The highest
 priority matching asset must have the requested type; a lower-priority asset must
-not hide a type error in the effective source.
+not hide a type error in the effective source. Check each root's index and newly
+written descriptors before proceeding to the next root; index publication must
+not change the selected source.
 
 Cooked-library dependencies retain the selected source, native key/type and a
 fingerprint of its protected container files. These facts participate in consumer
