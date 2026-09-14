@@ -38,6 +38,23 @@ add_test(NAME "Oxygen.Cooker.LinkTest" COMMAND "Oxygen.Cooker.LinkTest")
 
 include(GTestHelpers)
 
+gtest_program(
+  "Oxygen.Cooker.InspectorMetadata.Tests"
+  SOURCES
+    "Import/InspectorAssetKeyMap_test.cpp"
+    "../Tools/Inspector/AssetKeyMap.cpp"
+  DEPS
+    oxygen::cooker
+    oxygen::data
+    oxygen::clap
+    oxygen::testing
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+target_include_directories(
+  Oxygen.Cooker.InspectorMetadata.Tests PRIVATE "${CMAKE_BINARY_DIR}/generated"
+)
+
 m_gtest_program(
   AsyncImportCore
   SOURCES

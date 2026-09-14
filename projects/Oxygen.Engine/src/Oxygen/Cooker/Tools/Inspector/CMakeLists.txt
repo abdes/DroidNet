@@ -26,7 +26,26 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(nlohmann_json REQUIRED)
-add_executable(${META_MODULE_TARGET} "main.cpp" "DependencyReport.cpp" "DependencyReport.h")
+find_package(nlohmann_json_schema_validator REQUIRED)
+add_executable(
+  ${META_MODULE_TARGET}
+  "main.cpp"
+  "DependencyReport.cpp"
+  "DependencyReport.h"
+  "AssetKeyMap.cpp"
+  "AssetKeyMap.h"
+)
+
+oxygen_embed_json_schemas(
+  TARGET ${META_MODULE_TARGET}
+  OUTPUT_HEADER
+    "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h"
+  NAMESPACE "oxygen::content::inspection"
+  INCLUDE_BASE_DIR "${CMAKE_BINARY_DIR}/generated"
+  SCHEMAS
+    kAssetKeyRequestSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../Import/Schemas/oxygen.asset-key-request.schema.json"
+)
 
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
 # in addition to the generated target name (e.g. oxygen-cooker-inspector).
@@ -54,6 +73,7 @@ target_link_libraries(
     oxygen::content
     oxygen::clap
     nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
 )
 
 # ------------------------------------------------------------------------------

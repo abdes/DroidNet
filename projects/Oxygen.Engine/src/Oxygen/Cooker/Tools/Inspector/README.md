@@ -79,8 +79,6 @@ Oxygen.Cooker.Inspector.exe dump-index F:/path/to/loose_cooked_root
 Oxygen.Cooker.Inspector.exe dump-index F:/path/to/loose_cooked_root --assets --digests
 ```
 
-## Exit codes
-
 ### Dependency metadata
 
 ```powershell
@@ -95,6 +93,21 @@ complete; unsupported types, malformed descriptors and scene script sidecars
 retain a diagnostic instead of claiming an empty dependency set.
 
 The report schema is installed as `oxygen.cooked-dependencies.schema.json`.
+
+### Virtual asset identities
+
+```powershell
+Oxygen.Cooker.Inspector.exe asset-keys --input <request.json> --output <map.json>
+```
+
+The request uses `oxygen.asset-key-request.v1` with a `virtual_paths` array of
+canonical native paths. The `oxygen.asset-key-map.v1` response supplies each
+path and its engine-generated key using `AssetKey::FromVirtualPath`. This is a
+batched metadata operation; source files and cooked containers are not required.
+Invalid requests leave an existing output report untouched. Request and response
+schemas are installed alongside the other cooker schemas.
+
+## Exit codes
 
 - `0`: success
 - `1`: CLI usage / unknown command

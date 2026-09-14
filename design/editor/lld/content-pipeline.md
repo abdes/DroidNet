@@ -975,6 +975,12 @@ project output wins. A higher-priority library excludes the shadowed source from
 that consumer closure. Final binding selection uses captured ownership; changes
 to a shadowed version do not invalidate the consumer. Status uses the same
 resolution with cached metadata and never starts an Inspector process.
+For dependency keys absent from every library index, resolve project descriptor
+identities through the native Inspector using the engine's public virtual-path
+key policy. Batch candidate paths and cache the verified key map as derived data;
+status reads consume cached identities without launching tools. An uncooked
+project descriptor can then satisfy a cooked-library dependency on its first
+scene cook. Managed code must not reimplement the native key algorithm.
 
 Explicit replacement of an existing retained source keeps the reviewed source
 and settings intact during discovery and native cooking. Capture the incoming

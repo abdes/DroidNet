@@ -571,6 +571,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Debug and Release, with both SDK configurations installed.
   - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
         in 07B.1 and 07B.4.
+        Project-only uncooked dependencies still need editor integration. The
+        native Inspector now supplies batched virtual-path keys through the engine
+        identity API; four native schema/key/error cases pass in both configurations,
+        including 1,001 paths, and both installed CLIs pass canonical/Unicode checks.
   - [x] Cache native Inspector dependency reports by verified library contents.
         Cooked geometry captures a material supplied by another library; changing
         that material invalidates its consuming scene. Native keys retain their

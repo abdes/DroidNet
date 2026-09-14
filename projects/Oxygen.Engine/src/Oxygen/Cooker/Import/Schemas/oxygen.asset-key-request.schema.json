@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Virtual Asset Key Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "virtual_paths"
+  ],
+  "properties": {
+    "schema": {
+      "const": "oxygen.asset-key-request.v1"
+    },
+    "virtual_paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/[^/\\\\]+(/[^/\\\\]+)+$",
+        "not": {
+          "pattern": "(^|/)\\.{1,2}(/|$)|[\\u0000-\\u001f]"
+        }
+      }
+    }
+  }
+}
