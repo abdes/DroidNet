@@ -571,6 +571,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Debug and Release, with both SDK configurations installed.
   - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
         in 07B.1 and 07B.4.
+        Native Inspector dependency reports now reuse metadata-only descriptor
+        decoding; loader suites pass 39/39 in Debug and Release. The approved
+        derived-cache integration and transitive-library workflows are in progress.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.

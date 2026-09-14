@@ -11,6 +11,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
@@ -206,6 +207,26 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsRenderableDependencies)
 
   EXPECT_THAT(collector->AssetDependencies(),
     ::testing::UnorderedElementsAre(geom, material));
+}
+
+//! Inspection collects scene references with no mounted sources or resource
+//! readers.
+NOLINT_TEST_F(SceneLoaderTest, InspectDependenciesInParseOnlyMode)
+{
+  const auto geometry
+    = oxygen::data::AssetKey::FromVirtualPath("/Art/Mesh.ogeo");
+  const auto material
+    = oxygen::data::AssetKey::FromVirtualPath("/Art/Material.omat");
+  WriteMinimalSceneWithRenderable(geometry, material);
+  auto context = MakeContextParseOnly();
+  const auto result = oxygen::content::InspectDescriptorDependencies(
+    *context.desc_reader, {}, oxygen::data::AssetType::kScene);
+  EXPECT_TRUE(result.complete);
+  ASSERT_EQ(result.assets.size(), 2U);
+  EXPECT_NE(std::find(result.assets.begin(), result.assets.end(), geometry),
+    result.assets.end());
+  EXPECT_NE(std::find(result.assets.begin(), result.assets.end(), material),
+    result.assets.end());
 }
 
 } // namespace

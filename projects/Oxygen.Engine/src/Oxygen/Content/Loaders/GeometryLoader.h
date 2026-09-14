@@ -460,13 +460,14 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 
     // Resolve the material asset key to a MaterialAsset
     std::shared_ptr<const MaterialAsset> material;
+    if (context.dependency_collector
+      && sm_desc.material_asset_key != AssetKey {}) {
+      context.dependency_collector->AddAssetDependency(
+        sm_desc.material_asset_key);
+    }
     if (context.parse_only) {
       material = MaterialAsset::CreateDefault();
     } else if (context.dependency_collector) {
-      if (sm_desc.material_asset_key != AssetKey {}) {
-        context.dependency_collector->AddAssetDependency(
-          sm_desc.material_asset_key);
-      }
       material = MaterialAsset::CreateDefault();
     } else {
       LOG_F(ERROR,

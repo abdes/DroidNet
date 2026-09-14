@@ -9,6 +9,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -51,6 +52,37 @@ NOLINT_TEST_F(
 
   const auto context = MakeLoaderContext(false, false);
   EXPECT_THROW({ (void)LoadGeometryAsset(context); }, std::runtime_error);
+}
+
+//! Dependency inspection reads material keys without external buffer readers.
+NOLINT_TEST_F(
+  GeometryLoaderContractTest, InspectDependenciesWithoutLoadingBuffers)
+{
+  using namespace oxygen::data::pak::geometry;
+  const auto material
+    = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
+  GeometryAssetDesc desc {};
+  desc.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
+  desc.lod_count = 1;
+  MeshDesc mesh {};
+  mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kStandard);
+  mesh.submesh_count = 2;
+  SubMeshDesc submesh {};
+  submesh.material_asset_key = material;
+  {
+    auto packed = desc_writer_.ScopedAlignment(1);
+    WriteBlob(desc);
+    WriteBlob(mesh);
+    WriteBlob(submesh);
+    WriteBlob(submesh);
+  }
+  auto context = MakeLoaderContext(true, true);
+  const auto result = oxygen::content::InspectDescriptorDependencies(
+    *context.desc_reader, {}, oxygen::data::AssetType::kGeometry);
+  EXPECT_TRUE(result.complete);
+  ASSERT_EQ(result.assets.size(), 1U);
+  EXPECT_EQ(result.assets.front(), material);
 }
 
 } // namespace
