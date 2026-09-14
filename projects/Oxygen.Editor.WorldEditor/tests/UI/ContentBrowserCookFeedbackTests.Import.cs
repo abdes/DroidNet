@@ -103,7 +103,6 @@ public sealed partial class ContentBrowserCookFeedbackTests
         var provider = new Mock<IContentBrowserAssetProvider>();
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
-            Mock.Of<Oxygen.Managed.Assets.Catalog.IAssetCatalog>(),
             new ViewModelToView(locator.Object),
             new ContentBrowserState(projects),
             projects,
