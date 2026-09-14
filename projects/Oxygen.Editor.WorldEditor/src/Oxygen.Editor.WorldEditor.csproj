@@ -11,10 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Page Update="Assets\Resources\ViewportIcons.xaml">
-            <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-            <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-        </Page>
+        <Content Remove="Assets\Resources\ViewportIcons.xaml" />
     </ItemGroup>
 
     <ItemGroup>
