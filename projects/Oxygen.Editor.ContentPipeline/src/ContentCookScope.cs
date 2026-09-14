@@ -42,6 +42,9 @@ public sealed record ContentCookScope(
     /// <summary>Gets a value indicating whether explicit user intent permits changed retained model inputs.</summary>
     internal bool AllowImportedSourceChanges { get; init; } = true;
 
+    /// <summary>Gets ordered native lookup roots, including private roots for affected project mounts.</summary>
+    internal IReadOnlyList<string> CookedContextRoots { get; init; } = [];
+
     /// <summary>Gets sources whose validated products should be omitted from native manifests.</summary>
     internal System.Collections.Immutable.ImmutableHashSet<Uri> ReusableSources { get; init; } = [];
 

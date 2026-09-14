@@ -18,6 +18,11 @@ public sealed record ContentImportJob(
     [property: JsonPropertyName("output")] string? Output,
     [property: JsonPropertyName("name")] string? Name)
 {
+    /// <summary>Gets the ordered resolver-only roots for scene and geometry descriptors.</summary>
+    [JsonPropertyName("cooked_context_roots")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? CookedContextRoots { get; init; }
+
     /// <summary>Gets the required native source-content policy for model jobs.</summary>
     [JsonPropertyName("content_policy")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -16,14 +16,21 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Plans native jobs and preserves source-owned output evidence across partial cooks.</summary>
 public sealed partial class ContentPipelineService
 {
-    private static void RetainStagingUntilDrain(ContentPipelineTerminationException failure, CookStagingArea staging)
-        => _ = failure.DrainCompletion.ContinueWith(
+    private static Task RetainStagingUntilDrain(ContentPipelineTerminationException failure, CookStagingArea staging, CookReferenceRoots? references)
+        => failure.DrainCompletion.ContinueWith(
             completed =>
             {
                 _ = completed.Exception;
                 try
                 {
-                    staging.Dispose();
+                    try
+                    {
+                        references?.Dispose();
+                    }
+                    finally
+                    {
+                        staging.Dispose();
+                    }
                 }
                 catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
                 {
@@ -38,6 +45,7 @@ public sealed partial class ContentPipelineService
     {
         var roots = previous.Roots.ToDictionary(static root => root.Mount, StringComparer.Ordinal);
         var products = previous.Products.ToDictionary(static product => product.SourceUri);
+        var invalidatedRoots = previous.Roots.Where(root => !plan.ValidSharedRoots.Contains(root.Mount)).Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal);
         foreach (var result in results.Where(static value => value.VerifiedRoot is not null))
         {
             var root = result.VerifiedRoot!;
@@ -54,7 +62,7 @@ public sealed partial class ContentPipelineService
                             && oldAssets.TryGetValue(asset.Entry.VirtualPath, out var old) ? old : asset),
                     ],
                 };
-                if (!plan.ValidSharedRoots.Contains(root.Mount))
+                if (invalidatedRoots.Remove(root.Mount))
                 {
                     foreach (var product in products.Values.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal))).ToArray())
                     {
@@ -165,18 +173,22 @@ public sealed partial class ContentPipelineService
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
         dirtyInputs.AddRange(await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false));
         var staging = await CookStagingArea.CreateAsync(operation, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
+        CookReferenceRoots? references = null;
         try
         {
-            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, cancellationToken).ConfigureAwait(false);
+            references = await CookReferenceRoots.AcquireAsync(operation.Project, staging, previous, plan, cancellationToken).ConfigureAwait(false);
+            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure)
         {
-            RetainStagingUntilDrain(failure, staging);
+            var drain = RetainStagingUntilDrain(failure, staging, references);
             staging = null;
-            throw;
+            references = null;
+            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
         }
         finally
         {
+            references?.Dispose();
             staging?.Dispose();
         }
     }
@@ -192,19 +204,10 @@ public sealed partial class ContentPipelineService
         CookIncrementalPlan plan,
         List<ContentCookInput> dirtyInputs,
         CookStagingArea staging,
+        CookReferenceRoots references,
         CancellationToken cancellationToken)
     {
-        var results = new List<ContentCookResult>();
-        foreach (var mount in dirtyInputs.GroupBy(static input => input.MountName, StringComparer.OrdinalIgnoreCase))
-        {
-            var inputs = mount.Select(input => input with { SourceAbsolutePath = Path.Combine(snapshot.InputRoot, input.SourceRelativePath) }).ToArray();
-            var scope = this.CreateScope(operation.Project, inputs, targetKind) with
-            {
-                Snapshot = snapshot, Artifacts = artifacts, ReusableSources = plan.Reusable.Keys.ToImmutableHashSet(), PreviousProvenance = previous,
-                StagingOutputRoot = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)).StagingPath,
-            };
-            results.Add(await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false));
-        }
+        var results = await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, references, cancellationToken).ConfigureAwait(false);
 
         var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
         var result = cooked with
@@ -222,6 +225,7 @@ public sealed partial class ContentPipelineService
         if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
             && results.TrueForAll(static value => value.VerifiedRoot is not null))
         {
+            references.Verify();
             result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results), cancellationToken).ConfigureAwait(false);
         }
         else if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
