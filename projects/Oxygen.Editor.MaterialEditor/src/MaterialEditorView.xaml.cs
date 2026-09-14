@@ -55,6 +55,22 @@ public sealed partial class MaterialEditorView
         _ = VisualStateManager.GoToState(this, this.statusOwner?.CookStatusTone ?? "Neutral", useTransitions: false);
     }
 
+    private void MaterialHeader_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        // Keep the title/status together; move the unchanged actions only when their row is too narrow.
+        var actionRow = args.NewSize.Width < 480 ? 1 : 0;
+        if (Grid.GetRow(this.MaterialActions) == actionRow)
+        {
+            return;
+        }
+
+        Grid.SetRow(this.MaterialActions, actionRow);
+        Grid.SetColumn(this.MaterialActions, actionRow == 0 ? 2 : 0);
+        Grid.SetColumnSpan(this.MaterialActions, actionRow == 0 ? 1 : 3);
+        Grid.SetColumnSpan(this.MaterialIdentity, actionRow == 0 ? 1 : 2);
+        this.MaterialActions.Margin = new Thickness(0, actionRow == 0 ? 0 : 8, 0, 0);
+    }
+
     private void StopObservingCookStatus()
     {
         this.statusOwner?.PropertyChanged -= this.OnCookStatusChanged;
