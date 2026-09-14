@@ -117,6 +117,19 @@ internal sealed class ImportedSourceIndex
             : new(CookInputResolver.Resolve(project, source, role), Error: null);
     }
 
+    /// <summary>Finds declared and recorded native output for a source inspection scope.</summary>
+    /// <param name="scope">The source identity or source folder to inspect.</param>
+    /// <returns>Declared output namespaces and previously published outputs for matching sources.</returns>
+    public IEnumerable<string> GetInspectionOutputScopes(Uri scope)
+    {
+        var path = Uri.UnescapeDataString(scope.AbsolutePath).TrimEnd('/');
+        bool Matches(Uri source) => string.Equals(Uri.UnescapeDataString(source.AbsolutePath), path, StringComparison.OrdinalIgnoreCase)
+            || Uri.UnescapeDataString(source.AbsolutePath).StartsWith(path + "/", StringComparison.OrdinalIgnoreCase);
+        return this.entries.Where(entry => Matches(entry.Source)).Select(static entry => entry.Prefix.TrimEnd('/'))
+            .Concat(this.previousOwners.Where(pair => Matches(pair.Value)).Select(static pair => Uri.UnescapeDataString(pair.Key.AbsolutePath)))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>Includes retained work when the selected folder contains native output rather than descriptors.</summary>
     /// <param name="project">The owning project.</param>
     /// <param name="folder">The requested virtual folder.</param>
