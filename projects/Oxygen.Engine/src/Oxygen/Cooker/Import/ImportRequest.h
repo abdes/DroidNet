@@ -251,8 +251,11 @@ struct ImportRequest final {
 
    * request cooked root, so later entries have higher precedence in
 
-   * `content::VirtualPathResolver`.
-  */
+   * `content::VirtualPathResolver`. A repeated root keeps its last position,
+
+   * allowing callers to explicitly place the destination root in this order.
+
+ */
   std::vector<std::filesystem::path> cooked_context_roots;
 
   //! Optional inflight scene contexts for sidecar target resolution.

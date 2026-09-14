@@ -154,6 +154,15 @@ namespace {
     settings.cooked_root = cooked_root.lexically_normal().string();
   }
 
+  auto ResolveContextRootsRelativeToManifest(
+    const std::filesystem::path& manifest_dir, std::vector<std::string>& roots)
+    -> void
+  {
+    for (auto& root : roots) {
+      root = ResolveSourcePath(manifest_dir, root);
+    }
+  }
+
   auto ResolveCookedRootsRelativeToManifest(
     const std::filesystem::path& manifest_dir, ImportManifestDefaults& defaults)
     -> void
@@ -178,6 +187,10 @@ namespace {
       manifest_dir, defaults.geometry_descriptor);
     ResolveCookedRootRelativeToManifest(
       manifest_dir, defaults.scene_descriptor);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, defaults.scene_descriptor.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, defaults.geometry_descriptor.cooked_context_roots);
   }
 
   auto ResolveCookedRootsRelativeToManifest(
@@ -198,6 +211,10 @@ namespace {
       manifest_dir, job.collision_shape_descriptor);
     ResolveCookedRootRelativeToManifest(manifest_dir, job.geometry_descriptor);
     ResolveCookedRootRelativeToManifest(manifest_dir, job.scene_descriptor);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, job.scene_descriptor.cooked_context_roots);
+    ResolveContextRootsRelativeToManifest(
+      manifest_dir, job.geometry_descriptor.cooked_context_roots);
   }
 
   auto ReadStringField(const json& obj, const char* name, std::string& target,
@@ -963,7 +980,9 @@ namespace {
     GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
     return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
+             obj, "content_hashing", settings.with_content_hashing, errors)
+      && ReadStringArrayField(
+        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyCommonSceneDescriptorOverrides(const json& obj,
@@ -982,7 +1001,9 @@ namespace {
     SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
     return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
+             obj, "content_hashing", settings.with_content_hashing, errors)
+      && ReadStringArrayField(
+        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
 } // namespace

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -84,13 +85,16 @@ inline auto BuildUniqueMountedCookedRoots(const ImportRequest& request)
   auto unique_roots = std::vector<std::filesystem::path> {};
   auto seen = std::unordered_set<std::string> {};
 
-  for (auto root : BuildMountedCookedRoots(request)) {
+  const auto roots = BuildMountedCookedRoots(request);
+  for (auto it = roots.rbegin(); it != roots.rend(); ++it) {
+    auto root = *it;
     root = root.lexically_normal();
     const auto key = root.generic_string();
     if (seen.insert(key).second) {
       unique_roots.push_back(std::move(root));
     }
   }
+  std::ranges::reverse(unique_roots);
   return unique_roots;
 }
 

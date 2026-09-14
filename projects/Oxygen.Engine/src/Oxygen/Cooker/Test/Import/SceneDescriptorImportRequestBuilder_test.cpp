@@ -16,6 +16,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 
@@ -87,13 +88,36 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "manifest-scene" });
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  EXPECT_EQ(request->options.with_content_hashing,
+    EffectiveContentHashingEnabled(false));
   ASSERT_TRUE(request->scene_descriptor.has_value());
 
   const auto normalized
     = json::parse(request->scene_descriptor->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "DemoScene");
+}
+
+NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
+  ContextRootsRequireAbsolutePathsAndKeepLastPriorityPosition)
+{
+  const auto dir = MakeTempDir("context_root_order");
+  const auto descriptor = dir / "scene.json";
+  WriteTextFile(
+    descriptor, R"({"version":4,"name":"Scene","nodes":[{"name":"Root"}]})");
+  auto settings = MakeBaseSettings(descriptor);
+  settings.cooked_context_roots = { "relative/root" };
+  auto errors = std::ostringstream {};
+  EXPECT_FALSE(BuildSceneDescriptorRequest(settings, errors).has_value());
+  const auto library = dir / "library";
+  settings.cooked_context_roots = { library.string(), settings.cooked_root };
+  const auto request = BuildSceneDescriptorRequest(settings, errors);
+  ASSERT_TRUE(request.has_value()) << errors.str();
+  const auto roots
+    = oxygen::content::import::internal::BuildUniqueMountedCookedRoots(
+      *request);
+  ASSERT_EQ(roots.size(), 2U);
+  EXPECT_EQ(roots[0], library);
+  EXPECT_EQ(roots[1], std::filesystem::path(settings.cooked_root));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,

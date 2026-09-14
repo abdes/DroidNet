@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -20,6 +21,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 
 namespace oxygen::content::import::test {
@@ -119,6 +121,74 @@ namespace {
       return request;
     }
   };
+
+  auto WriteIndexedReference(const std::filesystem::path& root,
+    const data::AssetKey& key, const data::AssetType type) -> void
+  {
+    auto writer = LooseCookedWriter(root);
+    const auto bytes = std::array { std::byte { 1 } };
+    writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
+      type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
+                                         : "Materials/Wrong.omat",
+      bytes);
+    static_cast<void>(writer.Finish());
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, OrderedRootsResolveLastMatchingAsset)
+  {
+    const auto output = MakeTempCookedRoot("ordered_output");
+    const auto library = MakeTempCookedRoot("ordered_library");
+    const auto own_key = data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo");
+    const auto library_key
+      = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
+    WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
+    WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
+    auto service = AsyncImportService {};
+    const auto descriptor
+      = R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+    for (const auto own_wins : { false, true }) {
+      auto request = MakeRequest(output, descriptor);
+      request.cooked_context_roots = own_wins
+        ? std::vector<std::filesystem::path> { library, output }
+        : std::vector<std::filesystem::path> { output, library };
+      const auto report = SubmitAndWait(service, std::move(request));
+      ASSERT_TRUE(report.success);
+      const auto bytes = ReadBinaryFile(
+        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto scene = data::SceneAsset(
+        data::AssetKey {}, std::span<const std::byte>(bytes));
+      const auto renderables
+        = scene.GetComponents<data::pak::world::RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      EXPECT_EQ(renderables[0].geometry_key, own_wins ? own_key : library_key);
+    }
+    service.Stop();
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, WinningRootTypeMismatchDoesNotFallBack)
+  {
+    const auto output = MakeTempCookedRoot("wrong_winner_output");
+    const auto library = MakeTempCookedRoot("wrong_winner_library");
+    WriteIndexedReference(output,
+      data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo"),
+      data::AssetType::kGeometry);
+    WriteIndexedReference(library,
+      data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
+      data::AssetType::kMaterial);
+    auto service = AsyncImportService {};
+    auto request = MakeRequest(
+      output, R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
+    request.cooked_context_roots = { library };
+    const auto report = SubmitAndWait(service, std::move(request));
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.reference_type_mismatch"));
+    service.Stop();
+  }
 
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, ResolvesReferencesAndEmitsSceneDescriptor)

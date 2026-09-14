@@ -931,6 +931,15 @@ Folder cooks include sources whose output namespace intersects the selected
 folder. Capture and freshness checks use the same resolved source scope. Read-only
 status uses saved settings and prior output evidence without native discovery.
 
+Descriptor jobs use the engine's ordered `cooked_context_roots` lookup context
+for other staged project mounts and leased cooked libraries. Cook dependencies
+before consumers across mount boundaries, use staged roots for affected mounts,
+and retain published roots for reused dependencies. Reference lookup follows the
+saved content priority; explicitly listing the destination root places it at that
+position, with the last occurrence of a duplicate root winning. The highest
+priority matching asset must have the requested type; a lower-priority asset must
+not hide a type error in the effective source.
+
 Published model provenance records a source/settings/dependency fingerprint
 independent of the producer fingerprint. Automatic Save and preview demand may
 regenerate unchanged model inputs for a new producer, but changed model inputs

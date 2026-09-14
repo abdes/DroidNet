@@ -108,6 +108,15 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
   }
   request.cooked_root = std::move(cooked_root);
 
+  for (const auto& root : settings.cooked_context_roots) {
+    const auto path = std::filesystem::path(root);
+    if (!path.is_absolute()) {
+      error_stream << "ERROR: cooked context roots must be absolute paths\n";
+      return std::nullopt;
+    }
+    request.cooked_context_roots.push_back(path.lexically_normal());
+  }
+
   if (!settings.job_name.empty()) {
     request.job_name = settings.job_name;
   } else if (descriptor_doc->contains("name")) {

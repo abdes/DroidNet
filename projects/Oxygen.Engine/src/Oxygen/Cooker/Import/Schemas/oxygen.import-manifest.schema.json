@@ -244,7 +244,8 @@
                                 "source",
                                 "output",
                                 "name",
-                                "content_hashing"
+                                "content_hashing",
+                                "cooked_context_roots"
                             ]
                         }
                     }
@@ -266,7 +267,8 @@
                                 "source",
                                 "output",
                                 "name",
-                                "content_hashing"
+                                "content_hashing",
+                                "cooked_context_roots"
                             ]
                         }
                     }
@@ -620,7 +622,10 @@
                     "additionalProperties": false
                 },
                 "content_policy": {
-                    "enum": ["default", "static-scalar"]
+                    "enum": [
+                        "default",
+                        "static-scalar"
+                    ]
                 },
                 "unit_policy": {
                     "enum": [
@@ -822,13 +827,16 @@
                 },
                 "content_hashing": {
                     "type": "boolean"
+                },
+                "cooked_context_roots": {
+                    "$ref": "#/definitions/cooked_context_roots"
                 }
             },
             "additionalProperties": false
         },
         "scene_descriptor_settings": {
             "type": "object",
-            "description": "Scene-descriptor jobs always consume v3-only authored scene descriptors; legacy descriptors must be updated and re-cooked before import.",
+            "description": "Scene-descriptor jobs consume authored scene descriptors matching the current native version; legacy descriptors must be updated and re-cooked before import.",
             "properties": {
                 "output": {
                     "type": "string"
@@ -838,6 +846,9 @@
                 },
                 "content_hashing": {
                     "type": "boolean"
+                },
+                "cooked_context_roots": {
+                    "$ref": "#/definitions/cooked_context_roots"
                 }
             },
             "additionalProperties": false
@@ -1003,7 +1014,10 @@
                     "additionalProperties": false
                 },
                 "content_policy": {
-                    "enum": ["default", "static-scalar"]
+                    "enum": [
+                        "default",
+                        "static-scalar"
+                    ]
                 },
                 "unit_policy": {
                     "enum": [
@@ -1078,6 +1092,9 @@
                             "type": "object"
                         }
                     ]
+                },
+                "cooked_context_roots": {
+                    "$ref": "#/definitions/cooked_context_roots"
                 }
             },
             "additionalProperties": false
@@ -1201,6 +1218,15 @@
                 "keep",
                 "float"
             ]
+        },
+        "cooked_context_roots": {
+            "type": "array",
+            "description": "Ordered resolver-only cooked roots, relative to the manifest or absolute. Later roots have higher priority.",
+            "items": {
+                "type": "string",
+                "minLength": 1
+            },
+            "uniqueItems": true
         }
     }
 }
