@@ -117,7 +117,8 @@ public sealed partial class AssetCookStatusReader(
             && graph.FileDependencies.TryGetValue(asset.AssetUri, out var dependencies) && dependencies.Any(changed.Contains));
         _ = products.TryGetValue(input.AssetUri, out var prior);
         var inspectionPending = issues.Any(static issue => string.Equals(issue.Code, "asset_cook.library_inspection_required", StringComparison.Ordinal));
-        var changedLibrary = prior?.CookedDependencies.Any(dependency => graph.CookedDependencies.TryGetValue(dependency.AssetUri, out var current) && current != dependency) == true;
+        var libraries = closure.SelectMany(uri => graph.CookedDependencies.GetValueOrDefault(uri, [])).Distinct().ToArray();
+        var changedLibrary = prior?.CookedDependencies.Any(dependency => LibraryChanged(dependency, libraries)) == true;
         var published = prior?.Outputs.Select(static output => output.Asset).ToImmutableArray() ?? [];
         var verified = prior is not null && VerifyPriorClosure(prior.SourceUri, products, plan.VerifiedOutputs, graph.CookedDependencies, []);
         var needsDiscovery = closure.Overlaps(graph.ImportsNeedingDiscovery);
@@ -127,7 +128,7 @@ public sealed partial class AssetCookStatusReader(
             : inspectionPending ? changedLibrary ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Unknown
             : prior is null ? AssetCookFreshness.NeedsCooking
             : needsDiscovery ? AssetCookFreshness.OutOfDate
-            : closure.All(uri => plan.Reusable.ContainsKey(uri) || graph.CookedDependencies.ContainsKey(uri)) && verified ? AssetCookFreshness.Current
+            : closure.All(uri => plan.Reusable.ContainsKey(uri) || libraries.Any(dependency => dependency.AssetUri == uri)) && verified ? AssetCookFreshness.Current
             : AssetCookFreshness.OutOfDate;
         if (metadataUnavailable)
         {
@@ -216,15 +217,22 @@ public sealed partial class AssetCookStatusReader(
         return found;
     }
 
+    private static bool LibraryChanged(CookedDependencySnapshot prior, CookedDependencySnapshot[] libraries)
+    {
+        var current = libraries.FirstOrDefault(item => string.Equals(item.AssetKey, prior.AssetKey, StringComparison.OrdinalIgnoreCase))
+            ?? libraries.FirstOrDefault(item => item.AssetUri == prior.AssetUri);
+        return current is not null && current != prior;
+    }
+
     private static bool VerifyPriorClosure(
         Uri source,
         Dictionary<Uri, CookProvenance.Product> products,
         ImmutableHashSet<(string rootMount, string virtualPath)> verified,
-        ImmutableDictionary<Uri, CookedDependencySnapshot> cookedDependencies,
+        ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>> cookedDependencies,
         HashSet<Uri> visited)
         => !visited.Add(source) || (products.TryGetValue(source, out var product)
             && product.Outputs.All(output => verified.Contains((output.RootMount, output.Asset.VirtualPath)))
-            && product.CookedDependencies.All(dependency => cookedDependencies.GetValueOrDefault(dependency.AssetUri) == dependency)
+            && product.CookedDependencies.All(dependency => cookedDependencies.GetValueOrDefault(source, []).Contains(dependency))
             && product.Dependencies.All(dependency => product.CookedDependencies.Any(input => input.AssetUri == dependency)
                 || VerifyPriorClosure(dependency, products, verified, cookedDependencies, visited)));
 
@@ -267,5 +275,5 @@ public sealed partial class AssetCookStatusReader(
             importedSources: prior.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
             resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
             preferCookedReference: libraries.IsLibraryPreferred,
-            expandCookedReferences: (references, token) => libraries.ExpandReferencesAsync(references, inspector: null, operationRoot: string.Empty, artifacts: null, token));
+            expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, inspector: null, operationRoot: string.Empty, artifacts: null, token));
 }

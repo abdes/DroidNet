@@ -103,8 +103,8 @@ internal static class CookIncrementalPlanner
             // Native descriptors refer to stable virtual asset identities; scalar material bytes do not alter their consumers.
             Dependencies = graph.Dependencies[input.AssetUri].Select(static uri => uri.AbsoluteUri),
         });
-        var libraries = graph.NativeReferences.GetValueOrDefault(input.AssetUri, []).Where(graph.CookedDependencies.ContainsKey)
-            .Select(uri => graph.CookedDependencies[uri]).OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ToArray();
+        var libraries = graph.CookedDependencies.GetValueOrDefault(input.AssetUri, [])
+            .OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToArray();
         return libraries.Length == 0 ? authored : Hash(new { Authored = authored, Libraries = libraries });
     }
 

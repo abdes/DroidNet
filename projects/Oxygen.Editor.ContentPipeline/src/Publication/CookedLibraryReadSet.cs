@@ -96,7 +96,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>The complete publication input identity.</returns>
     public static CookInputSnapshot CaptureDependencies(CookInputSnapshot snapshot, CookDependencyGraph graph)
     {
-        var dependencies = graph.CookedDependencies.Values.OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ToImmutableArray();
+        var dependencies = graph.CookedDependencies.Values.SelectMany(static dependencies => dependencies).Distinct().OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToImmutableArray();
         return dependencies.IsEmpty ? snapshot : snapshot with
         {
             CookedDependencies = dependencies,
@@ -114,49 +114,75 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return asset is not null && !this.ProjectSourceWins(nativeUri, root);
     }
 
-    /// <summary>Expands native references before coherent saved-input capture, using cached reports for status reads.</summary>
-    /// <param name="references">References read from the current saved source.</param>
-    /// <param name="inspector">The native decoder for an owned cook, or null for process-free status.</param>
-    /// <param name="operationRoot">Private scratch space for native inspection.</param>
+    /// <summary>Resolves embedded keys separately from authored virtual-path references.</summary>
+    /// <param name="consumer">The source whose dependency closure is being captured.</param>
+    /// <param name="references">Direct authored references read from this source.</param>
+    /// <param name="inspector">The owned cook's native decoder, or null for cached status reads.</param>
+    /// <param name="operationRoot">Private native scratch space.</param>
     /// <param name="artifacts">Borrowed native artifact ownership.</param>
-    /// <param name="cancellationToken">Cancels dependency expansion.</param>
-    /// <returns>Direct and transitive identities for ordinary authored-owner resolution.</returns>
-    public async Task<IReadOnlyList<Uri>> ExpandReferencesAsync(IReadOnlyList<Uri> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    /// <param name="cancellationToken">Cancels lookup and inspection.</param>
+    /// <returns>Exact project and library identities required by this consumer.</returns>
+    public async Task<CookReferenceExpansion> ExpandReferencesAsync(ContentCookInput consumer, IReadOnlyList<Uri> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
-        var closure = references.ToHashSet();
-        var pending = new Queue<Uri>(references);
+        var projects = new Dictionary<Uri, ContentCookInput>();
+        var importedOutputs = new HashSet<Uri>();
+        var libraries = new List<CookedDependencySnapshot>();
+        var diagnostics = new List<DiagnosticRecord>();
+        var pending = this.CreateReferenceQueue(references);
+
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (pending.TryDequeue(out var uri))
+        while (pending.TryDequeue(out var current))
         {
-            var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
-            var (root, asset) = this.FindUri(nativeUri);
-            if (asset is null || this.ProjectSourceWins(nativeUri, root) || !visited.Add(asset.Cooked!.AssetKey.ToString()))
+            var (root, asset) = current;
+            var key = asset.Cooked!.AssetKey.ToString();
+            if (!visited.Add(key))
             {
                 continue;
             }
 
-            if (root.Dependencies is null && inspector is not null)
+            libraries.Add(new(asset.Uri, root.Name, root.Path, key, asset.Cooked.AssetType, root.Fingerprint));
+            var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
+            if (metadata?.Complete != true)
             {
-                root.Dependencies = await CookedDependencyCache.EnsureAsync(this.projectRoot, root.Path, root.Fingerprint, root.Assets, inspector, operationRoot, cancellationToken, artifacts).ConfigureAwait(false);
-            }
-
-            if (root.Dependencies is not { } metadata)
-            {
+                diagnostics.Add(metadata is null
+                    ? Issue(consumer, "asset_cook.library_inspection_required", "Library dependencies are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning }
+                    : Issue(consumer, "asset_cook.library_inspection_failed", metadata.Diagnostic ?? "Library dependencies could not be inspected."));
                 continue;
             }
 
-            foreach (var key in metadata.Assets[asset.Cooked!.AssetKey.ToString()].Dependencies)
+            foreach (var dependency in metadata.Dependencies)
             {
-                var resolved = this.FindKey(key);
-                var dependency = resolved.asset?.Uri ?? await this.ResolveProjectKeyAsync(key, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
-                if (dependency is not null && closure.Add(dependency))
+                var found = this.FindKey(dependency);
+                var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Uri, found.root)
+                    ? await this.ResolveProjectKeyAsync(dependency, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false) : null;
+                if (candidate is not null && (found.asset is null || this.ProjectHasPriority(found.root)))
                 {
-                    pending.Enqueue(dependency);
+                    var source = this.resolveImported?.Invoke(candidate) ?? CookInputResolver.Resolve(this.project, candidate, ContentCookInputRole.Dependency);
+                    projects[source.AssetUri] = source;
+                    if (source.Kind == ContentCookAssetKind.ForeignSource)
+                    {
+                        _ = importedOutputs.Add(candidate);
+                    }
+                }
+                else if (found.asset is not null)
+                {
+                    if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.asset.Uri, found.root))
+                    {
+                        diagnostics.Add(Issue(consumer, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning });
+                    }
+
+                    pending.Enqueue(found);
+                }
+                else
+                {
+                    diagnostics.Add(this.projectIdentities?.IsPending == true
+                        ? Issue(consumer, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning }
+                        : Issue(consumer, "asset_cook.library_dependency_missing", $"Library asset '{asset.Uri}' requires missing asset '{dependency}'."));
                 }
             }
         }
 
-        return [.. closure];
+        return new([.. projects.Values], [.. libraries], [.. diagnostics]) { ImportedOutputs = [.. importedOutputs] };
     }
 
     /// <summary>Attaches selected library inputs and reports required references that remain unavailable.</summary>
@@ -164,7 +190,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>The closure with selected library dependencies and scoped issues.</returns>
     public CookDependencyGraph Apply(CookDependencyGraph graph)
     {
-        var bindings = ImmutableDictionary.CreateBuilder<Uri, CookedDependencySnapshot>();
         var diagnostics = graph.Diagnostics.ToBuilder();
         foreach (var (name, message) in this.failures)
         {
@@ -195,8 +220,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     AddIssue(uri, "asset_cook.library_type_mismatch", "The selected library asset has the wrong type.");
                     continue;
                 }
-
-                bindings[uri] = new(uri, match.root.Name, match.root.Path, asset.AssetKey.ToString(), asset.AssetType, match.root.Fingerprint);
             }
             else if (graph.PublishedReferences.Contains(uri) && !owned)
             {
@@ -204,16 +227,14 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
         }
 
-        var references = this.ExpandDependencies(graph, bindings, diagnostics);
-
-        var usedRoots = bindings.Values.Select(static binding => binding.RootPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedRoots = graph.CookedDependencies.Values.SelectMany(static bindings => bindings).Select(static binding => binding.RootPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var unused in this.roots.Where(root => !usedRoots.Contains(root.Path)).ToArray())
         {
             unused.Reader.Dispose();
             _ = this.roots.Remove(unused);
         }
 
-        return graph with { CookedDependencies = bindings.ToImmutable(), NativeReferences = references, Diagnostics = diagnostics.ToImmutable() };
+        return graph with { Diagnostics = diagnostics.ToImmutable() };
 
         void AddIssue(Uri uri, string code, string message)
         {
@@ -277,80 +298,30 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };
 
-    private ImmutableDictionary<Uri, ImmutableArray<Uri>> ExpandDependencies(CookDependencyGraph graph, ImmutableDictionary<Uri, CookedDependencySnapshot>.Builder bindings, ImmutableArray<DiagnosticRecord>.Builder diagnostics)
+    private Queue<(Root root, AssetRecord asset)> CreateReferenceQueue(IReadOnlyList<Uri> references)
     {
-        var references = graph.NativeReferences.ToBuilder();
-        foreach (var (consumer, direct) in graph.NativeReferences)
+        var pending = new Queue<(Root root, AssetRecord asset)>();
+        foreach (var uri in references)
         {
-            var closure = direct.ToHashSet();
-            var pending = new Queue<Uri>(direct);
-            var input = graph.Assets.Single(asset => asset.AssetUri == consumer);
-            while (pending.TryDequeue(out var uri))
+            var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+            var (root, asset) = this.FindUri(nativeUri);
+            if (asset is not null && !this.ProjectSourceWins(nativeUri, root))
             {
-                if (!bindings.TryGetValue(uri, out var binding))
-                {
-                    continue;
-                }
-
-                var root = this.roots.Single(root => string.Equals(root.Path, binding.RootPath, StringComparison.OrdinalIgnoreCase));
-                if (root.Dependencies is null)
-                {
-                    diagnostics.Add(Issue(input, "asset_cook.library_inspection_required", "Library dependencies are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning });
-                    continue;
-                }
-
-                var metadata = root.Dependencies.Assets[binding.AssetKey];
-                if (!metadata.Complete)
-                {
-                    diagnostics.Add(Issue(input, "asset_cook.library_inspection_failed", metadata.Diagnostic ?? "Library dependencies could not be inspected."));
-                    continue;
-                }
-
-                foreach (var key in metadata.Dependencies)
-                {
-                    var resolved = this.FindKey(key);
-                    if (resolved.asset?.Cooked is not { } asset)
-                    {
-                        if (this.ResolveUnindexedDependency(graph, input, uri, key, closure) is { } issue)
-                        {
-                            diagnostics.Add(issue);
-                        }
-
-                        continue;
-                    }
-
-                    var dependency = resolved.asset.Uri;
-                    if (HasProjectOwner(graph, dependency) && this.ProjectHasPriority(resolved.root))
-                    {
-                        _ = closure.Add(dependency);
-                        continue;
-                    }
-
-                    bindings[dependency] = new(dependency, resolved.root.Name, resolved.root.Path, key, asset.AssetType, resolved.root.Fingerprint);
-                    if (closure.Add(dependency))
-                    {
-                        pending.Enqueue(dependency);
-                    }
-                }
+                pending.Enqueue(this.FindKey(asset.Cooked!.AssetKey.ToString()));
             }
-
-            references[consumer] = [.. closure];
         }
 
-        return references.ToImmutable();
+        return pending;
     }
 
-    private DiagnosticRecord? ResolveUnindexedDependency(CookDependencyGraph graph, ContentCookInput input, Uri consumer, string key, HashSet<Uri> closure)
+    private async Task<CookedAssetDependencies?> GetDependencyMetadataAsync(Root root, string key, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
-        if (this.projectIdentities?.Resolve(key) is { } projectUri && HasProjectOwner(graph, projectUri))
+        if (root.Dependencies is null && inspector is not null)
         {
-            _ = closure.Add(projectUri);
-            return null;
+            root.Dependencies = await CookedDependencyCache.EnsureAsync(this.projectRoot, root.Path, root.Fingerprint, root.Assets, inspector, operationRoot, cancellationToken, artifacts).ConfigureAwait(false);
         }
 
-        return this.projectIdentities?.IsPending == true
-            ? Issue(input, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning }
-            : Issue(input, "asset_cook.library_dependency_missing", $"Library asset '{consumer}' requires missing asset '{key}'.");
+        return root.Dependencies?.Assets[key];
     }
 
     private async Task<Uri?> ResolveProjectKeyAsync(string key, ICookedAssetKeyProvider? provider, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)

@@ -33,7 +33,7 @@ public sealed class CookDependencyDiscovery(
     Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null,
     Func<Uri, ContentCookInput?>? resolveImported = null,
     Func<Uri, bool>? preferCookedReference = null,
-    Func<IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<Uri>>>? expandCookedReferences = null)
+    Func<ContentCookInput, IReadOnlyList<Uri>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences = null)
 {
     /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
     /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
@@ -65,13 +65,14 @@ public sealed class CookDependencyDiscovery(
         Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported,
         Func<Uri, ContentCookInput?>? resolveImported,
         Func<Uri, bool>? preferCookedReference,
-        Func<IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<Uri>>>? expandCookedReferences)
+        Func<ContentCookInput, IReadOnlyList<Uri>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, byte[]> discoveredBytes = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> dependencies = [];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> nativeReferences = [];
+        private readonly Dictionary<Uri, ImmutableArray<CookedDependencySnapshot>> cookedDependencies = [];
         private readonly Dictionary<Uri, HashSet<string>> fileDependencies = [];
         private readonly HashSet<Uri> builtins = [];
         private readonly HashSet<Uri> published = [];
@@ -134,6 +135,7 @@ public sealed class CookDependencyDiscovery(
                 ImportedSources = this.imported.ToImmutableDictionary(), ImportedReferences = [.. this.importedReferences],
                 ImportsNeedingDiscovery = this.importsNeedingDiscovery.ToImmutableHashSet(),
                 NativeReferences = this.nativeReferences.ToImmutableDictionary(),
+                CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
             };
         }
 
@@ -167,13 +169,22 @@ public sealed class CookDependencyDiscovery(
                 ContentCookAssetKind.Material => ReadMaterial(input, bytes),
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };
+            this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
+            var resolvedDependencies = references.Select(this.ResolveReference).ToHashSet();
             if (expandCookedReferences is not null)
             {
-                references = await expandCookedReferences(references, cancellationToken).ConfigureAwait(false);
+                var expansion = await expandCookedReferences(input, references, cancellationToken).ConfigureAwait(false);
+                this.cookedDependencies[input.AssetUri] = expansion.Libraries;
+                this.diagnostics.AddRange(expansion.Diagnostics);
+                this.importedReferences.UnionWith(expansion.ImportedOutputs);
+                foreach (var dependency in expansion.ProjectInputs)
+                {
+                    this.AddAsset(dependency);
+                    _ = resolvedDependencies.Add(dependency.AssetUri);
+                }
             }
 
-            this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
-            this.dependencies[input.AssetUri] = [.. references.Select(this.ResolveReference).Distinct().OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
+            this.dependencies[input.AssetUri] = [.. resolvedDependencies.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
         }
 
         private async Task ReadImportedSourceAsync(ContentCookInput input, CancellationToken cancellationToken)

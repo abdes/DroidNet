@@ -83,7 +83,7 @@ public sealed partial class ContentPipelineService
                     : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
                 products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
                 {
-                    CookedDependencies = [.. graph.NativeReferences.GetValueOrDefault(source.Key, []).Where(graph.CookedDependencies.ContainsKey).Select(uri => graph.CookedDependencies[uri])],
+                    CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
                     ImportedSource = graph.ImportedSources.GetValueOrDefault(source.Key),
                     Diagnostics =
                     [
