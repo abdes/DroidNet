@@ -54,6 +54,32 @@ NOLINT_TEST_F(StaticScalarImportTest, NativeImportAcceptsStaticGltfAndFbx)
 }
 
 NOLINT_TEST_F(StaticScalarImportTest,
+  NativeImportPreservesPerspectiveCameraAndDirectionalLight)
+{
+  for (const auto* extension : { "gltf", "fbx" }) {
+    SCOPED_TRACE(extension);
+    ImportRequest request {};
+    request.source_path = TestModelsDirFromFile()
+      / (std::string("static_scalar_camera_sun.") + extension);
+    ASSERT_TRUE(std::filesystem::exists(request.source_path));
+    request.cooked_root
+      = MakeTempDir(std::string("static_scalar_camera_sun_") + extension);
+    request.options.scene_content_policy = SceneContentPolicy::kStaticScalar;
+    request.options.coordinate.bake_transforms_into_meshes = false;
+    const auto result = RunImport(std::move(request));
+    ASSERT_TRUE(result.report.success);
+    const auto scene = LoadSceneReadback(result.report);
+    EXPECT_EQ(scene.directional_lights.size(), 1U);
+    EXPECT_TRUE(std::ranges::any_of(
+      scene.component_entries, [](const auto& entry) -> bool {
+        return static_cast<oxygen::data::ComponentType>(entry.component_type)
+          == oxygen::data::ComponentType::kPerspectiveCamera
+          && entry.table.count == 1U;
+      }));
+  }
+}
+
+NOLINT_TEST_F(StaticScalarImportTest,
   NativeImportRejectsUnsupportedComponentsBeforeEmission)
 {
   for (const auto* extension : { "gltf", "fbx" }) {
@@ -121,7 +147,13 @@ NOLINT_TEST(
   source.animations_count = 1U;
   source.skins_count = 1U;
   source.textures_count = 1U;
+  cgltf_camera camera {};
+  camera.type = cgltf_camera_type_orthographic;
+  cgltf_light light {};
+  light.type = cgltf_light_type_point;
+  source.cameras = &camera;
   source.cameras_count = 1U;
+  source.lights = &light;
   source.lights_count = 1U;
   std::vector<ImportDiagnostic> diagnostics;
 
