@@ -101,11 +101,34 @@ public sealed partial class InspectorControlTests
         await this.CaptureQueryLayoutAsync(root, "cooked-mount-menu-" + persisted + ".png").ConfigureAwait(true);
     });
 
+    /// <summary>Imported output navigation opens the cooked tree and reveals all participating folders without per-row discovery.</summary>
+    /// <returns>The asynchronous complete-browser imported-output regression.</returns>
+    [TestMethod]
+    public Task ImportedOutputsOpenTogetherWithoutManualMounting() => EnqueueAsync(async () =>
+    {
+        using var fixture = new BrowserRevealFixture();
+        var outputs = new[]
+        {
+            CreateNavigationAsset("/Content/Models/Crate/Materials/Paint.omat", AssetKind.Material),
+            CreateNavigationAsset("/Content/Models/Crate/Geometry/Mesh.ogeo", AssetKind.Geometry),
+        }.Select(static item => item with { SourcePath = null, DescriptorPath = null, CookedUri = item.IdentityUri, PrimaryState = AssetState.Cooked }).ToArray();
+        fixture.SetCookedOutputs(outputs);
+        await fixture.OpenAsync().ConfigureAwait(true);
+        fixture.Browser.Query.SearchText = "hidden";
+        _ = (await fixture.Browser.ShowAssetsAsync(outputs.Select(static item => item.IdentityUri).ToArray()).ConfigureAwait(true)).Should().BeTrue(fixture.Diagnostics);
+        _ = fixture.MountChanges.Should().Be(1);
+        _ = fixture.Layout.Assets.Select(static row => row.Item.IdentityUri).Should().BeEquivalentTo(outputs.Select(static item => item.IdentityUri));
+        _ = fixture.Browser.Query.SearchText.Should().BeEmpty();
+        _ = fixture.Layout.SelectedAsset!.IdentityUri.Should().Be(outputs[0].IdentityUri);
+        fixture.Provider.Verify(value => value.ResolveAsync(It.IsAny<Uri>(), It.IsAny<CancellationToken>()), Times.Never);
+    });
+
     private sealed partial class BrowserRevealFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-BrowserReveal-");
         private readonly Container container = new();
         private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items;
+        private readonly Mock<ILogger> logger = new();
 
         public BrowserRevealFixture(bool persisted = false)
         {
@@ -114,6 +137,7 @@ public sealed partial class InspectorControlTests
             this.Material = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
             this.items = new([this.Material]);
             var provider = CreateQueryProvider(this.items);
+            this.Provider = provider;
             _ = provider.Setup(value => value.ResolveAsync(this.Material.IdentityUri, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
             var info = new ProjectInfo("Browser", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
             if (persisted)
@@ -134,7 +158,10 @@ public sealed partial class InspectorControlTests
             this.container.RegisterInstance<IMessenger>(messenger);
             this.container.RegisterInstance(provider.Object);
             this.container.RegisterInstance(CreateStatusHosting());
-            this.container.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
+            _ = this.logger.Setup(value => value.IsEnabled(It.IsAny<LogLevel>())).Returns(value: true);
+            var logging = new Mock<ILoggerFactory>();
+            _ = logging.Setup(value => value.CreateLogger(It.IsAny<string>())).Returns(this.logger.Object);
+            this.container.RegisterInstance<ILoggerFactory>(logging.Object);
             this.container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
             this.container.RegisterInstance(Mock.Of<IDialogService>());
             this.container.RegisterInstance(Mock.Of<IProjectAssetCatalog>());
@@ -145,9 +172,8 @@ public sealed partial class InspectorControlTests
             this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
             this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
             this.container.RegisterInstance(Mock.Of<IStatusReducer>());
-            this.container.RegisterInstance(Mock.Of<DroidNet.Aura.Dialogs.IDialogService>());
             this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
-            this.Browser = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), NullLoggerFactory.Instance);
+            this.Browser = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
         }
 
         public ProjectContextService Projects { get; } = new();
@@ -156,13 +182,33 @@ public sealed partial class InspectorControlTests
 
         public ContentBrowserViewModel Browser { get; }
 
+        public Mock<IContentBrowserAssetProvider> Provider { get; }
+
+        public string Diagnostics => string.Join(Environment.NewLine, this.logger.Invocations.Where(static call => string.Equals(call.Method.Name, "Log", StringComparison.Ordinal))
+            .Select(static call => call.Arguments[2]?.ToString() + " " + call.Arguments[3]?.ToString()));
+
         public ProjectLayoutViewModel Explorer => (ProjectLayoutViewModel)this.Browser.LeftPaneViewModel!;
 
         public AssetsLayoutViewModel Layout => (AssetsLayoutViewModel)((AssetsViewModel)this.Browser.RightPaneViewModel!).LayoutViewModel!;
 
         public int MountChanges { get; private set; }
 
-        public Task OpenAsync() => this.Browser.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), Mock.Of<INavigationContext>(value => value.NavigationTarget == new object()));
+        public void SetCookedOutputs(IReadOnlyList<ContentBrowserAssetItem> outputs)
+        {
+            foreach (var item in outputs)
+            {
+                var relative = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath).TrimStart('/');
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(this.directory.FullName, ".cooked", relative))!);
+            }
+
+            this.items.OnNext(outputs);
+        }
+
+        public async Task OpenAsync()
+        {
+            await this.Browser.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), Mock.Of<INavigationContext>(value => value.NavigationTarget == new object())).ConfigureAwait(true);
+            _ = this.Browser.LeftPaneViewModel.Should().NotBeNull(this.Diagnostics);
+        }
 
         public void Dispose()
         {

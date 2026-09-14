@@ -52,4 +52,15 @@ public sealed record CookRunSnapshot
 
     /// <summary>Gets a value indicating whether this run reached a final outcome.</summary>
     public bool IsCompleted => this.CompletedAt.HasValue;
+
+    /// <summary>Gets current native output identities offered for explicit navigation after successful model cooking.</summary>
+    public ImmutableArray<Uri> ImportedOutputs => !this.IsCompleted
+        || this.State is not (CookRunState.Succeeded or CookRunState.SucceededWithWarnings or CookRunState.UpToDate)
+        || !this.Assets.Values.Any(static asset => asset.Kind == ContentCookAssetKind.ForeignSource) ? []
+        :
+        [
+            .. this.Assets.Values.Where(static asset => asset.State is CookAssetState.Updated or CookAssetState.Reused
+            && Path.GetExtension(asset.AssetUri.AbsolutePath).ToUpperInvariant() is ".OGEO" or ".OMAT" or ".OSCENE")
+            .Select(static asset => asset.AssetUri).OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal),
+        ];
 }

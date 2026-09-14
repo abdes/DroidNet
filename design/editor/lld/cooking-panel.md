@@ -110,6 +110,12 @@ Keep the following order:
    published output for the selected run's original scope in a read-only document
    tab; it does not cook or alter run selection. Its tooltip identifies that scope.
    The existing Content Browser menu entry remains available.
+   Successful model cooks also offer an icon-only Show imported assets action
+   immediately after Inspect, with a tooltip. It reveals the available native
+   outputs together in Content Browser, opens the Cooked tree if needed and
+   clears only filters that would hide those outputs. Run completion never
+   invokes this navigation automatically. Unretained external-file failures
+   have no Inspect action because they have no project asset to inspect.
    Use WinUI semantic status colours for
    the pill and list icons, including the critical colour for failures. Cancel
    applies to pending/active work, Retry to failed/cancelled work, and
