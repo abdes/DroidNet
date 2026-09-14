@@ -43,6 +43,7 @@
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
+#include "AssetKeyMap.h"
 #include "DependencyReport.h"
 
 namespace oxygen::engine::internal {
@@ -1191,7 +1192,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   DumpScriptOptions& script_params_opts, DumpInputOptions& input_actions_opts,
   DumpInputOptions& input_mappings_opts,
   DumpPhysicsAssetsOptions& physics_assets_opts,
-  oxygen::content::inspection::DependencyReportOptions& dependency_opts)
+  oxygen::content::inspection::DependencyReportOptions& dependency_opts,
+  oxygen::content::inspection::AssetKeyMapOptions& key_map_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -1367,6 +1369,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
     .WithCommand(physics_assets_cmd)
     .WithCommand(
       oxygen::content::inspection::BuildDependencyCommand(dependency_opts))
+    .WithCommand(
+      oxygen::content::inspection::BuildAssetKeyMapCommand(key_map_opts))
     .Build();
 }
 
@@ -1399,11 +1403,12 @@ auto main(int argc, char** argv) -> int
     DumpInputOptions input_mappings_opts;
     DumpPhysicsAssetsOptions physics_assets_opts;
     oxygen::content::inspection::DependencyReportOptions dependency_opts;
+    oxygen::content::inspection::AssetKeyMapOptions key_map_opts;
 
-    const auto cli
-      = BuildCli(validate_opts, dump_opts, buffers_opts, textures_opts,
-        physics_opts, script_slots_opts, script_params_opts, input_actions_opts,
-        input_mappings_opts, physics_assets_opts, dependency_opts);
+    const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
+      textures_opts, physics_opts, script_slots_opts, script_params_opts,
+      input_actions_opts, input_mappings_opts, physics_assets_opts,
+      dependency_opts, key_map_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -1432,6 +1437,8 @@ auto main(int argc, char** argv) -> int
       exit_code = RunDumpInputMappings(input_mappings_opts);
     } else if (command_path == "physics") {
       exit_code = RunDumpPhysicsAssets(physics_assets_opts);
+    } else if (command_path == "asset-keys") {
+      exit_code = oxygen::content::inspection::RunAssetKeyMap(key_map_opts);
     } else if (command_path == "dependencies") {
       exit_code
         = oxygen::content::inspection::RunDependencyReport(dependency_opts);
