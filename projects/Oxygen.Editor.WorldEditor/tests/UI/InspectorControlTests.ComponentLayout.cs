@@ -27,13 +27,22 @@ public sealed partial class InspectorControlTests
     /// <param name="height">The dock height in logical pixels.</param>
     /// <param name="multiple">Whether to select two nodes.</param>
     /// <param name="theme">The theme to render.</param>
+    /// <param name="rasterizationScale">The effective XAML rasterization scale.</param>
     /// <returns>The asynchronous layout regression.</returns>
     [TestMethod]
-    [DataRow(360d, 620d, false, ElementTheme.Dark)]
-    [DataRow(280d, 320d, false, ElementTheme.Light)]
-    [DataRow(360d, 160d, true, ElementTheme.Dark)]
-    [DataRow(540d, 480d, true, ElementTheme.Light)]
-    public Task ComponentHeaderStaysCompactAndAllIconRemainsVisible(double width, double height, bool multiple, ElementTheme theme) => EnqueueAsync(async () =>
+    [DataRow(360d, 620d, false, ElementTheme.Dark, 1d)]
+    [DataRow(360d, 620d, false, ElementTheme.Dark, 1.5d)]
+    [DataRow(360d, 620d, false, ElementTheme.Dark, 2d)]
+    [DataRow(280d, 320d, false, ElementTheme.Light, 1d)]
+    [DataRow(280d, 320d, false, ElementTheme.Light, 1.5d)]
+    [DataRow(280d, 320d, false, ElementTheme.Light, 2d)]
+    [DataRow(360d, 160d, true, ElementTheme.Dark, 1d)]
+    [DataRow(360d, 160d, true, ElementTheme.Dark, 1.5d)]
+    [DataRow(360d, 160d, true, ElementTheme.Dark, 2d)]
+    [DataRow(540d, 480d, true, ElementTheme.Light, 1d)]
+    [DataRow(540d, 480d, true, ElementTheme.Light, 1.5d)]
+    [DataRow(540d, 480d, true, ElementTheme.Light, 2d)]
+    public Task ComponentHeaderStaysCompactAndAllIconRemainsVisible(double width, double height, bool multiple, ElementTheme theme, double rasterizationScale) => EnqueueAsync(async () =>
     {
         using var fixture = new Fixture();
         MakeGeometryOnly(fixture);
@@ -47,44 +56,32 @@ public sealed partial class InspectorControlTests
             _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
         }
 
-        var originalSize = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Size;
         var view = new SceneNodeEditorView { ViewModel = model, Width = width, Height = height, RequestedTheme = theme };
         var captureHost = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         captureHost.RequestedTheme = theme;
         captureHost.Width = width;
         captureHost.Height = height;
         captureHost.Child = view;
-        try
-        {
-            await LoadTestContentAsync(captureHost).ConfigureAwait(true);
-            var scale = view.XamlRoot.RasterizationScale;
-            VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(new((int)(width * scale) + 60, (int)(height * scale) + 100));
-            await WaitForRenderAsync().ConfigureAwait(true);
-            view.UpdateLayout();
-            var header = (Border)view.FindName("CompactNodeHeader");
-            var properties = (ScrollViewer)view.FindName("PropertyScroll");
-            var components = (ScrollViewer)view.FindName("ComponentScroll");
-            _ = header.ActualHeight.Should().BeLessThanOrEqualTo(116);
-            _ = components.ExtentHeight.Should().BeApproximately(64, 1);
-            _ = properties.ActualHeight.Should().BeGreaterThan(40);
-            AssertAllToggle(view, multiple);
-            AssertPropertyEditorRows(view);
-            await this.CaptureComponentLayoutAsync(captureHost, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"inspector-{width}-{height}-{multiple}-{theme}.png")).ConfigureAwait(true);
-            if (height > 300)
-            {
-                var previousHeader = header.ActualHeight;
-                var previousProperties = properties.ActualHeight;
-                view.Height = height + 100;
-                captureHost.Height = height + 100;
-                await WaitForRenderAsync().ConfigureAwait(true);
-                _ = header.ActualHeight.Should().BeApproximately(previousHeader, 1);
-                _ = properties.ActualHeight.Should().BeApproximately(previousProperties + 100, 1);
-            }
-        }
-        finally
-        {
-            VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(originalSize);
-        }
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(captureHost, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        view.UpdateLayout();
+        var header = (Border)view.FindName("CompactNodeHeader");
+        var properties = (ScrollViewer)view.FindName("PropertyScroll");
+        var components = (ScrollViewer)view.FindName("ComponentScroll");
+        _ = header.ActualHeight.Should().BeLessThanOrEqualTo(116);
+        _ = components.ExtentHeight.Should().BeApproximately(64, 1);
+        _ = properties.ActualHeight.Should().BeGreaterThan(40);
+        AssertAllToggle(view, multiple);
+        AssertPropertyEditorRows(view);
+        await this.CaptureComponentLayoutAsync(captureHost, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"inspector-{width}-{height}-{multiple}-{theme}-{rasterizationScale}.png")).ConfigureAwait(true);
+        await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
+        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        await ScaledXamlHost.ScrollToEndAsync(components).ConfigureAwait(true);
+        await ScaledXamlHost.ScrollToEndAsync(properties).ConfigureAwait(true);
+        await this.CaptureComponentLayoutAsync(captureHost, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"inspector-bottom-{width}-{height}-{multiple}-{theme}-{rasterizationScale}.png")).ConfigureAwait(true);
+        await AssertExtraHeightGoesToPropertiesAsync(view, captureHost, header, properties).ConfigureAwait(true);
     });
 
     /// <summary>Four valid components fit directly; a longer multi-node type list is bounded.</summary>
@@ -122,6 +119,34 @@ public sealed partial class InspectorControlTests
         _ = ((ScrollViewer)view.FindName("PropertyScroll")).ActualHeight.Should().BeGreaterThan(250);
         _ = model.ComponentFilters.Single(option => option.ComponentType == typeof(GeometryComponent)).IsAvailable.Should().BeTrue();
     });
+
+    private static async Task AssertExtraHeightGoesToPropertiesAsync(SceneNodeEditorView view, Border captureHost, Border header, ScrollViewer properties)
+    {
+        if (view.Height > 300)
+        {
+            var previousHeader = header.ActualHeight;
+            var previousProperties = properties.ActualHeight;
+            view.Height += 100;
+            captureHost.Height = view.Height;
+            await WaitForRenderAsync().ConfigureAwait(true);
+            _ = header.ActualHeight.Should().BeApproximately(previousHeader, 1);
+            _ = properties.ActualHeight.Should().BeApproximately(previousProperties + 100, 1);
+        }
+    }
+
+    private static async Task AssertScaledComponentSelectionAsync(SceneNodeEditorView view, bool multiple)
+    {
+        var editors = view.ViewModel!.PropertyEditors.ToArray();
+        Toggle(ComponentButton(view, typeof(GeometryComponent)));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = view.ViewModel!.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<Oxygen.Editor.World.Inspector.Geometry.GeometryViewModel>();
+        var all = multiple ? (ToolBarToggleButton)view.FindName("MultiAllComponentsButton")
+            : (ToolBarToggleButton)((SceneNodeDetailsView)view.FindName("NodeDetails")).FindName("AllComponentsButton");
+        Toggle(all);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = view.ViewModel!.PropertyEditors.Should().Equal(editors);
+        _ = view.ViewModel!.IsAllComponentsSelected.Should().BeTrue();
+    }
 
     private static void AssertAllToggle(SceneNodeEditorView view, bool multiple)
     {

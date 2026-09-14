@@ -794,13 +794,17 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [ ] Complete the remaining creation/import/reimport command/layout
         journeys, including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
-- [ ] 07B.5g compact single/multi-node inspector with component filtering and
+- [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
   - [x] Compact fixed-type selection, the All icon/tooltip, original property rows,
         clipping tooltips and consistent icons are implemented and tested. Hidden
         sections retain feedback; recycled controls detach; gesture/history cases pass.
-  - [ ] Complete the specified 100%, 150% and 200% scaling walkthroughs.
-        Existing packaged rendering evidence at 175% does not cover this gate.
+  - [x] Packaged Release rendering and control walkthroughs pass at verified
+        100%, 150% and 200% XAML scale: compact single/multi-node headers,
+        Geometry/All selection, unchanged dirty/history state, clipped-text
+        tooltips and scrolling. Cooking also retains accessible recovery and
+        expanded Output/Assets. All 18 cases pass;
+        [captures and test scope](validation/ED-M07B-scaled-layouts.md).
 - [x] 07B.6 owned native worker/descendant termination and I/O drain (#8).
       Cancellation retains ownership until workers and descendants drain, including
       termination failures. Process, stream and manifest cases pass.

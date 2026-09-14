@@ -399,7 +399,11 @@ validation results; affected component entries show an error icon and full-text
 feedback. Recycled section controls detach from their models. Packaged UI passes
 196/196 at 175% scaling. Numeric text, drag cancellation, late picker completion,
 invalid input and mixed-target source corrections have filter-boundary coverage.
-The separate 100%/150%/200% walkthroughs are still open.
+The 100%/150%/200% packaged Release layout and control walkthroughs also pass:
+12 inspector cases cover single/multi-node, short/narrow docks, Geometry/All
+selection, dirty/history preservation and scrolling. Six Cooking cases cover
+compact recovery and fully expanded output/assets.
+[Validation evidence](../validation/ED-M07B-scaled-layouts.md).
 
 Pass: selecting Geometry shows only its editor; selecting Transform switches
 sections; clearing selection/All restores all applicable editors. Two components
@@ -533,7 +537,7 @@ its product semantics are settled in 07B.0 before implementation.
   presentation and typed assignment before/after cooking pass.
 - [ ] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
   points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
-- [ ] 07B.5g compact single/multi-node inspector, functional component selection
+- [x] 07B.5g compact single/multi-node inspector, functional component selection
   and All reset pass without changing property/history/gesture semantics.
 - [ ] 07B.5f all workflow journeys and recorded UI defects pass through the
   visible editor, including resumed preview and user validation evidence.
