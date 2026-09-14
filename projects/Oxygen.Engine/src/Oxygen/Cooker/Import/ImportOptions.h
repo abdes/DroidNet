@@ -243,6 +243,15 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
 #endif
 }
 
+//! Required source semantics for scene imports.
+enum class SceneContentPolicy : uint8_t {
+  //! Preserve the normal native importer's supported feature set.
+  kDefault = 0,
+  //! Reject features outside static geometry and scalar materials before
+  //! emitting.
+  kStaticScalar,
+};
+
 //! Coordinate conversion policy.
 /*!
  This policy configures how source authoring data is converted into Oxygen's
@@ -369,6 +378,8 @@ struct CoordinateConversionPolicy final {
  belong in the domain's descriptor payload, not here.
 */
 struct ImportOptions final {
+  SceneContentPolicy scene_content_policy = SceneContentPolicy::kDefault;
+
   CoordinateConversionPolicy coordinate = {};
 
   //! Cooperative cancellation token for long-running imports.

@@ -553,6 +553,10 @@ namespace {
       ReadBoolField(flags, "scene", settings.import_scene, errors);
     }
 
+    if (!ReadStringField(
+          obj, "content_policy", settings.content_policy, errors)) {
+      return false;
+    }
     if (!ReadStringField(obj, "unit_policy", settings.unit_policy, errors)) {
       return false;
     }

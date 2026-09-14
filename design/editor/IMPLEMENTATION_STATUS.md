@@ -577,6 +577,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         SourceMedia without overwriting an existing bundle. Twelve tests cover
         relative dependencies, collisions, changed/missing files, dirty documents,
         project closure and retention after a later cook failure.
+  - [x] Native manifest scene imports can require static geometry and scalar
+        materials. Both adapters reject unsupported source features and ambiguous
+        FBX coordinate metadata before emission; ordinary imports retain their
+        existing policy. The glTF/FBX importer and policy suites pass 14/14 in
+        both Debug and Release, including minimal sources and rejection cases.
   - [ ] Complete supported static/scalar glTF/FBX import, retained settings,
         collision/reimport behavior, unsupported-feature rejection and clean-copy
         reproduction. Connect source discovery and the import UI to the retention

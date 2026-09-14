@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
+#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
@@ -1663,6 +1664,15 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
+  if (input.request.options.scene_content_policy
+      == SceneContentPolicy::kStaticScalar
+    && !internal::ValidateStaticScalarSource(
+      *scene, input.source_id_prefix, result.diagnostics)) {
+    impl_->scene_owner.reset();
+    result.success = false;
+    return result;
+  }
+
   impl_->scene_owner = std::move(scene);
   return result;
 }
@@ -1679,6 +1689,15 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
       result.diagnostics.push_back(MakeErrorDiagnostic("fbx.parse_failed",
         "FBX parse failed without diagnostics", input.source_id_prefix, ""));
     }
+    impl_->scene_owner.reset();
+    result.success = false;
+    return result;
+  }
+
+  if (input.request.options.scene_content_policy
+      == SceneContentPolicy::kStaticScalar
+    && !internal::ValidateStaticScalarSource(
+      *scene, input.source_id_prefix, result.diagnostics)) {
     impl_->scene_owner.reset();
     result.success = false;
     return result;
