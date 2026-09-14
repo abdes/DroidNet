@@ -667,11 +667,6 @@ namespace {
       return it->second;
     }
 
-    struct IndexedMatch final {
-      data::AssetKey key {};
-      data::AssetType type = data::AssetType::kUnknown;
-    };
-    auto indexed_matches = std::vector<IndexedMatch> {};
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       if (!it->inspection.has_value()) {
         continue;
@@ -680,36 +675,21 @@ namespace {
         if (asset.virtual_path != virtual_path) {
           continue;
         }
-        indexed_matches.push_back({
-          .key = asset.key,
-          .type = static_cast<data::AssetType>(asset.asset_type),
-        });
+        const auto type = static_cast<data::AssetType>(asset.asset_type);
+        if (expected_type.has_value() && type != *expected_type) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kError, "scene.descriptor.reference_type_mismatch",
+            "Reference type mismatch; expected "
+              + std::string(data::to_string(*expected_type)) + " but found "
+              + std::string(data::to_string(type)),
+            std::move(object_path));
+          return std::nullopt;
+        }
+        const auto resolved = std::make_pair(asset.key, type);
+        context.index_cache.insert_or_assign(
+          std::string(virtual_path), resolved);
+        return resolved;
       }
-    }
-
-    if (indexed_matches.size() > 1U) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_ambiguous",
-        "Reference virtual_path resolved to multiple mounted assets: "
-          + std::string(virtual_path),
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    if (!indexed_matches.empty()) {
-      const auto& match = indexed_matches.front();
-      if (expected_type.has_value() && match.type != *expected_type) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.reference_type_mismatch",
-          "Reference type mismatch; expected "
-            + std::string(data::to_string(*expected_type)) + " but found "
-            + std::string(data::to_string(match.type)),
-          std::move(object_path));
-        return std::nullopt;
-      }
-      context.index_cache.insert_or_assign(
-        std::string(virtual_path), std::make_pair(match.key, match.type));
-      return std::make_pair(match.key, match.type);
     }
 
     auto relpath = std::string {};
@@ -722,25 +702,17 @@ namespace {
       return std::nullopt;
     }
 
-    auto file_matches = std::vector<std::filesystem::path> {};
+    auto found_descriptor = false;
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       const auto candidate = it->root / std::filesystem::path(relpath);
       std::error_code ec;
       if (std::filesystem::exists(candidate, ec)) {
-        file_matches.push_back(candidate);
+        found_descriptor = true;
+        break;
       }
     }
 
-    if (file_matches.size() > 1U) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_ambiguous",
-        "Reference virtual_path resolved to multiple mounted descriptors: "
-          + std::string(virtual_path),
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    if (file_matches.empty()) {
+    if (!found_descriptor) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_missing",
         "Reference virtual_path was not found: " + std::string(virtual_path),

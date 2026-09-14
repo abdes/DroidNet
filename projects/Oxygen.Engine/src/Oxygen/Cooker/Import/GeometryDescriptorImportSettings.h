@@ -7,6 +7,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace oxygen::content::import {
 
@@ -17,6 +18,9 @@ struct GeometryDescriptorImportSettings final {
 
   //! Optional cooked root destination.
   std::string cooked_root;
+
+  //! Ordered resolver-only cooked roots; later roots have higher priority.
+  std::vector<std::string> cooked_context_roots;
 
   //! Optional explicit job name override.
   std::string job_name;

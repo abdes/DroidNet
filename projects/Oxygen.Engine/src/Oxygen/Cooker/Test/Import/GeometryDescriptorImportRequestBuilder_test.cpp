@@ -95,8 +95,8 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "manifest-geometry" });
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  EXPECT_EQ(request->options.with_content_hashing,
+    EffectiveContentHashingEnabled(false));
   ASSERT_TRUE(request->geometry_descriptor.has_value());
 
   const auto normalized

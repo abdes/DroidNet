@@ -79,6 +79,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
       "defaults": {
         "geometry_descriptor": {
           "content_hashing": true,
+          "cooked_context_roots": ["Libraries/Materials"],
           "name": "default-geometry-name"
         }
       },
@@ -106,9 +107,11 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
   ASSERT_TRUE(request->geometry_descriptor.has_value());
+  ASSERT_EQ(request->cooked_context_roots.size(), 1U);
+  EXPECT_EQ(request->cooked_context_roots[0], root / "Libraries/Materials");
 
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  EXPECT_EQ(request->options.with_content_hashing,
+    EffectiveContentHashingEnabled(false));
 
   const auto normalized
     = json::parse(request->geometry_descriptor->normalized_descriptor_json);

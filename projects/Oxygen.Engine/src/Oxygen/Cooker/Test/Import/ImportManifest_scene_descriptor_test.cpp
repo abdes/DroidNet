@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -42,6 +43,50 @@ auto WriteTextFile(
   auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
   ASSERT_TRUE(out.is_open());
   out << text;
+}
+
+NOLINT_TEST(ImportManifestSceneDescriptorTest,
+  ResolvesOrderedContextRootsAndOverridesDefaults)
+{
+  const auto path = MakeManifestPath("context_roots");
+  const auto root = path.parent_path();
+  WriteTextFile(root / "scene.json",
+    R"({"version":4,"name":"Scene","nodes":[{"name":"Root"}]})");
+  WriteTextFile(path, R"({
+    "version":1,"output":"out",
+    "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
+    "jobs":[
+      {"type":"scene-descriptor","source":"scene.json"},
+      {"type":"scene-descriptor","source":"scene.json",
+       "cooked_context_roots":["Libraries/High","out"]}
+    ]})");
+  auto errors = std::ostringstream {};
+  const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  const auto inherited = manifest->jobs[0].BuildRequest(errors);
+  const auto overridden = manifest->jobs[1].BuildRequest(errors);
+  ASSERT_TRUE(inherited.has_value()) << errors.str();
+  ASSERT_TRUE(overridden.has_value()) << errors.str();
+  ASSERT_EQ(inherited->cooked_context_roots.size(), 1U);
+  EXPECT_EQ(inherited->cooked_context_roots[0], root / "Libraries/Low");
+  ASSERT_EQ(overridden->cooked_context_roots.size(), 2U);
+  EXPECT_EQ(overridden->cooked_context_roots[0], root / "Libraries/High");
+  EXPECT_EQ(overridden->cooked_context_roots[1], root / "out");
+}
+
+NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
+{
+  const auto path = MakeManifestPath("invalid_context_roots");
+  for (const auto& roots : std::vector<json> {
+         json("root"), json::array({ 42 }), json::array({ "" }) }) {
+    const auto document = json { { "jobs",
+      json::array({ json { { "type", "scene-descriptor" },
+        { "source", "scene.json" }, { "cooked_context_roots", roots } } }) } };
+    WriteTextFile(path, document.dump());
+    auto errors = std::ostringstream {};
+    EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
+    EXPECT_FALSE(errors.str().empty());
+  }
 }
 
 NOLINT_TEST(ImportManifestSceneDescriptorTest,
@@ -100,8 +145,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   EXPECT_EQ(request->job_name, std::optional<std::string> { "demo-scene-job" });
   ASSERT_TRUE(request->scene_descriptor.has_value());
 
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  EXPECT_EQ(request->options.with_content_hashing,
+    EffectiveContentHashingEnabled(false));
 
   const auto normalized
     = json::parse(request->scene_descriptor->normalized_descriptor_json);
