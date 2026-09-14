@@ -41,6 +41,21 @@
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Text="Cooking progress and messages appear in Cooking."
             TextWrapping="Wrap" />
+        <InfoBar
+            Title="{x:Bind ViewModel.ReplacementTitle, Mode=OneWay}"
+            AutomationProperties.AutomationId="ModelImportCollision"
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasCollision, Mode=OneWay}"
+            Message="{x:Bind ViewModel.ReplacementMessage, Mode=OneWay}"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button
+                    AutomationProperties.AutomationId="ModelImportReviewReplacement"
+                    Command="{x:Bind ViewModel.ReviewReplacementCommand}"
+                    Content="Review replacement"
+                    Visibility="{x:Bind ViewModel.ReplacementChoiceVisibility, Mode=OneWay}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
         <TextBlock
             AutomationProperties.AutomationId="ModelImportError"
             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
