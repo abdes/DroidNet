@@ -667,49 +667,49 @@ namespace {
       return it->second;
     }
 
+    auto relpath = std::string {};
+    const auto is_mounted = internal::TryVirtualPathToRelPath(
+      context.request, virtual_path, relpath);
+    auto found_descriptor = false;
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (!it->inspection.has_value()) {
-        continue;
+      if (it->inspection.has_value()) {
+        for (const auto& asset : it->inspection->Assets()) {
+          if (asset.virtual_path != virtual_path) {
+            continue;
+          }
+          const auto type = static_cast<data::AssetType>(asset.asset_type);
+          if (expected_type.has_value() && type != *expected_type) {
+            AddDiagnostic(context.session, context.request,
+              ImportSeverity::kError,
+              "scene.descriptor.reference_type_mismatch",
+              "Reference type mismatch; expected "
+                + std::string(data::to_string(*expected_type)) + " but found "
+                + std::string(data::to_string(type)),
+              std::move(object_path));
+            return std::nullopt;
+          }
+          const auto resolved = std::make_pair(asset.key, type);
+          context.index_cache.insert_or_assign(
+            std::string(virtual_path), resolved);
+          return resolved;
+        }
       }
-      for (const auto& asset : it->inspection->Assets()) {
-        if (asset.virtual_path != virtual_path) {
-          continue;
+      if (is_mounted) {
+        const auto candidate = it->root / std::filesystem::path(relpath);
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec)) {
+          found_descriptor = true;
+          break;
         }
-        const auto type = static_cast<data::AssetType>(asset.asset_type);
-        if (expected_type.has_value() && type != *expected_type) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "scene.descriptor.reference_type_mismatch",
-            "Reference type mismatch; expected "
-              + std::string(data::to_string(*expected_type)) + " but found "
-              + std::string(data::to_string(type)),
-            std::move(object_path));
-          return std::nullopt;
-        }
-        const auto resolved = std::make_pair(asset.key, type);
-        context.index_cache.insert_or_assign(
-          std::string(virtual_path), resolved);
-        return resolved;
       }
     }
 
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          context.request, virtual_path, relpath)) {
+    if (!is_mounted) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_virtual_path_unmounted",
         "Reference virtual_path is outside mounted cooked roots",
         std::move(object_path));
       return std::nullopt;
-    }
-
-    auto found_descriptor = false;
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      const auto candidate = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
-      if (std::filesystem::exists(candidate, ec)) {
-        found_descriptor = true;
-        break;
-      }
     }
 
     if (!found_descriptor) {

@@ -27,6 +27,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -733,6 +734,91 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   EXPECT_FALSE(report.success);
   EXPECT_TRUE(
     HasDiagnosticCode(report.diagnostics, "geometry.material.missing"));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  NewMaterialRespectsPriorityBeforeIndexPublication)
+{
+  const auto root = MakeTempCookedRoot("new_material_priority");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path = source_dir / "priority.geometry.json";
+  const auto vb_source = source_dir / "cube.vertices.buffer.bin";
+  const auto ib_source = source_dir / "cube.indices.buffer.bin";
+
+  const auto vb_bytes = std::array<std::byte, 96> {};
+  const auto ib_bytes = std::array<std::byte, 12> {};
+  WriteBytesFile(vb_source, std::span<const std::byte>(vb_bytes));
+  WriteBytesFile(ib_source, std::span<const std::byte>(ib_bytes));
+
+  const auto descriptor_doc = MakeStandardDescriptorDoc("NewMaterialPriority",
+    "/.cooked/Materials/new.omat",
+    "/.cooked/Resources/Buffers/cube_vertices.obuf",
+    "/.cooked/Resources/Buffers/cube_indices.obuf", "lod0",
+    json::array({
+      json {
+        { "uri", vb_source.generic_string() },
+        { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
+        { "usage_flags", 1U },
+        { "element_stride", 32U },
+        { "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }) },
+      },
+      json {
+        { "uri", ib_source.generic_string() },
+        { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
+        { "usage_flags", 2U },
+        { "element_stride", 4U },
+        { "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }) },
+      },
+    }));
+  WriteTextFile(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto library = root / "Library";
+  const auto library_key = data::AssetKey::FromVirtualPath("/Library/New.omat");
+  auto writer = LooseCookedWriter(library);
+  const auto bytes = std::array { std::byte { 1 } };
+  writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
+    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes);
+  static_cast<void>(writer.Finish());
+  WriteTextFile(cooked_root / "Materials/new.omat", "new material");
+  for (const auto own_wins : { true, false }) {
+    auto request
+      = MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc);
+    request.cooked_context_roots = own_wins
+      ? std::vector<std::filesystem::path> { library, cooked_root }
+      : std::vector<std::filesystem::path> { cooked_root, library };
+    const auto report = SubmitAndWait(service, std::move(request));
+    ASSERT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+    const auto descriptor_bytes
+      = ReadBinaryFile(cooked_root / "Geometry/NewMaterialPriority.ogeo");
+    const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
+      + sizeof(data::pak::geometry::MeshDesc);
+    const auto submesh = ReadStructAt<data::pak::geometry::SubMeshDesc>(
+      descriptor_bytes, offset);
+    EXPECT_EQ(submesh.material_asset_key,
+      own_wins ? data::AssetKey::FromVirtualPath("/.cooked/Materials/new.omat")
+               : library_key);
+  }
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
