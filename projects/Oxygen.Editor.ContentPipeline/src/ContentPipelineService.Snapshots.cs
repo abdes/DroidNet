@@ -78,17 +78,22 @@ public sealed partial class ContentPipelineService
         CancellationToken cancellationToken)
     {
         await this.publication.RecoverBeforeCookAsync(operation.Project, cancellationToken).ConfigureAwait(false);
-        var primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
-        if (primaryInputs.Length == 0)
+        Incremental.CookProvenance previous;
+        Import.ImportedSourceIndex imports;
+        ContentCookInput[] primaryInputs;
+        try
         {
-            return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
+            (previous, imports, resolveScopes) = await this.ResolveImportOwnershipAsync(operation, resolveScopes, cancellationToken).ConfigureAwait(false);
+            primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return CreateFailedCook(operation, targetKind, failure);
         }
 
-        await this.RequireSavedDocumentsAsync(primaryInputs, cancellationToken).ConfigureAwait(false);
-        var missing = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs);
-        if (missing.Count != 0)
+        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, cancellationToken).ConfigureAwait(false) is { } preflight)
         {
-            return new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
+            return preflight;
         }
 
         var compatibility = await this.nativeCompatibility.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
@@ -101,7 +106,7 @@ public sealed partial class ContentPipelineService
         Task? retainedDrain = null;
         try
         {
-            return await this.ExecuteIncrementalCookAsync(operation, resolveScopes, targetKind, artifacts, cancellationToken).ConfigureAwait(false);
+            return await this.ExecuteIncrementalCookAsync(operation, resolveScopes, targetKind, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
         }
         catch (CookInputDiscoveryException failure)
         {
@@ -129,11 +134,37 @@ public sealed partial class ContentPipelineService
         }
     }
 
+    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, CancellationToken cancellationToken)
+    {
+        if (primaryInputs.Length == 0)
+        {
+            return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
+        }
+
+        await this.RequireSavedDocumentsAsync(primaryInputs, cancellationToken).ConfigureAwait(false);
+        var missing = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs);
+        return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
+    }
+
+    private async Task<(Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, Func<IReadOnlyList<ContentCookScope>> scopes)> ResolveImportOwnershipAsync(
+        ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> scopes, CancellationToken cancellationToken)
+    {
+        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
+        {
+            previous = new(1, operation.Project.ProjectId, [], []);
+        }
+
+        var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
+        return (previous, imports, () => scopes().Select(imports.ResolveScope).ToArray());
+    }
+
     private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
         Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts,
         Oxygen.Editor.ContentPipeline.Incremental.CookProvenance previous,
+        Import.ImportedSourceIndex imports,
         CancellationToken cancellationToken)
     {
         CookDependencyGraph? graph = null;
@@ -142,12 +173,15 @@ public sealed partial class ContentPipelineService
             operation,
             async token =>
             {
-                var inputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
+                var scopes = resolveScopes();
+                var inputs = scopes.SelectMany(static scope => scope.Inputs).ToArray();
                 graph = await new CookDependencyDiscovery(
                     cookDocuments,
                     importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
-                    discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken))
+                    discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken),
+                    resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency))
                     .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
+                graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
             },
             artifacts.Fingerprint,

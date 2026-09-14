@@ -501,13 +501,13 @@ public sealed partial class ContentPipelineService(
     }
 
     private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, Uri sceneAssetUri, CancellationToken cancellationToken)
-        => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri)], CookTargetKind.CurrentScene, cancellationToken);
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri) with { ScopeUri = sceneAssetUri }], CookTargetKind.CurrentScene, cancellationToken);
 
-    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken)
-        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset)], CookTargetKind.Asset, cancellationToken);
+    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true)
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with { ScopeUri = assetUri, AllowImportedSourceChanges = allowImportedSourceChanges }], CookTargetKind.Asset, cancellationToken);
 
     private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, Uri folderUri, CancellationToken cancellationToken)
-        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder)], CookTargetKind.Folder, cancellationToken);
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder) with { ScopeUri = folderUri }], CookTargetKind.Folder, cancellationToken);
 
     private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(

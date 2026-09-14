@@ -125,17 +125,20 @@ public sealed partial class ContentPipelineService
             ? throw new InvalidDataException("A required generated asset is absent from the native catalog.") : generated;
     }
 
-    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
-        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
-        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
-        {
-            previous = new(1, operation.Project.ProjectId, [], []);
-        }
-
-        var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, cancellationToken).ConfigureAwait(false);
+        var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
 
         var plan = await CookIncrementalPlanner.PlanAsync(snapshot, graph, previous, cancellationToken).ConfigureAwait(false);
+        if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))
+        {
+            var blocked = ChangedImportedSourceDiagnostics(operation.OperationId, graph, previous, plan);
+            if (blocked.Length != 0)
+            {
+                return new(operation.OperationId, targetKind, OperationStatus.Failed, blocked, [], Inspection: null, Validation: null);
+            }
+        }
+
         foreach (var asset in plan.ReusedAssets)
         {
             CookRunContext.Report(new(Asset: new(asset.SourceAssetUri, asset.Kind, CookAssetState.Reused)));
@@ -143,6 +146,12 @@ public sealed partial class ContentPipelineService
 
         if (plan.IsUpToDate)
         {
+            var missing = MissingImportedOutputs(operation.OperationId, graph, plan.ReusedAssets);
+            if (missing.Length != 0)
+            {
+                return new(operation.OperationId, targetKind, OperationStatus.Failed, missing, [], Inspection: null, Validation: null);
+            }
+
             CookRunContext.Report(new(Message: "Already up to date."));
             return new(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
             {
@@ -204,6 +213,12 @@ public sealed partial class ContentPipelineService
             Status = cooked.Status == OperationStatus.Succeeded && !plan.Diagnostics.IsEmpty ? OperationStatus.SucceededWithWarnings : cooked.Status,
             Diagnostics = NormalizeDiagnostics(operation.OperationId, cooked.Diagnostics.Concat(plan.Diagnostics)),
         };
+        var missingOutputs = MissingImportedOutputs(operation.OperationId, graph, result.CookedAssets.Concat(plan.ReusedAssets));
+        if (missingOutputs.Length != 0)
+        {
+            return result with { Status = OperationStatus.Failed, Diagnostics = [.. result.Diagnostics, .. missingOutputs] };
+        }
+
         if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings)
             && results.TrueForAll(static value => value.VerifiedRoot is not null))
         {

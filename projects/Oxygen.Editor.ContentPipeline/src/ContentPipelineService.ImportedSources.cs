@@ -12,6 +12,36 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Cooks retained models through the same snapshot, staging and publication path as authored descriptors.</summary>
 public sealed partial class ContentPipelineService
 {
+    private static DiagnosticRecord[] ChangedImportedSourceDiagnostics(Guid operationId, Snapshots.CookDependencyGraph graph, Incremental.CookProvenance previous, Incremental.CookIncrementalPlan plan)
+    {
+        var prior = previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri);
+        return graph.ImportedSources.Where(pair => !plan.Reusable.ContainsKey(pair.Key) && prior.TryGetValue(pair.Key, out var published)
+                && (published.ImportedSource!.ContentFingerprint is null || !string.Equals(published.ImportedSource.ContentFingerprint, pair.Value.ContentFingerprint, StringComparison.Ordinal)))
+            .Select(pair => new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.AssetImport,
+                Severity = DiagnosticSeverity.Error,
+                Code = "asset_import.reimport_required",
+                AffectedVirtualPath = pair.Key.AbsolutePath,
+                Message = $"Reimport '{Path.GetFileName(Uri.UnescapeDataString(pair.Key.AbsolutePath))}' to confirm its source changes before automatic cooking updates it.",
+            }).ToArray();
+    }
+
+    private static DiagnosticRecord[] MissingImportedOutputs(Guid operationId, Snapshots.CookDependencyGraph graph, IEnumerable<ContentCookedAsset> outputs)
+    {
+        var available = outputs.Select(static output => output.CookedAssetUri).ToHashSet();
+        return graph.ImportedReferences.Where(uri => !available.Contains(uri)).Select(uri => new DiagnosticRecord
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Error,
+            Code = AssetImportDiagnosticCodes.ImportFailed,
+            AffectedVirtualPath = uri.AbsolutePath,
+            Message = $"The retained model does not produce '{uri}'. Choose an existing imported output or correct the source before reimporting.",
+        }).ToArray();
+    }
+
     private static async Task ReleaseImportedDiscoveryAfterDrainAsync(Task drain, FileStream ownership)
     {
         try
