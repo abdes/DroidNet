@@ -21,35 +21,8 @@ internal static class RouteStateMapping
     /// <param name="url">The local navigation URL.</param>
     /// <returns>All selected folders, in URL order.</returns>
     internal static IReadOnlyList<string> ParseSelectedFoldersFromUrl(string? url)
-    {
-        if (string.IsNullOrEmpty(url))
-        {
-            return [];
-        }
-
-        var qIndex = url.IndexOf('?', StringComparison.Ordinal);
-        if (qIndex < 0 || qIndex >= url.Length - 1)
-        {
-            return [];
-        }
-
-        var query = url[(qIndex + 1)..];
-        var folders = new List<string>();
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var kv = pair.Split('=', 2);
-            if (kv.Length == 2 && string.Equals(kv[0], SelectedQueryKey, StringComparison.Ordinal))
-            {
-                var folder = Uri.UnescapeDataString(kv[1]);
-                if (!string.IsNullOrWhiteSpace(folder))
-                {
-                    folders.Add(folder);
-                }
-            }
-        }
-
-        return folders;
-    }
+        => string.IsNullOrEmpty(url) ? [] : DefaultUrlSerializer.Instance.Parse(url).QueryParams.GetValues(SelectedQueryKey)?
+            .OfType<string>().Where(static folder => !string.IsNullOrWhiteSpace(folder)).ToArray() ?? [];
 
     /// <summary>Applies a completed navigation as one observable scope update.</summary>
     /// <param name="state">The shared browser scope.</param>
