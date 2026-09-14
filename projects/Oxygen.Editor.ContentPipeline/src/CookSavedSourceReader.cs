@@ -36,8 +36,9 @@ internal static class CookSavedSourceReader
     /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The absolute source path.</param>
     /// <param name="cancellationToken">Cancels the protected read.</param>
+    /// <param name="allowUnsavedDocuments">Reads acknowledged saved bytes for read-only status while the document has newer edits.</param>
     /// <returns>The acknowledged source's SHA-256 hash.</returns>
-    public static Task<string> HashAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken)
+    public static Task<string> HashAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken, bool allowUnsavedDocuments = false)
         => ReadCoreAsync(
             documents,
             sourcePath,
@@ -46,7 +47,8 @@ internal static class CookSavedSourceReader
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, token).ConfigureAwait(false));
                 return (hash, hash);
             },
-            cancellationToken);
+            cancellationToken,
+            allowUnsavedDocuments);
 
     /// <summary>Copies and hashes one saved source while excluding saves and external replacement.</summary>
     /// <param name="documents">Registered source owners.</param>

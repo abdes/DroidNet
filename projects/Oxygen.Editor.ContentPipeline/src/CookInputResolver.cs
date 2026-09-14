@@ -24,9 +24,10 @@ internal static class CookInputResolver
             ".OMAT" => ContentCookAssetKind.Material,
             ".OGEO" => ContentCookAssetKind.Geometry,
             ".OSCENE" => ContentCookAssetKind.Scene,
+            ".GLTF" or ".GLB" or ".FBX" => ContentCookAssetKind.ForeignSource,
             _ => throw new InvalidDataException($"Unsupported cook dependency '{uri}'."),
         };
-        var nativePath = ContentPipelinePaths.ToNativeDescriptorPath(uri, extension);
+        var nativePath = kind == ContentCookAssetKind.ForeignSource ? path : ContentPipelinePaths.ToNativeDescriptorPath(uri, extension);
         var slash = nativePath.IndexOf('/', 1);
         if (slash <= 1)
         {
@@ -35,12 +36,12 @@ internal static class CookInputResolver
 
         var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, nativePath[1..slash], StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidDataException($"Cook dependency '{uri}' refers to an unknown authoring mount.");
-        var relative = Path.Combine(mount.RelativePath, nativePath[(slash + 1)..] + ".json").Replace('\\', '/');
+        var relative = Path.Combine(mount.RelativePath, nativePath[(slash + 1)..] + (kind == ContentCookAssetKind.ForeignSource ? string.Empty : ".json")).Replace('\\', '/');
         var absolute = Path.GetFullPath(Path.Combine(project.ProjectRoot, relative));
         relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
         return Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
             || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED"
             ? throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.")
-            : new(new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, nativePath, role);
+            : new(kind == ContentCookAssetKind.ForeignSource ? uri : new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, kind == ContentCookAssetKind.ForeignSource ? null : nativePath, role);
     }
 }

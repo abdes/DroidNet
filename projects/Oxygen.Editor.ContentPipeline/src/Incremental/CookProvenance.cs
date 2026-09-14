@@ -42,6 +42,9 @@ internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArra
     /// <param name="Outputs">The produced asset identities.</param>
     public sealed record Product(Uri SourceUri, string Fingerprint, ImmutableArray<Uri> Dependencies, ImmutableArray<Output> Outputs)
     {
+        /// <summary>Gets source discovery needed to reuse an imported product without another native query.</summary>
+        public Import.ImportedSourceDependencyState? ImportedSource { get; init; }
+
         /// <summary>Gets warnings that still apply when the unchanged product is reused.</summary>
         public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics { get; init; } = [];
     }

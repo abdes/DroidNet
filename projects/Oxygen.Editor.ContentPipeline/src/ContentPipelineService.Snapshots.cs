@@ -132,7 +132,8 @@ public sealed partial class ContentPipelineService
     private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
-        string fingerprint,
+        Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts,
+        Oxygen.Editor.ContentPipeline.Incremental.CookProvenance previous,
         CancellationToken cancellationToken)
     {
         CookDependencyGraph? graph = null;
@@ -142,10 +143,14 @@ public sealed partial class ContentPipelineService
             async token =>
             {
                 var inputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
-                graph = await new CookDependencyDiscovery(cookDocuments).DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
+                graph = await new CookDependencyDiscovery(
+                    cookDocuments,
+                    importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
+                    discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken))
+                    .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
             },
-            fingerprint,
+            artifacts.Fingerprint,
             cancellationToken).ConfigureAwait(false);
         return captured switch
         {

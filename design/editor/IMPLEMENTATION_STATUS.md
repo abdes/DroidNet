@@ -591,10 +591,17 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         cases pass 9/9, including both installed native formats,
         and compatibility cases pass 10/10. Retained settings, imported output lineage and UI
         integration remain below.
-  - [ ] Complete supported static/scalar glTF/FBX import, retained settings,
-        collision/reimport behavior, unsupported-feature rejection and clean-copy
-        reproduction. Connect retained settings and the import UI to the
-        source-retention transaction and native publication path; the browser still uses the older
+  - [x] Versioned retained native settings record the source bundle, output
+        namespace and explicit import policies without rewriting legacy sidecars.
+        Configured models enter asset/folder/project cooking through the existing
+        snapshot, incremental planner, staging and journaled publication. Native
+        reports establish actual emitted files and preserve warnings; collisions
+        and identity-changing reimports leave published output untouched.
+        Native-backed cases cover glTF/FBX, mixed project scopes, changed dependency
+        layouts, no-worker reuse and clean-copy logical identities.
+  - [ ] Complete Import/Reimport UI, source/output catalog and typed-use integration,
+        and full conversion/loaded-value/clean-copy qualification. Connect the
+        import UI to retained settings, source retention and shared publication; the browser still uses the older
         managed import entry point.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
@@ -842,7 +849,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 343/343 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 365/365 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 110/110; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI 252 cases validated (240 in the full run; four corrected query cases and eight new cooked-opening cases pass in the final 32-case browser/inspection/Cooking rerun); toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

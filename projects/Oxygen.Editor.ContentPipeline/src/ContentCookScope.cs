@@ -35,4 +35,7 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets sources whose validated products should be omitted from native manifests.</summary>
     internal System.Collections.Immutable.ImmutableHashSet<Uri> ReusableSources { get; init; } = [];
+
+    /// <summary>Gets prior source ownership used to reject imported-output collisions.</summary>
+    internal Incremental.CookProvenance? PreviousProvenance { get; init; }
 }

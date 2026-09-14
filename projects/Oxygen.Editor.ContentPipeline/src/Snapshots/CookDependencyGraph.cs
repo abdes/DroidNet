@@ -22,4 +22,8 @@ public sealed record CookDependencyGraph(
     ImmutableDictionary<Uri, ImmutableArray<string>> FileDependencies,
     ImmutableArray<Uri> Builtins,
     ImmutableArray<Uri> PublishedReferences,
-    ImmutableArray<DiagnosticRecord> Diagnostics);
+    ImmutableArray<DiagnosticRecord> Diagnostics)
+{
+    /// <summary>Gets source-revision dependency facts retained with successful imported products.</summary>
+    public ImmutableDictionary<Uri, Import.ImportedSourceDependencyState> ImportedSources { get; init; } = ImmutableDictionary<Uri, Import.ImportedSourceDependencyState>.Empty;
+}
