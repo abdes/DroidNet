@@ -91,7 +91,7 @@ public sealed partial class ContentPipelineService
             return CreateFailedCook(operation, targetKind, failure);
         }
 
-        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, cancellationToken).ConfigureAwait(false) is { } preflight)
+        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, resolveScopes().Any(static scope => scope.ImportReplacement is not null), cancellationToken).ConfigureAwait(false) is { } preflight)
         {
             return preflight;
         }
@@ -134,7 +134,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, CancellationToken cancellationToken)
+    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, bool replacingSource, CancellationToken cancellationToken)
     {
         if (primaryInputs.Length == 0)
         {
@@ -142,6 +142,11 @@ public sealed partial class ContentPipelineService
         }
 
         await this.RequireSavedDocumentsAsync(primaryInputs, cancellationToken).ConfigureAwait(false);
+        if (replacingSource)
+        {
+            return null;
+        }
+
         var missing = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs);
         return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
     }
@@ -167,6 +172,11 @@ public sealed partial class ContentPipelineService
         Import.ImportedSourceIndex imports,
         CancellationToken cancellationToken)
     {
+        if (resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
+        {
+            return await this.CaptureReplacementAsync(operation, replacement, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+        }
+
         CookDependencyGraph? graph = null;
         var capture = new CookInputSnapshotCapture(cookDocuments, this.cookCoordinator);
         var captured = await capture.CaptureAsync(

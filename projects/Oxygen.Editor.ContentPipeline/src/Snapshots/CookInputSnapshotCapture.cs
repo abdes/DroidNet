@@ -82,6 +82,21 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
         throw new IOException("Cook inputs changed during dependency discovery three times. Retry after source writes finish.");
     }
 
+    /// <summary>Computes the complete input identity for ordinary or replacement captures.</summary>
+    /// <param name="buildFingerprint">The compatible native producer identity.</param>
+    /// <param name="inputs">The final logical paths and captured hashes.</param>
+    /// <returns>The deterministic saved-input fingerprint.</returns>
+    internal static string ComputeIdentity(string buildFingerprint, ImmutableArray<CookSnapshotInput> inputs)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Build = buildFingerprint,
+            Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
+                .Select(static input => new { Uri = input.AssetUri?.AbsoluteUri, input.RelativePath, Hash = input.DiscoveryHash, input.IsAbsent }),
+        });
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
     private static void EnsureNewDirectory(string path)
     {
         if (Directory.Exists(path))
@@ -174,16 +189,5 @@ public sealed class CookInputSnapshotCapture(ICookDocumentRegistry documents, IC
         }
 
         return normalized.MoveToImmutable();
-    }
-
-    private static string ComputeIdentity(string buildFingerprint, ImmutableArray<CookSnapshotInput> inputs)
-    {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            Build = buildFingerprint,
-            Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
-                .Select(static input => new { Uri = input.AssetUri?.AbsoluteUri, input.RelativePath, Hash = input.DiscoveryHash, input.IsAbsent }),
-        });
-        return Convert.ToHexString(SHA256.HashData(bytes));
     }
 }

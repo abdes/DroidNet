@@ -962,6 +962,14 @@ only journal-verified private bundles. Dirty owners, ambiguous source ownership,
 unowned files in a replacement bundle and changed reviewed baselines block the
 replacement before mutation.
 
+Replacement keeps the existing source format, logical primary path, import
+policies and output namespace. Map incoming files relative to the primary so its
+references survive a filename change; reject layouts that would escape the owned
+bundle. Missing prior source files may be repaired from the incoming bundle.
+Retry retains the private candidate, including external buffers and candidates
+moved aside during rollback, without requiring the original external file again.
+Any change to the reviewed source baseline requires a new review.
+
 Published model provenance records a source/settings/dependency fingerprint
 independent of the producer fingerprint. Automatic Save and preview demand may
 regenerate unchanged model inputs for a new producer, but changed model inputs

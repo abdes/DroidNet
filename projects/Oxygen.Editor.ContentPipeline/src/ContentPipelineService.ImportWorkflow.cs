@@ -68,6 +68,12 @@ public sealed partial class ContentPipelineService
                 throw new InvalidOperationException("The project changed. Review the import destination again.");
             }
 
+            if (request.Replacement is { } replacement)
+            {
+                retainedUri = replacement.SourceUri;
+                return await this.CookReplacementAsync(operation, request, retainRecovery, cancellationToken).ConfigureAwait(false);
+            }
+
             var target = SceneImportTarget.Resolve(operation.Project, request.DestinationFolder, request.Name);
             var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
             var primary = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, retained.DirectoryRelativePath, retained.PrimaryRelativePath));

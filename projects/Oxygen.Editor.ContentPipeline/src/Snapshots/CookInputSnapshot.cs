@@ -23,4 +23,7 @@ public sealed record CookInputSnapshot(
 {
     /// <summary>Gets foreign cooked inputs held alongside the private authoring snapshot.</summary>
     public ImmutableArray<CookedDependencySnapshot> CookedDependencies { get; init; } = [];
+
+    /// <summary>Gets the reviewed retained-source baseline installed with these cooked outputs.</summary>
+    internal Publication.CookSourceReplacement? SourceReplacement { get; init; }
 }
