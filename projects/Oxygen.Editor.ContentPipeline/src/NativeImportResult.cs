@@ -11,4 +11,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <param name="Succeeded">Whether native import succeeded.</param>
 /// <param name="Diagnostics">Adapted native diagnostics.</param>
-public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<DiagnosticRecord> Diagnostics);
+public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<DiagnosticRecord> Diagnostics)
+{
+    /// <summary>Gets the exact files produced by source-model jobs, when native reporting was requested.</summary>
+    public IReadOnlyList<string>? OutputFiles { get; init; }
+}

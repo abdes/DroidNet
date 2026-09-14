@@ -9,7 +9,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Protects the compatible tool set through owned worker termination and drain.</summary>
 public sealed partial class ImportToolContentPipelineApi
 {
-    private static Task ReleaseAfterWorkerDrainAsync(Task drain, string inputPath, NativeArtifactLease? artifacts)
+    private static Task ReleaseAfterWorkerDrainAsync(Task drain, string inputPath, NativeArtifactLease? artifacts, string? additionalPath = null)
         => drain.ContinueWith(
             async completed =>
             {
@@ -20,6 +20,10 @@ public sealed partial class ImportToolContentPipelineApi
                 }
 
                 TryDeleteFile(inputPath);
+                if (additionalPath is not null)
+                {
+                    TryDeleteFile(additionalPath);
+                }
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,

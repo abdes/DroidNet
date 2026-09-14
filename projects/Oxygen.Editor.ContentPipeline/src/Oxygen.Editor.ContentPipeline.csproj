@@ -14,6 +14,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Import\Schemas\*.schema.json" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
