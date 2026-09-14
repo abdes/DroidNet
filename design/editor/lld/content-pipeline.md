@@ -970,6 +970,12 @@ Retry retains the private candidate, including external buffers and candidates
 moved aside during rollback, without requiring the original external file again.
 Any change to the reviewed source baseline requires a new review.
 
+Inspecting a retained model follows its declared output namespace and verified
+published ownership across authoring mounts. Source-folder inspection includes
+the output roots of matching retained models. An uncooked model reports its
+declared destination without starting native work for unrelated mounts; source
+associations require committed provenance and matching output bytes.
+
 Published model provenance records a source/settings/dependency fingerprint
 independent of the producer fingerprint. Automatic Save and preview demand may
 regenerate unchanged model inputs for a new producer, but changed model inputs

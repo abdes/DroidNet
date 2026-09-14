@@ -30,9 +30,20 @@ public sealed partial class ContentPipelineService
         });
         var token = cancellation.Token;
         token.ThrowIfCancellationRequested();
-        var requestedRoots = ResolveInspectionRoots(project, scopeUri);
         using var publicationRead = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, token).ConfigureAwait(false);
         var (provenance, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
+        if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
+        {
+            provenance = new(1, project.ProjectId, [], []);
+        }
+
+        var requestedRoots = ResolveInspectionRoots(project, scopeUri);
+        if (scopeUri is not null && requestedRoots.All(static root => !root.IsLocal))
+        {
+            var imports = await Import.ImportedSourceIndex.ReadAsync(project, cookDocuments, provenance, token).ConfigureAwait(false);
+            requestedRoots = ResolveImportedInspectionRoots(project, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
+        }
+
         var roots = new List<CookedRootReport>();
         foreach (var root in requestedRoots)
         {
@@ -115,6 +126,7 @@ public sealed partial class ContentPipelineService
         }
 
         return Matches(asset.VirtualPath, nativeScope)
+            || root.ImportedScopes.Any(scope => Matches(asset.VirtualPath, scope))
             || (root.IsLocal && asset.DescriptorRelativePath is { } relative && Matches(relative, nativeScope))
             || provenance.Any(item => string.Equals(AssetUriHelper.GetVirtualPath(item.CookedAssetUri), asset.VirtualPath, StringComparison.Ordinal)
                 && Matches(AssetUriHelper.GetVirtualPath(item.SourceAssetUri), root.Scope));
@@ -124,6 +136,24 @@ public sealed partial class ContentPipelineService
             var path = candidate.Trim('/');
             return string.Equals(path, scope, StringComparison.OrdinalIgnoreCase) || path.StartsWith(scope + "/", StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, Uri scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
+    {
+        var isModel = Path.GetExtension(scope.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
+        var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.OrdinalIgnoreCase))
+        {
+            if (!project.AuthoringMounts.Any(mount => !IsDerivedRootMount(mount) && string.Equals(mount.Name, group.Key, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var root = roots.GetValueOrDefault(group.Key) ?? new(group.Key, Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, group.Key, "container.index.bin"))!, AssetUriHelper.GetVirtualPath(scope).Trim('/'), IsLocal: false);
+            roots[group.Key] = root with { ImportedScopes = [.. group.Select(static path => path.Trim('/'))] };
+        }
+
+        return roots.Values.ToArray();
     }
 
     private async Task<CookedRootReport> InspectRootAsync(InspectionRoot root, CookProvenance provenance, bool validate, CancellationToken cancellationToken)
@@ -180,5 +210,8 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private sealed record InspectionRoot(string Name, string Path, string Scope, bool IsLocal);
+    private sealed record InspectionRoot(string Name, string Path, string Scope, bool IsLocal)
+    {
+        public IReadOnlyList<string> ImportedScopes { get; init; } = [];
+    }
 }
