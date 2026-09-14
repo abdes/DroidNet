@@ -1354,6 +1354,17 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 
     ImportManifestJob manifest_job {};
     manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
+    if (job.contains("layout")) {
+      const auto& layout = job["layout"];
+      if (!layout.is_object()) {
+        error_stream << "ERROR: job.layout must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyLayoutOverrides(
+            layout, manifest_job.loose_cooked_layout, error_stream)) {
+        return std::nullopt;
+      }
+    }
     manifest_job.texture = manifest.defaults.texture;
     manifest_job.fbx = manifest.defaults.fbx;
     manifest_job.gltf = manifest.defaults.gltf;

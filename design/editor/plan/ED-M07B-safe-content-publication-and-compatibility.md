@@ -116,6 +116,9 @@ Serialize overlapping requests and scope callbacks to project lifetime.
 Native admission must include submissions awaiting import-thread dispatch.
 Saturation defers unsubmitted jobs; it must not turn accepted work into queue-full
 failures. Batch completion and submission share synchronized job bookkeeping.
+Preserve authored descriptor folders through per-job native layout overrides in
+the shared staging root. Same-named materials in different folders must retain
+distinct native identities, and geometry/scene references must resolve those paths.
 
 Implement the workflow LLD section 5 incremental planner: persisted dependency
 fingerprints and validated-output reuse, missing/corrupt product invalidation,

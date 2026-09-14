@@ -17,4 +17,19 @@ public sealed record ContentImportLayout(
     [JsonPropertyName("descriptors_dir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DescriptorsDirectory { get; init; }
+
+    /// <summary>Gets the mount-relative folder for material descriptors.</summary>
+    [JsonPropertyName("materials_subdir")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MaterialsDirectory { get; init; }
+
+    /// <summary>Gets the mount-relative folder for geometry descriptors.</summary>
+    [JsonPropertyName("geometry_subdir")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GeometryDirectory { get; init; }
+
+    /// <summary>Gets the mount-relative folder for scene descriptors.</summary>
+    [JsonPropertyName("scenes_subdir")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ScenesDirectory { get; init; }
 }

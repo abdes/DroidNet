@@ -146,7 +146,35 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Source: NormalizeSource(input.SourceRelativePath),
             DependsOn: dependsOn,
             Output: null,
-            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)));
+            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
+        {
+            Layout = CreateJobLayout(input),
+        };
+
+    private static ContentImportLayout? CreateJobLayout(ContentCookInput input)
+    {
+        if (input.OutputVirtualPath is not { } output)
+        {
+            return null;
+        }
+
+        var mount = ContentPipelinePaths.GetVirtualMountRoot(input.MountName);
+        if (!output.StartsWith(mount + "/", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The descriptor output must remain within its authoring mount.", nameof(input));
+        }
+
+        var relative = output[(mount.Length + 1)..];
+        var folder = Path.GetDirectoryName(relative)?.Replace('\\', '/') ?? string.Empty;
+        var layout = new ContentImportLayout(mount) { DescriptorsDirectory = string.Empty };
+        return input.Kind switch
+        {
+            ContentCookAssetKind.Material => layout with { MaterialsDirectory = folder },
+            ContentCookAssetKind.Geometry => layout with { GeometryDirectory = folder },
+            ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
+            _ => null,
+        };
+    }
 
     private static string GetJobType(ContentCookAssetKind kind)
         => kind switch

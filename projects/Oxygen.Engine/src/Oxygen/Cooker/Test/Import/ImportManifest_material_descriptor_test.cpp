@@ -21,7 +21,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
 
 auto MakeManifestPath(const std::string_view stem) -> std::filesystem::path
@@ -98,9 +97,12 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
   ASSERT_TRUE(request->material_descriptor.has_value());
 
-  // Descriptor-level content_hashing overrides manifest defaults/job settings.
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  // Descriptor intent overrides defaults; Release enforces content hashing.
+#if defined(NDEBUG)
+  EXPECT_TRUE(request->options.with_content_hashing);
+#else
+  EXPECT_FALSE(request->options.with_content_hashing);
+#endif
 
   const auto normalized
     = json::parse(request->material_descriptor->normalized_descriptor_json);
@@ -268,6 +270,69 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   EXPECT_TRUE(
     request_errors.str().find("material.descriptor.schema_validation_failed")
     != std::string::npos);
+}
+
+//! Per-job folders preserve nested identities without changing the shared
+//! container.
+NOLINT_TEST(
+  ImportManifestMaterialDescriptorTest, JobLayoutOverridesRetainGlobalDefaults)
+{
+  const auto path = MakeManifestPath("job_layout_overrides");
+  WriteTextFile(
+    path.parent_path() / "shared.material.json", R"({"name":"Shared"})");
+  const json document = { { "version", 1 },
+    { "output", (path.parent_path() / ".cooked").generic_string() },
+    { "layout",
+      { { "virtual_mount_root", "/Content" },
+        { "descriptors_dir", "Descriptors" },
+        { "materials_subdir", "Common" } } },
+    { "jobs",
+      json::array({ { { "type", "material-descriptor" },
+                      { "source", "shared.material.json" },
+                      { "layout",
+                        { { "descriptors_dir", "" },
+                          { "materials_subdir", "Materials/A" } } } },
+        { { "type", "material-descriptor" },
+          { "source", "shared.material.json" },
+          { "layout",
+            { { "descriptors_dir", "" },
+              { "materials_subdir", "Materials/B" } } } },
+        { { "type", "material-descriptor" },
+          { "source", "shared.material.json" } } }) } };
+  WriteTextFile(path, document.dump());
+  std::ostringstream errors;
+  const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  const auto requests = manifest->BuildRequests(errors);
+  ASSERT_EQ(requests.size(), 3U) << errors.str();
+  EXPECT_EQ(requests[0].loose_cooked_layout.MaterialVirtualPath("Shared"),
+    "/Content/Materials/A/Shared.omat");
+  EXPECT_EQ(requests[1].loose_cooked_layout.MaterialVirtualPath("Shared"),
+    "/Content/Materials/B/Shared.omat");
+  EXPECT_EQ(requests[2].loose_cooked_layout.MaterialVirtualPath("Shared"),
+    "/Content/Descriptors/Common/Shared.omat");
+  EXPECT_EQ(requests[0].cooked_root, requests[1].cooked_root);
+  EXPECT_EQ(requests[0].loose_cooked_layout.resources_dir,
+    requests[2].loose_cooked_layout.resources_dir);
+}
+
+//! Malformed job overrides are rejected before job construction.
+NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
+{
+  const auto path = MakeManifestPath("invalid_job_layout");
+  for (const auto& layout :
+    { json("invalid"), json { { "materials_subdir", 12 } } }) {
+    WriteTextFile(path,
+      json { { "version", 1 },
+        { "output", (path.parent_path() / ".cooked").generic_string() },
+        { "jobs",
+          json::array({ { { "type", "material-descriptor" },
+            { "source", "shared.material.json" }, { "layout", layout } } }) } }
+        .dump());
+    std::ostringstream errors;
+    EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
+    EXPECT_FALSE(errors.str().empty());
+  }
 }
 
 } // namespace
