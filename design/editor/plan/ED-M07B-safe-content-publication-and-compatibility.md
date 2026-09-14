@@ -207,9 +207,12 @@ inputs and retains their current producer hashes through worker termination and
 reader drain. Project Browser and safe saves remain available on mismatch.
 
 The native `content_policy: "static-scalar"` manifest option validates both
-parsed source formats before emission, rejecting unsupported source features
-and ambiguous FBX units/axes. Source discovery, retained settings, editor import
-integration and clean-copy reproduction from pipeline section 17 remain open.
+parsed source formats before emission. Preserve REQ-009 perspective cameras and
+directional lights while rejecting excluded component types and source features
+and ambiguous FBX units/axes. Native source inspection and its managed adapter
+now report coordinates, supported features and external dependencies without
+cooking. Coherent bundle discovery, retained settings, editor import integration
+and clean-copy reproduction from pipeline section 17 remain open.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and

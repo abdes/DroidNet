@@ -866,8 +866,9 @@ axis conversion, winding, and resulting bounds. Unknown/ambiguous FBX units or
 axis metadata is rejected rather than guessed. A unit cube, oriented triangle,
 and nonuniform transform fixture prove each conversion.
 
-No animation, skinning, morphs, physics, scripts, or unsupported light/camera
-components enter the qualified scene. Detect such required content before
+Perspective cameras and directional lights are included under REQ-009.
+Orthographic cameras, point/spot lights, animation, skinning, morphs, physics
+and scripts do not enter the qualified scene. Detect such required content before
 publication and return a precise unsupported-content result while preserving the
 source. Import must not appear successful by silently dropping those features.
 Existing imported texture references may be preserved/read-only, but texture
@@ -882,6 +883,21 @@ Both native adapters validate the parsed source before creating pipeline work,
 including when loading captured in-memory inputs. Ordinary engine imports keep
 the default policy. This is part of the existing ImportTool/native transaction,
 not a separate qualification build or startup operation.
+
+`Oxygen.Cooker`'s `InspectSceneSource` and ImportTool `inspect-source` report parsed
+source counts, native coordinate conversion facts, supported-content diagnostics
+and decoded external buffer paths through the versioned scene-source-inspection
+schema. Inspection emits no cooked content and does not load external glTF
+buffers; supported FBX has no external scalar/geometry dependencies. The managed
+adapter validates the matched schema and retains worker/artifact ownership
+through cancellation and termination failure.
+
+Coherent bundle discovery must inspect a private copy of the primary file and
+use that copy's hash when capturing the complete original file set. Relative
+paths stay relative to the primary source; embedded data needs no extra file.
+Missing references are reported by retention, and unsupported source content
+cannot enter publication. The report destination cannot overwrite the source,
+its hard-link alias, or a declared buffer.
 
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
