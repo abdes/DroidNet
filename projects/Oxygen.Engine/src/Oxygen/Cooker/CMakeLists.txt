@@ -267,6 +267,8 @@ set(
   "Import/Internal/fbx/ufbx.c"
   "Import/Internal/gltf/cgltf.cpp"
   "Import/Internal/gltf/GltfAdapter.cpp"
+  "Import/Internal/StaticScalarSourceValidation.cpp"
+  "Import/Internal/StaticScalarSourceValidation.h"
   "Import/Internal/ImageDecode.cpp"
   "Import/Internal/ImageProcessing.cpp"
   "Import/Internal/ImportEventLoop.cpp"

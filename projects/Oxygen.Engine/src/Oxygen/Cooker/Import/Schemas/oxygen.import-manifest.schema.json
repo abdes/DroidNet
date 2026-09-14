@@ -619,6 +619,9 @@
                     },
                     "additionalProperties": false
                 },
+                "content_policy": {
+                    "enum": ["default", "static-scalar"]
+                },
                 "unit_policy": {
                     "enum": [
                         "normalize",
@@ -998,6 +1001,9 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "content_policy": {
+                    "enum": ["default", "static-scalar"]
                 },
                 "unit_policy": {
                     "enum": [

@@ -875,6 +875,14 @@ creation/editing and general textured-import qualification are outside V0.1.
 Texture-bearing imports are rejected by the qualified scalar-only entry point
 with an explanation; existing read-only references are not stripped on save.
 
+The native scene import request carries `SceneContentPolicy::kStaticScalar`;
+manifest scene options select it with `content_policy: "static-scalar"`.
+The editor persists and supplies that policy on initial import and reimport.
+Both native adapters validate the parsed source before creating pipeline work,
+including when loading captured in-memory inputs. Ordinary engine imports keep
+the default policy. This is part of the existing ImportTool/native transaction,
+not a separate qualification build or startup operation.
+
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
 facts; name/ID changes cannot silently redirect existing scene references. File

@@ -286,6 +286,7 @@ m_gtest_program(
     "Import/AsyncImporterFullTestBase.cpp"
     "Import/AsyncImporterFullTestBase.h"
     "Import/AsyncGltfImporter_test.cpp"
+    "Import/StaticScalarImport_test.cpp"
 )
 
 m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")

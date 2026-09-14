@@ -27,6 +27,9 @@ struct SceneImportSettings {
 
   bool with_content_hashing = true;
 
+  //! Optional source validation policy: default or static-scalar.
+  std::string content_policy;
+
   std::string unit_policy;
   float unit_scale = 1.0F;
   bool unit_scale_set = false;

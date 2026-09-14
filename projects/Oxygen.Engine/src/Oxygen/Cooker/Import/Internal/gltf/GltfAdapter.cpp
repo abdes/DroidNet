@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
+#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
@@ -1731,6 +1732,15 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
+  if (input.request.options.scene_content_policy
+      == SceneContentPolicy::kStaticScalar
+    && !internal::ValidateStaticScalarSource(
+      *data, input.source_id_prefix, result.diagnostics)) {
+    impl_->data_owner.reset();
+    result.success = false;
+    return result;
+  }
+
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
   return result;
@@ -1749,6 +1759,15 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
       result.diagnostics.push_back(MakeErrorDiagnostic("gltf.parse_failed",
         "glTF parse failed without diagnostics", input.source_id_prefix, ""));
     }
+    impl_->data_owner.reset();
+    result.success = false;
+    return result;
+  }
+
+  if (input.request.options.scene_content_policy
+      == SceneContentPolicy::kStaticScalar
+    && !internal::ValidateStaticScalarSource(
+      *data, input.source_id_prefix, result.diagnostics)) {
     impl_->data_owner.reset();
     result.success = false;
     return result;

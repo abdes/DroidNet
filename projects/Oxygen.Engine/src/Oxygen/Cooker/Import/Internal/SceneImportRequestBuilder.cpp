@@ -143,6 +143,13 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
 
   auto options = request.options;
   options.import_content = BuildContentFlags(settings);
+  if (settings.content_policy == "static-scalar") {
+    options.scene_content_policy = SceneContentPolicy::kStaticScalar;
+  } else if (!settings.content_policy.empty()
+    && settings.content_policy != "default") {
+    error_stream << "ERROR: invalid content_policy value\n";
+    return std::nullopt;
+  }
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
   options.with_content_hashing
     = EffectiveContentHashingEnabled(settings.with_content_hashing);

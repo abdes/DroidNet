@@ -206,8 +206,10 @@ only the normal Interop rebuild. Cooking independently checks its tool/schema
 inputs and retains their current producer hashes through worker termination and
 reader drain. Project Browser and safe saves remain available on mismatch.
 
-Implement the supported glTF/FBX static/scalar validation and retained import
-settings from pipeline section 17. Clean-copy reproduction remains open.
+The native `content_policy: "static-scalar"` manifest option validates both
+parsed source formats before emission, rejecting unsupported source features
+and ambiguous FBX units/axes. Source discovery, retained settings, editor import
+integration and clean-copy reproduction from pipeline section 17 remain open.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and
