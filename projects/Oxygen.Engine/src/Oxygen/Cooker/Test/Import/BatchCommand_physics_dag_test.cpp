@@ -174,6 +174,44 @@ private:
   std::unique_ptr<AsyncImportService> service_ {};
 };
 
+//! Large manifests defer saturated submissions and emit every independent
+//! asset.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  LargeIndependentMaterialBatchRespectsAdmissionBackpressure)
+{
+  const auto root = MakeScenarioDir("material_admission_backpressure");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  std::ostringstream manifest;
+  manifest << R"({"version":1,"output":")" << cooked_root.generic_string()
+           << R"(","jobs":[)";
+  constexpr size_t kMaterialCount = 1000;
+  for (size_t index = 0; index < kMaterialCount; ++index) {
+    const auto name = std::string("M") + std::to_string(index);
+    const auto source = std::string("Materials/") + name + ".material.json";
+    WriteTextFile(root / source, std::string(R"({"name":")") + name + R"("})");
+    if (index != 0U) {
+      manifest << ',';
+    }
+    manifest << R"({"type":"material-descriptor","source":")" << source
+             << R"("})";
+  }
+  manifest << "]}";
+  WriteTextFile(manifest_path, manifest.str());
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_TRUE(result.has_value()) << Messages();
+  EXPECT_EQ(Messages().find("import.queue_full"), std::string::npos);
+  size_t materials = 0;
+  for (const auto& entry :
+    std::filesystem::recursive_directory_iterator(cooked_root)) {
+    if (entry.path().extension() == ".omat") {
+      ++materials;
+    }
+  }
+  EXPECT_EQ(materials, kMaterialCount);
+}
+
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarUnresolvedInferredRefsEmitDependencyUnresolvedDiagnostic)
 {

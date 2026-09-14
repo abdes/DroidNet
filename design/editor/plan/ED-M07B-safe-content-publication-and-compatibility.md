@@ -113,6 +113,9 @@ Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and
 import settings under coordinated reads, and pass snapshot paths to native jobs.
 Serialize overlapping requests and scope callbacks to project lifetime.
+Native admission must include submissions awaiting import-thread dispatch.
+Saturation defers unsubmitted jobs; it must not turn accepted work into queue-full
+failures. Batch completion and submission share synchronized job bookkeeping.
 
 Implement the workflow LLD section 5 incremental planner: persisted dependency
 fingerprints and validated-output reuse, missing/corrupt product invalidation,

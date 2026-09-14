@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 
 #include <Oxygen/Base/Macros.h>
@@ -205,6 +206,10 @@ struct AsyncImportService::Impl {
 
   //! Next job ID to assign.
   std::atomic<uint64_t> next_job_id_ { 1 };
+
+  //! Accepted jobs, including submissions not yet dispatched to the import
+  //! thread.
+  std::atomic<size_t> admitted_jobs_ { 0 };
 
   //! Lightweight cancellation tracking only.
   mutable std::mutex cancel_events_mutex_;
@@ -524,6 +529,20 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     }
   }
 
+  auto admitted = impl_->admitted_jobs_.load(std::memory_order_relaxed);
+  do {
+    if (admitted >= Impl::kImportChannelCapacity) {
+      return std::nullopt;
+    }
+  } while (!impl_->admitted_jobs_.compare_exchange_weak(admitted, admitted + 1,
+    std::memory_order_acq_rel, std::memory_order_relaxed));
+  auto posted = false;
+  const auto admission = ScopeGuard([&]() noexcept {
+    if (!posted) {
+      impl_->admitted_jobs_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+  });
+
   auto cancel_event = std::make_shared<co::Event>();
 
   DLOG_F(
@@ -537,6 +556,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
       std::scoped_lock lock(impl_->cancel_events_mutex_);
       impl_->cancel_events_.erase(job_id);
     }
+
+    impl_->admitted_jobs_.fetch_sub(1, std::memory_order_acq_rel);
 
     // Invoke user callback
     if (on_complete) {
@@ -656,15 +677,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     .cancel_event = cancel_event,
   };
 
-  if (!impl_->async_importer_->CanAcceptJob()) {
-    LOG_F(WARNING, "Submit rejected: channel full for job {}", job_id);
-    {
-      std::scoped_lock lock(impl_->cancel_events_mutex_);
-      impl_->cancel_events_.erase(job_id);
-    }
-    return std::nullopt;
-  }
-
   // Submit directly to AsyncImporter via event loop post
   // The event loop ensures this runs on the import thread
   impl_->event_loop_->Post(
@@ -686,6 +698,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
         wrapped_complete(entry.job_id, report);
       }
     });
+  posted = true;
 
   return job_id;
 }

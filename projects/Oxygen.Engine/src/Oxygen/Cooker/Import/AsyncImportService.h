@@ -204,10 +204,12 @@ public:
           report phase and item updates. Invoked on the same thread as
           `on_complete`. Can be `nullptr`.
    @param concurrency_override Optional overrides for per-pipeline concurrency.
-   @return Valid job ID on success, or `std::nullopt` if rejected
-           due to: shutdown, importer not ready, unknown file format, or
-           internal failure. When `std::nullopt` is returned, callbacks are
-           never invoked.
+   @return Job ID on acceptance; `std::nullopt` on rejection.
+
+   Rejection covers shutdown, readiness, format, admission capacity and internal
+   failures. Capacity includes accepted jobs waiting for import-thread dispatch.
+   Callers may retry saturated submissions after accepted jobs complete.
+   Rejected submissions never invoke callbacks.
 
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
@@ -230,8 +232,10 @@ public:
    @param on_progress Optional progress callback invoked periodically.
    @param job_factory Factory invoked to construct the job instance.
    @param concurrency_override Optional overrides for per-pipeline concurrency.
-   @return Valid job ID on success, or `std::nullopt` if
-           rejected due to shutdown, importer not ready, or factory failure.
+   @return Job ID on acceptance; `std::nullopt` on rejection.
+
+   Rejection covers shutdown, readiness, admission capacity and factory failure.
+   Rejected submissions never invoke callbacks.
 
   @see CancelJob, CancelAll, ImportRequest, ImportReport, ProgressEvent
   */
