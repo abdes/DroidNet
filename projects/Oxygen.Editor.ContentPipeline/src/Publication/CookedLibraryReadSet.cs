@@ -25,20 +25,17 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private readonly List<(string name, string message)> failures = [];
     private IReadOnlyList<CookedContentSource> order = [];
     private string projectRoot = string.Empty;
+    private ProjectContext project = null!;
+    private Func<Uri, ContentCookInput?>? resolveImported;
 
     /// <summary>Reads library indexes and protects the full container inputs without starting a native worker.</summary>
     /// <param name="project">The project declaring the ordered libraries.</param>
-    /// <param name="graph">The saved dependency closure.</param>
     /// <param name="cancellationToken">Cancels acquisition and hashing.</param>
+    /// <param name="resolveImported">Resolves retained project owners of imported outputs.</param>
     /// <returns>The selected library readers and lookup facts.</returns>
-    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CookDependencyGraph graph, CancellationToken cancellationToken)
+    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<Uri, ContentCookInput?>? resolveImported = null)
     {
-        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot };
-        if (graph.NativeReferences.Values.All(static references => references.IsEmpty) && graph.PublishedReferences.IsEmpty)
-        {
-            return result;
-        }
-
+        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot, project = project, resolveImported = resolveImported };
         try
         {
             foreach (var source in result.order.Where(static source => source.Kind == CookedContentSourceKind.LocalFolder))
@@ -99,44 +96,58 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         };
     }
 
-    /// <summary>Inspects reachable libraries on cache misses before native consumers execute.</summary>
-    /// <param name="graph">The saved authoring references.</param>
-    /// <param name="inspector">The native dependency decoder.</param>
-    /// <param name="operationRoot">Private native scratch space.</param>
-    /// <param name="artifacts">Borrowed native artifact ownership.</param>
-    /// <param name="cancellationToken">Cancels metadata inspection.</param>
-    /// <returns>Completion after reachable dependency reports are cached.</returns>
-    public async Task PopulateDependenciesAsync(CookDependencyGraph graph, ICookedDependencyInspector inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    /// <summary>Tests whether the saved order resolves this identity to a library instead of a project source.</summary>
+    /// <param name="uri">The authored or native identity.</param>
+    /// <returns>Whether dependency discovery should retain the cooked identity.</returns>
+    public bool IsLibraryPreferred(Uri uri)
     {
-        var pending = new Queue<(Root root, AssetRecord asset)>();
-        foreach (var uri in graph.NativeReferences.Values.SelectMany(static values => values).Concat(graph.PublishedReferences).Distinct())
-        {
-            var match = this.FindUri(uri);
-            if (match.asset is not null)
-            {
-                pending.Enqueue(match);
-            }
-        }
+        var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+        var (root, asset) = this.FindUri(nativeUri);
+        return asset is not null && !this.ProjectSourceWins(nativeUri, root);
+    }
 
+    /// <summary>Expands native references before coherent saved-input capture, using cached reports for status reads.</summary>
+    /// <param name="references">References read from the current saved source.</param>
+    /// <param name="inspector">The native decoder for an owned cook, or null for process-free status.</param>
+    /// <param name="operationRoot">Private scratch space for native inspection.</param>
+    /// <param name="artifacts">Borrowed native artifact ownership.</param>
+    /// <param name="cancellationToken">Cancels dependency expansion.</param>
+    /// <returns>Direct and transitive identities for ordinary authored-owner resolution.</returns>
+    public async Task<IReadOnlyList<Uri>> ExpandReferencesAsync(IReadOnlyList<Uri> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    {
+        var closure = references.ToHashSet();
+        var pending = new Queue<Uri>(references);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (pending.TryDequeue(out var current))
+        while (pending.TryDequeue(out var uri))
         {
-            var key = current.asset.Cooked!.AssetKey.ToString();
-            if (!visited.Add(key))
+            var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+            var (root, asset) = this.FindUri(nativeUri);
+            if (asset is null || this.ProjectSourceWins(nativeUri, root) || !visited.Add(asset.Cooked!.AssetKey.ToString()))
             {
                 continue;
             }
 
-            current.root.Dependencies ??= await CookedDependencyCache.EnsureAsync(this.projectRoot, current.root.Path, current.root.Fingerprint, current.root.Assets, inspector, operationRoot, cancellationToken, artifacts).ConfigureAwait(false);
-            foreach (var dependency in current.root.Dependencies.Assets[key].Dependencies)
+            if (root.Dependencies is null && inspector is not null)
             {
-                var resolved = this.FindKey(dependency);
-                if (resolved.asset is not null)
+                root.Dependencies = await CookedDependencyCache.EnsureAsync(this.projectRoot, root.Path, root.Fingerprint, root.Assets, inspector, operationRoot, cancellationToken, artifacts).ConfigureAwait(false);
+            }
+
+            if (root.Dependencies is not { } metadata)
+            {
+                continue;
+            }
+
+            foreach (var key in metadata.Assets[asset.Cooked!.AssetKey.ToString()].Dependencies)
+            {
+                var resolved = this.FindKey(key);
+                if (resolved.asset is not null && closure.Add(resolved.asset.Uri))
                 {
-                    pending.Enqueue(resolved);
+                    pending.Enqueue(resolved.asset.Uri);
                 }
             }
         }
+
+        return [.. closure];
     }
 
     /// <summary>Attaches selected library inputs and reports required references that remain unavailable.</summary>
@@ -160,8 +171,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         foreach (var uri in requested)
         {
             var match = this.roots.AsEnumerable().Reverse().Select(root => (root, record: root.Assets.FirstOrDefault(record => record.Uri == uri))).FirstOrDefault(static item => item.record is not null);
-            var owned = graph.Assets.Any(input => string.Equals(input.OutputVirtualPath, uri.AbsolutePath, StringComparison.Ordinal)
-                || (input.Kind == ContentCookAssetKind.ForeignSource && input.OutputVirtualPath is { } prefix && uri.AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)));
+            var owned = HasProjectOwner(graph, uri);
             if (match.record?.Cooked is { } asset)
             {
                 var libraryPriority = priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.OrdinalIgnoreCase)).index;
@@ -251,6 +261,10 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
     }
 
+    private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
+        => graph.Assets.Any(input => string.Equals(input.OutputVirtualPath, uri.AbsolutePath, StringComparison.Ordinal)
+            || (input.Kind == ContentCookAssetKind.ForeignSource && input.OutputVirtualPath is { } prefix && uri.AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)));
+
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };
 
@@ -293,6 +307,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     }
 
                     var dependency = resolved.asset.Uri;
+                    if (HasProjectOwner(graph, dependency) && this.ProjectHasPriority(resolved.root))
+                    {
+                        _ = closure.Add(dependency);
+                        continue;
+                    }
+
                     bindings[dependency] = new(dependency, resolved.root.Name, resolved.root.Path, key, asset.AssetType, resolved.root.Fingerprint);
                     if (closure.Add(dependency))
                     {
@@ -306,6 +326,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
         return references.ToImmutable();
     }
+
+    private bool ProjectHasPriority(Root root)
+        => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
+            || (source.Kind == CookedContentSourceKind.LocalFolder && string.Equals(source.Name, root.Name, StringComparison.OrdinalIgnoreCase))).Kind == CookedContentSourceKind.ProjectOutput;
+
+    private bool ProjectSourceWins(Uri uri, Root root)
+        => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
+            || (CookInputResolver.IsAuthoringUri(this.project, uri)
+                && File.Exists(CookInputResolver.Resolve(this.project, uri, ContentCookInputRole.Dependency).SourceAbsolutePath)));
 
     private (Root root, AssetRecord asset) FindUri(Uri uri)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => asset.Uri == uri).Select(asset => (root, asset))).FirstOrDefault();

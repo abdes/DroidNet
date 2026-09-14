@@ -170,6 +170,7 @@ public sealed partial class ContentPipelineService
         Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts,
         Oxygen.Editor.ContentPipeline.Incremental.CookProvenance previous,
         Import.ImportedSourceIndex imports,
+        Publication.CookedLibraryReadSet libraries,
         CancellationToken cancellationToken)
     {
         if (resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
@@ -189,7 +190,9 @@ public sealed partial class ContentPipelineService
                     cookDocuments,
                     importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
                     discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken),
-                    resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency))
+                    resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
+                    preferCookedReference: libraries.IsLibraryPreferred,
+                    expandCookedReferences: (references, queryToken) => libraries.ExpandReferencesAsync(references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, queryToken))
                     .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;

@@ -136,15 +136,10 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
-        var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
-        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, graph, cancellationToken).ConfigureAwait(false);
+        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency)).ConfigureAwait(false);
         try
         {
-            if (this.engineContentPipelineApi is Inspection.ICookedDependencyInspector inspector)
-            {
-                await libraries.PopulateDependenciesAsync(graph, inspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, cancellationToken).ConfigureAwait(false);
-            }
-
+            var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);
             graph = libraries.Apply(graph);
             if (HasError(graph.Diagnostics))
             {

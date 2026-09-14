@@ -577,7 +577,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         binary identity across report/index representations. Corrupt cache entries
         become misses, status reads start no native processes, and failed worker
         termination retains readers and the project writer until drain. Native
-        loader suites pass 39/39 in Debug and Release; ContentPipeline passes 432/432.
+        loader suites pass 39/39 in Debug and Release. Project material overrides
+        reached through indexed library dependencies now enter saved-input capture
+        and cooking; saved priority selects the winner, and shadowed versions do
+        not invalidate consumers. Both orders and status transitions pass; the
+        ContentPipeline suite passes 434/434.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
