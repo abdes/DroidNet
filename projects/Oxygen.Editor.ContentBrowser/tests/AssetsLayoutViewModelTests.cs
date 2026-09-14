@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -9,13 +10,41 @@ namespace Oxygen.Editor.ContentBrowser.Tests;
 [TestClass]
 public sealed class AssetsLayoutViewModelTests
 {
+    /// <summary>A renamed derived mount filters cooked assets while an ordinary Cooked folder remains authored.</summary>
+    [TestMethod]
+    public void RenamedCookedMountUsesItsSavedAlias()
+    {
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
+            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat.json",
+            ["/Published/Content/Materials"],
+            hasActiveProject: true,
+            cookedAbsolutePath: "/Content/Materials/Red.omat",
+            hasCookedProjection: true,
+            cookedFolders: ["/Published"]).Should().BeTrue();
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
+            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat.json",
+            ["/Published/Content/Materials"],
+            hasActiveProject: true,
+            cookedAbsolutePath: "/Content/Materials/Red.omat",
+            hasCookedProjection: false,
+            cookedFolders: ["/Published"]).Should().BeFalse();
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
+            "/Cooked/Red.omat.json",
+            "/Cooked/Red.omat.json",
+            ["/Cooked"],
+            hasActiveProject: true,
+            cookedFolders: ["/Published"]).Should().BeTrue();
+    }
+
     [TestMethod]
     public void NormalizeSelectedFolders_WhenRootAndConcreteFolderAreSelected_ShouldDropRoot()
     {
         var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/", "/Content/Materials"]);
 
-        Assert.AreEqual(1, folders.Count);
-        Assert.AreEqual("/Content/Materials", folders[0]);
+        _ = folders.Should().ContainSingle();
+        _ = folders[0].Should().Be("/Content/Materials");
     }
 
     [TestMethod]
@@ -23,16 +52,16 @@ public sealed class AssetsLayoutViewModelTests
     {
         var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/", "/Content/Materials"]);
 
-        Assert.IsTrue(AssetsLayoutViewModel.IsInSelectedFolders(
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Red.omat.json",
             "/Content/Materials/Red.omat.json",
             folders,
-            hasActiveProject: true));
-        Assert.IsFalse(AssetsLayoutViewModel.IsInSelectedFolders(
+            hasActiveProject: true).Should().BeTrue();
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Scenes/Default.oscene.json",
             "/Content/Scenes/Default.oscene.json",
             folders,
-            hasActiveProject: true));
+            hasActiveProject: true).Should().BeFalse();
     }
 
     [TestMethod]
@@ -40,20 +69,22 @@ public sealed class AssetsLayoutViewModelTests
     {
         var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/Cooked"]);
 
-        Assert.IsTrue(AssetsLayoutViewModel.IsInSelectedFolders(
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Red.omat.json",
             "/Content/Materials/Red.omat.json",
             folders,
             hasActiveProject: true,
             cookedAbsolutePath: "/Content/Materials/Red.omat",
-            hasCookedProjection: true));
-        Assert.IsFalse(AssetsLayoutViewModel.IsInSelectedFolders(
+            hasCookedProjection: true,
+            cookedFolders: ["/Cooked"]).Should().BeTrue();
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Uncooked.omat.json",
             "/Content/Materials/Uncooked.omat.json",
             folders,
             hasActiveProject: true,
             cookedAbsolutePath: "/Content/Materials/Uncooked.omat",
-            hasCookedProjection: false));
+            hasCookedProjection: false,
+            cookedFolders: ["/Cooked"]).Should().BeFalse();
     }
 
     [TestMethod]
@@ -61,19 +92,21 @@ public sealed class AssetsLayoutViewModelTests
     {
         var folders = AssetsLayoutViewModel.NormalizeSelectedFolders(["/Cooked/Content/Materials"]);
 
-        Assert.IsTrue(AssetsLayoutViewModel.IsInSelectedFolders(
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Red.omat.json",
             "/Content/Materials/Red.omat.json",
             folders,
             hasActiveProject: true,
             cookedAbsolutePath: "/Content/Materials/Red.omat",
-            hasCookedProjection: true));
-        Assert.IsFalse(AssetsLayoutViewModel.IsInSelectedFolders(
+            hasCookedProjection: true,
+            cookedFolders: ["/Cooked"]).Should().BeTrue();
+        _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Scenes/Main.oscene.json",
             "/Content/Scenes/Main.oscene.json",
             folders,
             hasActiveProject: true,
             cookedAbsolutePath: "/Content/Scenes/Main.oscene",
-            hasCookedProjection: true));
+            hasCookedProjection: true,
+            cookedFolders: ["/Cooked"]).Should().BeFalse();
     }
 }

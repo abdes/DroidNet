@@ -42,6 +42,7 @@ public abstract partial class AssetsLayoutViewModel(
     private bool isReplacingRows;
     private bool hasSnapshot;
     private Uri? pendingReveal;
+    private string[] projectCookedFolders = [];
 
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
@@ -202,6 +203,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// <param name="hasActiveProject">Whether the browser owns a project.</param>
     /// <param name="cookedAbsolutePath">The known cooked virtual path.</param>
     /// <param name="hasCookedProjection">Whether a cooked projection exists.</param>
+    /// <param name="cookedFolders">The saved virtual mount paths exposing project output.</param>
     /// <returns>Whether the asset belongs to this scope.</returns>
     internal static bool IsInSelectedFolders(
         string displayPath,
@@ -209,7 +211,8 @@ public abstract partial class AssetsLayoutViewModel(
         IReadOnlyCollection<string> selectedFolders,
         bool hasActiveProject,
         string? cookedAbsolutePath = null,
-        bool hasCookedProjection = false)
+        bool hasCookedProjection = false,
+        IReadOnlyCollection<string>? cookedFolders = null)
     {
         if (selectedFolders.Count == 0
             || selectedFolders.Contains(".", StringComparer.OrdinalIgnoreCase)
@@ -225,7 +228,7 @@ public abstract partial class AssetsLayoutViewModel(
 
         foreach (var selected in selectedFolders)
         {
-            if (TryMapCookedSelectionToRuntimePath(selected, out var cookedSelection))
+            if (ProjectCookedFolders.TryMap(selected, cookedFolders ?? [], out var cookedSelection))
             {
                 if (hasCookedProjection
                     && (string.Equals(cookedSelection, "/", StringComparison.OrdinalIgnoreCase)
@@ -319,21 +322,6 @@ public abstract partial class AssetsLayoutViewModel(
                || normalizedCandidate.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool TryMapCookedSelectionToRuntimePath(string selectedFolder, out string runtimePath)
-    {
-        runtimePath = string.Empty;
-        var normalized = NormalizeFolderPath(selectedFolder);
-        const string cookedRoot = "/Cooked";
-        if (!normalized.Equals(cookedRoot, StringComparison.OrdinalIgnoreCase)
-            && !normalized.StartsWith(cookedRoot + "/", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        runtimePath = normalized.Length == cookedRoot.Length ? "/" : normalized[cookedRoot.Length..];
-        return true;
-    }
-
     private async Task InitializeAsync()
     {
         var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -390,6 +378,7 @@ public abstract partial class AssetsLayoutViewModel(
 
     private void ReplaceItems(IReadOnlyList<ContentBrowserAssetItem> items)
     {
+        this.projectCookedFolders = ProjectCookedFolders.Roots(this.projectContextService.ActiveProject);
         if (this.disposed)
         {
             return;
@@ -446,7 +435,7 @@ public abstract partial class AssetsLayoutViewModel(
     private void BrowseSource()
     {
         var sourceFolders = NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)
-            .Select(static folder => TryMapCookedSelectionToRuntimePath(folder, out var source) ? source : folder)
+            .Select(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out var source) ? source : folder)
             .ToArray();
         if (sourceFolders.Contains("/", StringComparer.Ordinal))
         {
@@ -462,7 +451,7 @@ public abstract partial class AssetsLayoutViewModel(
     }
 
     private bool IsCookedScope()
-        => NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders).Any(static folder => TryMapCookedSelectionToRuntimePath(folder, out _));
+        => NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders).Any(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out _));
 
     private void NotifyEmptyState()
     {
@@ -486,7 +475,8 @@ public abstract partial class AssetsLayoutViewModel(
             selectedFolders,
             this.projectContextService.ActiveProject is not null,
             asset.CookedUri?.AbsolutePath,
-            HasCookedProjection(asset));
+            HasCookedProjection(asset),
+            this.projectCookedFolders);
     }
 
     [RelayCommand]
