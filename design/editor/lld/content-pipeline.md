@@ -958,6 +958,11 @@ Cooking and mount preparation populate cache misses while retaining library and
 native-tool readers through worker completion or failed-termination drain.
 Status reads consume cached facts without starting native processes. A known
 changed library remains Out of date while further inspection is pending.
+Catalog initialization and changes queue metadata refresh behind the existing
+project writer. Browser rows remain available while it runs, and a completed
+cache update refreshes their status. This work creates no Cooking-panel run;
+unchanged catalog revisions and verified cache hits launch no extra inspection.
+Project changes cancel obsolete work and schedule the latest catalog revision.
 
 Follow asset-key dependencies across declared libraries using the saved source
 order. Capture every reached library in consumer provenance, including materials

@@ -109,6 +109,7 @@ public sealed partial class ContentBrowserAssetProvider
 
                 if (this.TryPublishSnapshot(revision, project, snapshot, completion))
                 {
+                    this.RefreshLibraryMetadata(project, revision);
                     return;
                 }
             }
