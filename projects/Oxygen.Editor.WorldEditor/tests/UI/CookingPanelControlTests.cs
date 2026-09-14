@@ -128,6 +128,58 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = inspect.Visibility.Should().Be(Visibility.Collapsed);
         await model.InspectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         actions.Verify(value => value.InspectAsync(It.IsAny<CookRunSnapshot>()), Times.Once);
+        await UnloadTestContentAsync(view).ConfigureAwait(true);
+    });
+
+    /// <summary>Imported output navigation stays in the selected run header and never happens automatically.</summary>
+    /// <param name="width">The panel width in DIPs.</param>
+    /// <returns>The asynchronous imported-output action regression.</returns>
+    [TestMethod]
+    [DataRow(360d)]
+    [DataRow(960d)]
+    public Task ImportedAssetsNavigationIsCompactAndExplicit(double width) => EnqueueAsync(async () =>
+    {
+        var actions = new Mock<ICookingWorkspaceActions>();
+        _ = actions.Setup(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
+        var source = new Uri("asset:///Content/SourceMedia/DCC/Model/model.gltf");
+        var output = new Uri("asset:///Content/Models/Model/Geometry/Mesh.ogeo");
+        using var model = CreateModel(actions.Object, configure: snapshot => snapshot with
+        {
+            DisplayName = "Model", Diagnostics = [], Messages = [new(1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Import complete.")],
+            State = CookRunState.Succeeded, Request = new(CookTargetKind.Asset, source) { IsReimport = true },
+            Assets = System.Collections.Immutable.ImmutableDictionary<Uri, CookRunAsset>.Empty
+                .Add(source, new(source, ContentCookAssetKind.ForeignSource, CookAssetState.Updated))
+                .Add(output, new(output, ContentCookAssetKind.Geometry, CookAssetState.Updated)),
+        });
+        var selected = model.SelectedRun!;
+        selected.IsAssetsExpanded = true;
+        var completed = selected.Snapshot;
+        var view = new CookingPanelView { ViewModel = model, Width = width, Height = 360 };
+        var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
+        host.Width = width;
+        host.Height = 360;
+        host.Child = view;
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var scale = view.XamlRoot.RasterizationScale;
+        VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(new((int)(width * scale) + 40, (int)(360 * scale) + 80));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        actions.Verify(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>()), Times.Never);
+        var button = view.FindDescendant<Button>(item => string.Equals(item.Name, "ShowImportedAssetsButton", StringComparison.Ordinal))!;
+        var inspect = view.FindDescendant<Button>(item => string.Equals(item.Name, "InspectButton", StringComparison.Ordinal))!;
+        _ = button.Visibility.Should().Be(Visibility.Visible);
+        _ = ToolTipService.GetToolTip(button).Should().Be("Show imported assets in Content Browser");
+        var point = button.TransformToVisual(view).TransformPoint(default);
+        var inspectPoint = inspect.TransformToVisual(view).TransformPoint(default);
+        _ = point.X.Should().BeGreaterThanOrEqualTo(inspectPoint.X + inspect.ActualWidth);
+        _ = (point.X + button.ActualWidth).Should().BeLessThanOrEqualTo(width);
+        await this.CaptureAsync(host, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"cooking-imported-assets-{width}.png")).ConfigureAwait(true);
+        await model.ShowImportedAssetsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        actions.Verify(value => value.ShowImportedAssetsAsync(completed), Times.Once);
+        _ = model.SelectedRun.Should().BeSameAs(selected);
+        selected.Apply(completed with { Revision = completed.Revision + 1, State = CookRunState.Failed });
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = button.Visibility.Should().Be(Visibility.Collapsed);
+        await UnloadTestContentAsync(host).ConfigureAwait(true);
     });
 
     /// <summary>Failure icons use the platform's semantic critical brush in both themes.</summary>
@@ -375,7 +427,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null, Mock<ICookRunService>? runService = null)
+    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
@@ -410,6 +462,7 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
             run = run with { State = CookRunState.NeedsSave, CompletedAt = null, Diagnostics = [], UnsavedDocuments = [waitingDocument], Assets = run.Assets.Clear(), Messages = [] };
         }
 
+        run = configure?.Invoke(run) ?? run;
         var runs = runService ?? new Mock<ICookRunService>();
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();

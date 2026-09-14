@@ -24,6 +24,7 @@ public sealed partial class CookingPanelView : UserControl
         this.RetryButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
         this.CancelButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
         this.InspectButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
+        this.ShowImportedAssetsButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs args)
@@ -59,8 +60,9 @@ public sealed partial class CookingPanelView : UserControl
     {
         var actionsWidth = (this.RetryButton.Visibility == Visibility.Visible ? this.RetryButton.DesiredSize.Width : 0)
             + (this.CancelButton.Visibility == Visibility.Visible ? this.CancelButton.DesiredSize.Width : 0)
-            + (this.InspectButton.Visibility == Visibility.Visible ? this.InspectButton.DesiredSize.Width : 0);
-        this.RunTitle.MaxWidth = Math.Max(48, this.RunHeader.ActualWidth - this.RunStatus.DesiredSize.Width - actionsWidth - 40);
+            + (this.InspectButton.Visibility == Visibility.Visible ? this.InspectButton.DesiredSize.Width : 0)
+            + (this.ShowImportedAssetsButton.Visibility == Visibility.Visible ? this.ShowImportedAssetsButton.DesiredSize.Width : 0);
+        this.RunTitle.MaxWidth = Math.Max(48, this.RunHeader.ActualWidth - this.RunStatus.DesiredSize.Width - actionsWidth - 48);
     }
 
     private async void GoToPropertyClicked(object sender, RoutedEventArgs args)

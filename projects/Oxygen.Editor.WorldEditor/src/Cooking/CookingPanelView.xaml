@@ -249,6 +249,19 @@
                     Content="Inspect"
                     ToolTipService.ToolTip="Inspect the currently published output for this cook's scope"
                     Visibility="{x:Bind ViewModel.SelectedRun.InspectVisibility, Mode=OneWay}" />
+                <Button
+                    x:Name="ShowImportedAssetsButton"
+                    Grid.Column="5"
+                    MinWidth="28"
+                    MinHeight="28"
+                    Padding="5,3"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.Name="Show imported assets"
+                    Command="{x:Bind ViewModel.ShowImportedAssetsCommand}"
+                    ToolTipService.ToolTip="Show imported assets in Content Browser"
+                    Visibility="{x:Bind ViewModel.SelectedRun.ShowImportedAssetsVisibility, Mode=OneWay}">
+                    <FontIcon FontSize="14" Glyph="&#xE8B7;" />
+                </Button>
             </Grid>
             <ProgressBar
                 Grid.Row="1"

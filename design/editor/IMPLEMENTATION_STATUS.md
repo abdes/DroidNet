@@ -756,6 +756,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Replace and import. It shows the preserved destination, resets the choice
         when the review changes, and reports unowned files inline. Normal import,
         replacement and cancellation controls pass in light/dark packaged checks.
+  - [x] Successful model cooks offer Show imported assets beside Inspect in the
+        selected-run header. Explicit navigation reveals available outputs across
+        their folders, opens the Cooked tree when needed and preserves unrelated
+        user focus until requested. Source-aware inspection carries the selected
+        identity into its document. Combined Cooking/import/browser UI cases pass
+        20/20; narrow/wide captures are verified.
   - [ ] Complete the remaining creation/import/reimport command/layout
         journeys, including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.

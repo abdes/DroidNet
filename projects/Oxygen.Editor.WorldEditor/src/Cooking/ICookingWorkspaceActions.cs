@@ -30,4 +30,9 @@ public interface ICookingWorkspaceActions
     /// <param name="run">The selected cook and its original scope.</param>
     /// <returns>Whether the report document was opened.</returns>
     public Task<bool> InspectAsync(CookRunSnapshot run);
+
+    /// <summary>Reveals the selected run's imported outputs in Content Browser on explicit request.</summary>
+    /// <param name="run">The successful run and its actual output identities.</param>
+    /// <returns>Whether available output assets were revealed.</returns>
+    public Task<bool> ShowImportedAssetsAsync(CookRunSnapshot run);
 }

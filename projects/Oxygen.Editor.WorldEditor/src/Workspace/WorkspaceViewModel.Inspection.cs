@@ -17,14 +17,39 @@ public partial class WorkspaceViewModel
     /// <inheritdoc />
     public async Task<bool> InspectAsync(CookRunSnapshot run)
     {
-        if (this.projectContextService.ActiveProject is not { } project || project.ProjectId != run.ProjectId || this.messenger is null)
+        if (this.projectContextService.ActiveProject is not { } project || project.ProjectId != run.ProjectId
+            || !string.Equals(project.ProjectRoot, run.ProjectRoot, StringComparison.OrdinalIgnoreCase) || this.messenger is null)
         {
             return false;
         }
 
         var scope = run.Request.TargetKind == CookTargetKind.Project ? null : run.Request.ScopeUri;
-        var request = this.messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false));
+        if (scope is not null && !string.Equals(scope.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var request = this.messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)
+        {
+            AssetUri = run.Request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? scope : null,
+            DisplayName = run.DisplayName,
+        });
         return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ShowImportedAssetsAsync(CookRunSnapshot run)
+    {
+        if (this.projectContextService.ActiveProject is not { } project || project.ProjectId != run.ProjectId
+            || !string.Equals(project.ProjectRoot, run.ProjectRoot, StringComparison.OrdinalIgnoreCase)
+            || run.ImportedOutputs.IsEmpty || Dockable.FromId("cb") is not { ViewModel: ContentBrowserViewModel browser } dockable
+            || !await browser.ShowAssetsAsync(run.ImportedOutputs).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        this.RevealTool(dockable);
+        return true;
     }
 
     private async Task<bool> ShowInspectionAssetAsync(ShowAssetRequestMessage request)

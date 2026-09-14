@@ -191,7 +191,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed report-opening action stays with the selected cook and does not change its outcome.")]
     private async Task InspectAsync()
     {
-        if (this.SelectedRun is not { Snapshot.IsCompleted: true } selected
+        if (this.SelectedRun is not { InspectVisibility: Microsoft.UI.Xaml.Visibility.Visible } selected
             || selected.Snapshot.ProjectId != this.projects.ActiveProject?.ProjectId)
         {
             return;
@@ -203,6 +203,34 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
             if (!await this.workspace.InspectAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
             {
                 this.ActionError = "The inspection document could not be opened.";
+            }
+        }
+        catch (Exception exception)
+        {
+            if (this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            {
+                this.ActionError = exception.Message;
+            }
+        }
+    }
+
+    [RelayCommand]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Explicit browser navigation reports failures in the selected run without changing its cook outcome.")]
+    private async Task ShowImportedAssetsAsync()
+    {
+        if (this.SelectedRun is not { ShowImportedAssetsVisibility: Microsoft.UI.Xaml.Visibility.Visible } selected
+            || selected.Snapshot.ProjectId != this.projects.ActiveProject?.ProjectId)
+        {
+            return;
+        }
+
+        var run = selected.Snapshot;
+        this.ActionError = string.Empty;
+        try
+        {
+            if (!await this.workspace.ShowImportedAssetsAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            {
+                this.ActionError = "The imported assets are no longer available in this project.";
             }
         }
         catch (Exception exception)

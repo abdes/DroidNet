@@ -67,7 +67,11 @@ public sealed partial class CookingRunViewModel : ObservableObject
     public Visibility CancelVisibility => this.snapshot.IsCompleted ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>Gets visibility of published-output inspection after the selected operation has finished.</summary>
-    public Visibility InspectVisibility => this.snapshot.IsCompleted ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility InspectVisibility => this.snapshot.IsCompleted && (this.snapshot.Request.TargetKind == CookTargetKind.Project
+        || (this.snapshot.Request.ScopeUri is { } uri && string.Equals(uri.Scheme, "asset", StringComparison.OrdinalIgnoreCase))) ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets visibility of explicit navigation to the successful run's imported assets.</summary>
+    public Visibility ShowImportedAssetsVisibility => this.snapshot.ImportedOutputs.IsEmpty ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>Gets a value indicating whether cancellation can still be requested.</summary>
     public bool CanCancel => !this.snapshot.IsCompleted && this.snapshot.State != CookRunState.Cancelling;
