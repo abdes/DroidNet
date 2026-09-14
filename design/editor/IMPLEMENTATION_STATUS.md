@@ -571,8 +571,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] Publication can install a privately captured retained source alongside
         cooked roots in the same journal. Source baseline checks, commit,
         cancellation, rollback and persisted recovery pass; later source edits
-        remain ordinary authoring changes. Import request/dialog integration
-        remains in 07B.4 and 07B.5d-e.
+        remain ordinary authoring changes. Reviewed replacement requests use
+        this transaction after native validation.
   - [x] Runtime publication awaits pending loads, retains readers through refresh
         and teardown, and refreshes current material bindings without scene reload.
         The user confirmed recook/tab switching and leak-free native-debug shutdown.
@@ -632,8 +632,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Native-backed tests cover those paths, in-project source identity and
         rejecting a changed reviewed project. Completed runs list actual named
         outputs and their types beside the retained source.
-  - [ ] Complete collision replacement, source/output catalog and typed-use
-        integration, and full conversion/loaded-value/clean-copy qualification.
+  - [x] Reviewed retained-source replacement cooks private incoming bytes under
+        the existing source identity, policies and output namespace. Native glTF
+        cases cover external buffers, missing-source repair, changed baselines,
+        authored conflicts, late unsaved edits, native failure and publication
+        rollback. Retry uses the captured candidate after external files disappear.
+  - [ ] Complete source/output catalog and typed-use integration, and full
+        conversion/loaded-value/clean-copy qualification.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
   - [x] Shared input/dependency and publication facts drive browser, material editor
@@ -734,10 +739,14 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         the existing dialog service, then submits the shared Cooking operation.
         Raw source invocation imports in place; configured source offers Reimport.
         Validation stays inline, Cancel starts no cook, and source-name collisions
-        require correction without overwriting existing files. Dialog-model and
+        offer another name or an explicit reviewed replacement. Dialog-model and
         packaged command/rendering tests cover acceptance, cancellation, picker
         failures, retained-source Retry and light/dark presentation.
-  - [ ] Complete collision replacement and the remaining creation/import/reimport command/layout
+  - [x] The import dialog identifies an existing retained source before enabling
+        Replace and import. It shows the preserved destination, resets the choice
+        when the review changes, and reports unowned files inline. Normal import,
+        replacement and cancellation controls pass in light/dark packaged checks.
+  - [ ] Complete the remaining creation/import/reimport command/layout
         journeys, including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [ ] 07B.5g compact single/multi-node inspector with component filtering and
@@ -757,8 +766,8 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       verify geometry attributes, bounds and default material semantics; packaged
       tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
 
-Current validation: ContentPipeline 412/412 and the expanded inspection adapter
-suite 25/25; Managed.Assets 91/91, Content Browser 129/129, Runtime 95/95,
+Current validation: ContentPipeline 423/423 and the expanded inspection adapter
+suite 25/25; Managed.Assets 91/91, Content Browser 130/130, Runtime 95/95,
 MaterialEditor 56/56, SceneExplorer 174/174. Packaged UI validated 252 cases: 240 passed in the full run; the four query
 expectations corrected for shared initialization and eight new cooked-asset opening
 cases pass in the final 32-case browser/inspection/Cooking rerun. The shared
@@ -894,7 +903,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 412/412 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 129/129; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI includes the prior 252-case set and six import/retry cases plus four imported-asset information/action cases; focused runs pass 18/18 for import/Cooking and 9/9 for asset information/picking; toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 423/423 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 130/130; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI includes the prior 252-case set and six import/retry cases plus four imported-asset information/action cases; focused runs pass 18/18 for import/Cooking and 9/9 for asset information/picking; toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |

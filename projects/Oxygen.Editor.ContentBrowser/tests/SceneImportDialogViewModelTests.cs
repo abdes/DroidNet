@@ -16,6 +16,9 @@ namespace Oxygen.Editor.ContentBrowser.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository configuration.")]
 public sealed class SceneImportDialogViewModelTests
 {
+    /// <summary>Gets or sets the test cancellation context.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A valid review produces a source request with the user's visible name and destination.</summary>
     [TestMethod]
     public void ValidReviewProducesMatchingRequest()
@@ -57,7 +60,8 @@ public sealed class SceneImportDialogViewModelTests
             _ = Directory.CreateDirectory(Path.Combine(root.FullName, "Content/SourceMedia/DCC/Crate"));
             var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
             _ = model.CanAccept.Should().BeFalse();
-            _ = model.Error.Should().Contain("already exists");
+            _ = model.HasCollision.Should().BeTrue();
+            _ = model.ReplacementTitle.Should().Contain("already exists");
             model.Name = "Crate2";
             _ = model.CanAccept.Should().BeTrue();
         }
@@ -106,6 +110,44 @@ public sealed class SceneImportDialogViewModelTests
         _ = model.Error.Should().Contain("Unavailable");
         _ = model.DestinationFolder.Should().Be("/Content/Models");
         _ = model.Validate().Should().BeTrue();
+    }
+
+    /// <summary>Replacement is explicit, identifies its target, and is reset by changing the review.</summary>
+    /// <returns>The asynchronous collision review regression.</returns>
+    [TestMethod]
+    public async Task ReviewedReplacementPreservesExistingDestination()
+    {
+        var directory = Directory.CreateTempSubdirectory("OxygenReplacementReview-");
+        try
+        {
+            var project = CreateProject() with { ProjectRoot = directory.FullName };
+            var root = Path.Combine(project.ProjectRoot, "Content/SourceMedia/DCC/Crate");
+            _ = Directory.CreateDirectory(root);
+            var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
+            await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var settings = Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.Create(
+                new("Content/SourceMedia/DCC/Crate", "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
+                "Content",
+                "Crate",
+                "Models/Crate");
+            await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Other", Mock.Of<IDialogService>());
+            _ = model.CanAccept.Should().BeFalse();
+            _ = model.Request.Should().BeNull();
+            await model.ReviewReplacementCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+            _ = model.CanAccept.Should().BeTrue();
+            _ = model.PrimaryButtonText.Should().Be("Replace and import");
+            _ = model.Request!.Replacement!.SourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf"));
+            _ = model.DestinationFolder.Should().Be("/Content/Models");
+            _ = model.ReplacementMessage.Should().Contain("/Content/Models/Crate");
+            model.Name = "Another";
+            _ = model.Replacement.Should().BeNull();
+            _ = model.PrimaryButtonText.Should().Be("Import");
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
     }
 
     private static ProjectContext CreateProject() => new()

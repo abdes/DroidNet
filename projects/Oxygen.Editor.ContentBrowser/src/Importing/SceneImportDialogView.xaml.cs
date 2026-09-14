@@ -27,6 +27,7 @@ public sealed partial class SceneImportDialogView
     private void UpdateSubscription()
     {
         this.subscribedModel?.PropertyChanged -= this.OnModelChanged;
+        this.subscribedModel?.ReviewReplacementCommand.Cancel();
 
         this.subscribedModel = this.IsLoaded ? this.ViewModel : null;
         this.subscribedModel?.PropertyChanged += this.OnModelChanged;
@@ -36,7 +37,8 @@ public sealed partial class SceneImportDialogView
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(SceneImportDialogViewModel.CanAccept), StringComparison.Ordinal))
+        if (string.Equals(args.PropertyName, nameof(SceneImportDialogViewModel.CanAccept), StringComparison.Ordinal)
+            || string.Equals(args.PropertyName, nameof(SceneImportDialogViewModel.PrimaryButtonText), StringComparison.Ordinal))
         {
             this.UpdateButton();
         }
@@ -47,6 +49,7 @@ public sealed partial class SceneImportDialogView
         if (this.FindAscendant<ContentDialog>() is { } dialog)
         {
             dialog.IsPrimaryButtonEnabled = this.ViewModel?.CanAccept == true;
+            dialog.PrimaryButtonText = this.ViewModel?.PrimaryButtonText ?? "Import";
         }
     }
 }

@@ -30,11 +30,14 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
 
     /// <summary>The compact review shows source/name/destination and updates errors without leaving the dialog.</summary>
     /// <param name="theme">The editor theme.</param>
+    /// <param name="replacement">Whether an existing retained source requires explicit replacement.</param>
     /// <returns>The asynchronous rendered review test.</returns>
     [TestMethod]
-    [DataRow(ElementTheme.Dark)]
-    [DataRow(ElementTheme.Light)]
-    public Task ModelImportReviewShowsInlineValidation(ElementTheme theme) => EnqueueAsync(async () =>
+    [DataRow(ElementTheme.Dark, false)]
+    [DataRow(ElementTheme.Light, false)]
+    [DataRow(ElementTheme.Dark, true)]
+    [DataRow(ElementTheme.Light, true)]
+    public Task ModelImportReviewShowsInlineValidation(ElementTheme theme, bool replacement) => EnqueueAsync(async () =>
     {
         var project = new ProjectContext
         {
@@ -42,6 +45,11 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [], Scenes = [],
         };
+        if (replacement)
+        {
+            await this.CreateRetainedSourceAsync(project).ConfigureAwait(true);
+        }
+
         var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
         var view = new SceneImportDialogView { ViewModel = model, Width = 480, RequestedTheme = theme };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' Padding='16' />");
@@ -58,28 +66,64 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         {
             await Task.Delay(350, this.TestContext.CancellationToken).ConfigureAwait(true);
             view.UpdateLayout();
-            var name = view.FindDescendant<TextBox>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportName", StringComparison.Ordinal))!;
-            var destination = view.FindDescendant<TextBox>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportDestination", StringComparison.Ordinal))!;
-            _ = name.Text.Should().Be("Crate");
-            _ = destination.Text.Should().Be("/Content/Models");
-            _ = model.CanAccept.Should().BeTrue();
-            _ = view.ActualHeight.Should().BeLessThan(360);
-            model.Name = "../invalid";
-            await Task.Yield();
-            var error = view.FindDescendant<TextBlock>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportError", StringComparison.Ordinal))!;
-            _ = model.CanAccept.Should().BeFalse();
-            _ = error.Text.Should().NotBeEmpty();
-            model.Name = "Crate";
-            await Task.Yield();
-            _ = model.CanAccept.Should().BeTrue();
-            await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true);
-            await this.CaptureAsync(host, theme).ConfigureAwait(true);
+            await this.CheckReviewAsync(view, model, host, theme, replacement).ConfigureAwait(true);
         }
         finally
         {
             window.Resize(original);
+            if (Directory.Exists(project.ProjectRoot))
+            {
+                Directory.Delete(project.ProjectRoot, recursive: true);
+            }
         }
     });
+
+    private async Task CheckReviewAsync(SceneImportDialogView view, SceneImportDialogViewModel model, Border host, ElementTheme theme, bool replacement)
+    {
+        var name = view.FindDescendant<TextBox>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportName", StringComparison.Ordinal))!;
+        var destination = view.FindDescendant<TextBox>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportDestination", StringComparison.Ordinal))!;
+        _ = name.Text.Should().Be("Crate");
+        _ = destination.Text.Should().Be("/Content/Models");
+        _ = model.CanAccept.Should().Be(!replacement);
+        _ = view.ActualHeight.Should().BeLessThan(replacement ? 500 : 360);
+        model.Name = "../invalid";
+        await Task.Yield();
+        var error = view.FindDescendant<TextBlock>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportError", StringComparison.Ordinal))!;
+        _ = model.CanAccept.Should().BeFalse();
+        _ = error.Text.Should().NotBeEmpty();
+        model.Name = "Crate";
+        await Task.Yield();
+        _ = model.CanAccept.Should().Be(!replacement);
+        if (replacement)
+        {
+            var warning = view.FindDescendant<InfoBar>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportCollision", StringComparison.Ordinal))!;
+            _ = warning.IsOpen.Should().BeTrue();
+            await this.CaptureAsync(host, theme).ConfigureAwait(true);
+            await model.ReviewReplacementCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+            _ = model.CanAccept.Should().BeTrue();
+            _ = model.PrimaryButtonText.Should().Be("Replace and import");
+            _ = warning.Message.Should().Contain("/Content/SourceMedia/DCC/Crate/model.gltf");
+            _ = warning.Message.Should().Contain("/Content/Models/Crate");
+        }
+
+        await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true);
+        await this.CaptureAsync(host, theme).ConfigureAwait(true);
+    }
+
+    private async Task CreateRetainedSourceAsync(ProjectContext project)
+    {
+        const string relative = "Content/SourceMedia/DCC/Crate";
+        var root = Path.Combine(project.ProjectRoot, relative);
+        _ = Directory.CreateDirectory(root);
+        var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
+        await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var settings = Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.Create(
+            new(relative, "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
+            "Content",
+            "Crate",
+            "Models/Crate");
+        await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+    }
 
     private async Task CaptureAsync(FrameworkElement view, ElementTheme theme)
     {
