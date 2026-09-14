@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -20,7 +21,13 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <summary>Discovers saved scene, scalar material and static geometry dependencies without generating output.</summary>
 /// <param name="documents">Document owners coordinating saved-source reads.</param>
 /// <param name="allowUnsavedDocuments">Allows read-only inspection of saved inputs while their documents contain newer edits.</param>
-public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, bool allowUnsavedDocuments = false)
+/// <param name="importedSources">Previously published native dependency layouts for exact source revisions.</param>
+/// <param name="discoverImported">Optional native rediscovery used only by an owned cook operation.</param>
+public sealed class CookDependencyDiscovery(
+    ICookDocumentRegistry documents,
+    bool allowUnsavedDocuments = false,
+    IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? importedSources = null,
+    Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null)
 {
     /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
     /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
@@ -31,7 +38,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(roots);
-        var discovery = new Discovery(project, documents, allowUnsavedDocuments);
+        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported);
         foreach (var input in roots)
         {
             discovery.AddAsset(input);
@@ -40,7 +47,9 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
         return await discovery.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments)
+    private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments,
+        IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? priorImports,
+        Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
@@ -51,6 +60,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
         private readonly HashSet<Uri> published = [];
         private readonly Queue<ContentCookInput> pending = new();
         private readonly List<DiagnosticRecord> diagnostics = [];
+        private readonly Dictionary<Uri, ImportedSourceDependencyState> imported = [];
         private Uri currentAsset = null!;
 
         public void AddAsset(ContentCookInput input)
@@ -71,6 +81,10 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
                 try
                 {
                     await this.ReadAssetAsync(input, cancellationToken).ConfigureAwait(false);
+                }
+                catch (CookInputDiscoveryException failure)
+                {
+                    this.diagnostics.AddRange(failure.Diagnostics.Select(issue => issue with { AffectedVirtualPath = input.AssetUri.AbsolutePath }));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
                 {
@@ -96,7 +110,7 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
                 this.fileDependencies.ToImmutableDictionary(static pair => pair.Key, static pair => pair.Value.Order(StringComparer.Ordinal).ToImmutableArray()),
                 [.. this.builtins.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
                 [.. this.published.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
-                [.. this.diagnostics]);
+                [.. this.diagnostics]) { ImportedSources = this.imported.ToImmutableDictionary() };
         }
 
         private static Uri[] ReadMaterial(ContentCookInput input, byte[] bytes)
@@ -113,6 +127,13 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
         {
             this.currentAsset = input.AssetUri;
             this.fileDependencies[input.AssetUri] = [with(StringComparer.Ordinal)];
+            if (input.Kind == ContentCookAssetKind.ForeignSource)
+            {
+                await this.ReadImportedSourceAsync(input, cancellationToken).ConfigureAwait(false);
+                this.dependencies[input.AssetUri] = [];
+                return;
+            }
+
             var bytes = await this.ReadFileAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             await this.ReadSettingsAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var references = input.Kind switch
@@ -123,6 +144,69 @@ public sealed class CookDependencyDiscovery(ICookDocumentRegistry documents, boo
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };
             this.dependencies[input.AssetUri] = [.. references.Select(this.ResolveReference).Distinct().OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
+        }
+
+        private async Task ReadImportedSourceAsync(ContentCookInput input, CancellationToken cancellationToken)
+        {
+            var settingsBytes = await this.ReadFileAsync(assetUri: null, input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix, cancellationToken).ConfigureAwait(false);
+            var settings = NativeSceneImportSettings.Parse(settingsBytes);
+            if (!string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), Path.GetFullPath(input.SourceAbsolutePath), StringComparison.OrdinalIgnoreCase)
+                || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException("Import settings do not match their retained source or output mount.");
+            }
+
+            var primaryHash = await this.ReadHashAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+            IEnumerable<string> paths;
+            if (priorImports?.TryGetValue(input.AssetUri, out var prior) == true && string.Equals(prior.PrimaryHash, primaryHash, StringComparison.OrdinalIgnoreCase))
+            {
+                paths = prior.Files.Select(relative => Path.GetFullPath(Path.Combine(project.ProjectRoot, relative)));
+            }
+            else if (string.Equals(settings.SourceHash, primaryHash, StringComparison.OrdinalIgnoreCase))
+            {
+                paths = settings.Files.Select(relative => settings.ResolveFile(project.ProjectRoot, relative));
+            }
+            else if (discoverImported is not null)
+            {
+                var discovered = await discoverImported(input, cancellationToken).ConfigureAwait(false);
+                foreach (var file in discovered.Bundle.Files)
+                {
+                    var relative = this.RelativePath(file.SourcePath);
+                    this.files[file.SourcePath] = file with { RelativePath = relative };
+                    _ = this.fileDependencies[input.AssetUri].Add(relative);
+                }
+
+                primaryHash = discovered.Bundle.Files.Single(file => string.Equals(file.SourcePath, input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase)).DiscoveryHash;
+                paths = discovered.Bundle.Files.Select(static file => file.SourcePath);
+            }
+            else
+            {
+                throw new InvalidDataException("The imported source changed. Cook or reimport it to update its saved dependency information.");
+            }
+
+            var knownPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var path in knownPaths)
+            {
+                var relative = this.RelativePath(path);
+                _ = this.fileDependencies[input.AssetUri].Add(relative);
+                if (!this.files.ContainsKey(path))
+                {
+                    _ = await this.ReadHashAsync(assetUri: null, path, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = input with { MountName = settings.MountPoint, OutputVirtualPath = settings.OutputPrefix };
+            this.imported[input.AssetUri] = new(primaryHash, knownPaths.Select(this.RelativePath).Order(StringComparer.Ordinal).ToImmutableArray());
+        }
+
+        private async Task<string> ReadHashAsync(Uri? assetUri, string path, CancellationToken cancellationToken)
+        {
+            path = Path.GetFullPath(path);
+            var relative = this.RelativePath(path);
+            _ = this.fileDependencies[this.currentAsset].Add(relative);
+            var hash = await CookSavedSourceReader.HashAsync(documents, path, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
+            this.files[path] = new(assetUri, path, relative, hash);
+            return hash;
         }
 
         private async Task<byte[]> ReadFileAsync(Uri? assetUri, string path, CancellationToken cancellationToken)

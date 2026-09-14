@@ -50,7 +50,7 @@ public sealed partial class AssetCookStatusReader(
         var requested = assetUris.Distinct().ToArray();
         var builtins = requested.Where(IsBuiltinIdentity).ToImmutableArray();
         var inputs = requested.Where(uri => !IsBuiltinIdentity(uri)).Select(uri => CookInputResolver.Resolve(project, uri, ContentCookInputRole.Primary)).ToArray();
-        var graph = await new CookDependencyDiscovery(documents, allowUnsavedDocuments: true).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
+        var graph = await new CookDependencyDiscovery(documents, allowUnsavedDocuments: true, importedSources: prior.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!)).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
         var availableFiles = graph.Files.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
         var validGraph = graph with

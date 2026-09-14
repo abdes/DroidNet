@@ -75,6 +75,7 @@ public sealed partial class ContentPipelineService
                     : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
                 products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
                 {
+                    ImportedSource = graph.ImportedSources.GetValueOrDefault(source.Key),
                     Diagnostics =
                     [
                         .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
@@ -126,12 +127,13 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CancellationToken cancellationToken)
     {
-        var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts.Fingerprint, cancellationToken).ConfigureAwait(false);
         var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
         if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
         {
             previous = new(1, operation.Project.ProjectId, [], []);
         }
+
+        var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, cancellationToken).ConfigureAwait(false);
 
         var plan = await CookIncrementalPlanner.PlanAsync(snapshot, graph, previous, cancellationToken).ConfigureAwait(false);
         foreach (var asset in plan.ReusedAssets)
@@ -189,7 +191,7 @@ public sealed partial class ContentPipelineService
             var inputs = mount.Select(input => input with { SourceAbsolutePath = Path.Combine(snapshot.InputRoot, input.SourceRelativePath) }).ToArray();
             var scope = this.CreateScope(operation.Project, inputs, targetKind) with
             {
-                Snapshot = snapshot, Artifacts = artifacts, ReusableSources = plan.Reusable.Keys.ToImmutableHashSet(),
+                Snapshot = snapshot, Artifacts = artifacts, ReusableSources = plan.Reusable.Keys.ToImmutableHashSet(), PreviousProvenance = previous,
                 StagingOutputRoot = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)).StagingPath,
             };
             results.Add(await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false));

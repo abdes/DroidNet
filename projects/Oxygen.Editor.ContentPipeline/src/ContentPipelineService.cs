@@ -185,25 +185,24 @@ public sealed partial class ContentPipelineService(
 
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
-        CookInspectionResult inspection)
+        CookInspectionResult inspection,
+        IReadOnlyList<string>? outputFiles)
     {
-        var inputsByVirtualPath = scope.Inputs
-            .Where(static input => !string.IsNullOrWhiteSpace(input.OutputVirtualPath))
-            .ToDictionary(static input => input.OutputVirtualPath!, StringComparer.Ordinal);
-        return inspection.Assets
-            .Where(asset => inputsByVirtualPath.ContainsKey(asset.VirtualPath))
-            .Select(asset =>
+        var result = new List<ContentCookedAsset>();
+        foreach (var asset in inspection.Assets)
+        {
+            var input = scope.Inputs.FirstOrDefault(input => input.OutputVirtualPath is { } output
+                && (input.Kind == ContentCookAssetKind.ForeignSource
+                    ? asset.VirtualPath.StartsWith(output, StringComparison.Ordinal)
+                    : string.Equals(asset.VirtualPath, output, StringComparison.Ordinal)));
+            if (input is not null && (input.Kind != ContentCookAssetKind.ForeignSource
+                || (asset.DescriptorRelativePath is not null && outputFiles?.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase) == true)))
             {
-                var cookedUri = ToAssetUri(asset.VirtualPath);
-                var input = inputsByVirtualPath.GetValueOrDefault(asset.VirtualPath);
-                return new ContentCookedAsset(
-                    input?.AssetUri ?? cookedUri,
-                    cookedUri,
-                    asset.Kind,
-                    GetMountName(asset.VirtualPath),
-                    asset.VirtualPath);
-            })
-            .ToList();
+                result.Add(new(input.AssetUri, ToAssetUri(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath));
+            }
+        }
+
+        return result;
     }
 
     private static Project CreateProject(ProjectContext context)
@@ -239,6 +238,7 @@ public sealed partial class ContentPipelineService(
                 || path.EndsWith(".ogeo", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Geometry,
             _ when path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".oscene", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Scene,
+            _ when path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.ForeignSource,
             _ => throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri)),
         };
     }
@@ -272,7 +272,9 @@ public sealed partial class ContentPipelineService(
     private static bool IsCookableDescriptorFile(string path)
         => path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-           || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase);
+           || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
+           || ((path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
+               && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
 
     private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, Uri folderUri)
     {
@@ -293,7 +295,7 @@ public sealed partial class ContentPipelineService(
         }
 
         var absoluteFolder = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativeFolder));
-        return !Directory.Exists(absoluteFolder) ? [] : Directory.EnumerateFiles(absoluteFolder, "*.json", SearchOption.AllDirectories)
+        return !Directory.Exists(absoluteFolder) ? [] : Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
             .Where(IsCookableDescriptorFile)
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
             .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
@@ -305,7 +307,7 @@ public sealed partial class ContentPipelineService(
         ProjectMountPoint mount)
     {
         var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
-        return !Directory.Exists(mountRoot) ? [] : Directory.EnumerateFiles(mountRoot, "*.json", SearchOption.AllDirectories)
+        return !Directory.Exists(mountRoot) ? [] : Directory.EnumerateFiles(mountRoot, "*", SearchOption.AllDirectories)
             .Where(IsCookableDescriptorFile)
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
             .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
@@ -323,7 +325,7 @@ public sealed partial class ContentPipelineService(
         var mountRelativePath = Path.GetRelativePath(mountRoot, sourceAbsolutePath).Replace('\\', '/');
         var assetUri = ToAssetUri(mount.Name, mountRelativePath);
         var kind = GetAssetKind(assetUri);
-        return new ContentCookInput(
+        return kind == ContentCookAssetKind.ForeignSource ? CookInputResolver.Resolve(project, assetUri, role) : new ContentCookInput(
             assetUri,
             kind,
             mount.Name,
@@ -536,7 +538,9 @@ public sealed partial class ContentPipelineService(
            ?? throw new InvalidOperationException("Content pipeline requires an active project.");
 
     private Task<ContentCookResult> CookMixedInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
-        => scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.Scene)
+        => scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.ForeignSource)
+            ? this.CookWithImportedSourcesAsync(operationId, scope, cancellationToken)
+            : scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.Scene)
             ? this.CookSceneInputsAsync(operationId, scope, cancellationToken)
             : this.CookResolvedInputsAsync(operationId, scope, diagnostics: [], cancellationToken);
 
@@ -687,7 +691,16 @@ public sealed partial class ContentPipelineService(
 
         var importResult = await this.ImportManifestAsync(operationId, scope, manifest, cancellationToken)
             .ConfigureAwait(false);
-        var allDiagnostics = diagnostics.Concat(importResult.Diagnostics).ToList();
+        var nativeDiagnostics = importResult.Diagnostics.Select(issue =>
+        {
+            var input = scope.Inputs.FirstOrDefault(input => string.Equals(input.SourceAbsolutePath, issue.AffectedPath, StringComparison.OrdinalIgnoreCase));
+            return input is null ? issue : issue with
+            {
+                AffectedPath = Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath),
+                AffectedVirtualPath = input.AssetUri.AbsolutePath,
+            };
+        });
+        var allDiagnostics = diagnostics.Concat(nativeDiagnostics).ToList();
         return !importResult.Succeeded
             ? new ContentCookResult(
                 operationId,
@@ -697,10 +710,10 @@ public sealed partial class ContentPipelineService(
                 CookedAssets: [],
                 Inspection: null,
                 Validation: null)
-            : await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, cancellationToken).ConfigureAwait(false);
+            : await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult.OutputFiles, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, IReadOnlyList<string>? outputFiles, CancellationToken cancellationToken)
     {
         var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
         await using var outputLifetime = outputLease.ConfigureAwait(false);
@@ -733,7 +746,7 @@ public sealed partial class ContentPipelineService(
             targetKind,
             GetStatus(allDiagnostics, validation),
             NormalizeDiagnostics(operationId, allDiagnostics),
-            CreateCookedAssets(scope, inspection),
+            CreateCookedAssets(scope, inspection, outputFiles),
             inspection,
             validation) { VerifiedRoot = proof };
     }

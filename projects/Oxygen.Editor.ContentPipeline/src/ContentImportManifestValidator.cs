@@ -17,6 +17,8 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         "material-descriptor",
         "geometry-descriptor",
         "scene-descriptor",
+        "gltf",
+        "fbx",
     ];
 
     /// <inheritdoc />

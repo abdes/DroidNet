@@ -903,6 +903,24 @@ Content mount. Operation ownership and the private primary copy survive a failed
 worker termination until native drain and cleanup complete. The report destination cannot overwrite the source,
 its hard-link alias, or a declared buffer.
 
+Native retained settings use the existing `<source>.import.json` naming
+convention with `SchemaVersion: 2` and `Importer: "Oxygen.Cooker.Scene/v1"`.
+The sidecar records the Content bundle/primary paths, initially discovered files
+and primary hash, output mount and exclusive destination, and explicit native
+content/unit/normal/tangent/transform policies. Legacy managed sidecars are not
+silently converted or allowed to replace existing identities. Creation uses the
+ordinary atomic file store with a missing-file baseline.
+
+Retained model jobs use the same captured inputs, incremental planner, staging
+and journaled root publication as descriptors. Native rediscovery runs when a
+changed primary has no matching published dependency layout; successful product
+provenance retains that layout so an unchanged repeat/reopen starts no worker.
+Folder/project scopes include configured retained models. Native batch reports
+identify the actual emitted files and structured issues; seeded old files cannot
+be claimed as new outputs. Existing source ownership and native identities are
+checked before publication. Identity-changing replacement remains blocked with
+an actionable result; failed imports preserve published roots.
+
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
 facts; name/ID changes cannot silently redirect existing scene references. File

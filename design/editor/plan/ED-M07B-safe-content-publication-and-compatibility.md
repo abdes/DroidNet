@@ -212,8 +212,10 @@ directional lights while rejecting excluded component types and source features
 and ambiguous FBX units/axes. Native source inspection and its managed adapter
 now report coordinates, supported features and external dependencies without
 cooking. Coherent bundle discovery now captures native-discovered files through the
-existing retention transaction. Retained settings, editor import integration
-and clean-copy reproduction from pipeline section 17 remain open.
+existing retention transaction. Retained settings and source cooking now share snapshot/incremental/publication
+contracts; native cases prove unchanged reuse and clean-copy logical identities.
+Editor Import/Reimport integration and complete loaded-value/conversion
+qualification from pipeline section 17 remain open.
 
 Route Import/Reimport through the same snapshot/publication coordinator. Retain
 source media and settings before derived processing; expose destination and
