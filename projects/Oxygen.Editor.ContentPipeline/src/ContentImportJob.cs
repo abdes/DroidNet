@@ -18,6 +18,11 @@ public sealed record ContentImportJob(
     [property: JsonPropertyName("output")] string? Output,
     [property: JsonPropertyName("name")] string? Name)
 {
+    /// <summary>Gets per-job descriptor folders while retaining the manifest's shared cooked root.</summary>
+    [JsonPropertyName("layout")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ContentImportLayout? Layout { get; init; }
+
     /// <summary>Gets the ordered resolver-only roots for scene and geometry descriptors.</summary>
     [JsonPropertyName("cooked_context_roots")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

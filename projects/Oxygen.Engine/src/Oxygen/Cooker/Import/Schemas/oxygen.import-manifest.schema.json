@@ -110,6 +110,7 @@
                                 "source",
                                 "sources",
                                 "output",
+                                "layout",
                                 "name",
                                 "verbose",
                                 "intent",
@@ -155,6 +156,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing"
                             ]
@@ -177,6 +179,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing"
                             ]
@@ -199,6 +202,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing"
                             ]
@@ -221,6 +225,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing"
                             ]
@@ -243,6 +248,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing",
                                 "cooked_context_roots"
@@ -266,6 +272,7 @@
                                 "type",
                                 "source",
                                 "output",
+                                "layout",
                                 "name",
                                 "content_hashing",
                                 "cooked_context_roots"
@@ -352,6 +359,7 @@
                                 "bindings",
                                 "target_scene_virtual_path",
                                 "output",
+                                "layout",
                                 "name",
                                 "verbose",
                                 "content_hashing"
@@ -378,7 +386,8 @@
                                 "type",
                                 "source",
                                 "depends_on",
-                                "output"
+                                "output",
+                                "layout"
                             ]
                         }
                     }
@@ -920,6 +929,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "layout": {
+                    "$ref": "#/definitions/layout_settings"
                 },
                 "verbose": {
                     "type": "boolean"
