@@ -10,6 +10,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Maps source and native identities to the same authored descriptor without changing scene references.</summary>
 internal static class CookInputResolver
 {
+    /// <summary>Tests whether a virtual reference belongs to a declared authoring mount.</summary>
+    /// <param name="project">The declared authoring mounts.</param>
+    /// <param name="uri">The asset identity to resolve.</param>
+    /// <returns>Whether the URI belongs to an authoring mount.</returns>
+    public static bool IsAuthoringUri(ProjectContext project, Uri uri)
+        => project.AuthoringMounts.Any(mount => uri.AbsolutePath.StartsWith("/" + Uri.EscapeDataString(mount.Name) + "/", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Resolves the authored descriptor corresponding to a source or native identity.</summary>
     /// <param name="project">The owning project and mount declarations.</param>
     /// <param name="uri">The reference to resolve.</param>

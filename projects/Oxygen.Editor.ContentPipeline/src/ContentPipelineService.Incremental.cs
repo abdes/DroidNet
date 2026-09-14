@@ -83,6 +83,7 @@ public sealed partial class ContentPipelineService
                     : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
                 products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
                 {
+                    CookedDependencies = [.. graph.NativeReferences.GetValueOrDefault(source.Key, []).Where(graph.CookedDependencies.ContainsKey).Select(uri => graph.CookedDependencies[uri])],
                     ImportedSource = graph.ImportedSources.GetValueOrDefault(source.Key),
                     Diagnostics =
                     [
@@ -136,7 +137,41 @@ public sealed partial class ContentPipelineService
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
         var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, graph, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            graph = libraries.Apply(graph);
+            if (HasError(graph.Diagnostics))
+            {
+                throw new CookInputDiscoveryException(graph.Diagnostics);
+            }
 
+            snapshot = CookedLibraryReadSet.CaptureDependencies(snapshot, graph);
+            return await this.ExecuteCapturedCookAsync(operation, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContentPipelineTerminationException failure)
+        {
+            var retained = libraries;
+            var drain = failure.DrainCompletion.ContinueWith(
+                completed =>
+            {
+                _ = completed.Exception;
+                retained.Dispose();
+            },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            libraries = null;
+            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
+        }
+        finally
+        {
+            libraries?.Dispose();
+        }
+    }
+
+    private async Task<ContentCookResult> ExecuteCapturedCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CookInputSnapshot snapshot, CookDependencyGraph graph, CookedLibraryReadSet libraries, CancellationToken cancellationToken)
+    {
         var plan = await CookIncrementalPlanner.PlanAsync(snapshot, graph, previous, cancellationToken).ConfigureAwait(false);
         if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))
         {
@@ -171,13 +206,14 @@ public sealed partial class ContentPipelineService
         }
 
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
+        await libraries.ValidateNativeAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
         dirtyInputs.AddRange(await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false));
         var staging = await CookStagingArea.CreateAsync(operation, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
         CookReferenceRoots? references = null;
         try
         {
             references = await CookReferenceRoots.AcquireAsync(operation.Project, staging, previous, plan, cancellationToken).ConfigureAwait(false);
-            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, cancellationToken).ConfigureAwait(false);
+            return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, libraries, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure)
         {
@@ -205,9 +241,10 @@ public sealed partial class ContentPipelineService
         List<ContentCookInput> dirtyInputs,
         CookStagingArea staging,
         CookReferenceRoots references,
+        CookedLibraryReadSet libraries,
         CancellationToken cancellationToken)
     {
-        var results = await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, references, cancellationToken).ConfigureAwait(false);
+        var results = await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, libraries.OrderRoots(references.Paths), cancellationToken).ConfigureAwait(false);
 
         var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
         var result = cooked with
@@ -226,6 +263,7 @@ public sealed partial class ContentPipelineService
             && results.TrueForAll(static value => value.VerifiedRoot is not null))
         {
             references.Verify();
+            libraries.Verify();
             result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results), cancellationToken).ConfigureAwait(false);
         }
         else if (results.TrueForAll(static value => value.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))

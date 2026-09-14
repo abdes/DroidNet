@@ -940,6 +940,13 @@ position, with the last occurrence of a duplicate root winning. The highest
 priority matching asset must have the requested type; a lower-priority asset must
 not hide a type error in the effective source.
 
+Cooked-library dependencies retain the selected source, native key/type and a
+fingerprint of its protected container files. These facts participate in consumer
+freshness and the publication receipt. Library inputs remain read-only and leased
+through native work, publication and failed-worker drain. Source priority is
+resolved from the saved project order for both cooking and preview; no library is
+copied into project authoring or claimed as a newly produced project asset.
+
 Published model provenance records a source/settings/dependency fingerprint
 independent of the producer fingerprint. Automatic Save and preview demand may
 regenerate unchanged model inputs for a new producer, but changed model inputs

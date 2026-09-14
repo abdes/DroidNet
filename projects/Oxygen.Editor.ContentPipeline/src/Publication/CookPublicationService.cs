@@ -60,7 +60,10 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                 snapshot.Inputs,
                 snapshot.Documents,
                 provenance.Roots,
-                preview?.IsRuntimeAvailable == true);
+                preview?.IsRuntimeAvailable == true)
+            {
+                CookedDependencies = snapshot.CookedDependencies,
+            };
             var metadata = new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 [CookPublicationTransaction.PublicationMetadata] = JsonSerializer.SerializeToUtf8Bytes(receipt),

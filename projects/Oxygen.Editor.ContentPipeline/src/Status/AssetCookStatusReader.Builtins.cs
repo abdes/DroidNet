@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -22,7 +24,7 @@ public sealed partial class AssetCookStatusReader
         bool metadataUnavailable)
     {
         _ = products.TryGetValue(uri, out var product);
-        var verified = product is not null && VerifyPriorClosure(uri, products, plan.VerifiedOutputs, []);
+        var verified = product is not null && VerifyPriorClosure(uri, products, plan.VerifiedOutputs, ImmutableDictionary<Uri, CookedDependencySnapshot>.Empty, []);
         var freshness = metadataUnavailable || !nativeAvailable ? AssetCookFreshness.Unknown
             : product is null ? AssetCookFreshness.NeedsCooking
             : verified && plan.Reusable.ContainsKey(uri) ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate;

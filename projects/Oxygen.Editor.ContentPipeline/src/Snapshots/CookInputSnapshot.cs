@@ -19,4 +19,8 @@ public sealed record CookInputSnapshot(
     string BuildFingerprint,
     string InputIdentity,
     ImmutableArray<CookSnapshotInput> Inputs,
-    ImmutableArray<CookDocumentState> Documents);
+    ImmutableArray<CookDocumentState> Documents)
+{
+    /// <summary>Gets foreign cooked inputs held alongside the private authoring snapshot.</summary>
+    public ImmutableArray<CookedDependencySnapshot> CookedDependencies { get; init; } = [];
+}

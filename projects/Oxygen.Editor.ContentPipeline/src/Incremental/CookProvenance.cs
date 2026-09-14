@@ -42,6 +42,9 @@ internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArra
     /// <param name="Outputs">The produced asset identities.</param>
     public sealed record Product(Uri SourceUri, string Fingerprint, ImmutableArray<Uri> Dependencies, ImmutableArray<Output> Outputs)
     {
+        /// <summary>Gets the external native identities used when the source was cooked.</summary>
+        public ImmutableArray<Snapshots.CookedDependencySnapshot> CookedDependencies { get; init; } = [];
+
         /// <summary>Gets source discovery needed to reuse an imported product without another native query.</summary>
         public Import.ImportedSourceDependencyState? ImportedSource { get; init; }
 

@@ -12,14 +12,18 @@ public sealed partial class ContentPipelineServiceTests
 {
     /// <summary>Reused dependency files stay protected until the worker and its cleanup have drained.</summary>
     /// <param name="terminationFailure">Whether native work reports a delayed termination failure.</param>
+    /// <param name="foreignLibrary">Whether the dependency belongs to a different project.</param>
     /// <returns>The asynchronous reference-reader ownership regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task ReusedCrossMountRootsStayLeasedThroughNativeWork(bool terminationFailure)
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public async Task ReusedCrossMountRootsStayLeasedThroughNativeWork(bool terminationFailure, bool foreignLibrary)
     {
         using var workspace = new TempWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var foreignConsumer = new TempWorkspace();
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -29,8 +33,15 @@ public sealed partial class ContentPipelineServiceTests
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
-        AddGeometryNode(workspace, geometry, "Mesh");
-        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+        var consumer = foreignLibrary ? foreignConsumer : workspace;
+        if (foreignLibrary)
+        {
+            consumer.ContextService.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", Path.Combine(workspace.Root, ".cooked/Art"))] });
+            service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        }
+
+        AddGeometryNode(consumer, geometry, "Mesh");
+        await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var index = Path.Combine(workspace.Root, ".cooked/Art/container.index.bin");
         Action openForWrite = () => { using var file = new FileStream(index, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete); };
         var observed = false;
@@ -45,20 +56,7 @@ public sealed partial class ContentPipelineServiceTests
             var work = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
             if (terminationFailure)
             {
-                Func<Task> observe = () => work;
-                var failure = await observe.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
-                _ = openForWrite.Should().Throw<IOException>();
-                var next = workspace.CookCoordinator.RunAsync(
-                    (_, _) =>
-                {
-                    openForWrite();
-                    return Task.FromResult(true);
-                },
-                    this.TestContext.CancellationToken);
-                _ = next.IsCompleted.Should().BeFalse();
-                drain.SetResult();
-                await failure.Which.DrainCompletion.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-                _ = await next.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+                await this.AssertReaderRetainedUntilDrainAsync(work, consumer, openForWrite, drain).ConfigureAwait(false);
             }
             else
             {
@@ -72,6 +70,24 @@ public sealed partial class ContentPipelineServiceTests
         {
             _ = drain.TrySetResult();
         }
+    }
+
+    private async Task AssertReaderRetainedUntilDrainAsync(Task<ContentCookResult> work, TempWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
+    {
+        Func<Task> observe = () => work;
+        var failure = await observe.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
+        _ = openForWrite.Should().Throw<IOException>();
+        var next = consumer.CookCoordinator.RunAsync(
+            (_, _) =>
+        {
+            openForWrite();
+            return Task.FromResult(true);
+        },
+            this.TestContext.CancellationToken);
+        _ = next.IsCompleted.Should().BeFalse();
+        drain.SetResult();
+        await failure.Which.DrainCompletion.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await next.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private sealed class ContextLeaseRunner : IContentPipelineProcessRunner
