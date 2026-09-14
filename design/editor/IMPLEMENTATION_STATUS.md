@@ -613,14 +613,15 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         matrix, including the remaining import workflows.
   - [x] The UI Automation exception flood was isolated to the computer-use helper;
         the user confirmed it disappears with the helper stopped.
-  - [ ] Close the reported native scene-switch shadow-barrier failure. The native
-        registry now forgets backend state before retiring a resource; its cache
-        regression fails before the fix and passes afterward; 121 native cases pass
-        in both Debug and Release. Shadow-enabled
-        publication/scene-switch tests pass at 60 and 10 FPS. Release stress runs
-        cover 30 cycles at each cadence with active shadow casters, successful
-        view destruction and zero retained surface leases after every cycle. The intermittent
-        reported transition is not reproduced by that editor test.
+  - [x] Close the reported native scene-switch shadow-barrier failure. The native
+        registry forgets backend state before retiring a resource; its cache
+        regression fails before the fix and passes afterward, with 121 native
+        cases passing in each configuration. Direct scene-replacement stress and
+        real document-host Main/Inspect/Main transitions pass 30 cycles at both
+        60 and 10 FPS. The latter explicitly enables D3D12 debug/validation and
+        conventional shadows, checks retired view IDs and zero/one surface
+        ownership at every activation, and reports no engine-loop failure.
+        [Document transition evidence](validation/ED-M07B-document-transitions.md).
 - [x] 07B.3 required PostProcess/Background native descriptor/load mappings.
       Scene v4 carries all 23 post-process fields and display-background RGB through
       saved JSON, descriptors, native cooking/loading and hydration. Debug/Release
