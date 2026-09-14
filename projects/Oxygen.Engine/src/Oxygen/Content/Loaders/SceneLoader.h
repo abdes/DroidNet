@@ -474,7 +474,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   detail::ValidateTrailingEnvironmentBlock(bytes_span, payload_end);
 
-  if (!context.parse_only) {
+  if (!context.parse_only || context.dependency_collector) {
     if (!context.dependency_collector) {
       LOG_F(ERROR,
         "SceneLoader requires a DependencyCollector for non-parse-only loads");

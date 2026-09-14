@@ -51,6 +51,7 @@ set(
   "api_export.h"
   "PakFile.h"
   "AssetLoader.h"
+  "DescriptorDependencies.h"
   "Constants.h"
   "EvictionEvents.h"
   "VirtualPath.h"
@@ -71,6 +72,7 @@ set(
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
   "AssetLoader.cpp"
+  "DescriptorDependencies.cpp"
   "Internal/AssetIdentityIndex.h"
   "Internal/AssetIdentityIndex.cpp"
   "Internal/ContentSourceRegistry.h"

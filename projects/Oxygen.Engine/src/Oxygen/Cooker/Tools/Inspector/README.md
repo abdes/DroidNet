@@ -81,6 +81,21 @@ Oxygen.Cooker.Inspector.exe dump-index F:/path/to/loose_cooked_root --assets --d
 
 ## Exit codes
 
+### Dependency metadata
+
+```powershell
+Oxygen.Cooker.Inspector.exe dependencies <cooked_root> --output <report.json>
+```
+
+Writes `oxygen.cooked-dependencies.v1` metadata using the runtime descriptor
+decoders. Geometry and scene asset-key references are collected without loading
+vertex buffers, textures, or a rendering engine. Material resource indices remain
+local to their container. Each asset reports whether dependency inspection is
+complete; unsupported types, malformed descriptors and scene script sidecars
+retain a diagnostic instead of claiming an empty dependency set.
+
+The report schema is installed as `oxygen.cooked-dependencies.schema.json`.
+
 - `0`: success
 - `1`: CLI usage / unknown command
 - `2`: validation or runtime error while loading/inspecting

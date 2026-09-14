@@ -25,7 +25,8 @@ asap_push_module("${META_MODULE_NAME}")
 # Build instructions
 # ------------------------------------------------------------------------------
 
-add_executable(${META_MODULE_TARGET} "main.cpp")
+find_package(nlohmann_json REQUIRED)
+add_executable(${META_MODULE_TARGET} "main.cpp" "DependencyReport.cpp" "DependencyReport.h")
 
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
 # in addition to the generated target name (e.g. oxygen-cooker-inspector).
@@ -52,6 +53,7 @@ target_link_libraries(
     oxygen::cooker
     oxygen::content
     oxygen::clap
+    nlohmann_json::nlohmann_json
 )
 
 # ------------------------------------------------------------------------------

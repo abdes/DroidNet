@@ -1,0 +1,37 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://oxygen-engine.org/schemas/oxygen.cooked-dependencies.schema.json",
+    "type": "object",
+    "required": ["schema", "source_key", "assets"],
+    "additionalProperties": false,
+    "properties": {
+        "schema": { "const": "oxygen.cooked-dependencies.v1" },
+        "source_key": { "$ref": "#/definitions/key" },
+        "assets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["asset_key", "asset_type", "virtual_path", "dependencies", "complete"],
+                "additionalProperties": false,
+                "properties": {
+                    "asset_key": { "$ref": "#/definitions/key" },
+                    "asset_type": { "type": "integer", "minimum": 0, "maximum": 255 },
+                    "virtual_path": { "type": "string", "pattern": "^/" },
+                    "dependencies": {
+                        "type": "array",
+                        "uniqueItems": true,
+                        "items": { "$ref": "#/definitions/key" }
+                    },
+                    "complete": { "type": "boolean" },
+                    "diagnostic": { "type": "string" }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "key": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+    }
+}
