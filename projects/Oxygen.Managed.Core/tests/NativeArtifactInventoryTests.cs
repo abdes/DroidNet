@@ -36,6 +36,8 @@ public sealed class NativeArtifactInventoryTests
         _ = inventory.Should().Contain(item => item.Id == NativeArtifactInventory.ImportToolId);
         _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.scene-descriptor.schema.json");
         _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.import-manifest.schema.json");
+        _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.scene-source-inspection.schema.json");
+        _ = inventory.Should().Contain(item => item.Id == "engine/schemas/oxygen.scene-source-inspection.schema.json");
         _ = inventory.Should().NotContain(item => item.Id == NativeArtifactInventory.InteropId || item.Id.EndsWith("RenderScene.exe", StringComparison.Ordinal));
     }
 

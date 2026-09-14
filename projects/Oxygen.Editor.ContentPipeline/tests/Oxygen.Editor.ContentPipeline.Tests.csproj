@@ -18,6 +18,7 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <None Update="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.*" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
     </ItemGroup>
