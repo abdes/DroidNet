@@ -9,6 +9,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <future>
 #include <latch>
 #include <mutex>
 #include <thread>
@@ -129,6 +130,100 @@ class AsyncImportServiceSubmitTest : public testing::Test {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };
+
+//! Admission includes jobs posted by concurrent callers before the import
+//! thread runs them.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, PostedJobsReserveQueueCapacity)
+{
+  AsyncImportService service(AsyncImportService::Config {
+    .thread_pool_size = 2, .max_in_flight_jobs = 1 });
+  std::promise<void> entered;
+  auto entered_future = entered.get_future();
+  std::promise<void> release;
+  auto resume = release.get_future().share();
+  const auto blocker
+    = SubmitTestJob(service, ImportRequest { .source_path = "barrier.asset" },
+      [&](ImportJobId, const ImportReport&) {
+        entered.set_value();
+        resume.wait();
+      });
+  EXPECT_NE(blocker, kInvalidJobId);
+  const auto blocked = entered_future.wait_for(5s) == std::future_status::ready;
+  EXPECT_TRUE(blocked);
+  if (!blocked) {
+    release.set_value();
+    StopService(service);
+    return;
+  }
+
+  std::mutex mutex;
+  std::condition_variable completed;
+  size_t accepted = 0;
+  size_t callbacks = 0;
+  size_t failed = 0;
+  {
+    std::vector<std::jthread> producers;
+    for (size_t producer = 0; producer < 4; ++producer) {
+      producers.emplace_back([&] {
+        for (size_t job = 0; job < 64; ++job) {
+          const auto id = service.SubmitImport(
+            ImportRequest { .source_path = "queued.asset" },
+            [&](ImportJobId, const ImportReport& report) {
+              std::scoped_lock lock(mutex);
+              ++callbacks;
+              failed += report.success ? 0U : 1U;
+              completed.notify_one();
+            },
+            nullptr,
+            MakeTestJobFactory({ .total_delay = 1ms,
+              .step_delay = 1ms,
+              .report_progress = false }));
+          if (id) {
+            std::scoped_lock lock(mutex);
+            ++accepted;
+          }
+        }
+      });
+    }
+  }
+  EXPECT_GT(accepted, 0U);
+  EXPECT_LT(accepted, 256U);
+  release.set_value();
+  {
+    std::unique_lock lock(mutex);
+    EXPECT_TRUE(
+      completed.wait_for(lock, 10s, [&] { return callbacks == accepted; }));
+  }
+  StopService(service);
+  EXPECT_EQ(callbacks, accepted);
+  EXPECT_EQ(failed, 0U);
+}
+
+//! Factory rejection releases admission and never invokes a completion
+//! callback.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, RejectedFactoriesReleaseAdmission)
+{
+  AsyncImportService service(config_);
+  std::atomic<size_t> rejected_callbacks { 0 };
+  for (size_t attempt = 0; attempt < 256; ++attempt) {
+    const auto id = service.SubmitImport(
+      ImportRequest { .source_path = "rejected.asset" },
+      [&](ImportJobId, const ImportReport&) { ++rejected_callbacks; }, nullptr,
+      [](detail::ImportJobParams) -> std::shared_ptr<detail::ImportJob> {
+        return nullptr;
+      });
+    EXPECT_FALSE(id);
+  }
+  std::promise<void> finished;
+  auto done = finished.get_future();
+  const auto id
+    = SubmitTestJob(service, ImportRequest { .source_path = "accepted.asset" },
+      [&](ImportJobId, const ImportReport&) { finished.set_value(); });
+  EXPECT_NE(id, kInvalidJobId);
+  EXPECT_EQ(done.wait_for(5s), std::future_status::ready);
+  StopService(service);
+  EXPECT_EQ(rejected_callbacks.load(), 0U);
+}
 
 //! Verify SubmitImport returns a valid job ID.
 NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImportReturnsValidJobId)
@@ -657,7 +752,7 @@ NOLINT_TEST_F(
   // Submit first job that blocks
   [[maybe_unused]] auto blocking_job = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
-    [](ImportJobId, ImportReport) {},
+    [](ImportJobId, ImportReport) { },
     [&](const ProgressEvent& progress) {
       if (progress.header.phase == ImportPhase::kWorking) {
         bool expected = false;

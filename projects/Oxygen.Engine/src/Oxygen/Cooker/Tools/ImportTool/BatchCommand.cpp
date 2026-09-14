@@ -1348,7 +1348,13 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       import_service->RequestShutdown();
     };
 
-    while (!st.stop_requested() && (completed < jobs.size() || in_flight > 0)) {
+    while (!st.stop_requested()) {
+      {
+        std::scoped_lock lock(common_context->mutex);
+        if (completed == jobs.size() && in_flight == 0U) {
+          break;
+        }
+      }
       if (!import_service->IsAcceptingJobs()) {
         RequestShutdown();
       }
@@ -1692,30 +1698,31 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           UpdateWorkerUtilization();
         };
 
-        if (auto id = import_service->SubmitImport(
-              job.request, on_complete, on_progress)) {
-          job_submitted[job_index] = true;
-          job_ids[job_index] = *id;
-          job_views[job_index].id = std::to_string(DisplayJobNumber(job_index));
-          job_views[job_index].source = job.source_path;
-          job_views[job_index].status = "Queued";
-          job_views[job_index].progress = 0.0f;
-          job_views[job_index].items_completed = 0U;
-          job_views[job_index].items_total = 0U;
-          job_active[job_index] = true;
-          submitted++;
-          in_flight++;
-        } else {
-          std::scoped_lock lock(common_context->mutex);
-          ready_queue.push_front(job_index);
-          common_context->state.recent_logs.push_back(
-            fmt::format("Backpressure: delaying submission of job {}",
-              DisplayJobNumber(job_index)));
-          break;
-        }
-
         {
+          // Completion can arrive before SubmitImport returns. Publish the
+          // submitted state under the same lock used by both callbacks.
           std::scoped_lock lock(common_context->mutex);
+          if (auto id = import_service->SubmitImport(
+                job.request, on_complete, on_progress)) {
+            job_submitted[job_index] = true;
+            job_ids[job_index] = *id;
+            job_views[job_index].id
+              = std::to_string(DisplayJobNumber(job_index));
+            job_views[job_index].source = job.source_path;
+            job_views[job_index].status = "Queued";
+            job_views[job_index].progress = 0.0f;
+            job_views[job_index].items_completed = 0U;
+            job_views[job_index].items_total = 0U;
+            job_active[job_index] = true;
+            submitted++;
+            in_flight++;
+          } else {
+            ready_queue.push_front(job_index);
+            common_context->state.recent_logs.push_back(
+              fmt::format("Backpressure: delaying submission of job {}",
+                DisplayJobNumber(job_index)));
+            break;
+          }
           common_context->state.in_flight = in_flight;
           common_context->state.remaining
             = PendingCount(jobs.size(), completed, in_flight);

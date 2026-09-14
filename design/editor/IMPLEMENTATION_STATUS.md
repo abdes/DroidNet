@@ -535,6 +535,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] One writer owns queued work, project lifetimes and native drain. Pending
         scopes coalesce with independent caller cancellation; explicit/demand work
         precedes background saves. Pause/resume and later saved revisions are covered.
+        Native admission reserves capacity before import-thread dispatch, and batch
+        submission/completion bookkeeping is synchronized. Importer and batch
+        regressions pass 57/57 in Debug and Release, including a 1,000-material
+        cook; both updated SDKs are installed.
   - [x] Imported output ownership resolves from saved settings or verified
         provenance. Asset, output-folder and consuming-scene cases regenerate
         from retained sources in a clean project. Exact requested outputs are
