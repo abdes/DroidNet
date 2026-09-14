@@ -176,7 +176,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             {
                 AssetCookFreshness.MissingSource => AssetState.Missing,
                 AssetCookFreshness.InvalidSource => AssetState.Broken,
-                _ => AssetState.Descriptor,
+                _ => item.Kind == AssetKind.ForeignSource ? AssetState.Source
+                    : item.ImportSourceUri is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
             },
             DerivedState = !state.HasPublishedOutput ? null
                 : !state.HasVerifiedOutput ? AssetState.Broken
@@ -214,7 +215,12 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
     private async Task<IReadOnlyList<ContentBrowserAssetItem>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<ContentBrowserAssetItem> source, CancellationToken cancellationToken)
     {
-        var candidates = source.Where(static item => item.Generated is not null || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene)).ToArray();
+        source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
+            && File.Exists(path + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
+                ? item with { ImportSourceUri = item.IdentityUri, ImportSourcePath = path } : item).ToArray();
+        var candidates = source.Where(item => item.Generated is not null || item.ImportSourceUri is not null
+            || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene)
+            || IsProjectCookedOutput(project, item)).ToArray();
         if (candidates.Length == 0)
         {
             return source;
@@ -227,7 +233,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             .GroupBy(static entry => entry.CookedUri)
             .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.ToArray());
-        return source.Select(item =>
+        var projectedItems = source.Select(item =>
         {
             if (item.IsBuiltin)
             {
@@ -244,7 +250,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
                     : item.CookedPath is { } path && Path.GetFullPath(path).StartsWith(proof.Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))?.Origin;
             return item.SourcePath is null && item.DescriptorPath is null && origin is not null
                 ? projected with { Generated = origin.Generated, BuiltinOriginUri = origin.IdentityUri, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
-                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyCookStatus(projected, state) : projected;
+                : states.TryGetValue(item.IdentityUri, out var state) ? ApplyOwnedCookStatus(project, projected, state) : projected;
         }).ToArray();
+        return AddKnownImportedOutputs(project, projectedItems, states.Values);
     }
 }

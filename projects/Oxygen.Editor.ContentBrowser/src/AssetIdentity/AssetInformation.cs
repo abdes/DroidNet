@@ -30,6 +30,10 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
                 facts.Add(new("Generator", asset.AliasDescription));
             }
         }
+        else if (asset.ImportSourceUri is { } origin && origin != asset.IdentityUri)
+        {
+            facts.Add(new("Imported from", AssetUriHelper.GetVirtualPath(origin)));
+        }
         else if ((asset.SourcePath ?? asset.DescriptorPath) is { } source)
         {
             facts.Add(new("Source", source));
@@ -55,6 +59,23 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
     private static void AddOutputFacts(ContentBrowserAssetItem asset, List<AssetInformationFact> facts)
     {
+        if (asset.Kind == AssetKind.ForeignSource && asset.CookStatus is { Outputs.Length: > 0 } status)
+        {
+            var imported = status.Outputs.Where(output => output.SourceAssetUri == asset.IdentityUri).DistinctBy(static output => output.CookedAssetUri).ToArray();
+            var text = string.Join(Environment.NewLine, imported.Take(3).Select(static output => AssetIdentityReducer.GetDisplayName(output.CookedAssetUri) + " (" + output.Kind + ")"));
+            if (imported.Length > 3)
+            {
+                text += string.Create(CultureInfo.InvariantCulture, $"{Environment.NewLine}+{imported.Length - 3} more outputs");
+            }
+
+            if (imported.Length > 0)
+            {
+                facts.Add(new("Outputs", text));
+            }
+
+            return;
+        }
+
         var outputs = asset.CookedCompanions.Prepend(asset)
             .Select(static item => item.CookedUri)
             .OfType<Uri>()
@@ -76,7 +97,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
     private static string GetDescription(ContentBrowserAssetItem asset)
     {
-        var description = asset.IsBuiltin || asset.IsCookedSourceOverridden || asset.CookStatus is not null ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
+        var description = asset.IsBuiltin || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.ForeignSource ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
         {
             AssetState.Missing => "The referenced asset could not be found.",
             AssetState.Broken => "The asset could not be read or validated.",

@@ -84,6 +84,14 @@ assignable geometry identities from its filename. After import, typed pickers
 show actual supported outputs. Shared source/cooked companions do not inflate
 the PRD's logical asset count.
 
+The shared row snapshot retains a configured model's source identity separately
+from descriptor editing paths. Project-produced outputs show that source in
+tooltips and expose Show source/Reimport in the existing Cook menu; foreign
+library copies do not acquire project source actions from an equal virtual name.
+Before configuration, source rows show Not imported and do not create typed
+picker choices. Previously published output names can remain visible while their
+derived files need regeneration; unobserved names are never synthesized.
+
 Expose engine-provided assets in an explicitly labeled Built-in group/filter
 in the browser as well as the pickers. Use the 07B.7 provenance/identity mapping
 to attach generated cooked companions to their originating built-in. Do not

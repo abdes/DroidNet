@@ -74,6 +74,14 @@
                     <dnc:ToolBarButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedLeft">
                             <MenuFlyoutItem
+                                Command="{x:Bind ViewModel.ShowImportSourceCommand}"
+                                Text="Show source"
+                                Visibility="{x:Bind ViewModel.ShowImportSourceVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <SymbolIcon Symbol="OpenFile" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
                                 Command="{x:Bind ViewModel.ReimportSelectedSourceCommand}"
                                 Text="Reimport source"
                                 Visibility="{x:Bind ViewModel.ReimportSelectedSourceVisibility, Mode=OneWay}">
