@@ -145,7 +145,7 @@ public sealed partial class InspectorControlTests
             this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
             this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
             this.container.RegisterInstance(Mock.Of<IStatusReducer>());
-            this.container.RegisterInstance(Mock.Of<IImportService>());
+            this.container.RegisterInstance(Mock.Of<DroidNet.Aura.Dialogs.IDialogService>());
             this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
             this.Browser = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), NullLoggerFactory.Instance);
         }

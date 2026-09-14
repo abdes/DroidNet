@@ -125,7 +125,7 @@ public sealed partial class InspectorControlTests
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
             messenger ?? new StrongReferenceMessenger(),
-            Mock.Of<Oxygen.Managed.Assets.Import.IImportService>(),
+            Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>());
     }
 }

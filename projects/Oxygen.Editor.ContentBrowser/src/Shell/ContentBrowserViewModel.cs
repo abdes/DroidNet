@@ -206,6 +206,7 @@ public sealed partial class ContentBrowserViewModel(
             // Dialog views used via Aura's IDialogService + VmToViewConverter.
             this.childContainer.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
             this.childContainer.Register<LocalFolderMountDialogView>(Reuse.Transient);
+            this.childContainer.Register<Importing.SceneImportDialogView>(Reuse.Transient);
 
             this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
             this.childContainer.Register<AssetsView>(Reuse.Singleton);
