@@ -56,10 +56,19 @@ auto ValidateStaticScalarSource(const cgltf_data& source,
     source.skins_count != 0U, "skinning", source_path, "/skins", diagnostics);
   Reject(source.textures_count != 0U || source.images_count != 0U,
     "texture-bearing materials", source_path, "/textures", diagnostics);
-  Reject(source.cameras_count != 0U, "camera components", source_path,
-    "/cameras", diagnostics);
-  Reject(source.lights_count != 0U, "light components", source_path,
-    "/extensions/KHR_lights_punctual", diagnostics);
+  for (const auto& [index, camera] :
+    std::views::enumerate(std::span(source.cameras, source.cameras_count))) {
+    Reject(camera.type != cgltf_camera_type_perspective,
+      "non-perspective camera components", source_path,
+      "/cameras/" + std::to_string(index), diagnostics);
+  }
+  for (const auto& [index, light] :
+    std::views::enumerate(std::span(source.lights, source.lights_count))) {
+    Reject(light.type != cgltf_light_type_directional,
+      "non-directional light components", source_path,
+      "/extensions/KHR_lights_punctual/lights/" + std::to_string(index),
+      diagnostics);
+  }
   Reject(source.variants_count != 0U, "material variants", source_path,
     "/extensions/KHR_materials_variants", diagnostics);
 
@@ -169,10 +178,18 @@ auto ValidateStaticScalarSource(const ufbx_scene& source,
     "vertex caches", source_path, "/Deformers/Cache", diagnostics);
   Reject(source.textures.count != 0U || source.videos.count != 0U,
     "texture-bearing materials", source_path, "/Textures", diagnostics);
-  Reject(source.cameras.count != 0U || source.stereo_cameras.count != 0U,
-    "camera components", source_path, "/Cameras", diagnostics);
-  Reject(source.lights.count != 0U, "light components", source_path, "/Lights",
-    diagnostics);
+  Reject(source.stereo_cameras.count != 0U, "stereo camera components",
+    source_path, "/Cameras", diagnostics);
+  for (const auto* camera :
+    std::span(source.cameras.data, source.cameras.count)) {
+    Reject(camera->projection_mode != UFBX_PROJECTION_MODE_PERSPECTIVE,
+      "non-perspective camera components", source_path, "/Cameras",
+      diagnostics);
+  }
+  for (const auto* light : std::span(source.lights.data, source.lights.count)) {
+    Reject(light->type != UFBX_LIGHT_DIRECTIONAL,
+      "non-directional light components", source_path, "/Lights", diagnostics);
+  }
   Reject(source.unknowns.count != 0U, "unknown FBX scene elements", source_path,
     "/Objects", diagnostics);
   Reject(source.constraints.count != 0U || source.characters.count != 0U,
