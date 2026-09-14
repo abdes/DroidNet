@@ -411,6 +411,7 @@ public static partial class Program
         container.Register<ImportToolContentPipelineApi>(Reuse.Singleton);
         container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
         container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
+        container.RegisterMapping<Oxygen.Editor.ContentPipeline.Import.ISceneSourceInspector, ImportToolContentPipelineApi>();
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();

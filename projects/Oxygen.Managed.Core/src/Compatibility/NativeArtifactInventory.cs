@@ -33,7 +33,7 @@ public static class NativeArtifactInventory
     {
         var files = NativeLibraries(installation);
         files[ImportToolId] = new(ImportToolId, Path.Combine(installation.EngineRoot, "bin", "Oxygen.Cooker.ImportTool.exe"));
-        foreach (var name in new[] { "oxygen.scene-descriptor.schema.json", "oxygen.material-descriptor.schema.json", "oxygen.geometry-descriptor.schema.json", "oxygen.import-manifest.schema.json", "oxygen.buffer-container.schema.json" })
+        foreach (var name in new[] { "oxygen.scene-descriptor.schema.json", "oxygen.material-descriptor.schema.json", "oxygen.geometry-descriptor.schema.json", "oxygen.import-manifest.schema.json", "oxygen.buffer-container.schema.json", "oxygen.scene-source-inspection.schema.json" })
         {
             AddSchema("engine/schemas/" + name, Path.Combine(installation.EngineRoot, "schemas", name));
             AddSchema("editor/Schemas/" + name, Path.Combine(installation.EditorRoot, "Schemas", name));
