@@ -46,6 +46,9 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
             : new(root.GetProperty("source_key").GetGuid(), assets.ToImmutableDictionary(static asset => asset.AssetKey, StringComparer.OrdinalIgnoreCase), json);
     }
 
-    private static string IndexKey(string nativeKey)
+    /// <summary>Preserves native key bytes when converting canonical text to the managed index representation.</summary>
+    /// <param name="nativeKey">Canonical native key text.</param>
+    /// <returns>The index key text for the same sixteen bytes.</returns>
+    internal static string IndexKey(string nativeKey)
         => AssetKey.FromBytes(Guid.Parse(nativeKey).ToByteArray(bigEndian: true)).ToString();
 }

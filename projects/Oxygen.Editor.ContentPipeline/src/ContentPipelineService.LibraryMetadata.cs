@@ -85,7 +85,34 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
             }
         }
 
+        if (inspector is ICookedAssetKeyProvider keys)
+        {
+            changed |= await this.RefreshProjectIdentitiesAsync(operation, keys, cancellationToken).ConfigureAwait(false);
+        }
+
         this.cookCoordinator.VerifyCurrent(operation);
         return changed;
+    }
+
+    private async Task<bool> RefreshProjectIdentitiesAsync(ContentCookOperation operation, ICookedAssetKeyProvider provider, CancellationToken cancellationToken)
+    {
+        // Identity lookup reads only its private path request, so library readers can close before it starts.
+        using (var libraries = await Publication.CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken).ConfigureAwait(false))
+        {
+            if (!libraries.HasUnresolvedAssetKeys)
+            {
+                return false;
+            }
+        }
+
+        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
+        {
+            previous = new(1, operation.Project.ProjectId, [], []);
+        }
+
+        var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
+        var candidates = await ProjectAssetKeyIndex.ReadAsync(operation.Project, imports.KnownOutputs, cancellationToken).ConfigureAwait(false);
+        return await candidates.EnsureAsync(provider, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
     }
 }

@@ -27,15 +27,23 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private string projectRoot = string.Empty;
     private ProjectContext project = null!;
     private Func<Uri, ContentCookInput?>? resolveImported;
+    private IReadOnlyCollection<Uri> knownProjectOutputs = [];
+    private ProjectAssetKeyIndex? projectIdentities;
+
+    /// <summary>Gets a value indicating whether cached dependencies name keys absent from every declared library index.</summary>
+    public bool HasUnresolvedAssetKeys => this.roots.Where(static root => root.Dependencies is not null)
+        .SelectMany(static root => root.Dependencies!.Assets.Values).SelectMany(static asset => asset.Dependencies)
+        .Any(key => this.FindKey(key).asset is null);
 
     /// <summary>Reads library indexes and protects the full container inputs without starting a native worker.</summary>
     /// <param name="project">The project declaring the ordered libraries.</param>
     /// <param name="cancellationToken">Cancels acquisition and hashing.</param>
     /// <param name="resolveImported">Resolves retained project owners of imported outputs.</param>
+    /// <param name="knownOutputs">Previously identified imported project output names.</param>
     /// <returns>The selected library readers and lookup facts.</returns>
-    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<Uri, ContentCookInput?>? resolveImported = null)
+    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<Uri, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<Uri>? knownOutputs = null)
     {
-        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot, project = project, resolveImported = resolveImported };
+        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot, project = project, resolveImported = resolveImported, knownProjectOutputs = knownOutputs ?? [] };
         try
         {
             foreach (var source in result.order.Where(static source => source.Kind == CookedContentSourceKind.LocalFolder))
@@ -140,9 +148,10 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             foreach (var key in metadata.Assets[asset.Cooked!.AssetKey.ToString()].Dependencies)
             {
                 var resolved = this.FindKey(key);
-                if (resolved.asset is not null && closure.Add(resolved.asset.Uri))
+                var dependency = resolved.asset?.Uri ?? await this.ResolveProjectKeyAsync(key, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
+                if (dependency is not null && closure.Add(dependency))
                 {
-                    pending.Enqueue(resolved.asset.Uri);
+                    pending.Enqueue(dependency);
                 }
             }
         }
@@ -302,7 +311,11 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     var resolved = this.FindKey(key);
                     if (resolved.asset?.Cooked is not { } asset)
                     {
-                        diagnostics.Add(Issue(input, "asset_cook.library_dependency_missing", $"Library asset '{uri}' requires missing asset '{key}'."));
+                        if (this.ResolveUnindexedDependency(graph, input, uri, key, closure) is { } issue)
+                        {
+                            diagnostics.Add(issue);
+                        }
+
                         continue;
                     }
 
@@ -325,6 +338,30 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
 
         return references.ToImmutable();
+    }
+
+    private DiagnosticRecord? ResolveUnindexedDependency(CookDependencyGraph graph, ContentCookInput input, Uri consumer, string key, HashSet<Uri> closure)
+    {
+        if (this.projectIdentities?.Resolve(key) is { } projectUri && HasProjectOwner(graph, projectUri))
+        {
+            _ = closure.Add(projectUri);
+            return null;
+        }
+
+        return this.projectIdentities?.IsPending == true
+            ? Issue(input, "asset_cook.library_inspection_required", "Project asset identities are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning }
+            : Issue(input, "asset_cook.library_dependency_missing", $"Library asset '{consumer}' requires missing asset '{key}'.");
+    }
+
+    private async Task<Uri?> ResolveProjectKeyAsync(string key, ICookedAssetKeyProvider? provider, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    {
+        this.projectIdentities ??= await ProjectAssetKeyIndex.ReadAsync(this.project, this.knownProjectOutputs, cancellationToken).ConfigureAwait(false);
+        if (provider is not null)
+        {
+            _ = await this.projectIdentities.EnsureAsync(provider, operationRoot, cancellationToken, artifacts).ConfigureAwait(false);
+        }
+
+        return this.projectIdentities.Resolve(key);
     }
 
     private bool ProjectHasPriority(Root root)

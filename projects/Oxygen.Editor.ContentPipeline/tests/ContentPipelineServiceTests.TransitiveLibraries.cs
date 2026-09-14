@@ -14,12 +14,16 @@ public sealed partial class ContentPipelineServiceTests
 {
     /// <summary>A library geometry's material resolves through the project's saved source priority.</summary>
     /// <param name="projectWins">Whether project output has higher priority than the material library.</param>
+    /// <param name="materialLibraryMounted">Whether a library index can name the dependent material.</param>
+    /// <param name="prewarm">Whether background metadata refresh runs before the first cook.</param>
     /// <returns>The asynchronous native priority regression.</returns>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
+    [DataRow(true, true, false)]
+    [DataRow(false, true, false)]
+    [DataRow(true, false, false)]
+    [DataRow(true, false, true)]
     [TestCategory("NativeContent")]
-    public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins)
+    public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins, bool materialLibraryMounted, bool prewarm)
     {
         using var library = new TempWorkspace([new("Content", "Content"), new("Art", "Art")]);
         using var consumer = new TempWorkspace([new("Content", "Content"), new("Art", "Art")]);
@@ -32,12 +36,15 @@ public sealed partial class ContentPipelineServiceTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + material[..^5];
         library.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+        var runner = new CountingSourceRunner();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         _ = (await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
         {
-            LocalFolderMounts = [new("Materials", Path.Combine(library.Root, ".cooked/Art")), new("Meshes", Path.Combine(library.Root, ".cooked/Content"))],
+            LocalFolderMounts = materialLibraryMounted
+                ? [new("Materials", Path.Combine(library.Root, ".cooked/Art")), new("Meshes", Path.Combine(library.Root, ".cooked/Content"))]
+                : [new("Meshes", Path.Combine(library.Root, ".cooked/Content"))],
             CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.World.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Meshes")],
         };
         consumer.ContextService.Activate(context);
@@ -45,6 +52,11 @@ public sealed partial class ContentPipelineServiceTests
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        if (prewarm)
+        {
+            await this.VerifyBackgroundKeyLookupAsync(service, consumer, scene, runner).ConfigureAwait(false);
+        }
+
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var materialUri = new Uri("asset:///" + material[..^5]);
