@@ -15,6 +15,9 @@ internal sealed class ImportedSourceIndex
     private readonly Dictionary<Uri, Uri> previousOwners = [];
     private readonly List<Entry> entries = [];
 
+    /// <summary>Gets previously identified native outputs for project key lookup.</summary>
+    public IReadOnlyCollection<Uri> KnownOutputs => this.previousOwners.Keys;
+
     /// <summary>Reads saved source namespaces and trusted prior output ownership once for a request.</summary>
     /// <param name="project">The project's authoring mount declarations.</param>
     /// <param name="documents">Owners protecting acknowledged saved settings.</param>

@@ -136,7 +136,7 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
-        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency)).ConfigureAwait(false);
+        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         try
         {
             var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);

@@ -571,10 +571,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Debug and Release, with both SDK configurations installed.
   - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
         in 07B.1 and 07B.4.
-        Project-only uncooked dependencies still need editor integration. The
-        native Inspector now supplies batched virtual-path keys through the engine
-        identity API; four native schema/key/error cases pass in both configurations,
-        including 1,001 paths, and both installed CLIs pass canonical/Unicode checks.
+  - [x] Project-only uncooked dependencies resolve through batched native keys and
+        a derived candidate-path cache. First scene cook includes the material
+        without mounting its producer library. Background preparation creates no
+        cooking run; unchanged status starts no workers. Rename/removal, corrupt
+        cache and failed-drain regressions pass. Native lookup passes four cases
+        in both configurations, including 1,001 paths; editor integration and
+        lifecycle cases pass 11/11.
   - [x] Cache native Inspector dependency reports by verified library contents.
         Cooked geometry captures a material supplied by another library; changing
         that material invalidates its consuming scene. Native keys retain their
@@ -585,7 +588,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         reached through indexed library dependencies now enter saved-input capture
         and cooking; saved priority selects the winner, and shadowed versions do
         not invalidate consumers. Both orders and status transitions pass; the
-        ContentPipeline suite passes 434/434.
+        ContentPipeline suite passes 441/441.
 - [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
