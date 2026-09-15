@@ -176,6 +176,8 @@ union ShapeParams {
   } sphere;
   struct CapsuleParams {
     float radius = 0.0F;
+    //! Half-length of the Z-axis cylinder segment, excluding hemispheres.
+    //! Total height = 2 * (half_height + radius); zero gives a sphere.
     float half_height = 0.0F;
     float _reserved[18] = {}; //!< Union tail: 80-byte arm size
   } capsule;

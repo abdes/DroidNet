@@ -930,7 +930,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `ready for implementation; runtime qualification pending`
+Status: `in_progress; M08.1 native implementation; runtime qualification pending`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, with
 semantic/image qualification through development-only native and embedded paths.
@@ -946,6 +946,11 @@ readers. Primary/Secondary names remain unchanged.
 
 - [x] Final implementation plan and coherent domain contracts are available.
 - [ ] M08.1 native canonical data, producers and primitives.
+      Capsule generation/catalog/cooking, procedural loaded bounds and canonical
+      Physics capsule/cylinder axes have native tests and protected fixture
+      migration/recooking evidence in the [increment record](validation/ED-M08-M08.1-capsule.md).
+      Native rendered qualification remains open. Other M08.1
+      canonical formats, producer mappings and migrations remain open.
 - [ ] M08.2 native rendering and view behavior.
 - [ ] M08.3 development harness and native visual gate outside the editor.
 - [ ] M08.4 editor canonical authoring and live delivery.
@@ -1035,7 +1040,7 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `validated` | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded. |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `planned` | Final package is ready for implementation: native contracts/rendering/visual gate, editor integration, migration and development-only parity. M02 evidence and normal-build exclusion gate closeout. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `in_progress` | M08.1 Capsule/native primitive work has started. Canonical formats, remaining native contracts, rendered qualification, editor integration and development-only parity remain open. M02 evidence and normal-build exclusion gate closeout. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |

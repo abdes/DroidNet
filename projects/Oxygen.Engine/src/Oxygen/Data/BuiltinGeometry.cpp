@@ -21,8 +21,8 @@ namespace {
 
 constexpr auto kUriPrefix
   = std::string_view { "asset:///Engine/Generated/BasicShapes/" };
-constexpr auto kNames = std::array<std::string_view, 11> { "Cube",
-  "SubdividedCube", "Sphere", "IcoSphere", "GeodesicSphere", "Plane",
+constexpr auto kNames = std::array<std::string_view, 12> { "Cube",
+  "SubdividedCube", "Sphere", "Capsule", "IcoSphere", "GeodesicSphere", "Plane",
   "Cylinder", "Cone", "Torus", "Quad", "ArrowGizmo" };
 
 constexpr auto AsciiLower(const char value) noexcept -> char

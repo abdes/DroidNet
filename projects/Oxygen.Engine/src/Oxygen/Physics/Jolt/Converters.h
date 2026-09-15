@@ -314,6 +314,16 @@ inline auto ApplyShapeLocalTransform(const CollisionShape& source_shape,
   return Ok(std::move(base_shape));
 }
 
+//! Adapts Jolt's Y-axis primitive basis to Oxygen before authored transforms.
+inline auto OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> shape)
+  -> JPH::RefConst<JPH::Shape>
+{
+  const auto rotation = JPH::Quat::sFromTo(
+    JPH::Vec3::sAxisY(), ToJoltVec3(oxygen::space::move::Up));
+  return JPH::RefConst<JPH::Shape> { new JPH::RotatedTranslatedShape(
+    JPH::Vec3::sZero(), rotation, shape.GetPtr()) };
+}
+
 inline auto MakeShape(const CollisionShape& shape)
   -> PhysicsResult<JPH::RefConst<JPH::Shape>>
 {
@@ -335,19 +345,28 @@ inline auto MakeShape(const CollisionShape& shape)
           new JPH::BoxShape(ToJoltVec3(value.extents)),
         });
       } else if constexpr (std::is_same_v<T, CapsuleShape>) {
-        if (value.radius <= 0.0F || value.half_height <= 0.0F) {
+        if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
+          || value.radius <= 0.0F || value.half_height < 0.0F) {
           return Err(PhysicsError::kInvalidArgument);
         }
-        return Ok(JPH::RefConst<JPH::Shape> {
+        // A zero-length cylinder is the exact sphere limit. Jolt's capsule
+        // constructor requires positive length; its settings API uses the
+        // same sphere representation for this limit.
+        if (value.half_height == 0.0F) {
+          return Ok(
+            JPH::RefConst<JPH::Shape> { new JPH::SphereShape(value.radius) });
+        }
+        return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
           new JPH::CapsuleShape(value.half_height, value.radius),
-        });
+        }));
       } else if constexpr (std::is_same_v<T, CylinderShape>) {
-        if (value.radius <= 0.0F || value.half_height <= 0.0F) {
+        if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
+          || value.radius <= 0.0F || value.half_height <= 0.0F) {
           return Err(PhysicsError::kInvalidArgument);
         }
-        return Ok(JPH::RefConst<JPH::Shape> {
+        return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
           new JPH::CylinderShape(value.half_height, value.radius),
-        });
+        }));
       } else if constexpr (std::is_same_v<T, PlaneShape>) {
         const auto normal_len2 = glm::dot(value.normal, value.normal);
         if (!(normal_len2 > 0.0F)) {

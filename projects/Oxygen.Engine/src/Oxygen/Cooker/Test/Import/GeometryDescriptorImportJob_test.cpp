@@ -30,6 +30,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -148,6 +149,35 @@ namespace {
     return json {
       { "min", json::array({ -0.5F, -0.5F, -0.5F }) },
       { "max", json::array({ 0.5F, 0.5F, 0.5F }) },
+    };
+  }
+
+  auto MakeCapsuleDescriptor(const json& params, const float height,
+    const float radius) -> json
+  {
+    const auto bounds = json {
+      { "min", json::array({ -radius, -radius, -height * 0.5F }) },
+      { "max", json::array({ radius, radius, height * 0.5F }) },
+    };
+    auto procedural = json {
+      { "generator", "Capsule" }, { "mesh_name", "Capsule" }
+    };
+    if (!params.is_null()) {
+      procedural["params"] = params;
+    }
+    return json {
+      { "name", "Capsule" },
+      { "bounds", bounds },
+      { "lods", json::array({ {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "bounds", bounds },
+          { "procedural", std::move(procedural) },
+          { "submeshes", json::array({ {
+              { "material_ref", "/.cooked/Materials/default.omat" },
+              { "views", json::array({ { { "view_ref", "__all__" } } }) },
+            } }) },
+        } }) },
     };
   }
 
@@ -1226,6 +1256,151 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   EXPECT_FLOAT_EQ(geometry_desc.bounding_box_max[1], 5.0F);
   EXPECT_FLOAT_EQ(geometry_desc.bounding_box_max[2], 0.0F);
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ProceduralCapsuleParametersRoundTripThroughNativeLoader)
+{
+  struct Case {
+    std::string_view name;
+    json params;
+    uint32_t hemisphere_segments;
+    uint32_t radial_segments;
+    float height;
+    float radius;
+  };
+  const auto cases = std::vector<Case> {
+    { "capsule_defaults", nullptr, 8U, 32U, 2.0F, 0.5F },
+    { "capsule_custom",
+      { { "hemisphere_segments", 4 }, { "radial_segments", 16 },
+        { "height", 3.0 }, { "radius", 0.75 } },
+      4U, 16U, 3.0F, 0.75F },
+    { "capsule_sphere", { { "height", 1.0 } }, 8U, 32U, 1.0F, 0.5F },
+  };
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    const auto root = MakeTempCookedRoot(test_case.name);
+    const auto cooked_root = root / ".cooked";
+    const auto source_path = root / "Sources" / "capsule.geometry.json";
+    WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+    const auto doc = MakeCapsuleDescriptor(
+      test_case.params, test_case.height, test_case.radius);
+    WriteTextFile(source_path, doc.dump(2));
+    const auto report = SubmitAndWait(
+      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    ASSERT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+    ASSERT_EQ(report.geometry_written, 1U);
+    const auto output = FindOutputByExtension(report, ".ogeo");
+    ASSERT_TRUE(output.has_value());
+    auto bytes = ReadBinaryFile(cooked_root / *output);
+
+    constexpr auto mesh_offset
+      = sizeof(data::pak::geometry::GeometryAssetDesc);
+    constexpr auto params_offset
+      = mesh_offset + sizeof(data::pak::geometry::MeshDesc);
+    ASSERT_GE(bytes.size(), params_offset + 16U);
+    const auto mesh_desc
+      = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, mesh_offset);
+    EXPECT_TRUE(mesh_desc.IsProcedural());
+    EXPECT_STREQ(mesh_desc.name, "Capsule/Capsule");
+    EXPECT_EQ(mesh_desc.info.procedural.params_size, 16U);
+    EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset),
+      test_case.hemisphere_segments);
+    EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset + 4U),
+      test_case.radial_segments);
+    EXPECT_FLOAT_EQ(
+      ReadStructAt<float>(bytes, params_offset + 8U), test_case.height);
+    EXPECT_FLOAT_EQ(
+      ReadStructAt<float>(bytes, params_offset + 12U), test_case.radius);
+
+    auto stream = serio::MemoryStream(std::span<std::byte>(bytes));
+    auto reader = serio::Reader(stream);
+    auto context = content::LoaderContext {};
+    context.desc_reader = &reader;
+    context.parse_only = true;
+    const auto geometry
+      = content::loaders::LoadGeometryAsset(std::move(context));
+    ASSERT_NE(geometry, nullptr);
+    ASSERT_EQ(geometry->LodCount(), 1U);
+    const auto& mesh = geometry->MeshAt(0);
+    ASSERT_NE(mesh, nullptr);
+    ASSERT_GT(mesh->VertexCount(), 0U);
+    ASSERT_GT(mesh->IndexCount(), 0U);
+    const auto expected = data::MakeCapsuleMeshAsset(
+      test_case.hemisphere_segments, test_case.radial_segments,
+      test_case.height, test_case.radius);
+    ASSERT_TRUE(expected.has_value());
+    const auto loaded_vertices = mesh->Vertices();
+    ASSERT_EQ(loaded_vertices.size(), expected->first.size());
+    for (size_t vertex_index = 0; vertex_index < loaded_vertices.size();
+      ++vertex_index) {
+      const auto& actual_vertex = loaded_vertices[vertex_index];
+      const auto& expected_vertex = expected->first[vertex_index];
+      EXPECT_EQ(actual_vertex.position, expected_vertex.position);
+      EXPECT_EQ(actual_vertex.normal, expected_vertex.normal);
+      EXPECT_EQ(actual_vertex.texcoord, expected_vertex.texcoord);
+      EXPECT_EQ(actual_vertex.tangent, expected_vertex.tangent);
+      EXPECT_EQ(actual_vertex.bitangent, expected_vertex.bitangent);
+      EXPECT_EQ(actual_vertex.color, expected_vertex.color);
+    }
+    const auto loaded_indices = mesh->IndexBuffer().AsU32();
+    ASSERT_EQ(loaded_indices.size(), expected->second.size());
+    for (size_t index = 0; index < expected->second.size(); ++index) {
+      EXPECT_EQ(loaded_indices[index], expected->second[index]);
+    }
+    const auto minimum = mesh->BoundingBoxMin();
+    const auto maximum = mesh->BoundingBoxMax();
+    EXPECT_FLOAT_EQ(minimum.x, -test_case.radius);
+    EXPECT_FLOAT_EQ(minimum.y, -test_case.radius);
+    EXPECT_FLOAT_EQ(minimum.z, -test_case.height * 0.5F);
+    EXPECT_FLOAT_EQ(maximum.x, test_case.radius);
+    EXPECT_FLOAT_EQ(maximum.y, test_case.radius);
+    EXPECT_FLOAT_EQ(maximum.z, test_case.height * 0.5F);
+    ASSERT_EQ(mesh->SubMeshes().size(), 1U);
+    const auto views = mesh->SubMeshes().front().MeshViews();
+    ASSERT_EQ(views.size(), 1U);
+    EXPECT_EQ(views.front().VertexCount(), mesh->VertexCount());
+    EXPECT_EQ(views.front().IndexCount(), mesh->IndexCount());
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ProceduralCapsuleRejectsUnrepresentableDimensionsWithoutOutput)
+{
+  const auto cases = std::vector<json> {
+    { { "height", 0.75 }, { "radius", 0.5 } },
+    { { "radius", 1.0e-50 } },
+    { { "height", 1.0e10 }, { "radius", 0.5 } },
+  };
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+  for (size_t index = 0; index < cases.size(); ++index) {
+    SCOPED_TRACE(cases[index].dump());
+    const auto root
+      = MakeTempCookedRoot("capsule_invalid_" + std::to_string(index));
+    const auto cooked_root = root / ".cooked";
+    const auto source_path = root / "Sources" / "capsule.geometry.json";
+    WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+    const auto doc = MakeCapsuleDescriptor(cases[index], 2.0F, 0.5F);
+    WriteTextFile(source_path, doc.dump(2));
+    const auto report = SubmitAndWait(
+      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    EXPECT_FALSE(report.success);
+    EXPECT_EQ(report.geometry_written, 0U);
+    EXPECT_FALSE(FindOutputByExtension(report, ".ogeo").has_value());
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "geometry.procedural.generation_failed"))
+      << DiagnosticSummary(report.diagnostics);
+  }
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,

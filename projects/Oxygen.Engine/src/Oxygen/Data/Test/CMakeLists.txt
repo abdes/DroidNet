@@ -41,6 +41,7 @@ m_gtest_program(
     "AssetKey_test.cpp"
     "BufferResource_test.cpp"
     "BuiltinGeometry_test.cpp"
+    "Capsule_test.cpp"
     "GeometryAsset_test.cpp"
     "IndexBufferView_test.cpp"
     "Mesh_test.cpp"

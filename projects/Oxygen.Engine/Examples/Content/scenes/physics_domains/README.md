@@ -56,7 +56,9 @@ in a single, visually interesting scene.
 - `chassis_box.geometry.json` — Procedural cube scaled as chassis
 - `cylinder_wheel.geometry.json` — Procedural cylinder for wheels
 - `ramp.geometry.json` — Procedural cube scaled as ramp
-- `character_capsule.geometry.json` — Procedural cylinder for character
+- `character_capsule.geometry.json` — Z-axis capsule matching `actor.shape.json`:
+  radius 0.35 m, cylindrical half-height 0.9 m, total height 2.5 m. Physics uses
+  cylindrical half-height; the render recipe uses total height including caps.
 - `softbody_sphere.geometry.json` — Procedural sphere for soft body
 - `stack_cube.geometry.json` — Procedural cube for stack elements
 

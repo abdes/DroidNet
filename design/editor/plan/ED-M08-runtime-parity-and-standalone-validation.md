@@ -1,6 +1,6 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **ready for implementation**
+Status: **in progress — M08.1**
 
 ## 1. Outcome
 
@@ -154,14 +154,24 @@ Remove the ineffective real-time-capture toggle from canonical SkyLight records,
 adapters and demo controls. Captured sky has one source-change-driven production
 policy; migrate its existing source/enable/parameter values and recook.
 
-Deliver maintained native source/recipe migration and recooking scripts in this
-slice. Refresh every affected maintained bundle and RenderScene source import
-before M08.3 loads it. The scripts validate inputs, preserve recoverable backups,
-update references and invoke current producers; no obsolete reader survives.
+Perform native source/recipe migration and recooking in this slice. Generate
+one-time migration scripts in the build tree; retain source-tree tooling only
+when it has an ongoing use. Refresh every affected maintained bundle and
+RenderScene source import before M08.3 loads it. Migration validates inputs,
+preserves recoverable backups, updates references and invokes current producers;
+no obsolete reader survives.
 M08.5 extends this foundation to editor document migration and repair workflows.
 
 Owners: `Oxygen/Data` format/catalog/procedural files; `Oxygen/Scene`;
 `Oxygen/Cooker/Import` and schemas; native Inspector; shared scene hydration.
+
+Canonical axial primitives use Oxygen's Z axis in both generated geometry and
+analytic Physics shapes. Adapt backend primitive bases before authored local
+transforms; do not change engine world axes or compensate in mesh generation.
+Capsule render height includes the hemispheres; Physics cylindrical half-height
+maps through `height = 2 * (half_height + radius)`. Qualify that relationship,
+including the sphere limit, body/shape transforms and affected maintained source
+recipes, before closing primitive parity.
 
 Checks: schema/round trips; slot continuity and structural changes; nonzero
 slot overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records;

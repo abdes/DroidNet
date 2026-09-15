@@ -112,6 +112,7 @@ set(
   "TextureResource.cpp"
   "ToStringConverters.cpp"
   "Procedural/ArrowGizmo.cpp"
+  "Procedural/Capsule.cpp"
   "Procedural/Cone.cpp"
   "Procedural/Cube.cpp"
   "Procedural/Cylinder.cpp"
@@ -130,10 +131,8 @@ target_sources(
     ${OXYGEN_DATA_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_DATA_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_DATA_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

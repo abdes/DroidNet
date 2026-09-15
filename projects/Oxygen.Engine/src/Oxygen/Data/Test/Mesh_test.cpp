@@ -132,9 +132,9 @@ NOLINT_TEST_F(MeshAssetBasicTest, BoundingBoxCorrectness)
   EXPECT_EQ(max, glm::vec3(1, 1, 0));
 }
 
-//! Checks that procedural meshes compute bounds from vertices without a
-//! packaged descriptor.
-NOLINT_TEST_F(MeshAssetBasicTest, ProceduralMeshComputesBoundsWithoutDescriptor)
+//! Procedural recipe descriptors must not overwrite generated bounds.
+NOLINT_TEST_F(
+  MeshAssetBasicTest, ProceduralMeshComputesBoundsWithOrWithoutDescriptor)
 {
   std::vector<Vertex> vertices = {
     {
@@ -165,22 +165,29 @@ NOLINT_TEST_F(MeshAssetBasicTest, ProceduralMeshComputesBoundsWithoutDescriptor)
   std::vector<std::uint32_t> indices = { 0, 1, 2 };
   auto material = MaterialAsset::CreateDefault();
 
-  const auto mesh
-    = oxygen::data::MeshBuilder(0, "procedural")
-        .WithVertices(vertices)
-        .WithIndices(indices)
-        .BeginSubMesh("main", material)
-        .WithMeshView({
-          .first_index = 0,
-          .index_count = static_cast<std::uint32_t>(indices.size()),
-          .first_vertex = 0,
-          .vertex_count = static_cast<std::uint32_t>(vertices.size()),
-        })
-        .EndSubMesh()
-        .Build();
+  for (const auto with_descriptor : { false, true }) {
+    SCOPED_TRACE(with_descriptor);
+    auto builder = MeshBuilder(0, "procedural");
+    builder.WithVertices(vertices).WithIndices(indices);
+    if (with_descriptor) {
+      auto desc = oxygen::data::pak::geometry::MeshDesc {};
+      desc.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
+      builder.WithDescriptor(desc);
+    }
+    const auto mesh
+      = builder.BeginSubMesh("main", material)
+          .WithMeshView({
+            .first_index = 0,
+            .index_count = static_cast<std::uint32_t>(indices.size()),
+            .first_vertex = 0,
+            .vertex_count = static_cast<std::uint32_t>(vertices.size()),
+          })
+          .EndSubMesh()
+          .Build();
 
-  EXPECT_EQ(mesh->BoundingBoxMin(), glm::vec3(-2, -5, -1));
-  EXPECT_EQ(mesh->BoundingBoxMax(), glm::vec3(4, 7, 3));
+    EXPECT_EQ(mesh->BoundingBoxMin(), glm::vec3(-2, -5, -1));
+    EXPECT_EQ(mesh->BoundingBoxMax(), glm::vec3(4, 7, 3));
+  }
 }
 
 //! Checks that Mesh is safely shareable via shared_ptr.

@@ -469,6 +469,37 @@
                 }
             }
         },
+        "capsule_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Centred Z-axis capsule. Height includes both hemispheres and must be at least twice the radius; equality produces a sphere. Defaults are 2 m total height and 1 m diameter.",
+            "properties": {
+                "hemisphere_segments": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "Intervals from each pole to its hemisphere equator."
+                },
+                "radial_segments": {
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 256,
+                    "description": "Intervals around the Z axis."
+                },
+                "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38,
+                    "description": "Total height in metres, including both hemispheres."
+                },
+                "radius": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38,
+                    "description": "Hemisphere and cylinder radius in metres."
+                }
+            }
+        },
         "torus_params": {
             "type": "object",
             "additionalProperties": false,
@@ -521,6 +552,7 @@
                         "Plane",
                         "Cylinder",
                         "Cone",
+                        "Capsule",
                         "Torus",
                         "Quad"
                     ]
@@ -689,6 +721,25 @@
                         "properties": {
                             "params": {
                                 "$ref": "#/definitions/cone_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Capsule"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/capsule_params"
                             }
                         }
                     }

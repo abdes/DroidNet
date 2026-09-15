@@ -533,6 +533,12 @@ namespace {
       ok = write_u32("segments", params, recipe::kConeSegments)
         && write_f32("height", params, recipe::kConeHeight)
         && write_f32("radius", params, recipe::kConeRadius);
+    } else if (generator == "Capsule") {
+      ok = write_u32(
+             "hemisphere_segments", params, recipe::kCapsuleHemisphereSegments)
+        && write_u32("radial_segments", params, recipe::kCapsuleRadialSegments)
+        && write_f32("height", params, recipe::kCapsuleHeight)
+        && write_f32("radius", params, recipe::kCapsuleRadius);
     } else if (generator == "Torus") {
       ok = write_u32("major_segments", params, recipe::kTorusMajorSegments)
         && write_u32("minor_segments", params, recipe::kTorusMinorSegments)

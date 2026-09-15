@@ -216,6 +216,72 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsSubdividedCubeProcedural)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
+auto CapsuleDescriptor(const json& params) -> json
+{
+  auto doc = json::parse(R"({
+    "name": "Capsule",
+    "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
+    "lods": [{
+      "name": "LOD0",
+      "mesh_type": "procedural",
+      "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
+      "procedural": { "generator": "Capsule", "mesh_name": "Capsule" },
+      "submeshes": [{
+        "material_ref": "/.cooked/Materials/default.omat",
+        "views": [{ "view_ref": "__all__" }]
+      }]
+    }]
+  })");
+  if (!params.is_null()) {
+    doc["lods"][0]["procedural"]["params"] = params;
+  }
+  return doc;
+}
+
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCapsuleParameterBounds)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  const auto cases = std::vector<json> {
+    nullptr,
+    json::object(),
+    { { "hemisphere_segments", 1 }, { "radial_segments", 3 },
+      { "height", 1.0 }, { "radius", 0.5 } },
+    { { "hemisphere_segments", 64 }, { "radial_segments", 256 },
+      { "height", 3.0 }, { "radius", 0.75 } },
+  };
+  for (const auto& params : cases) {
+    SCOPED_TRACE(params.dump());
+    auto errors = std::string {};
+    EXPECT_TRUE(ValidateSchema(*schema, CapsuleDescriptor(params), errors))
+      << errors;
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsInvalidCapsuleParameters)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  const auto cases = std::vector<json> {
+    { { "hemisphere_segments", 0 } },
+    { { "hemisphere_segments", 65 } },
+    { { "hemisphere_segments", 1.5 } },
+    { { "radial_segments", 2 } },
+    { { "radial_segments", 257 } },
+    { { "radial_segments", "32" } },
+    { { "height", 0.0 } },
+    { { "height", 1.0e39 } },
+    { { "radius", -0.5 } },
+    { { "radius", 1.0e39 } },
+    { { "segments", 16 } },
+  };
+  for (const auto& params : cases) {
+    SCOPED_TRACE(params.dump());
+    auto errors = std::string {};
+    EXPECT_FALSE(ValidateSchema(*schema, CapsuleDescriptor(params), errors));
+  }
+}
+
 NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
 {
   const auto repo_root = FindRepoRoot();

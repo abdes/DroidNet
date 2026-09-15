@@ -38,6 +38,19 @@ OXGN_DATA_NDAPI auto MakeSphereMeshAsset(
   unsigned int longitude_segments = procedural::kSphereLongitudeSegments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
+//! Creates a centred Z-axis capsule with outward winding and smooth normals.
+//! Height includes both hemispheres; height == 2*radius produces a sphere.
+//! The matching Physics capsule uses cylindrical half_height = height/2 - radius.
+//! Defaults are 2 m total height and 1 m diameter. Dimensions must be finite
+//! and positive; hemisphere/radial segments must be in [1,64]/[3,256].
+//! Rejects dimensions whose sampled surface collapses in float32 storage.
+OXGN_DATA_NDAPI auto MakeCapsuleMeshAsset(
+  unsigned int hemisphere_segments = procedural::kCapsuleHemisphereSegments,
+  unsigned int radial_segments = procedural::kCapsuleRadialSegments,
+  float height = procedural::kCapsuleHeight,
+  float radius = procedural::kCapsuleRadius)
+  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+
 //! Creates vertex/index buffers for a radius-0.5 icosphere centred at the
 //! origin.
 OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(

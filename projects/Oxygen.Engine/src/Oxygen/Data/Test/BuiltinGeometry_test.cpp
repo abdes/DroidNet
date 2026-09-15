@@ -25,7 +25,7 @@ using namespace oxygen::data;
 NOLINT_TEST(
   BuiltinGeometryTest, CatalogResolvesCompleteMeshesAndDefaultMaterial)
 {
-  ASSERT_EQ(GetBuiltinGeometryNames().size(), 11U);
+  ASSERT_EQ(GetBuiltinGeometryNames().size(), 12U);
   for (const auto name : GetBuiltinGeometryNames()) {
     SCOPED_TRACE(name);
     const auto uri
@@ -66,6 +66,7 @@ NOLINT_TEST(
         { "Cube", [] { return MakeCubeMeshAsset(); } },
         { "SubdividedCube", [] { return MakeSubdividedCubeMeshAsset(); } },
         { "Sphere", [] { return MakeSphereMeshAsset(); } },
+        { "Capsule", [] { return MakeCapsuleMeshAsset(); } },
         { "IcoSphere", [] { return MakeIcoSphereMeshAsset(); } },
         { "GeodesicSphere", [] { return MakeGeodesicSphereMeshAsset(); } },
         { "Plane", [] { return MakePlaneMeshAsset(); } },

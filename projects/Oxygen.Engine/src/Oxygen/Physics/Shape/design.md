@@ -149,9 +149,9 @@ invariants (`Z-up`, right-handed).
 | Shape | `shape_params` Fields | Validation Rules |
 | --- | --- | --- |
 | `Sphere` | `radius: float` | `radius > 0` |
-| `Capsule` | `radius: float`, `half_height: float` | `radius > 0`, `half_height > 0` |
+| `Capsule` | `radius: float`, `half_height: float` | finite `radius > 0`, finite `half_height >= 0` |
 | `Box` | `half_extents: Vec3` | `half_extents.x > 0 && half_extents.y > 0 && half_extents.z > 0` |
-| `Cylinder` | `radius: float`, `half_height: float` | `radius > 0`, `half_height > 0` |
+| `Cylinder` | `radius: float`, `half_height: float` | finite `radius > 0`, finite `half_height > 0` |
 | `Cone` | `radius: float`, `half_height: float` (authoring descriptor); cooked convex required | `radius > 0`, `half_height > 0`, valid `cooked_shape_ref` |
 | `ConvexHull` | authoring descriptor + cooked convex payload | valid `cooked_shape_ref` type `kConvex` |
 | `TriangleMesh` | authoring descriptor + cooked mesh payload | valid `cooked_shape_ref` type `kMesh`; dynamic body disallowed |
@@ -164,6 +164,23 @@ Validation failure policy:
 
 - Any invalid `shape_params` field is a hard load/hydration error.
 - No implicit clamping of authored values.
+
+Capsule and cylinder dimensional contract:
+
+- Both primitives are centred at the origin with their longitudinal axis along
+  Oxygen `+Z`, before any authored local transform.
+- Capsule `half_height` is half the straight cylinder length, excluding the
+  hemispherical ends. Total tip-to-tip height is
+  `H = 2 * (half_height + radius)`. A render capsule with total height `H` and
+  radius `r` therefore uses collision `half_height = H / 2 - r`.
+- Capsule `half_height == 0` is the exact sphere limit with radius `r`.
+- Cylinder `half_height` is half its total height; its end planes are
+  `z = +/-half_height`.
+- Backend-specific primitive axes must be adapted at the backend boundary,
+  before authored shape scale, rotation and translation. For Jolt, native
+  capsule and cylinder shapes use a Y axis; their backend shape basis is
+  rotated to Oxygen Z. World vectors, scene transforms and render vertices
+  remain in the universal Oxygen coordinate convention.
 
 ### Transform And Scale Semantics
 

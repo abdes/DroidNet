@@ -86,6 +86,17 @@ asset descriptors; they are not listed in the asset directory themselves.
 3. Attach default or debug material; add single full-range view.
 4. (Optional) Promote to `GeometryAsset` if you need LOD semantics.
 
+`MakeCapsuleMeshAsset()` and the `Capsule` generator share the same centred,
+Z-axis recipe: total height 2 m and radius 0.5 m. Its parameters are
+`hemisphere_segments` (default 8, range 1–64), `radial_segments` (default 32,
+range 3–256), `height` and `radius`. Dimensions must be finite, positive and
+representable by non-collapsed float32 vertex coordinates; height must be at
+least the diameter. Equality produces a sphere without a duplicate equator.
+The corresponding Physics capsule uses the same radius and a cylindrical
+`half_height = height / 2 - radius`; that field excludes both hemispheres.
+Both domains use Oxygen's Z axis. Backend shape conventions are adapted inside
+Physics, before authored local transforms.
+
 ---
 
 ## 5. Invariants & Validation (Read First)

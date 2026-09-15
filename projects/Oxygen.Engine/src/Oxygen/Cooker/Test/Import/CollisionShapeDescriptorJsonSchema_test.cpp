@@ -132,6 +132,23 @@ NOLINT_TEST(
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
+NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest, CapsuleAllowsSphereLimit)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  auto doc = json {
+    { "shape_type", "capsule" },
+    { "material_ref", "/.cooked/Physics/Materials/default.opmat" },
+    { "radius", 0.5 },
+    { "half_height", 0.0 },
+  };
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  doc["half_height"] = -0.1;
+  errors.clear();
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
 //! Verifies unknown top-level external payload fields are rejected.
 NOLINT_TEST(
   CollisionShapeDescriptorJsonSchemaTest, RejectsTopLevelUnknownFieldDocument)
