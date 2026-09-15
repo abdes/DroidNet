@@ -2,9 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.WinUI;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 
 namespace Oxygen.Editor.World.Cooking;
 
@@ -25,6 +29,19 @@ public sealed partial class CookingPanelView : UserControl
         this.CancelButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
         this.InspectButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
         this.ShowImportedAssetsButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();
+    }
+
+    private void OnRowContentLoaded(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement content && content.FindAscendant<SelectorItem>() is { } container)
+        {
+            container.SetBinding(AutomationProperties.NameProperty, new Binding
+            {
+                Source = content,
+                Path = new PropertyPath("DataContext.AccessibleName"),
+                Mode = BindingMode.OneWay,
+            });
+        }
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs args)
