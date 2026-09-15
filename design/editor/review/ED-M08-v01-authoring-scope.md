@@ -3,8 +3,8 @@
 Status: **interactive decisions in progress**. The user approved development-only
 qualification, no backward compatibility, captured-sky diffuse/specular lighting,
 overrides for all existing material slots, emission colour/HDR intensity, and the
-ten-shape creation palette including Capsule and metric centred primitive defaults
-on 2026-09-15. Other property choices below are recommendations, not an
+ten-shape creation palette including Capsule, metric centred primitive defaults
+and basic perspective camera authoring on 2026-09-15. Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
 ## 1. Recommendation
@@ -45,7 +45,8 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Scalar emission colour and HDR intensity | Approved; zero intensity disables emission, no promise of lighting surrounding objects; implementation pending |
 | Ten-shape primitive creation palette | Approved; includes Capsule, SubdividedCube advanced, ArrowGizmo internal; migrate/remove GeodesicSphere alias; implementation pending |
 | Metric primitive defaults and orientation | Approved; centred pivots, Z-up, dimensions in Decision 4, horizontal Plane/upright Quad; prose must match actual code; implementation pending |
-| Camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Basic perspective camera authoring | Approved; pose, vertical FOV, aspect and near/far; exact selected-camera loading; physical-camera authoring deferred; implementation/qualification pending |
+| Camera aspect fitting; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -241,18 +242,17 @@ Validate finite native generator inputs as part of that work: current positive-
 dimension guards alone do not reject NaN/Infinity. Prose must not promise a
 broader rejection contract than the implementation actually provides.
 
-### Decision 5 proposal: camera authoring model — awaiting choice
+### Decision 5: basic perspective camera authoring — approved
 
-Recommend a basic perspective camera for V0.1: transform, explicitly labelled
+The user approved a basic perspective camera for V0.1: transform, explicitly labelled
 vertical FOV in degrees, aspect/frame ratio and near/far clipping in metres.
 Use a selected authored camera independently of editor navigation. Exact loaded
 values must match saved intent; reject invalid projection values instead of
 silently repairing them. Frame-to-viewport presentation is a subsequent choice.
 
-The alternative is a physical camera model now, with focal length/sensor and
-aperture/shutter/ISO. That supports photographic workflows but requires coupled
-projection and calibrated camera-exposure authoring rather than inert controls.
-Basic perspective cameras cover the current static-scene scope; a later physical
+Physical-camera authoring is deferred: no focal-length/sensor or aperture/shutter/
+ISO controls in the V0.1 authoring contract. Basic perspective cameras cover
+the current static-scene scope; a later physical
 mode can derive projection from lens/sensor data and use explicit exposure
 inputs through the same camera/view ownership. Unity exposes basic projection
 and an optional physical-camera mode; Godot separates Camera3D from physical
@@ -265,6 +265,56 @@ selects the first camera, rewrites aspect and normalizes clipping values. Fix
 the real selection/hydration behaviour for the chosen model; do not compensate
 in a development-only test adapter. Camera model choice does not approve a
 physical-camera exposure fallback or orthographic/DOF features.
+
+ED-M08 must label vertical FOV explicitly, carry each approved field through
+commands, Undo/Redo, Save/reopen, cooking and real native hydration, and select
+the requested authored camera by identity. Preserve parented camera transforms
+and distinguish authored cameras from editor navigation. Native and editor
+qualification must cover multiple cameras, non-default projection, invalid
+clipping and camera switching. Migrate useful old camera intent to this canonical
+model without adding a legacy physical-camera fallback. Aspect-fitting policy
+remains open; basic-camera approval does not select it.
+
+### Decision 6 proposal: camera aspect fitting — awaiting choice
+
+Recommend an explicit per-camera choice with **Auto as the creation default**:
+
+- **Auto:** use the target viewport's aspect while keeping the authored vertical
+  FOV. Wider targets show more horizontally. Derive the projection per view;
+  do not overwrite saved camera fields on resize.
+- **Fixed:** use the authored ratio and preserve the complete composition in a
+  centred content rectangle, adding letterbox/pillarbox bars when necessary.
+  Do not stretch or crop the camera image.
+
+The smaller alternatives are Fixed-only (strong composition guarantees but
+mandatory bars on mismatched displays) or Auto-only (full-window rendering but
+no locked frame). Both explicit modes support ordinary future game viewports and
+fixed shots; their implementation adds an authored mode to serialization,
+cooking, hydration, UI and runtime view resolution. The mode must not be an
+editor-only renderer preference.
+
+Editor navigation remains independent and fills its viewport. In Fixed mode,
+compute one camera-content rectangle consistently in native and embedded views.
+Bars are presentation pixels added after scene exposure/post-processing and must
+not affect Auto-exposure metering. Example: 4:3 inside 1920×1080 gives a 1440×1080
+camera image with 240-pixel bars at left and right.
+
+The current strict validation LLD assumes preserved fixed aspect; accepting both
+modes requires revising it to preserve the **authored policy**, observe effective
+per-view projection and test each mode. Keep the full fixture explicitly Fixed
+16:9 and add Auto resize cases. Existing meaningful explicit frame ratios can
+migrate to Fixed; new cameras default Auto. This is canonical data conversion,
+not a hidden compatibility branch. This proposal remains unapproved.
+
+Unity derives aspect from the screen by default and permits an explicit ratio;
+Unreal exposes constrained aspect with black bars. These support both workflows,
+rather than one universal fitting rule. [Unity Camera.aspect](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Camera-aspect.html),
+[Unreal camera aspect constraint](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/Engine/UCameraComponent).
+glTF provides a further import-contract reason for both modes: an omitted
+camera aspect uses the viewport ratio; an explicit mismatched aspect should
+not be cropped or stretched to fill the viewport. Map those intentions to
+Auto and Fixed respectively, rather than inventing an aspect for every import.
+[glTF camera projection](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#projection-matrices).
 
 ### Why these choices
 
@@ -377,8 +427,8 @@ command registration, module initializer or instrumentation ships.
 
 Captured-sky diffuse/specular lighting, all existing material-slot overrides,
 scalar emission colour/HDR intensity, the ten-shape palette and metric defaults,
-and the build/migration policies are approved; do not ask for them again.
-Next discuss camera model/framing, scene participation
+basic perspective camera authoring, and the build/migration policies are approved;
+do not ask for them again. Next discuss camera aspect fitting, scene participation
 and transforms, light/sun roles, shadow controls, exposure, grading/output, and
 atmosphere controls. Split a topic when it contains independent consequential
 choices; do not request a blanket package approval.
