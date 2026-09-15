@@ -7,6 +7,9 @@ For more information see: <https://pre-commit.com/>.
 The repository root's `.pre-commit-config.yaml` is the single configuration for
 DroidNet, including Oxygen.Engine. It includes Prettier, oxyformat, gersemi,
 whitespace checks, Conventional Commits, and XamlStyler.
+The same configuration enforces the shared [line-ending policy](line-endings.md):
+LF for text and CRLF for batch scripts. A separate per-edit normalization script
+is not needed.
 
 ## Prettier formatting
 
