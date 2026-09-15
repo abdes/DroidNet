@@ -881,6 +881,15 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         native CLI checks preserve 217-character lines without escapes; the
         rebuilt native UI cases verify full progress paths in Cooking.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
+  - [x] The combined Main repair starts from a published value of 0, displays
+        saved -1 without clamping, preserves prior output on failure, focuses
+        the actual field, rejects -2 and accepts 100. Retry blocks until the
+        named scene is saved; publication becomes current and native/source
+        values remain 100 after reopening. The old failure retains -1.
+        [Main repair evidence](validation/ED-M07B-main-repair.md).
+  - [x] Cooking item automation peers expose readable operation/asset identities
+        and changing statuses instead of CLR type names. The related control
+        group passes 22/22. [Automation evidence](validation/ED-M07B-cooking-accessibility.md).
 - [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
   - [x] Compact fixed-type selection, the All icon/tooltip, original property rows,
