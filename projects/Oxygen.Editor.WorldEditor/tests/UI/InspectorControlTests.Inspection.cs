@@ -67,10 +67,14 @@ public sealed partial class InspectorControlTests
         await model.ShowAssetCommand.ExecuteAsync(model.SelectedAsset.Origin!.SourceAssetUri).ConfigureAwait(true);
         _ = navigated.Should().Be(model.SelectedAsset.Origin.SourceAssetUri);
         var sections = view.FindDescendant<SelectorBar>()!;
-        sections.Items[1].IsSelected = true;
+        sections.SelectedItem = sections.Items[1];
         _ = model.Section.Should().Be(1);
         _ = model.Files.Should().ContainSingle();
-        sections.Items[0].IsSelected = true;
+        _ = sections.Items.Where(static item => item.IsSelected).Should().ContainSingle().Which.Should().BeSameAs(sections.Items[1]);
+        model.Section = 2;
+        _ = sections.SelectedItem.Should().BeSameAs(sections.Items[2]);
+        sections.SelectedItem = sections.Items[0];
+        _ = model.Section.Should().Be(0);
         await model.ValidateCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.StatusText.Should().Be("Output validated");
         _ = model.SelectedAsset!.Name.Should().Be("Red");

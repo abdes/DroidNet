@@ -132,21 +132,9 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDocum
     [NotifyPropertyChangedFor(nameof(AssetsVisibility))]
     [NotifyPropertyChangedFor(nameof(FilesVisibility))]
     [NotifyPropertyChangedFor(nameof(IssuesVisibility))]
-    [NotifyPropertyChangedFor(nameof(AssetsSelected))]
-    [NotifyPropertyChangedFor(nameof(FilesSelected))]
-    [NotifyPropertyChangedFor(nameof(IssuesSelected))]
     [NotifyPropertyChangedFor(nameof(EmptyFilesVisibility))]
     [NotifyPropertyChangedFor(nameof(EmptyIssuesVisibility))]
     public partial int Section { get; set; }
-
-    /// <summary>Gets a value indicating whether Assets is selected.</summary>
-    public bool AssetsSelected => this.Section == 0;
-
-    /// <summary>Gets a value indicating whether Root files is selected.</summary>
-    public bool FilesSelected => this.Section == 1;
-
-    /// <summary>Gets a value indicating whether Issues is selected.</summary>
-    public bool IssuesSelected => this.Section == 2;
 
     /// <summary>Gets the asset section visibility.</summary>
     public Visibility AssetsVisibility => this.Section == 0 ? Visibility.Visible : Visibility.Collapsed;
