@@ -55,6 +55,7 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
   EXPECT_EQ(
     parameters.at("double_sided").get<bool>(), live_material->IsDoubleSided());
 
+  auto saw_capsule = false;
   for (const auto& entry : catalog.at("geometries")) {
     SCOPED_TRACE(entry.at("name").get<std::string>());
     const auto& descriptor = entry.at("descriptor");
@@ -75,7 +76,18 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
       catalog.at("default_material").at("virtual_path"));
     EXPECT_TRUE(
       descriptor.at("lods").at(0).at("procedural").at("params").empty());
+    if (entry.at("name") == "Capsule") {
+      saw_capsule = true;
+      EXPECT_EQ(entry.at("canonical_name"), "Capsule");
+      EXPECT_EQ(entry.at("asset_uri"),
+        "asset:///Engine/Generated/BasicShapes/Capsule");
+      EXPECT_EQ(descriptor.at("bounds").at("min"),
+        json::array({ -0.5F, -0.5F, -1.0F }));
+      EXPECT_EQ(descriptor.at("bounds").at("max"),
+        json::array({ 0.5F, 0.5F, 1.0F }));
+    }
   }
+  EXPECT_TRUE(saw_capsule);
 }
 
 //! Project mount changes alter only output addressing; aliases retain authored

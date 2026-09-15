@@ -13,6 +13,12 @@ namespace oxygen::data::procedural {
 inline constexpr unsigned int kSubdividedCubeSegments = 6U;
 inline constexpr unsigned int kSphereLatitudeSegments = 16U;
 inline constexpr unsigned int kSphereLongitudeSegments = 32U;
+inline constexpr unsigned int kCapsuleHemisphereSegments = 8U;
+inline constexpr unsigned int kCapsuleRadialSegments = 32U;
+inline constexpr unsigned int kCapsuleMaxHemisphereSegments = 64U;
+inline constexpr unsigned int kCapsuleMaxRadialSegments = 256U;
+inline constexpr float kCapsuleHeight = 2.0F;
+inline constexpr float kCapsuleRadius = 0.5F;
 inline constexpr unsigned int kIcoSphereSubdivisionLevel = 2U;
 inline constexpr unsigned int kPlaneXSegments = 1U;
 inline constexpr unsigned int kPlaneZSegments = 1U;

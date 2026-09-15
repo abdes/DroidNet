@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <numbers>
+#include <tuple>
+#include <type_traits>
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -76,6 +78,43 @@ auto HandleSphereMesh(std::span<const std::byte> param_blob)
     }(std::make_index_sequence<std::tuple_size_v<decltype(defaults)>> {});
   }
   return std::apply(oxygen::data::MakeSphereMeshAsset, defaults);
+}
+
+auto HandleCapsuleMesh(std::span<const std::byte> param_blob)
+  -> std::optional<MeshDataPair>
+{
+  // Optional parameters must be a prefix of complete uint32/float32 fields.
+  constexpr auto kFieldSize = sizeof(uint32_t);
+  constexpr auto kParameterSize = (2U * sizeof(uint32_t)) + (2U * sizeof(float));
+  static_assert(sizeof(float) == kFieldSize);
+  if (param_blob.size() > kParameterSize || param_blob.size() % kFieldSize != 0U) {
+    return std::nullopt;
+  }
+  auto parameters = std::make_tuple(recipe::kCapsuleHemisphereSegments,
+    recipe::kCapsuleRadialSegments, recipe::kCapsuleHeight, recipe::kCapsuleRadius);
+  oxygen::serio::ReadOnlyMemoryStream stream(param_blob);
+  oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
+  auto remaining = param_blob.size();
+  auto valid = true;
+  std::apply(
+    [&](auto&... fields) -> void {
+      const auto read = [&](auto& field) -> void {
+        if (remaining == 0U || !valid) {
+          return;
+        }
+        const auto value = reader.Read<std::remove_reference_t<decltype(field)>>();
+        if (!value) {
+          valid = false;
+          return;
+        }
+        field = *value;
+        remaining -= sizeof(field);
+      };
+      (read(fields), ...);
+    },
+    parameters);
+  return valid ? std::apply(oxygen::data::MakeCapsuleMeshAsset, parameters)
+               : std::nullopt;
 }
 
 auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
@@ -329,6 +368,8 @@ auto InvokeGenerator(std::string_view generator_id,
     mesh_data = HandlePlaneMesh(param_blob);
   } else if (generator_id == "Cylinder") {
     mesh_data = HandleCylinderMesh(param_blob);
+  } else if (generator_id == "Capsule") {
+    mesh_data = HandleCapsuleMesh(param_blob);
   } else if (generator_id == "Cone") {
     mesh_data = HandleConeMesh(param_blob);
   } else if (generator_id == "Torus") {

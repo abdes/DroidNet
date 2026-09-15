@@ -50,7 +50,8 @@
         },
         "half_height": {
             "type": "number",
-            "minimum": 0.0
+            "minimum": 0.0,
+            "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
         },
         "half_extents": {
             "$ref": "#/definitions/vec3_positive"
@@ -177,7 +178,8 @@
                 },
                 "half_height": {
                     "type": "number",
-                    "minimum": 0.0
+                    "minimum": 0.0,
+                    "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
                 },
                 "half_extents": {
                     "$ref": "#/definitions/vec3_positive"

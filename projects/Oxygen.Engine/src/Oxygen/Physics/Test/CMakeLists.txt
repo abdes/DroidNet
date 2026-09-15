@@ -76,6 +76,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
       "Jolt/Shape/Jolt_shape_basic_test.cpp"
       "Jolt/Shape/Jolt_shape_contract_test.cpp"
       "Jolt/Shape/Jolt_shape_domain_test.cpp"
+      "Jolt/Shape/Jolt_shape_axis_test.cpp"
       "Jolt/SoftBody/Jolt_softbody_basic_test.cpp"
       "Jolt/SoftBody/Jolt_softbody_blob_contract_test.cpp"
       "Jolt/SoftBody/Jolt_softbody_collision_contract_test.cpp"
@@ -90,4 +91,5 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
       "Jolt/World/Jolt_world_contract_test.cpp"
       "Jolt/World/Jolt_world_domain_test.cpp"
   )
+  target_link_libraries(Oxygen.Physics.Jolt.Tests PRIVATE oxygen::data)
 endif()

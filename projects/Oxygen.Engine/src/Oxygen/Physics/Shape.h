@@ -42,13 +42,18 @@ struct BoxShape final {
   Vec3 extents { 0.5F, 0.5F, 0.5F };
 };
 
+//! Capsule centred at the origin with its longitudinal axis along Oxygen +Z.
+//! The total tip-to-tip height is 2 * (half_height + radius).
 struct CapsuleShape final {
   float radius { 0.5F };
+  //! Half the straight cylinder length; zero produces the sphere limit.
   float half_height { 0.5F };
 };
 
+//! Cylinder centred at the origin with its longitudinal axis along Oxygen +Z.
 struct CylinderShape final {
   float radius { 0.5F };
+  //! Half the total height; end planes are at z = +/-half_height.
   float half_height { 0.5F };
 };
 

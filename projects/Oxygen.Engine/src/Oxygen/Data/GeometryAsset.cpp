@@ -160,15 +160,17 @@ Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
 
 //! Computes bounding box and sphere - the single source of truth.
 /*!
-  Computes bounding data from the PAK descriptor when available.
-  If no descriptor is present, bounds remain zero-initialized.
+  Uses the authored bounds for standard/skinned PAK descriptors, including
+  valid all-zero bounds. Procedural descriptors contain recipe data rather
+  than bounds, so their bounds come from the generated vertices, as they do
+  for meshes without a descriptor. Empty vertex storage yields zero bounds.
 
   Data members (bbox_min_, bbox_max_, bounding_sphere_) are the source of truth.
 */
 auto Mesh::ComputeBounds() -> void
 {
   // Step 1: Compute or copy bounding box
-  if (desc_.has_value()) {
+  if (desc_.has_value() && !desc_->IsProcedural()) {
     const auto& desc = desc_.value();
     if (desc.IsStandard()) {
       const auto& standard = desc.info.standard;

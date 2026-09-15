@@ -1001,7 +1001,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
     const float radius = shape_desc.shape_params.capsule.radius;
     const float half_height = shape_desc.shape_params.capsule.half_height;
     ensure_no_cooked_ref();
-    if (!(radius > 0.0F && half_height > 0.0F)) {
+    if (!std::isfinite(radius) || !std::isfinite(half_height)
+      || radius <= 0.0F || half_height < 0.0F) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid capsule params in ")
         + std::string(binding_kind)
