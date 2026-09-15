@@ -49,8 +49,8 @@ namespace {
       return glm::angleAxis(glm::pi<float>(), space::move::Up);
     }
 
-    return glm::angleAxis(std::acos(cos_theta),
-      glm::normalize(glm::cross(from_dir, to_dir)));
+    return glm::angleAxis(
+      std::acos(cos_theta), glm::normalize(glm::cross(from_dir, to_dir)));
   }
 
   auto LookRotation(const glm::vec3& position, const glm::vec3& target)
@@ -70,9 +70,8 @@ namespace {
 
     auto atmosphere = env->TryGetSystem<scene::environment::SkyAtmosphere>();
     if (!atmosphere) {
-      atmosphere = observer_ptr {
-        &env->AddSystem<scene::environment::SkyAtmosphere>()
-      };
+      atmosphere
+        = observer_ptr { &env->AddSystem<scene::environment::SkyAtmosphere>() };
     }
     atmosphere->SetEnabled(true);
     atmosphere->SetSunDiskEnabled(true);
@@ -90,20 +89,9 @@ namespace {
     sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
   }
 
-  auto EnsureSceneSun(scene::Scene& scene, const DefaultSceneLightingDesc& desc)
+  auto CreateSceneSun(scene::Scene& scene, const DefaultSceneLightingDesc& desc)
     -> scene::SceneNode
   {
-    scene.Update(false);
-    scene.SyncObservers();
-    scene.GetDirectionalLightResolver().Validate();
-    if (const auto primary
-      = scene.GetDirectionalLightResolver().ResolvePrimarySun();
-      primary.has_value()) {
-      const auto node = scene.GetNode(primary->NodeHandle());
-      CHECK_F(node.has_value(), "resolved primary sun node is unavailable");
-      return *node;
-    }
-
     auto sun_node = scene.CreateNode(std::string(desc.sun_node_name));
 
     auto light = std::make_unique<scene::DirectionalLight>();
@@ -135,7 +123,37 @@ auto EnsureDefaultSceneLighting(
   scene::Scene& scene, const DefaultSceneLightingDesc& desc) -> scene::SceneNode
 {
   EnsureSceneEnvironment(scene);
-  return EnsureSceneSun(scene, desc);
+  scene.Update(false);
+  scene.SyncObservers();
+  if (const auto primary
+    = scene.GetDirectionalLightResolver().ResolvePrimarySun();
+    primary.has_value()) {
+    const auto node = scene.GetNode(primary->NodeHandle());
+    CHECK_F(node.has_value(), "resolved primary sun node is unavailable");
+    return *node;
+  }
+  return CreateSceneSun(scene, desc);
+}
+
+auto AddPreviewSunIfMissing(
+  scene::Scene& scene, const DefaultSceneLightingDesc& desc) -> scene::SceneNode
+{
+  // The renderer's resolver intentionally filters inactive lights. Preview
+  // policy must inspect all authored components so disabling/hiding a light
+  // does not silently add another one.
+  auto stack = scene.GetRootNodes();
+  while (!stack.empty()) {
+    auto node = stack.back();
+    stack.pop_back();
+    if (node.GetLightAs<scene::DirectionalLight>().has_value()) {
+      return {};
+    }
+    for (auto child = node.GetFirstChild(); child.has_value();
+      child = child->GetNextSibling()) {
+      stack.push_back(*child);
+    }
+  }
+  return CreateSceneSun(scene, desc);
 }
 
 } // namespace oxygen::examples

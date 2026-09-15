@@ -40,6 +40,7 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/PathNormalization.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/Services/SceneLoaderService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/ContentVm.h"
@@ -208,9 +209,11 @@ namespace {
 
 } // namespace
 
-MainModule::MainModule(const examples::DemoAppContext& app)
+MainModule::MainModule(
+  const examples::DemoAppContext& app, const bool preview_sun_enabled)
   : Base(app)
   , last_viewport_({ 0, 0 })
+  , preview_sun_enabled_(preview_sun_enabled)
 {
   if (!app.startup_scene_name.empty()) {
     startup_scene_name_ = app.startup_scene_name;
@@ -221,18 +224,15 @@ MainModule::MainModule(const examples::DemoAppContext& app)
     startup_skybox_output_format_ = app.startup_skybox_output_format;
     startup_skybox_face_size_ = app.startup_skybox_face_size;
     startup_skybox_flip_y_ = app.startup_skybox_flip_y;
-    startup_skybox_tonemap_hdr_to_ldr_
-      = app.startup_skybox_tonemap_hdr_to_ldr;
+    startup_skybox_tonemap_hdr_to_ldr_ = app.startup_skybox_tonemap_hdr_to_ldr;
     startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
-    startup_skybox_enable_sky_sphere_
-      = app.startup_skybox_enable_sky_sphere;
+    startup_skybox_enable_sky_sphere_ = app.startup_skybox_enable_sky_sphere;
     startup_skybox_enable_sky_light_ = app.startup_skybox_enable_sky_light;
     startup_sky_sphere_intensity_
       = std::max(app.startup_sky_sphere_intensity, 0.0F);
     startup_sky_light_intensity_mul_
       = std::max(app.startup_sky_light_intensity_mul, 0.0F);
-    startup_sky_light_diffuse_
-      = std::max(app.startup_sky_light_diffuse, 0.0F);
+    startup_sky_light_diffuse_ = std::max(app.startup_sky_light_diffuse, 0.0F);
     startup_sky_light_specular_
       = std::max(app.startup_sky_light_specular, 0.0F);
     startup_sky_light_real_time_capture_enabled_
@@ -370,8 +370,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       .action = PendingSourceAction::kMountIndex,
       .path = cooked_index,
     });
-    LOG_F(INFO,
-      "RenderScene: Startup scene override '{}' will mount '{}'",
+    LOG_F(INFO, "RenderScene: Startup scene override '{}' will mount '{}'",
       *startup_scene_name_, cooked_index.string());
   }
 
@@ -916,6 +915,19 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         try {
           staged_main_camera
             = co_await loader->BuildSceneAsync(*staged_scene, *swap.asset);
+          if (preview_sun_enabled_) {
+            const DefaultSceneLightingDesc preview_desc { .sun_node_name
+              = "Preview Sun" };
+            const auto preview_sun
+              = AddPreviewSunIfMissing(*staged_scene, preview_desc);
+            LOG_F(INFO, "RenderScene: Preview sun {} (scene_key={})",
+              preview_sun.IsAlive() ? "added"
+                                    : "skipped: directional light exists",
+              data::to_string(swap.scene_key));
+          } else {
+            LOG_F(INFO, "RenderScene: Preview sun disabled (scene_key={})",
+              data::to_string(swap.scene_key));
+          }
           pending_physics_sidecar_ = swap.physics_asset;
         } catch (const std::exception& ex) {
           shell.DiscardStagedScene();
@@ -951,7 +963,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           co_return;
         }
 
-        ApplyStartupSkyboxToScene(staged_scene, data::to_string(swap.scene_key));
+        ApplyStartupSkyboxToScene(
+          staged_scene, data::to_string(swap.scene_key));
         shell.SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
@@ -1191,8 +1204,8 @@ auto MainModule::ApplyStartupSkyboxToScene(
     params.real_time_capture_enabled, params.enable_sky_sphere,
     params.enable_sky_light);
 
-  startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(),
-    options, params,
+  startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(), options,
+    params,
     [scene_name = std::string(scene_label)](SkyboxService::LoadResult result) {
       if (result.success) {
         LOG_F(INFO,

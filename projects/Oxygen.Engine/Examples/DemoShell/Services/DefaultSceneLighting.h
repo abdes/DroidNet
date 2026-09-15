@@ -29,8 +29,21 @@ struct DefaultSceneLightingDesc {
   bool casts_shadows { true };
 };
 
-auto EnsureDefaultSceneLighting(
-  scene::Scene& scene, const DefaultSceneLightingDesc& desc = {})
-  -> scene::SceneNode;
+auto EnsureDefaultSceneLighting(scene::Scene& scene,
+  const DefaultSceneLightingDesc& desc = {}) -> scene::SceneNode;
+
+//! Adds a preview sun only if no directional component exists in the scene.
+/*!
+ Disabled and invisible directional lights also suppress creation. Existing
+
+ * lights and environment systems are never modified. Returns the newly created
+
+ * node, or an invalid node when a directional light already exists. The caller
+
+ * owns the preview policy and must exclude placeholder scenes as
+ * appropriate.
+*/
+auto AddPreviewSunIfMissing(scene::Scene& scene,
+  const DefaultSceneLightingDesc& desc = {}) -> scene::SceneNode;
 
 } // namespace oxygen::examples

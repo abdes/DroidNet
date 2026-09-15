@@ -118,18 +118,46 @@ namespace {
     return rotation;
   }
 
+  auto WorldRotationFromLocalTransforms(scene::SceneNode& node)
+    -> std::optional<glm::quat>
+  {
+    const auto local_rotation = node.GetTransform().GetLocalRotation();
+    if (!local_rotation.has_value()) {
+      return std::nullopt;
+    }
+    if (const auto flags = node.GetFlags(); flags.has_value()
+      && flags->get().GetEffectiveValue(
+        scene::SceneNodeFlags::kIgnoreParentTransform)) {
+      return local_rotation;
+    }
+    auto parent = node.GetParent();
+    if (!parent.has_value()) {
+      return local_rotation;
+    }
+    const auto parent_rotation = WorldRotationFromLocalTransforms(*parent);
+    if (!parent_rotation.has_value()) {
+      return std::nullopt;
+    }
+    return *parent_rotation * *local_rotation;
+  }
+
   auto ComputeLocalRotationForWorldDirection(
     scene::SceneNode& node, const glm::vec3& direction_ws) -> glm::quat
   {
     const glm::quat desired_world_rotation
       = RotationFromDirection(direction_ws);
-    const auto parent_opt = node.GetParent();
+    if (const auto flags = node.GetFlags(); flags.has_value()
+      && flags->get().GetEffectiveValue(
+        scene::SceneNodeFlags::kIgnoreParentTransform)) {
+      return desired_world_rotation;
+    }
+    auto parent_opt = node.GetParent();
     if (!parent_opt.has_value()) {
       return desired_world_rotation;
     }
 
     const auto parent_world_rotation
-      = parent_opt->GetTransform().GetWorldRotation();
+      = WorldRotationFromLocalTransforms(*parent_opt);
     if (!parent_world_rotation.has_value()) {
       return desired_world_rotation;
     }
@@ -873,7 +901,7 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
-  EnsureSceneHasSunAtActivation();
+  BindSceneSun();
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
@@ -3260,10 +3288,14 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   }
   const auto cache_atmo_before = CaptureAtmosphereCanonicalState();
 
+  // Directional lights belong to scene nodes and do not require a scene
+  // environment block. Bind before the environment-only early return.
+  BindSceneSun();
   auto env = config_.scene->GetEnvironment();
   if (!env) {
     pending_changes_ = false;
     dirty_domains_ = ToMask(DirtyDomain::kNone);
+    epoch_++;
     return;
   }
 
@@ -3388,34 +3420,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   } else {
     sky_light_enabled_ = false;
     sky_light_cubemap_resource_key_ = content::ResourceKey { 0U };
-  }
-
-  UpdateSunLightCandidate();
-  if (sun_light_available_) {
-    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-      sun_enabled_ = light->get().Common().affects_world;
-      sun_color_rgb_ = light->get().Common().color_rgb;
-      sun_illuminance_lx_ = light->get().GetIntensityLux();
-      sun_source_angle_deg_ = light->get().GetAngularSizeRadians() * kRadToDeg;
-      sun_use_temperature_ = false;
-      const auto& resolver = config_.scene->GetDirectionalLightResolver();
-      if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()
-        && primary->NodeHandle() == sun_light_node_.GetHandle()) {
-        const auto direction_to_light_ws = primary->DirectionToLightWs();
-        sun_azimuth_deg_
-          = std::atan2(direction_to_light_ws.y, direction_to_light_ws.x)
-          * kRadToDeg;
-        if (sun_azimuth_deg_ < 0.0F) {
-          sun_azimuth_deg_ += 360.0F;
-        }
-        sun_elevation_deg_
-          = std::asin(std::clamp(direction_to_light_ws.z, -1.0F, 1.0F))
-          * kRadToDeg;
-      }
-      CaptureSunShadowSettingsFromLight(light->get());
-    }
-  } else {
-    sun_light_available_ = false;
   }
 
   ValidateAndClampState();
@@ -4368,38 +4372,56 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   sun_shadow_distance_fadeout_fraction_ = default_csm.distance_fadeout_fraction;
 }
 
-auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
+auto EnvironmentSettingsService::BindSceneSun() -> void
 {
   if (!config_.scene) {
     return;
   }
 
-  const auto& resolver = config_.scene->GetDirectionalLightResolver();
-  resolver.Validate();
-  if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()) {
-    auto node = config_.scene->GetNode(primary->NodeHandle());
-    CHECK_F(
-      node.has_value(), "failed to resolve scene node for primary sun handle");
-    sun_light_node_ = *node;
-    sun_light_available_ = sun_light_node_.IsAlive();
-    CHECK_F(ApplyDirectionalSunRole(sun_light_node_, true, true, true, true),
-      "failed to promote scene directional '{}' to active sun during "
-      "activation",
-      sun_light_node_.GetName());
-    sun_enabled_ = true;
-    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+  UpdateSunLightCandidate();
+  // Forced-override demos retain their persisted/current UI values for the
+  // next apply. Binding the new scene must not replace that requested state.
+  if (!config_.force_environment_override) {
+    sun_enabled_ = false;
+  }
+  if (sun_light_available_) {
+    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>();
+      light.has_value() && !config_.force_environment_override) {
+      sun_enabled_ = light->get().Common().affects_world;
+      sun_color_rgb_ = light->get().Common().color_rgb;
+      sun_illuminance_lx_ = light->get().GetIntensityLux();
+      sun_source_angle_deg_ = light->get().GetAngularSizeRadians() * kRadToDeg;
+      sun_use_temperature_ = false;
+      const auto& resolver = config_.scene->GetDirectionalLightResolver();
+      std::optional<glm::vec3> direction_to_light;
+      if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()
+        && primary->NodeHandle() == sun_light_node_.GetHandle()) {
+        direction_to_light = primary->DirectionToLightWs();
+      } else if (const auto world_rotation
+        = WorldRotationFromLocalTransforms(sun_light_node_)) {
+        // Disabled tagged lights are excluded from the active resolver, but
+        // their authored orientation must survive selection and re-enabling.
+        direction_to_light
+          = glm::normalize(-(*world_rotation * space::move::Forward));
+      }
+      if (direction_to_light.has_value()) {
+        sun_azimuth_deg_
+          = std::atan2(direction_to_light->y, direction_to_light->x)
+          * kRadToDeg;
+        if (sun_azimuth_deg_ < 0.0F) {
+          sun_azimuth_deg_ += 360.0F;
+        }
+        sun_elevation_deg_
+          = std::asin(std::clamp(direction_to_light->z, -1.0F, 1.0F))
+          * kRadToDeg;
+      }
       CaptureSunShadowSettingsFromLight(light->get());
     }
-    LOG_F(INFO,
-      "activated scene '{}' selected scene directional '{}' as resolved "
-      "primary sun",
+    LOG_F(INFO, "scene '{}' bound scene directional '{}' for sun controls",
       config_.scene->GetName(), sun_light_node_.GetName());
     return;
   }
 
-  sun_light_available_ = false;
-  sun_light_node_ = {};
-  sun_enabled_ = false;
   LOG_F(WARNING, "scene '{}' has no resolved sun directional light",
     config_.scene->GetName());
 }

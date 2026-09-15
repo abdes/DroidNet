@@ -97,7 +97,8 @@ template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
+auto RegisterEngineModules(
+  oxygen::examples::DemoAppContext& app, const bool preview_sun_enabled) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -137,15 +138,16 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     register_module(std::make_unique<oxygen::scripting::ScriptingModule>(
       engine::kScriptingModulePriority));
     register_module(
-      std::make_unique<oxygen::examples::render_scene::MainModule>(app));
+      std::make_unique<oxygen::examples::render_scene::MainModule>(
+        app, preview_sun_enabled));
 
     register_module(std::make_unique<oxygen::vortex::Renderer>(
       app.gfx_weak, renderer_config, kRenderSceneVortexCapabilities));
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
-  -> co::Co<int>
+auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+  const bool preview_sun_enabled) -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
   {
@@ -162,7 +164,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app);
+    RegisterEngineModules(app, preview_sun_enabled);
 
     n.Start([&app, &n]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -215,7 +217,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   using namespace oxygen::clap; // NOLINT
 
   // Initialize settings service
-  SettingsService::ForDemoApp();
+  const auto startup_settings = SettingsService::ForDemoApp();
+  bool preview_sun_enabled
+    = startup_settings->GetBool("render_scene.preview_sun.enabled").value_or(true);
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing
@@ -234,6 +238,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   try {
     const auto developer_options
       = std::make_shared<Options>("Developer options");
+    developer_options->Add(Option::WithKey("preview-sun")
+        .About("Add a preview sun to loaded scenes with no directional light")
+        .Long("preview-sun")
+        .WithValue<bool>()
+        .DefaultValue(preview_sun_enabled)
+        .UserFriendlyName("enabled")
+        .StoreTo(&preview_sun_enabled)
+        .Build());
     developer_options->Add(Option::WithKey("verify-hashes")
         .About("Enable content hash verification for mounted sources")
         .Long("verify-hashes")
@@ -266,7 +278,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .StoreTo(&directional_shadows)
         .Build());
     developer_options->Add(Option::WithKey("scene")
-        .About("Load a cooked scene by name, virtual path, stem, or key at startup")
+        .About(
+          "Load a cooked scene by name, virtual path, stem, or key at startup")
         .Long("scene")
         .WithValue<std::string>()
         .UserFriendlyName("scene")
@@ -315,6 +328,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
     oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
+    LOG_F(INFO, "Resolved preview-sun option = {}", preview_sun_enabled);
     if (!startup_scene_name.empty()) {
       LOG_F(INFO, "Parsed scene option = {}", startup_scene_name);
     }
@@ -331,14 +345,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       = ParseDirectionalShadowPolicy(directional_shadows);
     app.startup_scene_name = startup_scene_name;
     if (const auto settings = SettingsService::ForDemoApp()) {
-      const auto read_int = [&](const std::string_view key,
-                              const int fallback) -> int {
-        return static_cast<int>(settings->GetFloat(key).value_or(
-          static_cast<float>(fallback)));
+      const auto read_int
+        = [&](const std::string_view key, const int fallback) -> int {
+        return static_cast<int>(
+          settings->GetFloat(key).value_or(static_cast<float>(fallback)));
       };
-      const auto read_vec3
-        = [&](const std::string_view prefix,
-            const glm::vec3 fallback) -> glm::vec3 {
+      const auto read_vec3 = [&](const std::string_view prefix,
+                               const glm::vec3 fallback) -> glm::vec3 {
         return glm::vec3 {
           settings->GetFloat(std::string(prefix) + ".x").value_or(fallback.x),
           settings->GetFloat(std::string(prefix) + ".y").value_or(fallback.y),
@@ -355,8 +368,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         = settings->GetBool("env.sky_light.enabled").value_or(false);
       const int sky_light_source
         = read_int("env.sky_light.source", kSkyLightSourceSpecifiedCubemap);
-      const bool sky_sphere_requests_cubemap = sky_sphere_enabled
-        && sky_sphere_source == kSkySphereSourceCubemap;
+      const bool sky_sphere_requests_cubemap
+        = sky_sphere_enabled && sky_sphere_source == kSkySphereSourceCubemap;
       const bool sky_light_requests_cubemap = sky_light_enabled
         && sky_light_source == kSkyLightSourceSpecifiedCubemap;
       if (!explicit_startup_skybox) {
@@ -414,8 +427,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         app.startup_skybox_path, app.startup_skybox_layout,
         app.startup_skybox_output_format, app.startup_skybox_face_size,
         app.startup_skybox_flip_y, app.startup_skybox_tonemap_hdr_to_ldr,
-        app.startup_skybox_hdr_exposure_ev,
-        app.startup_sky_sphere_intensity, app.startup_skybox_enable_sky_sphere,
+        app.startup_skybox_hdr_exposure_ev, app.startup_sky_sphere_intensity,
+        app.startup_skybox_enable_sky_sphere,
         app.startup_skybox_enable_sky_light);
     }
     LOG_F(INFO, "Resolved directional shadow policy = {}",
@@ -505,7 +518,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames));
+    const auto rc = co::Run(app, AsyncMain(app, frames, preview_sun_enabled));
 
     app.engine->Stop();
     app.platform->Stop();
