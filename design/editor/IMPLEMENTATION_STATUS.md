@@ -790,7 +790,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Together with the 15 publication/lifetime cases, the combined native
         inspector regression run passes 34/34, including all eleven built-ins
         and mixed geometry/material selections.
-- [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
+- [x] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
   - [x] The dockable Cooking panel owns session runs and scoped output, grouped
         issues, selected-run cancellation, inline Save listed & Cook, Retry and
@@ -870,7 +870,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         Cooking; its Retry button succeeds after the original file is removed.
         The combined native import/typed-use/lifetime run passes 25/25.
         [Import journey evidence](validation/ED-M07B-import-dialog-journeys.md).
-  - [ ] Finish combined Save listed & Cook / save-conflict recovery.
+  - [x] Save listed & Cook routes exactly the named material through its real
+        document save service. A conflicting external edit preserves source and
+        prior output and leaves the cook blocked. Explicit reload and a second
+        save action resume the same operation, clear feedback and update native
+        bindings; unrelated material edits and the consuming scene remain dirty.
+        [Save-conflict evidence](validation/ED-M07B-save-conflict-recovery.md).
   - [x] Redirected ImportTool output uses complete plain lines without cursor
         controls, spinner padding or terminal-width truncation. Debug/Release
         native CLI checks preserve 217-character lines without escapes; the
