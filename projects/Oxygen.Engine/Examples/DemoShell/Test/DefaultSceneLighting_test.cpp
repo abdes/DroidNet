@@ -45,6 +45,7 @@ NOLINT_TEST(DefaultSceneLighting, AuthorsSunAndEnvironment)
   EXPECT_TRUE(primary->Light().IsSunLight());
   EXPECT_TRUE(primary->Light().GetEnvironmentContribution());
   EXPECT_TRUE(primary->Light().Common().casts_shadows);
+  EXPECT_FLOAT_EQ(primary->Light().Common().shadow.bias, 0.03F);
 
   const glm::vec3 expected_direction_to_light = glm::normalize(
     glm::vec3 { -4.0F, -6.0F, 8.0F } - glm::vec3 { 0.0F, 0.0F, 1.0F });
@@ -67,6 +68,32 @@ NOLINT_TEST(DefaultSceneLighting, IsIdempotent)
     scene->GetDirectionalLightResolver().ResolveDirectionalLights().size(), 1U);
 }
 
+NOLINT_TEST(DefaultSceneLighting, ExplicitSunShadowBiasIsAppliedAndPreserved)
+{
+  for (const auto bias : { 0.0F, 0.08F }) {
+    auto scene = std::make_shared<scene::Scene>("ExplicitBias", 16);
+    auto sun = EnsureDefaultSceneLighting(
+      *scene, DefaultSceneLightingDesc { .sun_shadow_bias = bias });
+    ASSERT_TRUE(sun.IsAlive());
+    const auto light = sun.GetLightAs<scene::DirectionalLight>();
+    ASSERT_TRUE(light.has_value());
+    EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, bias);
+
+    EXPECT_EQ(EnsureDefaultSceneLighting(*scene).GetHandle(), sun.GetHandle());
+    EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+    EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, bias);
+
+    auto preview_scene
+      = std::make_shared<scene::Scene>("ExplicitPreviewBias", 16);
+    auto preview = AddPreviewSunIfMissing(
+      *preview_scene, DefaultSceneLightingDesc { .sun_shadow_bias = bias });
+    ASSERT_TRUE(preview.IsAlive());
+    const auto preview_light = preview.GetLightAs<scene::DirectionalLight>();
+    ASSERT_TRUE(preview_light.has_value());
+    EXPECT_FLOAT_EQ(preview_light->get().Common().shadow.bias, bias);
+  }
+}
+
 NOLINT_TEST(DefaultSceneLighting, PreviewAddsOnlyOneSunWithoutEnvironment)
 {
   auto scene = std::make_shared<scene::Scene>("UnlitImport", 16);
@@ -80,6 +107,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewAddsOnlyOneSunWithoutEnvironment)
   EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 100000.0F);
   EXPECT_TRUE(primary->Light().Common().affects_world);
   EXPECT_TRUE(primary->Light().Common().casts_shadows);
+  EXPECT_FLOAT_EQ(primary->Light().Common().shadow.bias, 0.03F);
   EXPECT_GT(primary->DirectionToLightWs().z, 0.0F);
   EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);

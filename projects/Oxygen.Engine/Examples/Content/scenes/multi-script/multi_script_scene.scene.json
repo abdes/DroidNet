@@ -117,7 +117,8 @@
             0.92
           ],
           "mobility": 0,
-          "casts_shadows": true
+          "casts_shadows": true,
+          "shadow": {"bias": 0.03}
         },
         "angular_size_radians": 0.00935,
         "environment_contribution": true,

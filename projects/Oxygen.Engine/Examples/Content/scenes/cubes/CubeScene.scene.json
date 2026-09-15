@@ -271,7 +271,8 @@
             0.92
           ],
           "mobility": 0,
-          "casts_shadows": true
+          "casts_shadows": true,
+          "shadow": {"bias": 0.03}
         },
         "angular_size_radians": 0.00935,
         "environment_contribution": true,
@@ -289,7 +290,8 @@
             0.35,
             0.25
           ],
-          "casts_shadows": false
+          "casts_shadows": false,
+          "shadow": {"bias": 0.03}
         },
         "range": 8.0,
         "attenuation_model": 0,
@@ -306,7 +308,8 @@
             1.0,
             1.0
           ],
-          "casts_shadows": false
+          "casts_shadows": false,
+          "shadow": {"bias": 0.03}
         },
         "range": 3.0,
         "attenuation_model": 0,
@@ -325,7 +328,8 @@
             0.6,
             1.0
           ],
-          "casts_shadows": false
+          "casts_shadows": false,
+          "shadow": {"bias": 0.03}
         },
         "range": 12.0,
         "attenuation_model": 0,
@@ -344,7 +348,8 @@
             1.0,
             1.0
           ],
-          "casts_shadows": false
+          "casts_shadows": false,
+          "shadow": {"bias": 0.03}
         },
         "range": 6.0,
         "attenuation_model": 0,

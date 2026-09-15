@@ -18,6 +18,9 @@ class Scene;
 
 namespace oxygen::examples {
 
+//! Authored sun bias shared by example-created lights and preview lighting.
+inline constexpr float kDefaultDemoSunShadowBias = 0.03F;
+
 //! Authored default lighting/environment for procedural demo scenes.
 struct DefaultSceneLightingDesc {
   std::string_view sun_node_name { "SunLight" };
@@ -26,6 +29,7 @@ struct DefaultSceneLightingDesc {
   glm::vec3 sun_color_rgb { 1.0F, 0.97F, 0.92F };
   float sun_intensity_lux { 100000.0F };
   float sun_source_angle_degrees { 0.53F };
+  float sun_shadow_bias { kDefaultDemoSunShadowBias };
   bool casts_shadows { true };
 };
 

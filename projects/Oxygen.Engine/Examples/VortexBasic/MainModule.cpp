@@ -57,6 +57,7 @@
 
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "VortexBasic/MainModule.h"
 #include "VortexBasic/NormalMapValidationTexture.h"
 
@@ -1037,6 +1038,7 @@ auto MainModule::BuildSidednessScene() -> void
   auto light = std::make_unique<scene::DirectionalLight>();
   light->Common().affects_world = true;
   light->Common().casts_shadows = true;
+  light->Common().shadow.bias = kDefaultDemoSunShadowBias;
   light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
   light->SetIntensityLux(100000.0F);
   light->SetEnvironmentContribution(true);
@@ -1069,6 +1071,7 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().casts_shadows = true;
+    light->Common().shadow.bias = kDefaultDemoSunShadowBias;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);

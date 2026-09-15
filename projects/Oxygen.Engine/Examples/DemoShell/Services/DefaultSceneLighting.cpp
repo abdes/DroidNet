@@ -97,6 +97,7 @@ namespace {
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().casts_shadows = desc.casts_shadows;
+    light->Common().shadow.bias = desc.sun_shadow_bias;
     light->Common().mobility = scene::LightMobility::kRealtime;
     light->Common().color_rgb = desc.sun_color_rgb;
     light->SetAngularSizeRadians(glm::radians(desc.sun_source_angle_degrees));
