@@ -1131,8 +1131,10 @@ The prior milestone's evidence remains historical.
 Capsule must join the same native definition/generation/cook authority, not an
 editor-only primitive. The engine-owned catalog distinguishes canonical authoring
 choices from internal tools, and the editor consumes that metadata rather than
-duplicating name lists. Primitive dimensions/orientation remain under the separate
-interactive decision; this approval adds no raw generator-parameter editor.
+duplicating name lists. The subsequently approved metric, centred, Z-up defaults
+are specified in the property-inspector Geometry contract. Apply them through
+shared native recipes and migrate useful old recipe intent; keep API/schema
+prose aligned with generated buffers. This adds no raw generator-parameter editor.
 Future additions require explicit catalog and qualification updates.
 
 SetGeometryCommand registers the native request generation and resolves canonical

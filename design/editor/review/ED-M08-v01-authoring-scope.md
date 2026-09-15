@@ -3,7 +3,8 @@
 Status: **interactive decisions in progress**. The user approved development-only
 qualification, no backward compatibility, captured-sky diffuse/specular lighting,
 overrides for all existing material slots, emission colour/HDR intensity, and the
-ten-shape creation palette including Capsule on 2026-09-15. Other property choices below are recommendations, not an
+ten-shape creation palette including Capsule and metric centred primitive defaults
+on 2026-09-15. Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
 ## 1. Recommendation
@@ -43,7 +44,8 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Material overrides for every existing mesh slot | Approved; independent per-instance assignment/clearing, clear restores mesh material; no slot creation/topology editing; implementation pending |
 | Scalar emission colour and HDR intensity | Approved; zero intensity disables emission, no promise of lighting surrounding objects; implementation pending |
 | Ten-shape primitive creation palette | Approved; includes Capsule, SubdividedCube advanced, ArrowGizmo internal; migrate/remove GeodesicSphere alias; implementation pending |
-| Primitive defaults; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Metric primitive defaults and orientation | Approved; centred pivots, Z-up, dimensions in Decision 4, horizontal Plane/upright Quad; prose must match actual code; implementation pending |
+| Camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -108,8 +110,9 @@ adds a visual primitive, not physics, animation or a mesh-parameter editor.
 Qualify all ten choices through creation/assignment, Save/reopen, cooking and
 native/editor rendering, including material overrides. Verify migrations produce
 canonical identities and the ordinary palette contains no alias/tool rows.
-Dimensions, orientation, pivot and other generation defaults were explicitly
-left to the next decision and are not approved by the palette choice.
+The palette choice left dimensions, orientation and pivots separate; Decision 4
+subsequently approved them. Tessellation/normal-generation changes beyond that
+contract are not implied by either choice.
 
 ## 2. Approved: development qualification does not ship
 
@@ -178,18 +181,16 @@ without adding physics or animation scope. Both [Unity's primitive menu](https:/
 and [Godot's primitive meshes](https://docs.godotengine.org/en/stable/classes/class_primitivemesh.html)
 include Capsule; that supports the addition beyond copying Oxygen's current list.
 
-These are generator choices, not a claim of distinct default silhouettes.
-Oxygen's current Plane and Quad defaults are both four-vertex XY surfaces; their
-generator parameters differ. Orienting one as a ground grid and the other as an
-upright card requires a separate explicit decision and implementation. The menu
-approval does not silently change primitive topology, normals or orientation.
+These are generator choices, not a claim about current default silhouettes.
+The source audit found Plane and Quad both generated four-vertex XY surfaces.
+Decision 4 now approves an upright Quad; that geometry change remains pending.
 
-### Decision 4 proposal: primitive defaults — awaiting choice
+### Decision 4: metric centred primitive defaults — approved
 
-Keep metres, Z-up and centred origins. Recommend the following starting geometry;
+The user approved metres, Z-up and centred origins with the following geometry;
 transform scale remains the ordinary way to size instances in V0.1.
 
-| Primitive | Recommended size | Orientation |
+| Primitive | Approved default size | Orientation |
 | --- | --- | --- |
 | Cube / SubdividedCube | 1 m edges | Axis-aligned |
 | Sphere / IcoSphere | 1 m diameter | Z-axis poles where applicable |
@@ -199,23 +200,71 @@ transform scale remains the ordinary way to size instances in V0.1.
 | Plane | 1 m × 1 m | XY ground surface, front +Z |
 | Quad | 1 m × 1 m | Upright XZ card, front −Y |
 
-The viable alternative uses task-sized defaults, notably a 10 m ground Plane
-and 2 m-tall Cylinder, following familiar Unity starting sizes. Consistent sizes
-make transform scale and spatial comparisons easier to predict; larger task-sized
-defaults reduce scaling when building an initial floor or post. The recommended
-2 m Capsule is an explicit rounded-character-placeholder exception, not a promise
-of a character controller. Centred pivots avoid implicit offsets in future shared
-mesh instances; authoring pivot tools remain a separate capability.
+The user selected consistent metric defaults over task-sized defaults such as
+a 10 m ground Plane and 2 m-tall Cylinder. The 2 m Capsule is an explicit
+rounded-character-placeholder exception, not a character-controller feature.
+Centred pivots avoid implicit offsets in future shared mesh instances; authoring
+pivot tools remain a separate capability.
 
 Unity and Godot distinguish a horizontal Plane from an upright Quad. Oxygen's
 axes differ, so apply that authoring convention in its Z-up coordinates rather
-than copying axis labels. Current Oxygen Quad vertices are XY despite XZ prose;
-the Torus has 2.5 m outer diameter. The recommendation requires real native
+than copying axis labels. The audit found Quad vertices in XY, stale XZ prose,
+and a Torus with 2.5 m outer diameter. The approved target requires real native
 geometry/default changes and migration, not editor-only rotations or a legacy
 generator mode. These sizes are an Oxygen design choice, not an industry-wide
 metric standard. [Unity primitive defaults](https://docs.unity3d.com/6000.0/Documentation/Manual/PrimitiveObjects.html),
 [Godot Plane](https://docs.godotengine.org/en/stable/classes/class_planemesh.html),
 [Godot Quad](https://docs.godotengine.org/en/stable/classes/class_quadmesh.html).
+
+The user explicitly required prose to match implementation. Correct current
+source/API comments against actual vertex generation, parameter axes, return
+types and examples. When the approved Quad/Torus/Capsule implementation lands,
+update that prose in the same change. Until then, current API documentation must
+describe current geometry and design tables must identify the pending target.
+Do not claim the geometry change is complete after only updating comments.
+
+Current prose correction: eight procedural factory source files and
+`Data/ProceduralMeshes.h` now describe their actual axes/origins, optional
+vertex/index-buffer returns, examples and adjacent output counts. A C++ token
+comparison against the starting revision found zero non-comment changes in all
+nine files (`artifacts/ed-m08/primitive-prose-review.json`). No build/runtime test
+was needed for these comment-only edits; they do not validate the pending
+geometry changes.
+
+Use the native shared recipe defaults everywhere. Torus defaults become major
+radius 0.4 m and minor radius 0.1 m. Quad geometry, normals, tangents, winding and
+bounds must agree on XZ/front −Y; the editor must not apply a hidden compensating
+rotation. Migrate useful content through the canonical recipes and normal cook.
+Verify actual bounds/axes/attributes plus native and editor appearance before
+closing this implementation work.
+Validate finite native generator inputs as part of that work: current positive-
+dimension guards alone do not reject NaN/Infinity. Prose must not promise a
+broader rejection contract than the implementation actually provides.
+
+### Decision 5 proposal: camera authoring model — awaiting choice
+
+Recommend a basic perspective camera for V0.1: transform, explicitly labelled
+vertical FOV in degrees, aspect/frame ratio and near/far clipping in metres.
+Use a selected authored camera independently of editor navigation. Exact loaded
+values must match saved intent; reject invalid projection values instead of
+silently repairing them. Frame-to-viewport presentation is a subsequent choice.
+
+The alternative is a physical camera model now, with focal length/sensor and
+aperture/shutter/ISO. That supports photographic workflows but requires coupled
+projection and calibrated camera-exposure authoring rather than inert controls.
+Basic perspective cameras cover the current static-scene scope; a later physical
+mode can derive projection from lens/sensor data and use explicit exposure
+inputs through the same camera/view ownership. Unity exposes basic projection
+and an optional physical-camera mode; Godot separates Camera3D from physical
+attributes. [Unity camera reference](https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html),
+[Godot Camera3D](https://docs.godotengine.org/en/stable/classes/class_camera3d.html),
+[Godot physical camera attributes](https://docs.godotengine.org/en/stable/classes/class_cameraattributesphysical.html).
+
+Oxygen already exposes four projection fields, but ordinary DemoShell loading
+selects the first camera, rewrites aspect and normalizes clipping values. Fix
+the real selection/hydration behaviour for the chosen model; do not compensate
+in a development-only test adapter. Camera model choice does not approve a
+physical-camera exposure fallback or orthographic/DOF features.
 
 ### Why these choices
 
@@ -327,9 +376,9 @@ command registration, module initializer or instrumentation ships.
 ## 6. Interactive decision sequence
 
 Captured-sky diffuse/specular lighting, all existing material-slot overrides,
-scalar emission colour/HDR intensity, the ten-shape palette, and the build/migration
-policies are approved; do not ask for them again. Next discuss primitive defaults,
-camera framing, scene participation
+scalar emission colour/HDR intensity, the ten-shape palette and metric defaults,
+and the build/migration policies are approved; do not ask for them again.
+Next discuss camera model/framing, scene participation
 and transforms, light/sun roles, shadow controls, exposure, grading/output, and
 atmosphere controls. Split a topic when it contains independent consequential
 choices; do not request a blanket package approval.

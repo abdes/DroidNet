@@ -964,7 +964,10 @@ content in embedded preview and standalone runtime under controlled comparison.
       Emissive GI is outside this decision; implementation and validation remain pending.
 - [x] Ten-shape creation palette including Capsule is approved; SubdividedCube
       is Advanced, ArrowGizmo internal, and GeodesicSphere migrates to IcoSphere.
-      Primitive defaults, implementation and qualification remain pending.
+      Implementation and qualification remain pending.
+- [x] Metric centred primitive defaults are approved, including upright Quad,
+      1 m outer-diameter Torus and 2 m-high Capsule. Source/API prose must match
+      actual implementation; geometry changes and rendered qualification remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
