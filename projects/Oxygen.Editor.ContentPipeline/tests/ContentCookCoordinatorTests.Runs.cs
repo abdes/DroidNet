@@ -210,6 +210,14 @@ public sealed partial class ContentCookCoordinatorTests
     public async Task NeedsSaveReleasesWriterAndRechecksInputsOnResume()
     {
         using var coordinator = CreateCoordinator(CreateContextService());
+        var needsSave = new TaskCompletionSource<CookRunSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.RunChanged += (_, change) =>
+        {
+            if (change.Run.State == CookRunState.NeedsSave)
+            {
+                _ = needsSave.TrySetResult(change.Run);
+            }
+        };
         var dirty = true;
         var captures = 0;
         var document = new Snapshots.CookDocumentState(Guid.NewGuid(), Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", 2, 1, IsDirty: true, "saved");
@@ -221,7 +229,7 @@ public sealed partial class ContentCookCoordinatorTests
             return dirty ? Task.FromException<int>(new CookInputsNeedSaveException([document])) : Task.FromResult(100);
         },
             CancellationToken.None);
-        var run = coordinator.Runs.Single();
+        var run = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = run.State.Should().Be(CookRunState.NeedsSave);
         _ = (await coordinator.RunCookAsync(new(CookTargetKind.Asset, new("asset:///Content/Other.omat.json")), (_, _) => Task.FromResult(7), CancellationToken.None).ConfigureAwait(false)).Should().Be(7);
         _ = waiting.IsCompleted.Should().BeFalse();

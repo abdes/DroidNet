@@ -8,6 +8,7 @@ namespace Oxygen.Editor.ContentPipeline;
 public interface IContentCookCoordinator
 {
     /// <summary>Queues an identified user-visible cook with session progress and scoped cancellation.</summary>
+    /// <remarks>Cook work runs away from the submitting synchronization context after acquiring the writer. UI-owned work must use its owning dispatcher.</remarks>
     /// <typeparam name="T">The workflow result.</typeparam>
     /// <param name="request">The original logical scope and trigger.</param>
     /// <param name="work">Work invoked only while owning the shared writer. When pending scopes coalesce, the first delegate captures the latest saved inputs for every caller.</param>

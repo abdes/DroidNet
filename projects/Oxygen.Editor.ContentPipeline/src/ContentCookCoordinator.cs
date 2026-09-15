@@ -159,6 +159,12 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
                 await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
                 acquired = true;
 
+                if (progress is not null)
+                {
+                    // Cached I/O can complete synchronously; a cook must not run its whole closure on the UI caller.
+                    await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+                }
+
                 requestCancellation.Token.ThrowIfCancellationRequested();
                 this.VerifyCurrent(operation);
                 progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
