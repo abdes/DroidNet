@@ -39,9 +39,8 @@ in PRD sections 8-10.
 Current execution:
 
 1. Finish the remaining ED-M02 single-viewport surface/resize evidence.
-2. Execute [ED-M07B](plan/ED-M07B-safe-content-publication-and-compatibility.md):
-   saved input/staging/publication/recovery, required native descriptor mappings,
-   matched-build and portable-import guarantees.
+2. ED-M07B is validated. Its [workflow audit](validation/ED-M07B-closeout-audit.md)
+   records content discovery/use, publication/recovery and native import evidence.
 3. Continue through the exact ED-M08 parity, ED-M09 interaction and ED-M10 release
    qualification plans. No later milestone is an entry dependency of an earlier one.
 
@@ -52,7 +51,7 @@ the final viewport workflows through Undo/Redo and Save/reopen.
 Previously recorded milestone statuses and evidence are preserved. No new
 implementation or closure sweep is assigned to M04. Its identified authoring
 omissions and missing evidence were resolved in ED-M07A; downstream descriptor
-gaps remain in ED-M07B. Issue fixes #2-5 are included through editor ea395a310. Preserve their recorded
+gaps were resolved and validated in ED-M07B. Issue fixes #2-5 are included through editor ea395a310. Preserve their recorded
 automated evidence and limits; they do not automatically advance a milestone.
 PLAN section 9 maps #6-11 to the remaining concrete gap tasks.
 
@@ -512,7 +511,7 @@ Plan: [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 
 ### ED-M07B - Safe Content Publication And Compatibility
 
-Status: `in_progress`
+Status: `validated`
 
 Trace: `REQ-013` through `REQ-024`, `REQ-026`, `REQ-036` through `REQ-042`;
 `SUCCESS-004`, `SUCCESS-006`, `SUCCESS-007`.
@@ -886,7 +885,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         console events stay scoped to their source; reopened controls resume
         updates without duplicate handlers. The related UI/native group passes
         32/32. [Reading-state evidence](validation/ED-M07B-cooking-reading.md).
-- [ ] 07B.5f complete before/during/after workflow and user validation journeys.
+- [x] 07B.5f complete before/during/after workflow and user validation journeys.
+  - [x] The [final audit](validation/ED-M07B-closeout-audit.md) maps all 19 journeys,
+        Main repair, additional Cooking gates and the original 12 UI findings to
+        scoped implementation and validation evidence.
   - [x] The combined Main repair starts from a published value of 0, displays
         saved -1 without clamping, preserves prior output on failure, focuses
         the actual field, rejects -2 and accepts 100. Retry blocks until the
@@ -915,16 +917,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Browser and picker discovery use the native catalog with the approved
       last-known cache and unavailable-preview notice. Native comparison suites
       verify geometry attributes, bounds and default material semantics; packaged
-      tests verify preview and Save/reopen for every built-in. Issue #11 is resolved.
+      tests verify preview and Save/reopen for every built-in. The implemented fix is linked by its `Fixes #11` commit.
 
-Current validation: ContentPipeline 432/432 and the expanded inspection adapter
-suite 25/25; Managed.Assets 91/91, Content Browser 133/133, Runtime 95/95,
-MaterialEditor 56/56, SceneExplorer 174/174. Packaged UI validated 252 cases: 240 passed in the full run; the four query
-expectations corrected for shared initialization and eight new cooked-asset opening
-cases pass in the final 32-case browser/inspection/Cooking rerun. The shared
-toolbar suite passes 11/11, including conditional command visibility through overflow.
-Native asset-request tests pass 28/28. The user confirmed startup without the
-access violation and the live demand-cooking workflow described above.
+Current validation is summarized in the milestone ledger below and the
+[workflow audit](validation/ED-M07B-closeout-audit.md). Debug editor and both native
+SDK configurations are current. GitHub #8 and #11 retain their closing commit
+references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
@@ -1029,7 +1027,7 @@ recorded in section 5.
 | [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A` | `validated` | No further action for ED-M06A. |
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
-| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `in_progress` | UI/source review and D1 complete. Implement content workflows, incremental cooking, safe publication, mappings and qualification. |
+| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `validated` | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded. |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `blocked` | Requires 07A/07B and ED-M02 evidence; then execute exact-request parity. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
@@ -1054,7 +1052,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-15 | ContentPipeline 449/449; final ownership/publication subset 94/94; production workspace creation, typed-material discovery, all cook triggers, current native bindings, cancellation/recovery and scene-lifetime cases 15/15. Native import numeric profiles and clean copies pass in Debug/Release. Main/Inspect/Main native document transitions pass 30 cycles each at 60/10 FPS with D3D12 validation. Browser workload and cook-feedback timing meet their gates; import/browser/material controls pass 33/33 across themes/scales, and inspector/Cooking scaling passes 18/18. User-confirmed startup, live material updates, duplicate removal, built-ins and leak-free shutdown remain recorded above. Completed contracts and remaining combined import, typed-use, navigation and project-lifetime gates are checked individually above. |
+| `ED-M07B` | `validated` | 2026-09-15 | [Workflow audit](validation/ED-M07B-closeout-audit.md): all 19 journeys and original UI findings reconciled. ContentPipeline 449/449; final Cooking/reading/Main/import/recovery group 32/32; imported/native inspector group 34/34; browser UI 36/36 and Content Browser 134/134; scaled groups 33/33 and 18/18; isolated feedback 4/4. Native import profiles and copied sources pass in Debug/Release. Document transitions pass 30 cycles each at 60/10 FPS. Current Debug editor builds; both SDKs installed. Relevant executable changes/tests are analyzer/IDE clean. User-confirmed preview, built-in, browser and shutdown behavior is retained above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
