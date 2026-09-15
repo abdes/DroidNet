@@ -12,35 +12,32 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a cylinder centered at the origin, aligned
- along the Y axis. The cylinder consists of a side surface and two end caps.
- Vertices are generated with positions, normals, texcoords, tangents,
- bitangents, and color.
+ Creates vertex and index buffers for a cylinder aligned along the Z axis.
+ The cylinder has a side surface and two end caps at z = -height/2 and
+ z = +height/2. Its radial centre is x = y = 0.
 
  @param segments Number of radial segments (minimum 3).
- @param height Height of the cylinder (centered at Y=0).
- @param radius Radius of the cylinder.
- @return Shared pointer to the immutable Mesh containing the cylinder
- geometry. Returns nullptr on invalid input. Never throws.
+ @param height Height along Z (must be > 0).
+ @param radius Radius in the XY plane (must be > 0).
+ @return Vertex and index vectors, or std::nullopt for
+ segment counts below three or non-positive height/radius.
 
  ### Performance Characteristics
 
- - Time Complexity: O(segments)
- - Memory: Allocates space for 2*(segments+1) + 2 vertices and 12*segments
- indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(segments).
+ - Output: 4*(segments+1)+2 vertices and 12*segments indices.
+ - Side and cap rim vertices are separate to preserve their normal/UV seams.
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a cylinder mesh asset
-auto cylinder = MakeCylinderMeshAsset(32, 1.0f, 0.5f);
-for (const auto& v : cylinder->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeCylinderMeshAsset(32, 1.0f, 0.5f)) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
- using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeCylinderMeshAsset(
   const unsigned int segments, const float height, const float radius)

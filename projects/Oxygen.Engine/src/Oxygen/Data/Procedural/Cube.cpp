@@ -11,30 +11,26 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a unit axis-aligned cube centered at the
- origin.
+ Creates vertex and index buffers for a unit axis-aligned cube centred at the
+ origin. Each face has separate vertices and a constant outward normal.
 
- @return Shared pointer to the immutable Mesh containing the cube geometry.
- Returns nullptr on invalid input. Never throws.
+ @return A pair of vertex and index vectors wrapped in an engaged optional.
 
  ### Performance Characteristics
 
- - Time Complexity: O(1) (fixed-size geometry generation)
- - Memory: Allocates space for 8 vertices and 36 indices
- - Optimization: No dynamic allocations beyond vector growth; all data is
-   constructed in-place and moved into the Mesh.
+ - Time Complexity: O(1) (fixed-size geometry generation).
+ - Output: 24 vertices and 36 indices (12 triangles).
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a cube mesh asset
- auto cube = MakeCubeMeshAsset();
- for (const auto& v : cube->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeCubeMeshAsset()) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
-       using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeCubeMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>

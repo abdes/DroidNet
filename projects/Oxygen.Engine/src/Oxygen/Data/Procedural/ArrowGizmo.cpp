@@ -12,32 +12,28 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a simple arrow gizmo, typically used for
- axis visualization in editors and debug views. The arrow is aligned along the
- +Z axis (the engine Up direction), composed of a cylinder shaft and a cone
- head, with distinct colors for shaft and head. All geometry is centered at
- the origin.
+ Creates vertex and index buffers for an arrow used in editor-axis and debug
+ visualization. A blue shaft and yellow cone head point along +Z. The arrow
+ is centred on the Z axis, with its shaft base at z = -0.1 and tip at z = 0.78;
+ its bounding box is not centred at the origin.
 
- @return Shared pointer to the immutable Mesh containing the arrow gizmo.
- Returns nullptr on invalid input. Never throws.
+ @return A pair of vertex and index vectors wrapped in an engaged optional.
 
  ### Performance Characteristics
 
- - Time Complexity: O(segments)
- - Memory: Allocates space for a small number of vertices and indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(1), using a fixed 16 radial segments.
+ - Output: 53 vertices and 192 indices (64 triangles).
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create an arrow gizmo mesh asset
-auto arrow = MakeArrowGizmoMeshAsset();
-for (const auto& v : arrow->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeArrowGizmoMeshAsset()) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
-       using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeArrowGizmoMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>

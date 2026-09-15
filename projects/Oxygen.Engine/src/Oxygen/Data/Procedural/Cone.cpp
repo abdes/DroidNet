@@ -12,34 +12,33 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a cone centered at the origin, aligned
- along the Y axis. The cone consists of a side surface and a base cap.
- Vertices are generated with positions, normals, texcoords, tangents,
- bitangents, and color, using designated initializers and trailing commas.
+ Creates vertex and index buffers for a cone aligned along the Z axis.
+ The base cap lies at z = -height/2 and the apex at z = +height/2, with the
+ axis passing through x = y = 0. The origin is halfway along the height,
+ not the cone's centre of mass.
 
  @param segments Number of radial segments (minimum 3).
- @param height Height of the cone (centered at Y=0, apex at +Y).
- @param radius Base radius of the cone.
- @return Shared pointer to the immutable Mesh containing the cone geometry.
- Returns nullptr on invalid input. Never throws.
+ @param height Height along Z (must be > 0).
+ @param radius Base radius in the XY plane (must be > 0).
+ @return Vertex and index vectors, or std::nullopt for
+ segment counts below three or non-positive height/radius.
 
  ### Performance Characteristics
 
- - Time Complexity: O(segments)
- - Memory: Allocates space for (segments+2) vertices and 6*segments indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(segments).
+ - Output: 2*(segments+1)+2 vertices and 6*segments indices.
+ - Side and cap rim vertices are separate to preserve their normal/UV seams.
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a cone mesh asset
-auto cone = MakeConeMeshAsset(32, 1.0f, 0.5f);
-for (const auto& v : cone->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeConeMeshAsset(32, 1.0f, 0.5f)) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
- using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeConeMeshAsset(
   unsigned int segments, float height, float radius)
