@@ -728,6 +728,15 @@ not a new loader-generation implementation or a change to Accepted semantics.
 
 ## 19. Development-Only Validation Capture Session
 
+Production camera presentation follows the approved Auto/Fixed authoring policy.
+Auto derives effective aspect per target while retaining vertical FOV; Fixed
+preserves its authored ratio and complete image using a centred content rectangle.
+Add bars after scene exposure/post-processing so they cannot alter metering.
+Neither policy permits viewport resizing to mutate saved camera data. The engine
+view/composition path owns this ordinary runtime behaviour; editor and development
+tools consume it. The opt-in capture records target/content rectangles and
+effective projection, and the base fixture explicitly selects Fixed 16:9.
+
 The user explicitly required the entire ED-M08 validation workflow to remain
 development-only on 2026-09-15. Its opt-in editor test host temporarily pins the
 saved scene projection/camera/profile under a run/document/view-lifetime capture

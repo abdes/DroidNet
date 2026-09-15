@@ -233,7 +233,7 @@ managed test/tool consumers share those sources without production references.
 | `scene_virtual_path`, `scene_asset_key` | Exact path AND key; both resolve to the same winning cooked scene. |
 | `identity_map_path`, `identity_map_hash` | Immutable GUID/index and URI/key/winning-source map. No expected numeric property values. |
 | `expected_state_path`, `expected_state_hash` | Managed comparison input from saved sources and separately labelled library baselines. Native code may verify its hash, but never apply or echo its values. |
-| `profile` | Explicit camera GUID/index, target pixels/encoding, timestep, seed, scene-frame checkpoints, history reset and effective render-policy requirements. |
+| `profile` | Explicit camera GUID/index and authored Auto/Fixed aspect policy, target pixels/encoding and content mapping, timestep, seed, scene-frame checkpoints, history reset and effective render-policy requirements. |
 | `artifact_directory` | Absolute operation-owned directory outside authored content. |
 
 Paths must resolve within their declared input/output ownership; reject traversal,
@@ -316,7 +316,8 @@ property/knob; remaining property decisions follow the review's one-at-a-time
 interactive process.
 
 Compare stored native values and effective derived values separately. Examples:
-camera FOV/aspect/near/far and parented world pose; light stored intensity and
+camera aspect policy/fixed ratio, effective per-view aspect, vertical FOV,
+near/far and parented world pose; light stored intensity and
 effective compensation/sun selection; material alpha mode/cutoff and factors;
 environment's stored exposure settings and frame-specific GPU exposure.
 Useful legacy source intent must migrate to canonical PostProcess or the other
@@ -342,11 +343,29 @@ uses matched Release artifacts on the same recorded D3D12 adapter/driver,
 1920x1080 output, conventional directional shadows, fixed 1/60-second scene
 steps, seed 0 where randomness is used, and no editor/debug/tool overlays.
 
-Use the selected authored PerspectiveCamera's transform, FOV, aspect, near/far.
-Do not reinterpret the navigation camera as authored state or overwrite aspect
-from window dimensions. Both capture paths use the same recorded projection
-and target mapping. The full fixture has an explicitly authored 16:9 camera;
-non-16:9 field cases must preserve and observe their authored aspect.
+Use the selected authored PerspectiveCamera's transform, vertical FOV, near/far
+and approved aspect policy. [Decision 6: camera aspect fitting](../review/ED-M08-v01-authoring-scope.md)
+approves **Auto and Fixed, with Auto the default for newly created cameras**:
+
+- **Auto** derives effective aspect from that view's render target while keeping
+  authored vertical FOV. Resolve it per view; do not write the derived ratio
+  into saved camera data or persistent demo settings.
+- **Fixed** preserves the authored ratio and complete composition in a centred
+  content rectangle, with letterbox or pillarbox bars as needed. Do not crop or
+  stretch the scene to fill a mismatched target.
+
+Both embedded and native paths must use the same authored policy and target
+mapping. The full 100-node fixture explicitly selects **Fixed 16:9**, despite the
+new-camera Auto default. Add Fixed 4:3 and Auto target-resize cases. Fixed 4:3 in
+1920x1080 has content rectangle `(240, 0, 1440, 1080)`; a 16:9 frame in 1440x1080
+has `(0, 135, 1440, 810)`. These exercise both bar directions without changing
+authored camera identity, pose or vertical FOV. Navigation is not authored state.
+
+Record authored policy/ratio, target pixel dimensions, the exact integer content
+rectangle `(x, y, width, height)`, and actual effective projection aspect/vertical
+FOV for each view and capture. Check policy, target and rectangle exactly; use
+the unchanged scalar tolerances for aspect/FOV. The prohibition is against
+mutating authored policy, not against Auto deriving its required per-view aspect.
 
 Reset temporal, exposure and scene/view histories through supported engine
 capabilities. Readiness means the requested scene, required geometry/material/
@@ -361,6 +380,10 @@ Do not force Manual or another tone mapper merely to obtain passing images.
 
 Capture final scene pixels after tone mapping, authored display conversion,
 background and foreground transparency composition, before UI composition.
+Fixed-frame bars are composed after scene post-processing and exposure/metering;
+they must not enter scene luminance or Auto-exposure histograms. Capture the
+complete target including those bars. Test that changing bar area alone, while
+keeping scene content/projection constant, does not contaminate exposure.
 Use the same defined SDR output encoding on both paths; remove BGRA/row-pitch
 differences without another exposure/gamma adjustment or image resizing.
 Readback completes only after the GPU copy fence and encoding/file writes.
@@ -389,6 +412,11 @@ Preserve these established thresholds:
   Exclude only the outermost one-pixel border. Reject size/encoding mismatch;
   do not resize, align images, mask content or auto-rebaseline.
 
+Camera framing does not relax these rules. The complete target, including bars,
+participates in image comparison; no extra bar/content masks are allowed.
+An incorrect content rectangle or effective aspect also fails its independent
+semantic check, even if large matching bar regions reduce whole-image error.
+
 Compare expected vs embedded and expected vs standalone before reporting semantic
 success. Compare the original controlled image pair and retain metrics/difference
 images. Missing observations and unsupported required fields fail. Two empty or
@@ -402,7 +430,7 @@ same image thresholds at each paired checkpoint. Use bright/dark cases and
 non-default adaptation settings to exercise both speeds and metering modes;
 static Manual success cannot substitute for Auto behavior. ManualCamera cases
 record the engine's effective camera-exposure inputs as well as the saved mode;
-M08 does not add new camera authoring fields.
+the aspect-policy decision does not add physical-camera authoring fields.
 
 Subject to the accepted field-scope review, the suite includes every approved
 tone mapper/exposure mode and visually meaningful
@@ -432,6 +460,10 @@ newer pending edits without adding product validation UI. Its capture adapter
 suppresses navigation/profile changes only for the bounded capture window.
 A fixed capture target is independent of UI panel size; resizing the same view
 must not change image dimensions or persist a temporary camera setting.
+Auto uses that fixed capture target's aspect, not the current dock/window size.
+Separate Auto-resize cases intentionally change the controlled target/profile
+between checks; each embedded/native pair still uses identical dimensions and
+policy. In-session UI resize must leave the pinned capture profile unchanged.
 
 After embedded artifacts finalize, release without waiting for standalone.
 Remove the temporary profile only if lifetimes still match, capture one coherent

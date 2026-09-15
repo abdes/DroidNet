@@ -224,15 +224,27 @@ evidence that the current buffers satisfy it.
 | Vertical Field of View (`FieldOfView`) | Primary | `float` deg, `[1, 179]`, default `60` | Clamp | Indeterminate | yes |
 | `NearPlane` | Primary | `float` m, `> 0`, default `0.1` | Reject `<= 0`; reject `>= FarPlane` | Indeterminate | yes |
 | `FarPlane` | Primary | `float` m, `> NearPlane`, default `1000` | Reject `<= NearPlane` | Indeterminate | yes |
-| `AspectRatio` | Advanced | `float`, default `16/9` | Reject `<= 0` | Indeterminate | yes |
+| Aspect Mode | Primary | `Auto` / `Fixed`, new-camera default `Auto` | Reject unsupported modes | Indeterminate | yes |
+| Fixed Aspect Ratio | Primary, Fixed mode only | finite positive width/height ratio; initial Fixed selection `16/9` | Reject non-positive/non-finite values | Indeterminate | yes |
 
 Cross-field rule: editing `NearPlane >= FarPlane` rejects the commit; the field
 shows the diagnostic from `OXE.SCENE.PerspectiveCamera.NearFar.Invalid`.
 
 The user approved this basic perspective model for V0.1 on 2026-09-15, with pose
 provided by Transform. Do not add focal-length/sensor or aperture/shutter/ISO
-authoring; physical-camera authoring is deferred. Aspect fitting remains a
-separate pending decision, not permission to overwrite the saved ratio on resize.
+authoring; physical-camera authoring is deferred. The user subsequently approved
+Auto/Fixed aspect fitting with Auto as the new-camera default. Auto derives the
+current target's ratio per view and keeps vertical FOV unchanged. Fixed preserves
+the authored ratio and full composition in a centred image rectangle with
+letterbox/pillarbox bars, without cropping or stretching. Resize never changes
+saved camera values or dirty/history state. Editor navigation remains independent.
+
+The effective Auto ratio is derived/read-only information; do not offer an
+editable ratio that runtime ignores. Native view composition owns fitting and
+adds bars after scene exposure/post-processing so they do not affect metering.
+Map explicit glTF camera ratios to Fixed and omitted ratios to Auto. Migrate
+useful explicit ratios in prior Oxygen documents to Fixed using development
+tooling; the shipping path consumes only the canonical policy.
 
 ED-M08 must load the explicitly chosen authored camera, including parented pose
 and non-default projection, through real native hydration. Do not select the
@@ -240,6 +252,9 @@ first camera instead, silently normalize invalid clipping or substitute editor
 navigation. Carry all fields through commands, Undo/Redo, Save/reopen, cooking
 and observed native/editor rendering. These expanded loading/qualification gates
 remain pending; the approval is a scope decision, not evidence of implementation.
+Include wide/tall Auto targets, Fixed 4:3/16:9, mode changes and resize in the
+engine-first/editor-second qualification. Record both authored policy and actual
+view projection/content rectangle in development-only evidence.
 
 #### `DirectionalLightComponent` (`SelectionPolicy.CommonComponent`)
 
