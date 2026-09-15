@@ -23,6 +23,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
@@ -1466,6 +1467,53 @@ namespace {
       });
   }
 
+  [[nodiscard]] auto BuildFbxBakePlan(const ufbx_scene& scene,
+    const CoordinateConversionPolicy& policy) -> internal::MeshBakePlan
+  {
+    std::vector<internal::MeshBakeNode> nodes(scene.nodes.count);
+    std::vector<uint8_t> emit_mesh(scene.meshes.count, 1);
+    std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
+    std::vector<std::vector<std::vector<const ufbx_material*>>> material_groups(
+      scene.meshes.count);
+    for (size_t index = 0; index < scene.meshes.count; ++index) {
+      mesh_indices.emplace(scene.meshes.data[index], index);
+    }
+    std::unordered_set<const ufbx_element*> animated;
+    for (const auto* layer : scene.anim_layers) {
+      for (const auto& property : layer->anim_props) {
+        animated.insert(property.element);
+      }
+    }
+    for (size_t index = 0; index < scene.nodes.count; ++index) {
+      const auto* node = scene.nodes.data[index];
+      if (node == nullptr || node->mesh == nullptr) {
+        continue;
+      }
+      auto& input = nodes[index];
+      input.mesh_index = mesh_indices.at(node->mesh);
+      input.local_transform = MakeLocalTransformMatrix(node->local_transform);
+      const auto& materials
+        = node->materials.count != 0 ? node->materials : node->mesh->materials;
+      const std::vector<const ufbx_material*> bindings(
+        materials.data, materials.data + materials.count);
+      auto& groups = material_groups[input.mesh_index];
+      const auto match = std::ranges::find(groups, bindings);
+      input.material_binding = static_cast<size_t>(match - groups.begin());
+      if (match == groups.end()) {
+        groups.push_back(bindings);
+      }
+      if (node->children.count != 0 || node->camera != nullptr
+        || node->light != nullptr) {
+        input.retain_reason = "attachment or camera/light transform";
+      } else if (animated.contains(&node->element) || node->bone != nullptr
+        || node->bind_pose != nullptr || node->mesh->all_deformers.count != 0) {
+        input.retain_reason = "animation, skinning, or deformation transform";
+      }
+    }
+    return internal::BuildMeshBakePlan(
+      nodes, emit_mesh, policy.bake_transforms_into_meshes);
+  }
+
   [[nodiscard]] auto StreamWorkItemsFromScene(const ufbx_scene& scene,
     const AdapterInput& input, GeometryWorkItemSink& sink)
     -> WorkItemStreamResult
@@ -1496,7 +1544,21 @@ namespace {
 
     const auto scene_name = input.request.GetSceneName();
 
-    for (uint32_t mesh_i = 0; mesh_i < mesh_count; ++mesh_i) {
+    const auto bake_plan
+      = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
+      if (!bake_plan.retained_reasons[index].empty()) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic("mesh.transform_bake_retained",
+            "Retained authored node transform: "
+              + bake_plan.retained_reasons[index],
+            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+      }
+    }
+    for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
+      ++variant_index) {
+      const auto& variant = bake_plan.variants[variant_index];
+      const auto mesh_i = static_cast<uint32_t>(variant.mesh_index);
       if (input.stop_token.stop_requested()) {
         result.success = false;
         result.diagnostics.push_back(
@@ -1509,7 +1571,8 @@ namespace {
         continue;
       }
 
-      const auto authored_name = ToStringView(mesh->name);
+      const auto authored_name
+        = std::string(ToStringView(mesh->name)) + variant.name_suffix;
       DLOG_F(2,
         "FBX mesh[{}] name='{}' indices={} faces={} skin_deformers={} "
         "all_deformers={} instances={} conn_src={} conn_dst={}",
@@ -1529,17 +1592,24 @@ namespace {
         = input.naming_service->MakeUniqueName(authored_name, mesh_context);
 
       MeshBuildPipeline::WorkItem item;
-      item.source_id = BuildSourceId(input.source_id_prefix, mesh_name, mesh_i);
+      item.source_id = BuildSourceId(input.source_id_prefix, mesh_name,
+        static_cast<uint32_t>(variant_index));
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
-      item.source_key = mesh;
+      item.source_key = variant.representative_node != internal::kNoBakeIndex
+        ? static_cast<const void*>(
+            scene.nodes.data[variant.representative_node])
+        : static_cast<const void*>(mesh);
+      item.bake_transform = variant.transform;
       item.material_keys.assign(
         input.material_keys.begin(), input.material_keys.end());
       item.default_material_key = input.default_material_key;
       item.want_textures = true;
       bool has_material_textures = false;
       const ufbx_node* material_node
-        = (mesh->instances.count > 0) ? mesh->instances.data[0] : nullptr;
+        = variant.representative_node != internal::kNoBakeIndex
+        ? scene.nodes.data[variant.representative_node]
+        : nullptr;
       const ufbx_material_list* material_list = &mesh->materials;
       if (material_node != nullptr && material_node->materials.count > 0) {
         material_list = &material_node->materials;
@@ -2475,24 +2545,17 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& scene = *impl_->scene_owner;
   const auto& request = *input.request;
 
-  std::unordered_map<const ufbx_mesh*, data::AssetKey> mesh_keys;
-  mesh_keys.reserve(scene.meshes.count);
-
-  if (!input.geometry_keys.empty()
-    && input.geometry_keys.size() < scene.meshes.count) {
-    diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
-      "Geometry key count does not match mesh count", input.source_id, {}));
+  const auto bake_plan = BuildFbxBakePlan(scene, request.options.coordinate);
+  std::unordered_map<const ufbx_node*, size_t> source_node_indices;
+  source_node_indices.reserve(scene.nodes.count);
+  for (size_t index = 0; index < scene.nodes.count; ++index) {
+    source_node_indices.emplace(scene.nodes.data[index], index);
   }
 
-  for (size_t i = 0; i < scene.meshes.count; ++i) {
-    const auto* mesh = scene.meshes.data[i];
-    if (mesh == nullptr) {
-      continue;
-    }
-
-    if (i < input.geometry_keys.size()) {
-      mesh_keys.emplace(mesh, input.geometry_keys[i]);
-    }
+  if (!input.geometry_keys.empty()
+    && input.geometry_keys.size() < bake_plan.variants.size()) {
+    diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
+      "Geometry key count does not match mesh count", input.source_id, {}));
   }
 
   std::vector<NodeInput> nodes;
@@ -2519,7 +2582,13 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
 
-    const auto local_matrix = MakeLocalTransformMatrix(node->local_transform);
+    auto local_matrix = MakeLocalTransformMatrix(node->local_transform);
+    const auto variant_index
+      = bake_plan.node_variant[source_node_indices.at(node)];
+    if (variant_index < bake_plan.variants.size()
+      && bake_plan.variants[variant_index].transform.has_value()) {
+      local_matrix = glm::mat4(1.0F);
+    }
     const auto world_matrix = parent_world * local_matrix;
 
     NodeInput node_input;
@@ -2535,8 +2604,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.source_node = node;
 
     if (node->mesh != nullptr) {
-      const auto it = mesh_keys.find(node->mesh);
-      if (it != mesh_keys.end()) {
+      if (variant_index < input.geometry_keys.size()) {
         node_input.has_renderable = true;
       }
     }
@@ -2712,11 +2780,12 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
     const auto* ufbx_node = static_cast<const ::ufbx_node*>(node.source_node);
     if (ufbx_node != nullptr && ufbx_node->mesh != nullptr) {
-      const auto it = mesh_keys.find(ufbx_node->mesh);
-      if (it != mesh_keys.end()) {
+      const auto variant_index
+        = bake_plan.node_variant[source_node_indices.at(ufbx_node)];
+      if (variant_index < input.geometry_keys.size()) {
         build.renderables.push_back(RenderableRecord {
           .node_index = i,
-          .geometry_key = it->second,
+          .geometry_key = input.geometry_keys[variant_index],
           .visible = 1,
         });
       }

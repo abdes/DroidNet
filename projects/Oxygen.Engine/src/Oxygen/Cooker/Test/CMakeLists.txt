@@ -305,6 +305,7 @@ m_gtest_program(
     "Import/AsyncGltfImporter_test.cpp"
     "Import/StaticScalarImport_test.cpp"
     "Import/StaticScalarLoadedValues_test.cpp"
+    "Import/MeshTransformBake_test.cpp"
     "Import/SceneSourceInspection_test.cpp"
 )
 
