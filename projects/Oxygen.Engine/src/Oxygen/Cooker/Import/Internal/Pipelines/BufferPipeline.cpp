@@ -24,6 +24,11 @@ namespace {
 
 } // namespace
 
+BufferPipeline::BufferPipeline(co::ThreadPool& thread_pool)
+  : BufferPipeline(thread_pool, Config {})
+{
+}
+
 BufferPipeline::BufferPipeline(co::ThreadPool& thread_pool, Config config)
   : thread_pool_(thread_pool)
   , config_(config)
