@@ -346,9 +346,12 @@ prevent two empty or identically incorrect images from satisfying the gate.
 ## 6. Build and evidence
 
 Production native work uses the existing `projects/Oxygen.Engine/out/build-ninja`
-tree with CMake/CTest and `--parallel 1`. Use MSBuild.exe/VSTest for editor work;
-rebuild Interop after changed SDK inputs are installed. Serialize tests sharing
-GPU, fixture or publication resources.
+tree with CMake and normal Ninja build parallelism (`cmake --build <tree>
+--parallel`). Coordinate build invocations that share an output tree; this does
+not limit compilation within a build to one job. Use CTest for native tests and
+MSBuild.exe/VSTest for editor work; rebuild Interop after changed SDK inputs are
+installed. Serialize only tests that share exclusive GPU, fixture or publication
+resources; independent tests can run in parallel.
 
 M08.3 supplies reusable build/run scripts for the named development targets.
 Options select configuration, request/evidence paths and filters; development
