@@ -2,7 +2,7 @@
     "name": "floor",
     "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape",
     "shape_type": "box",
-    "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+    "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
     "half_extents": [
         60.0,
         60.0,

@@ -1,6 +1,6 @@
 {
-    "name": "ground",
-    "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
+    "name": "physics_domains_ground",
+    "virtual_path": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
     "static_friction": 0.9,
     "dynamic_friction": 0.9,
     "restitution": 0.05,

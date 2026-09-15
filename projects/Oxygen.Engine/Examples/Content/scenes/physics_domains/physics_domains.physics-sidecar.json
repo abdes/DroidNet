@@ -4,7 +4,7 @@
             {
                 "node_index": 1,
                 "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+                "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
                 "body_type": "static",
                 "motion_quality": "discrete",
                 "collision_layer": 1,
@@ -18,7 +18,7 @@
             {
                 "node_index": 2,
                 "shape_ref": "/.cooked/Physics/Shapes/ramp.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+                "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
                 "body_type": "static",
                 "motion_quality": "discrete",
                 "collision_layer": 1,

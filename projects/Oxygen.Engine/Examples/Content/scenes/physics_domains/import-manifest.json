@@ -312,7 +312,7 @@
             "id": "physics.material.ground",
             "type": "physics-material-descriptor",
             "source": "./ground.physics-material.json",
-            "name": "ground"
+            "name": "physics_domains_ground"
         },
         {
             "id": "physics.material.dynamic",

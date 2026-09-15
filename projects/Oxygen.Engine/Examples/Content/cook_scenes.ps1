@@ -6,6 +6,9 @@ Cooks one or all scenes in the Examples/Content/scenes folder using the Oxygen.C
 This script finds and runs the Oxygen.Cooker.ImportTool against scene 'import-manifest.json' files.
 It can target a specific scene by folder name, or all scenes found in the 'scenes' subdirectory.
 By default, it parses the CMake presets to find the built tool without running `cmake` directly, avoiding reconfigurations.
+The native ImportTool validates manifests and descriptors against its current schemas.
+The -All scope is the authored scene manifests and their dependencies; unreferenced
+raw FBX models and standalone images are not imported, and PAKs are not rebuilt.
 
 .PARAMETER Scene
 The name of the scene folder to cook (e.g. "bottle-on-box"). Required if -All is not specified.
@@ -57,40 +60,6 @@ if (-not (Test-Path $ScenesDir)) {
     exit 1
 }
 
-function Assert-V3SceneDescriptors {
-    param([string]$ManifestPath)
-
-    $manifestDir = Split-Path -Parent $ManifestPath
-    $manifest = Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json
-    if ($null -eq $manifest.jobs) {
-        return
-    }
-
-    foreach ($job in $manifest.jobs) {
-        if ($job.type -ne "scene-descriptor") {
-            continue
-        }
-
-        if ([string]::IsNullOrWhiteSpace($job.source)) {
-            throw "Scene descriptor job in '$ManifestPath' is missing 'source'."
-        }
-
-        $descriptorPath = $job.source
-        if (-not [System.IO.Path]::IsPathRooted($descriptorPath)) {
-            $descriptorPath = [System.IO.Path]::GetFullPath((Join-Path $manifestDir $descriptorPath))
-        }
-
-        if (-not (Test-Path $descriptorPath -PathType Leaf)) {
-            throw "Scene descriptor source not found: $descriptorPath"
-        }
-
-        $descriptor = Get-Content -Raw -Path $descriptorPath | ConvertFrom-Json
-        if ($descriptor.version -ne 3) {
-            throw "scene.descriptor.recook_required: '$descriptorPath' must declare version 3. Update the authored descriptor and re-cook the scene content."
-        }
-    }
-}
-
 function Get-ExpandedCMakePresets {
     param([string]$Path, [System.Collections.Hashtable]$Seen = @{})
 
@@ -121,6 +90,33 @@ function Get-ExpandedCMakePresets {
         }
     }
     return $Result
+}
+
+function Get-InheritedPresetProperty {
+    param(
+        [hashtable]$Presets,
+        [string]$Name,
+        [string]$Property,
+        [string[]]$Ancestors = @()
+    )
+
+    if ($Name -in $Ancestors) {
+        throw "CMake preset inheritance cycle: $($Ancestors -join ' -> ') -> $Name"
+    }
+    $Entry = $Presets[$Name]
+    if ($null -eq $Entry) { return $null }
+
+    $Value = $Entry.$Property
+    if ($null -ne $Value) { return $Value }
+
+    # CMake gives earlier parents precedence when a preset inherits several.
+    foreach ($Parent in @($Entry.inherits)) {
+        if ([string]::IsNullOrWhiteSpace($Parent)) { continue }
+        $Value = Get-InheritedPresetProperty -Presets $Presets -Name $Parent `
+            -Property $Property -Ancestors ($Ancestors + $Name)
+        if ($null -ne $Value) { return $Value }
+    }
+    return $null
 }
 
 # Resolve Tool Path
@@ -161,22 +157,30 @@ if ([string]::IsNullOrWhiteSpace($ToolPath) -and -not [string]::IsNullOrWhiteSpa
 
     $BP = $BuildPresets[$Preset]
     if ($BP) {
-        $ConfigName = $BP.configurePreset
-        if ($BP.configuration) { $Configuration = $BP.configuration }
+        $ConfigName = Get-InheritedPresetProperty -Presets $BuildPresets `
+            -Name $Preset -Property "configurePreset"
+        $InheritedConfiguration = Get-InheritedPresetProperty -Presets $BuildPresets `
+            -Name $Preset -Property "configuration"
+        if ($InheritedConfiguration) { $Configuration = $InheritedConfiguration }
     } else {
         $ConfigName = $Preset
     }
 
-    # Resolve configure preset inheritance for binaryDir
-    $CP = $ConfigurePresets[$ConfigName]
-    while ($null -ne $CP -and [string]::IsNullOrWhiteSpace($CP.binaryDir) -and $null -ne $CP.inherits) {
-        $Inherits = if ($CP.inherits -is [array]) { $CP.inherits[0] } else { $CP.inherits }
-        $CP = $ConfigurePresets[$Inherits]
-    }
+    $BinaryDir = Get-InheritedPresetProperty -Presets $ConfigurePresets `
+        -Name $ConfigName -Property "binaryDir"
 
-    if ($null -ne $CP -and (-not [string]::IsNullOrWhiteSpace($CP.binaryDir))) {
+    if (-not [string]::IsNullOrWhiteSpace($BinaryDir)) {
         # Expand common macros
-        $ResolvedBinDir = $CP.binaryDir.Replace('`$sourceDir', $RepoRoot).Replace('`${sourceDir}', $RepoRoot)
+        $ResolvedBinDir = $BinaryDir.Replace('${sourceDir}', $RepoRoot).
+            Replace('${sourceParentDir}', (Split-Path -Parent $RepoRoot)).
+            Replace('${sourceDirName}', (Split-Path -Leaf $RepoRoot)).
+            Replace('${presetName}', $ConfigName)
+        if ($ResolvedBinDir.Contains('$')) {
+            throw "Unsupported macro in CMake binaryDir '$BinaryDir'. Provide -ToolPath explicitly."
+        }
+        if (-not [System.IO.Path]::IsPathRooted($ResolvedBinDir)) {
+            $ResolvedBinDir = Join-Path $RepoRoot $ResolvedBinDir
+        }
         $ResolvedBinDir = [System.IO.Path]::GetFullPath($ResolvedBinDir)
 
         # Test standard locations inside this binary dir
@@ -206,13 +210,18 @@ if ([string]::IsNullOrWhiteSpace($ToolPath) -and -not [string]::IsNullOrWhiteSpa
     exit 1
 }
 
+$ToolPath = [System.IO.Path]::GetFullPath($ToolPath)
+if (-not (Test-Path -LiteralPath $ToolPath -PathType Leaf)) {
+    throw "ImportTool not found: $ToolPath"
+}
+
 Write-Host "Using ImportTool: $ToolPath" -ForegroundColor DarkGray
 
 # Collect scenes to process
 $ScenesToCook = @()
 
 if ($All) {
-    $AllDirs = Get-ChildItem -Path $ScenesDir -Directory
+    $AllDirs = Get-ChildItem -Path $ScenesDir -Directory | Sort-Object Name
     foreach ($dir in $AllDirs) {
         $ManifestPath = Join-Path $dir.FullName "import-manifest.json"
         if (Test-Path $ManifestPath) {
@@ -248,8 +257,6 @@ $FailedCount = 0
 foreach ($SceneDir in $ScenesToCook) {
     $ManifestPath = Join-Path $SceneDir.FullName "import-manifest.json"
 
-    Assert-V3SceneDescriptors -ManifestPath $ManifestPath
-
     Write-Host ""
     Write-Host "=======================================================" -ForegroundColor Cyan
     Write-Host "Cooking Scene: $($SceneDir.Name)" -ForegroundColor Cyan
@@ -259,21 +266,19 @@ foreach ($SceneDir in $ScenesToCook) {
     $ArgsList = @(
         "batch",
         "--manifest",
-        "`"$ManifestPath`""
+        $ManifestPath
     )
 
     if ($NoTUI) {
         $ArgsList += "--no-tui"
     }
 
-    $ArgString = $ArgsList -join " "
-    Write-Host "Executing:`n& `"$ToolPath`" $ArgString`n" -ForegroundColor DarkGray
+    # Preserve each argument, including paths with spaces, without shell parsing.
+    & $ToolPath @ArgsList
+    $ExitCode = $LASTEXITCODE
 
-    # Use Start-Process with Wait and NoNewWindow to keep output in current console and capture exit code
-    $process = Start-Process -FilePath $ToolPath -ArgumentList $ArgString -Wait -NoNewWindow -PassThru
-
-    if ($process.ExitCode -ne 0) {
-        Write-Host "FAILED: Cooking scene $($SceneDir.Name) exited with code $($process.ExitCode)" -ForegroundColor Red
+    if ($ExitCode -ne 0) {
+        Write-Host "FAILED: Cooking scene $($SceneDir.Name) exited with code $ExitCode" -ForegroundColor Red
         $FailedCount++
     } else {
         Write-Host "SUCCESS: $($SceneDir.Name) cooked successfully." -ForegroundColor Green
