@@ -53,6 +53,9 @@ public sealed partial class CookingRunViewModel : ObservableObject
     /// <summary>Gets one readable status for the selected run.</summary>
     public string Status => GetStatus(this.snapshot.State);
 
+    /// <summary>Gets the operation identity, origin and outcome for assistive technology.</summary>
+    public string AccessibleName => $"{this.Name}, {this.Context}, {this.Status}";
+
     /// <summary>Gets the status glyph used consistently in both lists.</summary>
     public string StatusGlyph => GetGlyph(this.snapshot.State);
 

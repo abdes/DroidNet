@@ -30,7 +30,7 @@
             <Setter Property="MinHeight" Value="28" />
         </Style>
         <DataTemplate x:Key="CookRunTemplate" x:DataType="local:CookingRunViewModel">
-            <Grid ColumnSpacing="8">
+            <Grid ColumnSpacing="8" Loaded="OnRowContentLoaded">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -52,7 +52,10 @@
             </Grid>
         </DataTemplate>
         <DataTemplate x:Key="CookAssetTemplate" x:DataType="local:CookingAssetViewModel">
-            <Grid AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}" ColumnSpacing="8">
+            <Grid
+                AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
+                ColumnSpacing="8"
+                Loaded="OnRowContentLoaded">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />

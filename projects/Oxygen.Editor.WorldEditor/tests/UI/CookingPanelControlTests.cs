@@ -13,6 +13,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
@@ -39,6 +40,40 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
 
     /// <summary>Gets or sets the active test context and artifact directory.</summary>
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Automation exposes the selected operation and asset names, types and statuses.</summary>
+    /// <returns>The accessible-name regression.</returns>
+    [TestMethod]
+    public Task CookingAutomationNamesDescribeRunAndAsset() => EnqueueAsync(async () =>
+    {
+        using var model = CreateModel();
+        model.SelectedRun!.IsAssetsExpanded = true;
+        var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 600 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var runs = (ListView)view.FindName("RunList");
+        var run = (ListViewItem)runs.ContainerFromItem(model.SelectedRun);
+        var name = new ListViewItemAutomationPeer(run).GetName();
+        _ = name.Should().Contain(model.SelectedRun.Name);
+        _ = name.Should().Contain(model.SelectedRun.Kind);
+        _ = name.Should().Contain(model.SelectedRun.Status);
+        var assets = (ListView)view.FindName("CookAssets");
+        var first = model.SelectedRun.Assets[0];
+        assets.ScrollIntoView(first);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var item = (ListViewItem)assets.ContainerFromItem(first);
+        _ = new ListViewItemAutomationPeer(item).GetName().Should().Be(first.AccessibleName);
+        var snapshot = model.SelectedRun.Snapshot;
+        model.SelectedRun.Apply(snapshot with
+        {
+            Revision = snapshot.Revision + 1,
+            State = CookRunState.Cancelled,
+            Assets = snapshot.Assets.SetItem(first.Asset.AssetUri, first.Asset with { State = CookAssetState.Cancelled }),
+        });
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = new ListViewItemAutomationPeer(run).GetName().Should().Be(model.SelectedRun.AccessibleName);
+        _ = new ListViewItemAutomationPeer(item).GetName().Should().Be(first.AccessibleName);
+    });
 
     /// <summary>Wide and narrow docks keep controls scoped and expanded content reachable.</summary>
     /// <param name="width">The dock width in device-independent pixels.</param>
