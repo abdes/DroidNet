@@ -18,6 +18,8 @@ m_gtest_program(DemoShellPanelConfig SOURCES "DemoShellPanelConfig_test.cpp")
 
 m_gtest_program(DefaultSceneLighting SOURCES "DefaultSceneLighting_test.cpp")
 
+m_gtest_program(OrbitCameraController SOURCES "OrbitCameraController_test.cpp")
+
 m_gtest_program(
   EnvironmentSettingsService
   SOURCES
@@ -30,11 +32,7 @@ m_gtest_program(
     "RenderingSettingsService_test.cpp"
 )
 
-m_gtest_program(
-  DiagnosticsPanel
-  SOURCES
-    "DiagnosticsPanel_test.cpp"
-)
+m_gtest_program(DiagnosticsPanel SOURCES "DiagnosticsPanel_test.cpp")
 
 m_gtest_program(
   AsyncVortexMigrationSurface

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -1011,11 +1012,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
 
   const bool is_orbit_mode = (mode_label == "orbit")
     || (camera_rig_ && camera_rig_->GetMode() == ui::CameraControlMode::kOrbit);
-  if (is_orbit_mode && orbit_distance.has_value() && orbit_target_loaded) {
-    const glm::vec3 forward = rot * space::look::Forward;
-    pos = orbit_target - forward * (*orbit_distance);
-    restored_transform = true;
-  }
 
   tf.SetLocalPosition(pos);
   tf.SetLocalRotation(rot);
@@ -1098,6 +1094,9 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
   }
 
   if (camera_rig_) {
+    // First adopt the restored local pose, then apply the persisted WORLD
+    // orbit pivot/radius through the controller's parent-aware conversion.
+    camera_rig_->SyncFromActiveCamera();
     if (const auto orbit = camera_rig_->GetOrbitController(); orbit) {
       if (orbit_target_loaded) {
         orbit->SetTarget(orbit_target);
@@ -1110,6 +1109,11 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
           orbit->SetMode(*mode);
           orbit_mode_label = *mode_str;
         }
+      }
+      if (is_orbit_mode && orbit_distance.has_value() && orbit_target_loaded) {
+        orbit->Update(
+          active_camera_, time::CanonicalDuration(std::chrono::nanoseconds(0)));
+        restored_transform = true;
       }
     }
 
@@ -1130,8 +1134,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
         fly->SetPlaneLockActive(*plane_lock);
       }
     }
-
-    camera_rig_->SyncFromActiveCamera();
   }
 
   last_saved_state_ = CaptureActiveCameraState();
