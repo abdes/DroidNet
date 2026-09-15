@@ -1,401 +1,292 @@
 # Live Engine Sync LLD
 
-Status: `V0.1 contract; named gaps execute in ED-M07A`
+Status: `Canonical V0.1 production contract; implementation and qualification tracked by ED-M08`
 
 ## 1. Purpose
 
-Concrete design for the ED-M07A live-sync adapter that projects committed
-authoring edits onto the embedded Oxygen Engine. This LLD owns the
-`SyncResult` shape, per-operation adapter mapping, runtime-readiness handling,
-unsupported-operation behavior, and `OperationResult` propagation. Engine
-lifecycle, surface/view leases, and cooked-root mounting stay in
-[runtime-integration.md](./runtime-integration.md).
+Project committed authoring changes into the embedded engine through one
+`SceneEngineSync` owner. This contract covers current-state convergence, typed
+runtime transport, asset intent, cancellation and diagnostics. Engine lifecycle,
+view ownership and mounting belong to [runtime-integration.md](runtime-integration.md).
+
+Normal scene synchronization is production behavior. Saved-revision capture
+isolation, parity checkpoints and qualification orchestration belong only to
+opt-in development adapters; they are not production services or dependencies.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
+| IDs | Required result |
 | --- | --- |
-| `GOAL-003`, `REQ-008`, `REQ-026` | Embedded preview reflects supported edits. |
-| `GOAL-006`, `REQ-022`, `REQ-024` | Sync failures produce visible `OperationResult`. |
-| `SUCCESS-003` | Live editor preview shows authored content. |
+| GOAL-003, REQ-008/026 | Embedded preview reflects committed supported authoring. |
+| GOAL-006, REQ-022/024 | Failures retain precise operation/target diagnostics. |
+| SUCCESS-003 | The current scene converges after edits, publication and restart. |
 
 ## 3. Architecture Links
 
-- [property-inspector.md](./property-inspector.md): edit producers and result
-  rendering.
-- [environment-authoring.md](./environment-authoring.md): environment adapter.
-- [runtime-integration.md](./runtime-integration.md): engine readiness states.
-- [diagnostics-operation-results.md](./diagnostics-operation-results.md):
-  `FailureDomain` and code prefixes.
+- [property-pipeline.md](property-pipeline.md): edit revisions and gesture ownership.
+- [property-inspector.md](property-inspector.md): node, geometry, camera and light fields.
+- [environment-authoring.md](environment-authoring.md): canonical environment/role semantics.
+- [material-editor.md](material-editor.md): source versus published material state.
+- [content-pipeline.md](content-pipeline.md): slot identity, publication and native readers.
+- [standalone-runtime-validation.md](standalone-runtime-validation.md): development-only capture ownership.
 
-## 4. Current Baseline
+## 4. Existing Integration Points
 
-The rebased source has typed SyncOutcome/EnvironmentSyncResult, property edits,
-a preview coalescer, native material override dispatch and native scene-system
-updates. Camera/light/environment controls still submit one-shot edits; background
-RGB now has independent native SkySphere dispatch and observed-state validation;
-managed property replay still needs its document-revision boundary. ED-M07A owns
-the remaining gesture, diagnostic and replay work.
+Reuse `ISceneEngineSync`, `SyncOutcome`, document metadata registrations,
+`SceneSyncRevision`, the property replay/coalescing path and Runtime-owned world
+commands. Native `SceneAssetRequests` owns scene sessions, request generations,
+completion inboxes and scene-mutation acceptance. Extend these mechanisms for
+stable slot IDs and canonical camera/flag/light payloads; do not create competing
+counters in an inspector or a second synchronization orchestrator.
 
-Issue #5 is implemented: native SceneAssetRequests owns geometry/material request
-generations, scene sessions, completion inboxes and mutation-phase acceptance.
-Its automated evidence is recorded in the issue plan. Preserve that mechanism;
-it is distinct from the managed scalar-property replay queue fixed in ED-M07A.4.
-Runtime-managed world/input capabilities are the ED-M07A.0 target; concrete
-OxygenWorld use in the current adapter is the known #10 migration starting point.
+Current index-based slot transport and old sun/camera/boolean flag payloads are
+migration targets. The canonical runtime consumes only the replacement contract
+once useful content is migrated. Existing evidence is listed in section 16;
+source/API presence alone is not proof of the newly required rendered effects.
 
-## 5. Target Design
+## 5. Delivery Model
 
 ```text
-ISceneDocumentCommandService.Edit*Async
-   |
-   |-- validate, mutate, dirty/undo (one HistoryKeeper entry per session)
-   |
-   v
-ISceneEngineSync.<op>     -> SyncOutcome
-   |
-   |-- IEngineService.State == Running ?
-   |       no  -> SyncOutcome.SkippedNotRunning(state, reason)
-   |       yes -> try: engine API call
-   |               -> SyncOutcome.Accepted
-   |              catch unsupported (no API, NotImpl) -> Unsupported(field)
-   |              catch invalid arg  -> Rejected(reason)
-   |              catch other        -> Failed(exception)
-   v
-SceneCommandResult { Succeeded=true, OperationResultId=<published if not Accepted> }
+Command validates -> commits authored values/revision/history
+  -> SceneEngineSync captures immutable target and intent
+  -> Runtime world capability validates target and queues native mutation
+  -> native completion is accepted only for the current target/generation
+  -> current readiness/diagnostics update; newer authoring remains authoritative
 ```
 
 Invariants:
 
-1. Sync is invoked only after authoring state is committed.
-2. Sync **never** rolls back authoring state. Authoring lives independently of
-   sync.
-3. `Unsupported` and `SkippedNotRunning` do not throw; they produce a warning
-   `OperationResult`. Authoring command's `Succeeded` remains `true`.
-4. `Rejected` and `Failed` produce `SucceededWithWarnings` / `PartiallySucceeded`
-   on the command result; the command itself is still `Succeeded` because
-   authoring succeeded.
-5. The command's `await` returns when sync has reached an accepted/skipped/
-   rejected/failed/unsupported terminal — not when a frame has presented.
-6. `SceneEngineSync.sceneSyncGate` continues to serialize scene-wide syncs.
-   Incremental ops do not take the gate; they enter a per-`(SceneId, NodeId)`
-   coalescer (see §8.4).
+1. Sync follows the committed authoring revision and never rolls it back.
+2. No running engine produces a classified skipped/pending state; the adapter
+   does not start it merely to deliver an edit.
+3. Acceptance means a command was accepted/queued, not loaded assets or a
+   presented frame. Completion/readiness and rendering evidence remain distinct.
+4. A failed required capability is visible and fails qualification; `Unsupported`
+   is a diagnostic state, not permission to ship an inert editable field.
+5. Full projection and later mutations share one document/runtime lifetime and
+   revision order. A stale completion cannot overwrite the latest intent.
+6. Source saving/cooking/mounting and production view navigation remain with
+   their normal owners; sync does not perform those operations itself.
 
 ## 6. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
-| `Oxygen.Editor.WorldEditor.Documents.Commands` | Decide when to call sync; map results into `OperationResult`; carry `EditSessionToken`. |
-| `Oxygen.Editor.WorldEditor.Services.SceneEngineSync` | Translate authoring delta to `OxygenWorld` calls; coalesce per session; classify outcomes. |
-| `Oxygen.Editor.Runtime.IEngineService` | Expose `State` and `World`. |
-| `Oxygen.Editor.Interop.OxygenWorld` | Native engine surface. |
+| Scene document commands | Validate/mutate source, history and immutable revision-stamped delivery. |
+| SceneEngineSync | Current-state projection, ordering, coalescing and classified results. |
+| Runtime world capabilities | Engine-run/scene-target validation and managed DTO transport. |
+| Interop | Narrow native dispatch; no authoring policy or independent asset state. |
+| Native scene/content/Vortex | Asset readiness, mutation-phase application and actual rendering. |
 
-ED-M07A keeps `SceneEngineSync` as the single adapter. Per-component sub-
-adapters are an optional refactor and not a closure gate.
+Feature code uses Runtime-owned capabilities rather than obtaining an
+`OxygenWorld` facade. Production sync has no import/cook/mount or development
+qualification dependency.
 
 ## 7. Data Contracts
 
-### 7.1 `SyncOutcome`
+### 7.1 Sync outcome
 
-```csharp
-public enum SyncStatus
-{
-    Accepted = 0,
-    SkippedNotRunning,
-    Unsupported,
-    Rejected,
-    Failed,
-    Cancelled,
-}
+`SyncOutcome` carries status, operation kind, affected project/scene/node/asset
+scope, code/message and optional technical exception. Existing statuses are
+Accepted, SkippedNotRunning, Unsupported, Rejected, Failed and Cancelled.
 
-public sealed record SyncOutcome(
-    SyncStatus Status,
-    string OperationKind,
-    AffectedScope Scope,
-    string? Code = null,        // OXE.LIVESYNC.* when not Accepted
-    string? Message = null,
-    Exception? Exception = null);
-```
+Expected contention, missing resources and unsupported capabilities are classified
+results rather than repeated first-chance exception loops. Authoring success and
+preview success are separate; a preview failure cannot undo a valid scene edit.
 
-`Accepted` does **not** imply a presented frame. ED-M07A does not add a
-presented-frame contract; visual proof is manual.
+### 7.2 Environment results
 
-### 7.2 `EnvironmentSyncResult`
+`EnvironmentSyncResult` retains each field's outcome and an aggregate outcome.
+Background has its own scoped delivery/result. Accepting some fields cannot
+turn a missing or rejected field into Accepted. Native observations identify
+their actual scene/run/lifetime, and do not themselves prove presentation.
 
-Aggregate for the environment adapter (per [environment-authoring.md](./environment-authoring.md)):
+### 7.3 Immutable intent and target
 
-```csharp
-public sealed record EnvironmentSyncResult(
-    SyncStatus Overall,                                // worst across fields
-    IReadOnlyDictionary<string, SyncOutcome> PerField); // field key -> detailed outcome
-```
+Every payload contains its `RuntimeSceneTarget` (project, run, scene, document
+lifetime and activation), authoring revision/preview sequence, component identity
+and immutable changed values. APIs use the same classified result path for full
+and granular delivery. Remove retired overload/adapter routes after callers are
+migrated; do not retain a second path for backward compatibility.
 
-Background uses its own runtime command and outcome. A failure is scoped to
-`BackgroundColor` and keeps its code/message through operation-result publication.
-Native background observation is a separate, scene-lifetime-checked request;
-observed values do not mean a frame has been presented.
+Material intent additionally identifies GeometryUri, MaterialSlotId and expected
+current layout revision. Runtime indices are resolved against accepted geometry
+inside the native capability; they are never persisted or supplied as authored
+identity. See section 8.2.
 
-### 7.3 New `ISceneEngineSync` methods
+## 8. Adapter Mapping
 
-Add to the existing interface; existing `Task<bool>` methods stay for
-back-compat but are wrapped to return `SyncOutcome` internally.
+### 8.1 Canonical payloads
 
-```csharp
-Task<SyncOutcome> UpdateNodeTransformAsync(Scene scene, SceneNode node, CancellationToken ct = default);
+| Operation | Required runtime behavior |
+| --- | --- |
+| Transform / reparent | Apply immutable local TRS and explicit reparent policy; resolve affected descendants and invalidate render/light products. Reject unrepresentable requested transforms before authoring mutation. |
+| Scene Visibility | Preserve Inherit/Shown/Hidden source mode. Geometry and light eligibility use the resolved native flag; a locally Shown child can override a hidden parent. |
+| Geometry Cast / Receive Shadows | Preserve each independent Inherit/On/Off flag. Cast controls opaque/masked occluder submission; Receive controls actual direct-light shadow attenuation, not AO or Unlit shading. |
+| Geometry attach/change/remove | Dispatch canonical geometry identity and retire obsolete request/slot intent; obtain the accepted inventory before applying material overrides. |
+| Material slot assign/clear | Apply the named SlotId's current native bindings; clear restores that slot's mesh default on every declared LOD/submesh binding. |
+| Perspective camera | Carry Auto/Fixed mode, stored Fixed ratio, vertical FOV, valid clipping and parented pose. Auto derives ratio per target; Fixed fits the complete image with bars. Resizing never edits source/history. |
+| Directional light | Carry runtime affects-world, light shadowing and supported values separately from AtmosphereLightSlot None/Primary/Secondary. Both atmospheric roles have full independent consumers; None still permits ordinary directional illumination. |
+| Atmosphere role edit | Validate unique stored slot occupancy across hidden/off sources; reject conflicts. No promotion, brightest/first-light selection or coupled Sun pointer/boolean representation. |
+| Scene environment | Carry exactly the canonical atmosphere, captured-sky lighting, exposure and appearance fields from the owning field tables; invalidate products affected by either atmospheric source. |
+| Background | Preserve its defined display-colour semantics and translucent foreground composition. |
+| Editor Hide | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook. |
 
-Task<SyncOutcome> AttachGeometryAsync(Scene scene, SceneNode node, CancellationToken ct = default);
-Task<SyncOutcome> DetachGeometryAsync(Scene scene, Guid nodeId, CancellationToken ct = default);
-
-Task<SyncOutcome> AttachCameraAsync(Scene scene, SceneNode node, CancellationToken ct = default);
-Task<SyncOutcome> DetachCameraAsync(Scene scene, Guid nodeId, CancellationToken ct = default);
-
-Task<SyncOutcome> AttachLightAsync(Scene scene, SceneNode node, CancellationToken ct = default);
-Task<SyncOutcome> DetachLightAsync(Scene scene, Guid nodeId, CancellationToken ct = default);
-
-Task<SyncOutcome> UpdateMaterialSlotAsync(Scene scene, SceneNode node, int slotIndex, Uri? materialUri, CancellationToken ct = default);
-
-Task<EnvironmentSyncResult> UpdateEnvironmentAsync(Scene scene, SceneEnvironmentData environment, CancellationToken ct = default);
-```
-
-## 8. Adapter Mapping (ED-M07A)
-
-### 8.1 Per-operation table
-
-| Producer (operation kind) | `ISceneEngineSync` method | Engine API call (today) | If runtime not `Running` | If engine API absent |
-| --- | --- | --- | --- | --- |
-| `Scene.Component.EditTransform` | `UpdateNodeTransformAsync` | `world.UpdateNodeTransform(...)` | `SkippedNotRunning` | n/a (always present) |
-| `Scene.Component.EditGeometry` (URI changed or added) | `AttachGeometryAsync` | `world.AttachGeometry(...)` | `SkippedNotRunning` | n/a |
-| `Scene.Component.EditGeometry` (cleared / component removed) | `DetachGeometryAsync` | `world.DetachGeometry(nodeId)` | `SkippedNotRunning` | n/a |
-| `Scene.Component.EditMaterialSlot` | `UpdateMaterialSlotAsync` | `world.SetMaterialOverride(nodeId, slotIndex, materialPath)` / clear override | `SkippedNotRunning` | n/a |
-| `Scene.Component.EditCamera` | `AttachCameraAsync` (re-apply) | `world.AttachCamera(...)` | `SkippedNotRunning` | n/a |
-| `Scene.Component.EditLight` | `AttachLightAsync` (re-apply) | `world.AttachLight(...)` | `SkippedNotRunning` | n/a |
-| `Scene.Component.Add` (Geometry/Camera/DirectionalLight) | matching `Attach*Async` | as above | `SkippedNotRunning` | n/a |
-| `Scene.Component.Remove` | matching `Detach*Async` or implicit via geometry/light/camera detach | as above | `SkippedNotRunning` | n/a for V0.1 supported types; `Unsupported` for OrthographicCamera/Point/Spot if engine lacks specific API |
-| `Scene.Environment.Edit` | `UpdateEnvironmentAsync` | queued native scene-system updates for `SkyAtmosphere` and full native-parity `PostProcessVolume`; post-process sync includes exposure enabled, mode, key, manual EV, compensation EV, auto-exposure range/speeds/metering/histogram/window/target/spot radius, tone mapper, bloom, saturation, contrast, vignette, and display gamma; sun binding via light sync | `SkippedNotRunning` (overall) | per-field `Unsupported`; overall = worst |
+Physical-camera inputs, general simulation activation and authored hidden-shadow
+modes are not introduced by these mappings. An explicitly selected camera remains
+usable when its node/representation is hidden. Runtime presence is derived;
+`IsActive` is not saved authored activation.
 
 ### 8.2 Material-slot V0.1 behavior
 
-`UpdateMaterialSlotAsync` maps the authored material URI to the cooked engine
-virtual path before calling the runtime override API:
+The canonical slot and reimport contract is
+[ContentPipeline section 20](content-pipeline.md#20-canonical-material-slot-identity-and-reimport).
+Every existing slot, including nonzero slots and its declared LOD bindings, uses
+one identity-based transport. Remove the old first-slot/LOD-0-only route.
 
-- `asset:///<Mount>/<Path>.omat.json` -> `/<Mount>/<Path>.omat`.
-- `asset:///<Mount>/<Path>.omat` -> `/<Mount>/<Path>.omat`.
-- `null` or the empty material sentinel clears the slot override.
+Normalize a material source URI to the corresponding native `.omat` virtual
+path before dispatch. A null assignment clears the instance override; it does
+not substitute another material. Retired empty-URI sentinels do not form another
+shipping execution path.
 
-The sync outcome is `Accepted` once the engine command is queued. Runtime asset
-resolution/load failure is logged by the native command because the material may
-not be mounted yet; it must not roll back the authored scene slot.
+Native requests are keyed by scene session, node, accepted geometry identity and
+SlotId. Each assignment/clear advances intent generation before any procedural,
+cache or asynchronous lookup. Geometry replacement has its own generation. A
+callback is accepted only when node, geometry generation, SlotId, current layout
+and material intent still match. Fresh inventories can carry an established
+SlotId into a changed layout; a numeric position or matching label cannot.
 
-Geometry and material loads use `SceneAssetRequests`, owned by the native
-editor's current scene session. Every request advances its target generation
-before resolution or cache lookup. Geometry generations are per node; material
-generations are per node and slot (LOD 0 in V0.1). Cached and procedural results
-obey the same acceptance checks as asynchronous results. Undo/redo issues these
-same commands and therefore supersedes pending work.
+Callbacks enqueue immutable results through a weak inbox. They do not retain
+scene nodes, editor contexts or modules and do not mutate the scene directly.
+During SceneMutation, queued authoring commands execute before completion
+acceptance. Deleted descendants/dead handles and obsolete failures are discarded.
+Detach retires the renderable's pending geometry and all slot intents. Scene
+replacement/shutdown retires its entire inbox.
 
-Loader callbacks enqueue immutable results through a weak completion inbox.
-They do not retain scene nodes, command contexts, or the editor module, and do
-not mutate the scene. During `SceneMutation`, the module executes its queued
-authoring commands first, then accepts only current results for live node
-handles. Dead targets, including deleted descendants, are pruned before result
-acceptance. Detach retires all geometry/material intent for that renderable,
-including when its initial geometry is still loading. Scene replacement and
-shutdown retire the entire inbox.
+Material results wait for transient geometry readiness. A missing geometry/slot
+while replacement is still loading is not a permanent structural rejection.
+Once geometry is accepted, resolve SlotId using its verified inventory. A missing
+identity produces repair-required status and retains authored intent; it is not
+retried endlessly or applied to another surface. Resolution/load errors retain
+node/asset/slot context and recover through existing content-demand/publication
+paths.
 
-Current material results wait for pending geometry readiness and are applied
-to the accepted geometry's slot layout. Geometry replacement retains the
-existing override-by-slot-index behavior. Clear records an explicit empty slot
-intent and clears a visible override even while replacement geometry loads,
-preventing pending material loads from restoring it. Missing slots and
-current resolution/load failures produce native diagnostics with asset and
-target context; obsolete failures are discarded. Queue acceptance still means
-`Accepted`, not that an asset has finished loading.
+Clear records explicit removal intent and immediately removes an applicable
+visible override even while newer geometry loads. Older pending loads cannot
+restore it. Undo/Redo sends the same generation-checked commands. On publication,
+only identity-compatible current intents are reapplied; incompatible layouts are
+blocked by the publication contract before they can break saved scene consumers.
 
-### 8.3 Component remove → detach
+### 8.3 Component removal
 
-When `Scene.Component.Remove` removes a Geometry/Light/Camera, the command
-service issues a single `Detach*Async` call after the authoring removal
-completes. Removing a `TransformComponent` is denied at the command layer
-(see [property-inspector.md](./property-inspector.md) §8.4); no sync is
-attempted.
+After source removal commits, issue the matching detach command. Transform is
+fundamental and cannot be removed. Removing a node retires descendants and all
+associated geometry/material/light/camera requests. Unsupported component types
+do not enter the canonical V0.1 source through silent best-effort projection.
 
-### 8.4 Per-session coalescing
+### 8.4 Gesture coalescing
 
-The command service holds the `EditSessionToken`. While a session is open:
-
-- Sub-commits update the in-flight authoring value but **do not** call sync.
-- A preview sync throttle (default 16 ms minimum interval) may issue
-  `Update*Async` calls with the latest authoring value while the user is still
-  dragging. These calls update the live viewport only; they do not create undo
-  entries and do not publish separate top-level operation results.
-- `session.Commit()` cancels any pending preview timer and issues exactly one
-  terminal sync call with the final value. The result of that call populates
-  `SceneCommandResult.OperationResultId`.
-- `session.Cancel()` issues one sync call with the pre-Begin value to revert
-  preview.
-
-This keeps "drag 100 samples" → "one undo entry and one terminal sync result"
-while still allowing live preview to update at a throttled cadence.
+The shared edit-session controller owns one history entry per committed gesture.
+While editing, committed sub-values may be delivered at a 16 ms minimum preview
+interval. Commit cancels any remaining preview timer and sends one terminal
+current value; cancellation restores the pre-gesture value. Wheel bursts use the
+shared 250 ms idle commit. Do not maintain a parallel history in sync.
 
 ### 8.5 Runtime-state classification
 
-| `IEngineService.State` | Behavior |
-| --- | --- |
-| `NoEngine`, `Initializing`, `Ready`, `Starting`, `ShuttingDown` | `SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning` with state in diagnostic detail. |
-| `Running` | proceed to engine call. |
-| `Faulted` | `SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`. |
-
-The adapter never starts the engine. That is a workspace-activation
-responsibility per [runtime-integration.md](./runtime-integration.md).
+NoEngine, Initializing, Ready, Starting, ShuttingDown and Faulted produce a scoped
+SkippedNotRunning/pending result. Running permits dispatch after target checks.
+A newer run/activation rejects old payloads and performs one coherent projection
+of the current open scene. Authoring remains available when preview is offline.
 
 ### 8.6 Cancellation
 
-Each `Update*Async` accepts a `CancellationToken`. The session's token chains
-the document/scene cancellation. Cancellation results in `SyncOutcome` with
-`Status = Cancelled`, `Code = OXE.LIVESYNC.Cancelled`. The command maps this
-to operation status `Cancelled` and does **not** retry.
+Chain delivery cancellation to the originating document/scene lifetime. Observe
+actual native completion/drain where resources are in flight; a cancelled managed
+wait does not prove those resources are free. Do not retry obsolete work or cancel
+an unrelated scene/process. Current authoring remains available for later
+convergence.
 
 ## 9. UI Surfaces
 
-The adapter has no UI of its own. Consumers render:
-
-- field-level errors → authoring (`SceneAuthoring`); not adapter output.
-- section-level warnings → adapter output of `Unsupported` /
-  `SkippedNotRunning`.
-- pane/output log → `Rejected` / `Failed` details.
-
-See [property-inspector.md](./property-inspector.md) §9 for the warning
-placement rules.
+Sync has no standalone panel. Consumers show current inline authoring errors,
+scoped pending/preview failures and technical operation details. Missing material
+or slot identity is visible on the corresponding slot row. Success does not add
+banner noise, and stale failures cannot replace current field state.
 
 ## 10. Persistence
 
-The adapter does not persist anything. Authoring persistence is the command
-service's job. Native scene state, view IDs, and mounted roots are runtime
-session state and must not be persisted.
+Sync does not save authoring or persistent demo/view state. Commands and document
+services own source. Native target generations, runtime indices and loaded
+objects are session state; editor Hide is separate workspace state owned by the
+view/workspace service.
 
 ## 11. Sync / Cook / Runtime Behavior
 
-Sync is preview only. Cook is ED-M07. The adapter must:
-
-- never resolve cooked paths,
-- never trigger cook,
-- never mount/unmount cooked roots.
-
-Geometry sync may receive a `GeometryUri` that the engine cannot resolve in
-mounted cooked roots. The engine API will return failure; adapter classifies
-as `Rejected` with `OXE.LIVESYNC.GEOMETRY.UnresolvedAtRuntime` and includes
-the URI in `AffectedScope.AssetVirtualPath`.
+The adapter translates identities but does not cook, mount, or invent physical
+cooked paths. Existing asset-demand services submit saved dependencies to the
+shared coordinator. Published material values remain on screen while their
+source has unsaved/newer changes. Successful validated publication refreshes the
+current scene through the same projection and generation authority.
 
 ## 12. Operation Results And Diagnostics
 
-`OperationResult` reduction rules (consumed by the command service):
+| Sync result | Authoring/result consequence |
+| --- | --- |
+| Accepted | No routine success result; queue acceptance only. |
+| SkippedNotRunning | Authoring succeeds; preview unavailable/pending warning. |
+| Unsupported | Capability failure; authoring retained, required-field qualification fails. |
+| Rejected / Failed | Authoring retained; scoped partial preview failure with actual reason. |
+| Cancelled | That delivery stops; current intent remains authoritative where the document is live. |
 
-| `SyncOutcome.Status` | Command's `OperationResult.Status` | `Severity` |
-| --- | --- | --- |
-| `Accepted` | (no result published) | n/a |
-| `SkippedNotRunning` | `SucceededWithWarnings` | `Warning` |
-| `Unsupported` | `SucceededWithWarnings` | `Warning` |
-| `Rejected` | `PartiallySucceeded` | `Warning` |
-| `Failed` | `PartiallySucceeded` | `Error` |
-| `Cancelled` | `Cancelled` | `Info` |
-
-`EnvironmentSyncResult.Overall` is the worst per-field status; per-field codes
-appear as separate `DiagnosticRecord` entries.
-
-`AffectedScope` populated by adapter:
-
-- `SceneId`, `SceneName` — always.
-- `NodeId`, `NodeName`, `ComponentType`, `ComponentName` — for node-scoped
-  ops.
-- `AssetVirtualPath` — for geometry/material URI failures.
-
-Diagnostic codes (under `OXE.LIVESYNC.`):
-
-- `NotRunning`, `RuntimeFaulted`, `Cancelled`.
-- `TRANSFORM.Rejected`, `TRANSFORM.Failed`.
-- `GEOMETRY.Rejected`, `GEOMETRY.Failed`, `GEOMETRY.UnresolvedAtRuntime`.
-- `CAMERA.Rejected`, `CAMERA.Failed`.
-- `LIGHT.Rejected`, `LIGHT.Failed`.
-- `MATERIAL.Rejected`, `MATERIAL.Failed`.
-- `ENVIRONMENT.<Field>.Unsupported`, `ENVIRONMENT.<Field>.Rejected`,
-  `ENVIRONMENT.Rejected`.
+Diagnostics carry scene/document lifetime, node/component identity, asset URI,
+SlotId and expected/actual geometry layout where relevant. Preserve native codes
+and context. Unresolved slot repair, missing asset, stale completion, incompatible
+schema and device/runtime failure are different conditions.
 
 ## 13. Dependency Rules
 
-Allowed:
-
-- Commands → `ISceneEngineSync`.
-- `SceneEngineSync` -> Runtime-owned managed world capability.
-- Internal Runtime adapter -> `OxygenWorld`; feature code never obtains the facade.
-
-Forbidden:
-
-- Inspector VMs → `ISceneEngineSync` directly.
-- `SceneEngineSync` → mutate authoring (`Scene`/`SceneNode`/components).
-- `SceneEngineSync` → import/cook/mount.
-- `SceneEngineSync` → persist any state (no JSON, no settings, no view IDs).
-- Any sync site throwing `NotImplementedException` outwards. All "no engine
-  API" cases must classify as `Unsupported`.
+Commands call SceneEngineSync; SceneEngineSync uses Runtime-owned world
+capabilities; only Runtime/Interop dispatch native calls. Inspector VMs do not
+call native facades or independently drive sync. No mutation of authored values,
+source persistence, cooking or mounting occurs inside the sync adapter.
 
 ## 14. Validation Gates
 
-1. Each ED-M07A operation in §8.1 has a unit/integration test covering
-   `Accepted`, `SkippedNotRunning`, and either `Unsupported` or `Rejected`
-   paths (mocked `IEngineService`).
-2. `EditMaterialSlot` maps descriptor URIs to cooked `.omat` engine paths,
-   accepts clear operations, and never throws, with the `MaterialUri`
-   populated in `AffectedScope.AssetVirtualPath`.
-3. With engine `Running`, dragging position 100 samples produces throttled
-   preview sync calls (for example, roughly one per 16 ms during a continuous
-   drag), exactly one terminal sync call on commit, and exactly one undo entry.
-4. With engine in `Faulted`, every Update* returns `SkippedNotRunning` with
-   `OXE.LIVESYNC.RuntimeFaulted`. Authoring still succeeds.
-5. Environment edit with engine `Running` queues native `SkyAtmosphere` and
-   full native-parity `PostProcessVolume` updates, preserving native enum
-   ordinals and authored scalar values, and reports those fields as `Accepted`.
-   BackgroundColor also requires native application in ED-M07A.1. A missing
-   required field reports its failure truthfully and fails the release gate;
-   another field being accepted cannot make that field accepted.
-6. No sync method throws `NotImplementedException` or any exception that
-   escapes the adapter; verified by exception-tape test that calls every
-   method against an in-process mock world.
-7. Static check: no inspector view-model project references
-   `SceneEngineSync` or `ISceneEngineSync`.
+- Exercise accepted, offline, rejected, failed and cancelled delivery without
+  outward NotImplementedException or contention exception floods.
+- Verify Local/Inherit propagation, local overrides beneath hidden parents,
+  reparenting, cached-light invalidation and actual caster/receiver effects.
+- Verify camera Auto/Fixed fitting and exact selected/parented camera behavior.
+- Verify None/Primary/Secondary, secondary-only and two-source illumination,
+  role conflicts, hidden/off sources and dependent sky-product invalidation.
+- Verify every material slot, per-LOD bindings, clear/Undo/Redo, delayed cache/
+  procedural/async completion, geometry replacement and repair-required layouts.
+- Verify newer edits and document close/replacement defeat stale callbacks;
+  restart and publication converge on current authoring without history changes.
+- Native-engine effects are validated before real editor workflows. CPU state,
+  successful enqueue and native asset loading do not substitute for rendered proof.
 
-## 15. Closed V0.1 Decisions
+## 15. Development Capture Integration Boundary
 
-Keep one scene sync orchestrator with specialized native payload adapters; no
-mandatory per-component service extraction. Use the existing 16 ms preview and
-one terminal sync policy, with 250 ms wheel idle commit. Native accepted/queued
-completion is not presentation proof; ED-M08 uses observed state and rendered
-captures. Offline convergence and stale-work rejection follow property-pipeline
-section 11 and are implemented in ED-M07A.4.
+The opt-in development host may adapt existing production entry points to hold
+later deliveries while rendering a pinned saved revision. Its admission hooks,
+qualification state and capture scheduling compile only into development targets.
+Normal SceneEngineSync builds do not contain a qualification hold service,
+protocol dependency, hidden command or always-shipping validation state.
 
-The canonical [property-pipeline.md](./property-pipeline.md) governs typed
-property entry points, shared sessions/history, current field diagnostics and
-revision-aware runtime convergence. Existing record adapters implement the same
-contract; they are not an alternative architecture.
+The development adapter must cover scalar edits, topology, asset completion and
+publication delivery, release after capture/readback ownership drains, and restore
+one coherent latest scene rather than replaying an obsolete snapshot. Source
+history and dirty state remain unchanged. See
+[standalone validation section 5](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)
+and [section 8.4](standalone-runtime-validation.md#84-saved-revision-embedded-capture-session).
 
-`SceneEngineSync` registers each open metadata instance with its loaded authoring
-scene. Publication captures that lifetime, authoring revision and preview sequence
-before asynchronous work. An owned scene snapshot is captured on the UI dispatcher;
-successful initial projection supersedes only work covered by that snapshot.
-Later scalar values, scene-system payloads and captured topology/component commands
-are replayed in order. Rejected work remains pending with its original diagnostic.
-Closing or replacing a document retires its delivery targets and waiting requests;
-a new runtime run resynchronizes the requested open scene. Authoring-loaded data
-and native-ready notifications are separate, and native readiness is emitted only
-after the pending work for that activation has been accepted.
+## 16. Historical Evidence
 
-## 16. Issue Integration Boundaries
-
-[#5](../plan/issue-005-asset-request-generations.md) guards native async geometry/
-material completions and remains intact through #10 managed-capability migration
-and #11 procedural resolver changes. Register procedural/cache/async intent before
-resolution; accept its completion only under the existing scene-mutation and
-request-generation authority. Do not add a competing generation counter in a VM.
-
-ED-M07B.7 uses the engine/content procedural definition authority for every exposed
-built-in shape. Immediate preview and cooker generation share its parameters,
-bounds, default material and identity mapping; interop only dispatches identity
-and transport. No format structures or independent defaults belong in this layer.
+Earlier request-generation and replay validation remains at its recorded scope
+in [issue 5](../plan/issue-005-asset-request-generations.md),
+[ED-M07A field workflows](../validation/ED-M07A-field-workflows.md),
+[workspace publication](../validation/ED-M07B-workspace-publication.md) and
+[material recovery](../validation/material-sidedness-and-recovery.md).
+The milestone ledger owns completion status for the canonical changes above.

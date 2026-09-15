@@ -2,6 +2,16 @@
 
 Status: `active LLD index`
 
+## ED-M08 implementation package
+
+The [ED-M08 plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md)
+provides the complete implementation document map and execution gates. Its
+[V0.1 authoring contract](../review/ED-M08-v01-authoring-scope.md),
+[visibility/light contract](../review/ED-M08-node-light-visibility-review.md) and
+[celestial-light contract](../review/ED-M08-celestial-light-authoring.md) define
+the final cross-domain decisions and eliminated alternatives. Domain LLDs below
+own exact fields, persistence, lifecycle and development qualification details.
+
 Detailed subsystem designs live here. Each LLD must be specific enough to guide
 implementation and review, and must trace to [PRD.md](../PRD.md),
 [ARCHITECTURE.md](../ARCHITECTURE.md), and [DESIGN.md](../DESIGN.md).
@@ -23,11 +33,11 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [content-browser-asset-identity.md](./content-browser-asset-identity.md) | Content browser states, asset identity, asset picker, missing/broken references. |
 | [asset-primitives.md](./asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
 | [content-pipeline.md](./content-pipeline.md) | Import, descriptors, manifests, cooking, pak, inspect, mount refresh requests. |
-| [content-cooking-workflows.md](./content-cooking-workflows.md) | M07B before/after-cook browsing and picking, shared status, incremental requests, accepted automatic/explicit triggers, progress and recovery. |
+| [content-cooking-workflows.md](./content-cooking-workflows.md) | Before/after-cook browsing and picking, shared status, incremental requests, automatic/explicit triggers, progress and recovery. |
 | [cooking-panel.md](./cooking-panel.md) | Dockable cooking progress, session runs, asset-grouped issues, cancellation, save/retry recovery, and property navigation. |
 | [live-engine-sync.md](./live-engine-sync.md) | Managed-to-native live scene synchronization. |
 | [runtime-integration.md](./runtime-integration.md) | Embedded engine lifecycle, runtime settings, surface leases, views, cooked-root mounts, input bridge, threading/frame phases. |
-| [standalone-runtime-validation.md](./standalone-runtime-validation.md) | Cooked-output launch/load validation in standalone runtime and parity evidence. |
+| [standalone-runtime-validation.md](./standalone-runtime-validation.md) | Development-only targets, saved-input preparation, native/embedded capture, private protocol/ABI, comparison and cleanup. |
 | [viewport-and-tools.md](./viewport-and-tools.md) | Viewports, camera navigation, tools, overlays, multi-view. |
 | [settings-architecture.md](./settings-architecture.md) | Editor, project, workspace, runtime, scene, and diagnostic settings ownership. |
 | [diagnostics-operation-results.md](./diagnostics-operation-results.md) | Operation results, diagnostics, failure domains, presentation rules. |

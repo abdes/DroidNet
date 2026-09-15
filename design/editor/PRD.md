@@ -96,7 +96,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-006` | New V0.1 scene-authoring work uses command-based mutation paths that update dirty state. |
 | `REQ-007` | Scene data save/reopen round trips supported V0.1 component and environment values. |
 | `REQ-008` | Supported scene mutations request live sync when the embedded engine is available. |
-| `REQ-009` | V0.1 scene authoring comprises Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, and Material assignment/override as bounded by section 8. Orthographic cameras, point lights, and spot lights are outside the supported V0.1 authoring/import qualification set; their existing domain data may be preserved but cannot be advertised as supported workflows. |
+| `REQ-009` | V0.1 scene authoring comprises Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, and Material assignment/override as bounded by section 8. Orthographic cameras, point lights, and spot lights are outside the supported V0.1 authoring/import qualification set. Encountering them produces an explicit unsupported-content result without discarding source data. |
 | `REQ-010` | Users can create and open scalar material assets through a real material editor. |
 | `REQ-011` | Users can inspect and edit scalar material properties through material editor/property UI. |
 | `REQ-012` | Users can assign material assets to geometry. |
@@ -113,7 +113,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-023` | Engine/runtime and pipeline failures produce useful logs. |
 | `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
 | `REQ-025` | Embedded preview renders visible scene content through Vortex. |
-| `REQ-026` | Embedded preview applies every required editable V0.1 scene/environment field. Material source changes appear after successful publication under the accepted Save/import/demand cooking policy. Unavailable runtime retains authoring state and visibly pending sync; reconnect converges to the current document revision. Unsupported required fields block release. |
+| `REQ-026` | Embedded preview applies every required editable V0.1 scene/environment field. Material source changes appear after successful publication under the Save/import/demand cooking policy. Unavailable runtime retains authoring state and visibly pending sync; reconnect converges to the current document revision. Unsupported required fields block release. |
 | `REQ-027` | The supported V0.1 live viewport layout remains stable and does not abort; multi-viewport layouts are deferred engine/editor work. |
 | `REQ-028` | Each supported visible viewport presents to the correct surface/view; V0.1 support is single live viewport unless multi-viewport is explicitly re-scoped. |
 | `REQ-029` | Users can navigate the editor camera and frame all/selected. |
@@ -128,7 +128,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-038` | Scene/material saves preserve the last valid saved file, acknowledge only their captured revision, retain newer edits, serialize writes, and reject external-write conflicts. Crash recovery is limited to the last explicit successful Save. |
 | `REQ-039` | Cook consumes a coherent saved dependency snapshot, validates staged output, and publishes it with a brief preview suspension and rollback protection. Failed/cancelled work cannot corrupt the previously published cook or falsely report it current. |
 | `REQ-040` | The qualified static/scalar import subset is reproducible from retained sources and configuration on a clean project copy. Unsupported authored/imported content fails visibly before publication; source data is never silently discarded or overwritten. |
-| `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the matched Windows x64 editor/runtime/cooker/schema build and performance conditions in section 9. Larger projects are unqualified, not subject to an artificial hard cap. |
+| `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the Windows x64 platform, verified capability dependencies and performance conditions in section 9. Larger projects are unqualified, not subject to an artificial hard cap. |
 | `REQ-042` | Development-only standalone qualification loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. Its workflow and tooling are excluded from normal editor Debug/Release builds. |
 
 ## 6. Success Metrics
@@ -151,26 +151,20 @@ Validation proves that the requirements work; it is not itself the product
 requirement. Each LLD/milestone plan decides the right verification method for its
 scope.
 
-On 2026-09-15 the user explicitly required the entire standalone validation
-workflow to remain development-only. Normal editor Debug and Release builds,
+The entire standalone qualification workflow is development-only. Normal editor Debug and Release builds,
 packages and the normal SDK must contain no qualification command, request
 protocol, fixture, comparison harness or qualification runner. Opt-in test/tool
 targets own that work and write to isolated development output directories.
-Production renderer, loading and authoring fixes remain in their proper modules;
-calling test instrumentation reusable does not justify shipping it.
-This supersedes the earlier M08 proposal for a product Validate in Standalone
-command. Ordinary field/input validation and cook/runtime compatibility checks
-remain production responsibilities.
+Production renderer, loading and authoring fixes remain in their owning modules.
+Ordinary field/input validation and cook/runtime compatibility checks remain
+production responsibilities.
 
-Pre-V0.1 backward compatibility is not a requirement. The user explicitly
-rejected legacy fields, schema/alias compatibility and runtime fallbacks on
-2026-09-15. Useful existing content migrates to the selected canonical model
+Pre-V0.1 formats migrate to the canonical model; no legacy runtime reader,
+alias or parallel behavior path is maintained. Useful existing content migrates
 using development tooling and normal recooking; the shipping product has one
 current contract. Migration recovery protects source work without keeping a
-legacy execution path. The authoring scope is being decided interactively in
-the [M08 scope review](review/ED-M08-v01-authoring-scope.md); captured-sky diffuse
-and specular lighting is approved, while the other proposed changes require
-individual decisions.
+legacy execution path. The [V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md)
+defines the final capability boundary and eliminated alternatives.
 
 Cheap, meaningful automated tests should be added when they give useful signal,
 especially for domain logic, serialization round trips, descriptor generation,
@@ -191,12 +185,12 @@ undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
 | Capability | Authoritative field/interaction contract | Preview and release condition |
 | --- | --- | --- |
 | Scene hierarchy and Transform | `scene-authoring-model.md`; `property-inspector.md` Transform table; `property-pipeline.md` | Create/delete/rename/reparent and transforms synchronize; hierarchy/IDs survive cook/load. |
-| Visibility and shadow participation | Approved contract in `review/ED-M08-node-light-visibility-review.md` section 5, excluding its sun row | Local editor Hide is separate from authored Inherit/Shown/Hidden. Geometry and light eligibility honor resolved visibility; Affects Scene remains independent. Object casting, light shadowing and functional receiver controls remain separate. Hidden cameras remain usable. No generic node activation, authored shadow-only mode or blended shadow casting in V0.1. Implementation and qualification are required. |
-| Geometry and all existing material slots | `property-inspector.md` Geometry table and section 7.6; `asset-primitives.md`; `content-pipeline.md` section 19 | Every mesh-provided material slot supports independent per-instance assignment and clearing; clearing restores the mesh material. Slot creation/removal and topology editing are excluded. Approved palette: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere, Torus, plus SubdividedCube under Advanced. All ten must synchronize, cook and render with the approved metric, centred, Z-up defaults in the inspector contract. ArrowGizmo is internal; useful GeodesicSphere references migrate to IcoSphere and the alias is removed. |
+| Visibility and shadow participation | `review/ED-M08-node-light-visibility-review.md`; `property-inspector.md` | Local editor Hide is separate from authored Inherit/Shown/Hidden. Geometry and light eligibility honor resolved visibility; Affects Scene remains independent. Object casting, light shadowing and functional receiver controls remain separate. Hidden cameras remain usable. Generic node activation, authored shadow-only mode and blended shadow casting are excluded. |
+| Geometry and all existing material slots | `property-inspector.md`; `content-pipeline.md` procedural and slot contracts | Every mesh slot supports independent per-instance assignment/clearing by stable SlotId; clearing restores its mesh material. Creation/topology editing is excluded. Palette: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere, Torus and advanced SubdividedCube, using the metric centred Z-up defaults. ArrowGizmo is internal; GeodesicSphere references migrate to IcoSphere. |
 | Basic perspective camera | `property-inspector.md` PerspectiveCamera table | Pose, vertical FOV in degrees, Auto/Fixed aspect policy and near/far in metres synchronize and cook; runtime loads the explicitly selected authored camera independently of editor navigation. Auto is the new-camera default and derives per-view aspect without editing saved data. Fixed preserves its ratio/composition with bars and no cropping/stretching. Physical-camera authoring is deferred. |
-| Directional light and sun | `property-inspector.md` DirectionalLight table | All editable fields synchronize and cook, including coherent exclusive sun binding. |
-| Scene environment and post-processing | `environment-authoring.md` editable SkyAtmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background tables | All editable fields, including background and post-processing, must have live and cooked runtime mappings. A missing native API/schema is implementation work, not a release exception. |
-| Scalar material | `material-editor.md` editable V0.1 field table, including approved emission colour/HDR intensity | Swatch responds while editing; the scene shows the last published material until saved content is successfully cooked/published. Save schedules incremental cooking, with visible stale/pending state and session pause. Emission is self-illumination; emissive GI and texture authoring are excluded. |
+| Directional lights and atmospheric assignment | `property-inspector.md` DirectionalLight table; `review/ED-M08-celestial-light-authoring.md` | Realtime lighting; no Mixed/Baked authoring workflow. Per-light None/Primary/Secondary uses existing native names. Both atmospheric sources illuminate and shadow, including Secondary alone. Role None retains ordinary directional illumination. Assignments are unique, explicit and stable without promotion or a competing Sun pointer. |
+| Scene environment and post-processing | `environment-authoring.md` field tables | Atmosphere, captured-sky diffuse/specular lighting, Manual/Auto exposure, tone mapping, bloom, grading and display-only background have complete live/cooked effects. Atmospheric assignments are owned by lights; scene summary is read-only. Physical-camera authoring is excluded. |
+| Scalar material | `material-editor.md` field table | Scalar PBR, sidedness, opacity and linear emission colour/HDR intensity use canonical engine-schema data and float32 compiled emission. Swatch responds while editing; the scene displays published material until saved content is cooked/published. Save schedules incremental cooking. Emissive GI and texture authoring are excluded. |
 | Viewport authoring | `viewport-and-tools.md` V0.1 interaction contract | One live viewport, navigation, frame selected/all, picking, selection feedback, transform gestures, icons, and bounded overlays. Multi-viewport stability is explicitly deferred. |
 | Content import and browsing | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md`; `content-cooking-workflows.md` | Identity-based browsing/picking, explicit scoped import/reimport and Cook actions, plus incremental cooking after Save/import and on active-scene/asset demand. Browsing and transient edits do not cook. File rename/move/reference-repair UI is outside V0.1; unsupported actions are hidden or disabled with a reason. |
 
@@ -206,12 +200,10 @@ inside the supported matrix is multi-viewport stability. PRD non-goals and the
 explicit unsupported component/import set are exclusions, not incomplete
 implementations that can be advertised as supported.
 
-ED-M07 UI decisions:
+### Content workflow
 
-ED-M07B's [content workflow refinement](lld/content-cooking-workflows.md) and
-[UI review](validation/ED-M07B-ux-review.md) add concrete browsing, picking,
-incremental execution and recovery requirements. The user accepted its hybrid
-trigger policy D1 on 2026-09-11 when directing implementation of revised M07B.
+The [content workflow contract](lld/content-cooking-workflows.md) defines
+browsing, picking, incremental execution and recovery:
 
 1. No generic project-settings panel or default renderer-preset selector in
    V0.1. Project manifests/mounts supply cook scope; `Projects` owns those facts.
@@ -247,8 +239,8 @@ Oxygen-supported D3D12 adapter. The ordinary Interop build records its installed
 native SDK inputs in assembly metadata. Startup reads that metadata without
 loading Interop and checks the installed native binaries. An SDK mismatch reports
 which dependency changed and requests an Interop rebuild before native calls.
-Managed/UI edits require no approval, qualification manifest, or separate probe
-build. Debug and Release use the same automatic build-compatibility workflow.
+Managed/UI edits require no qualification manifest or separate probe build.
+Debug and Release use the same automatic build-compatibility workflow.
 
 Cooking checks its tools and matching editor/native schemas when requested and
 captures producer hashes for incremental invalidation. These checks do not block
@@ -262,7 +254,7 @@ Release validation records CPU, RAM, GPU/VRAM, driver, OS/runtime versions,
 build configuration, and exact fixture hashes. This establishes support on the
 recorded configuration, not a claim about all hardware satisfying a GPU name.
 
-User-selected scale: 100 scene nodes and 1,000 logical authored catalog entries.
+Qualified scale: 100 scene nodes and 1,000 logical authored catalog entries.
 Derived companions must not inflate logical row counts. The fixture includes
 hierarchy, 98 geometry nodes, one perspective camera, one directional sun,
 environment settings, every exposed built-in shape and small imported meshes, shared and

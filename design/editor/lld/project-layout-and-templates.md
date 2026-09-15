@@ -691,7 +691,13 @@ ED-M07B stages inputs/output and retains its publication journal/backups beneath
 `.build/cook/<OperationId>`. Successful publication preserves fixed
 `.cooked/<Mount>/container.index.bin` paths and writes derived
 `.cooked/publication.json`. These files describe a published cook, not authored
-identity. Interrupted transactions are recovered before mounting. ED-M08 report
-artifacts live under `.oxygen/validation/<OperationId>`. No template must ship
-cooked or validation artifacts. Native/code/schema compatibility belongs to the
-qualified build manifest, not an editable project renderer preset.
+identity. Interrupted transactions are recovered before mounting. ED-M08 evidence
+lives under its explicit owned `EvidenceRoot`, defaulting to repository
+`artifacts/ed-m08/runs/<operation-id>/`; it is not inferred from the project layout.
+The [standalone qualification contract](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)
+owns development build staging, evidence containment and protocol manifests.
+Templates ship neither cooked products nor qualification artifacts. Ordinary
+native compatibility checks each capability's actual dependencies and producer
+proofs; the opt-in qualification runner uses a separate matched private
+runtime/Interop/capture bundle. Neither is an editable project renderer preset
+or a whole-editor qualification requirement for normal startup.

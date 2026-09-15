@@ -232,6 +232,10 @@ static_assert(sizeof(LocalFogVolumeRecord) == 56);
   - The camera looks down the -Z axis in its local space.
   - FOV is vertical, in radians.
 */
+// TODO(post-v0.1, EV01-CAMERA-PHYSICAL-AUTHORING): Carry physical camera exposure
+// through authoring/cooking/loading. Native CameraExposure already computes EV;
+// these packed records currently carry projection, not aperture/shutter/ISO.
+// Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-camera-physical-authoring
 struct PerspectiveCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   float fov_y = 0.785398F; // Vertical FOV in radians (~45 deg)

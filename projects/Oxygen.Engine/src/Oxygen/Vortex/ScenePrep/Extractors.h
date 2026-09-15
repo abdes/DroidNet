@@ -56,6 +56,9 @@ inline auto ExtractionPreFilter(const ScenePrepContext& /*ctx*/,
   using enum scene::SceneNodeFlags;
 
   // Skip nodes culled by effective visibility (hierarchy-aware flag).
+  // TODO(post-v0.1, EV01-SHADOW-HIDDEN): Add an authored hidden-shadow mode.
+  // Off-camera caster routing already exists; that is not an authored mode.
+  // Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-shadow-hidden
   if (!item.Flags().GetEffectiveValue(kVisible)) {
     item.MarkDropped();
     return;

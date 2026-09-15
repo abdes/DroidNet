@@ -1,12 +1,12 @@
 # Content Cooking Workflows LLD
 
-Status: `ED-M07B implementation contract; D1 accepted 2026-09-11; Cooking panel decisions accepted 2026-09-12`
+Status: `V0.1 content workflow contract`
 
 ## 1. Purpose And Ownership
 
 Make supported content easy to discover, prepare, assign, and update without
 requiring users to understand generated descriptors, cooked paths, or mounting.
-This is the user-workflow contract for ED-M07B. It traces to PRD `REQ-013` through
+This is the V0.1 user-workflow contract. It traces to PRD `REQ-013` through
 `REQ-024`, `REQ-026`, `REQ-036` through `REQ-041`, and `SUCCESS-006/007`.
 
 ContentPipeline owns dependency freshness, requests, incremental execution, and
@@ -27,32 +27,18 @@ Related contracts: [content-pipeline.md](content-pipeline.md) sections 16-19,
 [runtime-integration.md](runtime-integration.md). These follow
 [ARCHITECTURE.md](../ARCHITECTURE.md) and [DESIGN.md](../DESIGN.md).
 
-## 2. Source Review And Scope
+## 2. Scope and integration boundaries
 
-The current implementation provides useful browser rows, material/geometry
-pickers, explicit Cook actions, and result messages. ED-M07B must close these
-specific gaps:
+Browser and picker projections consume the same dependency/publication authority.
+File existence or timestamps alone do not prove freshness or runtime readiness.
+Material documents, browser rows and scene assignments report the same source,
+cooked and loading facts. A material source edit, approximate swatch and published
+scene material remain distinct states.
 
-| Source | Gap to close |
-| --- | --- |
-| `ContentBrowser/src/AssetIdentity/AssetIdentityReducer.cs` | Timestamp comparison cannot prove dependency freshness; file existence cannot prove publication or runtime readiness. An uncooked descriptor can acquire a missing-cooked diagnostic. |
-| `ContentBrowser/src/AssetIdentity/ContentBrowserAssetItem.cs` | Abbreviations such as SRC/DESC/COOK/MISS do not explain the user's next action. |
-| `ContentBrowser/src/Panes/Assets/AssetsViewModel.cs`, `AssetsView.xaml` | Cook results describe output counts/paths; the interaction needs scoped progress, cancellation, useful empty states, and clear recovery. Import copies external files with overwrite enabled and has early failures visible only in debug output. |
-| `ContentBrowser/src/AssetIdentity/ContentBrowserAssetProvider.cs`; WorldEditor geometry/material pickers | Browser and picker projections need a common publication/freshness authority and consistent pre-cook availability. |
-| `MaterialEditor/src/MaterialDocumentService.cs`, `MaterialEditorViewModel.cs` | Dirty Cook rejection must lead to an ordinary save/retry workflow; source save, approximate swatch, and actual scene material need distinct feedback. |
-| PRD section 8; material/pipeline LLDs | The implemented baseline requires explicit cooking. M07B implements the accepted D1 trigger policy below. |
-
-The [2026-09-11 running-editor review](../validation/ED-M07B-ux-review.md)
-adds observed defects: list/tile navigation can display assets from the wrong
-folder; a material marked cooked in the browser opens as NotCooked in its editor;
-Filter has no effect; Cook is clipped in the material document; source/cooked
-details are absent on selection; generated companions appear as separate picker
-choices. These are required 07B.5 fixes, not optional visual polish.
-
-The follow-up reports add Cylinder project-cook rejection and node-inspector
-space/filtering defects. Pipeline section 19 owns full engine generator/alias
-coverage; [property-inspector section 9.1](property-inspector.md#91-ed-m07b-compact-layout-and-component-filtering)
-owns compact component selection and filtered editors in 07B.5g.
+Native recipe/catalog authority in pipeline section 19 supplies supported
+procedural products. The [property-inspector layout](property-inspector.md#91-ed-m07b-compact-layout-and-component-filtering)
+owns compact component selection and filtering. The canonical V0.1 primitive
+inventory and migration rules apply throughout these workflows.
 
 Use the existing WinUI browser, inspector pickers, material document, scene
 toolbar, and output/results surfaces, with a dockable Cooking panel as the common
@@ -61,7 +47,8 @@ action labels, disabled reasons, progress, and keyboard/accessibility behavior.
 Full material thumbnails, a new asset management application, a generic settings
 panel, raw generated-file editing, scheduling beyond the existing cook queue,
 rename/move/reference repair, and a new drag/drop placement system are outside
-this slice. Qualified
+the general content-management workflow. M08's explicit material-slot repair is
+defined separately by content-pipeline section 20. Qualified
 formats/components remain those in PRD section 8 and pipeline section 17.
 
 ## 3. One Asset Before And After Cooking
@@ -198,12 +185,11 @@ copyable source/generated/cooked paths under technical details. Paths for cleane
 temporary artifacts must be labeled no longer retained. A thumbnail or material
 swatch is labeled approximate and never implies the current material is rendered.
 
-## 4. Trigger Policy D1 - Hybrid Default
+## 4. Cooking triggers
 
-Accepted on 2026-09-11 when the user directed implementation of the revised
-M07B plan. The table below replaces the explicit-only cook policy and includes
-the explicit Save listed and Cook action in section 6. Source saving remains an
-independent, explicit user operation.
+Import, Save and preview demand request incremental production; explicit Cook
+actions remain available. Section 6 defines Save listed and Cook recovery.
+Source saving remains an independent, explicit user operation.
 
 Rationale: Import and Save express intent to produce usable content. Assignment
 and scene opening express demand for preview. Browsing expresses discovery only.
@@ -245,7 +231,7 @@ tracks dependencies, imports changed data and hot-reloads assets. Unreal's
 [platform cooking](https://dev.epicgames.com/documentation/en-us/unreal-engine/cooking-content-in-unreal-engine)
 is a separate concern from applying material edits in the editor.
 
-Oxygen's embedded runtime consumes cooked assets. Under D1, successful Save is
+Oxygen's embedded runtime consumes cooked assets. Successful Save is
 the material's automatic cook trigger; it does not require another Apply button.
 Existing direct scene-property previews remain immediate. Transient gestures and
 Undo/Redo never launch cooks. External reimport stays explicit under the accepted
@@ -441,8 +427,8 @@ docks. Enforce a documented minimum pane width or provide a usable overflow.
 
 ## 7. Qualification Journeys
 
-ED-M07B.5 records packaged UI/integration evidence and user-visible walkthroughs
-for these cases, including the accepted D1 triggers.
+Packaged UI/integration evidence and visible walkthroughs qualify these cases,
+including the trigger policy in section 4.
 
 | Case | Required observation |
 | --- | --- |
@@ -452,7 +438,7 @@ for these cases, including the accepted D1 triggers.
 | Browse/search/filter/open picker with 1,000 logical entries | No cook launches; focus/selection remain stable during catalog updates; PRD browser timing gates hold. |
 | Navigate Materials/Geometry/Scenes, switch list/tiles, Back/Forward, then act | Breadcrumb, rows, selection, and operation scope agree; old asynchronous results cannot repopulate the wrong folder. Filters actually change the result set. |
 | Browse built-ins and their cooked companions | Proven generated outputs stay attached to their originating identity; legitimate authored assets and existing references remain distinct and usable. |
-| Select Cylinder, save, Cook Current Scene / Cook Project; repeat the full engine generator catalog and aliases | Every supported choice cooks and loads with its shared recipe. Diagnostics identify the captured scene/node/asset when another reference fails. |
+| Select Cylinder, save, Cook Current Scene / Cook Project; repeat all ten canonical primitives | Every supported choice cooks and loads with its shared recipe. Diagnostics identify the captured scene/node/asset when another reference fails. Obsolete aliases require migration. |
 | Single/multi-node component filter and compact inspector | Geometry/Transform selection restricts editors; deselection/All restores applicable sections. The header/list consumes only needed space; filtering creates no authored changes or cooks. |
 | Uncooked vs missing vs stale vs cooked-only assets | Distinct actions and state; typed identity survives Save/reopen; cooked-only editing stays read-only. |
 | Save shared material used on several nodes | Exactly the affected products rebuild; all current uses update after publication, with no additional history entry. |
@@ -466,19 +452,18 @@ for these cases, including the accepted D1 triggers.
 | Offline native state or mismatched build | Authoring and saves work; cooking/readiness report the specific capability; activation converges without an unnecessary recook. |
 | Keyboard-only, screen reader, theme and scale checks | Core import/cook/browse/pick/recovery actions are usable with readable state and stable focus. |
 
-Repeat the recorded running-editor journeys after implementation, alongside
-new before/during/after cooking cases, to verify discoverability, legibility, and
-interaction behavior. The planning review records current defects; milestone
-validation requires the corrected workflows. M08 owns rendered standalone parity.
+Exercise before/during/after cooking states to verify discoverability, legibility
+and interaction behavior. M08 additionally owns rendered standalone parity.
 
-## 8. Decision Record
+## 8. Design rationale and eliminated alternatives
 
-D1 adopts the hybrid trigger table and session pause control in section 4,
-including explicit Save listed and Cook. A successful saved revision schedules
+The trigger table and session pause control in section 4 include explicit
+Save listed and Cook. A successful saved revision schedules
 cooking and can refresh every shared use. Source saving stays explicit and
 independent. PRD `REQ-014/026`, section 8, and the material/pipeline contracts use
-this policy. ED-M05/06/07/07A evidence remains historical; the new behavior is
-qualified in M07B through the same saved-input, rollback, and lifetime contracts.
+this policy. Explicit-only cooking adds a second routine action after every Save;
+automatic cooking on transient edits or browsing produces work without a saved
+authoring or preview need. Neither fits this workflow.
 
 Dependency-aware incremental processing is established in
 [Unity's asset database workflow](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html),

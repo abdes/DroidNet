@@ -1,14 +1,12 @@
 # Settings Architecture LLD
 
-Status: `V0.1 contract; named gaps execute in ED-M07A`
+Status: `final V0.1 settings contract`
 
 ## 1. Purpose
 
-Concrete placement and mutation design for every setting touched by ED-M07A.
-This LLD is not a survey of all future settings: it locks down where each
-ED-M07A setting lives, how it is mutated, what marks dirty, what does not, and
-which mutation path is forbidden. ED-M07 re-reviews project cook/content
-settings; this document stays out of that scope.
+Define where V0.1 scene, workspace, runtime-session and startup settings live,
+how they change, and which changes affect saved authoring data. Project content
+policy remains in the project and content-pipeline contracts.
 
 ## 2. PRD Traceability
 
@@ -26,44 +24,69 @@ settings; this document stays out of that scope.
   storage decision.
 - [runtime-integration.md](./runtime-integration.md): runtime FPS/logging.
 
-## 4. Current Baseline
+## 4. Service ownership
 
 - `Oxygen.Editor.Runtime/src/Engine/IEngineSettings.cs` — startup engine
   config; consumed by `EngineService.InitializeAsync`. Persisted via
   `ISettingsService<IEngineSettings>` from DroidNet hosting.
 - `IEngineService` exposes `TargetFps : uint`, `MaxTargetFps : uint`,
   `EngineLoggingVerbosity : int` (read/write valid in `Ready`/`Running`).
-- `Scene` / `SceneNode` / components store authored values; ED-M07A adds
-  `Scene.Environment` (see env LLD).
+- `Scene` / `SceneNode` / components and `Scene.Environment` store authored
+  values.
 - Workspace / docking layout is persisted by existing editor data services
-  (out of ED-M07A scope; ED-M01 owns this).
+  and the typed settings manager.
 
-Brownfield gap: nothing defines, in writing, that `TargetFps` is a runtime
-session setting (not a project setting), that environment is scene scope (not
-editor scope), and that workspace activation may not call settings paths
-that environment editing might trip over.
+## 5. Setting placement
 
-## 5. ED-M07A Setting Placement Matrix
-
-For every ED-M07A setting, this matrix is normative. Implementation must reject
+For every listed setting, this matrix is normative. Implementation must reject
 storing a setting outside its row.
 
 | Setting | Scope | Owning service | Storage | Mutation API | Dirties scene? | Live-applied? |
 | --- | --- | --- | --- | --- | --- | --- |
 | `TransformComponent.LocalPosition/Rotation/Scale` | Scene component | `ISceneDocumentCommandService.EditTransformAsync` | scene file (`TransformData`) | command | yes | yes (sync) |
 | `GeometryComponent.Geometry` (URI) | Scene component | `EditGeometryAsync` | `GeometryComponentData.GeometryUri` | command | yes | yes |
-| `MaterialsSlot.Material` (URI) | Scene component | `EditMaterialSlotAsync` | `MaterialsSlotData.MaterialUri` | command | yes | yes, best-effort runtime override |
-| `PerspectiveCamera.{FOV, Near, Far, Aspect}` | Scene component | `EditPerspectiveCameraAsync` | `PerspectiveCameraData` | command | yes | yes |
+| Material overrides by geometry identity/SlotId | Scene component | Material-slot command | Canonical scene override records | command | yes | yes; observed effect qualified in M08 |
+| `PerspectiveCamera.{FOV, Near, Far, AspectMode, FixedAspect}` | Scene component | Camera command | Canonical perspective-camera data | command | yes | yes; target resize changes only effective view state |
+| Node visibility / geometry cast-receive source modes | Scene node | Property command | Local/Inherit source modes in scene data | command | yes | yes |
+| Directional atmosphere assignment | Light component | Light command | None/Primary/Secondary in light data | command | yes | yes; scene summary is read-only |
 | `DirectionalLightComponent.*` | Scene component | `EditDirectionalLightAsync` | `DirectionalLightData` | command | yes | yes |
 | `Scene.Environment.*` | Scene | `EditSceneEnvironmentAsync` | `SceneData.Environment` | command | yes | per-field, see env LLD |
 | `IEngineService.TargetFps` | Runtime session | `IEngineService` setter | in-memory only | property setter (no command) | no | yes (immediate) |
 | `IEngineService.EngineLoggingVerbosity` | Runtime session | `IEngineService` setter | in-memory only | property setter (no command) | no | yes (immediate) |
 | `IEngineSettings` (startup) | Editor preference | `ISettingsService<IEngineSettings>` | DroidNet user-local settings | `ISettingsService.Save` | no | only on next engine init |
-| Workspace docking, recent docs | Workspace | existing editor data services | user-local | (not ED-M07A) | no | n/a |
-| Project content roots, cook scope | Project | `Oxygen.Editor.Projects` | project metadata | (ED-M07) | n/a | n/a |
+| Workspace docking, recent docs | Workspace | existing editor data services | user-local | workspace services | no | n/a |
+| Editor Hide / Show All | Workspace per project and scene | WorldEditor workspace-visibility service | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no | editing main-view mask only |
+| Project content roots, cook scope | Project | `Oxygen.Editor.Projects` | project metadata | project/content commands | no scene changes | ordered mount/publication workflow |
 
-This table is the dispute-settler: any pull request that mutates one of these
-values via a different path must be changed.
+The owning service enforces each mutation boundary.
+
+### 5.1 Workspace visibility storage and lifetime
+
+WorldEditor owns the typed `WorldEditor/SceneVisibility` setting through the
+existing `IEditorSettingsManager`. Use `SettingContext.Project` with the
+canonical project root. The versioned payload contains the project ID and a map
+of scene IDs to sets of explicitly editor-hidden authored node IDs. The data
+store is user-local; no Hide state is written to scene documents, authoring
+mounts, cooked output or validation requests.
+
+Hiding a node masks its geometry/gizmo representation and descendants in the
+editing main view. It does not mutate native Scene Visibility, light properties
+or caster eligibility. Showing a parent removes only that parent's local Hide
+entry, leaving child entries intact; Show All clears the current scene's set.
+These commands persist workspace state without authoring history/dirty changes
+or automatic-cooking demand.
+
+Apply the mask through the current runtime view generation and authored-to-native
+node map. A callback for another project, scene activation or view generation is
+discarded. Unknown node IDs have no rendering effect. Retain local entries during
+an open document's undo lifetime; prune unresolved IDs when loading a saved scene
+into a fresh document lifetime. Reject a stored project-ID mismatch even if its
+path-based settings scope is reused by a different project.
+
+Controlled qualification views omit workspace masks and restore the current
+valid editing mask on return. Their opt-in adapters do not save a temporary
+profile, camera ratio or Hide state. Qualification EvidenceRoot is an explicit
+development-run option, not a persistent editor/project preference.
 
 ## 6. Mutation Path Rules
 
@@ -78,7 +101,7 @@ command implementation.
 // allowed
 await commandService.EditTransformAsync(ctx, [nodeId], edit, session);
 
-// forbidden in ED-M07A
+// forbidden: bypasses validation, history, revisions and live delivery
 node.Components.OfType<TransformComponent>().First().LocalPosition = newPos;
 ```
 
@@ -104,14 +127,13 @@ write in a `Runtime.Settings.Apply` `OperationResult`:
   `Failed` result with `FailureDomain.Settings` and code `OXE.SETTINGS.TARGET_FPS_REJECTED`.
 - on success, publishes `Succeeded` (no `OperationResult` UI, only a log entry).
 
-These writes never dirty any scene or document. They are not persisted by
-ED-M07A. (They remain session-only for V0.1.)
+These writes remain session-only and never dirty a scene or document.
 
 ### 6.3 Editor preferences (`IEngineSettings`)
 
 Read once at engine `InitializeAsync`. Editing the preference between
 sessions is allowed via existing `ISettingsService` pathways but is not part
-of ED-M07A inspector UX. ED-M07A does not surface a settings panel for these.
+of the inspector. V0.1 does not add a settings panel for these preferences.
 
 ### 6.4 Forbidden cross-scope writes
 
@@ -120,12 +142,12 @@ of ED-M07A inspector UX. ED-M07A does not surface a settings panel for these.
 | Storing scene environment in `IEngineSettings`. | Environment is scene authoring intent. |
 | Storing `TargetFps` in `SceneData`. | Runtime preference is per-session, not per-scene. |
 | Inspector code calling `ISettingsService<IEngineSettings>.Save` directly. | Inspector touches scene commands; preferences are not scene scope. |
-| Project policy fields (cook scope, content roots) being edited from the inspector. | Owned by `Oxygen.Editor.Projects` and re-reviewed in ED-M07. |
+| Project policy fields (cook scope, content roots) being edited from the inspector. | Owned by `Oxygen.Editor.Projects` and the content workflow. |
 | Diagnostic overrides (log level via env var, runtime DLL path override) becoming durable settings. | Bootstrap/diagnostic only. |
 
-## 7. UI Surfaces (ED-M07A)
+## 7. UI surfaces
 
-Settings reach the user only through these surfaces in ED-M07A:
+Settings reach the user through these surfaces:
 
 - Inspector component sections — scene-scope fields per
   [property-inspector.md](./property-inspector.md).
@@ -136,7 +158,7 @@ Settings reach the user only through these surfaces in ED-M07A:
 - Output/log panel + inline error placement — for `Settings`-domain
   diagnostics.
 
-ED-M07A does **not** introduce a generic "Settings" panel.
+V0.1 does not introduce a generic Settings panel.
 
 ## 8. Persistence Behavior
 
@@ -146,11 +168,12 @@ ED-M07A does **not** introduce a generic "Settings" panel.
 | Runtime-session | no | session-only |
 | Editor preference (`IEngineSettings`) | yes | by `ISettingsService` save |
 | Diagnostic override | no | command-line / env var |
-| Workspace layout | yes | by existing editor data services (not ED-M07A) |
+| Workspace layout | yes | by existing editor data services |
+| Workspace Hide | yes | through the project-scoped typed setting in §5.1 |
 
-Round-trip rule for scene-scope: every field in §5 deserialized through
-`SceneJsonContext` re-emits its in-memory value byte-for-byte (within
-`float`/`Vector3`/`Quaternion` ULP).
+Scene round trips preserve typed values, identities and source modes through
+`SceneJsonContext`. Text formatting need not match input bytes. The property
+pipeline owns conversion and numerical qualification rules.
 
 ## 9. Validation And Defaults
 
@@ -160,12 +183,11 @@ Per-setting validation lives in the command/setter, not in the UI control:
   scale axes ≠ 0, FPS within `[1, MaxTargetFps]`) are enforced by the
   command/setter and surface diagnostics if rejected.
 - Enums are constrained to the declared enum's defined members.
-- Defaults are taken from component constructor defaults
-  (`PerspectiveCamera.DefaultFieldOfViewDegrees = 60f`,
-  `DirectionalLightComponent.DefaultIntensityLux = 100_000f`, etc.) and
-  `SceneEnvironmentData` default initializer.
-- Missing JSON fields deserialize to those defaults; the editor must not
-  silently write back without a user edit.
+- The inspector, material and environment field tables define creation defaults.
+  Constructors, schema defaults and canonical writers implement those values.
+- Only fields declared optional by the current schema use its defaults. Missing
+  required fields or obsolete representations require rejection or explicit
+  migration; runtime readers do not infer a legacy format.
 
 ## 10. Operation Result Mapping
 
@@ -197,7 +219,7 @@ Forbidden:
 - Inspector ↔ `IEngineService` direct read/write of any setting.
 - Inspector ↔ `ISettingsService` for any scope.
 - Scene-scope write paths bypassing `ISceneDocumentCommandService`.
-- Project-scope mutation from any ED-M07A module.
+- Project-scope mutation outside the owning project/content services.
 
 ## 12. Validation Gates
 
@@ -210,16 +232,17 @@ Forbidden:
    the explicit scene authoring DTOs.
 4. Mutating `TargetFps` in `Faulted` state surfaces `OXE.SETTINGS.TARGET_FPS_REJECTED`
    in the operation log; viewport keeps showing previous value.
-5. No ED-M07A PR adds project/cook settings.
+5. Workspace Hide persists independently of authored data and project publication;
+   stale project/node identities follow §5.1.
 
-## 13. Closed V0.1 Decisions
+## 13. V0.1 boundary
 
 TargetFps and logging verbosity remain session-only; no persistence toggle or
 project renderer preset is introduced. Scene settings use the existing empty-
 selection Environment surface. There is no generic project settings panel.
 Projects supplies mount/cook facts to ContentPipeline; native startup preferences
-remain editor-local and must match the qualified artifact set. The schema-property
-path and scene/runtime scope separation are qualified in ED-M07A.2/3/6.
+remain editor-local. Runtime capability and artifact compatibility follows the
+runtime-integration contract.
 
 The canonical [property-pipeline.md](./property-pipeline.md) governs typed
 property entry points, shared sessions/history, current field diagnostics and

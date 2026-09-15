@@ -11,6 +11,9 @@ implementation-preparation workstream.
 
 | Document | Purpose |
 | --- | --- |
+| [editor-v01-rendering-contract.md](editor-v01-rendering-contract.md) | ED-M08 native scene/light/shadow/view/post-process implementation contract; execution order belongs to the linked editor plan. |
+| [editor-v01-captured-sky-ibl.md](editor-v01-captured-sky-ibl.md) | Captured-sky diffuse/specular products, filtering, Stage 13 ownership, readiness and qualification. |
+| [editor-v01-deferred-capabilities.md](editor-v01-deferred-capabilities.md) | V0.1 exclusions and stable source-local deferred capability IDs. |
 | [milestone-planning-workflow.md](milestone-planning-workflow.md) | Standard workflow for preparing any Vortex milestone for implementation. |
 | [VTX-M04D.1-environment-publication-truth.md](VTX-M04D.1-environment-publication-truth.md) | Detailed implementation plan for the next environment work package. |
 | [VTX-M04D.2-exponential-height-fog-parity.md](VTX-M04D.2-exponential-height-fog-parity.md) | Detailed implementation plan for UE5.7 exponential height fog parity. |

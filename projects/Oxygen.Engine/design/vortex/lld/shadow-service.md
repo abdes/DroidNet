@@ -4,6 +4,17 @@
 **Deliverable:** D.11
 **Status:** `m05d_directional_csm_reaudit_in_progress`
 
+## V0.1 Production Extension
+
+[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#4-conventional-shadows-and-receiver-control)
+extends this baseline with explicitly indexed per-light directional CSMs, GPU
+receiver eligibility and the conditional dedicated
+[ContactShadowCasterDepth product](../plan/editor-v01-rendering-contract.md#5-contactshadowcasterdepth-and-contact-attenuation).
+The exact contact algorithm is linked there. Existing reversed-Z, bias and 3x3
+PCF contracts remain; atmosphere disk diameter adds no PCSS/finite-source effect.
+Historical single-light interface examples and VTX evidence below do not close
+the new two-source, receiver or contact requirements.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
@@ -278,14 +289,14 @@ selection path.
 
 Phase 4C does not run an independent directional-light election.
 
-`ShadowService` consumes the per-frame directional-light selection already
-resolved earlier in frame execution. If no selected directional light exists
-for a view, the published `ShadowFrameBindings` payload for that view is empty.
-If the selected directional light is not authored with `casts_shadows`, the
-payload is also empty; Stage 8 must not silently render shadow maps for lights
-that opted out of shadow participation.
+ShadowService consumes the per-frame directional collection already resolved
+earlier in frame execution. Publish per-light CSM records/indices for eligible
+lights with `casts_shadows`; do not render maps for opted-out lights. If none
+request directional shadows, the directional family is empty while independent
+local-light families remain valid. Never select shadow authority solely from
+atmosphere slot 0 or promote another assignment when Primary is absent.
 
-The directional-light selection is also the source of authored CSM settings:
+Each directional record is also the source of its authored CSM settings:
 cascade count, manual/generated split mode, maximum shadow distance, manual
 cascade distances, distribution exponent, transition fraction, distance-fade
 fraction, and receiver bias terms. `SceneRenderer` canonicalizes the scene

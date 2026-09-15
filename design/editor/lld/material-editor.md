@@ -1,415 +1,295 @@
 # Material Editor LLD
 
-Status: `ED-M05 baseline; ED-M08 emission scope approved, implementation pending`
+Status: `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
 ## 1. Purpose
 
-Define the V0.1 scalar material editor baseline: material asset identity,
-material documents, scalar PBR property editing, descriptor persistence, content
-browser selection, assignment to geometry, minimum cook, and embedded preview
-after saved content is successfully cooked and published.
+Provide a focused scalar PBR material editor with asset identity, commands,
+Undo/Redo, atomic persistence, cooking, per-instance assignment and useful
+preview. The material swatch follows current edits immediately. Scene rendering
+uses the last successfully published material until a saved revision is cooked
+and published.
 
-ED-M07B's [content workflow contract](content-cooking-workflows.md) adds shared
-browser/document/picker state, usable Cook/Save layouts, and save/cook recovery.
-Its accepted D1 policy schedules incremental cooking after Save/import and
-when an assigned material is needed, with session pause and explicit Cook actions.
-
-This LLD is not an ED-M04 implementation gate. ED-M04 only creates the Geometry
-material assignment slot and leaves a clean handoff into this ED-M05 workflow.
+Successful explicit Save/import and missing/stale dependency demand schedule
+incremental work through the shared project coordinator. Session pause and
+explicit Cook remain available. Browsing and transient edits do not cook;
+cooking never saves documents implicitly. See
+[content-cooking-workflows.md](content-cooking-workflows.md).
 
 ## Save Revision Contract
 
-The material document service owns authoring and saved revisions. Scalar and
-schema-property edits validate and commit under the authoring lock. Saves are
-serialized per open document and writes per destination; a queued document save
-captures its snapshot when it obtains its save gate. The existing atomic file
-replacement behavior remains in effect.
+The material document owns authoring and saved revisions. Validate and commit
+edits under its authoring lock. Serialize saves per document and writes per
+destination; a queued save captures its coherent snapshot after acquiring the
+save gate. Disk I/O does not hold the UI edit gate.
 
-Disk I/O does not hold the view model edit gate. Successful persistence updates
-the saved revision without replacing the current source or asset. If newer edits
-exist, the save succeeds with "Saved; newer changes remain unsaved" and the dirty
-indicator stays visible. A subsequent save can persist those edits. Actual write
-failure preserves the previous saved revision and current authoring data.
-
-Closing waits for in-flight persistence and rejects unsaved revisions unless
-explicit discard was authorized. View-model close preparation drains queued
-saves and edits; disposal also drains pending work before releasing its gate.
+After successful atomic replacement, acknowledge the captured saved revision.
+Do not replace newer authoring state or clear its dirty flag. Report “Saved;
+newer changes remain unsaved” when applicable. A failed write retains the prior
+saved revision and current edits. Close/dispose drains pending persistence;
+unsaved revisions require the normal explicit Save/discard flow.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
+| IDs | Required result |
 | --- | --- |
-| `GOAL-004` | Establish a real scalar material editor baseline. |
-| `GOAL-005` | Make descriptor/cook/mount state understandable for material assets. |
-| `GOAL-006` | Material create/save/cook/assign failures are visible. |
-| `REQ-010` | Users can create/open scalar material assets through real material editor UI. |
-| `REQ-011` | Users can inspect and edit scalar material properties. |
-| `REQ-012` | Users can assign material assets to geometry. |
-| `REQ-013` | Users can select material assets from the content browser with clear identity. |
-| `REQ-014` | Material values save, reopen, cook, and preview where supported. |
-| `REQ-021` | Content browser exposes relevant asset state for material workflows. |
-| `REQ-022` | Material failures produce visible operation results. |
-| `REQ-037` | Supported material data survives save/reopen without manual repair. |
-| `SUCCESS-002` | Material edits survive save/reopen. |
-| `SUCCESS-004` | Authored material data is available for runtime parity validation. |
-| `SUCCESS-007` | Material assets can be created, edited, assigned, cooked, and previewed through real editor UI. |
+| GOAL-004/005/006 | Material authoring, published state and failures are usable and visible. |
+| REQ-010/011/012/013/014 | Create/open/edit/save/cook/assign supported material values by asset identity. |
+| REQ-021/022/037 | Shared catalog state, actionable failures and source round trips. |
+| SUCCESS-002/004/007 | Saved material integrity, independent native verification and complete editor workflows. |
 
 ## 3. Architecture Links
 
-- `ARCHITECTURE.md`: material editor module, content-pipeline boundary, runtime
-  preview, diagnostics.
-- `DESIGN.md`: material LLD owner and material assignment workflow.
-- `PROJECT-LAYOUT.md`: `Oxygen.Editor.MaterialEditor`, `Oxygen.Managed.Assets`,
-  `Oxygen.Editor.ContentPipeline`, `Oxygen.Editor.ContentBrowser`.
-- `property-inspector.md`: Geometry material assignment slot.
-- `content-browser-asset-identity.md`: material picker and asset identity.
-- `content-pipeline.md`: material import/cook orchestration.
+- [property-pipeline.md](property-pipeline.md): property identity, validation and gestures.
+- [documents-and-commands.md](documents-and-commands.md): document lifetime, history and saving.
+- [property-inspector.md](property-inspector.md): geometry slots and scene commands.
+- [content-pipeline.md](content-pipeline.md): native cooking, slot identity and publication.
+- [live-engine-sync.md](live-engine-sync.md): current runtime intent and async completion ownership.
+- [content-browser-asset-identity.md](content-browser-asset-identity.md): browser/picker identity.
 
-## 4. Current Baseline
+## 4. Integration Baseline
 
-The repo already has material primitives:
+`MaterialDocumentService`, immutable `MaterialSource`, the property-descriptor
+catalog, source reader/writer, CPU swatch and material picker are existing
+integration points. `MaterialCookService` delegates to `IContentPipelineService`;
+it is not an independent managed binary writer. The native cooker owns emitted
+material descriptors and their format.
 
-- `projects/Oxygen.Managed.Assets/docs/material-json.md` defines authoring
-  `*.omat.json` with `Schema = oxygen.material.v1`.
-- `MaterialSource`, `MaterialPbrMetallicRoughness`, texture refs, alpha mode,
-  and material source reader/writer exist in `Oxygen.Managed.Assets`.
-- `MaterialSourceImporter` imports `*.omat.json`.
-- `CookedMaterialWriter` writes cooked `.omat` descriptors.
-- `MaterialAsset` carries optional `MaterialSource`.
-- GLTF import can generate material sources.
-- generated engine default material exists in the generated asset catalog.
-- `GeometryComponent` already supports `MaterialsSlot` references.
-
-Brownfield gaps:
-
-- there is no material document/editor UI.
-- the content browser does not yet provide a dedicated material create/open
-  workflow.
-- geometry material assignment is not wired to a material picker.
-- material preview/live override support is incomplete.
+The implementation must extend these paths for emission and identity-based
+assignment to all existing geometry slots. Current source models lack emission,
+and the native packed material currently stores emissive RGB as binary16. These
+are implementation deltas, not supported substitutes for the contract below.
 
 ## 5. Target Design
 
-The ED-M05 target workflow is end-to-end:
-
 ```text
-Content Browser
-  -> create/open material asset
-  -> Material Editor document
-  -> edit scalar PBR properties
-  -> save material JSON descriptor (*.omat.json)
-  -> import/cook to cooked material (*.omat)
-  -> assign material asset to Geometry material slot
-  -> embedded preview where engine API supports it
+Create/open material -> edit immutable source through commands -> explicit Save
+  -> shared incremental cook -> validated publication -> refresh scene instances
+Assign/clear material -> scene command for a stable geometry slot -> live sync
 ```
 
-Before the ED-M05 editor exists, manually authored Oxygen material descriptors
-(`*.omat.json`, `oxygen.material.v1`) and manual or minimum cook steps are
-acceptable bootstrapping tools. They are not the V0.1 user experience and must
-not become hidden permanent workflow.
+V0.1 supports base colour/opacity, metallic, roughness, Opaque/Mask/Blend,
+double-sided rendering and scalar emission. Existing canonical texture references
+remain read-only. Normal scale and occlusion strength are editable only when the
+corresponding input exists and its active shader path has an effect.
 
-V0.1 explicitly excludes:
-
-- texture authoring and texture parameter editing.
-- material graph editing.
-- custom shader authoring.
-- procedural shader node workflows.
-
-V0.1 includes a real scalar PBR material baseline:
-
-- name/display identity.
-- base color factor RGBA.
-- metallic factor.
-- roughness factor.
-- alpha mode and alpha cutoff if the existing descriptor supports it.
-- double-sided flag.
-- emission colour and HDR intensity, approved for ED-M08 on 2026-09-15;
-  zero intensity disables emission. This is self-illumination, not a promise of
-  lighting surrounding objects through global illumination.
-- normal scale and occlusion strength may be shown in Advanced when texture
-  refs exist, but texture editing itself is deferred.
-
-### UI Design Philosophy
-
-The material editor should feel like a focused asset editor, not a generic JSON
-form. It borrows from mature editor patterns:
-
-- grouped material parameters.
-- immediate preview where supported.
-- reset/default affordances for scalar fields.
-- primary/advanced/raw disclosure.
-- clear asset identity and descriptor/cook status.
-
-Illustrative ED-M05 editor:
-
-```text
-+--------------------------------------------------------------+
-| Material: Preview Gold                              [save]   |
-| [swatch preview]          asset:///Content/Materials/Gold... |
-| Descriptor: saved   Cooked: stale                    [cook]  |
-+--------------------------------------------------------------+
-| Identity                                                     |
-|   Asset URI      asset:///Content/Materials/Gold...    [copy] |
-|   Asset GUID     0f2d...                               [copy] |
-| PBR Metallic Roughness                                      |
-|   Base Color     R [1.00] G [0.76] B [0.22] A [1.00]        |
-|   Surface        Metallic [1.00] Roughness [0.35]           |
-| > Advanced                                                  |
-|   Alpha          Mode [Opaque v] Cutoff [0.50]              |
-|   Rendering      Double Sided [off]                         |
-+--------------------------------------------------------------+
-```
-
-The UI uses shared editor property controls (`PropertiesExpander` and
-`PropertyCard`) and DroidNet `NumberBox` scalar editors. ED-M05 must not ship
-one-off number boxes or one-off section chrome for this editor.
+Texture authoring, material graphs, custom shaders, additional BRDF lobes and
+emissive global illumination are outside this material surface. Emission adds
+self-illumination to ordinary PBR; it does not select a new Unlit mode or promise
+light on nearby geometry.
 
 ## 6. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
-| `Oxygen.Editor.MaterialEditor` | material document UI, scalar property editor, preview surface composition. |
-| `Oxygen.Managed.Assets` | `MaterialSource`, material asset identity, import primitives, cooked material writer. |
-| `Oxygen.Editor.ContentBrowser` | material create/open entry point and picker UX. |
-| `Oxygen.Editor.ContentPipeline` | import/cook orchestration and descriptor/cooked state. |
-| `Oxygen.Editor.WorldEditor` | geometry assignment command consumes material asset identity. |
-| `Oxygen.Editor.Runtime` | embedded material preview/runtime application where supported. |
+| MaterialEditor | Material documents, property commands, history and swatch UI. |
+| Managed.Assets | Typed immutable material data and canonical source reader/writer. |
+| ContentBrowser | Create/open entry points, asset identity and material picker. |
+| ContentPipeline | Saved-input capture, native cook, provenance and publication. |
+| WorldEditor | Per-instance geometry-slot assignments and explicit repair commands. |
+| Native Data/Cooker/Content/Vortex | Slot inventory, binary formats, loaded materials and actual rendering. |
+| Runtime / Interop | Supported capability transport and lifetime-safe native application. |
+
+No editor feature writes native material/geometry structs or owns another cook
+path. Development qualification depends on these production capabilities; the
+production modules do not depend on qualification code or schemas.
 
 ## 7. Data Contracts
 
-### 7.1 Schema decision
+### 7.1 Canonical schema and migration
 
-The ED-M05 baseline reused the managed `MaterialSource` PBR model. ED-M08's
-approved emission scope extends the canonical engine-schema authoring route;
-it cannot leave the managed model unchanged. Native material descriptors already
-provide `parameters.emissive_factor`. Keep material schema ownership in the
-engine and the managed reader/writer/cook path aligned with it.
+Use the engine-owned material descriptor schema for canonical `*.omat.json`
+authoring. The typed `MaterialSource` is an immutable managed projection of that
+schema, not a second wire format. Remove the former glTF-shaped
+`oxygen.material.v1` authoring route after one-time migration of useful content.
+The reader must not silently accept a retired format.
 
-Specify the colour/intensity representation, linear-colour conversion, finite
-HDR range and native storage precision before implementation. No arbitrary
-display-colour clamp may reduce HDR intensity to `[0,1]`; no unapproved physical
-luminance unit or silently relaxed parity tolerance is implied. Migrate useful
-prior material documents to the canonical model with emission off, then remove
-old-format compatibility paths.
+Keep colour and intensity separately in canonical source; store only their
+compiled RGB product in the native runtime factor. Do not serialize both an
+editable factor and editable colour/intensity with competing authority.
 
-### 7.2 Authoring model
+Migration converts useful old descriptors once, including read-only texture
+references. A prior factor-only emissive RGB can be decomposed as intensity =
+max(R,G,B), colour = RGB/intensity; zero uses colour white and intensity zero.
+Materials without emission use that zero-intensity default. Migration preserves
+representable appearance, reports invalid/out-of-range input, and recooks affected
+content. No old-schema reader, deprecated alias or runtime compatibility branch
+ships alongside the canonical contract.
 
-```csharp
-public sealed class MaterialDocument
-{
-    public Guid DocumentId { get; }
-    public Uri MaterialUri { get; }            // asset:///{Mount}/{Path}.omat.json
-    public MaterialSource Source { get; }      // immutable source snapshot
-    public MaterialAsset Asset { get; }        // identity only; Source is authoritative while editing
-    public bool IsDirty { get; }
-    public DescriptorState DescriptorState { get; }
-    public MaterialCookState CookState { get; }
-}
+### 7.2 Document model and identity
 
-public enum DescriptorState { Saved, Dirty, Missing, Invalid }
-```
+The document contains its material URI, current immutable `MaterialSource`,
+authoring/saved revisions, document-owned history and shared published cook state.
+An asset wrapper supplies identity; any attached source snapshot is not the
+editable authority. Every edit/copy/history path preserves every canonical field.
 
-`MaterialSource` and nested PBR records are immutable in `Oxygen.Managed.Assets`.
-Material edits replace the affected record branch and publish a new document
-snapshot; they do not rely on hidden mutable editor-only state.
+The asset name is the source file stem: `Content/Materials/Gold.omat.json` is
+shown and saved as `Gold`. URI and derived editor GUID are read-only identity
+information. Do not introduce an independently editable descriptor name. Asset
+file rename/reference repair remains the Content Browser's responsibility.
 
-Material asset name policy is option B: the user-facing asset name is the
-material source file stem. `Content/Materials/Gold.omat.json` opens as `Gold`,
-and saves with `MaterialSource.Name == "Gold"`. The Material Editor header
-shows this name; the Identity section shows the material asset URI and an
-editor-side material GUID with copy buttons. The GUID is derived from the
-canonical asset URI for ED-M05 and is not written into `oxygen.material.v1`.
-The editor must not create a second editable descriptor name that can drift from
-Content Browser and filesystem names. A future Content Browser asset rename
-command owns file/URI rename, stable registry identity, and reference repair.
+### 7.3 Field table and numeric contract
 
-`MaterialDocument.Source` is the editable snapshot. `MaterialDocument.Asset`
-exists only to expose identity for assignment/open workflows; its optional
-`MaterialAsset.Source` may be stale and is not updated during scalar edits.
+Paths below belong to the canonical engine-owned authoring schema. Internal
+managed member names may differ; one tested adapter owns the mapping.
 
-`MaterialCookState` and `MaterialCookResult` are owned by
-[content-pipeline.md](./content-pipeline.md). MaterialEditor consumes that
-contract instead of defining a parallel cook-result type.
+| UI field | Canonical source path | Validation and behavior |
+| --- | --- | --- |
+| Base colour / opacity | `parameters.base_color[0..3]` | Finite linear RGB and alpha in [0,1]. Colour picker converts display sRGB at its boundary; alpha is linear coverage. |
+| Metallic | `parameters.metalness` | Finite [0,1]. |
+| Roughness | `parameters.roughness` | Finite [0,1]. |
+| Surface mode | `alpha_mode` | Opaque, Mask or Blend; explicit enum mapping. |
+| Alpha cutoff | `parameters.alpha_cutoff` | Finite [0,1]; shown only for Mask. |
+| Double Sided | `parameters.double_sided` | Boolean; normal PBR and alpha-mode rules remain active. |
+| Emission colour | `parameters.emissive_color[0..2]` | Finite linear RGB in [0,1]; retained when intensity is zero. |
+| Emission intensity | `parameters.emissive_intensity` | Finite float32 relative multiplier in [0,65504]; default 0. No physical luminance unit is asserted. |
+| Normal scale | `parameters.normal_scale` | Finite >=0, only when the preserved normal input exists and is effective. |
+| Occlusion strength | `parameters.ambient_occlusion` | Finite [0,1], only when the preserved occlusion input exists and is effective. |
+| Texture identities | Canonical texture-reference fields | Read-only; preserve on all unrelated edits, Save and migration. |
+| Name, URI, GUID, schema | Identity/schema metadata | Read-only with appropriate copy affordances. |
 
-### 7.3 Field table (V0.1 PBR)
+New materials retain the existing editor creation defaults: white base colour
+with opacity 1, metallic 0, roughness 0.5, Opaque, alpha cutoff 0.5, single-sided
+and no texture references. Emission starts with white colour and intensity 0;
+conditional normal scale and occlusion strength start at 1. The canonical writer
+emits these scalar values explicitly. Native descriptor defaults are not a
+substitute: its current roughness default is 1, so omission would change newly
+authored appearance. Migration preserves existing values instead of applying
+creation defaults to older materials.
 
-| UI Field | `MaterialSource` path | Type | Range / Validation | Tier |
-| --- | --- | --- | --- | --- |
-| Asset URI | `MaterialUri` | `Uri` | read-only with copy affordance | Primary |
-| Asset GUID | derived editor identity | `Guid` | read-only with copy affordance; not serialized to material JSON | Primary |
-| Name | `Name` | `string` | derived from `*.omat.json` file stem; shown in header, not edited as a scalar field | Primary |
-| Base Color R | `PbrMetallicRoughness.BaseColorR` | `float` | `[0,1]`, clamped on commit | Primary |
-| Base Color G | `PbrMetallicRoughness.BaseColorG` | `float` | `[0,1]` | Primary |
-| Base Color B | `PbrMetallicRoughness.BaseColorB` | `float` | `[0,1]` | Primary |
-| Base Color A | `PbrMetallicRoughness.BaseColorA` | `float` | `[0,1]` | Primary |
-| Metallic | `PbrMetallicRoughness.MetallicFactor` | `float` | `[0,1]` | Primary |
-| Roughness | `PbrMetallicRoughness.RoughnessFactor` | `float` | `[0,1]` | Primary |
-| Emission colour | Canonical emission colour; managed member pending implementation | RGB colour | Defined UI-to-linear conversion; contributes to native `parameters.emissive_factor` | Primary |
-| Emission intensity | Canonical emission intensity; managed member pending implementation | scalar HDR intensity | Finite, nonnegative, zero means off; native representability checked | Primary |
-| Alpha Mode | `AlphaMode` | enum `Opaque` / `Mask` / `Blend` | enum | Advanced |
-| Alpha Cutoff | `AlphaCutoff` | `float` | `[0,1]`, enabled iff `AlphaMode == Mask` | Advanced |
-| Double Sided | `DoubleSided` | `bool` | — | Advanced |
-| Normal Scale | `NormalTexture.Scale` | `float` | `>= 0`, enabled iff `NormalTexture` exists | Advanced |
-| Occlusion Strength | `OcclusionTexture.Strength` | `float` | `[0,1]`, enabled iff `OcclusionTexture` exists | Advanced |
-| Texture refs (if any) | `PbrMetallicRoughness.BaseColorTexture`, `PbrMetallicRoughness.MetallicRoughnessTexture`, `NormalTexture`, `OcclusionTexture` | refs | **read-only** in V0.1 | Raw |
-| Schema / Type | `Schema`, `Type` | string | read-only | Raw |
+Reject non-finite and out-of-range entered values without changing source or
+history. Sliders may constrain their own interaction range; they do not authorize
+silent file/cooker clamps. HDR intensity is not limited to [0,1]. The 65504 limit
+provides a finite HDR working range compatible with common binary16 render
+intermediates; it does not authorize binary16 storage of the authored factor.
 
-Clamp policy: out-of-range numeric input is **clamped on commit** and the
-committed value is shown in the field; clamping does not produce a warning
-unless the original input was non-numeric (then `Rejected`).
+For a display sRGB component s, use s/12.92 when s <= 0.04045, otherwise
+((s+0.055)/1.055)^2.4. Persist float32 linear colour. Do not repeatedly convert
+unchanged values or apply display gamma during cooking.
 
-#### ED-M08 emission completion contract
+Cook `emissive_factor = emissive_color * emissive_intensity` once in float32.
+The native `MaterialAssetDesc` stores all three factor channels as float32;
+update its engine-owned version and serializers/readers, schema compatibility
+checks and producers, then recook all affected material content. The current
+binary16 factor is insufficient: 9.7 becomes 9.703125, exceeding the unchanged
+1e-4 comparison bound. Do not quantize the expected source to binary16 or loosen
+semantic thresholds to conceal that loss.
 
-Emission remains a scalar material feature: no texture authoring, new Unlit
-mode or emissive GI is added by this decision. Ordinary PBR lighting and
-Opaque/Mask/Blend behavior continue to apply. Bloom can form a halo when enabled;
-exposure and tone mapping affect the final displayed brightness.
+Save/reopen compares colour and intensity independently. Native material
+observations compare the independently computed float32 RGB factor. Multiple
+source pairs can produce the same factor, so native observations do not pretend
+to reconstruct the source colour/intensity split. Include hand-authored golden
+cases for sRGB conversion, zero intensity, HDR products and the 9.7 precision
+case. Shader accumulation and output must remain finite at the chosen range;
+HDR values do not guarantee unclipped final display pixels.
 
-Wire emission through edit-state copying, commands, Undo/Redo, atomic Save,
-reopen, native cooking, swatch/material preview and published scene rendering.
-Qualification requires zero/nonzero/HDR values, colour changes, alpha modes,
-exposure and bloom interactions in the native engine first and then the editor.
-The user approved the scope; these implementation and validation gates remain
-open in ED-M08.
+### 7.4 Material asset identity
 
-### 7.4 Asset identity in the scene
+Assignments contain material asset URIs, never physical cooked paths. Resolve the
+winning project/library identity through the normal catalog/provenance rules.
+A missing material remains an authored reference with a visible diagnostic.
+A scene instance assignment never changes the shared material or mesh asset.
 
-Geometry material assignment persists as
-`AssetReference<MaterialAsset>` (URI + asset). The scene round-trip stores
-only the URI; the catalog rehydrates the asset on load.
+### 7.5 Existing geometry slots and repair
+
+Every existing mesh material slot is assignable. The native geometry inventory
+owns opaque 128-bit `MaterialSlotId` values (canonical UUID text in JSON), layout
+revision, labels, mesh defaults and per-LOD/submesh bindings. See
+[content-pipeline section 20](content-pipeline.md#20-canonical-material-slot-identity-and-reimport)
+for the complete identity, witness and publication contract.
+
+A scene override is keyed by geometry URI and SlotId, with its observed layout
+revision for stale-operation checks. Slot labels, list order and runtime indices
+are presentation/transport facts, not authored identity. Clearing removes that
+slot's override and restores its mesh-assigned default. It does not assign an
+unrelated engine material or clear another slot. Explicitly choosing the engine
+default remains an ordinary material assignment.
+
+Unproven reimport continuity retains unresolved overrides, their material URIs
+and prior slot context. The inspector offers Reassign to an existing slot or
+Clear; each is one scene command with Undo/Redo. Do not guess a name/index match.
+Unresolved overrides block cooking and qualification of affected scenes, while
+unrelated scenes remain usable. Known missing material resources remain distinct
+from missing slot identity. Transient geometry loading is not a structural slot
+failure and must recover without restarting the editor.
 
 ## 8. Commands, Services, Or Adapters
 
-### 8.1 `IMaterialDocumentService`
+### 8.1 Material commands
 
-```csharp
-public interface IMaterialDocumentService
-{
-    Task<MaterialDocument> CreateAsync(Uri targetUri, CancellationToken ct);
-    Task<MaterialDocument> OpenAsync(Uri materialUri, CancellationToken ct);
-    Task<MaterialEditResult> EditScalarAsync(Guid documentId, MaterialFieldEdit edit, CancellationToken ct);
-    Task<MaterialSaveResult> SaveAsync(Guid documentId, CancellationToken ct);
-    Task<MaterialCookResult> CookAsync(Guid documentId, CancellationToken ct);
-    Task CloseAsync(Guid documentId, bool discard, CancellationToken ct);
-}
-
-public readonly record struct MaterialFieldEdit(
-    string FieldKey,            // e.g. "PbrMetallicRoughness.MetallicFactor"
-    object NewValue);
-
-public sealed record MaterialEditResult(bool Succeeded, OperationResultId? ResultId);
-public sealed record MaterialSaveResult(bool Succeeded, OperationResultId? ResultId);
-```
-
-All mutating operations follow the ED-M03 command pattern: validate → mutate
-→ mark dirty/record undo → diagnostics. `SaveAsync` is the operation that
-persists the descriptor. Edits feed an `EditSessionToken` for sliders to
-coalesce one undo entry per drag.
+Extend the existing `IMaterialDocumentService` and shared property pipeline.
+Create/open/edit/save/cook/close use document lifetimes and normal results.
+A property edit validates, replaces the immutable branch, advances authoring
+revision and records one history entry per committed gesture. Save alone persists
+source. Material cooking delegates to the shared pipeline.
 
 ### 8.2 Assignment to geometry
 
-Assignment uses the existing scene command from
-[property-inspector.md](./property-inspector.md):
+The scene command takes explicit targets `(NodeId, GeometryUri, SlotId,
+ExpectedLayoutRevision)` plus the selected material URI, or null to clear.
+Validate all targets against the current inventories before mutation. A stale
+layout or incompatible multi-selection rejects the command atomically and names
+the affected target. Never apply a slot merely because it has the same visible
+row number on another selected mesh.
 
-```csharp
-Task<SceneCommandResult> EditMaterialSlotAsync(
-    SceneDocumentCommandContext ctx,
-    IReadOnlyList<Guid> nodeIds,
-    int slotIndex,
-    Uri? materialUri,
-    EditSessionToken session);
-```
+The picker supplies material identity; the scene command owns source mutation,
+dirty state, history and live sync. All existing slots, including nonzero slots,
+use the same native binding and clear route. Unsupported/missing native behavior
+is a failed capability/qualification gate, not the supported V0.1 outcome.
 
-The material picker (§9) returns a `MaterialPickerResult` whose `Uri` is
-passed to `EditMaterialSlotAsync`. The scene command resolves it to
-`AssetReference<MaterialAsset>` via `IAssetCatalog`. Single-node assignment
-passes a one-item `nodeIds` list; multi-selection assignment writes the same
-URI to every selected `GeometryComponent` that owns the slot. Live sync of the
-slot remains `Unsupported` per [live-engine-sync.md](./live-engine-sync.md)
-§8.2 in V0.1.
+### 8.3 Operation kinds
 
-### 8.3 Operation kinds (for diagnostics)
-
-`Material.Create`, `Material.Open`, `Material.EditScalar`, `Material.Save`,
-`Material.Cook`, `Material.AssignToGeometry`, `Material.Preview`.
+Reuse `Material.Create`, `Material.Open`, `Material.EditScalar`, `Material.Save`,
+`Material.Cook`, `Material.AssignToGeometry` and scene slot-edit operations.
+Slot repair is an explicit scene edit with target and old/new identity evidence.
 
 ## 9. UI Surfaces
 
-ED-M05 surfaces:
+Use the existing Material Editor document, shared property cards/number boxes,
+Content Browser create/open flow and material picker. Present one compact shared
+cook-state chip near the name, current inline field diagnostics and an
+approximate swatch. Routine success does not create a banner.
 
-- Content Browser material create/open command.
-- material asset tile/list row with clear visual identity and state.
-- material picker used by Geometry material slot.
-- Material Editor document tab/pane.
-- scalar property inspector.
-- preview surface or preview swatch where runtime preview is not yet stable.
-- descriptor/cook state strip.
-- output/result details for failed create/save/cook/preview.
+The status feed includes automatic, asset, folder and project cooks. Reopening or
+reactivating a material must not replace publication facts with its last explicit
+cook result. Closing detaches document subscriptions without cancelling unrelated
+shared cooking.
 
-M07B presents cook status as one compact chip beside the material name, using
-WinUI semantic colors and a tooltip for the next action and prior-output facts.
-It observes the shared browser/picker feed, including automatic, folder and
-project cooks. Opening or switching back to a material does not
-replace current publication facts with the document's last explicit cook result.
-Unsaved edits remain visible; progress does not alter values, history or save
-errors. Routine success adds no banner or status row. Closing the document
-detaches its status subscription and pending read without cancelling shared work.
+The swatch previews current base/PBR/emission values with a fixed documented
+viewing transform and is labelled approximate. It is not native rendering or HDR
+parity evidence. Scene instances continue to show published content until Save
+and successful publication; pending state explains this relationship.
 
-Material picker:
-
-```text
-+-----------------------------------------------+
-| Pick Material                           search |
-+-----------------------------------------------+
-| [swatch] Default       Engine/Generated        |
-| [swatch] Preview Gold  Content/Materials       |
-| [warn ] Missing Mat    Missing reference       |
-+-----------------------------------------------+
-```
-
-`Create New` flow:
-
-1. Opens a compact prompt for material name and target folder.
-2. Resolves the target folder using the material row in
-   `project-layout-and-templates.md` default creation target table. Project
-   root, `Config`, `Packages`, and derived roots resolve to
-   `/Content/Materials`; an explicit authored mount root resolves to
-   `/<Mount>/Materials`.
-3. Creates `{Name}.omat.json` via `IMaterialDocumentService.CreateAsync`.
-4. Opens the new material document. Assignment to a geometry slot is a separate
-   explicit picker action unless the picker was launched from a slot and the
-   user confirms assigning the newly created material.
+Create New chooses a name and target using project-layout-and-templates rules,
+writes canonical source and opens the document. Assignment is a separate explicit
+slot action. Each existing slot row shows its identity/label, default, override
+and resolution state; obsolete slot context is shown only for explicit repair.
+Slot topology creation/removal is not part of this editor.
 
 ## 10. Persistence And Round Trip
 
-Requirements:
-
-- material create writes a valid Oxygen `*.omat.json` descriptor unless an
-  explicit schema decision above changes that.
-- scalar edits update descriptor data, not hidden editor state.
-- save/reopen preserves all supported scalar fields.
-- raw/imported metadata that ED-M05 does not edit is preserved where practical.
-- assignment to geometry persists as `AssetReference<MaterialAsset>`.
+- Persist canonical source fields through the existing atomic file store.
+- Preserve linear colour/HDR values, alpha semantics and read-only texture refs.
+- Persist geometry/SlotId/material identities and unresolved repair context.
+- Do not persist runtime slot indices, loaded asset pointers or cooked paths.
+- Migrate useful pre-V0.1 data once and reject retired schemas thereafter.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
 ### 11.1 Save
 
-`SaveAsync` writes `*.omat.json` atomically (temp file + rename). On
-failure: `MaterialSaveResult { Succeeded = false }` and diagnostic in
-`Document` domain (`OXE.DOCUMENT.MATERIAL.SaveFailed`). Document remains
-dirty.
+Serialize document writes, capture the saved revision under the authoring lock,
+then release that lock during I/O. Atomic replacement and revision acknowledgement
+are separate guarantees. Newer edits remain dirty; failure leaves the prior file.
+Save schedules incremental work only after successful persistence and completes
+independently of cooking.
 
 ### 11.2 Cook
 
-`CookAsync` delegates to the public content-pipeline orchestration service.
-That service uses `Oxygen.Managed.Assets` primitives (`MaterialSourceImporter` and
-`CookedMaterialWriter`) to produce the cooked `.omat`; `Oxygen.Editor.MaterialEditor`
-does not own cook primitive execution. If the descriptor is dirty, cook is
-**rejected** with `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty` (user must
-save first). On success the result transitions `MaterialCookState` to `Cooked`. The
-cooked output path follows existing project cooked-root layout — this LLD does
-not invent a new path scheme. For the default Content mount:
+`MaterialCookService.CookMaterialAsync` routes to
+`IContentPipelineService.CookAssetAsync`. Native material-descriptor cooking owns
+the binary output. Dirty participating documents require explicit Save; automatic
+work shows Needs save. The fixed layout remains:
 
 ```text
 source: <ProjectRoot>/Content/Materials/Gold.omat.json
@@ -417,152 +297,86 @@ cooked: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
 index:  <ProjectRoot>/.cooked/Content/container.index.bin
 ```
 
+Only validated, journaled publication makes a material current. MaterialEditor
+never writes/remounts a cooked root itself. Report the actual captured revision,
+publication and mount state, including offline NotMounted.
+
 ### 11.3 Preview
 
-ED-M05 does not introduce a managed material preview API. Preview is:
+Assignment queues identity-based runtime intent. Native asset completion and
+geometry-layout acceptance remain generation checked. A transient unavailable
+geometry/material produces a visible pending/failure state, retains authored
+intent and can recover. Structural missing slots require repair, not retry loops.
 
-1. **In the material document**: a deterministic CPU-rendered swatch driven
-   by the scalar PBR values (no engine roundtrip). Shows base color, alpha,
-   and a fixed-lighting ball thumbnail.
-2. **In the scene**: the slot assignment is recorded in scene data and the
-   geometry material slot sync maps the descriptor URI to the cooked `.omat`
-   virtual path before queuing the runtime material override. The editor does
-   not force a cook from assignment in ED-M05. If the material is not published/mounted,
-   authoring remains valid and the scene shows a pending/missing-material state
-   with a visible operation diagnostic; logs alone are insufficient.
-
-In ED-M07B, successful Save and assignment of a material needed by preview submit
-incremental requests under `content-cooking-workflows.md`. Explicit Cook remains
-available. The material editor never publishes or remounts directly; project-level
-publication is owned by `content-pipeline.md`.
+Successful material publication refreshes every current instance of that material
+without restarting. Unsaved material edits affect the swatch and stale-state
+presentation only. Asset demand schedules the saved dependency through the shared
+coordinator; it never publishes an unsaved material.
 
 ## 12. Operation Results And Diagnostics
 
-### 12.1 Failure domain
+Use `MaterialAuthoring` for field/create errors, `Document` for persistence,
+`ContentPipeline`/`AssetCook` for cooking/publication, `AssetIdentity` for missing
+assets and `LiveSync` for native application. Preserve native technical codes.
+Diagnostics identify document/project lifetime, material URI and, for assignment,
+node, geometry URI, SlotId, expected/actual layout revision and previous label.
 
-ED-M05 **adds** `MaterialAuthoring` to `FailureDomain`. Without it, scalar
-field validation collides with `SceneAuthoring` (which is owned by scene
-commands) and dilutes diagnostic filtering.
-
-### 12.2 Failure mapping
-
-| Failure | Domain | Code |
-| --- | --- | --- |
-| Numeric out of range | (clamped, no result) | — |
-| Non-numeric input | `MaterialAuthoring` | `OXE.MATERIAL.Field.Rejected` |
-| Empty / over-long name in Create New prompt | `MaterialAuthoring` | `OXE.MATERIAL.Name.Invalid` |
-| Descriptor-only name edit attempt | `MaterialAuthoring` | `OXE.MATERIAL.Field.Rejected` |
-| Save IO failure | `Document` | `OXE.DOCUMENT.MATERIAL.SaveFailed` |
-| Cook with dirty descriptor | `ContentPipeline` | `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty` |
-| Cook IO / importer failure | `ContentPipeline` | `OXE.CONTENTPIPELINE.MATERIAL.CookFailed` |
-| Picker selected URI not in catalog | `AssetIdentity` | `OXE.ASSETID.MATERIAL.Missing` |
-| Picker selected URI not yet cooked | `AssetIdentity` | `OXE.ASSETID.MATERIAL.NotCooked` (warning only) |
-| Slot live preview rejected/failed | `LiveSync` | `OXE.LIVESYNC.MATERIAL.Rejected` / `OXE.LIVESYNC.MATERIAL.Failed` |
-
-`AffectedScope` always carries `AssetVirtualPath` (the material URI) for any
-material-scoped diagnostic.
+Distinguish invalid input, Needs save, missing material, loading geometry,
+missing/stale slot layout, rejected native application, cook failure and publish
+failure. Never report a queued command as a loaded material or displayed frame.
 
 ## 13. Dependency Rules
 
-Allowed:
-
-- MaterialEditor depends on `Oxygen.Managed.Assets` material contracts.
-- MaterialEditor depends on ContentBrowser picker contracts.
-- MaterialEditor invokes ContentPipeline through public orchestration services.
-
-Forbidden:
-
-- MaterialEditor must not own reusable cook primitives.
-- MaterialEditor must not call native interop directly.
-- Geometry inspector must not implement material asset editing.
-- Material asset references must not be stored as cooked filesystem paths.
+MaterialEditor uses managed material contracts and public ContentPipeline/picker
+services. Geometry UI consumes slot inventory through supported content APIs.
+It does not decode native files or implement material asset editing. No editor
+feature calls native facades directly or creates a second history/save/cook path.
+Production modules have no dependency on development parity schemas or drivers.
 
 ## 14. Validation Gates
 
-1. Create → Save → Reopen of a material descriptor preserves all V0.1 PBR
-   fields and texture refs (read-only) bit-for-bit.
-2. Editing Metallic from 0 → 1 with 30 slider samples produces 1 undo entry
-   and one dirty material-document update; the descriptor is written once when
-   the user saves.
-3. Cook with dirty descriptor returns `Rejected` with
-   `OXE.CONTENTPIPELINE.MATERIAL.DescriptorDirty`. After save, cook succeeds
-   and `MaterialCookState` becomes `Cooked`.
-4. Geometry assignment via picker writes the URI through
-   `EditMaterialSlotAsync`, persists round-trip, and queues live material
-   override sync using the cooked `.omat` virtual path without blocking the
-   authoring edit.
-5. A material URI removed from the catalog after assignment surfaces as
-   `OXE.ASSETID.MATERIAL.Missing` on next scene open; the slot keeps the
-   URI text and shows a missing badge.
-6. Texture-ref fields are visibly read-only and do not produce edit commands.
-7. No code path in `Oxygen.Editor.MaterialEditor` calls
-   `OxygenWorld`, `IEngineService`, or `ISceneEngineSync` directly.
+1. Every canonical scalar and read-only texture identity survives Save/reopen.
+2. Emission zero/nonzero/HDR and 9.7 factors satisfy unchanged 1e-4 semantics;
+   invalid values fail without source/history mutation.
+3. Colour/slider gestures, cancellation, no-op, Undo/Redo and close/reopen preserve
+   document history and newer unsaved revisions.
+4. Every existing slot supports assign/clear, nonzero-slot editing, multiple
+   instances, stable layout reload and missing-material recovery.
+5. Slot reimport tests cover exact unchanged layout, parameter/texture-only edits,
+   persistent source IDs, unproven reorder/removal, explicit repair and rollback.
+6. Native opaque/masked/blended emission works with lighting, exposure and bloom
+   before real editor Save/cook/assignment/refresh validation.
+7. Pending and failed publication never masquerade as current scene rendering.
+8. Normal Debug/Release packages contain no development qualification dependency.
 
-## 15. Closed V0.1 Decisions
+## 15. Qualification And Historical Evidence
 
-Keep the deterministic CPU swatch, visibly labeled approximate. Runtime material
-updates require successful publication of saved content under the accepted D1
-trigger policy. Existing texture references are
-preserved read-only; first-class texture pickers/authoring are excluded. Reuse
-the engine material descriptor schema; no parallel editor material schema is
-introduced. Required missing native field support is an implementation task in
-ED-M07B, never an unresolved choice or permission to omit a V0.1 field.
+Current requirements are above. Historical validation stays at its recorded
+scope in [ED-M07A field workflows](../validation/ED-M07A-field-workflows.md),
+[ED-M07B closeout](../validation/ED-M07B-closeout-audit.md) and
+[material sidedness/recovery](../validation/material-sidedness-and-recovery.md).
+Those reports do not establish emission, all-slot identity or new-format parity.
+Implementation/evidence completion is recorded in the milestone status ledger.
 
-## 16. V0.1 Property, Save, And Preview Contract
+## 16. Shared Property, Save, And Preview Contract
 
-[property-pipeline.md](./property-pipeline.md) owns shared property identity,
-validation, apply/history and edit-session mechanics. Material service entry
-points implement that contract; typed scalar record adapters cannot create a
-second history or persistence path. Scene-specific target logic stays outside
-Schemas.
+The property pipeline owns descriptor identity, validation, gestures and history
+mechanics; the material document owns its revisions and source. Scene targets
+stay outside Schemas. Save, authoring, published content and current runtime
+readiness are distinct states with one owner each.
 
-[documents-and-commands.md section 16](./documents-and-commands.md#16-v01-authoring-integrity-qualification)
-applies to material saves: coherent captured revision, serialized writes, newer
-edits remain dirty, atomic replacement and conflict handling. The source model
-is never replaced by an older successful save. These gaps are qualified in
-ED-M07A, independently of the earlier ED-M05 evidence and issue-fix tests.
+## 17. Document History
 
-The material swatch updates immediately and is labeled as an approximation.
-The embedded scene uses the last validated published material. Editing the
-source marks its scene use stale. Successful explicit Save schedules incremental
-cooking; session pause and explicit Cook remain available.
-After explicit save and successful publication, all instances using that material
-identity refresh without restarting the editor. Assigning an unpublished material
-preserves identity and submits a saved-dependency cook request. Pending/missing
-runtime content stays visible with progress and explicit Cook available; it must
-not pretend the current source is rendered. Offline publication records NotMounted and converges on
-activation. Source saves remain explicit and complete independently of cooking.
+Capture before/after snapshots under the material authoring lock and replay them
+through the same canonical source-commit path. Advance revisions before async
+notifications. One committed scalar/colour gesture creates one history entry;
+rejected, cancelled and unchanged edits create none. Document switches/close
+cannot redirect history commands to another material lifetime.
 
-The fixed-root publication transaction, including material-only cook, is owned
-by ContentPipeline section 16 and qualified in ED-M07B. All editable V0.1 scalar
-fields and flags must load/render with their saved values. Read-only existing
-texture references are preserved but not claimed as newly qualified texture
-creation/import. ED-M08 proves the actual runtime material, not the CPU swatch.
+## 18. Shared Atomic Save
 
-## 17. Document History (#9)
-
-ED-M07A.8 adds material-document-owned TimeMachine history. Existing property
-validation, source replacement and dirty/cooked-stale updates do not create undo
-entries by themselves. Capture descriptor-addressed before/after snapshots under
-the material authoring lock, apply undo/redo through the same source commit path,
-and advance authoring revisions before asynchronous notifications. Preserve the
-landed #4 save acknowledgment and serialization.
-
-Active material commands target that document lifetime's history. Scalar and
-multi-channel color gestures use the shared session controller, with one entry
-per committed gesture, no entry for rejected/cancelled/unchanged edits, and exact
-before-value restoration. Source edits and undo/redo update dirty and cook-stale
-state coherently relative to the saved/published revisions. Switching/closing a
-document cannot target another document's history. Tests cover scalar/color
-changes, drag/wheel/color sessions, save/undo/redo, no-op/rejection/cancel and
-history isolation through the material service and UI command routing.
-
-## 18. Shared Atomic Save (#7)
-
-Material WriteBytesAsync already uses a unique same-directory temporary path and
-File.Move replacement. ED-M07A.5 factors that mechanism into the shared atomic
-storage primitive also used by scene saves, and closes flush/cleanup/collision/
-replacement-failure guarantees. Retain the #4 immutable snapshot and newer-edits-
-remain-dirty behavior. Atomic replacement and revision acknowledgment are separate
-requirements; neither substitutes for the other. Guarantees cover process
-interruption and reported I/O failure, not universal hardware power-loss durability.
+Scene and material persistence use the same atomic storage primitive: unique
+same-directory temporary files, complete writes/flush, replacement, cleanup and
+conflict checks. The write-result acknowledgement cannot overwrite a newer source
+snapshot. These guarantees cover process interruption and reported I/O failure;
+they do not assert universal hardware power-loss durability.

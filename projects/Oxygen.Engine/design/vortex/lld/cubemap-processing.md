@@ -3,6 +3,16 @@
 **Milestone:** VTX-M08
 **Status:** `validated_reference`
 
+## Current V0.1 extension
+
+[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) is the current
+implementation contract for captured sky, complete diffuse/specular products,
+readiness and Stage13 consumption. The closed VTX-M08 baseline below retains its
+historical evidence scope. Its captured/specular deferrals, diffuse-only readiness
+and Stage12 bridge are superseded by that extension; they are not accepted V0.1
+fallbacks. Existing cube orientation, HDR range scaling and SH packing remain
+inputs to the current contract.
+
 This LLD defines the VTX-M08 static specified-cubemap processing path used by
 diffuse SkyLight lighting. Visual skyboxes may share the same authored cubemap
 asset and the same resource-resolution path, but they do not share the

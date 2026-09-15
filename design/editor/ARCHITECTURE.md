@@ -544,8 +544,14 @@ flowchart LR
     Cooked --> Runtime --> Load --> Instantiate --> Compare
 ```
 
-Standalone validation proves the editor is producing real Oxygen runtime data,
-not merely a live editor preview.
+Standalone qualification compares independently observed native and embedded
+state/images with expectations from verified saved input. Its protocols,
+fixtures, capture instrumentation, process coordination and comparisons reside
+in opt-in development targets. Normal Debug/Release editor, RenderScene and SDK
+packages contain no qualification workflow. Production data/loading/rendering
+fixes stay in their owning modules; the private harness uses the same algorithms.
+The [ED-M08 plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) maps the
+canonical authoring, runtime and qualification contracts to implementation.
 
 ## 9. Data and Persistence Architecture
 
@@ -1181,10 +1187,15 @@ document, content-pipeline, runtime, and standalone LLDs implement these rules:
    completion cannot replace a later scene, project, or cook publication.
 5. One scene is live at a time. Activation synchronizes its current snapshot;
    old queues/handles cannot cross scene or document lifetimes.
-6. Editor/runtime/cooker/schema artifacts form one matched build. Incompatibility
-   is detected before native calls; safe source authoring remains accessible.
-   Standalone proof identifies the exact published project output and never
-   relies on developer-local example content or hidden restored settings.
+6. Each capability verifies its actual dependencies before native use: runtime
+   checks the SDK inputs recorded by Interop, while cooking records/verifies its
+   own producer/schema inventory per product. Safe source authoring remains
+   accessible when a native capability is unavailable. Qualification uses a
+   separately matched private runtime/Interop/capture bundle and preserves
+   production producer proofs; it does not require every editor assembly or past
+   cook to come from one build/revision. There is no whole-editor qualification
+   gate in normal startup. Standalone proof identifies exact published output
+   and never relies on developer-local examples or hidden restored settings.
 
 These are design guarantees, not claims of implementation. Their evidence and
 remaining work are recorded in IMPLEMENTATION_STATUS and owning milestone plans.

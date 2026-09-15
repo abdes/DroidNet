@@ -167,8 +167,13 @@ Schemas depends on JSON-schema validation and shared non-UI primitives. Feature
 owners supply target adapters; Schemas cannot depend on feature implementations.
 Engine schemas and sibling overlays ship with the matched editor build.
 `*.editor.schema.json` is excluded from native embedding. Overlay-only UI edits
-do not require engine code changes. Runtime/cooker/schema compatibility follows
-the PRD qualification manifest, not arbitrary files from another installation.
+do not require engine code changes. Runtime/cooker/schema compatibility verifies
+each capability's actual dependency inventory: Interop's recorded SDK inputs for
+runtime use, and native producer/schema proofs for cooking. The
+[runtime compatibility contract](runtime-integration.md#17-native-compatibility-and-publication-boundary)
+owns those ordinary checks. Development qualification uses its separately matched
+private runtime/Interop/capture bundle; it adds no whole-editor qualification
+manifest or prerequisite to normal startup, property editing, Save or Cook.
 
 ## 14. Validation Gates
 

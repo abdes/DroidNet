@@ -15,6 +15,9 @@
 
 namespace oxygen::scene {
 
+// TODO(post-v0.1, EV01-ATM-COUNT): More than two atmosphere contributors need
+// coordinated scene, GPU payload, LUT and shader changes. Keep Primary/Secondary.
+// Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-atm-count
 enum class AtmosphereLightSlot : std::uint8_t {
   kNone,
   kPrimary,
@@ -30,6 +33,9 @@ enum class AtmosphereLightSlot : std::uint8_t {
  The component stores authored properties and caches a pointer to the owning
  node's TransformComponent via the Composition dependency mechanism.
 */
+// TODO(post-v0.1, EV01-CELESTIAL-MOTION): Celestial orbit/calendar controllers
+// should drive node transforms; the light resolver is not an orbital simulator.
+// Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-celestial-motion
 class DirectionalLight final : public Component {
   OXYGEN_COMPONENT(DirectionalLight)
   OXYGEN_COMPONENT_REQUIRES(detail::TransformComponent)
@@ -58,9 +64,9 @@ public:
 
   //! Sets the light source angle in radians.
   //!
-  //! Semantics match UE's directional-light Source Angle: this is the full
-  //! angular diameter, not the half-apex angle used internally by the
-  //! atmosphere sun-disk shader math.
+  //! This is the full angular diameter, not the half-apex angle used internally
+  //! by atmosphere disk shading. It does not control the current conventional
+  //! shadow filter or finite-source surface highlights.
   auto SetAngularSizeRadians(const float angular_size_radians) noexcept -> void
   {
     angular_size_radians_ = angular_size_radians;
@@ -171,8 +177,10 @@ private:
 
   //! Full source angle / angular diameter of the light source in radians.
   //! Scale: 0 to pi (radians).
-  //! Variation: Small changes (e.g. 0.01) affect shadow softness and specular
-  //! highlights.
+  //! Variation: Changes the analytic atmosphere disk's apparent diameter.
+  // TODO(post-v0.1, EV01-LIGHT-FINITE-SOURCE): Add finite-source surface shading
+  // and variable shadow softness under an explicit renderer contract.
+  // Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-light-finite-source
   float angular_size_radians_ = 0.0F;
 
   //! Illuminance in lux (lm/m^2).

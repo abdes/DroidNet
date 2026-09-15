@@ -29,18 +29,21 @@ gap.
 | `blocked` | Required design, dependency, or proof surface is missing. |
 | `future` | Explicitly deferred beyond the production-complete desktop deferred baseline. |
 
-## 3. Current Next Step
+## 3. Current next step
 
-**Next milestone:** `VTX-FUTURE - reserved post-baseline family selection`
+**Implementation package:** `ED-M08 — V0.1 canonical authoring and rendering`.
+**Status:** `planned`; design package ready, implementation and rendered gates open.
 
-**Why:** `VTX-M08` is validated. The production-complete desktop deferred
-baseline plus the first cubemap-backed skybox/static SkyLight post-baseline
-family are closed at the current Vortex proof boundary. The next work item must
-be selected from approved future families and promoted with its own detailed
-plan, LLD updates, validation gates, and status edits.
+The [cross-engine/editor plan](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md)
+defines native implementation and native visual validation before editor work.
+The engine [rendering contract](plan/editor-v01-rendering-contract.md) and
+[captured-sky IBL contract](plan/editor-v01-captured-sky-ibl.md) define this
+extension. The editor ledger owns its slice-by-slice progress; this ledger
+records the native capability boundary without duplicating its schedule.
 
-**Active work package:** None selected. The project is at a validated M08
-boundary with only approved future gaps remaining in this ledger.
+VTX-M08 remains validated at its static diffuse-only scope. ED-M08 requires new
+proof for its formats, directional/visibility/shadow behavior, captured sky and
+specular IBL, camera framing, grading, primitives and material contract.
 
 **Latest closed plan:** `design/vortex/plan/VTX-M08-skybox-static-skylight.md`.
 Validated M08 LLD references are `design/vortex/lld/cubemap-processing.md` and
@@ -56,6 +59,7 @@ Validated M08 LLD references are `design/vortex/lld/cubemap-processing.md` and
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |
 | --- | --- | --- | --- | --- |
+| ED-M08 native extension | V0.1 canonical authoring and rendering | `planned` | Final rendering/IBL contracts, source-local deferred annotations and editor execution plan. | Native implementation, focused tests and visual proof outside the editor, followed by integrated editor qualification. |
 | VTX-M00 | Planning and status truth surface | `validated` | `PLAN.md` was rewritten as a milestone-first plan; this milestone/status ledger exists; restricted doc scans and `git diff --check` passed on 2026-04-25. | No open planning-status gap. |
 | VTX-M01 | Renderer Core and SceneRenderer baseline | `validated` | Vortex module, Renderer Core, publication, upload/resource substrate, SceneRenderer shell, SceneTextures, non-runtime facades, resolve/cleanup, and related tests are present and freshly validated. Build proof passed `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.SceneRendererShell.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.RenderContextMaterializer.Tests Oxygen.Vortex.RendererFacadePresets.Tests Oxygen.Vortex.RenderGraphHarnessFacade.Tests Oxygen.Vortex.SinglePassHarnessFacade.Tests Oxygen.Vortex.UploadCoordinator.Tests Oxygen.Vortex.ViewConstantsManager.Tests oxygen-examples-vortexbasic --parallel 4`. Focused CTest passed the corresponding Vortex substrate/facade suites plus `Oxygen.Vortex.LinkTest`. Runtime proof `tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m01-m03-closeout\vortexbasic-foundation -Frame 3 -RunFrames 6 -Fps 10 -BuildJobs 4` passed overall with runtime exit 0, final present nonzero, CDB/debug-layer `overall_verdict=pass`, no D3D12/DXGI errors, and no blocking warnings. | No open VTX-M01 closure gap. |
 | VTX-M02 | Deferred core visual path | `validated` | InitViews, depth prepass, generic Screen HZB, base pass/GBuffer/velocity, Stage 10 publication, deferred lighting, shader families, debug views, and focused tests/tools are present and freshly validated. Build proof passed `Oxygen.Vortex.SceneRendererPublication.Tests`, `Oxygen.Vortex.SceneRendererDeferredCore.Tests`, `oxygen-graphics-direct3d12_shaders`, `Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests`, and `oxygen-examples-vortexbasic`. CTest passed `Oxygen.Vortex.SceneRendererPublication.Tests`, `Oxygen.Vortex.SceneRendererDeferredCore.Tests`, and `Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests`. Runtime proof `vortexbasic-foundation.validation.txt` passed with Stage 3 depth scope/draw/clear/copy counts, Stage 5 Screen HZB scope, Stage 9 base-pass scope/draw counts, Stage 9 GBuffer/base-color/velocity nonzero proof, Stage 12 scope/directional/point/spot draw counts, and phase-stage order checks. | No open VTX-M02 closure gap. |

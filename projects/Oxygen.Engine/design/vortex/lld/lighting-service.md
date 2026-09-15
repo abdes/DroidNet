@@ -4,6 +4,18 @@
 **Deliverable:** D.9
 **Status:** `ready`
 
+## V0.1 Production Extension
+
+[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments)
+defines the current extension: independent directional arrays, explicit
+None/Primary/Secondary assignment, per-light shadow association and shared
+receiver/contact attenuation. The initial single-directional structs and wire
+layout below are implementation baselines, not the final V0.1 ABI. Update CPU,
+HLSL and publication together; keep no parallel single-light fallback.
+Stage 12 remains direct lighting; captured-sky opaque IBL activates Stage 13
+under its [own contract](../plan/editor-v01-captured-sky-ibl.md#1-ownership-and-scope).
+Prior milestone evidence retains its original scope.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
@@ -48,8 +60,10 @@ What does **not** change:
 
 1. Stage 12 remains the canonical deferred **direct**-lighting stage.
 2. Stage 6 remains shared supporting data, not the deferred-lighting root.
-3. Canonical indirect environment evaluation remains future Stage 13 work.
-4. Any Phase 4 ambient bridge is transitional, opt-in, and ambient-only.
+3. Canonical opaque indirect evaluation belongs to Stage 13; V0.1 activates its
+   captured-sky IBL subset without claiming the entire future GI family.
+4. The initial ambient bridge is a migration baseline. Retire its sky-diffuse
+   contribution when Stage 13 owns that IBL, preventing duplicate accumulation.
 
 ### 1.3 Architectural Authority
 
@@ -88,6 +102,9 @@ src/Oxygen/Vortex/
 ```
 
 ### 2.2 Public API
+
+The following is the original Phase-4A interface sketch. Its single-light
+representation is superseded by the V0.1 directional-array extension above.
 
 ```cpp
 namespace oxygen::vortex {
@@ -159,7 +176,8 @@ scene-light gather/sort itself.
 
 The frame-light selection is the canonical source for:
 
-- the selected directional light for the current frame
+- the ordered eligible directional-light collection for the current frame,
+  independent of atmosphere membership
 - the local-light set considered visible/relevant for the frame
 - the stable selection epoch used by tests/diagnostics
 
@@ -242,11 +260,11 @@ struct ForwardLightFrameBindings {
 
 ### 2.6 Directional-Light Authority
 
-The selected directional-light payload is part of the published per-view
-forward-light package. `LightingService` is responsible for shaping that
-payload for consumers, but the service does not invent a second scene-light
-ownership system. The selected directional light remains sourced from the
-renderer-owned frame-light selection described in Section 2.3.
+The directional-light collection is part of the published per-view forward-light
+package. LightingService shapes the renderer-owned selection for consumers;
+it does not perform another light election. Explicit atmosphere assignments are
+separate metadata, not a direct-light eligibility filter. Both surface paths
+consume every eligible directional with the matching per-light shadow binding.
 
 ### 2.7 Per-View Publication
 
@@ -255,7 +273,7 @@ The service publishes `ForwardLightFrameBindings` through
 Consumers access the forward-light family only through the published per-view
 binding stack.
 
-The current `LightingFrameBindings` wire layout is 208 bytes. Its directional
+The single-light baseline `LightingFrameBindings` wire layout is 208 bytes. Its directional
 light starts at byte 112, after 12 explicitly reserved alignment bytes, and the
 trailing eight bytes are reserved. C++ and HLSL must declare those bytes explicitly;
 implicit C++ alignment is not reproduced by HLSL structured-buffer packing.
@@ -315,7 +333,7 @@ dispatch source.
 
 ```text
 Renderer Core builds frame light selection
-  `- selected directional light + visible local lights
+  `- eligible directional array + visible local lights
 
 SceneRenderer::OnRender(...)
   |- Stage 6: lighting_->BuildLightGrid(frame_lighting_inputs)
@@ -325,7 +343,7 @@ SceneRenderer::OnRender(...)
   `- Stage 12: lighting_->RenderDeferredLighting(
                  ctx, scene_textures, frame_light_set)
                  `- Derives per-light draw packets from the same frame light set
-                 `- Records one directional fullscreen draw plus bounded-volume
+                 `- Records one fullscreen draw per directional plus bounded-volume
                     point/spot draws
                  `- Accumulates into SceneColor
 ```
@@ -429,9 +447,10 @@ When `lighting_` is null:
 - `SceneColor` retains only prior stage contributions such as base-pass
   emissive
 
-When the selected directional light is absent, the published payload sets
-`has_directional_light=0`, but the local-light portion of the forward-light
-family remains valid if local lights are present.
+When no directional is eligible, publish directional count zero with no usable
+directional-array binding. The local-light portion remains valid when local
+lights are present. An absent Primary assignment must not discard Secondary or
+ordinary role-None directionals.
 
 ### 6.3 Capability Gate
 

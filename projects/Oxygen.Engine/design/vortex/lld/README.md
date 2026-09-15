@@ -2,8 +2,15 @@
 
 This directory contains the low-level design (LLD) documents for the Vortex
 renderer. Each document covers one subsystem, stage module, or cross-cutting
-concern and is written to the readiness criteria defined in
-[PLAN.md §1.5](../PLAN.md).
+concern and is written to the readiness criteria below.
+
+## ED-M08 implementation references
+
+The [V0.1 rendering contract](../plan/editor-v01-rendering-contract.md) and
+[captured-sky IBL contract](../plan/editor-v01-captured-sky-ibl.md) define the
+current native extension and link its owning LLDs. They activate the bounded
+Stage 13 sky-light subset and replace the old single-directional/ambient-bridge
+assumptions. Earlier VTX closure records retain their original scope.
 
 ## Mandatory Vortex Rule
 
@@ -20,7 +27,7 @@ concern and is written to the readiness criteria defined in
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
-## LLD Readiness Criteria (from PLAN.md §1.5)
+## LLD readiness criteria
 
 Every LLD must contain at minimum:
 
