@@ -25,7 +25,7 @@ public sealed partial class CookOutputLeaseTests
     public async Task ExternalReaderMustExitBeforePublication(bool terminate)
     {
         using var project = new ProjectDirectory();
-        CookOutputLease.AcquireRead(project.Root).Dispose();
+        (await CookOutputLease.AcquireReadAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false)).Dispose();
         var marker = Path.Combine(project.Root, ".build", "cook", "readers", Guid.NewGuid().ToString("N") + ".lease");
         var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "WorkerProbe", "Oxygen.Editor.ContentPipeline.WorkerProbe.exe"))
         {
@@ -130,16 +130,18 @@ public sealed partial class CookOutputLeaseTests
     private static async Task<CookOutputWriteLease> WaitForReleasedWriterAsync(string root, CancellationToken cancellationToken)
     {
         var deadline = Stopwatch.StartNew();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         while (true)
         {
             try
             {
-                return CookOutputLease.AcquireWrite(root);
+                return await CookOutputLease.AcquireWriteAsync(root, timeout.Token).ConfigureAwait(false);
             }
             catch (CookOutputBusyException) when (deadline.Elapsed < TimeSpan.FromSeconds(5))
             {
                 // Process termination can precede completion of filesystem handle cleanup.
-                await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(20, timeout.Token).ConfigureAwait(false);
             }
         }
     }

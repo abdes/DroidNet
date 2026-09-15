@@ -80,7 +80,7 @@ public sealed partial class ContentPipelineServiceTests
         await publication.RecoverBeforeCookAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = Directory.Exists(staging.Roots[0].StagingPath).Should().BeFalse();
         _ = (await File.ReadAllTextAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old");
-        using var writer = CookOutputLease.AcquireWrite(workspace.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var recovered = await CookPublicationTransaction.LoadAsync(workspace.ProjectContext, operation.OperationId, files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = recovered.Phase.Should().Be(CookPublicationPhase.RolledBack);
     }

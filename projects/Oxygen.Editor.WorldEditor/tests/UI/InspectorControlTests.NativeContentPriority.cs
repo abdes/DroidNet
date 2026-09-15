@@ -65,7 +65,7 @@ public sealed partial class InspectorControlTests
         {
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
             var service = new CookedContentMountService(new NativeStorageProvider(new RealFileSystem()), api);
-            var mounts = await service.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), CookOutputLease.AcquireRead(project.ProjectRoot), cancellationToken).ConfigureAwait(true);
+            var mounts = await service.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), await CookOutputLease.AcquireReadAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(true), cancellationToken).ConfigureAwait(true);
             await this.engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
         }
     }

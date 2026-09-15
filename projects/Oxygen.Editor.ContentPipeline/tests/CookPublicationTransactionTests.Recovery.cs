@@ -48,7 +48,7 @@ public sealed partial class CookPublicationTransactionTests
             _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
             _ = captured.Should().BeTrue();
             var reopened = project.Context with { ProjectRoot = replica.FullName };
-            using var writer = CookOutputLease.AcquireWrite(replica.FullName);
+            using var writer = await CookOutputLease.AcquireWriteAsync(replica.FullName, this.TestContext.CancellationToken).ConfigureAwait(false);
             var recovery = await CookPublicationTransaction.LoadAsync(reopened, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
             await recovery.RecoverAsync(writer).ConfigureAwait(false);
             _ = recovery.Phase.Should().Be(CookPublicationPhase.RolledBack);
@@ -84,7 +84,7 @@ public sealed partial class CookPublicationTransactionTests
         _ = transaction.Phase.Should().Be(CookPublicationPhase.RootsInstalled);
         _ = (await File.ReadAllTextAsync(Path.Combine(operationRoot, "previous", "Second", "container.index.bin"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old:Second");
         _ = (await File.ReadAllTextAsync(Path.Combine(project.Root, ".cooked", "Second", "container.index.bin"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("new:Second");
-        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> restore = async () => await recovery.RecoverAsync(writer).ConfigureAwait(false);
         _ = await restore.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
@@ -103,7 +103,7 @@ public sealed partial class CookPublicationTransactionTests
         var journal = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         journal["roots"]![0]!["mount"] = "../outside";
         await File.WriteAllTextAsync(path, journal.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> read = async () => _ = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await read.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         project.AssertOld();
@@ -122,7 +122,7 @@ public sealed partial class CookPublicationTransactionTests
         var timestamp = File.GetLastWriteTimeUtc(path);
         await File.WriteAllTextAsync(path, "bad:Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         File.SetLastWriteTimeUtc(path, timestamp);
-        using var writer = CookOutputLease.AcquireWrite(project.Root);
+        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> verify = async () => await loaded.VerifyCommittedAsync(writer).ConfigureAwait(false);
         _ = await verify.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);

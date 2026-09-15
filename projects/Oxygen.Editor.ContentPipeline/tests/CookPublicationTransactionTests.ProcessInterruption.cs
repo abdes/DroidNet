@@ -95,15 +95,17 @@ public sealed partial class CookPublicationTransactionTests
     private static async Task<CookOutputWriteLease> AcquireAfterProcessExitAsync(string root, CancellationToken cancellationToken)
     {
         var elapsed = Stopwatch.StartNew();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         while (true)
         {
             try
             {
-                return CookOutputLease.AcquireWrite(root);
+                return await CookOutputLease.AcquireWriteAsync(root, timeout.Token).ConfigureAwait(false);
             }
             catch (CookOutputBusyException) when (elapsed.Elapsed < TimeSpan.FromSeconds(5))
             {
-                await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(20, timeout.Token).ConfigureAwait(false);
             }
         }
     }
