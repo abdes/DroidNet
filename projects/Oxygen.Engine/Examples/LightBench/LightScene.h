@@ -157,8 +157,8 @@ private:
   auto ApplyPointLightState() -> void;
   auto ApplySpotLightState() -> void;
 
-  auto BuildQuadGeometry(
-    std::string_view name, std::shared_ptr<const data::MaterialAsset> material)
+  auto BuildSurfaceGeometry(std::string_view generator, std::string_view name,
+    std::shared_ptr<const data::MaterialAsset> material)
     -> std::shared_ptr<const data::GeometryAsset>;
   auto BuildSphereGeometry(
     std::string_view name, std::shared_ptr<const data::MaterialAsset> material)

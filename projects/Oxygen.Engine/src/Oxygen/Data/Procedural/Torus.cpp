@@ -7,6 +7,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <cmath>
+#include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
@@ -15,14 +17,17 @@
  Creates vertex and index buffers for a torus centred at the origin. The main
  ring lies in the XY plane around the Z axis. A circle of minor_radius is
  swept around a circle of major_radius; normals, UVs, tangents, bitangents and
- colours accompany positions.
+ colours accompany positions. The default major/minor radii are 0.4/0.1 m,
+ giving a 1 m outer diameter and a 0.2 m tube diameter. Positive radii also
+ support horn/spindle parameterizations; those are not regular ring surfaces.
 
  @param major_segments Number of intervals around the main ring (minimum 3).
  @param minor_segments Number of intervals around the tube (minimum 3).
- @param major_radius Distance from the origin to the tube centre (must be > 0).
- @param minor_radius Radius of the tube (must be > 0).
+ @param major_radius Finite positive distance from origin to tube centre.
+ @param minor_radius Finite positive tube radius.
  @return Vertex and index vectors, or std::nullopt for
- segment counts below three or non-positive radii.
+ invalid counts/radii, an overflowing outer radius, or a tube radius that
+ collapses against the major radius in float32 storage.
 
  ### Performance Characteristics
 
@@ -33,7 +38,7 @@
  ### Usage Example
 
  ```cpp
- if (auto buffers = oxygen::data::MakeTorusMeshAsset(32, 16, 1.0f, 0.25f)) {
+ if (auto buffers = oxygen::data::MakeTorusMeshAsset(32, 16, 0.4f, 0.1f)) {
    const auto& [vertices, indices] = *buffers;
    // Pass the buffers to the mesh consumer.
  }
@@ -45,39 +50,50 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
   unsigned int minor_segments, float major_radius, float minor_radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  if (major_segments < 3 || minor_segments < 3 || major_radius <= 0.0f
-    || minor_radius <= 0.0f) {
+  constexpr auto max_count = std::numeric_limits<uint32_t>::max();
+  constexpr auto kIndicesPerCell = 6U;
+  const auto outer_radius = static_cast<double>(major_radius) + minor_radius;
+  if (major_segments < 3 || minor_segments < 3 || !std::isfinite(major_radius)
+    || !std::isfinite(minor_radius) || major_radius <= 0.0F
+    || minor_radius <= 0.0F || outer_radius > std::numeric_limits<float>::max()
+    || major_radius + minor_radius <= major_radius
+    || major_radius - minor_radius >= major_radius
+    || static_cast<uint64_t>(major_segments) + 1U
+      > max_count / (static_cast<uint64_t>(minor_segments) + 1U)
+    || static_cast<uint64_t>(major_segments) * minor_segments
+      > max_count / kIndicesPerCell) {
     return std::nullopt;
   }
-  constexpr float pi = std::numbers::pi_v<float>;
+  constexpr double pi = std::numbers::pi_v<double>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
 
   for (unsigned int i = 0; i <= major_segments; ++i) {
-    float major_theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(major_segments);
-    float cos_major = std::cos(major_theta);
-    float sin_major = std::sin(major_theta);
-    glm::vec3 major_center
-      = { major_radius * cos_major, major_radius * sin_major, 0.0f };
+    const auto major_theta
+      = i == major_segments ? 0.0 : 2.0 * pi * i / major_segments;
+    const auto cos_major = static_cast<float>(std::cos(major_theta));
+    const auto sin_major = static_cast<float>(std::sin(major_theta));
 
     for (unsigned int j = 0; j <= minor_segments; ++j) {
-      float minor_theta = 2.0f * pi * static_cast<float>(j)
-        / static_cast<float>(minor_segments);
-      float cos_minor = std::cos(minor_theta);
-      float sin_minor = std::sin(minor_theta);
+      const auto minor_theta
+        = j == minor_segments ? 0.0 : 2.0 * pi * j / minor_segments;
+      const auto cos_minor = static_cast<float>(std::cos(minor_theta));
+      const auto sin_minor = static_cast<float>(std::sin(minor_theta));
 
       glm::vec3 pos = { cos_major * (major_radius + minor_radius * cos_minor),
         sin_major * (major_radius + minor_radius * cos_minor),
         minor_radius * sin_minor };
-      glm::vec3 normal = glm::normalize(pos - major_center);
+      // Analytic direction remains finite at singular horn/spindle samples
+      // and avoids subtracting nearly equal large position coordinates.
+      glm::vec3 normal
+        = { cos_major * cos_minor, sin_major * cos_minor, sin_minor };
       glm::vec2 texcoord
         = { static_cast<float>(i) / static_cast<float>(major_segments),
             static_cast<float>(j) / static_cast<float>(minor_segments) };
 
       glm::vec3 tangent = { -sin_major, cos_major, 0.0f };
-      glm::vec3 bitangent = glm::normalize(glm::cross(normal, tangent));
-      tangent = glm::normalize(glm::cross(bitangent, normal));
+      glm::vec3 bitangent
+        = { -cos_major * sin_minor, -sin_major * sin_minor, cos_minor };
 
       vertices.push_back(Vertex {
         .position = pos,
