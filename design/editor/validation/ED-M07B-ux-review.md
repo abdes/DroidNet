@@ -160,12 +160,11 @@ then emits the reported unsupported-geometry error. This proves a coverage gap,
 not that either node name in the report is wrong. The regression must identify
 the captured saved node ID/revision and keep diagnostic navigation accurate.
 
-The engine's `Data/ProceduralMeshes.h` and geometry descriptor schema support
-eleven generator names: the eight existing picker entries plus SubdividedCube,
-IcoSphere, and its GeodesicSphere alias. M07B.7 now covers the complete set and
-alias handling, including Save -> Cook Current Scene / Cook Project for each.
-The native public factories and importer also differ on Cylinder/Cone default
-segment counts (32 versus 16), reinforcing the need for one shared recipe.
+The M07B.7 baseline covered eleven exposed generator names, including duplicate
+sphere naming, through Save -> Cook Current Scene / Cook Project. ED-M08's
+canonical palette supersedes that inventory: ten authoring choices, one
+IcoSphere identity, and separate internal tool resources. Cylinder/Cone factory
+and importer segment defaults now share the native recipe authority.
 
 The user also reported that the node inspector's component list stretches,
 component selection does not filter editors, and single/multi-node layouts waste

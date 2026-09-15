@@ -11,17 +11,17 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Projects native recipes into discovery and resolver metadata.</summary>
 public sealed partial class BuiltinGeometryCatalog
 {
-    /// <summary>Creates discovery rows for every native geometry identity and the default material.</summary>
-    /// <returns>Immutable records retaining aliases and source-to-cooked mapping.</returns>
+    /// <summary>Creates discovery rows for native authoring choices and the default material.</summary>
+    /// <returns>Immutable records retaining classification and source-to-cooked mapping.</returns>
     public IReadOnlyList<AssetRecord> CreateCatalogRecords()
     {
-        var records = this.Geometries.Select(definition => new AssetRecord(definition.AssetUri)
+        var records = this.AuthoringGeometries.Select(definition => new AssetRecord(definition.AssetUri)
         {
-            Generated = CreateMetadata(definition.CanonicalName, definition.Contribution),
+            Generated = CreateMetadata(definition.CanonicalName, definition.Contribution, definition.AuthoringCategory),
         }).ToList();
         records.Add(new AssetRecord(AssetUris.BuildGeneratedUri("Materials/Default"))
         {
-            Generated = CreateMetadata("Default", this.DefaultMaterial),
+            Generated = CreateMetadata("Default", this.DefaultMaterial, GeneratedAssetCategory.Standard),
         });
         return records.AsReadOnly();
     }
@@ -30,7 +30,7 @@ public sealed partial class BuiltinGeometryCatalog
     /// <returns>Metadata for each native identity, without generating geometry or cooking content.</returns>
     public IReadOnlyList<Asset> CreateAssets()
     {
-        var assets = this.Geometries.Select(definition => (Asset)new GeometryAsset
+        var assets = this.AuthoringGeometries.Select(definition => (Asset)new GeometryAsset
         {
             Uri = definition.AssetUri,
             Lods = definition.Contribution.Descriptor.GetProperty("lods").EnumerateArray().Select((lod, index) => new MeshLod
@@ -48,9 +48,10 @@ public sealed partial class BuiltinGeometryCatalog
         return assets.AsReadOnly();
     }
 
-    private static GeneratedAssetMetadata CreateMetadata(string canonicalName, BuiltinDescriptorContribution contribution)
+    private static GeneratedAssetMetadata CreateMetadata(string canonicalName, BuiltinDescriptorContribution contribution, GeneratedAssetCategory authoringCategory)
         => new(
             canonicalName,
             contribution.Descriptor.GetProperty("$schema").GetString() ?? throw new InvalidDataException("A native recipe has no descriptor schema."),
-            contribution.VirtualPath);
+            contribution.VirtualPath,
+            authoringCategory);
 }

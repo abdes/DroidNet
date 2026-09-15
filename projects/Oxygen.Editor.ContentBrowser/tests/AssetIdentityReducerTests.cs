@@ -37,14 +37,14 @@ public sealed partial class AssetIdentityReducerTests
         _ = reducer.Reduce(records, project, scope, AssetBrowserFilter.Default).Single().PrimaryState.Should().Be(AssetState.Descriptor);
     }
 
-    /// <summary>Native generated assets are usable before cooking and retain alias provenance.</summary>
+    /// <summary>Native generated assets are usable before cooking and retain canonical provenance.</summary>
     [TestMethod]
     public void GeneratedRecordsRetainTheirEngineIdentityBeforeCooking()
     {
         using var workspace = new TempWorkspace();
-        var record = new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/GeodesicSphere"))
+        var record = new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/IcoSphere"))
         {
-            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", "/Content/Geometry/Engine_Generated_BasicShapes_GeodesicSphere.ogeo"),
+            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", "/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo", GeneratedAssetCategory.Standard),
         };
         var rows = Reduce(workspace, [record]);
         _ = rows.Should().ContainSingle();
@@ -52,7 +52,7 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.PrimaryState.Should().Be(AssetState.Generated);
         _ = row.Kind.Should().Be(AssetKind.Geometry);
         _ = row.IdentityUri.Should().Be(record.Uri);
-        _ = row.AliasDescription.Should().Be("Alias of IcoSphere");
+        _ = row.AliasDescription.Should().BeEmpty();
         _ = row.IsSelectable.Should().BeTrue();
         _ = row.CookedUri.Should().BeNull();
         _ = row.CookedPath.Should().BeNull();

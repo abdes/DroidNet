@@ -71,8 +71,8 @@ public sealed partial class ContentPipelineServiceTests
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var catalog = await api.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = catalog.Geometries.Should().HaveCount(11);
-        foreach (var definition in catalog.Geometries)
+        _ = catalog.AuthoringGeometries.Should().HaveCount(10);
+        foreach (var definition in catalog.AuthoringGeometries)
         {
             var node = new SceneNode(workspace.Scene) { Name = definition.Name };
             _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(definition.AssetUri) });
@@ -93,7 +93,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.Status.Should().BeOneOf(OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings);
         _ = result.Validation.Should().NotBeNull();
         _ = result.Validation!.Succeeded.Should().BeTrue();
-        foreach (var definition in catalog.Geometries)
+        foreach (var definition in catalog.AuthoringGeometries)
         {
             _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == definition.AssetUri);
             var path = Path.Combine(workspace.Root, ".cooked", definition.Contribution.VirtualPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
@@ -105,7 +105,7 @@ public sealed partial class ContentPipelineServiceTests
             ? await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
             : await pipeline.CookCurrentSceneAsync(new Uri("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = repeated.IsUpToDate.Should().BeTrue();
-        foreach (var definition in catalog.Geometries)
+        foreach (var definition in catalog.AuthoringGeometries)
         {
             _ = repeated.ReusedAssets.Should().Contain(asset => asset.SourceAssetUri == definition.AssetUri);
         }
@@ -118,7 +118,7 @@ public sealed partial class ContentPipelineServiceTests
         var identities = catalog.CreateCatalogRecords().Select(static record => record.Uri).ToArray();
         var runCount = workspace.CookCoordinator.Runs.Count;
         var statuses = await pipeline.ReadAsync(workspace.ProjectContext, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = statuses.Should().HaveCount(12).And.OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput);
+        _ = statuses.Should().HaveCount(11).And.OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput);
         _ = statuses.Should().OnlyContain(status => status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty && !status.Outputs.IsEmpty);
         _ = statuses.Should().OnlyContain(status => status.Outputs.All(output => output.SourceAssetUri == status.AssetUri));
         _ = workspace.CookCoordinator.Runs.Count.Should().Be(runCount, "origin discovery never cooks built-ins");

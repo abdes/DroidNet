@@ -19,6 +19,22 @@ namespace {
 using nlohmann::json;
 constexpr auto kDefaultMaterialName = "OxygenEditor_Default";
 
+auto AuthoringCategoryName(
+  const oxygen::data::BuiltinGeometryAuthoringCategory category)
+  -> std::string_view
+{
+  using Category = oxygen::data::BuiltinGeometryAuthoringCategory;
+  switch (category) {
+  case Category::kStandard:
+    return "standard";
+  case Category::kAdvanced:
+    return "advanced";
+  case Category::kInternal:
+    return "internal";
+  }
+  throw std::logic_error("Unknown built-in geometry authoring category.");
+}
+
 auto DefaultMaterialDescriptor() -> json
 {
   const auto material = oxygen::data::MaterialAsset::CreateDefault();
@@ -104,6 +120,8 @@ auto ExportBuiltinGeometryCatalog(const std::string_view mount_name)
     entries.push_back({
       { "name", identity->name },
       { "canonical_name", identity->generator },
+      { "authoring_category",
+        AuthoringCategoryName(identity->authoring_category) },
       { "asset_uri", identity->asset_uri },
       { "virtual_path",
         mount + "/Geometry/" + identity->descriptor_name + ".ogeo" },
@@ -112,7 +130,7 @@ auto ExportBuiltinGeometryCatalog(const std::string_view mount_name)
   }
 
   return json {
-    { "schema", "oxygen.builtin-geometry-catalog.v1" },
+    { "schema", "oxygen.builtin-geometry-catalog.v2" },
     { "mount", mount_name },
     { "default_material",
       {

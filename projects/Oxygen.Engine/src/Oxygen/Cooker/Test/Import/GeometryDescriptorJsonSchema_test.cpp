@@ -7,6 +7,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -144,7 +145,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsGeodesicSphereProcedural)
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, ValidatesIcoSphereParameters)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -160,7 +161,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsGeodesicSphereProcedural)
         "mesh_type": "procedural",
         "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
         "procedural": {
-          "generator": "GeodesicSphere",
+          "generator": "IcoSphere",
           "mesh_name": "BallGeo",
           "params": {
             "subdivision_level": 2
@@ -178,6 +179,18 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsGeodesicSphereProcedural)
 
   auto errors = std::string {};
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  for (const auto subdivisions : { 0, 8 }) {
+    auto candidate = doc;
+    candidate["lods"][0]["procedural"]["params"]["subdivision_level"]
+      = subdivisions;
+    EXPECT_TRUE(ValidateSchema(*schema, candidate, errors)) << errors;
+  }
+  for (const auto& subdivisions : { json(-1), json(9), json(2.5), json("2") }) {
+    auto candidate = doc;
+    candidate["lods"][0]["procedural"]["params"]["subdivision_level"]
+      = subdivisions;
+    EXPECT_FALSE(ValidateSchema(*schema, candidate, errors));
+  }
 }
 
 NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsSubdividedCubeProcedural)
@@ -245,8 +258,8 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCapsuleParameterBounds)
   const auto cases = std::vector<json> {
     nullptr,
     json::object(),
-    { { "hemisphere_segments", 1 }, { "radial_segments", 3 },
-      { "height", 1.0 }, { "radius", 0.5 } },
+    { { "hemisphere_segments", 1 }, { "radial_segments", 3 }, { "height", 1.0 },
+      { "radius", 0.5 } },
     { { "hemisphere_segments", 64 }, { "radial_segments", 256 },
       { "height", 3.0 }, { "radius", 0.75 } },
   };
@@ -255,6 +268,38 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCapsuleParameterBounds)
     auto errors = std::string {};
     EXPECT_TRUE(ValidateSchema(*schema, CapsuleDescriptor(params), errors))
       << errors;
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnrepresentablePrimitiveParameters)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  constexpr auto kTooManySegments = uint64_t { 1 } << 32U;
+  constexpr auto kTooLargeDimension =
+    static_cast<double>(std::numeric_limits<float>::max()) * 2.0;
+  struct Case {
+    std::string_view generator;
+    json parameters;
+  };
+  const auto cases = std::vector<Case> {
+    { "Sphere", { { "latitude_segments", kTooManySegments } } },
+    { "Plane", { { "x_segments", kTooManySegments } } },
+    { "Cylinder", { { "segments", kTooManySegments } } },
+    { "Cone", { { "segments", kTooManySegments } } },
+    { "Torus", { { "major_segments", kTooManySegments } } },
+    { "Plane", { { "size", kTooLargeDimension } } },
+    { "Cylinder", { { "radius", kTooLargeDimension } } },
+    { "Cone", { { "height", kTooLargeDimension } } },
+    { "Torus", { { "minor_radius", kTooLargeDimension } } },
+    { "Quad", { { "width", kTooLargeDimension } } },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.generator);
+    auto doc = CapsuleDescriptor(test_case.parameters);
+    doc["lods"][0]["procedural"]["generator"] = test_case.generator;
+    auto errors = std::string {};
+    EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
   }
 }
 

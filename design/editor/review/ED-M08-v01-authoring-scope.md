@@ -51,8 +51,8 @@ buffers directly; the editor applies no corrective scale or rotation.
 | Plane | 1×1 m | XY ground surface; front +Z |
 | Quad | 1×1 m | XZ upright card; front −Y |
 
-ArrowGizmo is an internal tool resource. GeodesicSphere references migrate to
-IcoSphere; the duplicate authoring alias is removed. Every selectable primitive
+ArrowGizmo is an internal tool resource. IcoSphere uses one canonical identity
+through authoring, cooking and loading. Every selectable primitive
 must cook and render. Source/API prose describes actual parameters, axes,
 returns and defaults and changes with the implementation.
 

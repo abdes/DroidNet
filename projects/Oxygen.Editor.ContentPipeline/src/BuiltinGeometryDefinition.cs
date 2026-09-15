@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets.Catalog;
+
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>A supported procedural name, its alias group, and cook contribution.</summary>
+/// <summary>A canonical procedural identity, authoring category and cook contribution.</summary>
 /// <param name="AssetUri">The authored built-in identity.</param>
-/// <param name="Name">The supported name or alias.</param>
-/// <param name="CanonicalName">The shared generator name used to group aliases.</param>
+/// <param name="Name">The supported canonical name.</param>
+/// <param name="CanonicalName">The native generator name.</param>
 /// <param name="Contribution">The native descriptor and output mapping.</param>
-public sealed record BuiltinGeometryDefinition(Uri AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution);
+/// <param name="AuthoringCategory">The engine-owned authoring availability.</param>
+public sealed record BuiltinGeometryDefinition(Uri AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution, GeneratedAssetCategory AuthoringCategory);

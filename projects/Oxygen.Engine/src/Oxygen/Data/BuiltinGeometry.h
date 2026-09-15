@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -18,15 +19,23 @@ namespace oxygen::data {
 
 class GeometryAsset;
 
+//! Native creation classification; internal entries remain available to tools.
+enum class BuiltinGeometryAuthoringCategory : uint8_t {
+  kStandard,
+  kAdvanced,
+  kInternal,
+};
+
 //! Stable authoring and generated-descriptor identity for a built-in shape.
 struct BuiltinGeometryIdentity {
   std::string_view name;
   std::string_view generator;
+  BuiltinGeometryAuthoringCategory authoring_category;
   std::string asset_uri;
   std::string descriptor_name;
 };
 
-//! All supported built-in names, including the GeodesicSphere alias.
+//! All supported canonical built-in names, including internal tool resources.
 OXGN_DATA_NDAPI auto GetBuiltinGeometryNames() noexcept
   -> std::span<const std::string_view>;
 
@@ -34,7 +43,7 @@ OXGN_DATA_NDAPI auto GetBuiltinGeometryNames() noexcept
 OXGN_DATA_NDAPI auto IsBuiltinGeometryUri(std::string_view asset_uri) noexcept
   -> bool;
 
-//! Resolves a built-in name/alias without changing its authored identity.
+//! Resolves a built-in name to its canonical identity and authoring category.
 OXGN_DATA_NDAPI auto ResolveBuiltinGeometryIdentity(std::string_view asset_uri)
   -> std::optional<BuiltinGeometryIdentity>;
 

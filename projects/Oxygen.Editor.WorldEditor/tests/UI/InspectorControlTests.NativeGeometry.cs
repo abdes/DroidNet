@@ -19,20 +19,19 @@ namespace Oxygen.Editor.World.Tests;
 public sealed partial class InspectorControlTests
 {
     /// <summary>Every engine built-in resolves with drawable buffers and retains its URI across Save/reopen.</summary>
-    /// <param name="shape">The built-in generator name or supported alias.</param>
+    /// <param name="shape">The canonical built-in generator name.</param>
     /// <returns>The test task.</returns>
     [TestMethod]
     [DataRow("Cube")]
     [DataRow("SubdividedCube")]
     [DataRow("Sphere")]
     [DataRow("IcoSphere")]
-    [DataRow("GeodesicSphere")]
+    [DataRow("Capsule")]
     [DataRow("Plane")]
     [DataRow("Cylinder")]
     [DataRow("Cone")]
     [DataRow("Torus")]
     [DataRow("Quad")]
-    [DataRow("ArrowGizmo")]
     public Task BuiltinGeometryResolvesAndReopensThroughNativeRuntime(string shape) => EnqueueAsync(async () =>
     {
         var fixture = new NativeSceneFixture(automatic: false, scene => AddGeometryNode(scene, shape));

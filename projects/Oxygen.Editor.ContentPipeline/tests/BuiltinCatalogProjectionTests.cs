@@ -19,26 +19,29 @@ public sealed class BuiltinCatalogProjectionTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>All native identities, including aliases, are discoverable without cooking.</summary>
+    /// <summary>Native authoring identities and categories are discoverable without exposing tool resources.</summary>
     /// <returns>The asynchronous catalog projection test.</returns>
     [TestMethod]
-    public async Task DiscoveryPreservesNativeIdentitiesAndAliasMetadata()
+    public async Task DiscoveryPreservesCanonicalIdentitiesAndAuthoringCategories()
     {
         var native = await this.ReadCatalogAsync().ConfigureAwait(false);
         var records = native.CreateCatalogRecords();
-        _ = records.Should().HaveCount(native.Geometries.Length + 1);
-        foreach (var definition in native.Geometries)
+        _ = records.Should().HaveCount(native.AuthoringGeometries.Count() + 1);
+        foreach (var definition in native.AuthoringGeometries)
         {
             var record = records.Single(item => item.Uri == definition.AssetUri);
             _ = record.Generated.Should().NotBeNull();
             _ = record.Generated!.CanonicalName.Should().Be(definition.CanonicalName);
+            _ = record.Generated.AuthoringCategory.Should().Be(definition.AuthoringCategory);
             _ = record.Generated.CookedVirtualPath.Should().Be(definition.Contribution.VirtualPath);
             _ = record.Generated.DescriptorSchema.Should().Be(definition.Contribution.Descriptor.GetProperty("$schema").GetString());
         }
 
         var catalog = new GeneratedAssetCatalog(records);
-        var aliases = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All, "IcoSphere"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = aliases.Select(static record => record.Name).Should().BeEquivalentTo(["IcoSphere", "GeodesicSphere"]);
+        var matches = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All, "IcoSphere"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = matches.Select(static record => record.Name).Should().BeEquivalentTo(["IcoSphere"]);
+        _ = native.Geometries.Should().ContainSingle(definition => definition.AuthoringCategory == GeneratedAssetCategory.Internal);
+        _ = records.Should().NotContain(record => record.Generated!.AuthoringCategory == GeneratedAssetCategory.Internal);
     }
 
     /// <summary>Resolvers receive the native LOD/submesh definitions instead of a separate shape list.</summary>
@@ -48,7 +51,7 @@ public sealed class BuiltinCatalogProjectionTests
     {
         var native = await this.ReadCatalogAsync().ConfigureAwait(false);
         var resolver = new GeneratedAssetResolver(native.CreateAssets());
-        foreach (var definition in native.Geometries)
+        foreach (var definition in native.AuthoringGeometries)
         {
             var resolved = await resolver.ResolveAsync(definition.AssetUri).ConfigureAwait(false);
             var geometry = resolved.Should().BeOfType<GeometryAsset>().Which;
@@ -84,4 +87,39 @@ public sealed class BuiltinCatalogProjectionTests
 
     private async Task<BuiltinGeometryCatalog> ReadCatalogAsync()
         => BuiltinGeometryCatalog.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
+
+    /// <summary>The native category is required and unknown values never become authoring choices.</summary>
+    /// <param name="category">An invalid category, or null to remove the field.</param>
+    /// <returns>The asynchronous parser regression.</returns>
+    [TestMethod]
+    [DataRow(null)]
+    [DataRow("unsupported")]
+    [DataRow("Standard")]
+    public async Task CatalogRejectsMissingOrUnknownAuthoringCategory(string? category)
+    {
+        var document = JsonNode.Parse((await this.ReadCatalogAsync().ConfigureAwait(false)).ToJson())!;
+        var geometry = document["geometries"]!.AsArray()[0]!.AsObject();
+        if (category is null)
+        {
+            _ = geometry.Remove("authoring_category");
+        }
+        else
+        {
+            geometry["authoring_category"] = category;
+        }
+
+        var parse = () => BuiltinGeometryCatalog.Parse(document.ToJsonString());
+        _ = parse.Should().Throw<InvalidDataException>();
+    }
+
+    /// <summary>Catalogs without the current classification contract are not accepted.</summary>
+    /// <returns>The asynchronous version rejection check.</returns>
+    [TestMethod]
+    public async Task CatalogRejectsAnObsoleteVersion()
+    {
+        var document = JsonNode.Parse((await this.ReadCatalogAsync().ConfigureAwait(false)).ToJson())!;
+        document["schema"] = "oxygen.builtin-geometry-catalog.v1";
+        var parse = () => BuiltinGeometryCatalog.Parse(document.ToJsonString());
+        _ = parse.Should().Throw<InvalidDataException>();
+    }
 }

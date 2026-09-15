@@ -29,7 +29,7 @@
                 ]
             },
             "procedural": {
-                "generator": "GeodesicSphere",
+                "generator": "IcoSphere",
                 "mesh_name": "SoftBodySphere",
                 "params": {
                     "subdivision_level": 2

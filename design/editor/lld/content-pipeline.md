@@ -987,8 +987,8 @@ the project output mount; it does not reconstruct geometry or material defaults.
 
 The canonical ten-shape palette is: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere,
 Torus and SubdividedCube. SubdividedCube is advanced creation; ArrowGizmo is an
-internal tool resource. Migrate useful GeodesicSphere references to IcoSphere,
-then remove the alias and legacy resolution path. Useful former scene uses of
+internal tool resource. IcoSphere has one canonical API, catalog and generator
+identity, with no duplicate resolution path. Useful former scene uses of
 tool-only geometry migrate to ordinary geometry; no compatibility shim remains.
 
 Capsule must join the same native definition/generation/cook authority, not an

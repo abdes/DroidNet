@@ -188,8 +188,8 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
   mobility. Migrate ineffective mobility to its actual Realtime behavior.
 - Convert single-slot overrides to stable IDs without remapping unresolved
   assignments or substituting engine Default.
-- Map GeodesicSphere to IcoSphere and useful ArrowGizmo scene uses to ordinary
-  geometry; retain tool-internal ArrowGizmo for its own purpose.
+- Use the single canonical IcoSphere identity. Migrate useful ArrowGizmo scene
+  uses to ordinary geometry; retain tool-internal ArrowGizmo for its own purpose.
 - Preserve useful camera composition under Auto/Fixed. Consolidate exposure
   mirrors into PostProcess; native physical exposure is not removed.
 

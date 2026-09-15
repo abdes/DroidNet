@@ -21,10 +21,10 @@ public sealed partial class SceneDescriptorGeneratorTests
         var catalog = await provider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         var service = new ProceduralGeometryDescriptorService(provider);
 
-        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), catalog.Geometries.Select(static item => item.AssetUri).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), catalog.AuthoringGeometries.Select(static item => item.AssetUri).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = inputs.Should().HaveCount(12);
-        foreach (var definition in catalog.Geometries)
+        _ = inputs.Should().HaveCount(11);
+        foreach (var definition in catalog.AuthoringGeometries)
         {
             var input = inputs.Single(input => input.AssetUri == definition.AssetUri);
             _ = input.OutputVirtualPath.Should().Be(definition.Contribution.VirtualPath);
@@ -35,7 +35,8 @@ public sealed partial class SceneDescriptorGeneratorTests
         var material = inputs.Single(static input => input.Kind == ContentCookAssetKind.Material);
         var materialJson = JsonNode.Parse(await File.ReadAllTextAsync(material.SourceAbsolutePath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = JsonNode.DeepEquals(materialJson, JsonNode.Parse(catalog.DefaultMaterial.Descriptor.GetRawText())).Should().BeTrue();
-        _ = catalog.Find(AssetUris.BuildGeneratedUri("BasicShapes/GeodesicSphere"))!.CanonicalName.Should().Be("IcoSphere");
+        _ = catalog.Find(AssetUris.BuildGeneratedUri("BasicShapes/IcoSphere"))!.CanonicalName.Should().Be("IcoSphere");
+        _ = catalog.Find(AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo")).Should().BeNull();
     }
 
     /// <summary>Does not fabricate a descriptor or default material for an unknown engine name.</summary>
