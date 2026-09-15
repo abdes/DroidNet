@@ -48,7 +48,8 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Metric primitive defaults and orientation | Approved; centred pivots, Z-up, dimensions in Decision 4, horizontal Plane/upright Quad; prose must match actual code; implementation pending |
 | Basic perspective camera authoring | Approved; pose, vertical FOV, aspect and near/far; exact selected-camera loading; physical-camera authoring deferred; implementation/qualification pending |
 | Auto/Fixed camera aspect fitting | Approved; Auto default for new cameras, vertical FOV retained, Fixed preserves composition with bars, no saved resize mutations; implementation pending |
-| Visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Node/light visibility | Combined Decision 7 withdrawn; detailed source/industry review splits editor hiding, inheritance, contribution, light eligibility and shadows; no policy approved |
+| Transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -151,7 +152,7 @@ their content remains useful; they do not remain hidden compatibility state.
 | Area | Primary V0.1 | Supported advanced controls | Deferred or removed from editable UI |
 | --- | --- | --- | --- |
 | Hierarchy and transform | Name, parent, local position, rotation in degrees, scale; create/delete/duplicate/reparent, reset and multi-selection | Deliberate world/local transform operations where already supported | Raw quaternion editing, rotation-order selection, pivots, generic Static/mobility and Ignore Parent Transform switches without a complete authoring contract |
-| Visibility and editor state | Explicit **Visible in render**; separate editor selection lock/hide state where supported | Cast/receive shadows when the engine actually honours them | General Enabled semantics across future scripts/physics; do not repurpose `IsActive`, which means loaded in the engine |
+| Visibility and editor state | Pending the separate node/light review; no combined subtree switch approved | Object casting, light shadowing and receiver controls need independent decisions | General Enabled semantics across future scripts/physics; do not repurpose `IsActive`, which means loaded in the engine |
 | Geometry | Approved Cube/Sphere/Capsule/IcoSphere/Plane/Quad/Cylinder/Cone/Torus palette; mesh identity, loading/missing state and qualified static imports | Approved SubdividedCube under Advanced; approved existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
 | Perspective camera | Pose, **Vertical FOV**, near/far in metres, aspect/frame ratio, explicit authored-camera selection | Preserve non-default aspect and parented cameras | Physical-camera exposure, lens/sensor/DOF controls, orthographic authoring in this slice |
 | Directional lighting | Enabled/affects scene, orientation, colour, illuminance in lux, Cast Shadows | Angular size, labelled according to its actual supported sun-disk/shadow effect | Contact Shadows without an implementation; mobility promises without matching runtime behaviour; per-light exposure compensation as a routine control |
@@ -323,45 +324,24 @@ value that the engine ignores. Revalidate selection/view generations on changes.
 Qualification covers Auto at wide/tall viewport ratios, Fixed 4:3/16:9, resizing,
 mode changes, parented cameras and no authored changes from presentation alone.
 
-### Decision 7 proposal: authored visibility and editor hiding — awaiting choice
+### Decision 7: withdrawn for a separated node/light review
 
-Recommend two distinct controls:
+The user requested deeper engine research before any visibility decision. The
+earlier proposal combined node visibility, inheritance, editor hiding, shadows
+and light participation too broadly. It is withdrawn and is **not approved**.
+The [node/light visibility review](ED-M08-node-light-visibility-review.md) now
+owns the current-source audit, industry comparison and smaller decision sequence.
 
-- **Hide in editor:** a local editor view/workspace preference. It does not
-  modify saved scene content, authoring dirty/history state, cooking or standalone
-  rendering. Development parity ignores these local editing overrides.
-- **Visible in render:** saved visual participation of a node and its subtree.
-  A hidden branch contributes no geometry, shadows or light. Effective visibility
-  is local visibility AND ancestor visibility; toggling a parent does not rewrite
-  children's individual saved values. Showing the parent restores those choices.
+In particular, Oxygen's native flags explicitly support local overrides OR
+inheritance. A locally visible child under a hidden parent is not by itself a
+geometry defect. The previous proposal's ancestor-AND rule would change that
+contract. Light contribution and atmosphere membership are separate controls,
+and light traversal has an additional documented subtree-filter policy. No
+visibility implementation or contract change follows from the withdrawn request.
 
-The alternative for the authored control is geometry-only visibility: geometry
-and shadows disappear, but lights remain governed solely by their own enabled
-settings. Both options keep editor hiding separate. Recommend whole visual-subtree
-participation so hiding an assembled room consistently removes its furniture and
-illumination. The effect on lights is an explicit choice, not an inferred side
-effect of an ambiguous Enabled flag.
-
-This is not general node activation: cameras remain selectable, hierarchy and
-transforms remain present, and it does not promise simulation/script/physics
-disablement. Light enabled state stays independent; under the recommended policy,
-its effective contribution also requires visible ancestors. Shadow-only invisible
-geometry is a separate deferred feature. A future activation/lifecycle API must
-remain distinct from visual participation.
-
-Source findings: managed `IsVisible` is saved/cooked despite its editor-local
-comment; `IsActive` means runtime-loaded state. Geometry extraction currently
-checks each node while traversing all descendants, whereas light filtering prunes
-hidden subtrees. Camera discovery ignores visibility. Correct geometry/light
-consistency and implement an explicit authoring command; do not rename loaded
-state into Enabled or present this as existing complete behavior. Migrate useful
-stored visibility intent to the chosen canonical contract.
-
-Unity separates editor Scene visibility from in-game visibility. Godot's Node3D
-visibility requires visible ancestors. These support the separation and inherited
-visibility model; the exact light/camera effects above are an explicit Oxygen
-scope recommendation. [Unity Scene visibility](https://docs.unity3d.com/6000.0/Documentation/Manual/SceneVisibility.html),
-[Godot Node3D visibility](https://docs.godotengine.org/en/stable/classes/class_node3d.html#class-node3d-property-visible).
+Do not implement the former combined switch. The next choices separately cover
+editor-only hiding, node Local/Inherit semantics, light contribution, light
+eligibility under node visibility, object/light shadows, and atmosphere roles.
 
 ### Why these choices
 
@@ -419,7 +399,7 @@ claims that a new renderer feature has passed visual validation.
 | P1 | Implement minimal captured-sky ambient lighting, then expose it | `IblProbePass.cpp` rejects captured-scene as deferred. Existing specified-cubemap processing provides diffuse SH only: `IblProcessor.cpp` leaves prefiltered-specular/BRDF-LUT bindings invalid. This needs real sky capture, diffuse and roughness-dependent specular products, forward/deferred consumers, invalidation and readiness. Then add managed authoring, persistence, cook and sync. |
 | P1 | Apply basic colour grading and vignette in Vortex | `ResolveAuthoredPostProcessConfig` in `SceneRenderer.cpp` and `Tonemap.hlsl` apply exposure/bloom/tone mapping/gamma, but no saturation/contrast/vignette. Add the actual GPU effect with defined ordering and defaults. Preserve the accepted clear-background/translucency composition. |
 | P1 | Remove rejected or inert options from the canonical model | `ManualCamera` falls back to Manual EV without camera EV. Normal/occlusion edits lack an effect without texture refs. Contact Shadows/mobility need an active consumer before being offered. Migrate useful old values; remove compatibility branches and deprecated fields. |
-| P2 | Define and implement authored visibility, then verify shadow participation, mirrored transforms and reparenting | `IsActive` is runtime presence and is overwritten by sync; it is not the proposed visibility control. Decide hierarchy/shadow semantics before adding the control. Keep editor state separate. Report transforms that introduce unrepresentable shear through the normal command rather than silently changing the pose. |
+| P2 | Decide separate node/light visibility policies before implementation | Native Local/Inherit overrides are deliberate; a visible child under a hidden parent is not itself a geometry defect. Use the node/light review for consumer policies and concrete gaps. Keep runtime presence and editor state separate. Mirrored transforms/reparenting are distinct topics. |
 
 Key source locations:
 
