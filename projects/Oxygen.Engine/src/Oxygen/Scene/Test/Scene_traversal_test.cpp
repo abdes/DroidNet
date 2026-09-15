@@ -239,6 +239,87 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
   EXPECT_FALSE(IsNodeTransformDirty(nodeC_)); // Still clean
 }
 
+NOLINT_TEST_F(SceneTraversalTransformTest,
+  IgnoreParentTransformInitializesAndUpdatesIndependentSubtree)
+{
+  constexpr glm::vec3 kParentPosition { 10, 20, 30 };
+  auto parent = CreateNode("Parent", kParentPosition);
+  auto independent = CreateChildNode(parent, "Independent");
+  auto descendant = CreateChildNode(independent, "Descendant");
+  ASSERT_TRUE(independent.GetTransform().SetLocalPosition({ 1, 2, 3 }));
+  ASSERT_TRUE(descendant.GetTransform().SetLocalPosition({ 4, 5, 6 }));
+  const auto independent_flags = independent.GetFlags();
+  if (!independent_flags.has_value()) {
+    ADD_FAILURE() << "Independent node must have scene flags";
+    return;
+  }
+  independent_flags->get().SetLocalValue(
+    SceneNodeFlags::kIgnoreParentTransform, true);
+
+  scene_->Update();
+  ASSERT_FALSE(IsNodeTransformDirty(independent));
+  ASSERT_FALSE(IsNodeTransformDirty(descendant));
+  EXPECT_EQ(*independent.GetTransform().GetWorldPosition(), glm::vec3(1, 2, 3));
+  EXPECT_EQ(*descendant.GetTransform().GetWorldPosition(), glm::vec3(5, 7, 9));
+
+  ASSERT_TRUE(independent.GetTransform().SetLocalPosition({ 2, 3, 4 }));
+  scene_->Update();
+  ASSERT_FALSE(IsNodeTransformDirty(independent));
+  ASSERT_FALSE(IsNodeTransformDirty(descendant));
+  EXPECT_EQ(*independent.GetTransform().GetWorldPosition(), glm::vec3(2, 3, 4));
+  EXPECT_EQ(*descendant.GetTransform().GetWorldPosition(), glm::vec3(6, 8, 10));
+
+  // A dirty ancestor must not propagate across this independent boundary.
+  ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 100, 200, 300 }));
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts();
+  EXPECT_EQ(GetTraversal().UpdateTransforms(), 1U);
+  EXPECT_EQ(*independent.GetTransform().GetWorldPosition(), glm::vec3(2, 3, 4));
+  EXPECT_EQ(*descendant.GetTransform().GetWorldPosition(), glm::vec3(6, 8, 10));
+
+  // Dirty descendants remain reachable through a clean independent root.
+  ASSERT_TRUE(descendant.GetTransform().SetLocalPosition({ 7, 8, 9 }));
+  scene_->Update();
+  ASSERT_FALSE(IsNodeTransformDirty(descendant));
+  EXPECT_EQ(
+    *descendant.GetTransform().GetWorldPosition(), glm::vec3(9, 11, 13));
+}
+
+NOLINT_TEST_F(SceneTraversalTransformTest,
+  IgnoreParentTransformToggleInvalidatesCleanWorldTransforms)
+{
+  constexpr glm::vec3 kParentPosition { 10, 20, 30 };
+  auto parent = CreateNode("Parent", kParentPosition);
+  auto independent = CreateChildNode(parent, "Independent");
+  auto descendant = CreateChildNode(independent, "Descendant");
+  ASSERT_TRUE(independent.GetTransform().SetLocalPosition({ 1, 2, 3 }));
+  ASSERT_TRUE(descendant.GetTransform().SetLocalPosition({ 4, 5, 6 }));
+  scene_->Update();
+  EXPECT_EQ(
+    *independent.GetTransform().GetWorldPosition(), glm::vec3(11, 22, 33));
+  EXPECT_EQ(
+    *descendant.GetTransform().GetWorldPosition(), glm::vec3(15, 27, 39));
+
+  const auto independent_flags = independent.GetFlags();
+  if (!independent_flags.has_value()) {
+    ADD_FAILURE() << "Independent node must have scene flags";
+    return;
+  }
+  independent_flags->get().SetLocalValue(
+    SceneNodeFlags::kIgnoreParentTransform, true);
+  scene_->Update();
+  EXPECT_EQ(*independent.GetTransform().GetWorldPosition(), glm::vec3(1, 2, 3));
+  EXPECT_EQ(*descendant.GetTransform().GetWorldPosition(), glm::vec3(5, 7, 9));
+
+  independent_flags->get().SetLocalValue(
+    SceneNodeFlags::kIgnoreParentTransform, false);
+  scene_->Update();
+  EXPECT_EQ(
+    *independent.GetTransform().GetWorldPosition(), glm::vec3(11, 22, 33));
+  EXPECT_EQ(
+    *descendant.GetTransform().GetWorldPosition(), glm::vec3(15, 27, 39));
+}
+
 //! Tests that UpdateTransformsFrom only updates nodes in the specified subtree.
 NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
 {
