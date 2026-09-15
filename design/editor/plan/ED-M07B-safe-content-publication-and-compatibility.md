@@ -543,7 +543,7 @@ its product semantics are settled in 07B.0 before implementation.
   one semantic authority; every selectable shape passes scene/project cook (#11).
 - [x] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
   presentation and typed assignment before/after cooking pass.
-- [ ] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
+- [x] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
   points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
 - [x] 07B.5g compact single/multi-node inspector, functional component selection
   and All reset pass without changing property/history/gesture semantics.
