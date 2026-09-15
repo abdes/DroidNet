@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
@@ -16,6 +17,7 @@ namespace Oxygen.Editor.World.Cooking;
 /// <summary>Maintains stable presentation collections for one session cook.</summary>
 public sealed partial class CookingRunViewModel : ObservableObject
 {
+    private readonly Dictionary<Uri, CookingAssetViewModel> assetRows = [];
     private CookRunSnapshot snapshot;
 
     /// <summary>Initializes a new instance of the <see cref="CookingRunViewModel"/> class.</summary>
@@ -146,18 +148,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
             });
         }
 
-        foreach (var asset in next.Assets.Values.OrderBy(static asset => asset.AssetUri.AbsoluteUri, StringComparer.Ordinal))
-        {
-            var existing = this.Assets.FirstOrDefault(item => item.Asset.AssetUri == asset.AssetUri);
-            if (existing is null)
-            {
-                this.Assets.Add(new(asset));
-            }
-            else
-            {
-                existing.Apply(asset);
-            }
-        }
+        this.UpdateAssets(next.Assets);
 
         foreach (var diagnostic in next.Diagnostics)
         {
@@ -212,4 +203,27 @@ public sealed partial class CookingRunViewModel : ObservableObject
         CookRunState.Publishing => "Updating preview",
         _ => state.ToString(),
     };
+
+    private void UpdateAssets(ImmutableDictionary<Uri, CookRunAsset> assets)
+    {
+        foreach (var asset in assets.Values.OrderBy(static asset => asset.AssetUri.AbsoluteUri, StringComparer.Ordinal))
+        {
+            if (!this.assetRows.TryGetValue(asset.AssetUri, out var existing))
+            {
+                var row = new CookingAssetViewModel(asset);
+                this.assetRows.Add(asset.AssetUri, row);
+                this.Assets.Add(row);
+            }
+            else
+            {
+                existing.Apply(asset);
+            }
+        }
+
+        foreach (var removed in this.assetRows.Keys.Where(uri => !assets.ContainsKey(uri)).ToArray())
+        {
+            _ = this.Assets.Remove(this.assetRows[removed]);
+            _ = this.assetRows.Remove(removed);
+        }
+    }
 }
