@@ -21,11 +21,18 @@ public sealed partial class CookedInspectionView
 
     private void OnSectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        if (this.ViewModel is { } model)
+        if (sender.SelectedItem is { } selected && this.ViewModel is { } model)
         {
-            model.Section = ReferenceEquals(sender.SelectedItem, this.FilesSection) ? 1 : ReferenceEquals(sender.SelectedItem, this.IssuesSection) ? 2 : 0;
+            model.Section = ReferenceEquals(selected, this.FilesSection) ? 1 : ReferenceEquals(selected, this.IssuesSection) ? 2 : 0;
         }
     }
+
+    private SelectorBarItem GetSectionItem(int section) => section switch
+    {
+        1 => this.FilesSection,
+        2 => this.IssuesSection,
+        _ => this.AssetsSection,
+    };
 
     private void OnShowAsset(object sender, RoutedEventArgs args)
     {

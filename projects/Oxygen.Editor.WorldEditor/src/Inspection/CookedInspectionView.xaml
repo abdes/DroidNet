@@ -72,16 +72,13 @@
             IsOpen="{x:Bind ViewModel.HasMessage, Mode=OneWay}"
             Message="{x:Bind ViewModel.Message, Mode=OneWay}"
             Severity="Error" />
-        <SelectorBar Grid.Row="3" SelectionChanged="OnSectionChanged">
-            <SelectorBarItem IsSelected="{x:Bind ViewModel.AssetsSelected, Mode=OneWay}" Text="Assets" />
-            <SelectorBarItem
-                x:Name="FilesSection"
-                IsSelected="{x:Bind ViewModel.FilesSelected, Mode=OneWay}"
-                Text="Root files" />
-            <SelectorBarItem
-                x:Name="IssuesSection"
-                IsSelected="{x:Bind ViewModel.IssuesSelected, Mode=OneWay}"
-                Text="Issues" />
+        <SelectorBar
+            Grid.Row="3"
+            SelectedItem="{x:Bind GetSectionItem(ViewModel.Section), Mode=OneWay}"
+            SelectionChanged="OnSectionChanged">
+            <SelectorBarItem x:Name="AssetsSection" Text="Assets" />
+            <SelectorBarItem x:Name="FilesSection" Text="Root files" />
+            <SelectorBarItem x:Name="IssuesSection" Text="Issues" />
         </SelectorBar>
         <Grid
             Grid.Row="4"
