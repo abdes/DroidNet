@@ -56,6 +56,7 @@
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
 
@@ -1151,6 +1152,7 @@ auto MainModule::EnsureSunDirectionalLight(scene::Scene& scene) -> void
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().casts_shadows = true;
+    light->Common().shadow.bias = kDefaultDemoSunShadowBias;
     light->Common().mobility = scene::LightMobility::kRealtime;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
