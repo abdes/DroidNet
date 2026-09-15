@@ -8,9 +8,18 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <regex>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
 
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
@@ -60,6 +69,54 @@ using oxygen::vortex::shadows::internal::PointShadowSetup;
 using oxygen::vortex::shadows::internal::SpotShadowSetup;
 using oxygen::vortex::testing::FakeGraphics;
 
+struct ShaderStructLayout {
+  std::size_t size = 0;
+  std::unordered_map<std::string, std::size_t> offsets;
+};
+
+// StructuredBuffer members use natural scalar layout, without cbuffer register
+// padding. Read the shader declarations independently of the native structures.
+auto ReadShadowShaderLayouts()
+  -> std::unordered_map<std::string, ShaderStructLayout>
+{
+  const auto path
+    = std::filesystem::path { OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR }
+    / "Contracts/Shadows/ShadowFrameBindings.hlsli";
+  auto stream = std::ifstream(path);
+  if (!stream) {
+    throw std::runtime_error(
+      "Cannot read shadow shader contract: " + path.string());
+  }
+  const std::string source { std::istreambuf_iterator<char>(stream),
+    std::istreambuf_iterator<char>() };
+  auto sizes = std::unordered_map<std::string, std::size_t> {
+    { "uint", 4U },
+    { "float", 4U },
+    { "float2", 8U },
+    { "float4", 16U },
+    { "float4x4", 64U },
+  };
+  auto layouts = std::unordered_map<std::string, ShaderStructLayout> {};
+  const auto structures = std::regex(R"(struct\s+(\w+)\s*\{([^}]*)\})");
+  const auto fields = std::regex(R"(\b(\w+)\s+(\w+)(?:\[(\d+)\])?\s*;)");
+  for (auto type
+    = std::sregex_iterator(source.begin(), source.end(), structures);
+    type != std::sregex_iterator(); ++type) {
+    const auto name = type->str(1);
+    const auto body = type->str(2);
+    auto& layout = layouts.try_emplace(name).first->second;
+    for (auto field = std::sregex_iterator(body.begin(), body.end(), fields);
+      field != std::sregex_iterator(); ++field) {
+      layout.offsets.emplace(field->str(2), layout.size);
+      const auto array_count = field->str(3);
+      const auto count = array_count.empty() ? 1U : std::stoul(array_count);
+      layout.size += sizes.at(field->str(1)) * count;
+    }
+    sizes.emplace(name, layout.size);
+  }
+  return layouts;
+}
+
 auto DestroyRenderer(Renderer* renderer) -> void
 {
   if (renderer != nullptr) {
@@ -100,6 +157,55 @@ auto MakePerspectiveResolvedView() -> oxygen::ResolvedView
   params.proj_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
     glm::pi<float>() / 3.0F, 1.0F, params.near_plane, params.far_plane);
   return oxygen::ResolvedView(params);
+}
+
+NOLINT_TEST(ShadowServiceSurfaceTest,
+  ShaderStructuredBufferLayoutsMatchNativeShadowPublication)
+{
+  using oxygen::vortex::PointShadowBinding;
+  using oxygen::vortex::SpotShadowBinding;
+  const auto layouts = ReadShadowShaderLayouts();
+  const auto& cascade = layouts.at("VortexShadowCascadeBinding");
+  EXPECT_EQ(cascade.size, sizeof(ShadowCascadeBinding));
+  EXPECT_EQ(cascade.offsets.at("sampling_metadata0"),
+    offsetof(ShadowCascadeBinding, sampling_metadata0));
+  EXPECT_EQ(cascade.offsets.at("sampling_metadata1"),
+    offsetof(ShadowCascadeBinding, sampling_metadata1));
+  const auto& spot = layouts.at("VortexSpotShadowBinding");
+  EXPECT_EQ(spot.size, sizeof(SpotShadowBinding));
+  EXPECT_EQ(spot.offsets.at("sampling_metadata1"),
+    offsetof(SpotShadowBinding, sampling_metadata1));
+  const auto& point = layouts.at("VortexPointShadowBinding");
+  EXPECT_EQ(point.size, sizeof(PointShadowBinding));
+  EXPECT_EQ(point.offsets.at("position_and_inv_range"),
+    offsetof(PointShadowBinding, position_and_inv_range));
+  const auto& frame = layouts.at("VortexShadowFrameBindings");
+  EXPECT_EQ(frame.size, sizeof(ShadowFrameBindings));
+  const auto expected_offsets = std::array {
+    std::pair { "conventional_shadow_surface_handle",
+      offsetof(ShadowFrameBindings, conventional_shadow_surface_handle) },
+    std::pair { "cascade_count", offsetof(ShadowFrameBindings, cascade_count) },
+    std::pair {
+      "technique_flags", offsetof(ShadowFrameBindings, technique_flags) },
+    std::pair { "sampling_contract_flags",
+      offsetof(ShadowFrameBindings, sampling_contract_flags) },
+    std::pair { "light_direction_to_source",
+      offsetof(ShadowFrameBindings, light_direction_to_source) },
+    std::pair { "spot_shadow_surface_handle",
+      offsetof(ShadowFrameBindings, spot_shadow_surface_handle) },
+    std::pair {
+      "spot_shadow_count", offsetof(ShadowFrameBindings, spot_shadow_count) },
+    std::pair { "cascades", offsetof(ShadowFrameBindings, cascades) },
+    std::pair { "spot_shadows", offsetof(ShadowFrameBindings, spot_shadows) },
+    std::pair { "point_shadow_surface_handle",
+      offsetof(ShadowFrameBindings, point_shadow_surface_handle) },
+    std::pair {
+      "point_shadow_count", offsetof(ShadowFrameBindings, point_shadow_count) },
+    std::pair { "point_shadows", offsetof(ShadowFrameBindings, point_shadows) },
+  };
+  for (const auto& [name, offset] : expected_offsets) {
+    EXPECT_EQ(frame.offsets.at(name), offset) << name;
+  }
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,

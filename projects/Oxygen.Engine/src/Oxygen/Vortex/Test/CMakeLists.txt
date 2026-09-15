@@ -42,17 +42,9 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 # -- GTest Test Programs -------------------------------------------------------
 
-m_gtest_program(
-  RendererCapability
-  SOURCES
-    "RendererCapability_test.cpp"
-)
+m_gtest_program(RendererCapability SOURCES "RendererCapability_test.cpp")
 
-m_gtest_program(
-  GpuTimelineProfiler
-  SOURCES
-    "GpuTimelineProfiler_test.cpp"
-)
+m_gtest_program(GpuTimelineProfiler SOURCES "GpuTimelineProfiler_test.cpp")
 
 m_gtest_program(
   DiagnosticsService
@@ -84,53 +76,30 @@ m_gtest_program(
     "ShaderDebugModeRegistry_test.cpp"
 )
 
-m_gtest_program(
-  RenderContext
-  SOURCES
-    "RenderContext_test.cpp"
-)
+m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
-m_gtest_program(
-  AcceptedDrawView
-  SOURCES
-    "Types/AcceptedDrawView_test.cpp"
-)
+m_gtest_program(AcceptedDrawView SOURCES "Types/AcceptedDrawView_test.cpp")
 
-m_gtest_program(
-  SceneRendererShell
-  SOURCES
-    "SceneRendererShell_test.cpp"
-)
+m_gtest_program(SceneRendererShell SOURCES "SceneRendererShell_test.cpp")
 
-m_gtest_program(
-  SceneTextures
-  SOURCES
-    "SceneTextures_test.cpp"
-)
+m_gtest_program(SceneTextures SOURCES "SceneTextures_test.cpp")
 
-m_gtest_program(
-  SceneTextureLeasePool
-  SOURCES
-    "SceneTextureLeasePool_test.cpp"
-)
+m_gtest_program(SceneTextureLeasePool SOURCES "SceneTextureLeasePool_test.cpp")
 
-m_gtest_program(
-  LightingService
-  SOURCES
-    "LightingService_test.cpp"
-)
+m_gtest_program(LightingService SOURCES "LightingService_test.cpp")
 
-m_gtest_program(
-  PostProcessService
-  SOURCES
-    "PostProcessService_test.cpp"
-)
+m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")
 
 m_gtest_program(
   ShadowService
   SOURCES
     "Fixtures/MeshRasterStateTest.h"
     "ShadowService_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Vortex.ShadowService.Tests
+  PRIVATE
+    OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders/Vortex"
 )
 
 m_gtest_program(
@@ -275,11 +244,7 @@ m_gtest_program(
     "Internal/CompositionPlanner_test.cpp"
 )
 
-m_gtest_program(
-  CompositingPass
-  SOURCES
-    "Internal/CompositingPass_test.cpp"
-)
+m_gtest_program(CompositingPass SOURCES "Internal/CompositingPass_test.cpp")
 
 m_gtest_program(
   RendererCompositionQueue
@@ -364,17 +329,9 @@ m_gtest_program(
     "Fixtures/UploadCoordinatorTest.h"
 )
 
-m_gtest_program(
-  UploadTracker
-  SOURCES
-    "Upload/UploadTracker_basic_test.cpp"
-)
+m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
 
-m_gtest_program(
-  AtlasBuffer
-  SOURCES
-    "Upload/AtlasBuffer_basic_test.cpp"
-)
+m_gtest_program(AtlasBuffer SOURCES "Upload/AtlasBuffer_basic_test.cpp")
 
 m_gtest_program(
   UploadPlanner
