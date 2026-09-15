@@ -1,17 +1,38 @@
 # Standalone Runtime Validation LLD
 
-Status: `reviewed after ED-M07B; ED-M08 implementation and validation pending`
+Status: `revised development-only architecture approved; property-scope review and implementation pending`
 
-Review baseline: 2026-09-15, `9df3b2b88`. Section 9 records the user's choice
-to run an automatic check and exit; the ownership, data and comparison contracts guide
-the implementation sequence in the [M08 plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md).
+The user's 2026-09-15 revision makes the **entire validation workflow
+development-only**. This supersedes the earlier shipped Validate in Standalone
+command, RenderScene validation flag, and prohibition on a separate qualification
+executable. Normal Debug and Release editor/RenderScene builds and their
+SDK/install/package graphs contain no validation protocol, runner, UI, fixtures,
+metrics, or qualification-only instrumentation.
+
+The original review baseline was `9df3b2b88`. The current plan is in
+[ED-M08](../plan/ED-M08-runtime-parity-and-standalone-validation.md). Before
+freezing field payloads, complete the substantive
+[V0.1 authoring-scope review](../review/ED-M08-v01-authoring-scope.md).
+Existing property registrations are evidence for that review, not automatic
+approval of every exposed field.
+
+V0.1 has no backward-compatibility requirement. Useful legacy intent migrates
+to the approved canonical model; no legacy alias, fallback reader or parallel
+field behavior is retained for compatibility. Integrity backups, publication
+recovery and saved-revision ownership remain required and are not compatibility
+features. Property decisions are made interactively one at a time, with current
+context, viable options, industry practice and future implications. Approval of
+one property does not approve a whole category or protocol payload.
 
 ## 1. Purpose
 
 Prove that the exact saved/published editor scene loads through native runtime
 content APIs and renders the same authored content as embedded preview.
-Validation reads authored/published content and writes only derived evidence.
-Save and Cook remain separate, explicit workflows when preparation needs them.
+An explicitly opted-in development test/tool runner reads authored/published
+content and writes only isolated derived evidence. It exercises the real editor
+authoring, Save, and Cook workflows; it does not add a validation command to the
+shipped editor. Save and Cook remain separate explicit actions when preparation
+needs them.
 
 ## 2. Traceability And Related Contracts
 
@@ -40,58 +61,80 @@ does not claim standalone rendered parity.
 RenderScene loads native assets through DemoShell's scene loader. Its normal
 startup reads persisted demo/render settings, discovers/restores content and
 uses fuzzy scene selection. The loader selects the first camera and may create
-one or rewrite its aspect/clipping. M08 adds a strict validation mode using the
-same runtime loading/rendering capabilities.
+one or rewrite its aspect/clipping. M08's separate development driver uses the
+real loading/rendering capabilities with an exact controlled profile; it adds
+no mode to the normal RenderScene executable.
 
 Current runtime observations read native node/environment/background values.
 They do not enumerate a complete hierarchy or all scalar material fields and
 do not observe GPU auto-exposure. Existing frame-capture settings configure
-PIX/RenderDoc; Graphics has GPU readback primitives but no editor parity-PNG
-completion contract. These are explicit M08 implementation tasks.
+PIX/RenderDoc; Graphics has GPU readback primitives but no parity-PNG completion
+contract. M08 consumes those production capabilities through development-only
+drivers/adapters. New exposure telemetry, deep observations, capture holds/hooks,
+and checkpoint scheduling needed only for qualification stay in opt-in targets.
+A capability being reusable does not justify shipping its instrumentation.
 
-## 4. Target Workflow
+## 4. Development Workflow
 
-1. Invoke Validate in Standalone for the active authored scene. Resolve its
-   explicit authored camera; explain unavailable prerequisites with actions.
-2. If participating documents need Save or the selected closure needs Cook,
-   use those existing workflows only after the named user action. Recheck the
-   complete preflight afterward. Unrelated dirty documents do not block.
-3. Admit validation through the project's existing operation coordinator.
-   Verify committed publication, capture the selected saved dependency closure
-   and ordered mounts, and acquire their read/native artifact ownership.
+1. Explicitly invoke the development test/tool target with a project, authored
+   scene, and explicit authored camera. Its own output explains unavailable
+   prerequisites; there is no product menu, command, panel, or persistent setting.
+2. Where preparation requires Save or Cook, use the real editor's existing
+   workflows only after an explicit developer/user action. UI workflow tests
+   invoke those real actions and recheck preflight. Unrelated dirty documents
+   do not block and remain untouched.
+3. The development adapter participates in the existing project coordination and
+   reader contracts. Verify committed publication, capture the selected saved
+   dependency closure and ordered mounts, and retain native/artifact ownership.
 4. Build expected authored state and source-to-cooked identity mapping from
-   verified saved inputs. The live runtime and cooked observations are not the
-   expected authored-state oracle.
-5. Acquire a bounded embedded capture session, apply that saved projection and
-   camera, disable overlays/navigation for its viewport, and capture completed
-   scene frames while newer authoring delivery stays pending.
+   verified saved inputs. Neither the live runtime nor cooked observations is
+   the expected authored-state oracle.
+5. Acquire a development-owned embedded capture session, apply the saved
+   projection/camera, suppress tool overlays/navigation for that target, and
+   capture completed scene frames while later authoring delivery stays pending.
 6. Release the embedded session and converge to current authoring/view intent.
-   Launch the matched RenderScene with the exact immutable request. It loads
-   only the allowed roots/scene and produces native observations and images.
-7. Drain the child and compare both native observations to expectations, then
-   compare the images. Finalize a structured result and expose original evidence.
-8. Release all reservations/readers after actual native reads and cleanup end.
-   Newer edits remain dirty; results keep the captured revision and become
-   historical without changing their original verdict.
+   Launch the matched opt-in native validation driver with the immutable request.
+   It loads only the allowed roots/scene and produces observations and images.
+7. Drain the child, compare each observation to expectations, then compare images.
+   Finalize a structured result and expose original evidence in test/tool output.
+8. Release reservations/readers only after actual native reads and cleanup end.
+   Newer edits remain dirty. Results identify the captured revision and can
+   become historical without changing their original verdict.
 
-## 5. Ownership And Dependency Direction
+## 5. Ownership, Build Isolation And Dependency Direction
 
 | Owner | Responsibility |
 | --- | --- |
-| WorldEditor | Scene/camera context, explicit save/cook recovery, capture-aware scene-sync hold, view intent and result UI. |
-| ContentPipeline | UI-independent request/expected-state preparation, provenance/mount admission, owned process, comparison and derived result persistence. |
-| Runtime | Managed target validation, native observation/capture capabilities and completion; no authoring DTOs or cook policy. |
-| Interop | Narrow adapters for engine public capabilities; no independent renderer/asset policy. |
-| Engine Scene/Content/Engine/Vortex/Graphics | Actual scene/asset observations, readiness, deterministic timing, final render output and GPU readback ownership. |
-| RenderScene / reusable DemoShell code | Strict request runner, native scene hydration, camera/profile selection and native artifacts. |
-| Editor composition root | Registers the WorldEditor capture adapter with the ContentPipeline workflow. |
+| Opt-in managed validation target in `tests/validation` or existing test-support | Preparation, expected state, admission adapter, owned process, comparison, fixture/coverage data, progress and derived results. Reuse an existing host where it can isolate this work; add a development project only if necessary. |
+| Canonical development contracts under `Oxygen.Engine/tools/validation` | Shared schemas, protocol reader/DTO contract, rejection corpus and version compatibility. No canonical schema is owned by an example or embedded by a production editor assembly. |
+| Opt-in native validation driver/adapters under `Oxygen.Engine/tools/validation` | Strict request execution, native enumeration/telemetry, deterministic checkpoints, capture correlation and evidence. A separate test/tool executable is permitted. |
+| Development editor/UI-host adapter | Connect real editor services to the development runner; own qualification-only capture hold/hooks and result feedback outside the shipped composition graph. |
+| Production ContentPipeline/WorldEditor/Runtime/Interop | Keep their real authoring, save/cook, mutation, loading, view and runtime responsibilities. They do not own M08 orchestration or depend on its test/tool target. |
+| Production Scene/Content/Engine/Vortex/Graphics | Real scene/loading/rendering/readback behavior. Fix production defects under those owners; add production APIs only for an independent runtime responsibility. |
+| DemoShell/RenderScene | Remain ordinary example consumers. Development drivers may reuse their loader/library code, but examples do not own the shared protocol and normal RenderScene receives no validation flag. |
 
-ContentPipeline must not add a dependency on WorldEditor or Runtime to orchestrate
-capture. Define a managed capture-client contract in its validation namespace;
-WorldEditor implements it using its scene/document services and Runtime.
-Runtime capability DTOs stay runtime-owned. Use existing test projects/native
-CMake registration; no validation probe executable, new authoring domain or
-generic validation center is required.
+Dependencies point **development tooling → production capabilities**, never the
+reverse. Merely moving schemas into a shared production package does not meet
+this requirement. New exposure telemetry, deep observations, capture hold/hooks,
+checkpoint scheduling, comparison metrics, and fixtures used only for
+qualification compile/link only in the opt-in managed/native target. If a hook
+cannot be isolated, resolve that design constraint before adding it; do not
+label validation instrumentation reusable and silently ship it.
+
+Native validation configuration is explicitly opt-in and off by default,
+independently of Debug/Release and ordinary test settings. Managed validation
+has a dedicated opt-in test/tool target outside normal editor project references,
+resources, module initializers, solution build selections, and packaging.
+Development drivers/hooks and their schemas are not part of the normal SDK
+installation. Use a separate development-validation output/staging tree; never
+overwrite normal editor, RenderScene, SDK, or `bin` artifacts with a qualification
+variant. Exact target names and commands are recorded when implemented.
+
+An exclusion gate must inspect normal Debug **and** Release build graphs, binary
+and embedded resources, module initializers, package contents, and install
+manifests: **zero development-validation dependencies or payloads**. Build and
+run the normal editor and RenderScene without the opt-in target to prove ordinary
+behavior remains available. This is separate from proving the development runner.
 
 ## 6. Admission, Provenance And Immutable Inputs
 
@@ -148,7 +191,7 @@ not silently count as preservation of the overridden project material's values.
 
 ### 6.3 Coordination and lock order
 
-Validation shares the existing project's operation admission. Wait cancellably
+The development adapter uses the existing project's operation admission. Wait cancellably
 for already-admitted cook/mount work, then establish a reservation and acquire
 the verified read set. Later cooks/mount changes wait visibly and resume when the
 reservation ends. This must not change session Pause automatic cooking.
@@ -171,13 +214,14 @@ process or document is closed to obtain the reservation.
 
 ## 7. Version-1 Protocol And Evidence
 
-M08 adds this installed-tool entry point:
+The opt-in development driver accepts an absolute immutable request path. Its
+exact target and argument names are introduced with that target; **no validation
+entry point is added to the normal RenderScene executable or editor**.
 
-~~~text
-Oxygen.Examples.RenderScene.exe --editor-validation-request <absolute-request.json>
-~~~
-
-No such supported option exists at the review baseline.
+The version-1 envelope below remains a design contract, not implemented protocol
+support. Payload/field details freeze only after the V0.1 scope review. Canonical
+schemas and native readers belong to development tooling under `tools/validation`;
+managed test/tool consumers share those sources without production references.
 
 | Required field | Type and contract |
 | --- | --- |
@@ -198,7 +242,8 @@ finite values and bounded counts/sizes before allocation. Protocol readers
 reject missing required data and incompatible versions; optional diagnostic
 extensions cannot satisfy a missing required observation.
 
-Artifacts under `.oxygen/validation/<OperationId>/`:
+Run artifacts under `.oxygen/validation/<OperationId>/` in a designated development
+test project, or an explicitly owned isolated development evidence root:
 
 - `request.json`, `identity-map.json`, `expected-state.json`, private saved inputs
   and their proofs.
@@ -225,41 +270,58 @@ Exit codes: 0 = requested native load/observation/captures completed;
 Forced termination or crash need not return 5: the managed owner classifies the
 actual outcome. Native exit 0 is never a parity verdict.
 
-### Compatibility without a qualification build
+### Compatibility and separate development builds
 
-Follow PRD section 9. Normal Interop compilation records its SDK dependencies;
-runtime startup verifies those inputs. Managed/UI edits do not invalidate a fixed
-whole-editor approval manifest because no such manifest is required.
+Normal Interop compilation continues to record its ordinary SDK dependencies;
+product startup verifies them. No whole-editor qualification manifest or
+validation target is a prerequisite for production startup, authoring, Save,
+or Cook. Managed/UI edits do not invalidate a fixed whole-editor approval
+manifest because no such manifest is required.
 
-Validation discovers RenderScene in the selected installed SDK and verifies its
-ordinary build dependency/protocol metadata against the embedded native runtime,
-required schemas and shaders. Add missing native tool metadata to the normal
-CMake build/install path, not to a separate probe or qualification command.
-Verify and hold the actual files before use. Child startup verifies the request
-against its own loaded/runtime artifact identities.
+The development runner verifies the selected production runtime/Interop inputs,
+its own opt-in driver/adapters/protocol, required schemas and shaders. Use the
+existing SDK metadata/fingerprint approach for real dependencies, and generate
+development target metadata only in its separate output bundle. Do not install
+qualification-only headers, schemas, binaries or hooks into the normal SDK.
+Verify and retain actual artifact files before use; child startup checks its
+loaded identities against the request.
 
-Cooking producer fingerprints remain per-product provenance. Exact runtime/tool
-and profile hashes identify this parity run. Do not require unrelated managed
-assemblies, tests, documentation or git dirtiness to match for execution.
-A diagnostic source commit may be recorded without becoming a startup gate.
-Failure affects validation/native availability, not safe source authoring/Save.
+Cooking producer fingerprints remain per-product provenance. Exact runtime,
+development tool, and profile hashes identify the parity run. Do not require
+unrelated managed assemblies, tests, documentation or git dirtiness to match.
+A source commit may be recorded diagnostically without becoming a startup gate.
+A missing/incompatible development bundle makes qualification unavailable; it
+does not affect normal source authoring, Save, Cook, or runtime availability.
 
 ## 8. Observation, Capture And Comparison
 
 ### 8.1 Required semantics
 
-The field inventory covers every editable authored field in PRD section 8's
-Transform/hierarchy, Geometry/slot 0, PerspectiveCamera, DirectionalLight/sun,
-Environment/PostProcess/Background and scalar Material rows. Include component
-presence, names/flags where authored, all camera components (not just selected),
-parent relationships and transforms, geometry and resolved slot identities.
+The required field set is **pending the researched V0.1 authoring-scope review**
+and its explicit acceptance. Review professional workflows, authoring value,
+canonical storage/units, runtime support and testing cost; do not freeze the
+current registrations as the product surface. Reconcile approved changes with
+PRD section 8 and the relevant authoring LLDs before protocol/fixture completion.
+
+For the approved scope, include component presence, authored names/flags, every
+authored camera (not just the selected one), parent relationships/transforms,
+geometry and resolved slot identities. Map approved fields to source, stored
+native and effective observations explicitly. Missing support for an approved
+required field fails qualification; excluding a field needs a recorded scope
+decision rather than silent omission.
+
+Captured-sky lighting supporting both diffuse and specular image-based lighting
+is explicitly approved. This capability decision does not approve every related
+property/knob; remaining property decisions follow the review's one-at-a-time
+interactive process.
 
 Compare stored native values and effective derived values separately. Examples:
 camera FOV/aspect/near/far and parented world pose; light stored intensity and
 effective compensation/sun selection; material alpha mode/cutoff and factors;
 environment's stored exposure settings and frame-specific GPU exposure.
-Legacy source mirror fields normalize to canonical PostProcess and are not
-independent editable fields.
+Useful legacy source intent must migrate to canonical PostProcess or the other
+approved canonical owner. Validation accepts that canonical model only; old
+mirror fields, enum aliases or alternate readers are not compatibility gates.
 
 For engine-generated/None/Default references, record conceptual selection plus
 the engine catalog's expected resolved keys/default material. Do not require
@@ -302,7 +364,10 @@ background and foreground transparency composition, before UI composition.
 Use the same defined SDR output encoding on both paths; remove BGRA/row-pitch
 differences without another exposure/gamma adjustment or image resizing.
 Readback completes only after the GPU copy fence and encoding/file writes.
-A native capture owns source textures and related resources until then.
+A native capture owns source textures and related resources until then. The
+checkpoint scheduler, qualification telemetry and capture-result protocol remain
+development-only; using production readback does not make their instrumentation
+part of the normal renderer build.
 
 Record effective settings/CVars and native loaded artifacts, not just requested
 values. Disable restored demo state, automatic camera rigs, hidden sky/material
@@ -339,7 +404,8 @@ static Manual success cannot substitute for Auto behavior. ManualCamera cases
 record the engine's effective camera-exposure inputs as well as the saved mode;
 M08 does not add new camera authoring fields.
 
-The field suite includes every tone mapper/exposure mode and visually meaningful
+Subject to the accepted field-scope review, the suite includes every approved
+tone mapper/exposure mode and visually meaningful
 geometry/material, hierarchy/camera, light/atmosphere and background changes.
 Background with atmosphere off retains picked display colour independently of
 exposure/tone mapping; translucent foreground must retain its material.
@@ -348,7 +414,9 @@ relaxed thresholds or substituted scenes.
 
 ### 8.4 Saved-revision embedded capture session
 
-Only one session owns the embedded runtime. It records operation, project, run,
+Only one development capture session owns the embedded target. The opt-in
+adapter owns its hold/hook; normal editor builds contain no qualification session.
+It records operation, project, run,
 document, scene activation and view generation, saved revision, temporary profile
 and current view intent. Before pinning, finish/cancel the active edit gesture
 through its ordinary contract and drain earlier conflicting projection work.
@@ -359,8 +427,9 @@ asset-demand completion. Authoring commits/Undo/Redo and new revisions continue;
 rendering keeps advancing. This is not the publication pause that suspends
 cooked-content rendering.
 
-The viewport labels capture of the saved revision and any newer pending edits.
-Disable navigation and profile changes only for the bounded capture window.
+The development host/test output identifies capture of the saved revision and
+newer pending edits without adding product validation UI. Its capture adapter
+suppresses navigation/profile changes only for the bounded capture window.
 A fixed capture target is independent of UI panel size; resizing the same view
 must not change image dimensions or persist a temporary camera setting.
 
@@ -376,60 +445,53 @@ fault leaves authoring intact and preview unavailable; restart converges normall
 Capture/GPU cleanup and independent output-reader cleanup retain their respective
 owners until actual work drains.
 
-## 9. User Experience
+## 9. Development Workflow And Joint Review
 
-The command is discoverable for an active authored scene. Preflight shows a clear
-reason and next action instead of silently disabling the command for dirty or
-stale content. No scene/runtime/camera, missing tooling, recovery-required output
-and unresolved dependencies are distinct conditions.
+### Entry and prerequisites
 
-Camera selection uses the selected authored PerspectiveCamera, otherwise the
-sole authored perspective camera. Several require explicit choice; none requires
-creating an authored camera. No fallback to an editor-navigation camera.
+The developer explicitly runs the opt-in test/tool target. There is no shipped
+Validate in Standalone command, menu, banner, panel, protocol endpoint, metrics
+viewer, fixture catalog, preference, or background scheduler. A separate driver
+runs the check, writes useful results, and exits. Earlier requirements for a
+product scene command and no separate executable are historical and superseded.
 
-Save recovery lists participating documents with document-name links and explicit
-Save listed. It uses existing save-conflict handling and preserves the validation
-intent. Cook recovery delegates to existing Cooking and reruns preflight after
-successful publication. No automatic save or implicit cook on command invocation.
-Unrelated dirty documents remain untouched.
+Camera selection uses an explicitly selected authored PerspectiveCamera,
+otherwise the sole authored perspective camera. Several require explicit choice;
+none requires creating an authored camera. Never substitute editor navigation.
+The development runner distinguishes missing runtime/camera/tooling, dirty saved
+inputs, stale cooking, recovery-required publication and unresolved dependencies.
 
-Running feedback is concise: Preparing, Capturing preview, Running standalone,
-Comparing, then Passed/Failed/Cancelled. Busy/phase feedback appears within
-100 ms. Show Cancel while work owns resources and Cancelling until cleanup
-finishes. Captured revision/freshness is secondary information, not several
-repetitive success labels.
+Preparation does not secretly Save or Cook. UI workflow tests and joint review
+exercise the real editor's scene, material, hierarchy, Save/conflict and Cooking
+surfaces. Name participating documents when a save is required and invoke the
+existing workflow explicitly; recheck preflight after completion. Leave unrelated
+dirty documents alone and do not hold a validation reservation during recovery.
 
-### Product feedback and verification evidence
+### Feedback and lifetime
 
-User decision, 2026-09-15: **Run a check, then exit**. The standalone window is
-controlled by the check, then closes automatically. This is not a new interactive
-play mode. Screenshot comparisons remain verification evidence; no comparison
-document tab, docked validation panel or generic test dashboard is added.
+Developer/test feedback retains the concise sequence Preparing, Capturing
+preview, Running standalone, Comparing, then Passed/Failed/Cancelled. Busy/phase
+feedback appears within 100 ms; cancellation remains visible until cleanup
+finishes. A failure identifies scene/asset/property and the next action, with
+technical details and original evidence in the run directory. A test-host status
+surface may reuse compact accessible controls, but it must not enter the normal
+editor composition or package. No new product dashboard or comparison tab.
 
-Show compact progress/Cancel at the originating scene command surface, then a
-concise result through the existing operation-result infrastructure. A failure
-names the scene/asset/property and next action. Its details action exposes the
-captured messages and artifact directory without making the user search global
-logs. Do not put a raw stack trace or a permanent large banner in the scene view.
-Original images, differences and full comparison JSON are retained as files for
-diagnosis and joint acceptance testing, not another everyday asset-editor view.
+Do not activate another document merely to report progress. In interactive UI
+qualification, navigation away during embedded capture cancels that session.
+After it releases, navigation does not cancel the independent child or reactivate
+an old scene. Explicit Cancel and approved project close own termination. New
+edits do not clear dirty state or relabel a captured revision as current.
 
-Do not activate another document merely to show progress during capture. Manual
-navigation away during embedded capture cancels it. Navigation afterward does
-not cancel the independent standalone child or reactivate an old scene on its
-completion. Explicit Cancel and project close own termination.
+### Joint acceptance
 
-Reuse DroidNet compact controls, semantic WinUI status colours/icons, tooltips
-and named accessible controls. Hide inapplicable actions. A run applies to its
-captured revision; editing afterward does not relabel it as current or clear
-document dirty state. Repeating the check captures fresh saved inputs and creates
-distinct evidence.
-
-Milestone acceptance includes joint testing with the user: execute the real
-command, observe launch/progress/exit and result, change representative content,
-rerun and cancel. Review retained captures/metrics together and record the user's
-observations. Automated checks support that review; an extra product UI is not
-required to prove the implementation.
+Run the real authoring UI together with the user, explicitly Save/Cook as needed,
+and invoke the development driver. Observe capture, standalone launch/exit,
+results, a changed material/background case, rerun and cancellation. Review
+original images, differences, metrics and semantic failures as retained test
+evidence. Record the user's observations and allow time for their testing before
+closeout. Automated checks support that review; they do not substitute a toy UI,
+a hidden source edit, or a matching pair of incorrect images.
 
 ## 10. Process Lifetime, Deadlines And Recovery
 
@@ -468,9 +530,9 @@ unresolved asset, load failure, missing field, capture/readback failure, semanti
 mismatch, image mismatch, timeout, cancellation and incomplete cleanup.
 
 Every issue has operation/phase plus scene/node/asset/property identity when
-available, a concise user message and optional technical details. Retain existing
-operation-result vocabulary and string-kind conventions; add validation-specific
-codes in the owning module. Do not expose a raw exception stack as primary UI.
+available, a concise user message and optional technical details. Reuse existing diagnostic vocabulary and string-kind conventions where suitable;
+validation-specific codes live in the development target. Do not present a raw
+stack trace as the primary developer/test-host result.
 
 Artifacts are local derived evidence under `.oxygen`, not saved authoring or
 publication state. Missing evidence does not corrupt the project. Earlier results
@@ -484,7 +546,8 @@ preference or background validation scheduler is added.
 - [ ] Request/build/schema/root/file mismatches fail before affected native use.
 - [ ] Per-product expected state stays correct after partial/no-op cook and
   deliberate library priority changes; unavailable source is labelled honestly.
-- [ ] Every required field passes saved/embedded/standalone semantic comparison.
+- [ ] The researched V0.1 scope is accepted and reconciled; every approved required
+  field passes saved/embedded/standalone semantic comparison.
 - [ ] Controlled static and Auto/field image cases pass unchanged tolerances,
   with observed GPU exposure and actual completed-frame identities.
 - [ ] Editing/Undo/hierarchy/asset changes during capture cannot contaminate
@@ -493,8 +556,13 @@ preference or background validation scheduler is added.
   restore stale state or leak scene/view/GPU/reader ownership.
 - [ ] Concurrent saves/cooks/mount changes wait/resume safely without exception
   polling, hidden save/cook or modifying automatic-cooking preferences.
-- [ ] Scene entry, prerequisite recovery, camera choice and complete readable
-  per-run results pass actual UI tests and user review.
+- [ ] Development entry, real authoring/Save/Cook UI recovery, camera choice and
+  readable per-run results pass development tests and joint user review.
+- [ ] Normal Debug/Release editor and RenderScene project references, resources,
+  initializers, binaries, packages and SDK/install outputs contain zero
+  development-validation dependencies or payloads. Canonical product workflows
+  remain usable without development tooling; legacy behavior is not preserved
+  merely for compatibility.
 - [ ] M02's outstanding single-viewport evidence and the exact M08 build/
   publication/fixture/profile artifact set are recorded before M08 closes.
 

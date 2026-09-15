@@ -129,7 +129,7 @@ recorded by the owning LLD/milestone plan.
 | `REQ-039` | Cook consumes a coherent saved dependency snapshot, validates staged output, and publishes it with a brief preview suspension and rollback protection. Failed/cancelled work cannot corrupt the previously published cook or falsely report it current. |
 | `REQ-040` | The qualified static/scalar import subset is reproducible from retained sources and configuration on a clean project copy. Unsupported authored/imported content fails visibly before publication; source data is never silently discarded or overwritten. |
 | `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the matched Windows x64 editor/runtime/cooker/schema build and performance conditions in section 9. Larger projects are unqualified, not subject to an artificial hard cap. |
-| `REQ-042` | Standalone validation loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. |
+| `REQ-042` | Development-only standalone qualification loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. Its workflow and tooling are excluded from normal editor Debug/Release builds. |
 
 ## 6. Success Metrics
 
@@ -150,6 +150,27 @@ recorded by the owning LLD/milestone plan.
 Validation proves that the requirements work; it is not itself the product
 requirement. Each LLD/milestone plan decides the right verification method for its
 scope.
+
+On 2026-09-15 the user explicitly required the entire standalone validation
+workflow to remain development-only. Normal editor Debug and Release builds,
+packages and the normal SDK must contain no qualification command, request
+protocol, fixture, comparison harness or qualification runner. Opt-in test/tool
+targets own that work and write to isolated development output directories.
+Production renderer, loading and authoring fixes remain in their proper modules;
+calling test instrumentation reusable does not justify shipping it.
+This supersedes the earlier M08 proposal for a product Validate in Standalone
+command. Ordinary field/input validation and cook/runtime compatibility checks
+remain production responsibilities.
+
+Pre-V0.1 backward compatibility is not a requirement. The user explicitly
+rejected legacy fields, schema/alias compatibility and runtime fallbacks on
+2026-09-15. Useful existing content migrates to the selected canonical model
+using development tooling and normal recooking; the shipping product has one
+current contract. Migration recovery protects source work without keeping a
+legacy execution path. The authoring scope is being decided interactively in
+the [M08 scope review](review/ED-M08-v01-authoring-scope.md); captured-sky diffuse
+and specular lighting is approved, while the other proposed changes require
+individual decisions.
 
 Cheap, meaningful automated tests should be added when they give useful signal,
 especially for domain logic, serialization round trips, descriptor generation,

@@ -930,7 +930,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `planned; ready for implementation`
+Status: `active; interactive property decisions; development-only qualification`
 
 Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-018`,
 `REQ-019`, `REQ-022`, `REQ-023`, `REQ-024`, `REQ-026`, `REQ-030`,
@@ -949,15 +949,23 @@ content in embedded preview and standalone runtime under controlled comparison.
 - [x] Detailed plan refreshed on 2026-09-15: per-product provenance, ordered
       library readers, ordinary native compatibility, strict camera/loading,
       complete observations, GPU readback and bounded capture ownership.
-- [x] User confirmed an automatic check that exits. No comparison tab; concise
-      editor results and retained artifacts support joint acceptance testing.
+- [x] User confirmed the entire validation workflow is development-only:
+      opt-in test/tool targets, no qualification command/protocol/fixtures in
+      normal editor Debug/Release or normal RenderScene builds. Retained
+      artifacts support joint review; the earlier shipped-command plan is superseded.
+- [x] User rejected backward compatibility: migrate useful legacy content to
+      canonical V0.1 formats; no shipping compatibility fields/aliases/fallbacks.
+- [x] Captured-sky diffuse/specular lighting is approved as V0.1 scope;
+      implementation and rendered validation remain pending.
+- [ ] Decide the remaining researched authoring choices individually with the
+      user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
 - [ ] M08.2 verified preparation, root ownership and project admission.
-- [ ] M08.3 exact RenderScene loading and complete native observations.
+- [ ] M08.3 exact native loading and complete observations through opt-in tooling.
 - [ ] M08.4 controlled scene-frame capture and effective exposure observation.
 - [ ] M08.5 saved-revision embedded session and current-authoring convergence.
 - [ ] M08.6 owned process, semantic/image comparison and result integrity.
-- [ ] M08.7 real scene command, prerequisite recovery and concise feedback.
+- [ ] M08.7 development workflow, real authoring prerequisites and build exclusion.
 - [ ] M08.8 complete field/rendered suite and joint user acceptance.
 - [ ] Embedded preview renders the qualified PRD fixture and field cases.
 - [ ] The exact published project output loads through the ED-M08 request contract.
@@ -1046,7 +1054,7 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `validated` | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded. |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `planned` | Post-M07B review complete; eight ordered implementation slices. M02 resize/discovery evidence gates closure, not implementation. Automatic check exits; joint acceptance uses retained artifacts. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `active` | Development-only workflow approved; authoring-scope review precedes implementation. Normal Debug/Release excludes qualification code. M02 evidence and joint retained-artifact review gate closure. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
