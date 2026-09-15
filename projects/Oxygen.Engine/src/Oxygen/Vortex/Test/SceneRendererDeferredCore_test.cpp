@@ -49,6 +49,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
+#include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -2442,6 +2443,170 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
                 return bind.desc.GetName() == "Vortex.BasePass.GBuffer.Masked";
               }),
     1);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  BaseAndDepthPassesBindSidednessAndHandednessForEveryDraw)
+{
+  const auto config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, config);
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, config);
+  auto depth_pass = oxygen::vortex::DepthPrepassModule(*renderer_, config);
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "RasterState.ViewConstants",
+  });
+  for (const auto kind : { oxygen::vortex::PassMaskBit::kOpaque,
+         oxygen::vortex::PassMaskBit::kMasked }) {
+    SCOPED_TRACE(static_cast<std::uint32_t>(kind));
+    auto draws = oxygen::vortex::testing::MakeRasterStateDraws(kind);
+    auto frame = oxygen::vortex::PreparedSceneFrame {};
+    frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
+    context.current_view.prepared_frame
+      = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+          &frame
+        };
+    for (const auto shading :
+      { ShadingMode::kForward, ShadingMode::kDeferred }) {
+      SCOPED_TRACE(static_cast<int>(shading));
+      graphics_->draw_log_.draws.clear();
+      base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+        .write_velocity = false,
+        .early_z_pass_done = false,
+        .shading_mode = shading,
+        .render_mode = oxygen::vortex::RenderMode::kSolid,
+      });
+      EXPECT_EQ(
+        base_pass.Execute(context, scene_textures).draw_count, draws.size());
+      oxygen::vortex::testing::ExpectRasterStateDraws(
+        graphics_->draw_log_.draws, "Vortex.BasePass.");
+    }
+    for (const auto write_velocity : { false, true }) {
+      SCOPED_TRACE(write_velocity);
+      graphics_->draw_log_.draws.clear();
+      depth_pass.SetConfig(oxygen::vortex::DepthPrepassConfig {
+        .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
+        .write_velocity = write_velocity,
+      });
+      depth_pass.Execute(context, scene_textures);
+      oxygen::vortex::testing::ExpectRasterStateDraws(
+        graphics_->draw_log_.draws, "Vortex.DepthPrepass.");
+    }
+  }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  AuxiliaryVelocityBindsSidednessAndHandednessForEveryDraw)
+{
+  const auto config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, config);
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, config);
+  const auto status = std::array {
+    oxygen::vortex::MotionVectorStatusPublication {
+      .contract_hash = 0x1234U,
+      .capability_flags
+      = static_cast<std::uint32_t>(oxygen::vortex::
+            MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
+        | static_cast<std::uint32_t>(
+          oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
+      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
+    },
+  };
+  auto velocity = std::array<oxygen::vortex::VelocityDrawMetadata, 5> {};
+  for (auto& item : velocity) {
+    item.current_motion_vector_status_index = 0U;
+    item.previous_motion_vector_status_index = 0U;
+    item.publication_flags
+      = static_cast<std::uint32_t>(oxygen::vortex::
+            VelocityDrawPublicationFlagBits::kCurrentMotionVectorStatusValid)
+      | static_cast<std::uint32_t>(oxygen::vortex::
+          VelocityDrawPublicationFlagBits::kPreviousMotionVectorStatusValid);
+  }
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "RasterState.VelocityConstants",
+  });
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = true,
+    .early_z_pass_done = true,
+    .shading_mode = ShadingMode::kDeferred,
+  });
+  for (const auto kind : { oxygen::vortex::PassMaskBit::kOpaque,
+         oxygen::vortex::PassMaskBit::kMasked }) {
+    auto draws = oxygen::vortex::testing::MakeRasterStateDraws(kind);
+    auto frame = oxygen::vortex::PreparedSceneFrame {};
+    frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
+    frame.current_motion_vector_status_publications = std::span(status);
+    frame.previous_motion_vector_status_publications = std::span(status);
+    frame.velocity_draw_metadata = std::span(velocity);
+    context.current_view.prepared_frame
+      = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+          &frame
+        };
+    graphics_->draw_log_.draws.clear();
+    const auto result = base_pass.Execute(context, scene_textures);
+    EXPECT_TRUE(result.wrote_velocity_target);
+    oxygen::vortex::testing::ExpectRasterStateDraws(
+      graphics_->draw_log_.draws, "Vortex.BasePass.VelocityAux.");
+  }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  TranslucencyBindsSidednessAndHandednessForEveryDraw)
+{
+  const auto config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, config);
+  auto translucency = oxygen::vortex::TranslucencyModule(*renderer_);
+  auto draws = oxygen::vortex::testing::MakeRasterStateDraws(
+    oxygen::vortex::PassMaskBit::kTransparent);
+  auto frame = oxygen::vortex::PreparedSceneFrame {};
+  frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
+  auto context = RenderContext {};
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> { &frame };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "RasterState.TranslucencyConstants",
+  });
+  for (const auto reverse_z : { true, false, true }) {
+    const auto view = MakePerspectiveResolvedView(64.0F, 64.0F, reverse_z);
+    context.current_view.resolved_view
+      = oxygen::observer_ptr<const ResolvedView> { &view };
+    graphics_->draw_log_.draws.clear();
+    EXPECT_TRUE(translucency.Execute(context, scene_textures).executed);
+    oxygen::vortex::testing::ExpectRasterStateDraws(
+      graphics_->draw_log_.draws, "Vortex.Translucency.");
+  }
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,

@@ -56,6 +56,8 @@ enum class PassMaskBit : uint32_t { // NOLINT(*-enum-size)
   kUi = OXYGEN_FLAG(8),
   kShadowCaster = OXYGEN_FLAG(9),
   kMainViewVisible = OXYGEN_FLAG(10),
+  //! Negative world determinant: reverse raster front-face winding.
+  kReverseWinding = OXYGEN_FLAG(11),
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(PassMaskBit)
@@ -148,7 +150,7 @@ inline auto to_string(PassMask mask) -> std::string
     PassMaskBit flag;
     std::string_view name;
   };
-  static constexpr std::array<Entry, 10> kTable = { {
+  static constexpr std::array<Entry, 11> kTable = { {
     { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
     { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
     { .flag = PassMaskBit::kMasked, .name = "Masked" },
@@ -159,6 +161,7 @@ inline auto to_string(PassMask mask) -> std::string
     { .flag = PassMaskBit::kUi, .name = "UI" },
     { .flag = PassMaskBit::kShadowCaster, .name = "ShadowCaster" },
     { .flag = PassMaskBit::kMainViewVisible, .name = "MainViewVisible" },
+    { .flag = PassMaskBit::kReverseWinding, .name = "ReverseWinding" },
   } };
   std::string out;
   for (const auto& e : kTable) {

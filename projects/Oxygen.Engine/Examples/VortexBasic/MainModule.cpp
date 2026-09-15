@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -57,6 +58,7 @@
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "VortexBasic/MainModule.h"
+#include "VortexBasic/NormalMapValidationTexture.h"
 
 using oxygen::ViewPort;
 using oxygen::data::Vertex;
@@ -191,7 +193,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   const oxygen::data::MaterialDomain domain
   = oxygen::data::MaterialDomain::kOpaque,
   const glm::vec3 emissive = glm::vec3 { 0.0F },
-  const uint32_t extra_flags = 0U)
+  const uint32_t extra_flags = 0U, const bool double_sided = true,
+  const oxygen::content::ResourceKey normal_map = {})
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   // NOLINTBEGIN(*-magic-numbers)
@@ -207,8 +210,14 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = pak::render::kMaterialFlag_DoubleSided
-    | pak::render::kMaterialFlag_NoTextureSampling | extra_flags;
+  desc.flags = pak::render::kMaterialFlag_NoTextureSampling | extra_flags;
+  if (double_sided) {
+    desc.flags |= pak::render::kMaterialFlag_DoubleSided;
+  }
+  if (normal_map != oxygen::content::ResourceKey {}) {
+    desc.flags &= ~pak::render::kMaterialFlag_NoTextureSampling;
+    desc.base_color_texture = pak::core::kFallbackResourceIndex;
+  }
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -223,8 +232,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.emissive_factor[2] = d::HalfFloat { emissive.b };
   const auto key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/VortexBasic/Materials/" + std::string(name) + ".omat");
-  return std::make_shared<const d::MaterialAsset>(
-    key, desc, std::vector<d::ShaderReference> {});
+  return std::make_shared<const d::MaterialAsset>(key, desc,
+    std::vector<d::ShaderReference> {},
+    std::vector<oxygen::content::ResourceKey> { {}, normal_map });
   // NOLINTEND(*-magic-numbers)
 }
 
@@ -235,14 +245,16 @@ auto BuildPrimitiveGeometry(const char* geometry_name,
   const oxygen::data::MaterialDomain domain
   = oxygen::data::MaterialDomain::kOpaque,
   const glm::vec3 emissive = glm::vec3 { 0.0F },
-  const uint32_t extra_material_flags = 0U)
+  const uint32_t extra_material_flags = 0U, const bool double_sided = true,
+  const oxygen::content::ResourceKey normal_map = {})
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   namespace d = oxygen::data;
   namespace pak = d::pak;
 
-  const auto material = MakeSolidColorMaterial(material_name, rgba, roughness,
-    metalness, domain, emissive, extra_material_flags);
+  const auto material
+    = MakeSolidColorMaterial(material_name, rgba, roughness, metalness, domain,
+      emissive, extra_material_flags, double_sided, normal_map);
 
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
@@ -327,8 +339,10 @@ namespace oxygen::examples::vortex_basic {
 // ---------------------------------------------------------------------------
 
 MainModule::MainModule(const DemoAppContext& app,
-  const vortex::ShaderDebugMode shader_debug_mode) noexcept
+  const vortex::ShaderDebugMode shader_debug_mode,
+  const ValidationOptions validation) noexcept
   : app_(app)
+  , validation_(validation)
   , shader_debug_mode_(shader_debug_mode)
 {
   DCHECK_NOTNULL_F(app_.platform);
@@ -357,10 +371,15 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
   if (!app_.headless) {
     DCHECK_NOTNULL_F(app_window_);
 
-    platform::window::Properties props("Vortex Basic Example");
+    platform::window::Properties props(validation_.sidedness_scene
+        ? (validation_.shading_mode == vortex::ShadingMode::kDeferred
+              ? "Oxygen Sidedness Validation - Deferred"
+              : "Oxygen Sidedness Validation - Forward")
+        : "Vortex Basic Example");
     constexpr uint32_t kWidth = 1920U;
     constexpr uint32_t kHeight = 1440U;
-    props.extent = { .width = kWidth, .height = kHeight };
+    props.extent = { .width = validation_.sidedness_scene ? 1600U : kWidth,
+      .height = validation_.sidedness_scene ? 1000U : kHeight };
     props.flags = {
       .hidden = false,
       .always_on_top = false,
@@ -406,6 +425,7 @@ auto MainModule::OnShutdown() noexcept -> void
   translucent_cylinder_node_ = {};
   scene_.reset();
   vortex_renderer_.reset(nullptr);
+  validation_normal_map_.reset();
 }
 
 auto MainModule::ReleasePublishedRuntimeView(
@@ -531,6 +551,15 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
+  if (validation_.normal_map) {
+    if (!validation_normal_map_) {
+      validation_normal_map_ = std::make_unique<NormalMapValidationTexture>(
+        app_.engine->GetAssetLoader());
+    }
+    if (!validation_normal_map_->EnsureReady()) {
+      co_return;
+    }
+  }
   EnsureScene();
   EnsureLighting();
   const auto extent = ResolveViewExtent();
@@ -587,8 +616,8 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
 
-  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
-    std::move(view_ctx), vortex::ShadingMode::kDeferred);
+  renderer->UpsertPublishedRuntimeView(
+    *context, main_view_id_, std::move(view_ctx), validation_.shading_mode);
   const auto published_view_id
     = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
   if (published_view_id != kInvalidViewId) {
@@ -656,6 +685,11 @@ auto MainModule::EnsureScene() -> void
   }
 
   LOG_SCOPE_FUNCTION(INFO);
+
+  if (validation_.sidedness_scene) {
+    BuildSidednessScene();
+    return;
+  }
 
   constexpr size_t kCapacity = 32;
   scene_ = std::make_shared<scene::Scene>("VortexBasicScene", kCapacity);
@@ -854,9 +888,179 @@ auto MainModule::EnsureScene() -> void
   }
 }
 
+auto MainModule::BuildSidednessScene() -> void
+{
+  // NOLINTBEGIN(*-magic-numbers)
+  namespace d = oxygen::data;
+  namespace pak = d::pak;
+
+  scene_ = std::make_shared<scene::Scene>("SidednessValidation", 128);
+  scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& post = scene_->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  post.SetExposureEnabled(true);
+  post.SetExposureMode(engine::ExposureMode::kManual);
+  post.SetManualExposureEv(13.0F);
+  post.SetExposureCompensationEv(0.0F);
+  post.SetExposureKey(engine::kExposureCalibrationKey);
+  post.SetToneMapper(engine::ToneMapper::kAcesFitted);
+
+  validation_root_ = scene_->CreateNode("SidednessChart");
+  const auto make_child
+    = [this](scene::SceneNode& parent, const std::string& name) {
+        auto node = scene_->CreateChildNode(parent, name);
+        CHECK_F(node.has_value(), "Failed to create validation node {}", name);
+        return *node;
+      };
+  const auto vertices = std::vector<Vertex> {
+    { .position = { -0.75F, 0.0F, -0.7F },
+      .normal = { 0.0F, -1.0F, 0.0F },
+      .texcoord = { 0.0F, 0.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
+    { .position = { 0.75F, 0.0F, -0.7F },
+      .normal = { 0.0F, -1.0F, 0.0F },
+      .texcoord = { 1.0F, 0.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
+    { .position = { -0.35F, 0.0F, 0.8F },
+      .normal = { 0.0F, -1.0F, 0.0F },
+      .texcoord = { 0.0F, 1.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
+  };
+  // Asymmetric silhouette makes the mirror observable. Every non-double-sided
+  // column in a row shares the same geometry, including opposite determinants.
+  constexpr auto columns = std::array {
+    "SingleFront",
+    "SingleBack",
+    "DoubleFront",
+    "DoubleBack",
+    "MirrorSingleFront",
+    "MirrorSingleBack",
+    "MirrorDoubleFront",
+    "MirrorDoubleBack",
+    "ParentMirrorFront",
+    "TwoMirrorsFront",
+  };
+  constexpr auto domains = std::array { d::MaterialDomain::kOpaque,
+    d::MaterialDomain::kMasked, d::MaterialDomain::kAlphaBlended };
+  constexpr auto rows = std::array { "Opaque", "Masked", "Translucent" };
+  constexpr auto colors
+    = std::array { glm::vec4 { 0.82F, 0.055F, 0.025F, 1.0F },
+        glm::vec4 { 0.10F, 0.74F, 0.045F, 1.0F },
+        glm::vec4 { 0.015F, 0.5F, 0.9F, 0.55F } };
+  auto panel_geometry = BuildCubeGeometry(
+    "SidednessPanel", "SidednessPanel", { 0.20F, 0.22F, 0.25F, 1.0F });
+  const auto normal_map = validation_normal_map_ ? validation_normal_map_->Key()
+                                                 : content::ResourceKey {};
+
+  for (size_t row = 0; row < rows.size(); ++row) {
+    const auto flags = row == 1 ? pak::render::kMaterialFlag_AlphaTest : 0U;
+    const auto single_name = std::string(rows[row]) + "Single";
+    const auto double_name = std::string(rows[row]) + "Double";
+    auto single_geometry = BuildPrimitiveGeometry(single_name.c_str(),
+      single_name.c_str(), vertices, { 0U, 1U, 2U }, colors[row], 0.75F, 0.0F,
+      domains[row], glm::vec3 { 0.0F }, flags, false, normal_map);
+    auto double_geometry = BuildPrimitiveGeometry(double_name.c_str(),
+      double_name.c_str(), vertices, { 0U, 1U, 2U }, colors[row], 0.75F, 0.0F,
+      domains[row], glm::vec3 { 0.0F }, flags, true, normal_map);
+
+    for (size_t column = 0; column < columns.size(); ++column) {
+      const auto name = std::string(rows[row]) + "_" + columns[column];
+      const auto position
+        = glm::vec3 { (static_cast<float>(column) - 4.5F) * 2.3F, 0.0F,
+            3.8F - static_cast<float>(row) * 2.7F };
+      auto parent = validation_root_;
+      if (column >= 8) {
+        parent = make_child(validation_root_, name + "_Parent");
+        parent.GetTransform().SetLocalPosition(position);
+        parent.GetTransform().SetLocalScale({ -1.0F, 1.0F, 1.0F });
+      }
+      auto node = make_child(parent, name);
+      node.GetRenderable().SetGeometry(
+        column == 2 || column == 3 || column == 6 || column == 7
+          ? double_geometry
+          : single_geometry);
+      node.GetTransform().SetLocalPosition(
+        column >= 8 ? glm::vec3 { 0.0F } : position);
+      if ((column >= 4 && column <= 7) || column == 9) {
+        node.GetTransform().SetLocalScale({ -1.0F, 1.0F, 1.0F });
+      }
+      if (column == 1 || column == 3 || column == 5 || column == 7) {
+        node.GetTransform().SetLocalRotation(
+          glm::angleAxis(math::Pi, glm::vec3 { 0.0F, 0.0F, 1.0F }));
+      }
+      SetShadowParticipation(node, true, true);
+
+      auto panel = make_child(validation_root_, name + "_Receiver");
+      panel.GetRenderable().SetGeometry(panel_geometry);
+      panel.GetTransform().SetLocalPosition(
+        position + glm::vec3 { 0.0F, 0.9F, 0.0F });
+      panel.GetTransform().SetLocalScale({ 2.05F, 0.1F, 2.25F });
+      SetShadowParticipation(panel, false, true);
+    }
+  }
+
+  // Positive and negative determinant instances of closed meshes provide a
+  // familiar exterior/normal regression check beside the triangle chart.
+  auto cube_data = d::MakeCubeMeshAsset();
+  auto sphere_data = d::MakeSphereMeshAsset(24U, 32U);
+  CHECK_F(cube_data.has_value() && sphere_data.has_value());
+  auto cube = BuildPrimitiveGeometry("SidednessCube", "SidednessControls",
+    std::move(cube_data->first), std::move(cube_data->second),
+    { 0.8F, 0.42F, 0.025F, 1.0F }, 0.55F, 0.0F, d::MaterialDomain::kOpaque,
+    glm::vec3 { 0.0F }, 0U, false);
+  auto sphere = BuildPrimitiveGeometry("SidednessSphere", "SidednessControls",
+    std::move(sphere_data->first), std::move(sphere_data->second),
+    { 0.8F, 0.42F, 0.025F, 1.0F }, 0.55F, 0.0F, d::MaterialDomain::kOpaque,
+    glm::vec3 { 0.0F }, 0U, false);
+  for (size_t index = 0; index < 4; ++index) {
+    const auto mirrored = index % 2 != 0;
+    auto node = make_child(validation_root_,
+      std::string(index < 2 ? "Cube" : "Sphere")
+        + (mirrored ? "Mirrored" : "Normal"));
+    node.GetRenderable().SetGeometry(index < 2 ? cube : sphere);
+    node.GetTransform().SetLocalPosition(
+      { (static_cast<float>(index) - 1.5F) * 3.1F, 0.0F, -4.6F });
+    node.GetTransform().SetLocalScale(
+      { mirrored ? -1.25F : 1.25F, 1.25F, 1.25F });
+    node.GetTransform().SetLocalRotation(
+      glm::angleAxis(0.25F, glm::vec3 { 0.0F, 0.0F, 1.0F }));
+    SetShadowParticipation(node, true, true);
+  }
+
+  directional_light_node_ = scene_->CreateNode("ValidationKeyLight");
+  auto light = std::make_unique<scene::DirectionalLight>();
+  light->Common().affects_world = true;
+  light->Common().casts_shadows = true;
+  light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
+  light->SetIntensityLux(100000.0F);
+  light->SetEnvironmentContribution(true);
+  light->SetIsSunLight(true);
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  light->SetUsePerPixelAtmosphereTransmittance(false);
+  CHECK_F(directional_light_node_.AttachLight(std::move(light)));
+  directional_light_node_.GetTransform().SetLocalRotation(
+    LookRotation({ -3.0F, -10.0F, 6.0F }, glm::vec3 { 0.0F }));
+
+  LOG_F(INFO,
+    "Sidedness chart rows: opaque red, masked green, translucent blue; "
+    "columns: single front/back, double front/back, mirrored single "
+    "front/back, "
+    "mirrored double front/back, inherited mirror front, two mirrors front. "
+    "Columns 2 and 6 must show only the gray receiver in every row. "
+    "All other triangles must be lit. Bottom controls: cube, mirrored cube, "
+    "sphere, mirrored sphere.");
+  // NOLINTEND(*-magic-numbers)
+}
+
 auto MainModule::EnsureLighting() -> void
 {
-  if (!scene_) {
+  if (!scene_ || validation_.sidedness_scene) {
     return;
   }
 
@@ -914,6 +1118,15 @@ auto MainModule::EnsureLighting() -> void
 auto MainModule::UpdateValidationScene(
   const observer_ptr<engine::FrameContext> context) -> void
 {
+  if (validation_.sidedness_scene) {
+    if (validation_.animate && context != nullptr) {
+      const auto frame
+        = static_cast<float>(context->GetFrameSequenceNumber().get());
+      validation_root_.GetTransform().SetLocalPosition(
+        { 0.25F * std::sin(frame * 0.05F), 0.0F, 0.0F });
+    }
+    return;
+  }
   const auto delta_seconds = context != nullptr
     ? std::chrono::duration<float>(context->GetGameDeltaTime().get()).count()
     : 0.0F;
@@ -1004,8 +1217,12 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
     CHECK_F(ok, "Failed to attach PerspectiveCamera");
   }
 
-  constexpr glm::vec3 kCameraPosition { 0.0F, 8.0F, 4.0F };
-  constexpr glm::vec3 kCameraTarget { 0.0F, 0.0F, 1.5F };
+  const glm::vec3 kCameraPosition = validation_.sidedness_scene
+    ? glm::vec3 { 0.0F, -17.0F, 0.0F }
+    : glm::vec3 { 0.0F, 8.0F, 4.0F };
+  const glm::vec3 kCameraTarget = validation_.sidedness_scene
+    ? glm::vec3 { 0.0F }
+    : glm::vec3 { 0.0F, 0.0F, 1.5F };
   camera_node_.GetTransform().SetLocalPosition(kCameraPosition);
   camera_node_.GetTransform().SetLocalRotation(
     CameraLookRotation(kCameraPosition, kCameraTarget));

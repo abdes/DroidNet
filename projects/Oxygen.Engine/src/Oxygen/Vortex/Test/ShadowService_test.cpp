@@ -22,15 +22,18 @@
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
@@ -242,6 +245,69 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
 
   EXPECT_FALSE(service.HasVsm());
   EXPECT_EQ(service.InspectShadowData(oxygen::ViewId { 11U }), nullptr);
+}
+
+NOLINT_TEST_F(ShadowServiceBehaviorTest,
+  ShadowDepthBindsSidednessAndHandednessForEveryDrawAndSlice)
+{
+  using oxygen::vortex::shadows::ShadowDepthPass;
+  auto pass = ShadowDepthPass(*renderer_);
+  pass.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto texture_desc = oxygen::graphics::TextureDesc {};
+  texture_desc.width = 64U;
+  texture_desc.height = 64U;
+  texture_desc.array_size = 2U;
+  texture_desc.format = oxygen::Format::kDepth32Stencil8;
+  texture_desc.texture_type = oxygen::TextureType::kTexture2DArray;
+  texture_desc.debug_name = "RasterState.ShadowDepth";
+  texture_desc.is_shader_resource = true;
+  texture_desc.is_render_target = true;
+  texture_desc.is_typeless = true;
+  const auto texture = graphics_->CreateTexture(texture_desc);
+  graphics_->GetResourceRegistry().Register(texture);
+  const auto view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "RasterState.ShadowViewConstants",
+  });
+  const auto slices = std::array {
+    ShadowDepthPass::DepthSlice { .target_slice = 0U },
+    ShadowDepthPass::DepthSlice { .target_slice = 1U },
+  };
+  for (const auto kind : { oxygen::vortex::PassMaskBit::kOpaque,
+         oxygen::vortex::PassMaskBit::kMasked }) {
+    auto metadata = oxygen::vortex::testing::MakeRasterStateDraws(kind);
+    auto draws = std::array<oxygen::vortex::DrawCommand, 5> {};
+    for (std::size_t index = 0U; index < draws.size(); ++index) {
+      metadata[index].flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+      draws[index].draw_index = static_cast<std::uint32_t>(index);
+      draws[index].index_count = metadata[index].vertex_count;
+      draws[index].instance_count = 1U;
+    }
+    auto frame = oxygen::vortex::PreparedSceneFrame {};
+    frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
+    const auto input = oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 1U },
+      .prepared_scene = oxygen::observer_ptr<
+        const oxygen::vortex::PreparedSceneFrame> { &frame },
+      .view_constants
+      = oxygen::observer_ptr<const oxygen::graphics::Buffer> { view_constants
+          .get() },
+    };
+    graphics_->draw_log_.draws.clear();
+    const auto result = pass.RecordSlices(input, texture, slices, draws);
+    ASSERT_EQ(result.rendered_cascade_count, 2U);
+    ASSERT_EQ(result.rendered_draw_count, 10U);
+    ASSERT_EQ(graphics_->draw_log_.draws.size(), 10U);
+    for (std::size_t slice = 0U; slice < slices.size(); ++slice) {
+      oxygen::vortex::testing::ExpectRasterStateDraws(
+        std::span(graphics_->draw_log_.draws)
+          .subspan(slice * draws.size(), draws.size()),
+        "Vortex.ShadowDepth.");
+    }
+  }
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,

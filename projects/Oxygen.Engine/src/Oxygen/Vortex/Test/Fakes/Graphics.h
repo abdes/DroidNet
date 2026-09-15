@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <optional>
+#include <string>
 #include <unordered_map>
 
 #include <functional>
@@ -107,6 +108,8 @@ struct DrawCommandLog {
     uint32_t instances_num { 0U };
     uint32_t vertex_offset { 0U };
     uint32_t instance_offset { 0U };
+    std::optional<graphics::RasterizerStateDesc> rasterizer;
+    std::string pipeline_name;
   };
   std::vector<Event> draws;
 };
@@ -334,6 +337,8 @@ public:
 
   auto SetPipelineState(graphics::GraphicsPipelineDesc desc) -> void override
   {
+    current_rasterizer_ = desc.RasterizerState();
+    current_pipeline_name_ = desc.GetName();
     if (pipeline_log_ != nullptr) {
       pipeline_log_->binds.push_back(
         GraphicsPipelineCommandLog::Event { .desc = std::move(desc) });
@@ -385,6 +390,8 @@ public:
         .instances_num = instances_num,
         .vertex_offset = vertex_offset,
         .instance_offset = instance_offset,
+        .rasterizer = current_rasterizer_,
+        .pipeline_name = current_pipeline_name_,
       });
     }
   }
@@ -519,6 +526,8 @@ protected:
   }
 
 private:
+  std::optional<graphics::RasterizerStateDesc> current_rasterizer_;
+  std::string current_pipeline_name_;
   BufferCommandLog* buffer_log_ { nullptr };
   TextureCommandLog* texture_log_ { nullptr };
   GraphicsPipelineCommandLog* pipeline_log_ { nullptr };

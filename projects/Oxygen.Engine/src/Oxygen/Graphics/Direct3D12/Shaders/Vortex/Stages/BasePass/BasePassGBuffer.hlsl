@@ -107,7 +107,11 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     }
     world_tangent = SafeNormalize(world_tangent);
 
-    float3 world_bitangent = SafeNormalize(cross(world_normal, world_tangent));
+    const float3 bitangent_from_cross = cross(world_normal, world_tangent);
+    const float3 transformed_bitangent = mul(world_basis, vertex.bitangent);
+    const float handedness = dot(bitangent_from_cross, transformed_bitangent) < 0.0f
+        ? -1.0f : 1.0f;
+    float3 world_bitangent = SafeNormalize(bitangent_from_cross * handedness);
     if (dot(world_bitangent, world_bitangent) < 0.5f) {
         world_bitangent = float3(0.0f, 1.0f, 0.0f);
     }

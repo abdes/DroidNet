@@ -987,6 +987,47 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   }
 }
 
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  InstancingSeparatesMirroredInstancesOfTheSameGeometry)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.MixedWinding");
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  ASSERT_NE(GeoUploader().GetShaderVisibleIndices(handle).vertex_srv_index,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  for (std::uint32_t index = 0U; index < 4U; ++index) {
+    auto item = oxygen::vortex::sceneprep::RenderItemData {};
+    item.geometry = geometry;
+    item.submesh_index = 0U;
+    item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
+      oxygen::vortex::sceneprep::TransformHandle::Index { index + 1U },
+      oxygen::vortex::sceneprep::TransformHandle::Generation { 1U },
+    };
+    item.cast_shadows = true;
+    item.reverse_winding = (index % 2U) != 0U;
+    Emitter().EmitDrawMetadata(item);
+  }
+  Emitter().SortAndPartition();
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::vortex::DrawMetadata));
+  const auto* draws
+    = reinterpret_cast<const oxygen::vortex::DrawMetadata*>(bytes.data());
+  EXPECT_EQ(draws[0].instance_count, 2U);
+  EXPECT_EQ(draws[1].instance_count, 2U);
+  EXPECT_NE(draws[0].flags.IsSet(PassMaskBit::kReverseWinding),
+    draws[1].flags.IsSet(PassMaskBit::kReverseWinding));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws[1].flags.IsSet(PassMaskBit::kShadowCaster));
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 2U);
+  EXPECT_NE(partitions[0].pass_mask.IsSet(PassMaskBit::kReverseWinding),
+    partitions[1].pass_mask.IsSet(PassMaskBit::kReverseWinding));
+}
+
 NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   ShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
 {

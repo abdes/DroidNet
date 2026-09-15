@@ -233,6 +233,7 @@ set(
   "Internal/FrameViewPacket.h"
   "Internal/ImGuiRuntime.cpp"
   "Internal/ImGuiRuntime.h"
+  "Internal/MeshRasterState.h"
   "Internal/PerViewScope.h"
   "Internal/PerViewStructuredPublisher.h"
   "Internal/PreviousViewHistoryCache.cpp"

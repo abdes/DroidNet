@@ -37,9 +37,9 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
-#include <Oxygen/Vortex/ShaderDebugMode.h>
-#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 #include "Common/DemoCli.h"
 #include "Common/FrameCaptureCliOptions.h"
@@ -112,7 +112,8 @@ template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 namespace {
 
 auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  const oxygen::vortex::ShaderDebugMode shader_debug_mode) -> void
+  const oxygen::vortex::ShaderDebugMode shader_debug_mode,
+  const oxygen::examples::vortex_basic::ValidationOptions& validation) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -135,8 +136,9 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
     };
 
     // Register MainModule before the renderer so it runs first in each phase.
-    register_module(std::make_unique<oxygen::examples::vortex_basic::MainModule>(
-      app, shader_debug_mode));
+    register_module(
+      std::make_unique<oxygen::examples::vortex_basic::MainModule>(
+        app, shader_debug_mode, validation));
     register_module(
       std::make_unique<oxygen::scenesync::RuntimeMotionProducerModule>());
 
@@ -151,8 +153,12 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
         | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
         | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
         | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling;
+      const auto capabilities = validation.sidedness_scene
+        ? kVortexValidationCapabilities
+          | oxygen::vortex::RendererCapabilityFamily::kShadowing
+        : kVortexValidationCapabilities;
       register_module(std::make_unique<oxygen::vortex::Renderer>(
-        app.gfx_weak, renderer_config, kVortexValidationCapabilities));
+        app.gfx_weak, renderer_config, capabilities));
       break;
     }
 
@@ -165,7 +171,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
 }
 
 auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
-  const oxygen::vortex::ShaderDebugMode shader_debug_mode)
+  const oxygen::vortex::ShaderDebugMode shader_debug_mode,
+  const oxygen::examples::vortex_basic::ValidationOptions& validation)
   -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
@@ -183,7 +190,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app, shader_debug_mode);
+    RegisterEngineModules(app, shader_debug_mode, validation);
 
     n.Start([&app, &n]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -210,12 +217,44 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool headless = false;
   bool enable_vsync = true;
   std::string shader_debug_mode_name;
+  std::string validation_scene_name;
+  std::string shading_path_name;
+  oxygen::examples::vortex_basic::ValidationOptions validation {};
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
 
   try {
     auto vortex_options = std::make_shared<clap::Options>("Vortex options");
+    vortex_options->Add(clap::Option::WithKey("validation-scene")
+        .About("Procedural scene: default or sidedness")
+        .Long("validation-scene")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("default"))
+        .StoreTo(&validation_scene_name)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("shading-path")
+        .About("Native Vortex shading path: deferred or forward")
+        .Long("shading-path")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("deferred"))
+        .StoreTo(&shading_path_name)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-motion")
+        .About(
+          "Translate the sidedness chart at a deterministic rate per frame")
+        .Long("validation-motion")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .StoreTo(&validation.animate)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-normal-map")
+        .About("Apply a tangent +Y normal-map fixture to the sidedness chart")
+        .Long("validation-normal-map")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .StoreTo(&validation.normal_map)
+        .Build());
     vortex_options->Add(clap::Option::WithKey("shader-debug-mode")
         .About("Deferred debug visualization mode: disabled, base-color, "
                "world-normals, roughness, metalness, scene-depth-raw, "
@@ -282,8 +321,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&app.vortex_local_fog_into_volumetric)
         .Build());
-    vortex_options->Add(
-      clap::Option::WithKey("volumetric-directional-shadows")
+    vortex_options->Add(clap::Option::WithKey("volumetric-directional-shadows")
         .About("Apply directional shadow-map visibility inside volumetric fog")
         .Long("volumetric-directional-shadows")
         .WithValue<bool>()
@@ -300,8 +338,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&app.vortex_volumetric_temporal_reprojection)
         .Build());
-    vortex_options->Add(
-      clap::Option::WithKey("sky-light-volumetric-scattering")
+    vortex_options->Add(clap::Option::WithKey("sky-light-volumetric-scattering")
         .About("SkyLight volumetric scattering intensity")
         .Long("sky-light-volumetric-scattering")
         .WithValue<float>()
@@ -379,6 +416,30 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
 
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
+    if (validation_scene_name != "default"
+      && validation_scene_name != "sidedness") {
+      throw std::runtime_error(
+        "Unknown validation scene: " + validation_scene_name);
+    }
+    if (shading_path_name != "deferred" && shading_path_name != "forward") {
+      throw std::runtime_error("Unknown shading path: " + shading_path_name);
+    }
+    validation.sidedness_scene = validation_scene_name == "sidedness";
+    if (validation.normal_map && !validation.sidedness_scene) {
+      throw std::runtime_error(
+        "--validation-normal-map requires --validation-scene sidedness");
+    }
+    validation.shading_mode = shading_path_name == "forward"
+      ? oxygen::vortex::ShadingMode::kForward
+      : oxygen::vortex::ShadingMode::kDeferred;
+    if (validation.sidedness_scene) {
+      app.with_atmosphere = false;
+      app.with_height_fog = false;
+      app.with_local_fog = false;
+      app.with_volumetric_fog = false;
+    }
+    LOG_F(INFO, "Validation scene={}, shading path={}, motion={}",
+      validation_scene_name, shading_path_name, validation.animate);
     LOG_F(INFO, "Parsed frames option = {}", frames);
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
@@ -389,8 +450,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(
       INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
     LOG_F(INFO, "Parsed with-occlusion option = {}", app.with_occlusion);
-    LOG_F(INFO, "Parsed with-translucency option = {}",
-      app.with_translucency);
+    LOG_F(INFO, "Parsed with-translucency option = {}", app.with_translucency);
     LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
       app.vortex_local_fog_into_volumetric);
     LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
@@ -481,8 +541,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
     auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
     startup_cvars.Set("vtx.volumetric_fog.directional_shadows",
-      oxygen::console::CVarValue {
-        app.vortex_volumetric_directional_shadows });
+      oxygen::console::CVarValue { app.vortex_volumetric_directional_shadows });
     startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection",
       oxygen::console::CVarValue {
         app.vortex_volumetric_temporal_reprojection });
@@ -494,15 +553,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars.Set(
         "vtx.local_fog.enable", oxygen::console::CVarValue { true });
       startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
-        oxygen::console::CVarValue {
-          app.vortex_local_fog_into_volumetric });
+        oxygen::console::CVarValue { app.vortex_local_fog_into_volumetric });
       startup_cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
         oxygen::console::CVarValue {
           app.vortex_local_fog_volumetric_max_density });
     }
     app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
 
-    const auto rc = co::Run(app, AsyncMain(app, frames, shader_debug_mode));
+    const auto rc
+      = co::Run(app, AsyncMain(app, frames, shader_debug_mode, validation));
 
     app.platform->Stop();
     app.engine.reset();

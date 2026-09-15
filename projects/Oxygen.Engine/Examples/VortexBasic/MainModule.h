@@ -27,6 +27,7 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen {
@@ -50,15 +51,27 @@ class AppWindow;
 
 namespace oxygen::examples::vortex_basic {
 
-//! Minimal engine module that exercises the Vortex deferred renderer.
-/*!
- Creates a single procedural cube, a perspective camera, and registers
- a scene view with the Vortex renderer each frame. Supports RenderDoc
- frame capture via the standard CLI flags.
+class NormalMapValidationTexture;
 
- This module intentionally bypasses DemoModuleBase and DemoShell because
- those are coupled to the legacy ForwardPipeline renderer. Instead it
- owns an AppWindow directly and talks to vortex::Renderer.
+struct ValidationOptions {
+  bool sidedness_scene { false };
+  bool animate { false };
+  bool normal_map { false };
+  vortex::ShadingMode shading_mode { vortex::ShadingMode::kDeferred };
+};
+
+//! Procedural native validation scenes for the Vortex renderer.
+/*!
+ Creates procedural geometry and a perspective camera, and registers a
+ * scene
+ view with the Vortex renderer each frame. Supports forward/deferred
+ * shading
+ and RenderDoc frame capture via the standard CLI flags.
+
+ This
+ * focused example owns an AppWindow directly and talks to vortex::Renderer
+
+ * without the general DemoShell panels or cooked-content scene loader.
 */
 class MainModule final : public engine::EngineModule, public Composition {
   OXYGEN_TYPED(MainModule)
@@ -66,7 +79,8 @@ class MainModule final : public engine::EngineModule, public Composition {
 public:
   explicit MainModule(const DemoAppContext& app,
     vortex::ShaderDebugMode shader_debug_mode
-    = vortex::ShaderDebugMode::kDisabled) noexcept;
+    = vortex::ShaderDebugMode::kDisabled,
+    ValidationOptions validation = {}) noexcept;
   ~MainModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
@@ -116,6 +130,7 @@ private:
   [[nodiscard]] auto BuildResolvedView(uint32_t width, uint32_t height)
     -> std::optional<ResolvedView>;
   auto EnsureScene() -> void;
+  auto BuildSidednessScene() -> void;
   auto EnsureCamera(uint32_t width, uint32_t height) -> void;
   auto EnsureLighting() -> void;
   auto UpdateValidationScene(observer_ptr<engine::FrameContext> context)
@@ -125,6 +140,9 @@ private:
   auto ClearSceneFb() -> void;
 
   const DemoAppContext& app_;
+  ValidationOptions validation_ {};
+  std::unique_ptr<NormalMapValidationTexture> validation_normal_map_;
+  scene::SceneNode validation_root_ {};
   observer_ptr<AppWindow> app_window_ { nullptr };
   observer_ptr<graphics::Surface> last_surface_ { nullptr };
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
