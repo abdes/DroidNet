@@ -11,10 +11,10 @@
       "content_hashing": true
     },
     {
-      "id": "geometry.GeoCube",
+      "id": "geometry.GeoInstancedCube",
       "type": "geometry-descriptor",
-      "source": "./GeoCube.geometry.json",
-      "name": "GeoCube",
+      "source": "./GeoInstancedCube.geometry.json",
+      "name": "GeoInstancedCube",
       "content_hashing": true,
       "depends_on": [
         "material.MatInstanced"
@@ -27,7 +27,7 @@
       "name": "InstancingTestScene",
       "content_hashing": true,
       "depends_on": [
-        "geometry.GeoCube"
+        "geometry.GeoInstancedCube"
       ]
     }
   ]
