@@ -187,7 +187,7 @@ edited Euler component during the interaction; commit re-derives quaternion.
 | Field | Tier | Type | Notes |
 | --- | --- | --- | --- |
 | `Geometry` | Primary | `AssetReference<GeometryAsset>` | Asset field, populated from `IAssetCatalog`; unresolved URI shown with warning badge. |
-| Material slot 0 | Primary | `AssetReference<MaterialAsset>` (via `MaterialsSlot.Material`) | Use the existing IMaterialPickerService, constrained to material identity. |
+| Every existing material slot | Primary | Per-slot material asset reference or no instance override | Independent assignment/clearing through the existing material picker; clearing uses the mesh-assigned material. ED-M08 scope approved 2026-09-15; implementation pending. |
 | Override slot summary | Advanced | counts of `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot` | Read-only count; do not expose an unimplemented action. |
 | Submesh / LOD count | Advanced | `int`, `int` | Read-only from resolved `GeometryAsset.Lods`. |
 | `GeometryUri` raw | Raw | `string` | The persisted URI; copy-friendly diagnostic. |
@@ -274,39 +274,39 @@ inspectors for them; they are outside the PRD-qualified authoring/import set. If
 - `AssetReference<T>`: indeterminate when URIs differ. The field shows
   "(multiple)"; committing replaces URI on every selected component.
 
-### 7.6 Material Slot — ED-M07A ↔ ED-M05 Seam
+### 7.6 All Existing Material Slots — ED-M08 Contract
 
-ED-M07A owns:
+On 2026-09-15 the user approved independent overrides for **all existing mesh
+material slots**, superseding the slot-0 scope. ED-M07A's recorded evidence stays
+historical; it does not establish this broader implementation.
 
-- Surfacing the first `MaterialsSlot` (component-scope, index 0) inside the
-  Geometry section as an asset reference field.
-- Persisting `MaterialsSlotData.MaterialUri : string` through the
-  `GeometryComponentData.OverrideSlots` round trip.
-- Showing unresolved / placeholder / missing state in the field. Unresolved is
-  a valid authoring state; the URI is preserved verbatim.
-- Consume the existing `IMaterialPickerService` and shared Content Browser
-  provider with material filtering, current unresolved row, clear and create/open
-  delegation to the owning material workflow. Do not restore an older raw-list
-  picker merely because its original implementation plan described one.
+- Enumerate the slots supplied by the resolved mesh and expose each as a material
+  identity field. Do not create/remove mesh slots or change topology.
+- Store overrides on the scene instance. Assignment to one instance must not
+  rewrite its shared mesh, material assets or another instance's overrides.
+- Clearing removes that slot's instance override and restores the mesh-assigned
+  material. Do not substitute an engine default merely to implement Clear.
+- Reuse `IMaterialPickerService` and shared catalog state, including unresolved
+  identity and owning material create/open workflows. Geometry does not embed
+  scalar-material editing.
+- Give every slot the complete command, Undo/Redo, Save/reopen, cook/native-load,
+  live binding and missing-material recovery path. Nonzero slots are required
+  rendered cases, not read-only metadata.
+- Specify stable slot identity and reimport matching before implementation;
+  changing source slots must not silently send overrides to different surfaces.
 
-ED-M07A does NOT own:
-
-- Creating new material assets from the inspector.
-- Editing material scalar properties anywhere in the inspector.
-- Showing thumbnails generated from runtime preview.
-
-If a user tries to clear the material slot, ED-M07A stores the empty/sentinel
-URI defined by `MaterialsSlot` defaults. There is no inspector-side fallback
-to a generated default.
+Migrate useful prior single-slot assignments to the canonical per-slot model.
+Do not retain a second slot-0 serialization or runtime compatibility path.
 
 ### 7.6.1 Schema Decision
 
-`MaterialsSlot` already persists a `MaterialUri` via `MaterialsSlotData`. The
-slot does not embed material data. ED-M07A introduces no new editor-side schema:
-the authored material identity is the persisted contract. Material descriptor
-schema (`oxygen.material.v1`) remains the authoring source of truth and is
-owned by ED-M05 / `Oxygen.Managed.Assets`. Decision: **no editor schema; reuse engine
-descriptor**.
+Overrides reference material identities rather than embedding material data.
+ED-M08 must reconcile canonical scene serialization and the native scene
+descriptor with the approved all-slot contract before coding; the old one-ref
+descriptor is insufficient. Reuse the engine schema/loader ownership and extend
+it where needed. Material asset serialization remains with its material owner.
+Exact slot identity/reimport rules are still to be decided; the all-slot scope
+does not by itself select index-based or name-based remapping.
 
 ### 7.7 Metadata Visibility Rule
 
