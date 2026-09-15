@@ -176,6 +176,11 @@ private:
  4. **Session-Scoped**: Intended for one import session; call Reset() between
     sessions
 
+ Asset storage names (mesh, material, scene) use ASCII case-insensitive
+ comparison on every platform. Scene-node display names compare exactly.
+ Comparison includes namespaces and suffixes but preserves returned spelling.
+ The registry is scoped to one import session and does not fold Unicode case.
+
  @see NamingStrategy, NamingContext
 */
 class NamingService final {
@@ -189,6 +194,8 @@ public:
     bool enable_namespacing = true;
 
     //! Enforce uniqueness by appending collision suffixes.
+    //! Asset storage names compare without ASCII case; scene nodes compare
+    //! exactly. Disabling this option bypasses registration and suffixing.
     bool enforce_uniqueness = true;
   };
 
@@ -209,6 +216,13 @@ public:
   /*!
    Applies the naming strategy, then enforces uniqueness if enabled.
 
+   For a fixed registration order, append the first available numeric suffix
+   without changing the normalized spelling. Existing suffixes participate in
+   collision checks. For example, registering materials MetalGrey, metalgrey_1,
+   and Metalgrey produces M_MetalGrey, M_metalgrey_1, and M_Metalgrey_2 with the
+   default strategy. Concurrent calls are serialized by the registry lock;
+   their registration order determines suffix assignment.
+
    @param authored_name Original name from source file (may be empty).
    @param context Contextual information for naming conventions.
    @return Unique name ready for use in the import session.
@@ -219,7 +233,7 @@ public:
   OXGN_COOK_NDAPI auto MakeUniqueName(std::string_view authored_name,
     const NamingContext& context) -> std::string;
 
-  //! Check if a name has been registered for a specific kind.
+  //! Check a registered name using the same kind-specific comparison rule.
   OXGN_COOK_NDAPI auto HasName(ImportNameKind kind, std::string_view name) const
     -> bool;
 

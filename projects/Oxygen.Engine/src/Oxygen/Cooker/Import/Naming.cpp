@@ -41,6 +41,24 @@ auto ApplyNamespacing(std::string name, const import::NamingContext& context)
   return std::string(context.scene_namespace) + "/" + name;
 }
 
+auto RegistryKey(const import::ImportNameKind kind, std::string_view name)
+  -> std::string
+{
+  auto key = std::string(name);
+  if (kind == import::ImportNameKind::kSceneNode) {
+    return key;
+  }
+
+  // Only comparison keys are folded. Keep emitted spelling and make storage
+  // collisions identical on every platform, independent of the current locale.
+  for (auto& ch : key) {
+    if (ch >= 'A' && ch <= 'Z') {
+      ch = static_cast<char>(ch + ('a' - 'A'));
+    }
+  }
+  return key;
+}
+
 } // namespace
 
 namespace oxygen::content::import {
@@ -92,10 +110,11 @@ auto NamingService::MakeUniqueName(const std::string_view authored_name,
   std::unique_lock lock(mutex);
 
   // Check for collision
-  const auto it = usage_counts.find(base_name);
+  const auto base_key = RegistryKey(context.kind, base_name);
+  const auto it = usage_counts.find(base_key);
   if (it == usage_counts.end()) {
     // First use of this name
-    usage_counts[base_name] = 1;
+    usage_counts[base_key] = 1;
     return base_name;
   }
 
@@ -104,14 +123,16 @@ auto NamingService::MakeUniqueName(const std::string_view authored_name,
   uint32_t collision_ordinal = it->second;
 
   std::string unique_name;
+  std::string unique_key;
   do {
     unique_name = original_name + "_" + std::to_string(collision_ordinal);
+    unique_key = RegistryKey(context.kind, unique_name);
     ++collision_ordinal;
-  } while (usage_counts.contains(unique_name));
+  } while (usage_counts.contains(unique_key));
 
   // Register both the original (incremented) and the new unique name
   it->second = collision_ordinal;
-  usage_counts[unique_name] = 1;
+  usage_counts[unique_key] = 1;
 
   return unique_name;
 }
@@ -123,7 +144,7 @@ auto NamingService::HasName(
   const auto& [usage_counts, mutex] = registries_.at(kind_index);
 
   std::shared_lock lock(mutex);
-  return usage_counts.contains(std::string(name));
+  return usage_counts.contains(RegistryKey(kind, name));
 }
 
 auto NamingService::GetNameCount(const ImportNameKind kind) const -> size_t
