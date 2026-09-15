@@ -2,7 +2,8 @@
 
 Status: **interactive decisions in progress**. The user approved development-only
 qualification, no backward compatibility, captured-sky diffuse/specular lighting,
-and overrides for all existing material slots on 2026-09-15. Other property choices below are recommendations, not an
+overrides for all existing material slots, and emission colour/HDR intensity on
+2026-09-15. Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
 ## 1. Recommendation
@@ -40,7 +41,8 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | No pre-V0.1 backward compatibility; migrate useful legacy content instead | Approved |
 | Captured-sky lighting with diffuse and roughness-dependent specular reflection | Approved; engine and editor implementation pending |
 | Material overrides for every existing mesh slot | Approved; independent per-instance assignment/clearing, clear restores mesh material; no slot creation/topology editing; implementation pending |
-| Scalar emission; primitive picker; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Scalar emission colour and HDR intensity | Approved; zero intensity disables emission, no promise of lighting surrounding objects; implementation pending |
+| Primitive picker; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -67,6 +69,26 @@ nonzero slots, two instances sharing the mesh, individual clear-to-mesh-default,
 Save/reopen/cook/native load, Undo/Redo and missing-material recovery. The user
 has approved the scope; none of these implementation or validation gates is
 claimed complete by this decision.
+
+### Decision 2: emission colour and HDR intensity — approved
+
+The user approved scalar material emission. Expose colour and HDR intensity,
+with zero intensity meaning off. Emission contributes self-illumination while
+the material retains its ordinary PBR and alpha-mode behaviour. Bloom may add a
+halo when enabled. This does not approve emissive surfaces lighting surrounding
+geometry through GI, texture authoring, or a new Unlit shading mode.
+
+Native cooking and rendering already carry an RGB emissive factor. ED-M08 must
+extend the canonical managed material model, property commands, copying/edit
+state, serialization, cooking and preview, including Undo/Redo and Save/reopen.
+Useful old materials migrate with no emission. There is no shipping old-format
+fallback. Define colour conversion, intensity units and finite HDR limits in the
+implementation contract; the approval does not assert physical luminance units
+or authorize silently relaxing numerical comparison thresholds for half-floats.
+
+Verify zero/nonzero/HDR emission and changes under Manual/Auto exposure, with
+ordinary lighting, opacity/masking/blending and bloom. Native-engine evidence
+precedes editor workflow validation; implementation and evidence remain pending.
 
 ## 2. Approved: development qualification does not ship
 
@@ -103,7 +125,7 @@ their content remains useful; they do not remain hidden compatibility state.
 | --- | --- | --- | --- |
 | Hierarchy and transform | Name, parent, local position, rotation in degrees, scale; create/delete/duplicate/reparent, reset and multi-selection | Deliberate world/local transform operations where already supported | Raw quaternion editing, rotation-order selection, pivots, generic Static/mobility and Ignore Parent Transform switches without a complete authoring contract |
 | Visibility and editor state | Explicit **Visible in render**; separate editor selection lock/hide state where supported | Cast/receive shadows when the engine actually honours them | General Enabled semantics across future scripts/physics; do not repurpose `IsActive`, which means loaded in the engine |
-| Geometry | Mesh identity, loading/missing state, Cube/Sphere/IcoSphere/Plane/Quad/Cylinder/Cone/Torus, qualified static imports | SubdividedCube; existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
+| Geometry | Mesh identity, loading/missing state, Cube/Sphere/Capsule/IcoSphere/Plane/Quad/Cylinder/Cone/Torus, qualified static imports; Capsule is a proposed addition | SubdividedCube; approved existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
 | Perspective camera | Pose, **Vertical FOV**, near/far in metres, aspect/frame ratio, explicit authored-camera selection | Preserve non-default aspect and parented cameras | Physical-camera exposure, lens/sensor/DOF controls, orthographic authoring in this slice |
 | Directional lighting | Enabled/affects scene, orientation, colour, illuminance in lux, Cast Shadows | Angular size, labelled according to its actual supported sun-disk/shadow effect | Contact Shadows without an implementation; mobility promises without matching runtime behaviour; per-light exposure compensation as a routine control |
 | Sun selection | One clear scene-level sun reference; clearing it does not disable ordinary directional illumination | Sun-disk visibility | Competing independent sun toggles, additional atmosphere slots and moon authoring |
@@ -119,12 +141,28 @@ M08 merely because a mature engine supports them. Source/import limitations must
 remain explicit. Expanding material overrides does not make imported native scenes
 editable authored scene documents.
 
-Proposed primitive picker: nine distinct choices, with SubdividedCube under
-advanced creation. If accepted, migrate GeodesicSphere references to IcoSphere
+Proposed primitive picker: ten canonical generator choices, including a new
+Capsule and keeping SubdividedCube under advanced creation. The smaller alternative
+uses the nine existing authoring generators and defers Capsule. If accepted,
+migrate GeodesicSphere references to IcoSphere
 and remove the obsolete alias from authoring resolution. ArrowGizmo can remain
 an internal tool resource for its current purpose; useful old scene uses should
 migrate to ordinary geometry. No legacy picker/resolver path remains. Qualify
 the approved visible choices and the migration's canonical outputs.
+
+The native catalog currently has eleven names for ten generators; one is the
+GeodesicSphere alias and one is the tool-oriented ArrowGizmo. Capsule has no
+current generator/catalog entry and would need native implementation, cooking
+and rendered qualification. It is useful for character/rounded-object blockouts
+without adding physics or animation scope. Both [Unity's primitive menu](https://docs.unity3d.com/6000.0/Documentation/Manual/PrimitiveObjects.html)
+and [Godot's primitive meshes](https://docs.godotengine.org/en/stable/classes/class_primitivemesh.html)
+include Capsule; that supports the addition beyond copying Oxygen's current list.
+
+These are generator choices, not a claim of distinct default silhouettes.
+Oxygen's current Plane and Quad defaults are both four-vertex XY surfaces; their
+generator parameters differ. Orienting one as a ground grid and the other as an
+upright card requires a separate explicit decision and implementation. The menu
+proposal does not silently change primitive topology, normals or orientation.
 
 ### Why these choices
 
@@ -178,7 +216,7 @@ claims that a new renderer feature has passed visual validation.
 | P0 | Preserve selected authored-camera identity and projection | DemoShell `SceneLoaderService.cpp` currently chooses the first camera and rewrites aspect/clipping. Exact camera selection/preservation is real loading behaviour; the development driver must consume it without synthetic camera/sun injection. |
 | P0 | Preserve every approved authored field across cooking and native load | `SceneDescriptorGenerator.cs` emits only part of registered directional data. Correct mappings for the chosen canonical surface; migrate useful former authoring intent instead of carrying deprecated expert fields. |
 | P1 | Complete material-slot overrides end to end | `GeometryDescriptors.cs` and `SceneDescriptorGenerator.cs` use slot 0/one material reference. Changes need native descriptor/loader support, stable submesh-slot identity, commands, live sync, persistence, missing-asset recovery and per-slot clear semantics. |
-| P1 | Add scalar emissive colour/intensity | `MaterialSource`/material editing lack emission. Native schema exposes `emissive_factor`; binder and forward/G-buffer code evaluate it. Extend authoring/read/write/cook and prove opaque/masked/blended effects. Native half-float storage also requires explicit finite-range/precision handling; do not silently relax comparison thresholds. Scope remains pending the emission decision. |
+| P1 | Add approved scalar emissive colour/intensity | `MaterialSource`/material editing lack emission. Native schema exposes `emissive_factor`; binder and forward/G-buffer code evaluate it. Extend authoring/read/write/cook and prove opaque/masked/blended effects. Native half-float storage also requires explicit finite-range/precision handling; do not silently relax comparison thresholds. |
 | P1 | Implement minimal captured-sky ambient lighting, then expose it | `IblProbePass.cpp` rejects captured-scene as deferred. Existing specified-cubemap processing provides diffuse SH only: `IblProcessor.cpp` leaves prefiltered-specular/BRDF-LUT bindings invalid. This needs real sky capture, diffuse and roughness-dependent specular products, forward/deferred consumers, invalidation and readiness. Then add managed authoring, persistence, cook and sync. |
 | P1 | Apply basic colour grading and vignette in Vortex | `ResolveAuthoredPostProcessConfig` in `SceneRenderer.cpp` and `Tonemap.hlsl` apply exposure/bloom/tone mapping/gamma, but no saturation/contrast/vignette. Add the actual GPU effect with defined ordering and defaults. Preserve the accepted clear-background/translucency composition. |
 | P1 | Remove rejected or inert options from the canonical model | `ManualCamera` falls back to Manual EV without camera EV. Normal/occlusion edits lack an effect without texture refs. Contact Shadows/mobility need an active consumer before being offered. Migrate useful old values; remove compatibility branches and deprecated fields. |
@@ -236,8 +274,8 @@ command registration, module initializer or instrumentation ships.
 ## 6. Interactive decision sequence
 
 Captured-sky diffuse/specular lighting, all existing material-slot overrides,
-and the build/migration policies are approved; do not ask for them again.
-Next discuss scalar material controls, primitive choices, camera framing, scene participation
+scalar emission colour/HDR intensity, and the build/migration policies are
+approved; do not ask for them again. Next discuss primitive choices, camera framing, scene participation
 and transforms, light/sun roles, shadow controls, exposure, grading/output, and
 atmosphere controls. Split a topic when it contains independent consequential
 choices; do not request a blanket package approval.
