@@ -1,8 +1,8 @@
 # ED-M08: Professional V0.1 authoring scope
 
 Status: **interactive decisions in progress**. The user approved development-only
-qualification, no backward compatibility, and captured-sky diffuse/specular
-lighting on 2026-09-15. Other property choices below are recommendations, not an
+qualification, no backward compatibility, captured-sky diffuse/specular lighting,
+and overrides for all existing material slots on 2026-09-15. Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
 ## 1. Recommendation
@@ -39,13 +39,34 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Entire qualification workflow excluded from normal Debug/Release builds | Approved |
 | No pre-V0.1 backward compatibility; migrate useful legacy content instead | Approved |
 | Captured-sky lighting with diffuse and roughness-dependent specular reflection | Approved; engine and editor implementation pending |
-| Material overrides for every existing mesh slot | Next individual decision |
+| Material overrides for every existing mesh slot | Approved; independent per-instance assignment/clearing, clear restores mesh material; no slot creation/topology editing; implementation pending |
 | Scalar emission; primitive picker; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
 and implications after V0.1. Ask one decision at a time. Do not convert a reply
 about one area into approval of the rest of this document.
+
+### Decision 1: all existing material slots — approved
+
+The user chose all slots. Each scene instance can assign or clear an override
+for every material slot supplied by its mesh. Clearing restores that slot's
+mesh-assigned material; it does not rewrite the shared mesh or material asset.
+Slot creation/removal and topology editing are outside this decision.
+
+ED-M08 must implement the complete route: resolved slot inventory, inspector and
+commands, Undo/Redo, canonical scene serialization, cooking/native descriptors,
+runtime binding and missing-material recovery. Migrate useful prior slot-0
+assignments into the canonical per-slot representation, then remove the old
+single-override path. Slot identity and reimport matching require an explicit
+contract before implementation; approval does not authorize guessing by name or
+silently assigning an override to a different surface.
+
+Qualification must include a multi-material mesh with independent overrides on
+nonzero slots, two instances sharing the mesh, individual clear-to-mesh-default,
+Save/reopen/cook/native load, Undo/Redo and missing-material recovery. The user
+has approved the scope; none of these implementation or validation gates is
+claimed complete by this decision.
 
 ## 2. Approved: development qualification does not ship
 
@@ -157,7 +178,7 @@ claims that a new renderer feature has passed visual validation.
 | P0 | Preserve selected authored-camera identity and projection | DemoShell `SceneLoaderService.cpp` currently chooses the first camera and rewrites aspect/clipping. Exact camera selection/preservation is real loading behaviour; the development driver must consume it without synthetic camera/sun injection. |
 | P0 | Preserve every approved authored field across cooking and native load | `SceneDescriptorGenerator.cs` emits only part of registered directional data. Correct mappings for the chosen canonical surface; migrate useful former authoring intent instead of carrying deprecated expert fields. |
 | P1 | Complete material-slot overrides end to end | `GeometryDescriptors.cs` and `SceneDescriptorGenerator.cs` use slot 0/one material reference. Changes need native descriptor/loader support, stable submesh-slot identity, commands, live sync, persistence, missing-asset recovery and per-slot clear semantics. |
-| P1 | Add scalar emissive colour/intensity | `MaterialSource`/material editing lack emission. Native material schema exposes `emissive_factor`, `MaterialBinder.cpp` uploads it, and `ForwardMaterialEval.hlsli`/G-buffer code evaluate it. Extend authoring/read/write/cook without inventing another material format; prove both opaque and translucent effects. |
+| P1 | Add scalar emissive colour/intensity | `MaterialSource`/material editing lack emission. Native schema exposes `emissive_factor`; binder and forward/G-buffer code evaluate it. Extend authoring/read/write/cook and prove opaque/masked/blended effects. Native half-float storage also requires explicit finite-range/precision handling; do not silently relax comparison thresholds. Scope remains pending the emission decision. |
 | P1 | Implement minimal captured-sky ambient lighting, then expose it | `IblProbePass.cpp` rejects captured-scene as deferred. Existing specified-cubemap processing provides diffuse SH only: `IblProcessor.cpp` leaves prefiltered-specular/BRDF-LUT bindings invalid. This needs real sky capture, diffuse and roughness-dependent specular products, forward/deferred consumers, invalidation and readiness. Then add managed authoring, persistence, cook and sync. |
 | P1 | Apply basic colour grading and vignette in Vortex | `ResolveAuthoredPostProcessConfig` in `SceneRenderer.cpp` and `Tonemap.hlsl` apply exposure/bloom/tone mapping/gamma, but no saturation/contrast/vignette. Add the actual GPU effect with defined ordering and defaults. Preserve the accepted clear-background/translucency composition. |
 | P1 | Remove rejected or inert options from the canonical model | `ManualCamera` falls back to Manual EV without camera EV. Normal/occlusion edits lack an effect without texture refs. Contact Shadows/mobility need an active consumer before being offered. Migrate useful old values; remove compatibility branches and deprecated fields. |
@@ -214,9 +235,9 @@ command registration, module initializer or instrumentation ships.
 
 ## 6. Interactive decision sequence
 
-Captured-sky diffuse/specular lighting and the build/migration policies are
-approved; do not ask for them again. Begin with material-slot overrides, then
-scalar material controls, primitive choices, camera framing, scene participation
+Captured-sky diffuse/specular lighting, all existing material-slot overrides,
+and the build/migration policies are approved; do not ask for them again.
+Next discuss scalar material controls, primitive choices, camera framing, scene participation
 and transforms, light/sun roles, shadow controls, exposure, grading/output, and
 atmosphere controls. Split a topic when it contains independent consequential
 choices; do not request a blanket package approval.

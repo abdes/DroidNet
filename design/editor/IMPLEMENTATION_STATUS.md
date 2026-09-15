@@ -957,6 +957,9 @@ content in embedded preview and standalone runtime under controlled comparison.
       canonical V0.1 formats; no shipping compatibility fields/aliases/fallbacks.
 - [x] Captured-sky diffuse/specular lighting is approved as V0.1 scope;
       implementation and rendered validation remain pending.
+- [x] All existing mesh material slots are approved for per-instance assignment
+      and clearing to mesh defaults. Slot creation/topology editing are excluded;
+      canonical implementation and rendered validation remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
