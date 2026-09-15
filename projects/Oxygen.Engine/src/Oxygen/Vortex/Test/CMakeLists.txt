@@ -129,6 +129,7 @@ m_gtest_program(
 m_gtest_program(
   ShadowService
   SOURCES
+    "Fixtures/MeshRasterStateTest.h"
     "ShadowService_test.cpp"
 )
 
@@ -152,6 +153,7 @@ m_gtest_program(
 m_gtest_program(
   SceneRendererDeferredCore
   SOURCES
+    "Fixtures/MeshRasterStateTest.h"
     "SceneRendererDeferredCore_test.cpp"
 )
 

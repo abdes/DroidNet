@@ -35,6 +35,8 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "NormalMapValidationTexture.h"
+  "NormalMapValidationTexture.cpp"
 )
 
 set_target_properties(
@@ -73,6 +75,7 @@ target_link_libraries(
     oxygen::vortex
     oxygen::engine
     oxygen::data
+    oxygen::cooker
     oxygen::scene
     oxygen::scenesync
 )

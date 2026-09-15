@@ -9,8 +9,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -19,8 +19,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -71,8 +72,8 @@ auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
         table.view_type = RangeTypeToViewType(
           static_cast<bindless_d3d12::RangeType>(range.range_type));
         table.base_index = range.base_register;
-        table.count
-          = range.num_descriptors == (std::numeric_limits<std::uint32_t>::max)()
+        table.count = range.num_descriptors
+            == (std::numeric_limits<std::uint32_t>::max)()
           ? (std::numeric_limits<std::uint32_t>::max)()
           : range.num_descriptors;
       }
@@ -103,8 +104,8 @@ auto AddBooleanDefine(const bool enabled, std::string_view name,
   }
 }
 
-auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
-  graphics::Texture& texture) -> void
+auto AdoptOrBeginPersistentState(
+  graphics::CommandRecorder& recorder, graphics::Texture& texture) -> void
 {
   if (!recorder.AdoptKnownResourceState(texture)) {
     auto initial = texture.GetDescriptor().initial_state;
@@ -116,9 +117,8 @@ auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
   }
 }
 
-auto BuildDepthPrepassFramebuffer(
-  SceneTextures& scene_textures, const bool writes_velocity)
-  -> graphics::FramebufferDesc
+auto BuildDepthPrepassFramebuffer(SceneTextures& scene_textures,
+  const bool writes_velocity) -> graphics::FramebufferDesc
 {
   auto desc = graphics::FramebufferDesc {};
   if (writes_velocity && scene_textures.GetVelocity() != nullptr) {
@@ -157,18 +157,18 @@ auto NeedsFramebufferRebuild(
 
   return scene_textures.GetVelocity() == nullptr
     || desc.color_attachments[0].texture.get()
-      != scene_textures.GetVelocityResource().get();
+    != scene_textures.GetVelocityResource().get();
 }
 
 auto BuildDepthPrepassPipelineDesc(const SceneTextures& scene_textures,
-  const bool writes_velocity, const bool alpha_test, const bool reverse_z)
-  -> graphics::GraphicsPipelineDesc
+  const bool writes_velocity, const internal::MeshRasterState raster_state,
+  const bool reverse_z) -> graphics::GraphicsPipelineDesc
 {
   auto root_bindings = BuildVortexRootBindings();
 
   auto defines = std::vector<graphics::ShaderDefine> {};
   AddBooleanDefine(writes_velocity, "HAS_VELOCITY", defines);
-  AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+  AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
 
   auto blend_targets = std::vector<graphics::BlendTargetDesc> {};
   if (writes_velocity && scene_textures.GetVelocity() != nullptr) {
@@ -180,7 +180,8 @@ auto BuildDepthPrepassPipelineDesc(const SceneTextures& scene_textures,
 
   auto color_formats = std::vector<Format> {};
   if (writes_velocity && scene_textures.GetVelocity() != nullptr) {
-    color_formats.push_back(scene_textures.GetVelocity()->GetDescriptor().format);
+    color_formats.push_back(
+      scene_textures.GetVelocity()->GetDescriptor().format);
   }
 
   return graphics::GraphicsPipelineDesc::Builder {}
@@ -197,7 +198,7 @@ auto BuildDepthPrepassPipelineDesc(const SceneTextures& scene_textures,
       .defines = defines,
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-    .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+    .SetRasterizerState(raster_state.Rasterizer())
     .SetDepthStencilState(graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
       .depth_write_enable = true,
@@ -208,13 +209,16 @@ auto BuildDepthPrepassPipelineDesc(const SceneTextures& scene_textures,
     .SetBlendState(std::move(blend_targets))
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = std::move(color_formats),
-      .depth_stencil_format = scene_textures.GetSceneDepth().GetDescriptor().format,
-      .sample_count = scene_textures.GetSceneDepth().GetDescriptor().sample_count,
-      .sample_quality = scene_textures.GetSceneDepth().GetDescriptor().sample_quality,
+      .depth_stencil_format
+      = scene_textures.GetSceneDepth().GetDescriptor().format,
+      .sample_count
+      = scene_textures.GetSceneDepth().GetDescriptor().sample_count,
+      .sample_quality
+      = scene_textures.GetSceneDepth().GetDescriptor().sample_quality,
     })
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       root_bindings.data(), root_bindings.size()))
-    .SetDebugName(alpha_test
+    .SetDebugName(raster_state.alpha_test
         ? (writes_velocity ? "Vortex.DepthPrepass.MaskedVelocity"
                            : "Vortex.DepthPrepass.Masked")
         : (writes_velocity ? "Vortex.DepthPrepass.OpaqueVelocity"
@@ -241,11 +245,11 @@ auto TransitionDepthPrepassFinalStates(graphics::CommandRecorder& recorder,
 {
   recorder.RequireResourceStateFinal(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-  recorder.RequireResourceStateFinal(
-    scene_textures.GetPartialDepth(), graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceStateFinal(scene_textures.GetPartialDepth(),
+    graphics::ResourceStates::kShaderResource);
   if (writes_velocity && scene_textures.GetVelocity() != nullptr) {
-    recorder.RequireResourceStateFinal(
-      *scene_textures.GetVelocity(), graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceStateFinal(*scene_textures.GetVelocity(),
+      graphics::ResourceStates::kShaderResource);
   }
 }
 
@@ -254,9 +258,10 @@ auto SetViewportAndScissor(graphics::CommandRecorder& recorder,
 {
   const auto extent = scene_textures.GetExtent();
   if (ctx.current_view.resolved_view != nullptr) {
-    const auto clamped = oxygen::vortex::internal::ResolveClampedViewportState(
-      ctx.current_view.resolved_view->Viewport(),
-      ctx.current_view.resolved_view->Scissor(), extent.x, extent.y);
+    const auto clamped
+      = oxygen::vortex::internal::ResolveClampedViewportState(
+        ctx.current_view.resolved_view->Viewport(),
+        ctx.current_view.resolved_view->Scissor(), extent.x, extent.y);
     recorder.SetViewport(clamped.viewport);
     recorder.SetScissors(clamped.scissors);
     return;
@@ -278,17 +283,15 @@ auto SetViewportAndScissor(graphics::CommandRecorder& recorder,
   });
 }
 
-auto IsMaskedDraw(
-  const PreparedSceneFrame& prepared_frame, const DrawCommand& draw_command)
-  -> bool
+auto ResolveRasterState(const PreparedSceneFrame& prepared_frame,
+  const DrawCommand& draw_command) -> internal::MeshRasterState
 {
-  const auto metadata = prepared_frame.GetDrawMetadata();
-  return draw_command.draw_index < metadata.size()
-    && metadata[draw_command.draw_index].flags.IsSet(PassMaskBit::kMasked);
+  return internal::ResolveMeshRasterState(
+    prepared_frame.GetDrawMetadata(), draw_command.draw_index);
 }
 
-auto CopySceneDepthToPartialDepth(graphics::CommandRecorder& recorder,
-  SceneTextures& scene_textures) -> void
+auto CopySceneDepthToPartialDepth(
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures) -> void
 {
   recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kCopySource);
@@ -296,7 +299,8 @@ auto CopySceneDepthToPartialDepth(graphics::CommandRecorder& recorder,
     scene_textures.GetPartialDepth(), graphics::ResourceStates::kCopyDest);
   recorder.FlushBarriers();
 
-  recorder.CopyTexture(scene_textures.GetSceneDepth(), graphics::TextureSlice {},
+  recorder.CopyTexture(scene_textures.GetSceneDepth(),
+    graphics::TextureSlice {},
     graphics::TextureSubResourceSet::EntireTexture(),
     scene_textures.GetPartialDepth(), graphics::TextureSlice {},
     graphics::TextureSubResourceSet::EntireTexture());
@@ -336,9 +340,9 @@ void DepthPrepassModule::Execute(
   }
 
   if (mesh_processor_ != nullptr) {
-    mesh_processor_->BuildDrawCommands(
-      has_current_view_payload ? *ctx.current_view.prepared_frame
-                               : empty_prepared_frame,
+    mesh_processor_->BuildDrawCommands(has_current_view_payload
+        ? *ctx.current_view.prepared_frame
+        : empty_prepared_frame,
       ctx.current_view.resolved_view.get(),
       config_.mode == DepthPrePassMode::kOpaqueAndMasked);
   }
@@ -361,8 +365,8 @@ void DepthPrepassModule::Execute(
     || ctx.current_view.resolved_view->ReverseZ();
   BeginDepthPrepassResourceTracking(*recorder, scene_textures, writes_velocity);
 
-  auto& framebuffer = writes_velocity ? depth_velocity_framebuffer_
-                                      : depth_framebuffer_;
+  auto& framebuffer
+    = writes_velocity ? depth_velocity_framebuffer_ : depth_framebuffer_;
   if (NeedsFramebufferRebuild(framebuffer, scene_textures, writes_velocity)) {
     framebuffer = gfx->CreateFramebuffer(
       BuildDepthPrepassFramebuffer(scene_textures, writes_velocity));
@@ -378,19 +382,19 @@ void DepthPrepassModule::Execute(
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  auto current_alpha_test = std::optional<bool> {};
+  auto current_raster_state = std::optional<internal::MeshRasterState> {};
   for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-    const auto alpha_test
-      = IsMaskedDraw(*ctx.current_view.prepared_frame, draw_command);
-    if (!current_alpha_test.has_value()
-      || current_alpha_test.value() != alpha_test) {
+    const auto raster_state
+      = ResolveRasterState(*ctx.current_view.prepared_frame, draw_command);
+    if (!current_raster_state.has_value()
+      || current_raster_state.value() != raster_state) {
       recorder->SetPipelineState(BuildDepthPrepassPipelineDesc(
-        scene_textures, writes_velocity, alpha_test, reverse_z));
+        scene_textures, writes_velocity, raster_state, reverse_z));
       recorder->SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       recorder->SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-      current_alpha_test = alpha_test;
+      current_raster_state = raster_state;
     }
 
     recorder->SetGraphicsRoot32BitConstant(

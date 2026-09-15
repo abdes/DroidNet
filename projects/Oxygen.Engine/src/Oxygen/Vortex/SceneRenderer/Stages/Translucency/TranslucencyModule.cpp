@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -39,6 +40,7 @@ struct TranslucencyPipelineCacheKey {
   std::uint32_t sample_count { 1U };
   std::uint32_t sample_quality { 0U };
   bool reverse_z { true };
+  internal::MeshRasterState raster_state {};
 
   auto operator==(const TranslucencyPipelineCacheKey&) const -> bool = default;
 };
@@ -168,7 +170,7 @@ namespace {
   }
 
   auto BuildTranslucencyPipelineDesc(const SceneTextures& scene_textures,
-    const bool reverse_z,
+    const bool reverse_z, const internal::MeshRasterState raster_state,
     std::span<const graphics::RootBindingItem> root_bindings)
     -> graphics::GraphicsPipelineDesc
   {
@@ -200,7 +202,7 @@ namespace {
         .defines = std::move(pixel_defines),
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetRasterizerState(raster_state.Rasterizer())
       .SetDepthStencilState(depth_state)
       .SetBlendState({ MakeAlphaBlendTarget() })
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -220,7 +222,8 @@ namespace {
   }
 
   auto MakePipelineCacheKey(const SceneTextures& scene_textures,
-    const bool reverse_z) -> TranslucencyPipelineCacheKey
+    const bool reverse_z, const internal::MeshRasterState raster_state)
+    -> TranslucencyPipelineCacheKey
   {
     const auto& scene_color_desc
       = scene_textures.GetSceneColor().GetDescriptor();
@@ -232,14 +235,17 @@ namespace {
       .sample_count = scene_color_desc.sample_count,
       .sample_quality = scene_color_desc.sample_quality,
       .reverse_z = reverse_z,
+      .raster_state = raster_state,
     };
   }
 
   auto GetCachedTranslucencyPipelineDesc(TranslucencyPipelineCache& cache,
-    const SceneTextures& scene_textures, const bool reverse_z)
+    const SceneTextures& scene_textures, const bool reverse_z,
+    const internal::MeshRasterState raster_state)
     -> const graphics::GraphicsPipelineDesc&
   {
-    const auto key = MakePipelineCacheKey(scene_textures, reverse_z);
+    const auto key
+      = MakePipelineCacheKey(scene_textures, reverse_z, raster_state);
     const auto found = std::ranges::find_if(
       cache.entries, [&](const TranslucencyPipelineCacheEntry& entry) {
         return entry.key == key;
@@ -248,9 +254,10 @@ namespace {
       return found->desc;
     }
 
-    auto desc = BuildTranslucencyPipelineDesc(scene_textures, reverse_z,
-      std::span<const graphics::RootBindingItem>(
-        cache.root_bindings.data(), cache.root_bindings.size()));
+    auto desc
+      = BuildTranslucencyPipelineDesc(scene_textures, reverse_z, raster_state,
+        std::span<const graphics::RootBindingItem>(
+          cache.root_bindings.data(), cache.root_bindings.size()));
     cache.entries.push_back(TranslucencyPipelineCacheEntry {
       .key = key,
       .desc = std::move(desc),
@@ -383,19 +390,26 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
 
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
     || ctx.current_view.resolved_view->ReverseZ();
-  recorder->SetPipelineState(GetCachedTranslucencyPipelineDesc(
-    *pipeline_cache_, scene_textures, reverse_z));
 
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
-  recorder->SetGraphicsRootConstantBufferView(
-    view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-  recorder->SetGraphicsRoot32BitConstant(
-    root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-
+  auto current_raster_state = std::optional<internal::MeshRasterState> {};
   for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
+    const auto raster_state = internal::ResolveMeshRasterState(
+      ctx.current_view.prepared_frame->GetDrawMetadata(),
+      draw_command.draw_index);
+    if (!current_raster_state.has_value()
+      || *current_raster_state != raster_state) {
+      recorder->SetPipelineState(GetCachedTranslucencyPipelineDesc(
+        *pipeline_cache_, scene_textures, reverse_z, raster_state));
+      recorder->SetGraphicsRootConstantBufferView(
+        view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+      recorder->SetGraphicsRoot32BitConstant(
+        root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
+      current_raster_state = raster_state;
+    }
     recorder->SetGraphicsRoot32BitConstant(
       root_constants_param, draw_command.draw_index, 0U);
     recorder->Draw(draw_command.is_indexed ? draw_command.index_count

@@ -177,6 +177,46 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
   EXPECT_TRUE(State().CollectedItems().empty());
 }
 
+NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
+  ReverseWindingUsesInheritedWorldTransformAndCancelsTwoReflections)
+{
+  const auto geometry = MakeGeometryWithLods(1, { -1, -1, -1 }, { 1, 1, 1 });
+  SetGeometry(geometry);
+  auto child = scene_->CreateChildNode(Node(), "MirroredChild");
+  ASSERT_TRUE(child.has_value());
+  child->GetRenderable().SetGeometry(geometry);
+  EmplaceContextWithView();
+
+  struct TransformCase {
+    glm::vec3 parent_scale;
+    glm::vec3 child_scale;
+    bool reverse_winding;
+  };
+  const auto cases = std::vector<TransformCase> {
+    { { -2.0F, 1.0F, 1.0F }, { 1.0F, 1.0F, 1.0F }, true },
+    { { -2.0F, 1.0F, 1.0F }, { -1.0F, 1.0F, 1.0F }, false },
+    { { 2.0F, 1.0F, 1.0F }, { -1.0F, 1.0F, 1.0F }, true },
+    { { -2.0F, -1.0F, 1.0F }, { 1.0F, 1.0F, 1.0F }, false },
+  };
+  for (const auto& test_case : cases) {
+    Node().GetTransform().SetLocalTransform(glm::vec3(0.0F),
+      glm::quat(1.0F, 0.0F, 0.0F, 0.0F), test_case.parent_scale);
+    child->GetTransform().SetLocalTransform(glm::vec3(0.0F),
+      glm::quat(1.0F, 0.0F, 0.0F, 0.0F), test_case.child_scale);
+    UpdateScene();
+    auto item = RenderItemProto(child->GetImpl()->get());
+    oxygen::vortex::sceneprep::ExtractionPreFilter(Context(), State(), item);
+    ASSERT_FALSE(item.IsDropped());
+    item.ResolveMesh(geometry->MeshAt(0U), 0U);
+    item.SetVisibleSubmeshes({ 0U });
+    const auto before = State().CollectedCount();
+    EmitPerVisibleSubmesh(Context(), State(), item);
+    ASSERT_EQ(State().CollectedCount(), before + 1U);
+    EXPECT_EQ(State().CollectedItems().back().reverse_winding,
+      test_case.reverse_winding);
+  }
+}
+
 // These are complex integration tests - disabled for now
 #if 0
 // Emit one item per visible submesh with correct properties

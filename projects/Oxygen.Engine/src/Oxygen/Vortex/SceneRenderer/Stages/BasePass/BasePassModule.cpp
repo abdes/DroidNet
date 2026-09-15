@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -606,12 +607,13 @@ namespace {
   }
 
   auto BuildBasePassPipelineDesc(const SceneTextures& scene_textures,
-    const BasePassConfig& config, const bool alpha_test, const bool reverse_z,
-    const bool writes_velocity) -> graphics::GraphicsPipelineDesc
+    const BasePassConfig& config, const internal::MeshRasterState raster_state,
+    const bool reverse_z, const bool writes_velocity)
+    -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
-    AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
     AddBooleanDefine(writes_velocity, "HAS_VELOCITY", defines);
 
     auto blend_targets = std::vector<graphics::BlendTargetDesc>(
@@ -655,7 +657,7 @@ namespace {
         .defines = defines,
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetRasterizerState(raster_state.Rasterizer())
       .SetDepthStencilState(depth_state)
       .SetBlendState(std::move(blend_targets))
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -669,14 +671,14 @@ namespace {
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName(alpha_test ? "Vortex.BasePass.GBuffer.Masked"
-                               : "Vortex.BasePass.GBuffer.Opaque")
+      .SetDebugName(raster_state.alpha_test ? "Vortex.BasePass.GBuffer.Masked"
+                                            : "Vortex.BasePass.GBuffer.Opaque")
       .Build();
   }
 
   auto BuildForwardBasePassPipelineDesc(const SceneTextures& scene_textures,
-    const BasePassConfig& config, const bool alpha_test, const bool reverse_z)
-    -> graphics::GraphicsPipelineDesc
+    const BasePassConfig& config, const internal::MeshRasterState raster_state,
+    const bool reverse_z) -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {
@@ -689,7 +691,7 @@ namespace {
         .value = "1",
       },
     };
-    AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
 
     auto blend_target = graphics::BlendTargetDesc {};
     blend_target.blend_enable = false;
@@ -716,7 +718,7 @@ namespace {
         .defines = std::move(defines),
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetRasterizerState(raster_state.Rasterizer())
       .SetDepthStencilState(depth_state)
       .SetBlendState({ blend_target })
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -731,18 +733,18 @@ namespace {
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName(alpha_test ? "Vortex.BasePass.Forward.Masked"
-                               : "Vortex.BasePass.Forward.Opaque")
+      .SetDebugName(raster_state.alpha_test ? "Vortex.BasePass.Forward.Masked"
+                                            : "Vortex.BasePass.Forward.Opaque")
       .Build();
   }
 
   auto BuildVelocityAuxPipelineDesc(const SceneTextures& scene_textures,
-    const bool alpha_test, const bool reverse_z)
+    const internal::MeshRasterState raster_state, const bool reverse_z)
     -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
-    AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
     AddBooleanDefine(true, "USES_MOTION_VECTOR_WORLD_OFFSET", defines);
 
     auto blend_targets = std::vector<graphics::BlendTargetDesc>(1U);
@@ -771,7 +773,7 @@ namespace {
         .defines = defines,
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetRasterizerState(raster_state.Rasterizer())
       .SetDepthStencilState(depth_state)
       .SetBlendState(std::move(blend_targets))
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -786,8 +788,9 @@ namespace {
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName(alpha_test ? "Vortex.BasePass.VelocityAux.Masked"
-                               : "Vortex.BasePass.VelocityAux.Opaque")
+      .SetDebugName(raster_state.alpha_test
+          ? "Vortex.BasePass.VelocityAux.Masked"
+          : "Vortex.BasePass.VelocityAux.Opaque")
       .Build();
   }
 
@@ -875,12 +878,11 @@ namespace {
           prepared_frame, *velocity_metadata));
   }
 
-  auto IsMaskedDraw(const PreparedSceneFrame& prepared_frame,
-    const BasePassDrawCommand& draw_command) -> bool
+  auto ResolveRasterState(const PreparedSceneFrame& prepared_frame,
+    const BasePassDrawCommand& draw_command) -> internal::MeshRasterState
   {
-    const auto metadata = prepared_frame.GetDrawMetadata();
-    return draw_command.draw_index < metadata.size()
-      && metadata[draw_command.draw_index].flags.IsSet(PassMaskBit::kMasked);
+    return internal::ResolveMeshRasterState(
+      prepared_frame.GetDrawMetadata(), draw_command.draw_index);
   }
 
   auto BeginPersistentWriteTarget(
@@ -1108,8 +1110,8 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 {
   last_execution_result_ = {};
   const auto wireframe_only = config_.render_mode == RenderMode::kWireframe;
-  const auto forward_solid = config_.shading_mode == ShadingMode::kForward
-    && !wireframe_only;
+  const auto forward_solid
+    = config_.shading_mode == ShadingMode::kForward && !wireframe_only;
   if (config_.shading_mode != ShadingMode::kDeferred && !forward_solid
     && !wireframe_only) {
     return last_execution_result_;
@@ -1122,8 +1124,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     return last_execution_result_;
   }
 
-  const auto writes_velocity
-    = !forward_solid && config_.write_velocity
+  const auto writes_velocity = !forward_solid && config_.write_velocity
     && scene_textures.GetVelocity() != nullptr;
   const auto draw_command_mode
     = wireframe_only ? ShadingMode::kDeferred : config_.shading_mode;
@@ -1194,16 +1195,17 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     SetViewportAndScissor(*recorder, ctx, scene_textures);
     const auto wireframe_constants_index
       = WriteWireframeConstants(*gfx, ctx, false);
-    auto current_alpha_test = std::optional<bool> {};
+    auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-      const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
-      if (!current_alpha_test.has_value()
-        || current_alpha_test.value() != alpha_test) {
+      const auto raster_state
+        = ResolveRasterState(prepared_frame, draw_command);
+      if (!current_raster_state.has_value()
+        || current_raster_state.value() != raster_state) {
         recorder->SetPipelineState(BuildWireframePipelineDesc(
-          scene_textures, alpha_test, reverse_z, true, false));
+          scene_textures, raster_state.alpha_test, reverse_z, true, false));
         recorder->SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-        current_alpha_test = alpha_test;
+        current_raster_state = raster_state;
       }
 
       recorder->SetGraphicsRoot32BitConstant(
@@ -1261,18 +1263,19 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     recorder->BindFrameBuffer(*forward_framebuffer_);
     SetViewportAndScissor(*recorder, ctx, scene_textures);
 
-    auto current_alpha_test = std::optional<bool> {};
+    auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-      const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
-      if (!current_alpha_test.has_value()
-        || current_alpha_test.value() != alpha_test) {
+      const auto raster_state
+        = ResolveRasterState(prepared_frame, draw_command);
+      if (!current_raster_state.has_value()
+        || current_raster_state.value() != raster_state) {
         recorder->SetPipelineState(BuildForwardBasePassPipelineDesc(
-          scene_textures, config_, alpha_test, reverse_z));
+          scene_textures, config_, raster_state, reverse_z));
         recorder->SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
         recorder->SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-        current_alpha_test = alpha_test;
+        current_raster_state = raster_state;
       }
 
       recorder->SetGraphicsRoot32BitConstant(
@@ -1322,18 +1325,19 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     }
     recorder->BindFrameBuffer(*framebuffer_);
     SetViewportAndScissor(*recorder, ctx, scene_textures);
-    auto current_alpha_test = std::optional<bool> {};
+    auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-      const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
-      if (!current_alpha_test.has_value()
-        || current_alpha_test.value() != alpha_test) {
+      const auto raster_state
+        = ResolveRasterState(prepared_frame, draw_command);
+      if (!current_raster_state.has_value()
+        || current_raster_state.value() != raster_state) {
         recorder->SetPipelineState(BuildBasePassPipelineDesc(
-          scene_textures, config_, alpha_test, reverse_z, writes_velocity));
+          scene_textures, config_, raster_state, reverse_z, writes_velocity));
         recorder->SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
         recorder->SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-        current_alpha_test = alpha_test;
+        current_raster_state = raster_state;
       }
 
       recorder->SetGraphicsRoot32BitConstant(
@@ -1394,23 +1398,24 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       recorder->BindFrameBuffer(*velocity_aux_framebuffer_);
       SetViewportAndScissor(*recorder, ctx, scene_textures);
 
-      auto current_alpha_test = std::optional<bool> {};
+      auto current_raster_state = std::optional<internal::MeshRasterState> {};
       for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
         if (!DrawRequiresMotionVectorWorldOffset(
               prepared_frame, draw_command)) {
           continue;
         }
 
-        const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
-        if (!current_alpha_test.has_value()
-          || current_alpha_test.value() != alpha_test) {
+        const auto raster_state
+          = ResolveRasterState(prepared_frame, draw_command);
+        if (!current_raster_state.has_value()
+          || current_raster_state.value() != raster_state) {
           recorder->SetPipelineState(BuildVelocityAuxPipelineDesc(
-            scene_textures, alpha_test, reverse_z));
+            scene_textures, raster_state, reverse_z));
           recorder->SetGraphicsRootConstantBufferView(
             view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
           recorder->SetGraphicsRoot32BitConstant(
             root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-          current_alpha_test = alpha_test;
+          current_raster_state = raster_state;
         }
 
         recorder->SetGraphicsRoot32BitConstant(
@@ -1527,16 +1532,16 @@ auto BasePassModule::ExecuteWireframeOverlay(
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
-  auto current_alpha_test = std::optional<bool> {};
+  auto current_raster_state = std::optional<internal::MeshRasterState> {};
   for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-    const auto alpha_test = IsMaskedDraw(prepared_frame, draw_command);
-    if (!current_alpha_test.has_value()
-      || current_alpha_test.value() != alpha_test) {
+    const auto raster_state = ResolveRasterState(prepared_frame, draw_command);
+    if (!current_raster_state.has_value()
+      || current_raster_state.value() != raster_state) {
       recorder->SetPipelineState(BuildWireframePipelineDesc(
-        scene_textures, alpha_test, reverse_z, false, true));
+        scene_textures, raster_state.alpha_test, reverse_z, false, true));
       recorder->SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-      current_alpha_test = alpha_test;
+      current_raster_state = raster_state;
     }
 
     recorder->SetGraphicsRoot32BitConstant(

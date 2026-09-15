@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -53,7 +54,8 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
 static_assert(sizeof(ShadowPassConstants) == 128U);
 static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
 static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
-static_assert(offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
+static_assert(
+  offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
 static_assert(
   offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
 static_assert(offsetof(ShadowPassConstants, draw_metadata_slot) == 112U);
@@ -83,7 +85,7 @@ auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
   bindings.reserve(bindless_d3d12::kRootParamTableCount);
 
   for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-       ++index) {
+    ++index) {
     const auto& desc = bindless_d3d12::kRootParamTable.at(index);
     auto binding = graphics::RootBindingDesc {};
     binding.binding_slot_desc.register_index = desc.shader_register;
@@ -98,8 +100,8 @@ auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
         table.view_type = RangeTypeToViewType(
           static_cast<bindless_d3d12::RangeType>(range.range_type));
         table.base_index = range.base_register;
-        table.count
-          = range.num_descriptors == (std::numeric_limits<std::uint32_t>::max)()
+        table.count = range.num_descriptors
+            == (std::numeric_limits<std::uint32_t>::max)()
           ? (std::numeric_limits<std::uint32_t>::max)()
           : range.num_descriptors;
       }
@@ -144,11 +146,12 @@ auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
 }
 
 auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
-  const bool alpha_test) -> graphics::GraphicsPipelineDesc
+  const internal::MeshRasterState raster_state)
+  -> graphics::GraphicsPipelineDesc
 {
   auto root_bindings = BuildVortexRootBindings();
   auto defines = std::vector<graphics::ShaderDefine> {};
-  AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+  AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
 
   return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
@@ -164,7 +167,7 @@ auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
       .defines = defines,
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-    .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+    .SetRasterizerState(raster_state.Rasterizer())
     .SetDepthStencilState(graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
       .depth_write_enable = true,
@@ -178,18 +181,16 @@ auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
     })
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       root_bindings.data(), root_bindings.size()))
-    .SetDebugName(alpha_test ? "Vortex.ShadowDepth.Masked"
-                             : "Vortex.ShadowDepth.Opaque")
+    .SetDebugName(raster_state.alpha_test ? "Vortex.ShadowDepth.Masked"
+                                          : "Vortex.ShadowDepth.Opaque")
     .Build();
 }
 
-auto IsMaskedDraw(
-  const PreparedSceneFrame& prepared_scene, const DrawCommand& draw_command)
-  -> bool
+auto ResolveRasterState(const PreparedSceneFrame& prepared_scene,
+  const DrawCommand& draw_command) -> internal::MeshRasterState
 {
-  const auto metadata = prepared_scene.GetDrawMetadata();
-  return draw_command.draw_index < metadata.size()
-    && metadata[draw_command.draw_index].flags.IsSet(PassMaskBit::kMasked);
+  return internal::ResolveMeshRasterState(
+    prepared_scene.GetDrawMetadata(), draw_command.draw_index);
 }
 
 auto EnsureDepthStencilViewForCascade(Graphics& gfx,
@@ -210,18 +211,18 @@ auto EnsureDepthStencilViewForCascade(Graphics& gfx,
     shadow_surface.GetName());
 
   const auto dsv_desc = graphics::TextureViewDescription {
-    .view_type = graphics::ResourceViewType::kTexture_DSV,
-    .visibility = graphics::DescriptorVisibility::kCpuOnly,
-    .format = shadow_surface.GetDescriptor().format,
-    .dimension = TextureType::kTexture2DArray,
-    .sub_resources = graphics::TextureSubResourceSet {
-      .base_mip_level = 0U,
-      .num_mip_levels = 1U,
-      .base_array_slice = cascade_index,
-      .num_array_slices = 1U,
-    },
-    .is_read_only_dsv = false,
-  };
+  .view_type = graphics::ResourceViewType::kTexture_DSV,
+  .visibility = graphics::DescriptorVisibility::kCpuOnly,
+  .format = shadow_surface.GetDescriptor().format,
+  .dimension = TextureType::kTexture2DArray,
+  .sub_resources = graphics::TextureSubResourceSet {
+    .base_mip_level = 0U,
+    .num_mip_levels = 1U,
+    .base_array_slice = cascade_index,
+    .num_array_slices = 1U,
+  },
+  .is_read_only_dsv = false,
+};
 
   if (const auto existing = registry.Find(shadow_surface, dsv_desc);
     existing->IsValid()) {
@@ -230,8 +231,9 @@ auto EnsureDepthStencilViewForCascade(Graphics& gfx,
   }
 
   auto& allocator = gfx.GetDescriptorAllocator();
-  auto handle = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
-    graphics::DescriptorVisibility::kCpuOnly);
+  auto handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
+      graphics::DescriptorVisibility::kCpuOnly);
   CHECK_F(handle.IsValid(),
     "ShadowDepthPass: failed to allocate a DSV for shadow cascade {}",
     cascade_index);
@@ -274,7 +276,7 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   auto depth_slices = std::vector<DepthSlice> {};
   depth_slices.reserve(frame_data.bindings.cascade_count);
   for (std::uint32_t cascade_index = 0U;
-       cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
+    cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
     depth_slices.push_back(DepthSlice {
       .light_view_projection
       = frame_data.bindings.cascades[cascade_index].light_view_projection,
@@ -283,13 +285,14 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
         frame_data.bindings.cascades[cascade_index].sampling_metadata1.z
           * kUeCsmShadowSlopeScaleDepthBias * kUeDefaultUserShadowSlopeBias,
         kUeShadowMaxSlopeScaleDepthBias, 0.0F),
-      .light_direction_to_source = frame_data.bindings.light_direction_to_source,
+      .light_direction_to_source
+      = frame_data.bindings.light_direction_to_source,
       .target_slice = cascade_index,
     });
   }
 
-  return RecordSlices(view_input, shadow_surface, std::span(depth_slices),
-    draw_commands);
+  return RecordSlices(
+    view_input, shadow_surface, std::span(depth_slices), draw_commands);
 }
 
 auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
@@ -320,8 +323,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   auto pass_constants_srvs = std::vector<ShaderVisibleIndex> {};
   if (!draw_commands.empty()) {
     pass_constants_srvs.resize(depth_slices.size(), kInvalidShaderVisibleIndex);
-    for (std::uint32_t slice_index = 0U;
-         slice_index < depth_slices.size(); ++slice_index) {
+    for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
+      ++slice_index) {
       const auto& depth_slice = depth_slices[slice_index];
       const auto constants = ShadowPassConstants {
         .light_view_projection = depth_slice.light_view_projection,
@@ -350,7 +353,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   }
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "ShadowService ShadowDepth");
+  auto recorder
+    = gfx->AcquireCommandRecorder(queue_key, "ShadowService ShadowDepth");
   if (!recorder) {
     return last_render_state_;
   }
@@ -367,8 +371,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  for (std::uint32_t slice_index = 0U;
-       slice_index < depth_slices.size(); ++slice_index) {
+  for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
+    ++slice_index) {
     const auto target_slice = depth_slices[slice_index].target_slice;
     const auto dsv = EnsureDepthStencilViewForCascade(
       *gfx, cascade_dsvs_, *shadow_surface, target_slice);
@@ -376,8 +380,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     recorder->FlushBarriers();
     recorder->SetRenderTargets({}, dsv);
     recorder->ClearDepthStencilView(*shadow_surface, dsv,
-      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 0.0F,
-      0U);
+      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 0.0F, 0U);
     recorder->SetViewport({
       .top_left_x = 0.0F,
       .top_left_y = 0.0F,
@@ -393,20 +396,20 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
       .bottom = static_cast<std::int32_t>(shadow_desc.height),
     });
 
-    auto current_alpha_test = std::optional<bool> {};
+    auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : draw_commands) {
-      const auto alpha_test = IsMaskedDraw(*view_input.prepared_scene, draw_command);
-      if (!current_alpha_test.has_value()
-        || current_alpha_test.value() != alpha_test) {
+      const auto raster_state
+        = ResolveRasterState(*view_input.prepared_scene, draw_command);
+      if (!current_raster_state.has_value()
+        || current_raster_state.value() != raster_state) {
         recorder->SetPipelineState(
-          BuildShadowPipelineDesc(*shadow_surface, alpha_test));
-        recorder->SetGraphicsRootConstantBufferView(
-          view_constants_param, view_input.view_constants->GetGPUVirtualAddress());
-        recorder->SetGraphicsRoot32BitConstant(
-          root_constants_param, 0U, 0U);
+          BuildShadowPipelineDesc(*shadow_surface, raster_state));
+        recorder->SetGraphicsRootConstantBufferView(view_constants_param,
+          view_input.view_constants->GetGPUVirtualAddress());
+        recorder->SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
         recorder->SetGraphicsRoot32BitConstant(
           root_constants_param, pass_constants_srvs[slice_index].get(), 1U);
-        current_alpha_test = alpha_test;
+        current_raster_state = raster_state;
       }
 
       recorder->SetGraphicsRoot32BitConstant(

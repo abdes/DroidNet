@@ -63,8 +63,8 @@ void TransformComponent::SetLocalRotation(const Quat& rotation) noexcept
  Updates the object's scale in local space. Only marks dirty and updates if the
  new scale differs from the current one.
 
- @param scale New local scale vector (typically positive values).
- @warning Negative scale values will cause mesh inversion.
+ @param scale New local scale vector. Negative components reflect the geometry;
+  mesh rendering compensates world-transform handedness to preserve its exterior.
  @warning Zero scale values will cause degenerate transformations.
  */
 void TransformComponent::SetLocalScale(const Vec3& scale) noexcept

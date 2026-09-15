@@ -115,8 +115,9 @@ M05C parity re-check result:
   payload is used directly.
 - Draw-command state merging into `DrawIndexedInstanced` buckets. Stage 18
   still emits per-mesh draw commands for M05C.
-- Per-material sided rasterizer selection. M05C uses no culling for visual
-  validation; material-authored one-sided translucent PSOs are deferred.
+- Per-material sided rasterizer selection was deferred by M05C. Its follow-up
+  implementation and validation are tracked in
+  [material-sidedness-correction.md](../plan/material-sidedness-correction.md).
 
 These are not hidden gaps in the M05C claim. They are future scope because the
 current Vortex baseline needs correct standard alpha-blended meshes before the
@@ -229,7 +230,7 @@ and distance-offset controls until Oxygen has those authoring fields.
 | Depth write | Disabled |
 | Blend | Standard straight-alpha: source alpha over destination |
 | Color space | HDR/linear scene color, before final post-process |
-| Rasterizer | No culling for the first stage implementation; material-sided policy is deferred and must select separate PSOs before claiming one-sided translucent parity. |
+| Rasterizer | Material-sided PSOs: backface culling for single-sided, no culling for double-sided; front-face winding follows world handedness. Follow-up validation is tracked in the material-sidedness correction plan. |
 
 The pixel shader must emit straight alpha. It must not tonemap or output LDR
 color when writing to internal `SceneColor`.

@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include <glm/matrix.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -394,6 +396,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
       .main_view_visible = main_view_visible,
       .static_shadow_caster
       = item.Flags().GetEffectiveValue(scene::SceneNodeFlags::kStatic),
+      .reverse_winding
+      = glm::determinant(glm::mat3(item.GetWorldTransform())) < 0.0F,
     });
   };
 

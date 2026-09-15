@@ -154,7 +154,7 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
         return bindless::HeapIndex { frame_write_count_ };
       },
       [](oxygen::nexus::DomainKey /*domain*/,
-        bindless::HeapIndex /*index*/) -> void {},
+        bindless::HeapIndex /*index*/) -> void { },
       slot_reclaimer_)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::vortex::DrawMetadata)),
@@ -327,6 +327,11 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
         ClassifyMaterialPassMask(item.material.resolved_asset.get()),
         item.cast_shadows),
       item.main_view_visible);
+    if (item.reverse_winding) {
+      // Pass flags participate in both instancing and partition keys. Opposite
+      // handedness cannot share a draw with a fixed rasterizer front face.
+      dm.flags.Set(PassMaskBit::kReverseWinding);
+    }
     DCHECK_F(handle != oxygen::vortex::sceneprep::kInvalidTransformHandle,
       "Invalid transform handle while emitting");
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
@@ -355,12 +360,13 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     draw_bounding_spheres_[index] = item.world_bounding_sphere;
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    velocity_publication_sources_[index] = DrawMetadataEmitter::VelocityPublicationSource {
-      .node_handle = item.node_handle,
-      .geometry_asset_key = item.geometry.asset_key,
-      .lod_index = item.geometry.lod_index,
-      .submesh_index = item.submesh_index,
-    };
+    velocity_publication_sources_[index]
+      = DrawMetadataEmitter::VelocityPublicationSource {
+          .node_handle = item.node_handle,
+          .geometry_asset_key = item.geometry.asset_key,
+          .lod_index = item.geometry.lod_index,
+          .submesh_index = item.submesh_index,
+        };
     ++frame_write_count_;
   }
 }
@@ -403,8 +409,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   for (std::size_t i = 0; i < n; ++i) {
     perm[i] = static_cast<std::uint32_t>(i);
   }
-  std::ranges::stable_sort(
-    perm, [&](std::uint32_t a, std::uint32_t b) -> bool {
+  std::ranges::stable_sort(perm, [&](std::uint32_t a, std::uint32_t b) -> bool {
     const auto& ka = keys_[a];
     const auto& kb = keys_[b];
     if (ka.bucket_order != kb.bucket_order) {
@@ -430,8 +435,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
     if (ka.ib_srv != kb.ib_srv) {
       return ka.ib_srv < kb.ib_srv;
     }
-      return a < b;
-    });
+    return a < b;
+  });
 
   std::vector<oxygen::vortex::DrawMetadata> reordered;
   reordered.reserve(n);
