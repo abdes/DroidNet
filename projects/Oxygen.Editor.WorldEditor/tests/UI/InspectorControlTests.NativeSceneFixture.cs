@@ -126,10 +126,15 @@ public sealed partial class InspectorControlTests
 
         public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
 
-        public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection)
+        public SceneNodeEditorViewModel CreateInspectorHost(
+            IList<SceneNode> selection,
+            Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assets = null,
+            IMaterialPickerService? materials = null,
+            Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery? builtins = null,
+            ISceneContentDemandService? contentDemand = null)
         {
             this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, this.AssetCatalog.Object, this.MaterialPicker.Object, this.sync, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<ISceneContentDemandService>());
+            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>());
         }
 
         public async Task InitializeAsync(CancellationToken cancellationToken, string? cookedRoot = null)
