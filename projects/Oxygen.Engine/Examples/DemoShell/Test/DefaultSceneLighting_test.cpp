@@ -15,6 +15,7 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/Services/DefaultSceneLighting.h"
@@ -45,9 +46,8 @@ NOLINT_TEST(DefaultSceneLighting, AuthorsSunAndEnvironment)
   EXPECT_TRUE(primary->Light().GetEnvironmentContribution());
   EXPECT_TRUE(primary->Light().Common().casts_shadows);
 
-  const glm::vec3 expected_direction_to_light
-    = glm::normalize(glm::vec3 { -4.0F, -6.0F, 8.0F }
-      - glm::vec3 { 0.0F, 0.0F, 1.0F });
+  const glm::vec3 expected_direction_to_light = glm::normalize(
+    glm::vec3 { -4.0F, -6.0F, 8.0F } - glm::vec3 { 0.0F, 0.0F, 1.0F });
   EXPECT_NEAR(
     glm::dot(primary->DirectionToLightWs(), expected_direction_to_light), 1.0F,
     0.001F);
@@ -65,6 +65,127 @@ NOLINT_TEST(DefaultSceneLighting, IsIdempotent)
   EXPECT_EQ(scene->GetEnvironment()->GetSystemCount(), 2U);
   EXPECT_EQ(
     scene->GetDirectionalLightResolver().ResolveDirectionalLights().size(), 1U);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewAddsOnlyOneSunWithoutEnvironment)
+{
+  auto scene = std::make_shared<scene::Scene>("UnlitImport", 16);
+  ASSERT_EQ(scene->GetEnvironment(), nullptr);
+
+  const auto sun = AddPreviewSunIfMissing(*scene);
+  ASSERT_TRUE(sun.IsAlive());
+  const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
+  ASSERT_TRUE(primary.has_value());
+  EXPECT_EQ(primary->NodeHandle(), sun.GetHandle());
+  EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 100000.0F);
+  EXPECT_TRUE(primary->Light().Common().affects_world);
+  EXPECT_TRUE(primary->Light().Common().casts_shadows);
+  EXPECT_GT(primary->DirectionToLightWs().z, 0.0F);
+  EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_EQ(scene->GetEnvironment(), nullptr);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewPreservesLocalLightAndEnvironment)
+{
+  auto scene = std::make_shared<scene::Scene>("LocalLitImport", 16);
+  auto local = scene->CreateNode("LocalLight");
+  ASSERT_TRUE(local.AttachLight(std::make_unique<scene::PointLight>()));
+  auto environment = std::make_unique<scene::SceneEnvironment>();
+  auto& sky = environment->AddSystem<scene::environment::SkyLight>();
+  sky.SetEnabled(false);
+  sky.SetIntensityMul(3.0F);
+  scene->SetEnvironment(std::move(environment));
+  const auto original_environment = scene->GetEnvironment();
+
+  ASSERT_TRUE(AddPreviewSunIfMissing(*scene).IsAlive());
+  EXPECT_TRUE(local.GetLightAs<scene::PointLight>().has_value());
+  EXPECT_EQ(scene->GetRootNodes().size(), 2U);
+  EXPECT_EQ(scene->GetEnvironment(), original_environment);
+  EXPECT_EQ(original_environment->GetSystemCount(), 1U);
+  EXPECT_FALSE(sky.IsEnabled());
+  EXPECT_FLOAT_EQ(sky.GetIntensityMul(), 3.0F);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewPreservesUntaggedDirectionalLight)
+{
+  auto scene = std::make_shared<scene::Scene>("DirectionalImport", 16);
+  auto node = scene->CreateNode("KeyLight");
+  auto light = std::make_unique<scene::DirectionalLight>();
+  light->SetIntensityLux(42.0F);
+  light->Common().casts_shadows = false;
+  ASSERT_TRUE(node.AttachLight(std::move(light)));
+
+  EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  const auto preserved = node.GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(preserved.has_value());
+  EXPECT_FALSE(preserved->get().IsSunLight());
+  EXPECT_FALSE(preserved->get().GetEnvironmentContribution());
+  EXPECT_FALSE(preserved->get().Common().casts_shadows);
+  EXPECT_FLOAT_EQ(preserved->get().GetIntensityLux(), 42.0F);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewPreservesDisabledNestedDirectional)
+{
+  auto scene = std::make_shared<scene::Scene>("DisabledDirectionalImport", 16);
+  auto parent = scene->CreateNode("Parent");
+  const auto child = scene->CreateChildNode(parent, "DisabledLight");
+  ASSERT_TRUE(child.has_value());
+  auto node = *child;
+  auto light = std::make_unique<scene::DirectionalLight>();
+  light->Common().affects_world = false;
+  ASSERT_TRUE(node.AttachLight(std::move(light)));
+
+  EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_FALSE(
+    node.GetLightAs<scene::DirectionalLight>()->get().Common().affects_world);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewPreservesAuthoredSun)
+{
+  auto scene = std::make_shared<scene::Scene>("AuthoredSun", 16);
+  const auto authored = EnsureDefaultSceneLighting(
+    *scene, DefaultSceneLightingDesc { .sun_intensity_lux = 1234.0F });
+  EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+  const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
+  ASSERT_TRUE(primary.has_value());
+  EXPECT_EQ(primary->NodeHandle(), authored.GetHandle());
+  EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 1234.0F);
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewPreservesInvisibleDirectional)
+{
+  auto scene = std::make_shared<scene::Scene>("HiddenDirectionalImport", 16);
+  const auto flags
+    = scene::SceneNode::Flags {}.SetFlag(scene::SceneNodeFlags::kVisible,
+      scene::SceneFlag {}.SetEffectiveValueBit(false));
+  auto hidden = scene->CreateNode("HiddenLight", flags);
+  ASSERT_TRUE(hidden.AttachLight(std::make_unique<scene::DirectionalLight>()));
+
+  EXPECT_FALSE(AddPreviewSunIfMissing(*scene).IsAlive());
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_FALSE(hidden.GetFlags()->get().GetEffectiveValue(
+    scene::SceneNodeFlags::kVisible));
+}
+
+NOLINT_TEST(DefaultSceneLighting, PreviewBelongsToEachScene)
+{
+  auto first = std::make_shared<scene::Scene>("FirstImport", 16);
+  auto second = std::make_shared<scene::Scene>("SecondImport", 16);
+  auto first_sun = AddPreviewSunIfMissing(*first);
+  ASSERT_TRUE(first_sun.IsAlive());
+  first_sun.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(17.0F);
+  ASSERT_TRUE(AddPreviewSunIfMissing(*second).IsAlive());
+  EXPECT_FLOAT_EQ(second->GetDirectionalLightResolver()
+                    .ResolvePrimarySun()
+                    ->Light()
+                    .GetIntensityLux(),
+    100000.0F);
+  EXPECT_FLOAT_EQ(
+    first_sun.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    17.0F);
 }
 
 } // namespace oxygen::examples::testing

@@ -55,7 +55,8 @@ class MainModule final : public DemoModuleBase {
 public:
   using Base = oxygen::examples::DemoModuleBase;
 
-  explicit MainModule(const oxygen::examples::DemoAppContext& app);
+  explicit MainModule(const oxygen::examples::DemoAppContext& app,
+    bool preview_sun_enabled = true);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -115,8 +116,8 @@ private:
   auto ApplyStartupSkyboxToScene(
     oxygen::observer_ptr<oxygen::scene::Scene> scene,
     std::string_view scene_label) -> void;
-  auto ApplySkyLightLifecycleProofToggle(oxygen::scene::Scene& scene,
-    std::uint64_t frame_index) -> void;
+  auto ApplySkyLightLifecycleProofToggle(
+    oxygen::scene::Scene& scene, std::uint64_t frame_index) -> void;
 
   struct SceneLoadRequest {
     data::AssetKey key {};
@@ -189,6 +190,7 @@ private:
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_loose_index_write_times_;
   bool pending_scene_clear_ { false };
+  bool preview_sun_enabled_ { true };
 };
 
 } // namespace oxygen::examples::render_scene

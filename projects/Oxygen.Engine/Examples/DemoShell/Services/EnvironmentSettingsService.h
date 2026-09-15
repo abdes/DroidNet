@@ -565,7 +565,7 @@ private:
   [[nodiscard]] auto GetSelectedLocalFogVolume() const
     -> const LocalFogVolumeUiState*;
   auto ResetSunUiToDefaults() -> void;
-  auto EnsureSceneHasSunAtActivation() -> void;
+  auto BindSceneSun() -> void;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
   auto CaptureSunShadowSettingsFromLight(const scene::DirectionalLight& light)
     -> void;

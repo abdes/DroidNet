@@ -12,13 +12,10 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Examples.RenderScene"
   DESCRIPTION
     [=[
-An example demonstrating how to mount an existing cooked .pak file, resolve a
-Scene asset key (via embedded browse index virtual paths or manual key entry),
-load the SceneAsset through the engine AssetLoader, instantiate a runtime
-scene::Scene hierarchy, and render it using the standard SingleViewExample
-pipeline.
-
-The ImGui overlay is intentionally focused on PAK mounting and scene loading.
+Loads scenes from loose cooked indexes and PAK files through the native
+AssetLoader, then renders them with Vortex and Direct3D12. DemoShell provides
+interactive model import, camera, lighting, environment, and diagnostics panels.
+Optional preview sunlight illuminates loaded scenes without directional lights.
 ]=]
   WITHOUT_VERSION_H
 )
