@@ -606,17 +606,19 @@ Failure/cancellation releases acquired ownership. There is no fixed whole-editor
 qualification manifest, promotion command or separately built probe; managed/UI
 edits do not require one in Debug or Release.
 
-ED-M08 extends on-demand verification to the installed RenderScene executable,
-its normal build dependency metadata, protocol and capture/runtime inputs.
-Producer provenance and runtime/capture identity are separate facts. An SDK or
-protocol mismatch reports the affected build/install action; testing evidence is
-not a runtime admission manifest.
+ED-M08's opt-in development tools verify the native runner and its runtime
+inputs using ordinary build dependency identities. Their protocol, runner and
+qualification-only capture/observation adapters are excluded from normal editor
+Debug/Release builds and the normal SDK install. Producer provenance and runtime
+identity remain separate facts. Testing evidence is not a runtime admission
+manifest, and normal runtime startup does not discover development tools.
 
 Publication briefly pauses preview and drains affected content reads before
 fixed cooked-root replacement. The runtime exposes the required pause/drain/
 remount/resume capabilities; ContentPipeline owns journal, paths and policy.
-Standalone validation holds an output read lease. ED-M08 captures native observed
-state and rendered frames through stable capabilities; existing accepted/queued
+Development standalone validation holds an output read lease. ED-M08's opt-in
+test/tool targets observe native state and rendered frames; validation-only
+instrumentation is excluded from production build graphs. Existing accepted/queued
 responses remain insufficient for presented-frame proof. The full publication
 transaction and recovery behavior are in content-pipeline section 16.
 
@@ -724,13 +726,23 @@ boundary to existing feature result surfaces; superseded failures remain discard
 This is additional feature-visible reporting over the landed native mechanism,
 not a new loader-generation implementation or a change to Accepted semantics.
 
-## 19. Bounded Validation Capture Session
+## 19. Development-Only Validation Capture Session
 
-ED-M08 temporarily pins the saved scene projection/camera/profile under a
-run/document/view-lifetime capture lease. New authoring revisions continue, but
-matching scene mutation requests remain visibly pending until embedded observation
-and capture finish. Navigation is disabled for the pinned viewport during that
-window. This explicit validation mode does not claim the preview shows newer edits.
+The user explicitly required the entire ED-M08 validation workflow to remain
+development-only on 2026-09-15. Its opt-in editor test host temporarily pins the
+saved scene projection/camera/profile under a run/document/view-lifetime capture
+lease. New authoring revisions continue, but matching scene mutation requests
+remain pending until embedded observation and capture finish. Navigation is
+disabled in that test host for the pinned viewport during the window. This
+development mode does not claim the preview shows newer edits and does not add a
+qualification command, capture-hold service or protocol to normal editor builds.
+
+Use existing public production capabilities where they already provide the
+necessary operations. New validation-only observations, exposure telemetry,
+checkpoint scheduling and capture holds belong to opt-in test adapters or
+instrumented development targets with isolated outputs. A reusable interface by
+itself does not justify shipping test instrumentation. Real engine scene/loading/
+rendering fixes retain their production owner and are tested independently.
 
 The standalone-validation LLD defines acquisition, timeout and release. Every
 success/cancel/failure path removes temporary profile state and converges to the

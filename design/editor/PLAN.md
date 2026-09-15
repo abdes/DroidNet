@@ -103,7 +103,7 @@ ED-M02's evidence is collected, but M08 cannot close without that evidence.
 | `ED-M07` | Content pipeline and cooking | Descriptor/manifest generation, cook, inspect, cooked validation, catalog refresh, and mount refresh work as explicit workflows. | `content-pipeline`, `project-services`, `asset-primitives`, `runtime-integration`, `diagnostics-operation-results` | required before implementation |
 | `ED-M07A` | Authoring integrity and runtime convergence | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence. | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync` | detailed plan exists |
 | `ED-M07B` | Safe content publication and compatibility | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work. | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives` | Validated; complete workflow audit recorded |
-| `ED-M08` | Runtime parity and standalone validation | The saved/published PRD fixture and field suite agree in embedded preview and an automatic standalone check. | `standalone-runtime-validation`, `live-engine-sync`, `runtime-integration`, `content-pipeline`, `environment-authoring` | Reviewed after M07B; ready for implementation |
+| `ED-M08` | Runtime parity and standalone validation | Development-only qualification proves the saved/published PRD fixture and approved field suite agree in embedded and standalone runtime. | `standalone-runtime-validation`, `live-engine-sync`, `runtime-integration`, `content-pipeline`, `environment-authoring` | Active; development build boundary approved, authoring-scope review in progress |
 | `ED-M09` | Viewport authoring tools and overlays | Camera navigation, frame selected/all, selection highlight, transform gizmos, node icons, and overlays are usable in supported viewport layouts. | `viewport-and-tools`, `documents-and-commands`, `scene-explorer`, `runtime-integration` | required before implementation |
 | `ED-M10` | V0.1 acceptance | The full PRD V0.1 workflow completes end-to-end without manual repair. | all V0.1 LLDs | required before validation |
 
@@ -390,10 +390,17 @@ ED-M09 tool completion is not a prerequisite. Required LLDs are property-pipelin
 standalone-runtime-validation, live-engine-sync, runtime-integration,
 content-pipeline and environment-authoring. The
 [detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns the
-exact-request RenderScene entry point, observations/captures and comparisons.
-The user confirmed an automatic check that exits, with concise editor feedback.
-Captures and full comparisons remain verification artifacts for joint review;
-there is no additional comparison tab or validation dashboard.
+opt-in development runner, observations/captures and comparisons. On 2026-09-15
+the user required the entire validation workflow to remain development-only,
+including its command and protocol. Normal editor Debug/Release and normal
+RenderScene builds do not acquire a qualification workflow. Test/tool targets
+run the automatic check and exit, retaining evidence for joint review. No
+production project depends on example schemas or development qualification code.
+
+The [authoring-scope review](review/ED-M08-v01-authoring-scope.md) recommends the
+professional V0.1 property surface and required runtime support. Current UI
+registrations are audit input, not automatic release requirements. Proposed
+property-scope changes require approval before the field suite is frozen.
 
 Exit gate: exact project/scene loading, every required field's semantic parity,
 controlled static/auto-exposure image cases, precise failure/cancel/timeout
