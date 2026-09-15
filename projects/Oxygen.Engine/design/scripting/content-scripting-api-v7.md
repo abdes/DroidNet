@@ -168,14 +168,21 @@ These APIs map to loader mount administration and may be gated behind dev build 
 
 Supported geometry `kind` values:
 
-1. `cube`
-2. `sphere`
-3. `plane`
-4. `cylinder`
-5. `cone`
-6. `torus`
-7. `quad`
-8. `arrow_gizmo`
+| Kind | Optional named parameters |
+| --- | --- |
+| `cube` | None |
+| `subdivided_cube` | `segments` |
+| `sphere` | `latitude_segments`, `longitude_segments` |
+| `capsule` | `hemisphere_segments`, `radial_segments`, `height`, `radius` |
+| `icosphere` | `subdivision_level` (zero is valid) |
+| `plane` | `x_segments`, `z_segments`, `size` |
+| `cylinder` | `segments`, `height`, `radius` |
+| `cone` | `segments`, `height`, `radius` |
+| `torus` | `major_segments`, `minor_segments`, `major_radius`, `minor_radius` |
+| `quad` | `width`, `height` |
+
+`arrow_gizmo` remains available for native tool/debug scripting. It is internal
+catalog content, not an editor authoring shape.
 
 Notes:
 
@@ -183,6 +190,19 @@ Notes:
    runtime geometry userdata.
 2. This path creates runtime assets and does not auto-register generated assets
    in loader cache indices.
+3. Missing/nil options and an empty parameter table use the same native
+   `Data::procedural` defaults. Partial tables preserve those defaults for every
+   omitted field. Supplied fields must be numeric and representable by the
+   native parameter type; segment counts are integers. Invalid argument types,
+   non-finite numbers, and numeric conversion overflow raise a Lua error.
+   Unsupported kinds and recipes rejected by the native factory return `nil`.
+   They never substitute a default shape or clamp invalid supplied values.
+4. Geometry uses Oxygen's right-handed Z-up world convention. Capsule and
+   Cylinder axes are Z; Plane lies in XY (`z_segments` names its second, Y-axis
+   subdivision count); Quad lies in XZ and faces -Y. Capsule height includes its
+   hemispheres and defaults to 2 m with radius 0.5 m; the matching Physics capsule
+   has cylindrical `half_height = height / 2 - radius`. Torus defaults are major
+   radius 0.4 m and minor radius 0.1 m, giving a 1 m outer diameter.
 
 ## 4. Resource Userdata API
 

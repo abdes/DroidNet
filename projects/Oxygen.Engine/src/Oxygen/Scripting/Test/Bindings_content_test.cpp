@@ -202,6 +202,50 @@ end)
 if ok_finite then
   error("plane.size should reject non-finite number")
 end
+
+local invalid = {
+  { "sphere", { latitude_segments = "8" } },
+  { "sphere", { latitude_segments = 4294967296 } },
+  { "sphere", { latitude_segments = math.huge } },
+  { "sphere", { latitude_segments = 0 / 0 } },
+  { "sphere", { latitude_segments = 0 } },
+  { "subdivided_cube", { segments = -1 } },
+  { "icosphere", { subdivision_level = -1 } },
+  { "icosphere", { subdivision_level = 0.5 } },
+  { "capsule", { radius = "0.5" } },
+  { "capsule", { radius = 1e100 } },
+  { "capsule", { height = 0 / 0 } },
+  { "torus", { major_radius = -math.huge } },
+  { "cube", false },
+}
+for _, request in ipairs(invalid) do
+  local ok = pcall(function()
+    return assets.create_procedural_geometry(request[1], request[2])
+  end)
+  if ok then error("invalid supplied procedural option accepted: " .. request[1]) end
+end
+
+local rejected = {
+  { "capsule", { height = 0.5, radius = 0.5 } },
+  { "capsule", { radial_segments = 2 } },
+  { "capsule", { hemisphere_segments = 65 } },
+  { "capsule", { radius = 0 } },
+  { "capsule", { radius = 1e-100 } },
+  { "icosphere", { subdivision_level = 9 } },
+  { "torus", { major_radius = 0 } },
+  { "quad", { height = -1 } },
+}
+for _, request in ipairs(rejected) do
+  if assets.create_procedural_geometry(request[1], request[2]) ~= nil then
+    error("invalid native recipe must not become a default shape: " .. request[1])
+  end
+end
+if assets.create_procedural_geometry("unknown") ~= nil then
+  error("unknown primitive must return nil")
+end
+if assets.create_procedural_geometry("icosphere", { subdivision_level = 0 }) == nil then
+  error("unsubdivided icosphere must remain valid")
+end
 )lua" },
     .chunk_name
     = ScriptChunkName { "content_bindings_procedural_option_shapes" },

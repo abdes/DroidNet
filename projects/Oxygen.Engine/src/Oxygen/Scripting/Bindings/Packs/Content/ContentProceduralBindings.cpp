@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -65,28 +66,30 @@ namespace {
   }
 
   auto ReadOptionalUInt(lua_State* state, const int table_index,
-    const char* field, const unsigned int fallback_value) -> unsigned int
+    const char* field, const unsigned int fallback_value,
+    const unsigned int minimum_value = 1U) -> unsigned int
   {
     lua_getfield(state, table_index, field);
     if (lua_isnil(state, -1) != 0) {
       lua_pop(state, 1);
       return fallback_value;
     }
-    if (lua_isnumber(state, -1) == 0) {
+    if (lua_type(state, -1) != LUA_TNUMBER) {
       lua_pop(state, 1);
       luaL_error(state,
-        "assets.create_procedural_geometry option '%s' must be a positive "
-        "integer",
+        "assets.create_procedural_geometry option '%s' must be an integer",
         field);
       return fallback_value;
     }
 
     const double raw = lua_tonumber(state, -1);
     lua_pop(state, 1);
-    if (!std::isfinite(raw) || raw <= 0.0 || std::floor(raw) != raw) {
+    if (!std::isfinite(raw) || raw < minimum_value
+      || raw > (std::numeric_limits<unsigned int>::max)()
+      || std::floor(raw) != raw) {
       luaL_error(state,
-        "assets.create_procedural_geometry option '%s' must be a positive "
-        "integer",
+        "assets.create_procedural_geometry option '%s' is outside its "
+        "unsigned integer range",
         field);
       return fallback_value;
     }
@@ -101,7 +104,7 @@ namespace {
       lua_pop(state, 1);
       return fallback_value;
     }
-    if (lua_isnumber(state, -1) == 0) {
+    if (lua_type(state, -1) != LUA_TNUMBER) {
       lua_pop(state, 1);
       luaL_error(state,
         "assets.create_procedural_geometry option '%s' must be numeric", field);
@@ -109,9 +112,12 @@ namespace {
     }
     const double value = lua_tonumber(state, -1);
     lua_pop(state, 1);
-    if (!std::isfinite(value)) {
+    if (!std::isfinite(value)
+      || std::abs(value) > (std::numeric_limits<float>::max)()) {
       luaL_error(state,
-        "assets.create_procedural_geometry option '%s' must be finite", field);
+        "assets.create_procedural_geometry option '%s' must be a finite "
+        "float32 value",
+        field);
       return fallback_value;
     }
     return static_cast<float>(value);
@@ -169,75 +175,85 @@ namespace {
   auto GeneratePrimitive(lua_State* state, const std::string_view kind)
     -> std::optional<MeshData>
   {
+    namespace defaults = data::procedural;
+    const bool has_options = lua_gettop(state) >= 2 && lua_isnil(state, 2) == 0;
+    if (has_options) {
+      luaL_checktype(state, 2, LUA_TTABLE);
+    }
+    const auto read_uint = [&](const char* field, const unsigned int fallback,
+                             const unsigned int minimum = 1U) {
+      return has_options ? ReadOptionalUInt(state, 2, field, fallback, minimum)
+                         : fallback;
+    };
+    const auto read_float = [&](const char* field, const float fallback) {
+      return has_options ? ReadOptionalFloat(state, 2, field, fallback)
+                         : fallback;
+    };
+
     if (kind == "cube") {
       return data::MakeCubeMeshAsset();
+    }
+    if (kind == "subdivided_cube") {
+      return data::MakeSubdividedCubeMeshAsset(
+        read_uint("segments", defaults::kSubdividedCubeSegments));
     }
     if (kind == "arrow_gizmo") {
       return data::MakeArrowGizmoMeshAsset();
     }
 
-    if (lua_gettop(state) < 2 || lua_isnil(state, 2) != 0) {
-      if (kind == "sphere") {
-        return data::MakeSphereMeshAsset();
-      }
-      if (kind == "plane") {
-        return data::MakePlaneMeshAsset();
-      }
-      if (kind == "cylinder") {
-        return data::MakeCylinderMeshAsset();
-      }
-      if (kind == "cone") {
-        return data::MakeConeMeshAsset();
-      }
-      if (kind == "torus") {
-        return data::MakeTorusMeshAsset();
-      }
-      if (kind == "quad") {
-        return data::MakeQuadMeshAsset();
-      }
-      return std::nullopt;
-    }
-
-    luaL_checktype(state, 2, LUA_TTABLE);
     if (kind == "sphere") {
-      const auto latitude = ReadOptionalUInt(state, 2, "latitude_segments", 16);
+      const auto latitude
+        = read_uint("latitude_segments", defaults::kSphereLatitudeSegments);
       const auto longitude
-        = ReadOptionalUInt(state, 2, "longitude_segments", 32);
+        = read_uint("longitude_segments", defaults::kSphereLongitudeSegments);
       return data::MakeSphereMeshAsset(latitude, longitude);
     }
+    if (kind == "capsule") {
+      return data::MakeCapsuleMeshAsset(
+        read_uint("hemisphere_segments", defaults::kCapsuleHemisphereSegments),
+        read_uint("radial_segments", defaults::kCapsuleRadialSegments),
+        read_float("height", defaults::kCapsuleHeight),
+        read_float("radius", defaults::kCapsuleRadius));
+    }
+    if (kind == "icosphere") {
+      return data::MakeIcoSphereMeshAsset(read_uint(
+        "subdivision_level", defaults::kIcoSphereSubdivisionLevel, 0U));
+    }
     if (kind == "plane") {
-      const auto x_segments = ReadOptionalUInt(state, 2, "x_segments", 1);
-      const auto z_segments = ReadOptionalUInt(state, 2, "z_segments", 1);
-      const float size = ReadOptionalFloat(state, 2, "size", 1.0F);
+      const auto x_segments
+        = read_uint("x_segments", defaults::kPlaneXSegments);
+      const auto z_segments
+        = read_uint("z_segments", defaults::kPlaneZSegments);
+      const float size = read_float("size", defaults::kPlaneSize);
       return data::MakePlaneMeshAsset(x_segments, z_segments, size);
     }
     if (kind == "cylinder") {
-      const auto segments = ReadOptionalUInt(state, 2, "segments", 32);
-      const float height = ReadOptionalFloat(state, 2, "height", 1.0F);
-      const float radius = ReadOptionalFloat(state, 2, "radius", 0.5F);
+      const auto segments = read_uint("segments", defaults::kCylinderSegments);
+      const float height = read_float("height", defaults::kCylinderHeight);
+      const float radius = read_float("radius", defaults::kCylinderRadius);
       return data::MakeCylinderMeshAsset(segments, height, radius);
     }
     if (kind == "cone") {
-      const auto segments = ReadOptionalUInt(state, 2, "segments", 32);
-      const float height = ReadOptionalFloat(state, 2, "height", 1.0F);
-      const float radius = ReadOptionalFloat(state, 2, "radius", 0.5F);
+      const auto segments = read_uint("segments", defaults::kConeSegments);
+      const float height = read_float("height", defaults::kConeHeight);
+      const float radius = read_float("radius", defaults::kConeRadius);
       return data::MakeConeMeshAsset(segments, height, radius);
     }
     if (kind == "torus") {
       const auto major_segments
-        = ReadOptionalUInt(state, 2, "major_segments", 32);
+        = read_uint("major_segments", defaults::kTorusMajorSegments);
       const auto minor_segments
-        = ReadOptionalUInt(state, 2, "minor_segments", 16);
+        = read_uint("minor_segments", defaults::kTorusMinorSegments);
       const float major_radius
-        = ReadOptionalFloat(state, 2, "major_radius", 1.0F);
+        = read_float("major_radius", defaults::kTorusMajorRadius);
       const float minor_radius
-        = ReadOptionalFloat(state, 2, "minor_radius", 0.25F);
+        = read_float("minor_radius", defaults::kTorusMinorRadius);
       return data::MakeTorusMeshAsset(
         major_segments, minor_segments, major_radius, minor_radius);
     }
     if (kind == "quad") {
-      const float width = ReadOptionalFloat(state, 2, "width", 1.0F);
-      const float height = ReadOptionalFloat(state, 2, "height", 1.0F);
+      const float width = read_float("width", defaults::kQuadWidth);
+      const float height = read_float("height", defaults::kQuadHeight);
       return data::MakeQuadMeshAsset(width, height);
     }
     return std::nullopt;
