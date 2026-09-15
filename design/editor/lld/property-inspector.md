@@ -202,8 +202,20 @@ canonical authoring choices from the native catalog; the editor must not
 maintain its own generator/default list. ArrowGizmo is an internal tool resource.
 Migrate useful GeodesicSphere identities to IcoSphere and remove the alias.
 All ten creation/assignment paths require cooking and native/editor rendering;
-Capsule implementation and this broader qualification remain pending. Palette
-approval does not decide primitive dimensions, orientation or pivot defaults.
+Capsule implementation and this broader qualification remain pending.
+
+Approved primitive defaults (2026-09-15): all use metres and centred pivots in
+Oxygen's Z-up space. Cube/SubdividedCube have 1 m edges; Sphere/IcoSphere have
+1 m diameter; Cylinder/Cone have 1 m height and diameter along Z (cone tip +Z);
+Capsule has 2 m total height and 1 m diameter along Z; Torus lies in XY with
+1 m outer and 0.2 m tube diameter. Plane is a 1 × 1 m XY ground surface facing
++Z; Quad is a 1 × 1 m upright XZ card facing −Y. Native recipes own these
+defaults; no editor-only corrective rotation or scale is permitted.
+
+Quad/Torus changes and Capsule generation remain implementation work. Source
+and API prose must describe actual implemented axes, dimensions, parameters
+and return types, and update together with geometry. A design table is not
+evidence that the current buffers satisfy it.
 
 #### `PerspectiveCamera` (`SelectionPolicy.CommonComponent`)
 
