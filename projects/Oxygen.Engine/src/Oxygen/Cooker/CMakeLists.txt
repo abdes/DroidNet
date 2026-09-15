@@ -210,6 +210,7 @@ set(
   "Import/Internal/Pipelines/InputImportPipeline.h"
   "Import/Internal/Pipelines/MaterialPipeline.h"
   "Import/Internal/Pipelines/MeshBuildPipeline.h"
+  "Import/Internal/MeshTransformBake.h"
   "Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h"
   "Import/Internal/Pipelines/PhysicsResourceImportPipeline.h"
   "Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h"

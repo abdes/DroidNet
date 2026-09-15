@@ -151,6 +151,10 @@ public:
 
     std::vector<MeshLod> lods;
 
+    //! Eligible static node-local transform, applied before bounds are
+    //! computed.
+    std::optional<glm::mat4> bake_transform;
+
     std::vector<data::AssetKey> material_keys;
     std::vector<uint32_t> material_slots_used;
     data::AssetKey default_material_key;

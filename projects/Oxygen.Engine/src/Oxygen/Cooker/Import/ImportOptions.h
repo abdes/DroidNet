@@ -267,8 +267,15 @@ enum class SceneContentPolicy : uint8_t {
 struct CoordinateConversionPolicy final {
   //! When true, bake node transforms into mesh vertices.
   /*!
-   Baking applies only to linear vertex data (positions and compatible deltas)
-   and is intended for static geometry.
+   Baking applies the node-local affine transform to static geometry positions
+
+   and the corresponding normal/tangent transforms. The node's local TRS then
+
+   becomes identity; its parent hierarchy is preserved. Distinct transforms or
+
+   material bindings produce deterministic geometry variants; equal variants
+
+   remain shared. Reflected baked transforms reverse triangle winding once.
 
    @warning Baking transforms can destroy instancing and can invalidate
     transform-driven semantics (for example, animation, skinning, or any node

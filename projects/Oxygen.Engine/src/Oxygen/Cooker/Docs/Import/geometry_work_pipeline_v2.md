@@ -58,6 +58,65 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ## Data Model
 
+### Static node-transform baking (implemented and test-validated, 2026-09-15)
+
+`coordinate.bake_transforms_into_meshes` applies an eligible static mesh node's
+**local** transform to its geometry and resets that node's local transform to
+identity. The parent hierarchy is retained. Baking is deferred with a diagnostic
+for nodes whose transform carries attachment, camera/light, animation, skinning,
+morph, or other deformation semantics, and for non-invertible transforms.
+
+Both glTF and FBX adapters must use a common deterministic variant plan for mesh
+work emission and scene geometry-key assignment. A source mesh may produce an
+unbaked variant and several baked variants. Equal local transforms with equal
+material bindings share a variant; distinct transforms produce distinct variants.
+The first referencing source-node ordinal names a baked variant using
+`<mesh>__baked_<ordinal>` before the normal naming service resolves collisions.
+The unbaked variant retains the source mesh name; additional material-binding
+variants use `<mesh>__material_<ordinal>`. Output order is source-mesh order,
+then first referring node order. Variant identities follow the existing virtual
+path-to-AssetKey rule. Enabling baking therefore deliberately changes geometry
+identities; no cooked index or already-published identity is patched in place.
+
+MeshBuildPipeline owns applying the bake after attribute generation and before
+bounds/descriptor generation: positions use the affine transform, normals use
+inverse transpose, and tangent directions use the linear transform. Negative
+baked determinants reverse triangle indices exactly once to preserve the authored
+exterior. Retained node transforms do not change shared mesh winding; the runtime
+renderer owns their determinant correction.
+
+Required proof: fast variant and adapter tests for enabled/disabled baking,
+positive and reflected transforms, shared equal/distinct transforms, retained
+attachments/deformation semantics, material binding, hierarchy, and matching
+world-space output. Native cooked-buffer checks must verify bounds, normal/
+winding agreement, and scene-to-geometry references.
+
+Validation recorded on 2026-09-15:
+
+- Debug build of `Oxygen.Cooker.AsyncImportGltf.Tests` and
+  `Oxygen.Cooker.AsyncImportFbx.Tests` passed in the existing `out/build-ninja`
+  tree. Build log: `DroidNet/artifacts/sidedness-import-regression-build.log`.
+- The glTF test executable passed **26/26 tests in 1.879 seconds**, including
+  seven new bake cases, existing native loaded-value checks for both formats,
+  static-content validation, source inspection, and the default-baking Tabuleiro
+  and light-extras imports. Evidence:
+  `DroidNet/artifacts/sidedness-import-regression-gltf.{log,xml}`.
+- The FBX test executable passed **2/2 tests in 1.428 seconds**, covering the full
+  Dino scene and light custom properties. Evidence:
+  `DroidNet/artifacts/sidedness-import-regression-fbx.{log,xml}`.
+- `MeshTransformBake_test.cpp` uses the public async import service with tiny
+  sources and reads the published scene/geometry descriptors and buffer tables.
+  It verifies actual vertex positions/normals/bounds, source winding when baking
+  is disabled, node-local reset, scene-to-variant keys, shared equal variants,
+  distinct FBX material bindings, retained attachments, animated/morph-node
+  diagnostics, and parent/child reflections without double reversal.
+
+This validates the static baking contract and preservation of transforms that
+must remain authored. It does not add animation, skinning, or morph playback or
+claim general glTF/FBX feature compliance. Main-view rendered sidedness evidence
+belongs to the renderer correction's validation record; these importer checks
+prove the published geometry and scene contracts.
+
 ### WorkItem (GeometryPipeline)
 
 GeometryPipeline receives *finalization* work items produced by the planner

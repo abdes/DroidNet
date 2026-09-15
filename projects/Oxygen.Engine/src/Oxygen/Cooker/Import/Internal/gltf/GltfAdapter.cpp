@@ -27,6 +27,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
@@ -444,56 +445,6 @@ namespace {
       }
     }
     return nullptr;
-  }
-
-  //! Compute the world transform matrix for a glTF node (in glTF space).
-  [[nodiscard]] auto ComputeNodeWorldTransform(const cgltf_node* node)
-    -> glm::mat4
-  {
-    if (node == nullptr) {
-      return glm::mat4 { 1.0F };
-    }
-
-    cgltf_float world_matrix[16] = {};
-    cgltf_node_transform_world(node, world_matrix);
-
-    glm::mat4 result(1.0F);
-    for (int c = 0; c < 4; ++c) {
-      for (int r = 0; r < 4; ++r) {
-        result[c][r] = world_matrix[c * 4 + r];
-      }
-    }
-    return result;
-  }
-
-  //! Check if a mesh requires winding reversal based on glTF spec.
-  /*!
-   Per glTF 2.0 spec section 3.7.4: "When a mesh primitive uses any
-   triangle-based topology, the determinant of the node's global transform
-   defines the winding order of that primitive. If the determinant is a
-   positive value, the winding order triangle faces is counterclockwise;
-   in the opposite case, the winding order is clockwise."
-
-   This function finds the first node that references the given mesh and
-   checks if its world transform has a negative determinant.
-
-   @note If a mesh is instanced by multiple nodes with different determinant
-   signs, this returns the result for the first instance found. In practice,
-   glTF exporters typically avoid such configurations.
-  */
-  [[nodiscard]] auto MeshRequiresWindingReversal(
-    const cgltf_data& data, const cgltf_mesh& mesh) -> bool
-  {
-    for (cgltf_size i = 0; i < data.nodes_count; ++i) {
-      const auto* node = &data.nodes[i];
-      if (node != nullptr && node->mesh == &mesh) {
-        const auto world_transform = ComputeNodeWorldTransform(node);
-        const auto det = glm::determinant(glm::mat3(world_transform));
-        return det < 0.0F;
-      }
-    }
-    // No node references this mesh; assume no reversal needed
-    return false;
   }
 
   [[nodiscard]] auto HasMaterialTextures(const cgltf_material* material) -> bool
@@ -969,6 +920,61 @@ namespace {
     return converted;
   }
 
+  [[nodiscard]] auto BuildGltfBakePlan(const cgltf_data& data,
+    const CoordinateConversionPolicy& policy) -> internal::MeshBakePlan
+  {
+    std::vector<internal::MeshBakeNode> nodes(data.nodes_count);
+    std::vector<uint8_t> emit_mesh(data.meshes_count);
+    for (size_t index = 0; index < data.meshes_count; ++index) {
+      emit_mesh[index] = data.meshes[index].primitives_count != 0;
+    }
+    std::unordered_set<const cgltf_node*> animated_or_joint;
+    for (const auto& animation :
+      std::span(data.animations, data.animations_count)) {
+      for (const auto& channel :
+        std::span(animation.channels, animation.channels_count)) {
+        animated_or_joint.insert(channel.target_node);
+      }
+    }
+    for (const auto& skin : std::span(data.skins, data.skins_count)) {
+      for (const auto* joint : std::span(skin.joints, skin.joints_count)) {
+        animated_or_joint.insert(joint);
+      }
+    }
+    for (size_t index = 0; index < data.nodes_count; ++index) {
+      const auto& node = data.nodes[index];
+      if (node.mesh == nullptr) {
+        continue;
+      }
+      auto& input = nodes[index];
+      input.mesh_index = static_cast<size_t>(node.mesh - data.meshes);
+      cgltf_float matrix[16] {};
+      cgltf_node_transform_local(&node, matrix);
+      for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+          input.local_transform[column][row] = matrix[column * 4 + row];
+        }
+      }
+      input.local_transform
+        = ConvertGltfTransform(input.local_transform, policy);
+      if (node.children_count != 0 || node.camera != nullptr
+        || node.light != nullptr) {
+        input.retain_reason = "attachment or camera/light transform";
+      } else if (animated_or_joint.contains(&node)
+        || FindSkinForMesh(data, *node.mesh) != nullptr) {
+        input.retain_reason = "animation or skinning transform";
+      } else if (std::ranges::any_of(std::span(node.mesh->primitives,
+                                       node.mesh->primitives_count),
+                   [](const cgltf_primitive& primitive) {
+                     return primitive.targets_count != 0;
+                   })) {
+        input.retain_reason = "morph target transform";
+      }
+    }
+    return internal::BuildMeshBakePlan(
+      nodes, emit_mesh, policy.bake_transforms_into_meshes);
+  }
+
   [[nodiscard]] auto StreamWorkItemsFromData(const cgltf_data& data,
     const AdapterInput& input, GeometryWorkItemSink& sink)
     -> WorkItemStreamResult
@@ -1013,15 +1019,27 @@ namespace {
       bool has_skin = false;
     };
 
-    for (cgltf_size mesh_i = 0; mesh_i < data.meshes_count; ++mesh_i) {
+    const auto bake_plan
+      = BuildGltfBakePlan(data, input.request.options.coordinate);
+    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
+      if (!bake_plan.retained_reasons[index].empty()) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic("mesh.transform_bake_retained",
+            "Retained authored node transform: "
+              + bake_plan.retained_reasons[index],
+            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+      }
+    }
+    for (const auto& variant : bake_plan.variants) {
+      const auto mesh_i = variant.mesh_index;
       const auto* mesh = &data.meshes[mesh_i];
       if (mesh == nullptr) {
         continue;
       }
 
-      const std::string_view authored_name = mesh->name != nullptr
-        ? std::string_view(mesh->name)
-        : std::string_view {};
+      const std::string authored_name
+        = std::string(mesh->name != nullptr ? mesh->name : "")
+        + variant.name_suffix;
       const NamingContext mesh_context {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(mesh_i),
@@ -1340,7 +1358,10 @@ namespace {
         = BuildSourceId(input.source_id_prefix, mesh_name, mesh_ordinal++);
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
-      item.source_key = mesh;
+      item.source_key = variant.representative_node != internal::kNoBakeIndex
+        ? static_cast<const void*>(&data.nodes[variant.representative_node])
+        : static_cast<const void*>(mesh);
+      item.bake_transform = variant.transform;
       item.material_keys.assign(
         input.material_keys.begin(), input.material_keys.end());
       item.default_material_key = input.default_material_key;
@@ -2308,25 +2329,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& data = *impl_->data_owner;
   const auto& request = *input.request;
 
-  std::unordered_map<const cgltf_mesh*, size_t> mesh_base_index;
-  mesh_base_index.reserve(data.meshes_count);
-  size_t geometry_cursor = 0;
-
-  for (cgltf_size mesh_i = 0; mesh_i < data.meshes_count; ++mesh_i) {
-    const auto* mesh = &data.meshes[mesh_i];
-    if (mesh == nullptr) {
-      continue;
-    }
-
-    if (mesh->primitives_count == 0) {
-      continue;
-    }
-    mesh_base_index.emplace(mesh, geometry_cursor);
-    ++geometry_cursor;
-  }
+  const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
 
   if (!input.geometry_keys.empty()
-    && input.geometry_keys.size() < geometry_cursor) {
+    && input.geometry_keys.size() < bake_plan.variants.size()) {
     diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
       "Geometry key count does not match mesh count", input.source_id, {}));
   }
@@ -2369,6 +2375,12 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     local_matrix
       = ConvertGltfTransform(local_matrix, request.options.coordinate);
+    const auto source_node_index = static_cast<size_t>(node - data.nodes);
+    const auto variant_index = bake_plan.node_variant[source_node_index];
+    if (variant_index < bake_plan.variants.size()
+      && bake_plan.variants[variant_index].transform.has_value()) {
+      local_matrix = glm::mat4(1.0F);
+    }
     const auto world_matrix = parent_world * local_matrix;
 
     NodeInput node_input;
@@ -2570,16 +2582,15 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     const auto* gltf_node = static_cast<const cgltf_node*>(node.source_node);
     if (gltf_node != nullptr && gltf_node->mesh != nullptr) {
-      const auto it = mesh_base_index.find(gltf_node->mesh);
-      if (it != mesh_base_index.end()) {
-        const auto key_index = it->second;
-        if (key_index < input.geometry_keys.size()) {
-          build.renderables.push_back(RenderableRecord {
-            .node_index = i,
-            .geometry_key = input.geometry_keys[key_index],
-            .visible = 1,
-          });
-        }
+      const auto source_node_index
+        = static_cast<size_t>(gltf_node - data.nodes);
+      const auto key_index = bake_plan.node_variant[source_node_index];
+      if (key_index < input.geometry_keys.size()) {
+        build.renderables.push_back(RenderableRecord {
+          .node_index = i,
+          .geometry_key = input.geometry_keys[key_index],
+          .visible = 1,
+        });
       }
     }
 

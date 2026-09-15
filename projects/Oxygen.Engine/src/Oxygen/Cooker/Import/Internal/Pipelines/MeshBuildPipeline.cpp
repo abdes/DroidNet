@@ -20,6 +20,7 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
@@ -816,6 +817,57 @@ namespace {
       }
     }
 
+    if (item.bake_transform.has_value()) {
+      if (lod.mesh_type != data::MeshType::kStandard
+        || !internal::IsBakeTransformInvertible(*item.bake_transform)) {
+        diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_transform_bake",
+          "Transform baking requires static geometry and an invertible "
+          "transform",
+          item.source_id, item.mesh_name));
+        return std::nullopt;
+      }
+      const auto& transform = *item.bake_transform;
+      const auto linear = glm::mat3(transform);
+      const auto normal_matrix = glm::transpose(glm::inverse(linear));
+      const auto finite = [](const glm::vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y)
+          && std::isfinite(value.z);
+      };
+      const auto normalize_direction
+        = [&finite](const glm::vec3& value, glm::vec3& normalized) {
+            const auto largest = (std::max)({ std::abs(value.x),
+              std::abs(value.y), std::abs(value.z) });
+            if (!finite(value) || largest == 0.0F) {
+              return false;
+            }
+            normalized = glm::normalize(value / largest);
+            return finite(normalized);
+          };
+      for (auto& vertex : lod.vertices) {
+        vertex.position
+          = glm::vec3(transform * glm::vec4(vertex.position, 1.0F));
+        if (!finite(vertex.position)
+          || !normalize_direction(normal_matrix * vertex.normal, vertex.normal)
+          || !normalize_direction(linear * vertex.tangent, vertex.tangent)
+          || !normalize_direction(
+            linear * vertex.bitangent, vertex.bitangent)) {
+          diagnostics.push_back(
+            MakeErrorDiagnostic("mesh.invalid_transform_bake",
+              "Transform baking produced an invalid vertex attribute",
+              item.source_id, item.mesh_name));
+          return std::nullopt;
+        }
+      }
+      FixInvalidTangents(lod.vertices);
+      if (glm::determinant(linear) < 0.0F) {
+        for (auto& bucket : buckets) {
+          for (size_t index = 0; index < bucket.indices.size(); index += 3) {
+            std::swap(bucket.indices[index + 1], bucket.indices[index + 2]);
+          }
+        }
+      }
+    }
+
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
       lod.submeshes, lod.submesh_slots, lod.views, lod.indices);
     DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
@@ -830,7 +882,7 @@ namespace {
       DLOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
         item.mesh_name, lod.lod_name, views_with_base_vertex);
     }
-    if (mesh.bounds.has_value()) {
+    if (mesh.bounds.has_value() && !item.bake_transform.has_value()) {
       lod.bounds = *mesh.bounds;
     } else {
       lod.bounds = computed_bounds;
