@@ -36,13 +36,22 @@ public:
   void AddPanInput(const glm::vec2& delta) { pan_delta_ += delta; }
 
   // --- Configuration ---
-  void SetTarget(const glm::vec3& target) { target_ = target; }
+  //! Selects an orbit target in world space.
+  void SetTarget(const glm::vec3& target)
+  {
+    pose_update_pending_ |= target_ != target;
+    target_ = target;
+  }
   //! Returns the current orbit target in world space.
   [[nodiscard]] auto GetTarget() const noexcept -> const glm::vec3&
   {
     return target_;
   }
-  void SetDistance(float distance) { distance_ = distance; }
+  void SetDistance(float distance)
+  {
+    pose_update_pending_ |= distance_ != distance;
+    distance_ = distance;
+  }
   //! Returns the current orbit distance.
   [[nodiscard]] auto GetDistance() const noexcept -> float { return distance_; }
   void SetMode(OrbitMode mode) { mode_ = mode; }
@@ -70,6 +79,9 @@ public:
 
   /**
    * @brief Synchronizes the controller state from the node's current transform.
+   * Places the pivot on the camera's view ray at the distance to the previous
+   * target, preserving the current pose on subsequent idle updates.
+   * An explicit SetTarget after synchronization selects a new orbit pivot.
    */
   void SyncFromTransform(scene::SceneNode& node);
 
@@ -83,6 +95,7 @@ private:
   glm::vec3 target_ { 0.0F };
   float distance_ { 5.0F };
   glm::quat orbit_rot_ { 1.0F, 0.0F, 0.0F, 0.0F };
+  bool pose_update_pending_ { false };
 
   // Turntable state
   float turntable_yaw_ { 0.0F };
