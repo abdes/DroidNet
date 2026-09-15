@@ -149,6 +149,13 @@ public sealed class CookDependencyDiscovery(
                 : [];
         }
 
+        private static ContentCookInput WithImportedOutputs(ContentCookInput input, NativeSceneImportSettings settings) => input with
+        {
+            MountName = settings.MountPoint,
+            OutputVirtualPath = settings.SchemaVersion == 2 ? settings.OutputPrefixes[0] : null,
+            OutputNamespaces = settings.OutputPrefixes,
+        };
+
         private async Task ReadAssetAsync(ContentCookInput input, CancellationToken cancellationToken)
         {
             this.currentAsset = input.AssetUri;
@@ -242,7 +249,7 @@ public sealed class CookDependencyDiscovery(
                 }
             }
 
-            this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = input with { MountName = settings.MountPoint, OutputVirtualPath = settings.OutputPrefix };
+            this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = WithImportedOutputs(input, settings);
             this.imported[input.AssetUri] = new(primaryHash, knownPaths.Select(this.RelativePath).Order(StringComparer.Ordinal).ToImmutableArray())
             {
                 ContentFingerprint = FingerprintImportedContent(knownPaths.Append(input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix).Select(path => this.files[Path.GetFullPath(path)])),

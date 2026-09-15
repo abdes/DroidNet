@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "SchemaVersion": {
-      "const": 2
+      "enum": [2, 3]
     },
     "Importer": {
       "const": "Oxygen.Cooker.Scene/v1"

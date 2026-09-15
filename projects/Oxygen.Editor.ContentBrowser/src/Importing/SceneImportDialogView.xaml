@@ -25,7 +25,7 @@
             </Grid.ColumnDefinitions>
             <TextBox
                 AutomationProperties.AutomationId="ModelImportDestination"
-                Header="Destination"
+                Header="Content folder"
                 Text="{x:Bind ViewModel.DestinationFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             <Button
                 Grid.Column="1"
@@ -33,6 +33,10 @@
                 Command="{x:Bind ViewModel.BrowseDestinationCommand}"
                 Content="Browse" />
         </Grid>
+        <TextBlock
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="{x:Bind ViewModel.OutputLocations, Mode=OneWay}"
+            TextWrapping="Wrap" />
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Text="{x:Bind ViewModel.SourceLocation, Mode=OneWay}"

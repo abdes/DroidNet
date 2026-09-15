@@ -292,8 +292,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
-        => graph.Assets.Any(input => string.Equals(input.OutputVirtualPath, uri.AbsolutePath, StringComparison.Ordinal)
-            || (input.Kind == ContentCookAssetKind.ForeignSource && input.OutputVirtualPath is { } prefix && uri.AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)));
+        => graph.Assets.Any(input => input.OwnsOutput(uri.AbsolutePath));
 
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };

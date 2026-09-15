@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentBrowser.Importing;
 /// <summary>Reviews a model's name and authoring destination before import begins.</summary>
 public sealed partial class SceneImportDialogViewModel : ObservableObject
 {
+    private static readonly string[] ImportedAssetFolders = ["Materials", "Geometry", "Scenes"];
     private readonly ProjectContext project;
     private readonly IDialogService dialogs;
     private int reviewGeneration;
@@ -62,7 +63,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
     /// <summary>Gets or sets the existing source explicitly selected for replacement.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ReplacementChoiceVisibility), nameof(ReplacementTitle), nameof(ReplacementMessage), nameof(PrimaryButtonText))]
+    [NotifyPropertyChangedFor(nameof(ReplacementChoiceVisibility), nameof(ReplacementTitle), nameof(ReplacementMessage), nameof(PrimaryButtonText), nameof(OutputLocations))]
     public partial SceneImportReplacement? Replacement { get; set; }
 
     /// <summary>Gets the explicit replacement choice visibility.</summary>
@@ -73,7 +74,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
 
     /// <summary>Gets the existing identity and destination being replaced.</summary>
     public string ReplacementMessage => this.Replacement is { } replacement
-        ? Uri.UnescapeDataString(replacement.SourceUri.AbsolutePath) + "\nDestination: " + replacement.Settings.OutputPrefix.TrimEnd('/')
+        ? Uri.UnescapeDataString(replacement.SourceUri.AbsolutePath) + "\nDestinations: " + string.Join(", ", replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')))
         : "Choose another name, or review the existing source for replacement.";
 
     /// <summary>Gets the action matching the reviewed import intent.</summary>
@@ -83,6 +84,28 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
     public string SourceLocation => this.IsProjectSource()
         ? "Source files stay in their current project folder."
         : "Source files: /Content/SourceMedia/DCC/" + this.Name.Trim();
+
+    /// <summary>Gets the exact type folders shown before the user accepts import.</summary>
+    public string OutputLocations
+    {
+        get
+        {
+            if (this.Replacement is { } replacement)
+            {
+                return string.Join(Environment.NewLine, replacement.Settings.OutputPrefixes.Select(static prefix => prefix.TrimEnd('/')));
+            }
+
+            try
+            {
+                var target = SceneImportTarget.Resolve(this.project, ToUri(this.DestinationFolder ?? string.Empty), this.Name?.Trim() ?? string.Empty);
+                return string.Join(Environment.NewLine, ImportedAssetFolders.Select(kind => "/" + target.MountName + "/" + kind + "/" + target.OutputDirectory));
+            }
+            catch (ArgumentException)
+            {
+                return string.Empty;
+            }
+        }
+    }
 
     /// <summary>Gets the reviewed request, or null while validation fails.</summary>
     public SceneImportRequest? Request => this.CanAccept ? new(this.project, this.SourcePath, this.Name.Trim(), ToUri(this.DestinationFolder)) { Replacement = this.Replacement } : null;
@@ -103,12 +126,14 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         this.Revalidate();
         this.OnPropertyChanged(nameof(this.SourceLocation));
         this.OnPropertyChanged(nameof(this.ReplacementTitle));
+        this.OnPropertyChanged(nameof(this.OutputLocations));
     }
 
     partial void OnDestinationFolderChanged(string value)
     {
         this.ClearReplacement();
         this.Revalidate();
+        this.OnPropertyChanged(nameof(this.OutputLocations));
     }
 
     [RelayCommand]
@@ -128,6 +153,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
             this.DestinationFolder = "/" + replacement.Settings.MountPoint + (string.IsNullOrEmpty(directory) ? string.Empty : "/" + directory);
             this.Replacement = replacement;
             this.Revalidate();
+            this.OnPropertyChanged(nameof(this.OutputLocations));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

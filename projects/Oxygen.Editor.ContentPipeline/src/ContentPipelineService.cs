@@ -191,10 +191,7 @@ public sealed partial class ContentPipelineService(
         var result = new List<ContentCookedAsset>();
         foreach (var asset in inspection.Assets)
         {
-            var input = scope.Inputs.FirstOrDefault(input => input.OutputVirtualPath is { } output
-                && (input.Kind == ContentCookAssetKind.ForeignSource
-                    ? asset.VirtualPath.StartsWith(output, StringComparison.Ordinal)
-                    : string.Equals(asset.VirtualPath, output, StringComparison.Ordinal)));
+            var input = scope.Inputs.FirstOrDefault(input => input.OwnsOutput(asset.VirtualPath));
             if (input is not null && (input.Kind != ContentCookAssetKind.ForeignSource
                 || (asset.DescriptorRelativePath is not null && outputFiles?.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase) == true)))
             {

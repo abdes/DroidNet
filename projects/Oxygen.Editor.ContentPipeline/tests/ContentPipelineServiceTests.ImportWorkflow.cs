@@ -17,6 +17,9 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Exercises the explicit source-import operation and retained-source recovery.</summary>
 public sealed partial class ContentPipelineServiceTests
 {
+    private static readonly string[] TypedImportOutputPaths =
+        ["/Content/Materials/Model/Scalar.omat", "/Content/Geometry/Model/Triangle.ogeo", "/Content/Scenes/Model/Model.oscene"];
+
     /// <summary>One explicit import retains source, creates settings and publishes through one coordinator run.</summary>
     /// <returns>The asynchronous complete import test.</returns>
     [TestMethod]
@@ -27,16 +30,23 @@ public sealed partial class ContentPipelineServiceTests
         var external = Directory.CreateTempSubdirectory("OxygenExternalModel-");
         try
         {
-            var source = Path.Combine(external.FullName, "model.gltf");
+            var source = Path.Combine(external.FullName, "Model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
             using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-            _ = result.RetainedSourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Model/model.gltf"));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
-            var run = workspace.CookCoordinator.Runs.Single();
+            _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(TypedImportOutputPaths);
+
+            foreach (var folder in new[] { "Materials", "Geometry", "Scenes" })
+            {
+                _ = (await service.CookFolderAsync(new Uri("asset:///Content/" + folder + "/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+            }
+
+            _ = result.RetainedSourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Model/Model.gltf"));
+            var run = workspace.CookCoordinator.Runs[0];
             _ = run.Request.Import.Should().BeNull();
             _ = run.Request.IsReimport.Should().BeTrue();
             _ = run.Request.ScopeUri.Should().Be(result.RetainedSourceUri);

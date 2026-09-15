@@ -27,7 +27,16 @@ public sealed class NativeSceneImportSettingsTests
         var settings = CreateSettings();
         var parsed = NativeSceneImportSettings.Parse(settings.ToBytes());
         _ = parsed.Importer.Should().Be(NativeSceneImportSettings.ImporterIdentity);
-        _ = parsed.OutputPrefix.Should().Be("/Content/Models/Model/");
+        _ = parsed.SchemaVersion.Should().Be(3);
+        _ = parsed.OutputPrefixes.Should().Equal("/Content/Materials/Model/", "/Content/Geometry/Model/", "/Content/Scenes/Model/");
+        _ = parsed.CreateLayout().Should().Be(new ContentImportLayout("/Content")
+        {
+            DescriptorsDirectory = string.Empty, MaterialsDirectory = "Materials/Model", GeometryDirectory = "Geometry/Model", ScenesDirectory = "Scenes/Model",
+        });
+        var matchingName = parsed with { OutputDirectory = "model" };
+        _ = matchingName.CreateLayout().MaterialsDirectory.Should().Be("Materials");
+        _ = matchingName.CreateLayout().GeometryDirectory.Should().Be("Geometry");
+        _ = matchingName.OutputPrefixes.Should().Contain("/Content/Materials/model/");
         _ = parsed.Files.Should().Equal("model.gltf");
         _ = parsed.ContentPolicy.Should().Be("static-scalar");
         _ = parsed.UnitPolicy.Should().Be("normalize");
@@ -86,5 +95,5 @@ public sealed class NativeSceneImportSettingsTests
     }
 
     private static NativeSceneImportSettings CreateSettings()
-        => NativeSceneImportSettings.Create(new("Content/SourceMedia/DCC/Model", "model.gltf", [new("model.gltf", Convert.ToHexString(SHA256.HashData("source"u8)))]), "Content", "Model", "Models/Model");
+        => NativeSceneImportSettings.Create(new("Content/SourceMedia/DCC/Model", "model.gltf", [new("model.gltf", Convert.ToHexString(SHA256.HashData("source"u8)))]), "Content", "Model", "Model");
 }

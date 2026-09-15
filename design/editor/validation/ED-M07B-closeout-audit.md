@@ -101,3 +101,14 @@ Commit `9f5c15bcb` replaces competing per-item selection bindings with one
 check control-driven and model-driven section changes; they pass in 690 ms and
 464 ms, with no additional test cases. After the Debug refresh, the user confirmed
 that the inspection-section freeze no longer reproduces.
+
+## Import placement follow-up — 2026-09-15
+
+The user selected the existing Materials/Geometry/Scenes folders for new model
+outputs. Native import checks verify the exact three paths, folder-cook reuse
+and stable version-2 reimport; the final focused run passes 12/12. The preceding
+ownership/import run passes 24/24 and browser import checks pass 14/14. The two
+existing import-review UI cases pass in 98 ms and 6 ms, including an initial
+Scenes-folder selection that must not become the import destination. No new
+long-running test cases were added. Live inspection and relocation of the user's
+existing Test Cooking import remain pending after the requested session restart.

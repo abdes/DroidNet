@@ -207,7 +207,9 @@ public sealed partial class ContentPipelineServiceTests
         var bytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle." + extension), cancellationToken).ConfigureAwait(false);
         await File.WriteAllBytesAsync(Path.Combine(directory, filename), bytes, cancellationToken).ConfigureAwait(false);
         var retained = new RetainedImportSource(relative, filename, [new(filename, Convert.ToHexString(SHA256.HashData(bytes)))]);
-        var settings = NativeSceneImportSettings.Create(retained, "Content", name, "Models/" + name);
+
+        // Existing model-folder imports must retain their saved paths after the type-folder layout ships.
+        var settings = NativeSceneImportSettings.Create(retained, "Content", name, "Models/" + name) with { SchemaVersion = 2 };
         _ = await settings.SaveNewAsync(workspace.Root, new NativeAtomicFileStore(new RealFileSystem()), cancellationToken).ConfigureAwait(false);
         return new Uri("asset:///" + relative + "/" + filename);
     }
