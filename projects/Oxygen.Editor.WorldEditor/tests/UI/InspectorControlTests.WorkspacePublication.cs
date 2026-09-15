@@ -146,7 +146,7 @@ public sealed partial class InspectorControlTests
         _ = updated.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
     }
 
-    private async Task CheckWorkspacePublicationAsync(CookTargetKind? scope)
+    private async Task CheckWorkspacePublicationAsync(CookTargetKind? scope, Func<PublicationScenario, CancellationToken, Task>? verify = null)
     {
         var fixture = new NativeSceneFixture(automatic: false, scene =>
         {
@@ -175,7 +175,14 @@ public sealed partial class InspectorControlTests
         try
         {
             var key = await PrepareSharedPublicationMaterialAsync(fixture, services, picker, materials, material, timeout.Token).ConfigureAwait(true);
-            await CheckSharedPublicationRefreshAsync(fixture, services, picker, materials, material, scope, key, timeout.Token).ConfigureAwait(true);
+            if (verify is null)
+            {
+                await CheckSharedPublicationRefreshAsync(fixture, services, picker, materials, material, scope, key, timeout.Token).ConfigureAwait(true);
+            }
+            else
+            {
+                await verify(new(fixture, services, picker, materials, material, key), timeout.Token).ConfigureAwait(true);
+            }
         }
         finally
         {
@@ -186,6 +193,8 @@ public sealed partial class InspectorControlTests
             }
         }
     }
+
+    private sealed record PublicationScenario(NativeSceneFixture Fixture, CatalogWorkloadServices Services, MaterialPickerService Picker, MaterialDocumentService Materials, MaterialDocument Material, string Key);
 
     private sealed partial class NativeSceneFixture
     {

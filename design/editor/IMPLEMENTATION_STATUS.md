@@ -596,7 +596,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
         Contended inspections and publication wait without throwing first-chance
-        exceptions; reader exclusion and cancellation regressions pass.
+        exceptions; reader exclusion and cancellation regressions pass. Staging,
+        recovery and mount registration also wait through short gate contention;
+        nested verification reuses its existing lease. The reproduced catalog/
+        staging race, three registration modes and nested-reader deadlock
+        regressions pass with the full ContentPipeline suite (449/449).
   - [x] Journaled root/receipt/provenance replacement and rollback/recovery cover
         failed publication, metadata writes, abandoned operations and corrupt receipts.
         Fifteen publisher-termination cases and the 39-case process/worker/lease
@@ -615,6 +619,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         current catalog status and unchanged scene history pass 5/5 packaged
         native integration cases. Automatic publication preserves the unsaved
         scene. [Workspace publication evidence](validation/ED-M07B-workspace-publication.md).
+  - [x] Queued workspace publication respects Undo, cleared material assignments,
+        removed geometry and replacement scene lifetimes. Cancellation and source
+        conflict retain the prior native material until recovery. Unchanged
+        asset/folder/scene/project cooks preserve native content revision and
+        published file timestamps. These ten additional native integration cases
+        pass alongside the five creation/shared-refresh cases.
   - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
         matrix, including the remaining import workflows.
   - [x] The UI Automation exception flood was isolated to the computer-use helper;
@@ -997,7 +1007,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M06A` | `validated` | 2026-04-28 | User manually validated ED-M06A project layout and template standardization after starter-scene JSON fix: create project from template, starter scene load, new scene/material authored paths under `Content`, Content Browser folder navigation, Material Picker filtering, and authoring target resolution. MSBuild passed for Oxygen.Editor.App and focused ProjectBrowser tests; targeted VSTest run passed 96/96 across Projects, ContentBrowser, and ProjectBrowser assemblies before the final starter-scene regression test, then ProjectBrowser starter-scene regression passed 3/3. |
 | `ED-M07` | `validated` | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated` | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md). |
-| `ED-M07B` | `in_progress` | 2026-09-14 | ContentPipeline 432/432 and expanded inspection adapter 25/25; Managed.Assets 91/91; Content Browser 133/133; Runtime 95/95; MaterialEditor 56/56; SceneExplorer 174/174; packaged UI includes the prior 252-case set and six import/retry cases plus four imported-asset information/action cases; focused runs pass 18/18 for import/Cooking and 9/9 for asset information/picking; toolbar UI 11/11; native asset requests 28/28. User confirmed Default appears once with Materials/Scenes filters, live demand cooking without scene reload or saving the consuming scene, startup, tab switching and leak-free shutdown. Native resource/state/shadow cases pass 121/121 in both Debug and Release; final native-backed publication, material refresh, priority, scene-switch and shutdown UI cases pass 7/7, including 60/10 FPS shadow transitions. The user isolated UI Automation flooding to the computer-use helper. Completed contracts and remaining gates are checked individually above. |
+| `ED-M07B` | `in_progress` | 2026-09-15 | ContentPipeline 449/449; final ownership/publication subset 94/94; production workspace creation, typed-material discovery, all cook triggers, current native bindings, cancellation/recovery and scene-lifetime cases 15/15. Native import numeric profiles and clean copies pass in Debug/Release. Main/Inspect/Main native document transitions pass 30 cycles each at 60/10 FPS with D3D12 validation. Browser workload and cook-feedback timing meet their gates; import/browser/material controls pass 33/33 across themes/scales, and inspector/Cooking scaling passes 18/18. User-confirmed startup, live material updates, duplicate removal, built-ins and leak-free shutdown remain recorded above. Completed contracts and remaining combined import, typed-use, navigation and project-lifetime gates are checked individually above. |
 | `ED-M08` | `pending` | - | Not validated. |
 | `ED-M09` | `pending` | - | Not validated. |
 | `ED-M10` | `pending` | - | Not validated. |
