@@ -8,7 +8,6 @@
 #include <cctype>
 #include <mutex>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -122,11 +121,20 @@ namespace {
     if (token == "proc/cube" || token == "cube") {
       return "proc/cube";
     }
+    if (token == "proc/subdivided_cube" || token == "subdivided_cube") {
+      return "proc/subdivided_cube";
+    }
     if (token == "proc/arrow_gizmo" || token == "arrow_gizmo") {
       return "proc/arrow_gizmo";
     }
     if (token == "proc/sphere" || token == "sphere") {
       return "proc/sphere";
+    }
+    if (token == "proc/capsule" || token == "capsule") {
+      return "proc/capsule";
+    }
+    if (token == "proc/icosphere" || token == "icosphere") {
+      return "proc/icosphere";
     }
     if (token == "proc/plane" || token == "plane") {
       return "proc/plane";
@@ -172,10 +180,16 @@ namespace {
 
     if (canonical == "proc/cube") {
       mesh_data = data::MakeCubeMeshAsset();
+    } else if (canonical == "proc/subdivided_cube") {
+      mesh_data = data::MakeSubdividedCubeMeshAsset();
     } else if (canonical == "proc/arrow_gizmo") {
       mesh_data = data::MakeArrowGizmoMeshAsset();
     } else if (canonical == "proc/sphere") {
       mesh_data = data::MakeSphereMeshAsset();
+    } else if (canonical == "proc/capsule") {
+      mesh_data = data::MakeCapsuleMeshAsset();
+    } else if (canonical == "proc/icosphere") {
+      mesh_data = data::MakeIcoSphereMeshAsset();
     } else if (canonical == "proc/plane") {
       mesh_data = data::MakePlaneMeshAsset();
     } else if (canonical == "proc/cylinder") {
@@ -190,14 +204,10 @@ namespace {
 
     if (!mesh_data.has_value()) {
       LOG_F(WARNING,
-        "SceneNodeRenderableBindings: failed to generate mesh for token '{}'; "
-        "falling back to proc/cube",
+        "SceneNodeRenderableBindings: rejected unsupported or invalid "
+        "geometry token '{}'",
         canonical);
-      mesh_data = data::MakeCubeMeshAsset();
-    }
-
-    if (!mesh_data.has_value()) {
-      throw std::runtime_error("failed to generate fallback cube mesh");
+      return {};
     }
 
     return BuildGeometryAssetFromMeshData(canonical, std::move(*mesh_data));
@@ -231,6 +241,9 @@ namespace {
     }
 
     auto geometry = MakeGeometryForToken(canonical);
+    if (!geometry) {
+      return {};
+    }
     registry.token_by_geometry_ptr.emplace(geometry.get(), canonical);
     registry.geometry_by_token.emplace(canonical, geometry);
     return geometry;
@@ -365,6 +378,10 @@ namespace {
       }
       const std::string token(token_raw, len);
       auto geometry = GetOrCreateGeometryByToken(token);
+      if (!geometry) {
+        lua_pushboolean(state, 0);
+        return 1;
+      }
       node->GetRenderable().SetGeometry(std::move(geometry));
       const auto handle = node->GetHandle();
       DLOG_F(3,

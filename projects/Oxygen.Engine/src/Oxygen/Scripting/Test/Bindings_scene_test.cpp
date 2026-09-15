@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
@@ -28,7 +29,179 @@ namespace {
       loop, [&]() -> co::Co<> { co_await module.OnSceneMutation(context); });
   }
 
+  auto ExpectMeshBuffers(const data::GeometryAsset& geometry,
+    const std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>& expected)
+    -> void
+  {
+    const auto& mesh = geometry.MeshAt(0);
+    ASSERT_NE(mesh, nullptr);
+    const auto vertices = mesh->Vertices();
+    ASSERT_EQ(vertices.size(), expected.first.size());
+    for (size_t index = 0; index < vertices.size(); ++index) {
+      EXPECT_TRUE(data::StrictlyEqual(vertices[index], expected.first[index]))
+        << "vertex " << index;
+    }
+    const auto indices = mesh->IndexBuffer().AsU32();
+    ASSERT_EQ(indices.size(), expected.second.size());
+    for (size_t index = 0; index < indices.size(); ++index) {
+      EXPECT_EQ(indices[index], expected.second[index]) << "index " << index;
+    }
+  }
+
 } // namespace
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationProceduralRoutesMatchAllCanonicalNativeMeshBuffers)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local assets = oxygen.assets
+  local kinds = {
+    cube = "Cube", subdivided_cube = "SubdividedCube", sphere = "Sphere",
+    capsule = "Capsule", icosphere = "IcoSphere", plane = "Plane",
+    cylinder = "Cylinder", cone = "Cone", torus = "Torus", quad = "Quad",
+    arrow_gizmo = "ArrowGizmo",
+  }
+  for kind, native in pairs(kinds) do
+    local geometries = {
+      assets.create_procedural_geometry(kind),
+      assets.create_procedural_geometry(kind, nil),
+      assets.create_procedural_geometry(kind, {}),
+      kind,
+      "proc/" .. kind,
+    }
+    for variant = 1, 5 do
+      local node = oxygen.scene.create_node(native .. "_" .. variant, nil)
+      if geometries[variant] == nil or not node:renderable_set_geometry(geometries[variant]) then
+        error("canonical procedural route failed: " .. native .. "_" .. variant)
+      end
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "canonical_procedural_routes" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "canonical_procedural_routes", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+  const auto roots = scene->GetRootNodes();
+  ASSERT_EQ(roots.size(), 55U);
+  for (auto node : roots) {
+    const auto name = node.GetName();
+    SCOPED_TRACE(name);
+    const auto generator = name.substr(0, name.find('_'));
+    const auto expected
+      = data::GenerateMeshBuffers(generator + "/LuaParity", {});
+    ASSERT_TRUE(expected.has_value());
+    const auto geometry = node.GetRenderable().GetGeometry();
+    ASSERT_NE(geometry, nullptr);
+    ExpectMeshBuffers(*geometry, *expected);
+  }
+}
+
+NOLINT_TEST_F(
+  SceneBindingsTest, OnSceneMutationProceduralNamedOptionsReachNativeFactories)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local requests = {
+    { "Capsule", "capsule", { hemisphere_segments = 4, radial_segments = 12, height = 4, radius = 0.75 } },
+    { "IcoSphere", "icosphere", { subdivision_level = 0 } },
+    { "SubdividedCube", "subdivided_cube", { segments = 3 } },
+    { "Torus", "torus", { major_segments = 12 } },
+  }
+  for _, request in ipairs(requests) do
+    local geometry = oxygen.assets.create_procedural_geometry(request[2], request[3])
+    local node = oxygen.scene.create_node(request[1], nil)
+    if geometry == nil or not node:renderable_set_geometry(geometry) then
+      error("named procedural options failed: " .. request[1])
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "procedural_named_options" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "procedural_named_options", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+  const auto roots = scene->GetRootNodes();
+  ASSERT_EQ(roots.size(), 4U);
+  for (auto node : roots) {
+    const auto name = node.GetName();
+    SCOPED_TRACE(name);
+    const auto geometry = node.GetRenderable().GetGeometry();
+    ASSERT_NE(geometry, nullptr);
+    const auto expected = [&] {
+      if (name == "Capsule") {
+        return data::MakeCapsuleMeshAsset(4, 12, 4.0F, 0.75F);
+      }
+      if (name == "IcoSphere") {
+        return data::MakeIcoSphereMeshAsset(0);
+      }
+      if (name == "SubdividedCube") {
+        return data::MakeSubdividedCubeMeshAsset(3);
+      }
+      return data::MakeTorusMeshAsset(12);
+    }();
+    ASSERT_TRUE(expected.has_value());
+    ExpectMeshBuffers(*geometry, *expected);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationUnknownGeometryTokensReturnFalseAndRetainGeometry)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local node = oxygen.scene.create_node("GeometryRejection", nil)
+  if node:renderable_set_geometry("proc/unknown") ~= false or node:has_renderable() then
+    error("unknown token fabricated geometry")
+  end
+  if not node:renderable_set_geometry("capsule") then error("capsule failed") end
+  for _, token in ipairs({ "", "proc/unknown", "geo://cube_v1", "sphere2", "proc/sphere2" }) do
+    local ok, result = pcall(function() return node:renderable_set_geometry(token) end)
+    if not ok or result ~= false then error("unknown geometry token did not return false") end
+    if node:renderable_get_geometry() ~= "proc/capsule" then
+      error("failed geometry assignment replaced the previous capsule")
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "unknown_geometry_rejection" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+  auto scene = std::make_shared<scene::Scene>(
+    "unknown_geometry_rejection", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+}
 
 NOLINT_TEST_F(
   SceneBindingsTest, ExecuteScriptSceneBindingsExposeV1SceneModuleSurface)
@@ -285,13 +458,13 @@ function on_scene_mutation()
   local node = scene.create_node("RenderableHost", nil)
   if node == nil then error("node create failed") end
 
-  if not node:renderable_set_geometry("geo://cube_v1") then
+  if not node:renderable_set_geometry("proc/cube") then
     error("set geometry failed")
   end
   if not node:has_renderable() then error("has_renderable false") end
 
   local geometry = node:renderable_get_geometry()
-  if geometry ~= "geo://cube_v1" then error("geometry token mismatch") end
+  if geometry ~= "proc/cube" then error("geometry token mismatch") end
 
   if not node:renderable_set_material_override(1, 1, "mat://override_v1") then
     error("set material override failed")
@@ -620,10 +793,10 @@ function on_scene_mutation()
     error("light luminous flux mismatch")
   end
 
-  if not player:renderable_set_geometry("geo://player") then
+  if not player:renderable_set_geometry("proc/cube") then
     error("player set geometry failed")
   end
-  if player:renderable_get_geometry() ~= "geo://player" then
+  if player:renderable_get_geometry() ~= "proc/cube" then
     error("player geometry token mismatch")
   end
 

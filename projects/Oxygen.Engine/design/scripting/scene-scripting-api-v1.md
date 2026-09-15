@@ -361,6 +361,14 @@ Spot-only:
 3. `renderable:get_geometry() -> any?`
 4. `renderable:detach() -> boolean`
 
+Geometry strings select the native procedural kinds documented in
+[Procedural Runtime Content](content-scripting-api-v7.md#38-procedural-runtime-content),
+either as a kind (for example `capsule`) or its `proc/` token
+(`proc/capsule`). Token-backed geometry always uses the native default recipe.
+Unknown tokens return `false` without changing the attached geometry; arbitrary
+asset paths must be loaded through `oxygen.assets` and passed as geometry
+userdata. No failed token resolves to a substitute cube.
+
 ## 7.2 LOD and Selection
 
 1. `renderable:get_lod_policy() -> table`
