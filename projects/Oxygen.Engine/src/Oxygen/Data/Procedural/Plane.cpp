@@ -11,35 +11,32 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a flat plane in the XY plane centered at
- the origin. The plane is subdivided into a grid of quads, with each quad made
- of two triangles. Vertices are generated with positions, normals, texcoords,
- tangents, bitangents, and color.
+ Creates vertex and index buffers for a square grid in the XY plane at z = 0,
+ centred at the origin. Every grid cell contains two triangles, with normals
+ along +Z and texture coordinates spanning [0,1] across the complete surface.
 
- @param x_segments Number of subdivisions along the X axis (minimum 1).
- @param z_segments Number of subdivisions along the Y axis (minimum 1).
- @param size Length of the plane along X and Y (plane is size x size).
- @return Shared pointer to the immutable Mesh containing the plane
- geometry. Returns nullptr on invalid input. Never throws.
+ @param x_segments Number of grid cells along X (minimum 1).
+ @param y_segments Number of grid cells along Y (minimum 1).
+ @param size Length along both X and Y (must be > 0).
+ @return Vertex and index vectors, or std::nullopt for
+ segment counts below one or a non-positive size.
 
  ### Performance Characteristics
 
- - Time Complexity: O(x_segments * z_segments)
- - Memory: Allocates space for (x_segments+1)*(z_segments+1) vertices and
- 6*x_segments*z_segments indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(x_segments * y_segments).
+ - Output: (x_segments+1)*(y_segments+1) vertices and
+   6*x_segments*y_segments indices.
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a 2x2 plane mesh asset of size 1.0
- auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
- for (const auto& v : plane->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakePlaneMeshAsset(2, 2, 1.0f)) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
- using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakePlaneMeshAsset(
   unsigned int x_segments, unsigned int y_segments, float size)

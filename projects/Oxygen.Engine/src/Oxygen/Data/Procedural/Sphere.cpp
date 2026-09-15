@@ -12,35 +12,32 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a UV sphere centered at the origin.
- The sphere is generated using latitude and longitude segments, with vertices
- distributed over the surface and indexed triangles forming the mesh. Normals,
- UVs, tangents, bitangents, and vertex colors are set for each vertex.
+ Creates vertex and index buffers for a UV sphere of radius 0.5, centred at
+ the origin. Latitude runs between the +Z and -Z poles; longitude runs around
+ the Z axis. Normals, UVs, tangents, bitangents and colours accompany positions.
 
- @param latitude_segments Number of segments along the vertical axis (minimum
- 3).
- @param longitude_segments Number of segments around the equator (minimum 3).
- @return Shared pointer to the immutable Mesh containing the sphere
- geometry. Returns nullptr on invalid input. Never throws.
+ @param latitude_segments Number of intervals between the poles (minimum 3).
+ @param longitude_segments Number of intervals around the equator (minimum 3).
+ @return Vertex and index vectors, or std::nullopt for
+ segment counts below three.
 
  ### Performance Characteristics
 
- - Time Complexity: O(latitude_segments * longitude_segments)
- - Memory: Allocates space for (latitude_segments+1)*(longitude_segments+1)
- vertices and 6*latitude_segments*longitude_segments indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(latitude_segments * longitude_segments).
+ - Output: (latitude_segments+1)*(longitude_segments+1) vertices and
+   6*latitude_segments*longitude_segments indices, including pole degeneracies.
+ - The longitude seam and pole vertices are duplicated for UV coordinates.
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a sphere mesh asset
- auto sphere = MakeSphereMeshAsset(16, 32);
- for (const auto& v : sphere->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeSphereMeshAsset(16, 32)) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
-       using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeSphereMeshAsset(
   unsigned int latitude_segments, unsigned int longitude_segments)

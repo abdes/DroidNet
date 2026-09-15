@@ -11,32 +11,30 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a quad (rectangle) in the XZ plane,
- centered at the origin. The quad is made of two triangles. Vertices are
- generated with positions, normals, texcoords, tangents, bitangents, and color.
+ Creates vertex and index buffers for a rectangle in the XY plane at z = 0,
+ centred at the origin. The quad has two triangles, normals along +Z, and
+ texture coordinates spanning [0,1] across its width and height.
 
- @param width Width of the quad along the X axis (must be > 0).
- @param height Height of the quad along the Z axis (must be > 0).
- @return Shared pointer to the immutable Mesh containing the quad geometry.
- Returns nullptr on invalid input. Never throws.
+ @param width Width along X (must be > 0).
+ @param height Height along Y (must be > 0).
+ @return Vertex and index vectors, or std::nullopt for
+ non-positive width or height.
 
  ### Performance Characteristics
 
- - Time Complexity: O(1)
- - Memory: Allocates space for 4 vertices and 6 indices
- - Optimization: All data is constructed in-place and moved into the Mesh.
+ - Time Complexity: O(1).
+ - Output: 4 vertices and 6 indices (2 triangles).
 
- ### Usage Examples
+ ### Usage Example
 
  ```cpp
-// Create a quad mesh asset
-auto quad = MakeQuadMeshAsset(2.0f, 1.0f);
-for (const auto& v : quad->Vertices()) { ... }
+ if (auto buffers = oxygen::data::MakeQuadMeshAsset(2.0f, 1.0f)) {
+   const auto& [vertices, indices] = *buffers;
+   // Pass the buffers to the mesh consumer.
+ }
  ```
 
- @note The default view covers the entire mesh. Submesh views can be created
-       using Mesh::MakeView.
- @see Mesh, MeshView, Vertex
+ @see GenerateMesh, Vertex
 */
 auto oxygen::data::MakeQuadMeshAsset(const float width, const float height)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
