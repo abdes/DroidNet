@@ -4,6 +4,16 @@
 **Deliverable:** D.10
 **Status:** `ready`
 
+## V0.1 Production Extension
+
+[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#9-exposure-grading-and-output)
+defines complete authored exposure, bloom, grading, output and content-rectangle
+behavior. Its linked domain equations/defaults are authoritative. The minimal
+Phase-4B sketches below are implementation baselines, not permission to omit
+Auto exposure, bloom, Saturation/Contrast/Vignette or active DisplayGamma fields.
+None means SDR clipping without a tone curve, not disabling the other stages.
+Historical milestone evidence is preserved at its original scope.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
@@ -170,17 +180,16 @@ PostProcessService::Execute(ctx, scene_textures)
   │
   └─ 3. Tonemap (always)
         └─ Read post-temporal scene signal + bloom + exposure state
-        └─ Apply tonemap operator (ACES or Filmic)
+        └─ Apply V0.1 exposure/grading/curve/vignette/gamma ordering and background composition
         └─ Output: LDR result to the SceneRenderer-supplied post target
 ```
 
-### 3.2 Phase 4B Minimum
+### 3.2 Historical Phase 4B Minimum
 
-Tonemap is the only hard requirement for visible output. Phase 4B may start
-with tonemap plus fixed-exposure fallback. Auto-exposure and bloom are added
-if straightforward. The temporal slot, exposure ownership boundary, and
-history ownership are fixed in the design even if temporal AA / TSR and local
-exposure remain partially inactive in the first implementation slice.
+The initial Phase-4B slice started from tonemap and fixed exposure. That limited
+entry point does not define V0.1 completion: all fields and the exact chain in the
+production extension are required. Temporal/history ownership remains here;
+unrelated future local-exposure or temporal-upscaler scope is not implied.
 
 ## 4. Data Flow and Dependencies
 

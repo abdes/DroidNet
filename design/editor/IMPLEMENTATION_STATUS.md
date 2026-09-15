@@ -930,79 +930,35 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `active; interactive property decisions; development-only qualification`
+Status: `ready for implementation; runtime qualification pending`
 
-Trace: `GOAL-001`, `GOAL-002`, `GOAL-003`, `GOAL-006`; `REQ-018`,
-`REQ-019`, `REQ-022`, `REQ-023`, `REQ-024`, `REQ-026`, `REQ-030`,
-`REQ-037`; `SUCCESS-001`, `SUCCESS-003`, `SUCCESS-004`, `SUCCESS-006`
+Outcome: one canonical V0.1 authoring contract across engine and editor, with
+semantic/image qualification through development-only native and embedded paths.
 
-Outcome: the qualified PRD fixture and field suite prove exact saved/published
-content in embedded preview and standalone runtime under controlled comparison.
+The [final plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) contains
+the implementation document map, source owners, eight ordered slices and exact
+acceptance gates. The [authoring contract](review/ED-M08-v01-authoring-scope.md),
+[visibility contract](review/ED-M08-node-light-visibility-review.md) and
+[celestial contract](review/ED-M08-celestial-light-authoring.md) define the final
+scope and eliminated alternatives. Qualification code is excluded from normal
+Debug/Release graphs; migration produces canonical formats without legacy runtime
+readers. Primary/Secondary names remain unchanged.
 
-- [x] ED-M07A and ED-M07B are validated at their recorded scope.
-- [ ] ED-M02's remaining single-viewport resize/discovery evidence is recorded
-      before M08 closes. This does not block implementation; ED-M09 tools are
-      not a prerequisite.
-- [x] Required LLDs are reviewed against the post-M07B code and evidence:
-      `standalone-runtime-validation`, `live-engine-sync`,
-      `runtime-integration`, `content-pipeline`, `environment-authoring`.
-- [x] Detailed plan refreshed on 2026-09-15: per-product provenance, ordered
-      library readers, ordinary native compatibility, strict camera/loading,
-      complete observations, GPU readback and bounded capture ownership.
-- [x] User confirmed the entire validation workflow is development-only:
-      opt-in test/tool targets, no qualification command/protocol/fixtures in
-      normal editor Debug/Release or normal RenderScene builds. Retained
-      artifacts support joint review; the earlier shipped-command plan is superseded.
-- [x] User rejected backward compatibility: migrate useful legacy content to
-      canonical V0.1 formats; no shipping compatibility fields/aliases/fallbacks.
-- [x] Captured-sky diffuse/specular lighting is approved as V0.1 scope;
-      implementation and rendered validation remain pending.
-- [x] All existing mesh material slots are approved for per-instance assignment
-      and clearing to mesh defaults. Slot creation/topology editing are excluded;
-      canonical implementation and rendered validation remain pending.
-- [x] Scalar emission colour/HDR intensity is approved, with zero intensity off.
-      Emissive GI is outside this decision; implementation and validation remain pending.
-- [x] Ten-shape creation palette including Capsule is approved; SubdividedCube
-      is Advanced, ArrowGizmo internal, and GeodesicSphere migrates to IcoSphere.
-      Implementation and qualification remain pending.
-- [x] Metric centred primitive defaults are approved, including upright Quad,
-      1 m outer-diameter Torus and 2 m-high Capsule. Source/API prose must match
-      actual implementation; geometry changes and rendered qualification remain pending.
-- [x] Basic perspective camera authoring is approved: pose, vertical FOV,
-      aspect and near/far, with faithful explicit-camera loading. Physical-camera
-      authoring is deferred; implementation/qualification remain pending.
-- [x] Auto/Fixed aspect fitting is approved, Auto by default for new cameras;
-      Fixed adds bars to preserve composition. Resize does not change authored
-      values. Engine/editor implementation and qualification remain pending.
-- [ ] Decide the remaining researched authoring choices individually with the
-      user before freezing the corresponding field coverage.
-- [x] The complete [visibility/contribution/shadow contract](review/ED-M08-node-light-visibility-review.md)
-      is approved except its single scene-sun selector. Local editor hiding,
-      canonical Inherit/Shown/Hidden, independent light contribution/casting,
-      functional receiving and stated non-sun exclusions are approved scope;
-      implementation and rendered qualification remain pending.
-- [ ] Resolve celestial-light assignment for two suns and sun-plus-moon;
-      the [sun-selector proposal](review/ED-M08-celestial-light-authoring.md)
-      is not approved. The 38 existing research checks do not qualify new behavior.
-- [ ] M08.1 versioned protocol, deterministic workload and field inventory.
-- [ ] M08.2 verified preparation, root ownership and project admission.
-- [ ] M08.3 exact native loading and complete observations through opt-in tooling.
-- [ ] M08.4 controlled scene-frame capture and effective exposure observation.
-- [ ] M08.5 saved-revision embedded session and current-authoring convergence.
-- [ ] M08.6 owned process, semantic/image comparison and result integrity.
-- [ ] M08.7 development workflow, real authoring prerequisites and build exclusion.
-- [ ] M08.8 complete field/rendered suite and joint user acceptance.
-- [ ] Embedded preview renders the qualified PRD fixture and field cases.
-- [ ] The exact published project output loads through the ED-M08 request contract.
-- [ ] Expected geometry, material, camera, directional light, atmosphere,
-      exposure, and tone mapping are present within documented tolerance.
-- [ ] Failures classify cooked output, asset resolution, runtime load, sync, or
-      parity mismatch.
+- [x] Final implementation plan and coherent domain contracts are available.
+- [ ] M08.1 native canonical data, producers and primitives.
+- [ ] M08.2 native rendering and view behavior.
+- [ ] M08.3 development harness and native visual gate outside the editor.
+- [ ] M08.4 editor canonical authoring and live delivery.
+- [ ] M08.5 migration and verified saved-input preparation.
+- [ ] M08.6 embedded saved-revision capture.
+- [ ] M08.7 owned execution, comparisons and terminal results.
+- [ ] M08.8 full field/rendered qualification, normal-build exclusion and closeout.
+- [ ] M02 supported single-viewport resize/discovery evidence is recorded.
 
-Exit evidence required:
-
-- [ ] One `ED-M08` validation ledger row records embedded preview, cooked
-      output, mount, standalone load, and parity result for the minimum slice.
+Implementation and rendered evidence belong to these gates; documentation
+readiness does not close them. Earlier M07 and native-example evidence retains
+its original scope. One M08 validation ledger row records the final matched
+build, publication, fixture, profile and evidence set.
 
 ### ED-M09 - Viewport Authoring Tools And Overlays
 
@@ -1079,7 +1035,7 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `validated` | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded. |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `active` | Development-only workflow approved; authoring-scope review precedes implementation. Normal Debug/Release excludes qualification code. M02 evidence and joint retained-artifact review gate closure. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `planned` | Final package is ready for implementation: native contracts/rendering/visual gate, editor integration, migration and development-only parity. M02 evidence and normal-build exclusion gate closeout. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |

@@ -1,8 +1,20 @@
 # IndirectLightingService LLD
 
 **Phase:** 7B — Advanced Lighting and GI
-**Deliverable:** reserved future LLD
-**Status:** `reserved`
+**Deliverable:** Stage13 ownership with a bounded V0.1 activation contract
+**Status:** `specified`; implementation and rendered qualification pending
+
+## Current V0.1 activation
+
+[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) defines the first
+activation: complete diffuse/specular environment evaluation and simultaneous
+Stage12 ambient-bridge retirement. It fixes current family placement under
+`src/Oxygen/Vortex/IndirectLighting/`, product contracts, shared forward/deferred
+evaluation and readiness. The reserved roadmap below retains broader reflection,
+GI and optional AO ownership; it does not require those extra families for this
+bounded activation. Its future-only status and old `Services/` directory layout
+are superseded. No runtime bridge or parallel indirect path remains after
+Stage13 activates.
 
 ## Mandatory Vortex Rule
 

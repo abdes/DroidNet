@@ -1,20 +1,19 @@
 # Runtime Integration LLD
 
-Status: `ED-M07B baseline reviewed; ED-M08 capture extensions planned`
+Status: `final runtime and ED-M08 integration contract; delivery evidence tracked by milestone`
 
 ## 1. Purpose
 
 Define the managed boundary between the WinUI editor and the embedded Oxygen
-Engine runtime. This LLD was first reviewed for ED-M02 and is re-reviewed in
-ED-M04 only for inspector-driven live-sync completion semantics. It covers
-runtime lifecycle, native runtime
+Engine runtime. It covers runtime lifecycle, native runtime
 discovery assumptions, runtime settings, surface leases, engine view lifecycle,
 cooked-root refresh ordering, threading, and the validation evidence needed
-before live viewport behavior can support later authoring milestones.
+for the V0.1 live viewport and development-only ED-M08 qualification.
 
-This is not the LLD for scene synchronization, content cooking, standalone
-runtime validation, or viewport authoring tools. Those later milestones consume
-the runtime contracts defined here.
+Scene synchronization, cooking and viewport tools retain their own LLDs. The
+[standalone validation LLD](standalone-runtime-validation.md) owns the development
+protocol, runner and acceptance metrics; sections 17-20 here define its integration
+boundary and the ordinary runtime behavior it exercises.
 
 ED-M07 consumes this LLD only for validated cooked-root mount refresh after
 content pipeline cook. Multi-viewport remains deferred and is not reopened by
@@ -47,9 +46,11 @@ completion semantics. ED-M04 does not reopen surface/view lifecycle scope.
 - `diagnostics-operation-results.md`: runtime failure domains and operation
   result vocabulary.
 
-## 4. Current Baseline
+## 4. Historical ED-M02 Baseline
 
-The current codebase has the core runtime pieces needed for ED-M02:
+This section records the original ED-M02 baseline and evidence gaps. It is not a
+second runtime contract; subsequent sections define current ownership and behavior.
+The baseline contained these runtime pieces:
 
 - `Oxygen.Editor.Runtime` exposes `IEngineService` and `EngineService`.
 - `EngineServiceState` models `NoEngine`, `Initializing`, `Ready`, `Starting`,
@@ -58,10 +59,10 @@ The current codebase has the core runtime pieces needed for ED-M02:
   Browser responsibility. The editor now defers engine startup until workspace
   activation/runtime use.
 - `WorkspaceViewModel` starts the engine before cooked-root refresh. The
-  current cooked-root refresh can mount the project `.cooked` root when
-  `.cooked/container.index.bin` exists, with legacy per-mount index fallback.
-  ED-M02 documents the runtime ordering and user-visible warning behavior; the
-  full cooked-index policy remains `content-pipeline.md` / ED-M07 scope.
+  baseline mount logic accepted the project `.cooked/container.index.bin` and a
+  per-mount fallback. Canonical product execution uses the committed root and
+  publication contract in `content-pipeline.md`; the old fallback is not a
+  compatibility requirement.
 - `IEngineSettings` and `EngineSettingsService` provide startup settings.
   `EngineSettingsExtensions` maps them to the interop engine configuration.
 - `IEngineService.TargetFps`, `MaxTargetFps`, and `EngineLoggingVerbosity`
@@ -88,9 +89,9 @@ Known ED-M02 gaps:
   WorldEditor viewport code. ED-M02 accepts this split but documents the
   invariants that must hold.
 
-## 5. Target Design
+## 5. Runtime Design
 
-ED-M02 target flow:
+Runtime flow:
 
 ```mermaid
 flowchart LR
@@ -114,15 +115,15 @@ flowchart LR
     Runtime --> Present
 ```
 
-Target invariants:
+Invariants:
 
 1. Project Browser does not start the engine.
 2. Workspace activation is the first normal runtime startup trigger.
 3. Cooked-root mount, surface attach, resize, view create, and view destroy
    require `EngineServiceState.Running`.
 4. Runtime settings may be read/applied only in `Ready` or `Running` states.
-5. Feature UI depends on `Oxygen.Editor.Runtime`, not on interop classes except
-   for narrow existing view configuration structs until wrapper contracts exist.
+5. Feature UI depends on managed `Oxygen.Editor.Runtime` contracts; native and
+   C++/CLI types remain inside the Runtime/Interop boundary.
 6. A surface lease owns the native composition surface reservation for one
    `(document, viewport)` key.
 7. An engine view is associated with exactly one viewport surface target while
@@ -572,10 +573,11 @@ Tests are useful for state-machine and lease bookkeeping. Final ED-M02 closure
 also requires manual visual validation because frame-presented completion is not
 yet a managed contract.
 
-## 16. Closed V0.1 Decisions
+## 16. V0.1 Completion Contract
 
 Existing operation completion continues to mean accepted/queued where stated.
-ED-M08 adds explicit observed-state/capture completion for qualification; callers
+ED-M08's development targets provide explicit observed-state/capture completion;
+normal runtime commands retain their existing semantics. Callers
 cannot reinterpret accepted as presented. Runtime status uses the existing
 workspace/viewport pending/failure surface plus operation/output details. No
 new diagnostics dashboard is required.
@@ -603,15 +605,26 @@ Verification checks configuration and file identities, then returns an owned
 artifact lease and portable fingerprint. Windows read handles remain open through
 native execution and cleanup, preventing replacement between verification and use.
 Failure/cancellation releases acquired ownership. There is no fixed whole-editor
-qualification manifest, promotion command or separately built probe; managed/UI
-edits do not require one in Debug or Release.
+qualification manifest, promotion command or development probe in the production
+startup path; managed/UI edits do not require one in Debug or Release.
 
-ED-M08's opt-in development tools verify the native runner and its runtime
-inputs using ordinary build dependency identities. Their protocol, runner and
-qualification-only capture/observation adapters are excluded from normal editor
-Debug/Release builds and the normal SDK install. Producer provenance and runtime
-identity remain separate facts. Testing evidence is not a runtime admission
-manifest, and normal runtime startup does not discover development tools.
+ED-M08's opt-in development tools verify the native runner and runtime inputs
+using ordinary build dependency identities. The concrete topology is
+[standalone validation section 5](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction):
+`Oxygen.Tools.EditorValidation.Native`, the shared
+`Oxygen.Tools.EditorValidation.Capture` module and
+`tests/EditorValidation/Oxygen.Editor.Validation.csproj`, referenced only by the
+existing UI test host with `OxygenEditorValidation=true`. Native configuration
+requires `OXYGEN_BUILD_EDITOR_VALIDATION=ON`. Both default off. Private builds,
+matching SDK/Interop and staging live under `artifacts/ed-m08/<Configuration>/`;
+normal engine builds continue through their existing build/SDK paths.
+
+The development protocol, exports, hooks, observations and schemas are excluded
+from normal Debug/Release references, resources, initializers, binaries,
+installations and packages. The exclusion check inspects all of these and proves
+zero development dependencies. Producer provenance and runtime identity remain
+separate facts. Testing evidence is not a runtime admission manifest, and normal
+startup does not discover development tools or require a qualification result.
 
 Publication briefly pauses preview and drains affected content reads before
 fixed cooked-root replacement. The runtime exposes the required pause/drain/
@@ -728,7 +741,7 @@ not a new loader-generation implementation or a change to Accepted semantics.
 
 ## 19. Development-Only Validation Capture Session
 
-Production camera presentation follows the approved Auto/Fixed authoring policy.
+Production camera presentation follows the Auto/Fixed authoring policy.
 Auto derives effective aspect per target while retaining vertical FOV; Fixed
 preserves its authored ratio and complete image using a centred content rectangle.
 Add bars after scene exposure/post-processing so they cannot alter metering.
@@ -737,34 +750,90 @@ view/composition path owns this ordinary runtime behaviour; editor and developme
 tools consume it. The opt-in capture records target/content rectangles and
 effective projection, and the base fixture explicitly selects Fixed 16:9.
 
-The user explicitly required the entire ED-M08 validation workflow to remain
-development-only on 2026-09-15. Its opt-in editor test host temporarily pins the
-saved scene projection/camera/profile under a run/document/view-lifetime capture
-lease. New authoring revisions continue, but matching scene mutation requests
-remain pending until embedded observation and capture finish. Navigation is
-disabled in that test host for the pinned viewport during the window. This
-development mode does not claim the preview shows newer edits and does not add a
-qualification command, capture-hold service or protocol to normal editor builds.
+The entire ED-M08 workflow is development-only. Its managed
+`EmbeddedCaptureSession` owns one run/document/activation/view-generation session
+inside the existing WinUI test host. Compile-gated delivery hooks close the real
+scene-sync scheduling boundary before matching projection/property/hierarchy/
+environment/asset jobs reach `IRuntimeWorldCommands`. Later jobs stay pending in
+the existing revision-aware machinery, while authoring and Undo/Redo continue.
+Earlier native work drains; a session control token then projects the verified
+saved snapshot through the same production projector and native commands.
+Fresh activation and native request generations reject displaced callbacks.
+The saved projection's resource completions finish normally before readiness.
 
-Use existing public production capabilities where they already provide the
-necessary operations. New validation-only observations, exposure telemetry,
-checkpoint scheduling and capture holds belong to opt-in test adapters or
-instrumented development targets with isolated outputs. A reusable interface by
-itself does not justify shipping test instrumentation. Real engine scene/loading/
-rendering fixes retain their production owner and are tested independently.
+Navigation/profile delivery is held only for the captured view. The test host
+reports its saved revision and later pending edits; it never claims the captured
+preview is current. Layout resize cannot alter the private capture target or
+persist camera settings. These hooks and their registration compile only into
+the private development build; no hold service or validation command ships.
 
-The standalone-validation LLD defines acquisition, timeout and release. Every
-success/cancel/failure path removes temporary profile state and converges to the
-current valid document snapshot; activation/close/run replacement invalidates old
-callbacks and forbids restoring stale scene/view state. The capture lease can end
-before standalone loading completes; the separate output read lease protects
-published files until that process exits. Test edits during warm-up, late callbacks,
-fault/cancel and scene changes. Normal one-live-scene current-revision behavior
-resumes after the capture session, not merely after restoring camera settings.
+`Oxygen.Tools.EditorValidation.Capture` binds the real engine instance to an
+opaque, generation-checked session. Its engine-thread module observes normal
+scene/resource preparation, resets the actual scene/view histories and schedules
+completed-view checkpoints. At the final scene target boundary before UI, it
+uses Graphics `ReadbackManager` for pixels and the exposure pass's actual GPU
+result. It retains texture/buffer/ticket ownership until copy fences and worker
+encoding finish. Both embedded and standalone hosts use this module. There is
+no duplicate loader, exposure calculation, camera-fitting algorithm or renderer.
+
+The private [version-1 C ABI](standalone-runtime-validation.md#86-private-capture-abi-version-1)
+uses an exact packed target record, opaque engine/session tokens and an immutable
+UTF-8 request path. The development Interop hook maps actual runtime scene/view
+lifetimes into the native registry; numeric view IDs alone cannot select a target.
+Begin copies its inputs and schedules work. Poll copies bounded status JSON into
+caller-owned buffers; native code never calls managed completion delegates or
+returns allocator-owned memory. Cancel requests owner-thread teardown. Release
+succeeds only after terminal native/GPU/file drain. The host retains the DLL until
+every session and engine binding/hook is released; none of these exports or
+declarations enters the normal product ABI.
+
+Root/profile identity is the SHA-256 of the exact retained `roots-manifest.json`
+and `profile.json` UTF-8 file bytes referenced by the request. Both hosts verify
+bytes before parsing and use those same files; they do not reconstruct a
+fingerprint by serializing parsed JSON or maintain duplicate inline payloads.
+
+[Standalone sections 8.4-8.5](standalone-runtime-validation.md#84-saved-revision-embedded-capture-session)
+define gate acquisition, checkpoint hooks and release;
+[section 10](standalone-runtime-validation.md#10-process-lifetime-deadlines-and-recovery)
+defines cancellation and drain ownership. On release, valid lifetimes receive a
+coherent **current** full scene projection before later delivery resumes. Old
+scene snapshots and workspace hide masks are not restored over newer intent.
+Activation, close, view destruction or run replacement invalidate callbacks and
+skip stale restoration. Runtime failure leaves authoring intact and preview
+unavailable until normal restart/convergence.
+
+The project admission uses the existing cook coordinator's writer scope, then
+output/library readers; no independent validation writer is introduced. It lasts
+through native/output cleanup. Once the ordinary project/window-close or
+project-replacement decisions accept a transition, the opt-in pre-transition hook blocks new validation,
+abandons capture restoration and cancels admitted/queued validation **before**
+waiting for coordinator admission. It awaits the independent CleanupCompletion
+task, then continues normal project/runtime teardown. A canceled close dialog
+leaves validation live; ordinary same-project cook/mount changes still queue.
+Project-lifetime cancellation delivered only after replacement cannot provide
+this ordering. A document-only close/activation change invalidates its embedded
+session without closing project admission; after capture release, document
+navigation leaves an independent standalone child running.
+
+Cleanup and current-state convergence use an independent lifetime, never the
+canceled execution token. Bounded wait expiry transfers unresolved handles/tasks
+to their drain owner; it does not release ownership. Embedded scene/view ownership
+ends before native child launch; published-file/artifact readers remain owned
+until child and GPU work drain. Tests cover edit/Undo during warm-up, async asset
+completion, resize, late callback, fault, repeated cancellation, accepted/canceled
+close, queued mount changes, replacement and restart races.
+
+Preparation reuses ContentPipeline's destination-parameterized saved-snapshot
+core with the acquired read set/document gates. Normal cooking retains its
+project `.build/cook` destination; qualification supplies its private
+`<EvidenceRoot>/<operation-id>/inputs` directory. The shared core validates
+destination containment, no source/published-root overlap and no reparse points,
+then performs the same copy/hash/coherency work without reacquiring admission.
+It contains no qualification protocol or expected-state logic and creates no
+second capture implementation in the runtime adapter.
 
 ## 20. Authored Visibility And Editor View Hiding
 
-Approved 2026-09-15; **implementation and rendered qualification pending**.
 The [scene authoring model](scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state)
 owns canonical Local/Inherit values and migration. The ordinary engine
 scene/rendering path owns their effective behavior; this is production behavior,
@@ -784,9 +853,9 @@ not qualification instrumentation.
   lighting, ambient occlusion and the surface's own casting. Qualify every
   supported surface path; a CPU observation alone is insufficient.
 - Effective flag and hierarchy changes invalidate directional-light membership
-  and affected environment/capture products before use. `Scene::Update` alone
-  currently does not establish resolver invalidation; the identified gap needs
-  a focused regression and a real fix.
+  and affected environment/capture products before use. Resolver invalidation
+  includes changes made by `Scene::Update`; a previously populated cache cannot
+  retain stale visibility or hierarchy membership.
 - Hidden camera nodes remain usable for explicit camera selection. Do not
   reinterpret runtime-loaded state as authored activation or stop component
   processing through a visibility flag.
@@ -806,6 +875,8 @@ authored Shadows Only/Hidden Shadow modes are excluded from V0.1. Controlled
 qualification targets use canonical authored visibility without workspace hide
 masks; capture release preserves the current valid editing-view mask.
 
-Sun selection, role counts and secondary/moon/sky-only authoring remain open.
-None of these visibility or participation rules approves automatic reassignment
-or a particular sun selector.
+The per-light atmospheric assignment is None/Primary/Secondary, retaining
+existing native names. Both sources must illuminate and shadow, including
+Secondary alone; no automatic promotion or competing scene Sun pointer is used.
+The celestial contract defines two contributors and analytic disks for V0.1;
+sky-only authoring and lunar surface/phase/orbit features remain post-V0.1 scope.

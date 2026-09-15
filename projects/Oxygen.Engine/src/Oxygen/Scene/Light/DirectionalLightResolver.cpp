@@ -71,6 +71,9 @@ namespace {
       }
 
       const auto& light = node.GetComponent<DirectionalLight>();
+      // TODO(post-v0.1, EV01-LIGHT-SKY-ONLY): Authored sky-only contribution needs
+      // explicit destination semantics; affects_world remains the master gate.
+      // Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-light-sky-only
       if (!light.Common().affects_world) {
         return VisitResult::kContinue;
       }

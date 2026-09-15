@@ -1,6 +1,6 @@
 # Content Pipeline LLD
 
-Status: `V0.1 design contract; ED-M07B implementation and validation pending`
+Status: `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
 ## 1. Purpose
 
@@ -48,110 +48,62 @@ editor-only JSON schemas for runtime content.
 - `diagnostics-operation-results.md`: pipeline operation kinds, failure
   domains, and diagnostic code prefixes.
 
-## 4. ED-M07 Baseline
+## 4. Integration Boundaries
 
-Reusable managed primitives already exist:
+`ContentPipelineService` coordinates scene/asset/folder/project work through
+saved snapshots, native ImportTool execution, Inspector validation, provenance
+and journaled fixed-root publication. `MaterialCookService` delegates to that
+same service. Managed source readers/writers and catalog projections remain
+reusable; they are not alternative native-format cook/publication paths.
 
-- `Oxygen.Managed.Assets.Import.IImportService` accepts `ImportRequest` with
-  `ImportInput` rows and runs importer selection plus build.
-- `Oxygen.Managed.Assets.Cook.LooseCookedBuildService` is invoked by
-  `ImportService.ImportAsync`; callers must not call it again after import.
-- `MaterialSourceReader` / `MaterialSourceWriter` own
-  `oxygen.material.v1` material descriptors.
-- `MaterialSourceImporter`, `GltfImporter`, `ImageTextureImporter`,
-  `CookedMaterialWriter`, `CookedGeometryWriter`, `CookedSceneWriter`, and
-  `LooseCookedIndexValidator` exist as reusable primitives.
-- `Oxygen.Editor.ContentPipeline.MaterialCookService` implements the ED-M05
-  scalar material cook slice.
-- `ProjectAssetCatalog`, `ContentBrowserAssetProvider`, and
-  `AssetIdentityReducer` project source/cooked state into Content Browser rows.
-- ED-M07.1 identified save/import paths that previously published cooked-root
-  refresh messages outside a validated content-pipeline result. ED-M07 removes
-  or reroutes those publishers so runtime mount refresh can happen only after
-  cooked-output validation succeeds.
+The engine owns material, geometry, scene and manifest schemas and native
+binary formats. The canonical V0.1 changes require new descriptor/record versions
+for stable material slots, float32 emission, Auto/Fixed cameras and retained
+Local/Inherit light/visibility semantics. Update engine-owned version constants,
+producers, readers and installed schema compatibility together; recook affected
+content. Normal readers reject retired formats. Useful pre-V0.1 migration is a
+separate one-time development operation, not a shipping legacy execution path.
 
-Native engine content pipeline capabilities also exist:
-
-- `Oxygen.Cooker.ImportTool` supports manifest-driven `batch` import and
-  `scene-descriptor`, `material-descriptor`, `geometry-descriptor`, texture,
-  glTF/FBX, script, input, and sidecar jobs.
-- Engine schemas are the source of truth:
-  `oxygen.import-manifest.schema.json`,
-  `oxygen.scene-descriptor.schema.json`,
-  `oxygen.material-descriptor.schema.json`,
-  `oxygen.geometry-descriptor.schema.json`, and texture/input schemas.
-- `oxygen::content::lc::Inspection` reads loose cooked `container.index.bin`
-  assets/files for tooling.
-- `oxygen::content::lc::ValidateRoot` validates native loose cooked indexes.
-- Native `SceneDescriptorImportJob` consumes `oxygen.scene` v3 descriptors with
-  `renderables[].geometry_ref`, optional `material_ref`, cameras, lights,
-  environment systems, local fog volumes, and references.
-- `EditorModule::AddLooseCookedRoot` / `ClearCookedRoots` sync roots into
-  `AssetLoader` and `VirtualPathResolver` at frame start through the existing
-  runtime mount path.
-
-Brownfield gaps:
-
-- there is no full `IContentPipelineService` for scene/folder/project cook.
-- editor scene authoring JSON is not the native scene descriptor schema.
-- managed `CookedSceneWriter` writes a limited scene path and default
-  environment; full ED-M07 scene cook must target the native scene descriptor
-  importer unless equivalent managed coverage is deliberately added.
-- procedural editor geometry references need deterministic descriptor/key
-  resolution before scene cook.
-- runtime mount refresh currently fires from loose messages, not from a
-  validated content-pipeline result.
+Existing integration/evidence is recorded in the milestone ledger and
+[ED-M07B closeout audit](../validation/ED-M07B-closeout-audit.md). That historical
+scope does not establish the newly required material-slot or rendering behavior.
 
 ## 5. Target Design
 
-ED-M07 introduces an explicit workflow:
-
 ```text
-User action
-  -> resolve project cook scope and selected authored inputs
-  -> generate/update engine descriptors where needed
-  -> generate an import manifest or equivalent import request set
-  -> execute cook through Oxygen.Managed.Assets or native Oxygen.Cooker APIs
-  -> inspect cooked output
-  -> validate loose cooked root
-  -> refresh asset catalog rows
-  -> request runtime cooked-root refresh only after validation succeeds
-  -> publish one operation result
+Explicit Cook / successful Save or import / saved-dependency demand
+  -> project coordinator and saved scope
+  -> coherent input snapshot and native descriptor/manifest generation
+  -> native cook into staging
+  -> complete-root, reference, slot-layout and descriptor validation
+  -> journaled publication and runtime refresh
+  -> shared catalog status and correlated operation result
 ```
 
-Runtime-facing descriptor schemas are engine schemas. Editor authoring files
-remain editor files:
+Scene authoring keeps its canonical editor document model; generated native
+scene descriptors remain derived. Material authoring uses the canonical
+engine-owned descriptor schema through a typed managed model:
 
 ```text
-Content/Scenes/Main.oscene.json        # editor authoring scene
-Content/Materials/Red.omat.json        # oxygen.material.v1 descriptor
-Content/Geometry/Cube.ogeo.json        # engine geometry descriptor when needed
-
+Content/Scenes/Main.oscene.json        # authored scene
+Content/Materials/Red.omat.json        # canonical engine-schema material source
+Content/Geometry/Cube.ogeo.json        # canonical geometry source when authored
 .cooked/Content/Scenes/Main.oscene     # derived runtime output
-.cooked/Content/Materials/Red.omat     # derived runtime output
-.cooked/Content/container.index.bin    # derived loose cooked index
+.cooked/Content/Materials/Red.omat
+.cooked/Content/container.index.bin
 ```
 
-The pipeline may produce temporary/intermediate engine descriptors under a
-derived cache root when the authored editor source cannot itself be consumed by
-the engine cooker. Those intermediate files are derived artifacts and must not
-replace authored asset identity in scenes, material slots, project manifests,
-or recent state.
+Derived descriptors/manifests never replace authored URI identities. Save owns
+source persistence and acknowledges its captured revision independently of cook.
+Only after successful Save does automatic scheduling consider the saved scope.
+Session pause affects automatic scheduling, not explicit source saving. Browse
+and unsaved edits do not cook. A cook never saves dirty participating documents;
+it reports Needs save through the existing recovery flow.
 
-### User Workflow
-
-The visible ED-M07 workflow is:
-
-1. User opens a project and scene.
-2. User chooses `Cook Current Scene`, `Cook Selected Folder`, or
-   `Cook Project`.
-3. The editor shows a result summary with descriptor/import/cook/inspect/
-   validation/mount phases.
-4. Content Browser refreshes descriptor/cooked/stale badges.
-5. If validation succeeds, the workspace refreshes runtime cooked roots.
-6. If validation fails, cooked output remains inspectable but is not mounted.
-
-There is no save-time cook side effect.
+The normal Cooking, browser, document and inspector surfaces present phase,
+progress/cancel, current/stale status and actionable failures. Catalog refresh
+and mount refresh occur only through the validated publication authority.
+Failed staging remains inspectable without becoming published current content.
 
 ## 6. Ownership
 
@@ -195,16 +147,16 @@ Rules:
 - `Inputs` are authored asset identities and source paths, never cooked paths.
 - folder/project cooks expand to inputs under authoring mounts only; derived
   roots, config, packages, and browser presentation roots are not cook inputs.
-- V0.1 policy always refreshes the catalog after a successful cook attempt and
-  requests runtime mount refresh only after cooked-output validation succeeds.
-  These are not caller-controlled flags in ED-M07.
+- Refresh operation/status presentation on terminal results. New product catalog
+  state becomes current only after committed publication; runtime refresh occurs
+  inside its validated transaction. These are not caller-controlled bypass flags.
 
 ### 7.2 Cook Input
 
 ```csharp
 public sealed record ContentCookInput(
     Uri AssetUri,
-    AssetKind Kind,
+    ContentCookAssetKind Kind,
     string MountName,
     string SourceRelativePath,
     string SourceAbsolutePath,
@@ -224,84 +176,49 @@ public enum ContentCookInputRole
 
 ### 7.3 Scene Descriptor Adapter
 
-The ED-M07 scene adapter is extended by ED-M07B to emit native
-`oxygen.scene` v4 descriptors from editor scene documents:
+`ISceneDescriptorGenerator.GenerateAsync` emits the current engine-owned scene
+schema from a captured canonical scene document and resolved dependency scope.
+It returns the generated descriptor path/virtual identity, dependencies and
+complete diagnostics. Development identity-map construction consumes its stable
+traversal through a development adapter; no qualification protocol is embedded
+in this production service.
 
-```csharp
-public interface ISceneDescriptorGenerator
-{
-    Task<SceneDescriptorGenerationResult> GenerateAsync(
-        Scene scene,
-        ContentCookScope scope,
-        CancellationToken cancellationToken);
-}
-
-public sealed record SceneDescriptorGenerationResult(
-    Uri SceneAssetUri,
-    string DescriptorPath,
-    string DescriptorVirtualPath,
-    IReadOnlyList<ContentCookInput> Dependencies,
-    IReadOnlyList<DiagnosticRecord> Diagnostics);
-```
-
-Mapping requirements:
-
-| Editor authoring value | Native descriptor output |
+| Authoring fact | Required native descriptor/record content |
 | --- | --- |
-| scene node order and hierarchy | `nodes[]` with stable parent indexes |
-| `TransformComponent` | `nodes[].transform.translation/rotation/scale` |
-| `GeometryComponent.Geometry.Uri` | `renderables[].geometry_ref` canonical `.ogeo` virtual path |
-| first material slot material URI | `renderables[].material_ref` canonical `.omat` virtual path when set |
-| `PerspectiveCamera` | `cameras.perspective[]` |
-| `DirectionalLightComponent` | `lights.directional[]` including `intensity_lux`, `angular_size_radians`, `environment_contribution`, `is_sun_light` |
-| point/spot lights | best-effort descriptor output when component data exists; unsupported fields produce warnings, not silent drops |
-| `SceneEnvironmentData.AtmosphereEnabled` + `SkyAtmosphere` | full native `environment.sky_atmosphere` payload with authored V0.1 scalar/vector values overlaid onto fixed native defaults for fields not exposed by the editor |
-| `SceneEnvironmentData.SunNodeId` | encoded through the selected directional light's `is_sun_light` / `environment_contribution` fields, not through a separate editor-only environment field |
-| `SceneEnvironmentData.PostProcess` | All 23 fields in `environment.post_process_volume`, including exposure enable/key/manual EV, metering/histogram values and display gamma; native enum ordinals are preserved. |
-| `SceneEnvironmentData.BackgroundColor` | `environment.background.color_rgb`, linear SDR RGB in [0, 1], with the display-background system enabled. |
-| unmapped editable V0.1 fields | One actionable error per field; fail before publication. Read-only/editor-only metadata is omitted only by its explicit contract. |
+| Node identity/order/hierarchy | Deterministic depth-first records and parent indices; duplicate names are not identities. |
+| Local TRS | Captured position, quaternion and scale without silent repairs. |
+| Scene Visibility / geometry Cast and Receive Shadows | Each stored Local/Inherit mode and local value; never flatten inherited intent into the current effective boolean. |
+| Geometry URI | Canonical geometry key/path and its native slot inventory. |
+| Instance material assignments | Explicit SlotId-keyed overrides and resolved material keys; every supplied slot/LOD binding is supported. No single material_ref or positional-only override path. |
+| Perspective camera | Auto/Fixed mode, stored Fixed ratio, vertical FOV, near/far and parented pose. Auto ratio/content rectangle is derived per view, not saved on resize. |
+| Directional light | Complete selected scalar/common/shadow values and canonical AtmosphereLightSlot None/Primary/Secondary. |
+| Atmosphere roles | Per-light assignment only; uniqueness checked across stored lights including hidden/off ones. No SunNodeId, IsSunLight/Contributes duplicate authority or automatic promotion. |
+| Scene environment | Complete canonical atmosphere, captured-sky diffuse/specular, exposure and appearance data from the owning field tables. |
+| Background | Canonical display-background colour semantics, independent of scene exposure/tone mapping while preserving foreground transparency. |
+| Editor Hide, loaded IsActive, selection/gizmos | Editor/runtime-derived state, excluded from authored runtime content. |
+| Unsupported required values | Actionable failure before publication; no best-effort omission or substituted defaults. |
 
-The adapter must reject an empty scene descriptor because the native schema
-requires at least one node. The user-facing message must name the scene.
+The engine owns the changed schema and binary versions. Do not continue emitting
+old scene record layouts that cannot represent the selected contracts. Qualified
+imports reject excluded components instead of reporting success after dropping
+them. Reject an empty scene and invalid clipping/enum/role/slot data with the
+scene and field in the diagnostic.
 
-Native environment emission rule:
+Native descriptor names derive from the scene file stem: remove `.oscene.json`,
+replace characters outside `[A-Za-z0-9_.-]` with `_`, prefix `_` if the first
+character is not `[A-Za-z0-9_]`, then limit to 63 characters. An empty result fails.
+Display names and original paths remain intact in authoring and diagnostics.
 
-ED-M07B.3 completes native schema/import/load support for the PRD-required
-SkyAtmosphere, PostProcess and LDR Background fields. Emit complete validated
-native scene-system payloads with the captured authored values. Never invent
-native fields, substitute defaults for authored values, or omit required systems
-with warnings. Missing native mapping is an actionable error before publication.
-Scene v4 uses the complete 104-byte native post-process record and the 24-byte
-background record. Readers reject older scene versions with a recook diagnostic;
-the PAK container remains v7. The engine owns these records and their defaults.
-
-Scene descriptor `name` normalization:
-
-- The native descriptor `name` is a stable identifier derived from the scene
-  asset file stem, not the display title.
-- Remove the editor suffix first (`Main.oscene.json` -> `Main`).
-- Replace characters outside `[A-Za-z0-9_.-]` with `_`.
-- If the first character is not `[A-Za-z0-9_]`, prefix `_`.
-- Truncate to 63 characters after prefixing.
-- If normalization would produce an empty identifier, descriptor generation
-  fails with `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed`.
-- The original scene display name/path remains in diagnostics and UI text.
-
-Asset URI to native descriptor path normalization:
-
-| Editor URI | Native descriptor path |
+| Authoring URI | Native reference |
 | --- | --- |
-| `asset:///<Mount>/<Path>.omat.json` | `/<Mount>/<Path>.omat` |
-| `asset:///<Mount>/<Path>.omat` | `/<Mount>/<Path>.omat` |
-| `asset:///<Mount>/<Path>.ogeo.json` | `/<Mount>/<Path>.ogeo` |
-| `asset:///<Mount>/<Path>.ogeo` | `/<Mount>/<Path>.ogeo` |
+| `asset:///<Mount>/<Path>.omat.json` or `.omat` | `/<Mount>/<Path>.omat` |
+| `asset:///<Mount>/<Path>.ogeo.json` or `.ogeo` | `/<Mount>/<Path>.ogeo` |
 | `asset:///<Mount>/<Path>.oscene.json` | `/<Mount>/<Path>.oscene` |
 
-Normalization rejects URIs that do not use the `asset` scheme, do not resolve
-under a known project mount, or do not normalize to the expected native
-extension for the target field. Native scene descriptors must never contain
-`asset:///` URIs or `.json` suffixes in `geometry_ref`, `material_ref`, or
-scene-reference fields.
+Reject an unknown mount, wrong scheme/type, traversal or invalid normalization.
+Native references contain neither `asset:///` nor an authoring `.json` suffix.
+Opaque native keys come from engine inspection/identity APIs, not a second
+managed hash implementation.
 
 ### 7.4 Procedural Geometry Descriptors
 
@@ -321,7 +238,7 @@ public interface IProceduralGeometryDescriptorService
 Rules:
 
 - authored scene files keep the geometry asset URI.
-- ED-M07 uses derived procedural geometry descriptors under
+- Use derived procedural geometry descriptors under
   `<ProjectRoot>/.pipeline/Geometry/<StableName>.ogeo.json` and adds
   `geometry-descriptor` jobs to the manifest for those descriptors.
 - generated descriptors are derived files and are not shown as authored user
@@ -331,7 +248,7 @@ Rules:
 
 ### 7.5 Import Manifest
 
-ED-M07 supports an explicit manifest model that can be serialized to the native
+Use an explicit manifest model that can be serialized to the native
 `oxygen.import-manifest.schema.json` shape:
 
 ```csharp
@@ -384,7 +301,7 @@ Mount layout rules:
     becomes native path `/Content/Materials/Red.omat`
   - cooked index entries must round-trip back to
     `asset:///Content/Materials/Red.omat`
-- ED-M07 must not depend on a native default `/.cooked` virtual root or on
+- Do not depend on a native default `/.cooked` virtual root or on
   cooked filesystem paths as asset identity.
 
 Required job type mapping:
@@ -401,7 +318,7 @@ Required job type mapping:
 Scene jobs depend on the material and geometry jobs needed by their
 renderables. Folder/project cook generates a manifest and validates it against
 the native `oxygen.import-manifest.schema.json` contract before execution.
-ED-M07 uses a managed schema-aligned validator for the accepted V0.1 manifest
+Use the shared schema-aligned validator for the accepted V0.1 manifest
 subset; native builder/import construction is a secondary check for the chosen
 adapter, not a substitute for schema validation.
 
@@ -420,10 +337,15 @@ public sealed record ContentCookResult(
 public sealed record ContentCookedAsset(
     Uri SourceAssetUri,
     Uri CookedAssetUri,
-    AssetKind Kind,
+    ContentCookAssetKind Kind,
     string MountName,
     string VirtualPath);
 ```
+
+The existing result also carries InputSnapshot, InputsAreCurrent, ReusedAssets,
+IsUpToDate, IsPublished and IsMounted. Preserve these facts on every typed caller;
+successful staging alone cannot set IsPublished/IsMounted. A no-op result reuses
+verified products without claiming a new native production operation.
 
 `Diagnostics` is the complete workflow diagnostic set for the command result:
 descriptor-generation warnings/errors, missing source diagnostics, native import
@@ -433,124 +355,55 @@ only.
 
 ### 7.7 Inspect And Validate
 
-```csharp
-public sealed record CookInspectionResult(
-    string CookedRoot,
-    bool Succeeded,
-    Guid? SourceIdentity,
-    IReadOnlyList<CookedAssetEntry> Assets,
-    IReadOnlyList<CookedFileEntry> Files,
-    IReadOnlyList<DiagnosticRecord> Diagnostics);
+Use the installed native Inspector and native schemas through the existing
+process adapter. Reports contain container identity, asset keys/types/paths,
+protected files/digests, dependency information and canonical slot inventory.
+Cache only verified reports against their producer/schema/container fingerprints.
+Managed feature code does not decode binary geometry/material/scene structures.
 
-public sealed record CookValidationResult(
-    string CookedRoot,
-    bool Succeeded,
-    IReadOnlyList<DiagnosticRecord> Diagnostics);
-```
-
-Managed inspection may use `LooseCookedIndex` where sufficient. ED-M07 may add
-Interop wrappers over `oxygen::content::lc::Inspection` and
-`oxygen::content::lc::ValidateRoot` when native validation is the stricter
-runtime-compatible authority.
-
-Native `Inspection.LoadFromRoot` and `ValidateRoot` are exception-throwing
-pass/fail APIs in the current engine. The ED-M07 adapter returns at most one
-synthesized diagnostic for each native failure, mapping the native exception
-type/message to `OXE.CONTENTPIPELINE.INSPECT.Failed` or
-`OXE.CONTENTPIPELINE.VALIDATE.Failed` and preserving the native message in
-`TechnicalMessage`. Inspection failures return `Succeeded=false` and block
-validation. Multi-error native validation is future engine work.
+Failures return complete scoped diagnostics with native codes/messages; invalid
+inspection cannot authorize reuse or publication. Validate every preserved and
+new descriptor/reference in the candidate generation, including SlotId bindings
+and physical-path uniqueness. Successful file hashes alone do not prove that a
+source material or slot was preserved.
 
 ## 8. Commands, Services, Or Adapters
 
 ### 8.1 Main Service
 
-```csharp
-public interface IContentPipelineService
-{
-    Task<ContentCookResult> CookCurrentSceneAsync(
-        SceneDocument document,
-        CancellationToken cancellationToken);
-
-    Task<ContentCookResult> CookAssetAsync(
-        Uri assetUri,
-        CancellationToken cancellationToken);
-
-    Task<ContentCookResult> CookFolderAsync(
-        Uri folderUri,
-        CancellationToken cancellationToken);
-
-    Task<ContentCookResult> CookProjectAsync(
-        CancellationToken cancellationToken);
-
-    Task<CookInspectionResult> InspectCookedOutputAsync(
-        Uri? scopeUri,
-        CancellationToken cancellationToken);
-
-    Task<CookValidationResult> ValidateCookedOutputAsync(
-        Uri? scopeUri,
-        CancellationToken cancellationToken);
-}
-```
-
-`CookCurrentSceneAsync` is the ED-M07 minimum closure path. Folder/project
-cook can initially reuse the same manifest builder over a broader input set,
-but must not bypass descriptor generation or validation.
+Use the existing `IContentPipelineService` operations for current scene, asset,
+folder and project cooking, retained import/reimport, inspection and validation.
+Every target uses the same scope, snapshot, native execution, publication and
+status machinery. MaterialCookService is a typed caller of CookAssetAsync, not
+an independent writer. Invalid/missing slot identity is scoped to its affected
+consumer closure, as specified in section 20.
 
 ### 8.2 Engine API Adapter
 
-```csharp
-public interface IEngineContentPipelineApi
-{
-    Task<NativeImportResult> ImportAsync(
-        ContentImportManifest manifest,
-        CancellationToken cancellationToken);
+`ImportToolContentPipelineApi` is the normal native-process adapter, backed by
+the owned `ContentPipelineProcessRunner`, matched tool/schema discovery and
+immutable operation inputs. Native ImportTool performs cooking; native Inspector
+performs supported inspection/validation. This is the established production
+path, not a temporary fallback awaiting an in-process cooker.
 
-    Task<CookInspectionResult> InspectLooseCookedRootAsync(
-        string cookedRoot,
-        CancellationToken cancellationToken);
-
-    Task<CookValidationResult> ValidateLooseCookedRootAsync(
-        string cookedRoot,
-        CancellationToken cancellationToken);
-}
-```
-
-Implementation options:
-
-- use native `Oxygen.Cooker` APIs through `Oxygen.Editor.Interop`.
-- invoke `Oxygen.Cooker.ImportTool` only as a bounded fallback when an in-proc
-  Interop wrapper is not yet available; the fallback implementation owns any
-  temporary manifest-file serialization internally.
-- keep ED-M05 `MaterialCookService` on managed `Oxygen.Managed.Assets` if it already
-  produces the same loose cooked output and validation result.
-
-ED-M07.1 records which option is used for each ED-M07 operation before
-ED-M07.2+ implementation begins.
-Interop implementation, if chosen, exposes a managed `OxygenContentPipeline`
-facade with import/inspect/validate methods returning managed DTOs. Calls may
-run from background editor workflows; native exceptions are caught at the
-C++/CLI boundary and adapted into managed failure DTOs rather than crossing the
-boundary. The facade lifetime is owned by the same host/runtime composition
-that owns the engine context.
+Keep native exceptions, exit failures, parser/schema failures and termination
+failures inside classified operation results with retained diagnostics. Preserve
+worker/descendant and input/output ownership until I/O drains, including failed
+termination (section 18). Do not reintroduce managed binary writers or an
+alternative in-process publication path. Runtime Interop does not own cooking.
 
 ### 8.3 Catalog And Runtime Refresh
 
-After successful validation:
-
-1. publish/trigger catalog refresh (`ProjectAssetCatalog` /
-   `ContentBrowserAssetProvider`).
-2. publish a validated cook-refresh message to the workspace. Scene save,
-   material save/cook, Content Browser import/cook, and catalog-only refresh
-   paths must not trigger runtime mount refresh without validation.
-3. `WorkspaceViewModel` refreshes runtime cooked roots through `IEngineService`.
-
-Mount refresh must not happen if validation failed. Inspect-only operations do
-not mount.
+Section 16 owns staging validation, root installation, runtime refresh, receipt
+commit and rollback. Publish current catalog/provenance state only after that
+transaction commits. A validated staging result does not mark new content current.
+The workspace resynchronizes its current authoring scene through the normal
+Runtime/SceneEngineSync boundary; document saves and catalog-only refreshes cannot
+publish or remount roots independently. Inspect-only operations never mount.
 
 ## 9. UI Surfaces
 
-ED-M07 adds explicit actions to existing UI surfaces:
+Use the existing UI surfaces:
 
 | Surface | Actions |
 | --- | --- |
@@ -569,8 +422,9 @@ Validated: .cooked/Content/container.index.bin
 Mounted: Content
 ```
 
-Cook progress can be a simple busy state in ED-M07. Do not invent a separate
-progress subsystem unless the diagnostics LLD is updated.
+Use the existing Cooking panel, correlated logs and compact document/browser
+status. Preserve per-phase progress and cancellation; do not create another
+progress subsystem or a separate qualification dashboard.
 
 ## 10. Persistence And Round Trip
 
@@ -602,13 +456,12 @@ material slots, project manifests, or recent documents.
   succeeds.
 - Scene save, material save/cook, Content Browser import/cook, and catalog-only
   refresh paths must not publish unvalidated cooked-root refresh messages.
-  Keeping the source tree free of direct save-time cooked-root refresh
-  publishers is an ED-M07 closure precondition.
+  Save-time scheduling must never bypass this publication authority.
 - Runtime publication uses the section 16 transaction; mount failure reports
   `AssetMount`, restores prior output, and never reports the new output current.
-- ED-M07 proves embedded runtime can refresh mounted cooked roots after cook.
-- ED-M08 owns standalone runtime parity and content visual equivalence.
-- Multi-viewport remains deferred and is not an ED-M07 validation target.
+- Embedded runtime refreshes mounted cooked roots only through validated publication.
+- Opt-in development tools own standalone parity and visual-equivalence evidence.
+- Stable multi-viewport operation remains outside this release scope.
 
 ## 12. Operation Results And Diagnostics
 
@@ -662,17 +515,17 @@ Allowed:
 
 Forbidden:
 
-- saving a scene or material must not implicitly cook.
+- Save must not execute a cook inline or publish output; successful persistence may schedule saved-scope work through the shared coordinator.
 - ContentPipeline must not mutate scene authoring state.
 - ContentPipeline must not own Content Browser item layout or picker UX.
 - ContentPipeline must not persist cooked paths into authoring files.
 - Project services must not execute cook/import.
 - Runtime services must not generate descriptors or decide cook scope.
-- ED-M07 must not make multi-viewport stability a validation gate.
+- Stable multi-viewport behavior is outside this production scope.
 
 ## 14. Validation Gates
 
-ED-M07 is complete when:
+The following production paths require regression coverage:
 
 1. `Cook Current Scene` generates a native `oxygen.scene` descriptor from the
    editor scene with transform, geometry, material slot, perspective camera,
@@ -700,34 +553,30 @@ ED-M07 is complete when:
     and cooked-index virtual paths round-trip to `asset:///Content/...`.
 13. scene descriptor name tests prove display/file names with spaces normalize
     to native schema identifiers without changing authored display names.
-14. environment mapping tests cover authored sky-atmosphere scalar/vector
-    values, atmosphere enabled/disabled, and unsupported exposure/tone/background
-    warnings without partial native environment payloads.
-15. standalone parity remains deferred to ED-M08.
+14. environment mapping covers every canonical authored field; a missing required mapping fails publication without partial native payloads.
+15. Opt-in development qualification verifies native/editor parity without adding a production dependency.
 
-## 15. Closed Scope Decisions
+## 15. Scheduling And Product Scope
 
-ED-M07B's [content workflow contract](content-cooking-workflows.md) specifies
-shared status, incremental reuse, browser/picker behavior, and recovery through
-the existing surfaces. Its accepted D1 policy schedules cooking after successful
-Save/import and on asset/active-scene demand, with session pause. Browse and
+The [content workflow contract](content-cooking-workflows.md) specifies shared
+status, incremental reuse, browser/picker behavior and recovery. Schedule cooking
+after successful Save/import and on asset/active-scene demand, with session pause. Browse and
 transient-edit events do not cook; external-source reimport stays explicit.
 
 V0.1 retains existing Cook Asset/Folder/Scene/Project actions to rebuild stale
-content explicitly through the same coordinator. No separate stale-only scheduler, generic project-settings panel,
-project renderer-preset selector, or descriptor/manifest editor/launcher is
-required. Source/generated paths are visible and copyable in content/result
+content explicitly through the same coordinator. No separate stale-only scheduler,
+generic project-settings panel, renderer-preset selector or descriptor/manifest
+editor/launcher is required. Source/generated paths are visible and copyable in content/result
 information; Inspect and Validate operate on cooked products. Project mounts
-supply cook policy; scene settings supply render intent. These decisions are
-normative in PRD section 8 and ED-M07 section 11.
+supply cook policy; scene settings supply render intent. PRD section 8 and the
+current field tables define the supported surface.
 
 ## 16. Saved Inputs And Publication Transaction
 
-This section replaces the earlier direct-output publication assumption. Fixed
-published paths remain `.cooked/<Mount>/container.index.bin` and companions.
-ED-M07B implements and validates this transaction; see its
-[closeout audit](../validation/ED-M07B-closeout-audit.md). ED-M08 consumes these
-publication/provenance/read-lease contracts rather than creating a second writer.
+Fixed published paths remain `.cooked/<Mount>/container.index.bin` and
+companions. Every producer uses this transaction. Development qualification
+consumes its publication/provenance/read leases through an opt-in adapter; it
+does not add a second writer or shipping qualification workflow.
 
 ### Input Capture And Serialization
 
@@ -751,7 +600,7 @@ publication/provenance/read-lease contracts rather than creating a second writer
   files and separates engine recipes and cooked-only references from authored
   inputs. Cooked-only references require publication validation and output leases
   before reuse; their presence in the graph does not establish freshness.
-- Copy inputs to `.build/cook/<OperationId>/inputs`, preserving their logical
+- Normal cooking copies inputs to `.build/cook/<OperationId>/inputs`, preserving their logical
   mount-relative relationships. Record document saved revisions where known,
   source hashes, import settings, schema/build fingerprint, project lifetime,
   target scope, and operation identity. Native jobs read this private snapshot.
@@ -762,6 +611,16 @@ publication/provenance/read-lease contracts rather than creating a second writer
 - Authoring may continue after capture. A later edit or source change marks the
   result stale relative to current authoring, while a successful cook of the
   captured input remains a successful, identifiable historical result.
+
+The saved-snapshot core accepts a caller-owned canonical private input directory
+and the existing input registry/read gates. `CookInputSnapshotCapture` keeps the
+normal cooking destination above; development preparation supplies
+`<EvidenceRoot>/<OperationId>/inputs`. Both use the same closure discovery,
+coherent copy and hash implementation. Validate directory ownership, reparse
+boundaries and non-overlap with authored/published roots before writing. This is
+an ordinary destination-parameterized snapshot capability: no qualification
+protocol types, field expectations or validation-specific path policy enter the
+production API.
 
 ### Staging And Validation
 
@@ -791,8 +650,8 @@ publication/provenance/read-lease contracts rather than creating a second writer
    the owning project rather than trusting paths stored in the journal.
 2. Announce `Publishing cooked content` and suspend preview at a runtime boundary.
    The runtime drains requests/reads using affected roots and releases conflicting
-   file handles. UI and authoring remain responsive. A standalone validation
-   reader holds a project-output lease; publication waits for its exit or reports
+   file handles. UI and authoring remain responsive. An external content
+   reader holds a project-output lease; publication waits for its release or reports
    busy, without terminating another process or writing through its lease.
    A registration gate and OS-held reader markers under `.build/cook/readers`
    coordinate processes. The publisher holds the gate through replacement and
@@ -845,7 +704,7 @@ is partial success for the composite workflow, never a usable new mounted cook.
 Copyable generated descriptor/manifest paths are diagnostic affordances; they
 are not authored identities or required manual repair steps.
 
-### ED-M07B Validation Gates
+### Publication Validation Gates
 
 - [ ] Dirty dependencies reject capture; later edits do not mutate the captured
   bytes or get cleared by cook completion. Overlapping requests serialize.
@@ -873,7 +732,11 @@ axis conversion, winding, and resulting bounds. Unknown/ambiguous FBX units or
 axis metadata is rejected rather than guessed. A unit cube, oriented triangle,
 and nonuniform transform fixture prove each conversion.
 
-Perspective cameras and directional lights are included under REQ-009.
+Perspective cameras and directional lights are included under REQ-009. Map
+explicit source camera ratios to Fixed and omitted ratios to Auto; preserve
+valid FOV/clipping. Per-light atmosphere assignment uses the canonical
+None/Primary/Secondary contract; ambiguous old sun combinations require explicit
+migration repair, not an automatic selection.
 Orthographic cameras, point/spot lights, animation, skinning, morphs, physics
 and scripts do not enter the qualified scene. Detect such required content before
 publication and return a precise unsupported-content result while preserving the
@@ -915,8 +778,9 @@ convention with `SchemaVersion: 3` for new imports and
 `Importer: "Oxygen.Cooker.Scene/v1"`.
 The sidecar records the Content bundle/primary paths, initially discovered files
 and primary hash, output mount and exclusive destination, and explicit native
-content/unit/normal/tangent/transform policies. Legacy managed sidecars are not
-silently converted or allowed to replace existing identities. Creation uses the
+content/unit/normal/tangent/transform policies. Retired sidecars require the one-time migration tool and cannot silently replace
+existing identities. Canonical retained settings also carry the engine-owned
+slot identity provenance defined in section 20. Creation uses the
 ordinary atomic file store with a missing-file baseline.
 
 New imports follow the existing type folders: `/Content/Materials/<model>`,
@@ -927,10 +791,11 @@ the dialog shows all resulting paths before acceptance. Native mesh/material
 names already include the source-file namespace, which is not repeated when it
 matches the model folder. Bulk resource tables remain native-owned shared files.
 
-Version-2 sidecars retain their existing grouped paths on ordinary reimport.
-Relocating an existing import requires updating its authored references and
-rebuilding the affected cooked content together; changing the sidecar alone is
-insufficient because native asset keys derive from virtual paths. Ownership,
+One-time migration normalizes useful older sidecars/output paths and their
+authored references together, then rebuilds affected content. Production reimport
+accepts only the canonical settings/layout; it does not retain version-2 grouped
+path behavior. Changing a sidecar alone cannot relocate content because native
+asset keys derive from virtual paths. Ownership,
 collision checks, folder cooking and source inspection cover every disjoint
 output namespace, without claiming the whole mount for one imported model.
 
@@ -1055,8 +920,8 @@ product without the source fingerprint requires that explicit confirmation too.
 
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
-facts; name/ID changes cannot silently redirect existing scene references. File
-rename/move/reference repair UI is excluded; externally missing references remain
+facts; name/ID changes cannot silently redirect existing scene references. General file rename/move/reference repair UI is excluded; per-slot layout repair
+is required by section 20; externally missing references remain
 visible and retain their URIs. External source edits trigger stale state and an
 explicit reimport/cook; they cannot silently replace a dirty authored material.
 
@@ -1066,16 +931,16 @@ import descriptors/settings, and Config. `.cooked`, `.imported`, `.pipeline`,
 Absolute local mounts are explicit nonportable dependencies, reported as such;
 the portable qualification fixture uses project-relative mounts only.
 
-ED-M07B qualification deletes derived products from a copied fixture, then
+Reproduction validation deletes derived products from a copied fixture, then
 reimports/cooks using only retained sources/settings and the matched toolchain.
 Compare stable asset identities, canonical descriptors, resolved dependencies,
 and loaded values. Byte-for-byte reproducibility is required only for outputs
 whose format declares it; timestamps and diagnostic operation IDs are excluded
-from semantic comparison. ED-M08 proves rendered equivalence.
+from semantic comparison. Opt-in development qualification proves rendered equivalence.
 
-## 18. Owned Native Worker Lifetime (#8)
+## 18. Owned Native Worker Lifetime
 
-ED-M07B.6 runs each native cook worker in an operation-owned Windows job with
+Run each native cook worker in an operation-owned Windows job with
 kill-on-close descendant containment. Establish job membership before the worker
 can execute or create descendants; no start-then-attach escape window is allowed.
 Start with structured arguments and hidden
@@ -1102,9 +967,9 @@ cancellation token. A failed termination throws
 adapter retains input until that task finishes. The project coordinator must
 likewise retain its operation gate and staging until this drain completes.
 
-## 19. One Procedural Asset Authority (#11)
+## 19. One Procedural Asset Authority
 
-ED-M07B.7 adds a supported engine/content procedural-definition capability shared
+Use one supported engine/content procedural-definition capability shared
 by live resolution and cooking. The engine owns immutable recipe/version data,
 generator parameters, computed bounds, default material semantics and deterministic
 identity mapping. Editor project policy supplies the selected virtual mount/output
@@ -1120,48 +985,43 @@ Bounds come from the generated mesh, and material parameters come from
 contributions and the catalog artifact consumed by the editor. The editor supplies
 the project output mount; it does not reconstruct geometry or material defaults.
 
-ED-M08 supersedes the ED-M07B eleven-name authoring scope with the user-approved
-ten-shape palette: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere,
+The canonical ten-shape palette is: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere,
 Torus and SubdividedCube. SubdividedCube is advanced creation; ArrowGizmo is an
 internal tool resource. Migrate useful GeodesicSphere references to IcoSphere,
 then remove the alias and legacy resolution path. Useful former scene uses of
 tool-only geometry migrate to ordinary geometry; no compatibility shim remains.
-The prior milestone's evidence remains historical.
 
 Capsule must join the same native definition/generation/cook authority, not an
 editor-only primitive. The engine-owned catalog distinguishes canonical authoring
 choices from internal tools, and the editor consumes that metadata rather than
-duplicating name lists. The subsequently approved metric, centred, Z-up defaults
-are specified in the property-inspector Geometry contract. Apply them through
+duplicating name lists. Metric, centred, Z-up defaults are specified in the property-inspector Geometry contract. Apply them through
 shared native recipes and migrate useful old recipe intent; keep API/schema
 prose aligned with generated buffers. This adds no raw generator-parameter editor.
 Future additions require explicit catalog and qualification updates.
 
 SetGeometryCommand registers the native request generation and resolves canonical
 built-ins through Oxygen.Data. Browser and picker choices use the native catalog's
-approved authoring classification, including advanced SubdividedCube; managed
+canonical authoring classification, including advanced SubdividedCube; managed
 catalogs and resolvers require supplied metadata rather than constructing recipes.
 
 Discovery retains the complete native catalog under the editor's derived
 `cache/builtins/<configuration>` state directory. SDK identity changes refresh the
-snapshot; an unavailable SDK uses the last valid snapshot with the approved
+snapshot; an unavailable SDK uses the last valid snapshot with the
 last-known/preview-unavailable notice. Invalid metadata cannot replace the cache.
 Query output uses temporary storage, and catalog discovery never publishes cooked
 project output. The strict native provider remains the cook recipe source.
 
-The review also found different default cylinder/cone segment counts in the
-public mesh factory and descriptor importer (32 versus 16). The shared engine
-definition must choose and expose the authoritative recipe once, then use that
-exact recipe for immediate preview and cook generation; the editor must not
-copy either branch's constants. Compare effective defaults as part of parity.
+Direct factories, parameter-driven generation and descriptor import use the
+same engine-owned defaults. Compare effective definitions and generated output;
+the editor does not copy constants into a competing recipe.
 
-Remove generator selection/defaults/cache policy and manually maintained pak
-fields from SetGeometryCommand. It calls the supported resolver through the
-runtime adapter and preserves #5 request generation and completion acceptance.
+SetGeometryCommand calls the supported resolver through the runtime adapter
+and preserves request generation/completion acceptance. It owns no independent
+generator selection/defaults/cache policy or manually maintained format fields.
 ProceduralGeometryDescriptorService consumes the same definition/cook contribution;
 it no longer owns independent parameters, bounds or default-material constants.
-No explicit cook is required for initial procedural preview. User overrides remain
-user-authored values over the shared default, not a second generated default.
+No explicit cook is required for initial procedural preview. Instance overrides
+are authored assignments over the shared defaults, with the SlotId contract below.
 
 For every exposed shape compare live/cooked identity mapping, bounds, topology,
 vertex attributes, default material and explicit overrides using supported engine
@@ -1171,11 +1031,190 @@ source implementation and unit tests alone do not establish rendered equivalence
 
 Required regression: assign Cylinder to a scene node, explicitly save, then Cook
 Current Scene and Cook Project. Both succeed and preserve the authored identity;
-repeat for every approved canonical authoring generator, including Capsule.
+repeat for every canonical authoring generator, including Capsule.
 Test useful-content migration separately; no legacy alias is a release gate.
 Every offered choice must work; do not downgrade a failed required cook to a
-successful warning or hide an approved choice to evade qualification.
+successful warning or hide a required choice to evade qualification.
 Failure diagnostics carry captured scene identity, node ID/path/name, geometry
 identity, and saved revision, and can navigate to the matching current node.
 If the node has been renamed/deleted since capture, explain that relationship
 instead of selecting a different node with a similar display name.
+
+## 20. Canonical Material-Slot Identity And Reimport
+
+### 20.1 Native inventory and authored assignments
+
+The engine owns slot identity and publishes it through geometry records and
+normal Inspector/content metadata. Extend the canonical geometry/scene formats
+and their schema versions; a managed decoder or editor-generated slot catalog
+is not an alternative implementation.
+
+`MaterialSlotId` is an opaque 128-bit identifier: 16 bytes natively and canonical
+lower-case UUID text in JSON. It is scoped by geometry identity. Labels and
+indices are not IDs. Separate declared slots remain separate even when their
+labels or default materials coincide. A native definition may bind one proven
+semantic slot to several LOD/submesh locations; ordinal coincidence across LODs
+is insufficient to establish that relation.
+
+The engine-owned inventory schema contains:
+
+| Field | Contract |
+| --- | --- |
+| `schema_version` | Inventory schema version, checked before use. |
+| `geometry_asset_key` | Exact native geometry identity; authored callers retain its URI and winning source. |
+| `layout_revision` | SHA-256 of canonical slot IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
+| `slots[].slot_id` | Unique, nonempty MaterialSlotId. |
+| `slots[].display_name` | Presentation only; may be duplicated or renamed. |
+| `slots[].bindings[]` | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing surface belongs to exactly one declared slot. |
+
+Inventory order is display order only. The native canonical hash writer sorts
+slots by ID and each binding list by LOD/submesh before hashing the fixed-schema
+UTF-8 record. Managed code transports the native revision and validates the
+report/record schema; it does not invent another canonical hash algorithm.
+
+Canonical scene assignments contain GeometryUri, SlotId, MaterialUri and the
+last resolved layout revision. MaterialUri absence means no override; clearing
+removes that entry and restores the native default for every binding of that
+slot. If defaults differ across LOD bindings, show that fact rather than changing
+the mesh. Choosing the engine default is an explicit ordinary material assignment.
+
+The last resolved revision detects stale edit targets; it is not a demand to
+repair every revision change. A fresh inventory with established SlotId continuity
+can resolve the same authored assignment. Library priority changes must resolve
+against the winning geometry inventory and cannot reuse another source's slot
+merely because the URI, label or ordinal looks similar.
+
+### 20.2 Retained continuity witness
+
+Retained source settings carry versioned native slot provenance as portable
+import data. Derived `.build` metadata alone cannot own these IDs: removing
+reproducible output/cache directories must not change slot identities. The
+source/import-settings publication journal commits updated identity provenance
+with the produced geometry, never ahead of it.
+
+For each source geometry, the native provenance schema records:
+
+- Retained source identity and source-geometry anchor.
+- Previous inventory revision and its SlotId allocations.
+- Stable source slot/surface/LOD IDs when the format supplies explicit durable
+  identities; display names are not accepted as durable IDs.
+- A versioned `source_layout_witness` for layouts without sufficient durable IDs.
+  It contains the ordered source LOD/mesh/surface ownership, declared slot-to-
+  surface binding relation, primitive modes, vertex/index counts and hashes of
+  source vertex positions and index connectivity for each bound surface.
+- Slot labels and prior binding context separately for diagnostics/repair.
+
+The witness excludes material scalar values, texture-reference payloads/image
+contents, render colours, normals/tangents, producer fingerprints, timestamps
+and temporary paths. Material parameter or texture-content edits therefore do
+not change it. Material assignment/slot-to-surface relations do participate;
+matching only material names or list positions is never continuity proof.
+
+Resolve a reimport in this order:
+
+1. Validate prior provenance against its retained source identity, schema,
+   recorded inventory and any available committed geometry. When derived output
+   is absent, validate the retained allocations and recomputed source witness;
+   do not allocate replacement IDs merely because the cache was deleted.
+2. Reuse a SlotId when unique durable source identities establish the same slot
+   and its surface ownership. The inventory revision may change while that
+   semantic identity remains valid.
+3. Without such identities, reuse the recorded allocation only when the complete
+   canonical source-layout witness matches exactly. This is a whole-layout proof,
+   not a nearest-name/index matching heuristic. Parameter/texture-only changes
+   preserve IDs under this rule.
+4. A new or structurally changed slot without proven continuity receives a new
+   native ID. Record the old IDs as unresolved for affected authored overrides;
+   do not pair them by name, ordinal, material equality or spatial proximity.
+   Duplicate/ambiguous persistent IDs are errors, not an invitation to guess.
+
+Native IDs for first-seen slots are allocated deterministically within the
+retained source/geometry namespace from the proven durable anchor or complete
+witness plus declaration identity. The engine owns this versioned allocation
+policy. Retained mappings prevent later producer changes from reallocating
+already established IDs. Any policy migration is explicit development tooling;
+no shipping legacy resolver remains.
+
+### 20.3 Repair state and affected publication
+
+Keep an unresolved scene override's GeometryUri, SlotId, MaterialUri, previous
+layout revision and human-readable prior slot context. These are useful authored
+intent, not a hidden compatibility binding. Show Missing slot / Layout changed
+on the instance and provide explicit Reassign or Clear commands. Reassign chooses
+an existing candidate SlotId; clear removes the obsolete override. Neither
+changes mesh topology, another slot, another instance or the shared material.
+Both are ordinary undoable scene edits; failed validation changes no targets.
+
+Before publishing changed geometry, inspect its known saved/published consumer
+closure and validate all preserved scene overrides against the candidate
+inventories. A root with internally valid file hashes can still be semantically
+invalid if a scene references a removed slot. Include compatible regenerated
+consumers in the same root transaction where needed.
+
+If a preserved consumer has unresolved assignments, retain the candidate as
+operation-owned evidence and end the attempt as Needs slot repair. Do not publish
+new geometry under an old scene's incompatible slot bindings. Do not mutate or
+save affected authoring documents to unblock publication. Release the project
+writer and native/read ownership after drain; waiting for a user repair must not
+hold the shared coordinator indefinitely. Unrelated scenes and later unrelated
+cooks continue against the previous valid generation.
+
+After explicit repair and Save, start a new owned cook of the affected source
+and dependent scene closure. Revalidate source/settings/layout baselines and the
+latest published root before reusing candidate work; never install a stale
+whole-root staging copy after another operation has published. Commit source slot
+provenance, changed geometry and compatible scene descriptors atomically under
+section 16. Cancel/failure/rollback restores the previous complete generation and
+identity provenance. Read-only external consumers that cannot be repaired are
+reported with their owning source; do not rewrite a library silently.
+
+Repair-needed scenes cannot pass development parity or report current runtime
+assignment. Their last valid published preview may remain visible with explicit
+stale/pending status. Transient geometry/material loading is a different condition
+and retains generation-checked recovery without demanding structural repair.
+
+### 20.4 Required slot regressions
+
+- Two instances share a multi-slot mesh; editing a nonzero slot changes only the
+  selected instance/slot, including all declared LOD bindings.
+- Separate slots with equal names/default materials remain independently editable.
+- Clear restores each native mesh default; Undo/Redo and pending callbacks cannot
+  restore a superseded assignment.
+- Unchanged source, producer-only recook with the same structural layout,
+  derived-cache deletion and material/texture-only edits retain established SlotIds.
+- Proven durable-ID changes retain correct assignments through surface reordering;
+  unproven structural changes/removal produce repair state without guessed remaps.
+- A failed/abandoned repair attempt does not block unrelated work or publish an
+  incompatible preserved scene. Repaired joint publication and rollback retain
+  source identity/provenance and all unaffected assets.
+
+## 21. Material Emission Precision
+
+The canonical source, colour conversion, finite HDR range and float32 compiled
+factor are defined in [Material Editor section 7.3](material-editor.md#73-field-table-and-numeric-contract).
+Native cooking emits float32 emissive RGB after the colour-times-intensity
+calculation, and the matching binary version is required by readers. Update
+canonical examples, schemas, producer fingerprints and all dependent products;
+retired binary16 material-factor content requires recook, not a runtime fallback.
+
+Development expected-state generation uses independent source arithmetic and
+unchanged 1e-4 semantic tolerances. Rounding its expected factor to match old
+binary16 output would conceal a format deficiency and is forbidden. Source
+colour/intensity round-trip tests remain distinct from native compiled-factor
+checks and final image comparison.
+
+## 22. Development Qualification And Historical Evidence
+
+Normal production services provide content identity, immutable snapshots,
+coordinator admission, leases and native execution for real authoring workflows.
+Only opt-in development modules compose those capabilities into saved-revision
+parity preparation, capture/process orchestration and comparison. Production
+ContentPipeline does not embed qualification schemas, request/result DTOs, command
+registration or capture-reservation state; normal Debug/Release stay clean.
+
+Earlier evidence remains in [ED-M07B closeout](../validation/ED-M07B-closeout-audit.md),
+[typed assets](../validation/ED-M07B-typed-assets.md),
+[import values](../validation/ED-M07B-import-values.md) and
+[workspace publication](../validation/ED-M07B-workspace-publication.md).
+The canonical changes above require their own implementation and evidence in
+ED-M08; this LLD is a contract, not a completion report.

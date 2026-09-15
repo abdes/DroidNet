@@ -1,329 +1,218 @@
 # Scene Authoring Model LLD
 
-Status: `review`
+Status: **Final V0.1 contract**. Implementation evidence is tracked in
+[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
 
-## 1. Purpose
+## 1. Purpose and related contracts
 
-Define the managed scene authoring model that ED-M03 commands mutate and save.
-The model is the editor-owned source of truth for scene hierarchy, components,
-editor-only explorer layout, and JSON round trip.
+The editor-owned model is the source of truth for hierarchy, components,
+authored values and stable identities. Commands, Save, cooking and live runtime
+projection consume the same state. The model owns no WinUI controls, GPU
+resources or runtime handles.
 
-This LLD is intentionally domain-focused. It does not own inspector layout,
-asset picking, material authoring UI, or native runtime implementation.
+This covers REQ-004 through REQ-009, REQ-036/037 and SUCCESS-002. Related owners:
+[property inspector](property-inspector.md), [environment authoring](environment-authoring.md),
+[material editor](material-editor.md), [content pipeline](content-pipeline.md),
+[documents and commands](documents-and-commands.md), and [live sync](live-engine-sync.md).
 
-## 2. PRD Traceability
-
-| ID | Coverage |
-| --- | --- |
-| `REQ-004` | Scene documents have durable managed scene state. |
-| `REQ-005` | Partial: component cardinality/domain rules are defined; full component add/remove/edit workflow completion is ED-M04. |
-| `REQ-006` | Dirty state is based on managed authoring model mutations. |
-| `REQ-007` | ED-M03-supported scene data saves and reopens; full component/environment round trip continues in ED-M04. |
-| `REQ-008` | ED-M03-supported mutations provide the domain state needed for live-sync requests. |
-| `REQ-009` | Partial: Transform, Geometry, and Light/Camera domain rules are grounded; Environment and material assignment are later LLD scope. |
-| `REQ-036` | Scene persistence can use editor-owned schema where needed and later generate engine descriptors. |
-| `REQ-037` | Supported ED-M03 scene data saves and reopens without manual repair. |
-| `SUCCESS-002` | Supported scene edits survive save/reopen. |
-
-## 3. Architecture Links
-
-- `ARCHITECTURE.md`: authoring domain vs. runtime/cook separation.
-- `PROJECT-LAYOUT.md`: `Oxygen.Editor.World` owns scene authoring domain data.
-- `documents-and-commands.md`: command surface that mutates this model.
-- `scene-explorer.md`: hierarchy UI and explorer layout projection.
-- `live-engine-sync.md`: later adapter from this model to native runtime.
-
-## 4. Current Baseline
-
-`Oxygen.Editor.World` already provides:
-
-- `Scene` with `RootNodes`, `AllNodes`, `ExplorerLayout`, hydrate/dehydrate.
-- `SceneNode` with parent/children, flags, components, override slots, and
-  cycle prevention in `SetParent`.
-- required `TransformComponent` enforcement during hydration.
-- geometry, camera, and light component classes with JSON DTOs.
-- scene serializer infrastructure and source-generated JSON context.
-- editor-only `ExplorerEntryData` persisted in scene DTOs.
-
-WorldEditor already provides:
-
-- `SceneMutator` for root/child create, remove, hierarchy remove, and reparent.
-- `SceneOrganizer` for explorer layout/folder operations.
-- `SceneExplorerService` to coordinate mutator, organizer, and live sync.
-- inspector paths that directly mutate transform/geometry/component state and
-  record undo entries.
-
-Brownfield gaps:
-
-- `SceneNode.AddComponent` does not enforce component cardinality; callers do.
-- Quick-add and inspector paths can bypass `SceneMutator`.
-- Rename is direct property mutation.
-- Undo data is mostly inverse delegates, not command-result records.
-- The domain model has no central revision/validation state.
-- Environment authoring is not yet a complete ED-M03 domain workflow.
-
-## 5. Target Design
-
-The ED-M03 target is a reliable managed scene model for hierarchy authoring:
-
-```text
-Scene
-  RootNodes
-    SceneNode
-      TransformComponent (required)
-      optional GeometryComponent
-      optional CameraComponent
-      optional LightComponent
-      OverrideSlots
-      Children
-  ExplorerLayout (editor-only)
-```
-
-Commands mutate this model synchronously first. Persistence and live sync are
-downstream consumers of the resulting authoring state.
-
-## 6. Ownership
+## 2. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
-| `Oxygen.Editor.World` | Scene, node, component, DTO, serializer, and domain invariants. |
-| `Oxygen.Editor.WorldEditor` | Command orchestration, UI adapters, undo, dirty state, selection, live-sync requests. |
-| `Oxygen.Editor.Projects` | Scene file location and save/load plumbing until project services are further split. |
-| `Oxygen.Editor.Runtime` / interop | Runtime projection only; no authoring source of truth. |
+| `Oxygen.Editor.World` | Scene/node/component values, DTOs, serializer and invariants |
+| WorldEditor document commands | Atomic validated mutations, history, dirty state and sync requests |
+| Scene explorer/workspace | Selection, layout, editor-only hiding and view preferences |
+| ContentPipeline/native cooker | Canonical source-to-native mapping and asset/slot identity |
+| Runtime/Interop/engine scene | Lifetime-bound projection of authoring state |
 
-## 7. Data Contracts
+World has no WorldEditor, WinUI, Runtime or Interop dependency. DTOs contain no
+native pointers, handles, cache/view indices or current loading status.
 
-### Scene
+## 3. Scene and node structure
 
-Required:
+```text
+Scene: Id, Name, ordered RootNodes, Environment
+  SceneNode: Id, Name, node flags, ordered Children
+    TransformComponent (exactly one)
+    GeometryComponent (zero or one)
+    CameraComponent (zero or one)
+    LightComponent (zero or one)
+  ExplorerLayout (editor layout, never native nodes)
+```
 
-- stable `Id`.
-- `Name`.
-- ordered root node collection.
-- optional editor-only explorer layout.
+IDs are nonempty and unique within the document. Names are nonempty after
+trimming; duplicate display names are allowed and never identify native nodes.
+Root/child order is stable authoring state. Parent links and child membership
+agree; cycles and cross-scene parenting are rejected before mutation. Deletion
+removes a hierarchy. Reparenting preserves local transform; an existing explicit
+preserve-world operation remains distinct.
 
-Rules:
+Commands, deserialization and migration enforce component cardinality. Malformed
+source does not gain silent duplicate-component selection or synthetic cameras/
+lights. V0.1 authored editors cover Transform, Geometry, basic PerspectiveCamera
+and DirectionalLight. Existing other component data does not imply a new editor
+or release capability.
 
-- root node order is authoring state and must round-trip.
-- `ExplorerLayout` is editor UI state persisted with the scene, but it must not
-  create runtime scene graph nodes.
-- scene files remain readable through `SceneSerializer`.
+## 4. Transform and camera state
 
-### Scene Node
+Transform stores local position in metres, a finite nonzero normalized XYZW
+quaternion and finite nonzero scale axes. Negative scale is valid. Rotation UI
+uses degrees and the existing YXZ convention; no competing Euler source or raw
+quaternion editor is added. World pose derives from hierarchy/native rules.
 
-Required:
-
-- stable `Id`.
-- `Name`.
-- exactly one `TransformComponent`.
-- zero or more child nodes.
-
-ED-M03 command rules:
-
-- parent cycles are invalid.
-- deleting a node deletes its hierarchy unless a command explicitly says it
-  promotes children.
-- reparent default preserves local transform. Preserve-world-transform is a
-  later explicit command option.
-- rename cannot produce empty/whitespace display names.
+PerspectiveCamera stores vertical FOV in degrees, positive near/far distances
+with near < far, and Auto/Fixed aspect policy. Auto is the creation default.
+Fixed retains a positive width/height ratio, initially 16:9. Per-view Auto aspect
+is derived, not saved. Fixed fits its full image without stretching or cropping.
+Select cameras by authored ID; hidden camera nodes remain usable. Physical-camera
+authoring is outside V0.1; existing native physical exposure remains engine-owned.
 
 ### ED-M08 visibility and shadow source state
 
-Approved 2026-09-15; **implementation and qualification pending**. This section
-extends the earlier ED-M03 model under the accepted non-sun rows of the
-[visibility review](../review/ED-M08-node-light-visibility-review.md).
+Each flag preserves its source mode independently of its resolved value.
 
-Each of the following node flags preserves its own source mode:
+| Node flag | Source choices | New root | New child | Root Inherit fallback |
+| --- | --- | --- | --- | --- |
+| Scene Visibility | Inherit / Shown / Hidden | Shown | Inherit | Shown |
+| Geometry Cast Shadows | Inherit / On / Off | On | Inherit | On |
+| Geometry Receive Shadows | Inherit / On / Off | On | Inherit | On |
 
-| Flag | Canonical source choices | Newly created root | Newly created child |
-| --- | --- | --- | --- |
-| Scene Visibility | Inherit / Shown / Hidden | Shown | Inherit |
-| Geometry Cast Shadows | Inherit / On / Off | On | Inherit |
-| Geometry Receive Shadows | Inherit / On / Off | On | Inherit |
+Local overrides replace inheritance for that flag. Inherit copies the parent's
+resolved value; this is not ancestor-AND activation. Reparenting recomputes an
+inherited flag and preserves a local override. Parent edits never overwrite
+child choices. Undo restores source modes/hierarchy before recomputation.
+For a root, Inherit resolves the scene defaults Shown/On/On, never stale effective
+bits or an implicit false. Root/child creation policies and this root resolution
+are distinct from the low-level native Flags constructor and must be implemented
+explicitly; existing constructor defaults are not evidence of compliance.
 
-Local Shown/Hidden or On/Off replaces inheritance for that flag. Inherit takes
-the parent's resolved value; root/default resolution is Shown/On/On. Preserve
-the source choice independently of the current resolved boolean. This is not
-ancestor-AND visibility. Reparenting an inherited node recomputes its effective
-values; reparenting a local override retains that override. Parent edits must
-not overwrite children's stored choices. Commands publish coherent descendant
-changes, and Undo restores source modes and hierarchy before recomputation.
+Effective Hidden removes that node's geometry, caster and light contribution.
+A locally Shown child can remain visible and illuminating under a hidden parent.
+Geometry/light consumers use the same resolved flag without a light-only
+ancestor-pruning rule. Light Affects Scene remains independent; neither setting
+rewrites the other.
 
-Effective Hidden suppresses the node's geometry, its casting and its light
-contribution; a locally Shown descendant can remain eligible. Light Affects
-Scene is an independent light-component value: effective contribution requires
-both that participation setting and effective node visibility. Neither control
-rewrites the other. Light Cast Shadows controls shadowed illumination from that
-light; node Cast Shadows controls its geometry as an occluder. Receiver Off
-changes direct-light shadow attenuation only. Hidden cameras remain selectable
-and usable. These rules do not define general activation, simulation or script
-processing.
+Light Cast Shadows controls shadowed illumination from that light; node Cast
+Shadows controls geometry as an occluder. Receiver Off removes direct-light
+shadow attenuation without disabling direct light, ambient occlusion or casting.
+Opaque/masked casting is supported; blended casting and authored hidden-shadow/
+shadows-only modes are excluded. Visible off-screen casters remain eligible.
+`IgnoreParentTransform` concerns transform composition, not visibility or light
+participation. Other optimization/selection metadata does not automatically gain
+an inspector control because a DTO/native flag exists.
 
-**Editor-only Hide** is per-user/project workspace state outside this authored
-model. It filters geometry/gizmo representations in the editing main view and
-keeps lighting and shadow-caster eligibility. Parent hide/show preserves child
-hide choices; Show All clears the view overrides. It creates no scene dirty
-state, authoring-history entry or cooking request.
+## 5. Geometry, slots and primitives
 
-**Migration is required, not a compatibility branch.** Current source DTOs and
-cooked records retain boolean flag values but cannot express Local/Inherit.
-Migrate useful visibility/caster intent into explicit canonical values, then
-save/cook the new form and remove obsolete interpretations/readers. Do not
-reinterpret every old child as Inherit merely because that is the new creation
-default. The formerly ineffective receiver flag does not prove a former visual
-opt-out: migrate its prior rendered behavior as receiving shadows. Qualify this
-with useful existing content and source-to-native observations.
+Geometry references an asset URI. Instance material overrides use engine-owned
+`MaterialSlotId`, an opaque 128-bit ID serialized as a canonical UUID. The engine
+inventory supplies IDs, layout revision and per-LOD/submesh bindings; the editor
+does not derive IDs from names/indices. Source retains geometry identity, slot
+ID and the witnessed layout revision.
 
-`SceneNode.IsActive` currently means loaded/projected into the engine and is
-rewritten by synchronization. Remove its historical authored serialization;
-derive runtime presence from the current projection. It must not migrate into
-an authored Enabled flag. Editor hide state must not migrate into Scene
-Visibility. No authored Shadows Only/Hidden Shadow mode or blended shadow
-casting is added to V0.1.
+Assignment affects one instance/slot only. Clear removes its override and uses
+the mesh-assigned material. Engine Default is a separate explicit assignment.
+No slot/topology creation or deletion is offered. Reimport preserves proven
+continuity; an unproven mapping retains the unresolved override/old context and
+blocks only affected scene cook/qualification until explicit repair or clear.
+The detailed contract is owned by [content-pipeline.md](content-pipeline.md).
 
-Sun selection, atmospheric roles and secondary/moon/sky-only authoring remain
-separate open decisions. Preserving a light's existing assignment when its
-participation changes does not approve a particular selector or role count.
+Creation uses ten native-owned canonical recipes: Cube, Sphere, Capsule, Cylinder,
+Cone, Plane, Quad, IcoSphere, Torus, and SubdividedCube under Advanced. Exact
+metric defaults/orientation are in [primitive recipes](property-inspector.md#primitive-recipes).
+All pivots are centred in Z-up space. No managed generator/default list or
+editor-only corrective rotation/scale exists.
 
-### Component Cardinality
+## 6. Directional lights and atmosphere
 
-ED-M03 quick-add/create command rules:
+A directional light owns colour, lux, source angle, Affects Scene, shadow
+settings and `AtmosphereLightSlot`: None, Primary or Secondary. Preserve existing
+native enum/setter/getter names. None retains ordinary directional illumination
+without atmospheric membership. New light Cast Shadows is On: this is an
+explicit authoring default, not the low-level native common-structure default.
 
-- exactly one transform component.
-- at most one geometry component.
-- at most one camera component.
-- at most one light component.
+Each non-None slot has one stored occupant at most, including hidden/off lights.
+Conflicting edits/imports/cooks fail without partial reassignment. Hiding or
+disabling retains assignment; Secondary-only operation never promotes it.
+Primary/Secondary mean neither priority nor a celestial body type. No editable
+scene Sun pointer or independent IsSun/Contributes source remains; a scene
+summary is read-only.
 
-The domain classes may remain permissive internally for serialization and
-legacy load. ED-M03 quick-add/create commands construct component sets that
-respect the rules above. Generalized add/remove cardinality enforcement is
-owned by ED-M04 `property-inspector.md` and is not an ED-M03 gate.
+Both sources support direct illumination, requested surface/fog shadows,
+atmosphere and captured-sky diffuse/specular lighting. A Moon use case is
+moonlight plus an analytic disk; lunar textures/phases/orbits and sky-only
+creation remain outside V0.1. Detailed fields/defaults are owned by the inspector
+and environment LLDs. Authored lights are Realtime-only; no Mixed/Baked authoring
+field advertises an absent baking workflow.
 
-### Procedural Primitive Node
+## 7. Editor state and runtime presence
 
-ED-M03 quick-add creates a node with:
+Editor Hide is per-user/project workspace state outside authored content. It
+filters geometry/gizmo representations and descendants in the editing main view
+while retaining light contribution and caster eligibility. Parent hide/show
+retains child choices; Show All clears view overrides. It produces no scene
+dirty state, authoring history, cooking request or runtime-role edit. Other
+outputs and controlled qualification targets do not consume the mask.
 
-- transform component.
-- geometry component using a supported procedural mesh kind.
-- clear default name based on kind.
+Explorer layout can remain scene-associated UI metadata, but never generates
+runtime nodes or changes actual parenting. Historical `IsActive` means runtime
+projection/loading status: derive it for the current runtime, do not serialize
+it as activation. Visibility does not disable simulation/scripts.
 
-No texture/material authoring is required in ED-M03.
+## 8. Commands, Save and projection
 
-### Light Node
+Commands validate the whole edit, mutate atomically, advance revision, record
+one undo entry and request convergence. Gestures use shared property sessions.
+Runtime failure preserves valid authoring and Save; show a scoped error or
+unavailable-preview state. Missing required capability is a qualification failure,
+not successful fallback.
 
-ED-M03 quick-add creates directional light nodes as a closure gate with:
+Save captures a coherent revision and writes atomically; newer edits remain
+dirty. Cooking and sync consume canonical source. Observations come independently
+from actual native state. Every editable field must survive commands, Undo/Redo,
+Save/reopen, cooking/loading and projection. The domain calls no runtime, picker,
+catalog-mutation or cooking API.
 
-- transform component.
-- matching light component.
-- safe default values already present in the component model.
+## 9. Canonical migration
 
-Point and spot light quick-add remain best effort in ED-M03. If their current
-domain create/save/reopen path works, it is kept, but point/spot runtime sync
-or component-completion gaps do not block ED-M03 closure.
+Migrate useful content once to the canonical form and regenerate derived output.
+Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
 
-## 8. Commands, Services, Or Adapters
+- Convert old visibility/caster booleans to explicit modes preserving useful
+  intent; never apply new-child defaults to old local choices.
+- Old receiver flags had no rendered opt-out. Preserve prior receiving-On
+  appearance rather than infer visual intent from an ineffective value.
+- Preserve explicit atmosphere slots and unambiguous old sun intent. Report
+  ambiguous/conflicting combinations; do not guess by name/brightness/order or
+  collapse useful two-source content.
+- Remove saved runtime presence, duplicate sun authority and authored Mixed/Baked
+  mobility. Migrate ineffective mobility to its actual Realtime behavior.
+- Convert single-slot overrides to stable IDs without remapping unresolved
+  assignments or substituting engine Default.
+- Map GeodesicSphere to IcoSphere and useful ArrowGizmo scene uses to ordinary
+  geometry; retain tool-internal ArrowGizmo for its own purpose.
+- Preserve useful camera composition under Auto/Fixed. Consolidate exposure
+  mirrors into PostProcess; native physical exposure is not removed.
 
-Domain mutation is exposed through command services described in
-`documents-and-commands.md`.
+## 10. Alternatives and rationale
 
-`SceneMutator` remains the right low-level model mutator for hierarchy
-operations. ED-M03 should either extend it or wrap it; it should not introduce a
-parallel hierarchy mutation implementation.
+| Alternative | Reason not used |
+| --- | --- |
+| Ancestor-AND visibility | Discards intentional local overrides |
+| One scene Sun selector | Cannot express two simultaneous sources without competing state |
+| Slot mapping by name/index | Can silently redirect an override to another surface |
+| Activation through IsActive | Confuses runtime presence with authored processing |
+| Mixed/Baked choices without baking | Advertises nonfunctional lighting modes |
+| Editor hide stored as render visibility | Alters cooked output during a view-only editing action |
 
-`SceneOrganizer` remains the owner of explorer layout/folder state. Scene graph
-commands call it only when the hierarchy UI projection needs to change.
+## 11. Qualification
 
-## 9. UI Surfaces
+Test identity/cardinality/finite constraints, duplicate names, hierarchy order,
+inherited reparenting, local overrides, all slots and reimport conflicts, camera
+Auto/Fixed projection, and new-object defaults against native recipes/system
+defaults. The qualification fixture's overrides do not redefine creation defaults.
 
-The model is consumed by:
-
-- scene explorer tree.
-- scene editor quick-add menu.
-- inspector selection/details.
-- document save/reopen.
-- live viewport sync adapter.
-
-The domain model itself has no WinUI dependencies.
-
-## 10. Persistence And Round Trip
-
-ED-M03 persistence scope:
-
-- scene name and ID.
-- root node order.
-- child hierarchy.
-- node names.
-- transform components.
-- geometry components for supported procedural primitives.
-- camera/light components already serialized by current DTOs.
-- explorer layout where present.
-
-Directional light round-trip is an ED-M03 closure gate. Point/spot light
-round-trip is best effort unless the implementation already supports it without
-additional runtime/component-editor work.
-
-ED-M03 does not require material asset authoring, content-pipeline descriptors,
-or standalone runtime parity.
-
-## 11. Live Sync / Cook / Runtime Behavior
-
-The model does not call runtime or cook APIs. Command services may request live
-sync after model mutation.
-
-Cook contribution remains brownfield through existing save/cook behavior until
-ED-M07. ED-M03 must avoid adding new cook policy to the scene model.
-
-## 12. Operation Results And Diagnostics
-
-Domain validation failures map to `SceneAuthoring`.
-
-Examples:
-
-- empty name.
-- duplicate cardinality through user command.
-- stale node ID.
-- invalid reparent cycle.
-- unsupported primitive kind.
-- scene save serialization failure maps to `Document`.
-
-## 13. Dependency Rules
-
-Allowed:
-
-- WorldEditor depends on `Oxygen.Editor.World`.
-- Tests may construct scene/domain objects directly.
-
-Forbidden:
-
-- `Oxygen.Editor.World` must not depend on WorldEditor, WinUI, runtime,
-  interop, routing, project browser, or content browser UI.
-- Domain DTOs must not store live runtime handles.
-- Editor-only explorer layout must not be interpreted by the engine runtime as
-  scene graph data.
-
-## 14. Validation Gates
-
-The approved ED-M08 extension is not closed by ED-M03 evidence. Its remaining
-gates include canonical mode round trips and one-time migration; root/child
-defaults; inherited reparenting and local overrides; independent geometry/light
-casting and receiving; hidden-camera use; separate workspace hide with no
-authoring changes; and engine-first/editor-second rendered validation. A saved
-receiver value without its GPU effect cannot satisfy a gate.
-
-ED-M03 scene model is complete when:
-
-- user commands cannot create invalid component cardinality for supported
-  ED-M03 mutations.
-- create primitive/directional light, rename, delete, and reparent round-trip
-  through save and reopen.
-- undo/redo restores scene graph shape and node names for ED-M03 commands.
-- invalid reparent and stale node cases fail without partial model mutation.
-- explorer layout remains layout-only and does not create scene nodes.
-
-## 15. Open Issues
-
-- Environment authoring details move to `environment-authoring.md`.
-- Material override authoring moves to `material-editor.md` and ED-M05/ED-M06
-  asset identity work.
-- Schema migration policy for future scene file versions is outside ED-M03
-  unless the implementation changes the serialized shape.
+Verify independent mesh/light shadows and receiver effect, hidden usable cameras,
+two atmosphere sources and ordinary fill, cache invalidation, workspace Hide
+without authoring changes and useful-content migration. Native rendered cases
+precede editor cases. Stored values and unit/source checks do not substitute for
+required rendered evidence.

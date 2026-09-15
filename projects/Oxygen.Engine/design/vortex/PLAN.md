@@ -70,69 +70,38 @@ Important baseline facts:
   offscreen, feature-gated runtime variants, production-readiness cleanup, and
   the static cubemap skybox/SkyLight family are validated milestones.
 
-## 4. Next Milestone
+## 4. Next implementation package
 
-### NEXT: VTX-FUTURE - Reserved Post-Baseline Families
+### ED-M08 — V0.1 canonical authoring and rendering
 
-**Status:** `future`
+**Status:** `planned`; design package ready for implementation.
 
-**Purpose:** Hold the approved future families that remain after the validated
-desktop deferred baseline and VTX-M08 static cubemap environment baseline:
-captured/real-time SkyLight, broader indirect lighting and reflections, Virtual
-Shadow Maps, geometry virtualization, material composition, clouds,
-heterogeneous volumes, water, hair, distortion, and light shafts.
+The [editor ED-M08 plan](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md)
+owns the cross-engine/editor sequence and acceptance gates. Implement native
+formats/producers and renderer behavior, refresh affected content, and pass native
+visual validation outside the editor before editor integration. Native work is
+defined by the [rendering contract](plan/editor-v01-rendering-contract.md),
+[captured-sky IBL contract](plan/editor-v01-captured-sky-ibl.md) and
+[deferred capability record](plan/editor-v01-deferred-capabilities.md).
 
-**Why this is next:** `VTX-M08` validated the first cubemap-backed environment
-baseline after production readiness: visual skybox background rendering and
-static specified-cubemap SkyLight diffuse lighting. No narrower implementation
-milestone is selected yet; the next future family must be promoted with its own
-detailed plan and LLD updates before implementation starts.
+Scope includes independent directional lights and shadows, explicit atmospheric
+slots, visibility/contribution/receiver behavior, contact shadows, captured-sky
+diffuse/specular lighting, Stage 13 activation and Stage 12 ambient-bridge
+retirement, exact cameras, grading, canonical material slots/emission and
+procedural defaults. Qualification tools are opt-in development targets; normal
+engine/editor Debug and Release builds contain no qualification payload.
 
-**Prerequisite work packages:** `VTX-M01`, `VTX-M02`, `VTX-M03`,
-`VTX-M04D.4`, `VTX-M05A`, `VTX-M05B`, `VTX-M05C`, `VTX-M05D`, `VTX-M06A`,
-`VTX-M06B`, `VTX-M06C`, `VTX-M07`, and `VTX-M08` are validated.
+The latest closed Vortex plan remains
+[VTX-M08 static SkyLight](plan/VTX-M08-skybox-static-skylight.md). Its evidence
+covers static specified-cubemap diffuse lighting. It does not close the ED-M08
+extension. Preserve ordinary native demo loading, offscreen/composition behavior,
+feature variants and material-sidedness/mirrored-winding correctness.
 
-**Active work packages:** None selected. VTX-M08 is validated and retained as
-the latest closed post-baseline milestone. The next work item must be selected
-from `VTX-FUTURE` and promoted out of `future` with explicit scope, LLDs,
-validation gates, and status updates before it becomes active.
-
-**Latest closed detailed plan:** [plan/VTX-M08-skybox-static-skylight.md](plan/VTX-M08-skybox-static-skylight.md).
-
-**Future selection scope:**
-
-- Preserve the M07 proof boundary: no legacy renderer reference, fallback, or
-  compatibility path.
-- Preserve the VTX-M08 proof boundary: visual skybox and static
-  specified-cubemap SkyLight diffuse are validated baseline behavior, not
-  future work.
-- Promote exactly one future family at a time with its own detailed plan, LLD
-  updates, UE5.7 source/shader grounding, proof scripts, and status ledger row
-  edits before implementation starts.
-- Preserve no-environment, no-volumetrics, diagnostics, multi-view, offscreen,
-  and feature-variant behavior from VTX-M06/VTX-M07.
-
-**Approved future gaps:**
-
-- Captured-scene SkyLight.
-- Real-time sky capture.
-- Cubemap blend transitions.
-- Distance-field ambient occlusion / SkyLight occlusion.
-- Baked/static-lightmap SkyLight integration.
-- Reflection-capture recapture and broader reflection-probe ecosystem.
-- Volumetric clouds, heterogeneous volumes, water, hair, distortion, and VSM.
-- Treating a visual skybox texture sample or a constant ambient color as
-  SkyLight parity.
-
-**Dependencies:**
-
-- Validated Vortex composition, diagnostics, occlusion, translucency,
-  conventional shadows, multi-view, offscreen, and feature-gated variant
-  surfaces.
-
-**Next candidate:** Virtual Shadow Maps or the broader
-IndirectLighting/reflection family. Both remain `future` until reviewed and
-selected as the next detailed plan.
+Broader GI/SSR/reflection probes, continuous time-sliced sky capture, cubemap blend
+transitions, SkyLight occlusion/baking, VSM, geometry virtualization, material
+composition, clouds, heterogeneous volumes, water, hair, distortion and light
+shafts remain separately scoped future work. The ED-M08 IBL subset does not
+activate those families.
 
 ## 5. Milestone Roadmap
 
@@ -164,6 +133,12 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M07 | Production readiness and legacy retirement | `validated` | VTX-M06C | Static legacy seam guard, stale demo/doc cleanup, required demo refresh/testing, production proof-suite consolidation, binary dependency audit, current-path doc routing, CDB/RenderDoc closure proof, and safe legacy retirement are validated. |
 | VTX-M08 | Skybox and static specified-cubemap SkyLight | `validated` | VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows, VTX-M06C feature gates | Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and user visual confirmation are recorded in the detailed M08 plan and status ledger. Accepted future gaps: captured-scene SkyLight, real-time capture, cubemap blending, SkyLight occlusion, baked/static-lightmap integration, static-cubemap specular reflections, broader reflection probes, volumetric-cloud capture, and procedural sun-disk overlay inside static cubemap imagery. |
 | VTX-FUTURE | Reserved post-baseline families | `future` | VTX-M08 or explicit reprioritization | Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts. |
+
+ED-M08 is the scheduled extension after this historical VTX roadmap. Its
+[execution plan](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md)
+promotes captured-sky diffuse/specular lighting and Stage 13 activation from the
+VTX-M08 exclusions, together with the required native authoring/rendering fixes.
+The remaining VTX-FUTURE families retain their separate scope.
 
 ## 6. Environment Milestone Decomposition
 
@@ -560,7 +535,8 @@ Parallelism rules:
 | Legacy renderer retirement | VTX-M07 | `validated` | Static source seam guard `tools/vortex/Assert-VortexLegacySeams.ps1` passed with tooling over 581 current source/build/tooling files. Stale uncompiled `Examples/MultiView/ImGuiView.*` was removed, DemoShell/TexturedCube/Physics legacy namespace compatibility seams were removed, Async README/tooling now documents current Vortex capture/product proof, current-path docs under `src/Oxygen` were routed to Vortex/Graphics, the full registered example build matrix passed, and short D3D12/debug-layer smokes passed for Async, InputSystem, LightBench, TexturedCube, Physics, RenderScene, VortexBasic, and MultiView. Closure validation also passed the focused Vortex/example build, focused CTest 14/14, current-path doc/source audit with zero matches, `dumpbin /dependents` binary dependency audit with zero legacy renderer dependency matches, and VortexBasic, Async, MultiView standard/auxiliary, Offscreen, and Feature-variant CDB/RenderDoc proof wrappers under `out\build-ninja\analysis\vortex\m07-closeout`. ShaderBake/catalog validation was not run because no shader source, shader ABI, root-binding, or catalog data changed. |
 | Geometry virtualization | VTX-FUTURE | `future` | Nanite-class geometry virtualization. |
 | Material composition | VTX-FUTURE | `future` | DBuffer/deferred decal/material classification family. |
-| Indirect lighting / GI / reflections | VTX-FUTURE | `future` | Canonical indirect environment evaluation and ambient-bridge retirement. |
+| Sky diffuse/specular and ambient-bridge retirement | ED-M08 | `planned` | Canonical Stage 13 subset under the V0.1 captured-sky contract. |
+| Broader GI / SSR / reflection probes | VTX-FUTURE | `future` | Further IndirectLightingService families beyond the ED-M08 sky-light subset. |
 | VSM | VTX-FUTURE | `future` | ShadowService internal strategy upgrade. |
 | Volumetric clouds | VTX-FUTURE | `future` | Environment-owned cloud rendering. |
 | Heterogeneous volumes | VTX-FUTURE | `future` | Environment-owned heterogeneous volume family. |

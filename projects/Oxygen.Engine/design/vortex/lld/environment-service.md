@@ -4,6 +4,17 @@
 **Deliverable:** D.12
 **Status:** `in_progress`
 
+## V0.1 Production Extension
+
+[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md) defines the
+canonical per-light None/Primary/Secondary assignment and independent direct/
+shadowed contribution. The [captured-sky companion](../plan/editor-v01-captured-sky-ibl.md)
+defines complete products and Stage-13/forward indirect ownership. Older Sun
+abstractions, role fallbacks, preset examples and incomplete IBL status below are
+historical design/implementation baselines where they conflict with this extension.
+They are not alternate authoring/runtime authorities. Preserve historical VTX
+evidence and unrelated engine fog-family obligations at their recorded scope.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
@@ -463,74 +474,52 @@ Authoring file:
 
 - [SkyLight.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyLight.h>)
 
-#### 4.2.4 `scene::environment::Sun`
+#### 4.2.4 Per-light atmosphere authority
 
-`Sun` remains the scene-global authored primary sun abstraction, but it must no
-longer imply that the whole atmosphere family only has one light slot.
+V0.1 source authority is `DirectionalLight.AtmosphereLightSlot`, using the
+existing None/Primary/Secondary enum and setter/getter names. A separate
+scene-global `Sun` component/pointer is not introduced. DemoShell controls or
+presets may select a light for editing, but that UI selection is not another
+stored atmospheric assignment or a synthetic-vs-scene fallback policy.
 
-`Sun` remains responsible for:
-
-- authored azimuth/elevation
-- authored color / temperature / illuminance
-- disk size
-- shadow authoring defaults
-- synthetic vs scene-driven resolution
-
-`Sun` is **not** sufficient for the second atmosphere-light slot. That must be
-represented in directional-light authoring.
-
-Current file:
-
-- [Sun.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/Sun.h>)
+Primary/Secondary are stable integration assignments, not body type, brightness
+priority or promotion rules. An existing `ResolveMoon` convenience alias does not
+implement lunar textures, phases or orbital simulation. The exact production
+contract is [the rendering extension](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments).
 
 #### 4.2.5 `scene::DirectionalLight`
 
-`DirectionalLight` participates in atmosphere-light resolution. It has:
+Store one canonical atmosphere assignment per directional light. Existing native
+per-pixel transmittance/disk-luminance parameters remain engine-owned values;
+they do not become additional editor sliders by appearing in this LLD. Do not
+keep independently editable IsSun/EnvironmentContribution state as a competing
+assignment authority.
 
-- `environment_contribution`
-- `is_sun_light`
-- cascaded-shadow settings
+Resolution is explicit:
 
-For the full environment design, it must support explicit atmosphere-light slot
-selection.
+1. Validate every stored directional assignment, including hidden/off sources.
+   Each non-None slot has at most one occupant. Reject conflicts without a
+   traversal-order or brightness winner.
+2. Resolve effective node visibility through Local/Inherit and separately apply
+   `Common().affects_world`. Neither changes stored assignment. A locally Shown
+   child can participate under a Hidden parent.
+3. Populate active Primary/Secondary only from their explicit eligible occupants.
+   An inactive slot is empty; never fill it by fallback or move Secondary into
+   Primary. Ordinary role-None directionals remain eligible for direct lighting.
+4. Feed both atmospheric sources into scattering/disks and the captured-sky IBL
+   product. Associate applicable fog shadowing with the correct per-light shadow
+   record; slot-0-only shadow visibility is an old implementation limit.
+5. Invalidate resolver and affected products on source/role/participation/effective
+   visibility changes. Preserve unclamped physical direction and existing below-
+   horizon invariants.
 
-Required authored fields:
+`AngularSizeRadians` remains the full analytic disk diameter. V0.1 adds no
+finite-source GGX or PCSS effect through that field. Migrate useful old explicit
+slots/sun intent into this source, diagnose ambiguity and remove implicit fallback
+readers. See [captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) for complete
+diffuse/specular products and their Stage-13/forward consumption.
 
-- `atmosphere_light_slot`
-  - `none`
-  - `primary`
-  - `secondary`
-- `use_per_pixel_atmosphere_transmittance`
-- `atmosphere_disk_luminance_scale` or equivalent renderer-facing authoring
-  hook if needed by the final renderer contract
-
-Rules:
-
-- `Sun` resolves the primary authored sun workflow for DemoShell and scenes.
-- `DirectionalLight.atmosphere_light_slot` resolves the full two-slot renderer
-  contract.
-- A scene may bind:
-  - one primary atmosphere light
-  - one optional secondary atmosphere light
-- `Sun` does **not** auto-create a second atmosphere light.
-- Canonical slot resolution:
-  1. gather enabled directional lights with `environment_contribution=true`
-  2. apply explicit `atmosphere_light_slot` bindings first
-  3. if no explicit primary exists:
-     - use the first `DirectionalLight` with `is_sun_light=true`
-     - otherwise use the first environment-contributing directional light
-  4. if multiple lights explicitly claim the same slot:
-     - log an error
-     - keep the first light in deterministic scene traversal order
-     - ignore the later conflicting claimants
-  5. secondary is optional; if unresolved, it remains disabled / black
-
-Deterministic traversal order for slot resolution must use the existing scene
-traversal surface, not ad-hoc container iteration.
-
-Authoring file:
-
-- [DirectionalLight.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Light/DirectionalLight.h>)
+Authoring source: `src/Oxygen/Scene/Light/DirectionalLight.h`.
 
 #### 4.2.6 `scene::LocalFogVolume`
 
@@ -879,7 +868,9 @@ Required top-level sections:
    - slot 1
    - resolved scene bindings / overrides
 3. `Sun`
-   - remains the authoring surface for the primary artistic sun workflow
+   - historical panel name for an explicitly selected directional-light editor;
+     it must use canonical per-light assignment and cannot create a second
+     scene-global Sun authority or implicit promotion
 4. `Sky Atmosphere`
    - all atmosphere model parameters
 5. `Height Fog`
@@ -911,6 +902,11 @@ default safe values in the preset loader rather than leaving them
 undefined.
 
 Required expanded preset schema:
+
+The following historical preset sketch predates canonical per-light assignment.
+Its separate `primary_sun` must be consolidated into explicit light definitions;
+new presets do not retain duplicate Sun/atmosphere-slot sources. The V0.1
+extension controls assignment, including intentionally empty Primary/Secondary.
 
 ```cpp
 struct EnvironmentPresetDataV2 {

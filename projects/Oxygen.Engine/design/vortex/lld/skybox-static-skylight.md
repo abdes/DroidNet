@@ -1,5 +1,14 @@
 # Skybox And Static Specified-Cubemap SkyLight LLD
 
+## Current V0.1 extension
+
+[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) owns the current
+captured-source, full diffuse/specular and Stage13 integration contract. The
+VTX-M08 text below records the validated static diffuse baseline. Its Stage12
+bridge and captured/specular deferrals are historical scope, superseded for
+V0.1. The extension retains valid specified-cubemap source handling and the
+separation between visible sky, lighting radiance and display background.
+
 **Milestone:** VTX-M08
 **Status:** `validated_reference`
 

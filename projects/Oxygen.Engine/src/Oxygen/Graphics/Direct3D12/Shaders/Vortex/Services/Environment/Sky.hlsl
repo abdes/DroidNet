@@ -155,6 +155,9 @@ static float3 GetAtmosphereTransmittance(
         atmo.atmosphere_height_km);
 }
 
+// TODO(post-v0.1, EV01-CELESTIAL-SURFACE): Add celestial surface/phase shading.
+// This helper renders an analytic disk; Secondary does not imply a phased Moon.
+// Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-celestial-surface
 static float3 GetLightDiskLuminance(
     float3 planet_center_to_camera,
     float3 world_dir,

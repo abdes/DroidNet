@@ -12,6 +12,9 @@
 
 namespace oxygen::scene {
 
+// TODO(post-v0.1, EV01-NODE-ACTIVATION): General activation needs a cross-system
+// lifecycle contract; visibility and handle liveness must retain their meanings.
+// Scope: design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-node-activation
 //! SceneNodeFlags are symbolic flags for node state and optimization hints.
 enum class SceneNodeFlags : uint8_t {
   kVisible, //!< Node is visible for rendering

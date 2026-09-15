@@ -1,484 +1,372 @@
-# ED-M08 - Runtime Parity And Standalone Validation
+# ED-M08 — Runtime parity and standalone qualification
 
-Status: `development-only revision approved; property-scope review and implementation pending`
+Status: **ready for implementation**
 
-On 2026-09-15 the user made the **entire validation workflow development-only**.
-This replaces the shipped scene command, normal RenderScene validation CLI, and
-no-separate-executable constraint. The earlier review baseline was `9df3b2b88`
-plus built-in status fix `267c23c9d`; that history is not evidence of the revised
-workflow's implementation or qualification.
+## 1. Outcome
 
-Complete and accept the researched
-[V0.1 authoring-scope review](../review/ED-M08-v01-authoring-scope.md) before
-freezing fields/protocol/fixtures. Current registrations are review evidence,
-not automatic approval of every exposed field.
+The editor and native engine implement one canonical V0.1 authoring contract.
+Saved and cooked scenes reproduce geometry, material slots, visibility, cameras,
+lighting and environment in native and embedded rendering. An opt-in development
+harness proves semantic and image parity for the complete workload and field suite.
 
-V0.1 does not preserve backward compatibility: migrate useful legacy intent to
-the new canonical model and remove compatibility aliases/fallback paths instead
-of qualifying both. Preserve content-integrity backups/recovery and ordinary
-saved-revision ownership. Review properties interactively one at a time with
-context, options, industry practice and future rationale; category/package
-approval is not implied.
-
-## 1. Outcome And Scope
-
-An opt-in development test/tool target compares the exact saved/published editor
-scene and camera in embedded and standalone native rendering. It runs a check,
-writes actionable evidence, and exits. Development/UI tests and joint review use
-real authoring, Save and Cook surfaces. Normal Debug/Release editor, RenderScene,
-SDK, install and package graphs contain no validation UI/CLI/protocol, metrics,
-fixtures, or qualification-only instrumentation.
-
-The workload remains exactly 100 nodes / 1,000 logical catalog entries and at
-most 250,000 visible triangles. Required fields come from the accepted scope
-review and retain the existing semantic/image gates. A small scene or successful
-process exit is a smoke checkpoint, not milestone completion.
+Production behavior ships in its owning modules. Qualification protocols,
+fixtures, comparisons, instrumentation and runners belong exclusively to
+development targets. Normal Debug and Release applications and SDK packages
+contain no qualification workflow.
 
 Trace: REQ-018/019/022-026/030/037/039-042; SUCCESS-001/003/004/006.
 
-Required contracts:
+## 2. Implementation document map
 
-- [standalone-runtime-validation.md](../lld/standalone-runtime-validation.md):
-  development ownership/isolation, snapshots, protocol, capture and comparisons.
-- [V0.1 scope review](../review/ED-M08-v01-authoring-scope.md): researched
-  professional workflow and field acceptance before freeze.
-- [runtime-integration.md](../lld/runtime-integration.md), sections 17-19:
-  compatibility, target lifetime and existing runtime/readback owners.
-- [content-pipeline.md](../lld/content-pipeline.md), sections 16-19:
-  publication, provenance, imports/libraries, workers and built-ins.
-- [property-pipeline.md](../lld/property-pipeline.md),
-  [live-engine-sync.md](../lld/live-engine-sync.md),
-  [property-inspector.md](../lld/property-inspector.md),
-  [environment-authoring.md](../lld/environment-authoring.md), and
-  [material-editor.md](../lld/material-editor.md): behavior and scope-review
-  inputs; reconcile their required tables with the accepted decision.
+Each document owns the details listed below. This plan owns execution order and
+acceptance gates; field defaults and wire contracts are not independently
+redefined by the schedule.
 
-Non-scope: shipped validation entry/UI or protocol; M09 tools; multi-viewport
-stability; new physics/scripting/texture authoring workflows; a new production
-validation domain; whole-editor approval manifests; implicit Save/Cook;
-generic dashboards; M10's full hardware/performance qualification. A separate
-opt-in development executable is permitted when necessary.
-
-## 2. Freshness Assessment After M07
-
-| Verified source/evidence | Reuse or required change |
+| Document | Implementation authority |
 | --- | --- |
-| [M07B closeout audit](../validation/ED-M07B-closeout-audit.md) | Authoring, built-ins, publication, imports and native preview are validated at their recorded scope. Do not repeat their implementation or call that standalone image parity. |
-| `CookPublicationReceipt`, `CookProvenance`, `CookInputSnapshotCapture` | Reuse saved-byte capture, receipts and per-product freshness. A receipt records the latest operation's inputs while retaining complete roots; it is not a complete saved scene/material snapshot for every preserved product. M08 must resolve the selected scene's closure through provenance. |
-| `CookOutputLease.Inspection.cs`, `CookedContentMountService`, `CookedLibraryReadSet` | Reuse asynchronous leases, verified root files and saved priority. Protect all selected libraries as well as project output. Add validation admission to the existing project coordinator; a reader alone currently makes publication report busy. |
-| `EditorNativeCompatibilityService`, `NativeSdkMetadata` | Reuse ordinary Interop/runtime and producer/schema proofs. The separate development driver carries its own metadata; its absence never blocks product startup, Save or Cook. |
-| `SceneDescriptorGenerator.AddNode` | Emits scene v4 and depth-first node indices, but no author GUID in native node records or returned node map. Add an explicit source-GUID/index map tied to verified descriptor bytes; never match duplicate node names. |
-| `RuntimeNodeState`, `RuntimeEnvironmentState`, background observations | Reuse real native reads. Missing deep hierarchy/material/effective GPU observations needed solely for qualification belong in opt-in telemetry/adapters, not shipped instrumentation. |
-| Runtime `FrameCaptureSettings`; Graphics `ReadbackManager` | Reuse real GPU readback. Qualification PNG/correlation, telemetry and scheduling belong to the opt-in development adapter, not normal Runtime/Interop builds merely because they are reusable. |
-| RenderScene `main_impl.cpp` and `MainModule.cpp` | Normal demo startup restores state and substitutes preview content. Preserve it; the development driver reuses loader/render capabilities without a normal RenderScene validation flag. |
-| DemoShell `SceneLoaderService` | Reuse native loading/hydration. Baseline first-camera selection, clipping normalization and unconditional viewport-aspect overwrite do not implement the approved camera contract. Select the exact authored camera and apply Auto/Fixed per view without mutating saved values; Fixed preserves its ratio/composition. Scene-only loading works without a physics sidecar. |
-| `SceneEngineSync`, `WorkspacePublicationPreview` | Reuse lifetime and full-projection contracts. Qualification-only capture hold/hooks belong to an opt-in test-host adapter. Rendering advances while that adapter holds later delivery. |
-| `InspectorControlTests.CatalogWorkloadFixture.cs` | Reuse its deterministic content-building approach. Explicitly set Manual exposure/ACES and a camera aimed at the fixture; its EV value alone does not select Manual mode. Count actual logical catalog rows and visible triangles. |
-| Status ledger | 07A/07B are complete. M02 window/dock resize and consolidated discovery evidence remain a closure dependency, not a reason to block M08 implementation. |
-| Built-in status regression reported during this review | A combined browser query treated cooked built-in companions as authored JSON inputs. Fix `267c23c9d` passes the expanded native exception regression and 449 pipeline tests. The user confirmed Vortex Main/NewScene2 switching without the exceptions after refreshing Debug. Retain this regression; earlier M07 checks did not cover the combined query. |
+| [PRD](../PRD.md), sections 8–10 | Feature boundary, workload and release envelope |
+| [V0.1 authoring contract](../review/ED-M08-v01-authoring-scope.md) | Complete scope, exclusions and rejected alternatives |
+| [Visibility and light participation](../review/ED-M08-node-light-visibility-review.md) | Local/Inherit flags, workspace Hide, contribution and shadow semantics |
+| [Celestial-light contract](../review/ED-M08-celestial-light-authoring.md) | None/Primary/Secondary ownership, two contributors and conflicts |
+| [Scene authoring model](../lld/scene-authoring-model.md) | Canonical scene/component identities, hierarchy and workspace-state separation |
+| [Property inspector](../lld/property-inspector.md) | Exact fields, units, defaults, validation and conditional UI |
+| [Material editor](../lld/material-editor.md) | Scalar PBR/emission representation, editing, persistence and preview |
+| [Environment authoring](../lld/environment-authoring.md) | Atmosphere, captured sky light, exposure, grading and background |
+| [Property pipeline](../lld/property-pipeline.md) | Edit sessions, revisions, validation, mixed selection and history |
+| [Live engine sync](../lld/live-engine-sync.md) | Full projection, asset completion, native mutation and convergence |
+| [Content pipeline](../lld/content-pipeline.md) | Slot identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
+| [Runtime integration](../lld/runtime-integration.md) | Build compatibility, scene/view lifetimes and production capabilities |
+| [Standalone qualification](../lld/standalone-runtime-validation.md) | Development topology, protocol, admission, observations, capture, comparison and cleanup |
+| [Settings architecture](../lld/settings-architecture.md) | Authored settings, local workspace state, runtime-session and startup preferences |
+| [Documents and commands](../lld/documents-and-commands.md) | Save/close lifecycle, command outcomes and document ownership |
+| [Cooking workflows](../lld/content-cooking-workflows.md) | Actual Save/Cook/reimport/recovery actions used by qualification |
+| [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs |
 
-No native build or rendered parity test was performed for this document review.
+### Native implementation references
 
-## 3. Entry Conditions And Execution Order
+| Document | Native implementation authority |
+| --- | --- |
+| [V0.1 rendering contract](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-rendering-contract.md) | Concrete source owners and required changes for light enumeration, visibility, shadow receiving/contact, camera framing and grading |
+| [Captured-sky IBL](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-captured-sky-ibl.md) | Scene-global capture anchor, HDR products, diffuse SH, GGX filtering/BRDF integration, atomic publication and Stage 13 activation |
+| [Lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/lighting-service.md), [shadow service](../../../projects/Oxygen.Engine/design/vortex/lld/shadow-service.md) | Direct-light/shadow family ownership, wire/resource contracts and established CSM filtering/bias behavior |
+| [Environment service](../../../projects/Oxygen.Engine/design/vortex/lld/environment-service.md), [indirect lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/indirect-lighting-service.md) | Environment product publication and canonical indirect surface evaluation; retirement of the Stage 12 ambient bridge |
+| [Cubemap processing](../../../projects/Oxygen.Engine/design/vortex/lld/cubemap-processing.md), [static skylight baseline](../../../projects/Oxygen.Engine/design/vortex/lld/skybox-static-skylight.md) | Existing source orientation, SH/radiance normalization and static-cubemap behavior reused by the new IBL contract |
+| [View initialization](../../../projects/Oxygen.Engine/design/vortex/lld/init-views.md), [post-process service](../../../projects/Oxygen.Engine/design/vortex/lld/post-process-service.md) | View/history ownership, exposure, output composition and per-view processing |
 
-### Accepted history and revised entry gate
+Closed VTX-M08 evidence proves its original static diffuse-only implementation.
+The V0.1 rendering/IBL contracts explicitly extend that baseline; the ED-M08
+implementation must produce new evidence for captured sky and specular lighting.
 
-The user initially authorized M08 after the native content, preview-sun and
-tooling groundwork. Maintained content and four original RenderScene sources
-were refreshed; sunlight on/off and authored-light preservation evidence remains
-in the [preview-sun record](../../../projects/Oxygen.Engine/design/vortex/plan/renderscene-preview-sun.md).
-The broad example/interactive-import matrix was not claimed complete. This is
-useful groundwork, not M08 parity closure.
+## 3. Scope and ownership
 
-The subsequent development-only instruction paused provisional production
-ContentPipeline/protocol work and supersedes that placement. Preserve review
-drafts as drafts; do not restore them to production dependencies.
+### Production deliverables
 
-- [x] Read M07B's audit and inspect current integration points.
-- [x] Preserve ordinary production SDK/build compatibility; no qualification
-  manifest is required for startup, authoring, Save or Cook.
-- [x] Preserve numeric/image/ownership gates and the check-then-exit intent.
-- [x] Entire workflow is development-only; a separate opted-in driver is allowed.
-- [x] Captured-sky diffuse and specular image-based lighting is required.
-- [x] Non-sun visibility/contribution/shadow behavior is approved under the
-  [visibility review](../review/ED-M08-node-light-visibility-review.md), section 5.
-  Implementation and qualification remain pending. Sun selector/roles and the
-  associated single-sun, secondary/moon and sky-only boundaries remain open.
-- [ ] Complete and accept the V0.1 scope review and reconcile PRD/authoring tables
-  through explicit individual property decisions before freezing coverage or
-  protocol payloads. Do not treat the captured-sky decision as package approval.
-- [ ] Establish opt-in targets and prove exclusion from normal Debug/Release
-  references, resources, initializers, builds, SDK/install and packages.
-- [ ] Complete M02's remaining supported one-viewport evidence before M08
-  closes; do not reopen other milestones or multi-viewport work.
+- Ten canonical primitives, including Capsule, using shared native recipes and
+  the metric centred defaults: horizontal Plane, upright Quad and 1 m outer Torus.
+- Stable per-geometry material-slot identities and independent instance overrides
+  for all existing slots; clearing restores the mesh material.
+- Scalar emission colour/intensity with float32 storage, explicit linear-colour
+  conversion and finite HDR bounds.
+- Local/Inherit visibility and geometry shadow flags, independent light
+  contribution/shadow controls, and functional GPU receiving/contact shadows.
+- Exact authored perspective-camera selection with Auto/Fixed per-view framing.
+- Per-light None/Primary/Secondary atmospheric assignment, two complete shadowed
+  contributors and independent ordinary directional fill lights. Existing names
+  remain; there is no competing scene Sun pointer or automatic promotion.
+- Captured-sky diffuse/specular lighting and effective behavior for every retained
+  environment/post-process/light field. Realtime is the V0.1 lighting workflow.
+- Editor-only Hide as a local workspace/main-view mask, retaining illumination
+  and caster eligibility without authored changes or cooking demand.
+- One-time migration followed by canonical readers/writers and explicit repair
+  states for unresolvable references.
 
-After those entry decisions, implement the slices below with focused checks and
-self-contained commits. Native and managed development contracts may land in
-successive buildable slices. Reserve the full rendered suite for integration
-and closeout, rather than repeating it after each edit.
+### Development topology
 
-### Build and code ownership
+| Target/location | Responsibility |
+| --- | --- |
+| `projects/Oxygen.Engine/tools/validation/Schemas` | Versioned qualification schemas and rejection corpus |
+| `Oxygen.Tools.EditorValidation.Native` | Exact native request execution and standalone process |
+| `Oxygen.Tools.EditorValidation.Capture` | Opt-in observations, checkpoints, exposure telemetry and capture bridge |
+| `tests/EditorValidation/Oxygen.Editor.Validation.csproj` | Preparation, fixture/expectations, process ownership and comparisons |
+| Existing WorldEditor UI test host with `OxygenEditorValidation=true` | Real editor workflows and saved-revision capture adapter |
 
-Canonical schemas/protocol readers and the native development driver belong
-under `Oxygen.Engine/tools/validation`, outside Examples and production modules.
-Managed preparation/comparison/fixture code belongs in an opt-in
-`tests/validation` or existing test-support target. Reuse a test host where it
-can isolate this work; add a development project only when necessary, not a new
-production domain.
+Native qualification requires `OXYGEN_BUILD_EDITOR_VALIDATION=ON`; managed
+qualification requires `OxygenEditorValidation=true`. Both default off,
+independently of Debug/Release. Development builds/intermediates/staging use
+`artifacts/ed-m08/<Configuration>/{native-build,managed-build,managed-obj,stage}`.
+Evidence defaults to `artifacts/ed-m08/runs/<operation-id>` through an explicit
+owned root. The standalone LLD defines target references and private native ABI.
 
-Native opt-in is off by default, independent of Debug/Release and ordinary unit
-test settings. The managed target is absent from production references,
-resources, initializers, default solution builds, and packages. Use a separate
-development-validation output/staging tree. No qualification variant may replace
-normal editor/RenderScene binaries or the installed SDK. Examples may supply
-loader/library code as dependencies; they do not own canonical editor schemas.
+Production projects reference no qualification assemblies, schemas or runners.
+Qualification-only calls compile out of normal builds and their implementations
+live only in opt-in sources. Loading, projection, rendering and readback remain
+the real production algorithms; the harness does not duplicate them.
 
-'Reusable' alone does not justify shipping instrumentation. Deep observations,
-exposure telemetry, capture hold/hooks, checkpoint scheduling, protocol and
-metrics needed only for qualification compile/link solely in opt-in targets.
-Production changes require an independent responsibility: real rendering,
-authoring mutation, loading, or ordinary runtime behavior, under its real owner.
+All authored changes use normal commands/history/revisions. Qualification never
+implicitly saves or cooks. Its admission uses the existing project coordinator,
+output readers and structured worker ownership, not another scheduler or lock.
+Migration updates source/reference identities and recooks through native tools;
+it never patches cooked binaries or installs legacy runtime readers.
 
-### M08.1 - Versioned Contracts And Qualification Fixture
+Relevant engine edits carry `TODO(post-v0.1, <ID>)` at the actual deferred boundary,
+linked to the engine scope record. Existing native functionality is distinguished
+from missing editor exposure. Current M08 obligations are not future TODOs.
 
-Deliver:
+## 4. Execution sequence
 
-- Version-1 request, identity map, observation, capture manifest, comparison and
-  terminal result schemas/DTOs from LLD sections 7-8. Separate native execution
-  result from the managed parity verdict. Strictly validate required fields,
-  versions, finite numbers, unique IDs, bounded dimensions/frame counts, and
-  operation-owned artifact paths.
-- A fixture builder using existing test infrastructure: exactly 100 nodes
-  (98 geometry, camera, sun), all approved canonical built-in choices,
-  qualified small imported geometry, shared/distinct materials, hierarchy,
-  and exactly 1,000 logical catalog rows. Use explicit Manual EV 9.7, ACES,
-  **Fixed 16:9** camera and conventional shadows; assert <=250,000 visible triangles.
-  New cameras default Auto under [approved Decision 6](../review/ED-M08-v01-authoring-scope.md);
-  the qualification fixture deliberately authors Fixed. Include Fixed 4:3 and
-  Auto target-resize cases with unchanged saved camera/source identities.
-  The historical eleven-choice catalog does not create a legacy-alias
-  preservation requirement; reconcile catalog scope with canonical decisions.
-- A field-coverage manifest derived from the accepted scope review and
-  reconciled field tables. Audit registrations against that decision rather than
-  automatically including every exposed field. For each field record its saved path,
-  unit/enum conversion, expected native path, meaningful non-default case and
-  whether it has a visible-effect case. Include node flags and slot clearing.
-  Inventory approved Local/Inherit source modes separately from effective
-  booleans: new roots are Shown with geometry casting/receiving On; children
-  Inherit. Include independent Affects Scene, geometry/light Cast Shadows and
-  functional Receive Shadows. Workspace Hide and runtime-loaded `IsActive` are
-  not authored parity fields. Do not freeze pending sun roles.
-- Hand-authored expected examples for quaternion, radians, linear colour,
-  identity/index mapping and material enums; they must catch a shared adapter
-  error instead of computing both sides with the same implementation.
+Each slice ends with focused checks and a buildable code/test/doc commit. Native
+contracts and rendered behavior pass before editor implementation relies on them.
+M02's remaining supported-viewport evidence is a closeout gate; M09 tools are not
+an entry dependency.
 
-Touch points: the opt-in managed test/tool target and reusable UI test support;
-canonical contracts and native driver/tests under `Oxygen.Engine/tools/validation`.
-Production ContentPipeline, Runtime, WorldEditor, Interop and Examples do not
-reference qualification schemas or orchestration sources.
+### M08.1 — Native canonical data, producers and primitives
 
-Checks: cross-language JSON round trips and rejection corpus; fixture counts and
-saved camera/sun/exposure assertions; missing required field fails inventory
-coverage for the approved scope; normal build/install/package exclusion. A
-separately built development driver is allowed and remains explicitly opt-in.
+Implement engine-owned schemas/versioned records for flag source modes, slot
+identity/overrides, camera aspect policy, atmospheric slots and float32 emission.
+Schema validation covers shape/range/count limits; semantic validation covers
+identity, references, conflicts and representability.
 
-### M08.2 - Verified Saved Inputs, Mount Set And Admission
+Implement importer-owned slot inventories/provenance and continuity rules from
+the content contract. Material parameter changes alone keep IDs. Structural
+changes without proven continuity retain explicit repair-required references;
+no name/index guessing rebinds an override. Update native hydration, Inspector
+metadata and catalog output for every new record.
 
-Deliver:
+Implement Capsule, upright Quad, Torus defaults and finite-parameter rejection
+through the shared procedural authority. Bounds, normals, tangents, winding,
+recipe metadata and API prose change together. Migrate duplicate atmospheric
+inputs and GeodesicSphere identities; ArrowGizmo stays an internal tool resource.
+Remove the ineffective real-time-capture toggle from canonical SkyLight records,
+adapters and demo controls. Captured sky has one source-change-driven production
+policy; migrate its existing source/enable/parameter values and recook.
 
-- A development-owned read-only preparation adapter using existing publication recovery
-  verification, provenance, saved document reads and source fingerprints.
-  Select the scene closure, not every unrelated document in the project.
-- Capture current saved bytes privately, check their product fingerprints against
-  published provenance, and build expectations independently of cooked output.
-  Use a short project admission interval while capturing identities and readers.
-  Finish/release document read gates before authoring resumes.
-- Node GUID-to-descriptor-index mapping plus authored URI-to-cooked key/winning
-  root mapping. Reuse descriptor traversal, but validate its complete mapping
-  with duplicate names, hierarchy, multiple cameras and preserved outputs.
-- Record receipt hash/publication ID, per-product proofs, full ordered mount-set
-  fingerprint and all protected root files. Native Inspector and its derived
-  cache supply opaque library dependencies, never managed binary decoding.
-- A development adapter participating in existing coordinator admission: let already-admitted
-  work finish; hold later cooks and confirmed mount changes in a visible waiting
-  state until validation releases. Do not toggle the user's automatic-cooking
-  pause preference or generate a fake cooking run. Another process is excluded
-  by the existing output/file leases; ordinary contention is not an exception loop.
-- Revalidate admission after waits and handle partial acquisitions in reverse
-  order. Do not acquire a nested registration reader while holding a writer.
-  Never wait for a cook while retaining the validation reservation/read set.
-- Explicit development-driver selection and artifact ownership, with its separate
-  build metadata and selected ordinary runtime/SDK receipts. Separate cooking producer provenance
-  from runtime/capture executable hashes and optional diagnostic source revision.
+Deliver maintained native source/recipe migration and recooking scripts in this
+slice. Refresh every affected maintained bundle and RenderScene source import
+before M08.3 loads it. The scripts validate inputs, preserve recoverable backups,
+update references and invoke current producers; no obsolete reader survives.
+M08.5 extends this foundation to editor document migration and repair workflows.
 
-Checks: partial material cook after a scene cook; unchanged/no-op publications;
-older documents remaining dirty; saved dependency changes; reordered/conflicting
-libraries; invalid receipt/recovery journal; missing/corrupt shared files; stale
-Inspector cache; cancellation at each acquisition; concurrent cook/mount request;
-no first-chance exception flood for expected contention; release after project
-close. All tests preserve source/output hashes and document dirty/history state.
+Owners: `Oxygen/Data` format/catalog/procedural files; `Oxygen/Scene`;
+`Oxygen/Cooker/Import` and schemas; native Inspector; shared scene hydration.
 
-### M08.3 - Development Driver, Exact Loading And Native Observations
+Checks: schema/round trips; slot continuity and structural changes; nonzero
+slot overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records;
+finite HDR precision; primitive bounds/attributes/sidedness; obsolete format
+rejection. Cook and inspect through native tools, never managed binary decoding.
 
-Deliver:
+### M08.2 — Native rendering and view behavior
 
-- Implement approved visibility behavior in ordinary production owners:
-  canonical Local/Inherit round trip, matching geometry/light use of resolved
-  flags, light participation separate from visibility, and independent caster,
-  light-shadow and receiver effects. Fix effective flag/hierarchy resolver
-  invalidation and relevant captured-lighting invalidation. Migrate useful old
-  visibility/caster values; migrate ineffective receiver values to their former
-  rendered On behavior. Remove obsolete readers and saved runtime-loaded
-  `IsActive`; do not retain compatibility execution paths.
-- An opt-in native test/tool entry accepting the immutable request. Initialize
-  no restored demo content, skybox, camera rig, preview sun or scene-specific
-  CVar defaults. Normal RenderScene gains no validation request flag.
-- Exact ordered-root/file verification and exact scene path AND key loading via
-  production AssetLoader and real hydration. No fuzzy search, extra discovery,
-  repaired invalid saved values, synthetic content or post-process substitutions.
-- Exact authored camera selection and preservation of every approved camera
-  field, including a second/parented camera. Reuse real loader policies; any
-  production fix must have an independent loading responsibility.
-- Development-native observation adapters for the approved inventory: complete
-  hierarchy/index/flags, stored/effective transforms, geometry/slots/materials,
-  lights, environment/background and effective view settings. Qualification-only
-  deep observations/telemetry stay in opt-in sources/hooks, not normal engine
-  or Interop APIs.
-- Actual winning mounts and dependency/readiness failures. The driver never
-  reads expected numeric values to fill observations or patch the scene.
-  Identity maps label actual nodes; they cannot create missing native nodes.
-- Atomic native execution result with LLD exit codes and artifact hashes.
-  Native success remains separate from the managed parity verdict.
+Implement effective visibility for geometry/light eligibility and invalidation
+on effective flag/hierarchy changes. Keep editing-main-view hiding separate.
+Preserve independent geometry casting, light shadowing and receiver opt-out;
+carry receiving into both GPU surface paths and implement retained contact-shadow
+controls with their defined field semantics.
 
-Checks: exact load with example content unavailable and stale demo settings;
-wrong key/path; duplicate names; missing dependency; second/parented camera;
-non-default aspect/clipping; no camera; extra native node; wrong material value;
-zero exit with missing/truncated evidence. Keep ordinary RenderScene loading and
-production loader tests passing without validation CLI/resources.
+Replace single-directional surface/shadow selection with independent participating
+sources. Primary and Secondary both illuminate and cast requested shadows;
+None remains an ordinary directional source. Complete captured-sky diffuse
+irradiance, roughness-dependent specular products, readiness and invalidation.
+Activate Stage 13 indirect evaluation and retire the Stage 12 ambient bridge.
+Use the scene-global capture anchor and shared producer/consumer filtering rules
+in the IBL contract; camera navigation does not change authored sky lighting.
 
-### M08.4 - Frame-Complete Capture And Deterministic Render Profile
+Resolve the exact camera and parented pose. Auto derives target aspect with
+unchanged vertical FOV; Fixed preserves ratio/composition with a centred content
+rectangle. Bars are outside metering and added after scene post-processing.
+Implement retained grading/vignette and effective settings with defined ordering,
+including clear-background display colour and foreground transparency.
 
-Deliver:
+Owners: `Scene/SceneFlags`, `Scene/Light/DirectionalLightResolver`,
+`Vortex/ScenePrep`, `Vortex/Resources/DrawMetadataEmitter`, `Vortex/Lighting`,
+`Vortex/Shadows`, `Vortex/Environment`, `Vortex/IndirectLighting`,
+`Vortex/SceneCameraViewResolver`,
+`Vortex/SceneRenderer`, and their D3D12 shaders.
 
-- A development-native capture adapter for final scene pixels before UI, after
-  post-processing/background/transparency. Use production Graphics
-  `ReadbackManager` and real renderer outputs with copy/barrier/fence ownership
-  and row-pitch/format conversion. Retain resources until readback drains; the
-  qualification capture protocol and encoding orchestration stay opt-in.
-- A native capture result bound to run, scene, view generation, profile, scene
-  frame, dimensions, output encoding and actual effective renderer settings.
-  Development-host adapters bridge existing Runtime/Interop capabilities.
-  Qualification-only bridge/hooks compile solely in the development target;
-  no raw framebuffer-pointer contract.
-- A development-only scheduler resets temporal/exposure/view histories and
-  applies fixed scene timestep through supported engine configuration. Frame zero begins only when required content,
-  render uploads, camera and profile are ready. Count completed scene frames,
-  not process frames or requests queued before readiness.
-- Preserve authored camera aspect policy: **Auto** derives aspect per render
-  target with unchanged vertical FOV and no saved-data mutation; **Fixed** uses
-  the authored ratio and centred letterbox/pillarbox composition without crop
-  or stretch. Apply the same policy in embedded/native rendering; neither a
-  forced fixed ratio for Auto nor a target-ratio override for Fixed is valid.
-- Observe target pixel dimensions, exact integer content rectangle, authored
-  policy/ratio and effective projection aspect/vertical FOV. Compare target and
-  rectangle exactly and retain existing scalar tolerances. Fixed-frame bars are
-  composed after post-processing and exposure, outside the metering/histogram
-  input; final capture includes the complete target and bars.
-- Opt-in CPU/GPU exposure telemetry at frames 120/240/600; reading
-  the authored Auto enum or a CPU placeholder is insufficient. Capture both
-  image sets at those frames.
-- Controlled output encoding independent of desktop HDR/DPI/compositor state.
-  Record effective CVars, adapter/driver and shader/runtime fingerprints.
+Checks: independent light/caster/receiver controls; inherited Hidden/local Shown;
+visibility cache invalidation; off-screen versus authored-hidden casters; opaque/
+masked/Blend behavior; two shadowed directionals and Secondary alone; fill-only;
+IBL readiness; grading/contact effects; Auto/Fixed projection. Preserve existing
+material-sidedness and mirrored-winding correctness.
 
-Checks: readback completion vs queued acceptance; row pitch/channel order;
-device/readback failure; capture cancellation with an in-flight GPU copy; view
-destroy/resize and runtime replacement; identical repeated captures after reset;
-manual/auto exposure frame checkpoints. No PIX/RenderDoc dependency for PNG
-capture and no test that claims headless rendering proves images.
-Include Fixed 4:3 in 1920x1080 (`240,0,1440,1080` content), Fixed 16:9 in
-1440x1080 (`0,135,1440,810`), and Auto across controlled target sizes while
-preserving vertical FOV and saved hashes. Check exposure is unaffected by bar
-area alone. Do not crop comparison images, exclude bars, or relax image metrics.
+### M08.3 — Development harness and native visual gate
 
-### M08.5 - Bounded Embedded Saved-Revision Session
+Implement the named opt-in targets and standalone LLD's version-1 protocol.
+Build the complete fixture, field inventory and independent conversion examples.
+The native driver loads only verified ordered roots and the exact scene path/key,
+selects the explicit camera, and emits real observations/completed-frame images.
+Expected values never populate observations or patch loaded content. Native
+execution outcome is separate from the managed parity verdict.
 
-Deliver:
+Use production GPU readback with opt-in instrumentation at real ownership
+boundaries. Validate input versions/fields/IDs/hashes/counts/paths before use.
+Retain resources through GPU copy and encoding completion. PNG capture has no
+RenderDoc/PIX dependency. Supply reusable documented build/run scripts.
 
-- Keep approved editor-only Hide as a production editing-main-view mask with
-  per-user/project workspace persistence and no authoring dirty/history/cook
-  effects. It retains light contribution, caster eligibility and child hide
-  choices. Controlled test targets render canonical authored visibility; test
-  entry/release must not erase or apply a stale editing-view mask.
-- One opt-in development capture owner tied to project/run/document/scene/view generation.
-  Capture view intent, finish any active edit gesture, pin the verified saved
-  projection and camera/profile, then hold all later scene mutation delivery.
-  Rendering and authoring continue. Development-host feedback identifies
-  capture; its adapter suppresses navigation/profile changes for that target.
-  No hold UI/hook/state machine ships solely for qualification.
-- The development adapter covers all `SceneEngineSync` delivery, asset-demand completions
-  and publication delivery, not only scalar property updates. Prevent entry
-  while an earlier projection/publication still owns conflicting work.
-- Release immediately after embedded observation/image completion. Restore only
-  valid current view intent and resynchronize one coherent latest authoring
-  snapshot, superseding older pending work. Do not replay an obsolete snapshot,
-  change history/dirty flags, save camera settings or resume a closed scene.
-- Activation, scene/document close, viewport destruction, runtime fault/restart
-  and project replacement invalidate capture callbacks. Same-view layout resize
-  cannot alter the fixed capture target. Transfer teardown to its actual native
-  owner if a bounded wait expires.
+**Native visual gate:** render every changed engine capability outside the
+editor: all primitives and material slots; scalar emission/transparency;
+visibility/caster/receiver controls; both atmospheric sources and fill lights;
+captured diffuse/specular sky; camera framing; exposure/grading/background.
+Retain images, observations, actual profile/build identities and readiness facts.
+Resolve these failures before the editor-integration slice.
 
-For Auto cameras, derive aspect from the pinned capture target, not a changing
-editor panel. UI resize during a session does not change capture dimensions or
-profile; dedicated Auto-resize cases change the controlled target/profile
-between checks and keep each embedded/native image pair matched.
+Checks also include row pitch/channel order/encoding, GPU-fence completion,
+cancellation/device failure, in-flight resource lifetime and history reset.
+Maintained RenderScene examples provide ordinary-loading regression coverage.
 
-Checks: edit/Undo/Redo, create/delete/reparent, slot assignment, environment change
-and repeated saves during warm-up; navigation input; resize; switching to scene,
-material and inspection documents; cancellation/failure at each phase; late
-callbacks after restart. Assert both the saved captured image/observations and
-the newer preview after release. Test the native resource lifetimes, not just
-mock return values.
+### M08.4 — Editor canonical authoring and live delivery
 
-### M08.6 - Coordinator, Comparisons And Result Integrity
+Implement the owning LLD field tables through existing document/property services:
+all slots and repair affordances, emission, flags, atmospheric roles, cameras,
+realtime light/shadow controls, captured sky light, exposure/grading and primitives.
 
-Deliver:
+WorldEditor/MaterialEditor own UI/commands; World/Managed.Assets own source data;
+ContentPipeline owns native production; Runtime/Interop adapt engine operations.
+Complete copy/duplicate, mixed selection, sessions, Undo/Redo, Save/reopen,
+diagnostics and current-scene convergence. Workspace Hide follows the settings
+contract and adds no authored state or cooking demand. Product UI contains no
+qualification entry.
 
-- Compose preparation -> embedded capture/release -> child launch/drain ->
-  semantic/image comparison -> atomic result in the development target.
-  Expectations come from saved authoring; native paths observe independently.
-- Run the child through the existing structured process runner/owned Windows
-  job and I/O-drain model. Extend names/contracts only where necessary; never
-  terminate unrelated RenderScene instances. Cancellation/timeout must retain
-  artifacts, native leases and drain ownership until readers actually finish.
-- Compare expected vs embedded, expected vs standalone, then embedded vs
-  standalone images. Distinguish original authored expectations from opaque
-  cooked-library expectations and intentional source overrides.
-- Apply the unchanged LLD numeric rules and strict required-field completeness.
-  Reject wrong operation/profile/root/build/frame identities, invalid image
-  dimensions, NaN/Infinity, absent checkpoints and partial JSON.
-- Keep original PNGs plus a derived difference image and per-field mismatches.
-  The current/historical label is independent of pass/fail: a newer edit does
-  not rewrite the result of the captured saved revision.
-- Release the project reservation and all output/native/artifact handles on
-  every terminal path, including failure before launch and a child that exits
-  while a descendant still owns redirected output.
+Checks: actual packaged controls/commands, nonzero slot assignment/clearing and
+repair, published material changes, role conflicts, flag defaults/overrides,
+Auto resize without dirtying, workspace Hide restoration/lifetime/accessibility.
+Verify engine fixes again through normal editor workflows.
 
-Checks: numerical boundary tests; opposite-sign quaternions; enum/ID mismatch;
-all-black/missing geometry false positives; hidden render override; altered
-artifacts; changed source during execution; nonzero exit with partial evidence;
-timeout/crash/forced cancellation; same-project queued automatic work resumes;
-old result does not become current after project/source/mount replacement.
+### M08.5 — Migration and verified saved-input preparation
 
-### M08.7 - Development Entry And Real Authoring UI Coverage
+Implement editor document migration and repair using M08.1's native producers
+and maintained migration tools. Validate old inputs, write canonical source
+atomically with backups, update references and invoke normal cooking.
+Unrepresentable intent remains repair-required. Qualify existing project migration,
+interrupted recovery and explicit slot repair through the real editor workflow.
 
-Deliver revised LLD section 9:
+The development preparation adapter enters the existing coordinator and resolves
+the selected saved closure through source and per-product provenance. Capture
+private saved bytes and verify product/receipt/publication identities. Protect
+project/library files in saved mount order; native Inspector supplies opaque
+library metadata. Build GUID/index and URI/key/winning-source maps tied to verified
+descriptors. Release document read gates before authoring resumes; retain output
+and native ownership until actual reads drain.
 
-- Explicit development test/tool invocation with scene/camera context,
-  prerequisite feedback, check execution and exit. No shipped Validate in
-  Standalone menu/command/CLI, validation panel, preference, metrics viewer,
-  schema resource or module initializer.
-- Real editor UI tests for authoring, hierarchy/material changes, Save/conflicts
-  and Cook. Use existing actions/coordinator, name participating documents,
-  choose among authored cameras, and revalidate after explicit recovery.
-  Do not replace product workflows with hidden file edits or toy controls.
-- Concise development progress/Cancel feedback within 100 ms and actionable
-  results by scene/node/asset/field, captured revision and artifact paths. Any
-  test-host UI uses compact accessible controls only in that opt-in host.
-- Correct capture lifetimes during UI tests: feedback does not activate another
-  document; switching away during capture cancels it; independent child work
-  after release cannot reactivate a previous scene.
+Recheck lifetime after waits; unwind partial acquisition in reverse order.
+Save/Cook recovery occurs outside the reservation. Automatic-cooking preferences
+remain unchanged. Expected contention waits without exception polling.
 
-Checks: development invocation, real blocked/dirty/conflict/cooking paths,
-camera selection, cancel/results/evidence, and ordinary one-pane document
-lifetime. Exercise actual authoring accessibility/layout/themes where relevant.
-Normal product menus/resources/builds/packages contain no validation feature.
+Checks: partial/no-op publication, unrelated dirty documents, changed dependencies,
+reordered/conflicting libraries, corrupt/missing files, stale Inspector cache,
+recovery journals, cancellation at each acquisition, competing cook/mount work,
+project close and unchanged source/publication hashes during qualification.
 
-### M08.8 - Field/Rendered Qualification And Closeout
+### M08.6 — Embedded saved-revision capture
 
-- Qualify the approved visibility matrix through normal authoring, Undo/Redo,
-  Save/reopen/cook and native-engine-first/editor-second rendering: inherited
-  Hidden versus locally Shown children; new root/child defaults; independent
-  Affects Scene, geometry/light Cast Shadows and receiver opt-out; hidden usable
-  cameras; authored Hidden versus off-screen casters; editor-only Hide retaining
-  lighting/shadows with unchanged authored hashes, dirty/history and cooking.
-  Verify resolver/captured-product invalidation and useful-content migration.
-  Blended casting and authored Shadows Only/Hidden Shadow are excluded; this
-  matrix does not settle the separately pending sun-selector/role contract.
-- Run every approved field case through real authoring/Save/Cook and
-  development-driven embedded/native paths. Add bounded visual cases for camera, hierarchy, every built-in and
-  imported geometry, material replacement/None/Default, opacity/mask/blend,
-  light/sun, atmosphere, exposure, tone mapping and background preservation.
-- Verify the full static fixture, every approved tone mapper/exposure mode and auto-exposure
-  checkpoints. Include bright background with atmosphere disabled and foreground
-  transparency; this must not regress M07A's display-colour decision.
-- Re-run matched Release embedded/standalone images on the same recorded adapter
-  and driver. Record CPU/RAM, GPU/VRAM, driver, OS/runtime versions and fixture/
-  artifact hashes from PRD section 9. Debug covers diagnostics, protocol and
-  ownership integration.
-  M10 retains its full release performance/hardware gate; M08 measures its own
-  <=100 ms feedback and responsive/cancellable capture workflow.
-- Complete M02's remaining one-pane resize/discovery evidence in its own ledger
-  before claiming M08 complete. Retain M07 results at their original scope.
-- Jointly test real authoring and the opt-in runner with the user: make changes,
-  explicitly Save/Cook, invoke qualification, observe capture/native driver
-  launch/exit and results, then repeat a material/background change and Cancel.
-  No product validation action is required or introduced.
-  Review original images, differences, metrics and semantic mismatches as test
-  evidence outside the everyday editor UI; preserve hashes and exact commands
-  in one M08 validation record. Give the user time to test before closeout.
-- Prepare the affected-code analyzer/IDE pass once for commit preparation, fix
-  relevant diagnostics, and commit stable code/test/doc slices. Update one
-  M08 validation ledger row only after every gate passes.
+The opt-in host owns one session by project/document/activation/run/view generation.
+Finish active gestures, drain earlier projection/publication, apply the verified
+saved projection and pin camera/profile/target. Hold later properties, hierarchy,
+components, asset completions and publication delivery while authoring/rendering
+continue. Suppress navigation for the captured target and ignore workspace Hide
+without destroying its current state.
 
-## 4. Verification And Build Placement
+After observations and GPU/image completion, release and converge once to the
+latest valid authoring snapshot/view intent. Do not replay stale mutations or
+restore a closed scene. Panel resize does not alter a pinned target; separate
+Auto-resize cases use distinct controlled profiles.
 
-Qualification schemas/readers, fixtures/catalogs, comparisons, orchestration,
-deep observations/telemetry and capture adapters are tested through explicit
-development targets. Managed UI tests reuse actual editor parts/test hosts.
-Production defect tests stay with their real Scene/Content/Engine/Vortex/Graphics
-or editor owner; qualification-only work is not a production dependency.
+Checks: edits/Undo/Redo/create/delete/reparent/slots/environment/saves during
+warm-up; navigation/resize/document switch; cancel/fault/close/restart and late
+callbacks. Verify saved captured state and newer preview after release. A drain
+owner retains native resources if bounded teardown expires.
 
-Use MSBuild/VSTest and native CMake/CTest with opt-in target configurations.
-Serialize native builds and tests sharing GPU/fixture/output resources. Build
-and stage development artifacts in an isolated tree, retaining ordinary SDK
-fingerprints as inputs. Do not overwrite normal editor/RenderScene binaries,
-SDK installation or shipping schemas. Record exact target/filter names only
-when they exist; this plan does not advertise an implemented runner.
+### M08.7 — Owned execution, comparison and results
 
-Explicit negative checks for normal **Debug and Release** build/install/package:
+Compose preparation → embedded capture/release → native child execution/drain →
+semantic/image comparison → atomic result. Reuse structured process arguments,
+owned Windows jobs and I/O drain. Terminate only owned work; leases survive until
+descendant/process/native/GPU readers finish.
 
-- Project references, embedded/content resources and module initializers contain
-  zero development-validation dependencies or payloads.
-- Default CMake/MSBuild/solution graphs do not compile/link qualification drivers,
-  hooks, telemetry, fixture generation, protocol readers/schemas, metrics or UI.
-- Packages and normal SDK/install inventories contain none of those artifacts.
-- Normal editor authoring/Save/Cook/preview and ordinary RenderScene loading run
-  successfully without development targets or their output present.
+Compare expectations independently with embedded and standalone observations,
+then compare images. Reject missing fields/checkpoints, non-finite data, wrong
+operation/root/build/profile/view/frame identity and altered/truncated artifacts.
+Label source-less library baselines and intentional overrides explicitly.
+Native exit zero is not a parity verdict.
 
-A separate opt-in driver is permitted, not a product startup prerequisite or a
-whole-editor promotion manifest. Reusability alone does not justify shipping
-instrumentation. Doc-only review needs link/consistency/diff checks, not builds
-or UI launches.
+Retain original PNGs, differences, metrics, field mismatches and partial evidence.
+Freshness is separate from verdict; later edits make the captured revision
+historical without changing its outcome.
 
-## 5. Exit Gates
+Checks: numeric boundaries, quaternion sign, enum/ID mismatch, empty-image false
+positives, wrong frame/dimensions/encoding, hidden overrides, tampering, source
+changes, crash/timeout/cancel, descendants retaining I/O, project replacement and
+queued cooking/mount work resuming.
 
-- [ ] M02 supported single-viewport evidence is recorded; 07A/07B remain validated.
-- [ ] Exact project/scene/camera loading works with example content unavailable.
-- [ ] Current saved expectations and complete mount/provenance proofs survive
-  partial/no-op cooking and library priority; invalid inputs cannot launch.
-- [ ] Researched V0.1 scope is accepted/reconciled before field freeze; complete
-  semantics pass for every approved field, hierarchy/camera and effective setting.
-- [ ] Static and auto-exposure image cases pass unchanged tolerances.
-- [ ] Saved-revision capture is isolated from later edits and releases into the
-  coherent current preview; no late callback restores obsolete state.
-- [ ] Cancel/timeout/crash/close/restart/resize and concurrent cook/mount work
-  preserve files, dirty/history state, ownership and responsiveness.
-- [ ] Explicit development entry, real authoring/Save/Cook UI recovery, camera
-  selection and useful development results pass tests and joint review.
-- [ ] Normal Debug/Release references, resources, initializers, compile/link
-  artifacts, SDK/install and packages contain zero development-validation payloads.
-- [ ] Development output is isolated; normal editor and RenderScene run without it.
-- [ ] Relevant analyzer/IDE checks are clean; original evidence and user review
-  are recorded for the exact tested build/publication/profile.
-- [ ] IMPLEMENTATION_STATUS contains one M08 validation row; M09/M10 are not
-  claimed complete by this work.
+### M08.8 — Integrated qualification and closeout
+
+Run the full fixture and every field case through native/embedded rendering and
+real editor authoring/Save/Cook/migration/recovery. Qualify matched Release images
+on the same adapter/driver; Debug covers protocol and ownership faults.
+
+Include Primary-only, Secondary-only and both with distinct directions/colours
+and requested shadows; None-role fill; capture invalidation; visibility/Hide
+and receiver cases; every primitive/slot/emission case; Auto/Fixed cameras;
+Manual/Auto exposure; every retained tone mapper/grade/background interaction.
+
+Complete M02's one-viewport resize and consolidated discovery evidence under
+[its plan](ED-M02-live-viewport-stabilization.md). Run normal editor and RenderScene
+without development tools installed. Inspect normal Debug/Release references,
+resources, initializers, exports, packages and SDK inventories for zero
+qualification payloads.
+
+Jointly review real changes, reruns, cancellation, original images and results.
+Finish affected-code analyzer/IDE checks at commit preparation. Record one M08
+result in IMPLEMENTATION_STATUS with exact build/fixture/publication/profile
+and evidence identities.
+
+## 5. Qualification constants
+
+The standalone LLD owns measurement algorithms. These constants are fixed:
+
+| Gate | Required value |
+| --- | --- |
+| Full workload | Exactly 100 nodes: 98 geometry, one camera, one Primary light; exactly 1,000 logical catalog entries; ≤250,000 visible triangles |
+| Field cases | Separate bounded scenes cover multiple lights and non-default fields without changing full-workload counts |
+| Base image profile | 1920×1080; Fixed 16:9; Manual EV9.7; ACES fitted; conventional shadows; no overlays |
+| Time/history | Fixed 1/60-second scene step; seed 0; reset histories; frame 0 starts after content/uploads/camera/profile readiness |
+| Checkpoints | Completed frame 120; Auto also at 240 and 600 |
+| IDs/enums/booleans/membership/rectangles | Exact through the declared identity map |
+| Finite scalars/vectors | `abs(a-b) <= max(1e-4, 1e-4 * max(abs(a), abs(b)))` |
+| Quaternion orientation | ≤0.01 degree; opposite signs equivalent; invalid quaternions rejected |
+| Images | Display-encoded sRGB RGB; RMSE ≤0.01; nearest-rank P99 absolute channel error ≤0.03; only outer one-pixel border excluded |
+| Auto exposure | GPU-observed difference ≤0.05 EV at each checkpoint, with the same image thresholds |
+| Framing | Fixed 4:3 in 1920×1080: `(240,0,1440,1080)`; Fixed 16:9 in 1440×1080: `(0,135,1440,810)`; bars stay in images and outside metering |
+| Deadlines | Cancellable 120-second active preparation/capture bound and 120-second child deadline per run; cancellable admission wait; separately bounded cleanup/drain ownership |
+| Feedback | Development progress/cancel state within 100 ms; responsive production authoring |
+
+No image resizing/alignment/content masking, automatic rebaselining or tolerance
+adjustment is part of comparison. Required geometry and visible-effect checks
+prevent two empty or identically incorrect images from satisfying the gate.
+
+## 6. Build and evidence
+
+Production native work uses the existing `projects/Oxygen.Engine/out/build-ninja`
+tree with CMake/CTest and `--parallel 1`. Use MSBuild.exe/VSTest for editor work;
+rebuild Interop after changed SDK inputs are installed. Serialize tests sharing
+GPU, fixture or publication resources.
+
+M08.3 supplies reusable build/run scripts for the named development targets.
+Options select configuration, request/evidence paths and filters; development
+output never replaces normal SDK/editor artifacts. Record commands and hashes
+of tools/runtime/schemas/shaders, hardware/driver/OS, profiles and results beside
+each run. Native example use/content refresh follows the maintained
+[RenderScene guide](../../../projects/Oxygen.Engine/Examples/RenderScene/README.md).
+
+## 7. Exit checklist
+
+- [ ] Canonical formats/migration and every required producer/loader mapping pass.
+- [ ] Engine fixes have native tests and rendered evidence outside the editor.
+- [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
+- [ ] Saved-input proof/ownership survive partial/no-op publication and contention.
+- [ ] Saved-revision capture isolates edits and converges correctly after release.
+- [ ] Full semantic/image/GPU-exposure comparisons pass the fixed thresholds.
+- [ ] Cancel/fault/close/restart/resize preserve source, publication and ownership.
+- [ ] Normal Debug/Release build/install/package contain no qualification payloads.
+- [ ] M02 single-viewport evidence and joint M08 review are recorded.
+- [ ] Source/API prose and post-V0.1 annotations match implemented contracts.
+- [ ] Affected-code diagnostics are clean and the exact evidence set is recorded.

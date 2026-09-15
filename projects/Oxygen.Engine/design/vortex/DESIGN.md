@@ -313,7 +313,7 @@ EngineShaderCatalog registration table.
 | Shadow depth | Light list, view data | LightingService, InitViews |
 | Base pass | Shadow maps (optional) | ShadowService |
 | Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation |
-| Static SkyLight diffuse lighting | VTX-M08 validated static specified-cubemap diffuse product | VTX-M08 expands the documented ambient bridge with a typed static-SkyLight SH product. EnvironmentLightingService owns generation/publication; LightingService may consume in Stage 12 through that bridge only. Stage 13 remains reserved for future IndirectLightingService activation, which must retire or absorb the bridge rather than create a second diffuse SkyLight path. |
+| SkyLight diffuse/specular lighting | VTX-M08 static diffuse baseline; ED-M08 extension planned | EnvironmentLightingService owns generation/publication. The [V0.1 IBL contract](plan/editor-v01-captured-sky-ibl.md) activates Stage 13 indirect evaluation for captured-sky and specified-cubemap diffuse/specular products and removes the Stage 12 ambient bridge. Forward surfaces share the same evaluation helper; no duplicate diffuse contribution remains. |
 | Translucency | SceneColor, SceneDepth, forward light data | Prior stages, LightingService |
 | Post-process | SceneColor, SceneDepth, Velocity | Prior stages |
 | Diagnostics | Any SceneTextures product | Prior stages |

@@ -96,7 +96,7 @@ authoring. Physics scene editing has no V0.1 LLD because it is out of scope per
 
 ### 4.1 Project Open To Workspace
 
-Owner chain:
+Development dependency chain:
 
 ```text
 project-workspace-shell
@@ -211,18 +211,23 @@ Design contract:
 Owner chain:
 
 ```text
-content-pipeline
-  -> standalone-runtime-validation
-  -> diagnostics-operation-results
+opt-in qualification host
+  -> production content/runtime capabilities
+  -> independently observed embedded and native frames
+  -> development comparison and evidence
 ```
 
 Design contract:
 
-- Standalone validation consumes cooked output; it does not inspect live editor
-  runtime state as proof.
-- The validation harness proves that cooked V0.1 scenes load in standalone
-  runtime with expected authored geometry, materials, camera, lighting,
-  atmosphere, exposure, and tone mapping.
+- Expected values come from verified saved sources and explicitly labelled
+  library baselines. Embedded and standalone native observations are independent
+  evidence compared against those expectations.
+- Qualification proves canonical scene/slot/material/camera/light/environment
+  semantics and completed-frame image parity through the real engine paths.
+- Qualification code, protocols, fixtures, instrumentation and runners are
+  opt-in development targets outside normal Debug/Release product and SDK graphs.
+- [ED-M08](plan/ED-M08-runtime-parity-and-standalone-validation.md) defines the
+  implementation document map and engine-first delivery sequence.
 - Failures identify whether the problem is cooked output, asset resolution,
   runtime loading, or expected-content mismatch.
 

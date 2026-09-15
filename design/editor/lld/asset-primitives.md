@@ -326,11 +326,15 @@ ED-M06 Content Browser UI consumes primitive records through an editor-owned
 
 ## 10. Persistence And Round Trip
 
-Required ED-M05 persistence behavior:
+V0.1 persistence behavior:
 
-- material descriptors persist as `*.omat.json` using `oxygen.material.v1`.
+- material descriptors persist as canonical engine-schema `*.omat.json`; the
+  [material contract](material-editor.md) defines colour/HDR emission and the
+  float32 compiled factor.
 - `MaterialSourceWriter` output must be readable by `MaterialSourceReader`.
-- scene material slots persist only the `AssetReference<MaterialAsset>.Uri`.
+- scene overrides persist geometry identity, stable material SlotId and material
+  URI; the [content contract](content-pipeline.md) defines importer continuity,
+  unresolved repair and atomic publication.
 - missing material URIs survive scene save/reopen unchanged.
 - cooked output is derived state and must not be the only copy of authored
   material values.
@@ -347,8 +351,9 @@ Runtime-relevant behavior:
 - full runtime preview/parity is owned by `runtime-integration.md` and
   `standalone-runtime-validation.md`.
 
-ED-M05 may validate the minimum material cook slice by producing `.omat` and
-refreshing catalog state. It must not claim full runtime parity.
+Native production and catalog behavior have their own tests. Full saved-source,
+embedded and standalone image/semantic parity is qualified through ED-M08's
+development-only targets.
 
 ## 12. Operation Results And Diagnostics
 

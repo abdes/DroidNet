@@ -193,7 +193,7 @@ ED-M03 command surface:
 | --- | --- |
 | `Scene.Node.Create` | Create root/child node with default transform. |
 | `Scene.Node.CreatePrimitive` | Create supported procedural primitive node from the quick-add menu. |
-| `Scene.Node.CreateLight` | Create directional light node from the quick-add menu; point/spot remain best effort in ED-M03. |
+| `Scene.Node.CreateLight` | Create a realtime directional light through the V0.1 command; point/spot authoring is outside this release. |
 | `Scene.Node.Rename` | Rename node and update hierarchy/document state. |
 | `Scene.Node.Delete` | Delete selected node hierarchy and support undo restore. |
 | `Scene.Node.Reparent` | Reparent node/hierarchy; local-transform preservation is the ED-M03 default. |
@@ -301,18 +301,23 @@ serializer path. ED-M03 must prove:
 - dirty state clears only when the current committed revision is successfully saved.
 - failed save leaves dirty state set.
 
-Scene save has no cook side effect. `Scene.Save` reports authoring-data
-persistence only. Explicit scene cook orchestration and any related
-`ContentPipeline` diagnostics are owned by the content pipeline.
+Scene persistence reports the saved source revision, not a cooked result.
+Successful Save notifies the existing content coordinator, which schedules
+incremental cooking of that revision under the cooking workflow contract.
+The persistence operation does not perform or await an implicit native cook;
+cooking progress/failure remains a separate ContentPipeline outcome.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
 Commands may request live sync through `ISceneEngineSync`. They must not call
 native interop directly.
 
-ED-M03 live sync scope is command-triggered best effort for hierarchy,
-primitive, and light creation/deletion/reparent where current engine APIs
-support it. Complete component property sync is ED-M04.
+Every required V0.1 authored change participates in coherent live delivery:
+hierarchy, components, all material slots, Local/Inherit flags, Auto/Fixed cameras,
+atmospheric assignment and environment fields. Source authoring remains available
+while runtime is unavailable; delivery is visibly pending and converges on the
+current scene when available. Accepted/queued operations are not presented-frame
+proof; development qualification observes actual native state and frame output.
 
 ## 12. Operation Results And Diagnostics
 

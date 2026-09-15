@@ -4,6 +4,17 @@
 **Deliverable:** D.8
 **Status:** `ready`
 
+## V0.1 Production Extension
+
+[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md) extends the
+prepared-scene/view contract with resolved Local/Inherit flags, per-instance
+receiver eligibility, Auto/Fixed camera projection and an editing-main-view
+representation mask. Preserve frame caster/light eligibility when that view
+mask hides geometry. Authored Hidden and camera-frustum exclusion remain distinct.
+The dedicated contact caster-depth pass is a ShadowService product, not a new
+InitViews GPU pass or a reason to add another full ScenePrep traversal.
+Original phase evidence remains scoped to the original prepared-scene behavior.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
