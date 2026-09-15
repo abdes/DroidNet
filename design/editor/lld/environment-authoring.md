@@ -1,6 +1,6 @@
 # Environment Authoring LLD
 
-Status: `V0.1 contract; named gaps execute in ED-M07A`
+Status: `V0.1 field contract; ED-M07A/07B validated, ED-M08 parity pending`
 
 ## 1. Purpose
 
@@ -47,11 +47,11 @@ Concrete state of the code:
 - `DirectionalLightComponent` carries `IsSunLight` and
   `EnvironmentContribution`; `Scene.Environment.Edit` keeps sun binding and
   light flags coherent in one undo entry.
-- `SceneEngineSync.UpdateEnvironmentAsync` owns the live-sync boundary. V0.1
-  syncs sun binding through existing light paths and queues scene-level updates
-  for native `SkyAtmosphere` and `PostProcessVolume` systems. Background color
-  is not carried by the current native environment call; ED-M07A.1 fixes this
-  omission and its falsely inherited per-field success status.
+- `SceneEngineSync.UpdateEnvironmentAsync` owns the live-sync boundary. Sun
+  binding, native `SkyAtmosphere`, complete `PostProcessVolume` settings and
+  display-preserving Background are implemented through managed runtime
+  capabilities. M07A/07B evidence covers native application and scene v4
+  save/cook/load; M08 adds controlled embedded/standalone rendered comparison.
 - `IEngineSettings` / `EngineSettingsService` remain process-startup engine
   config only. They do not store scene environment data.
 
@@ -77,8 +77,9 @@ Decision (recorded for ED-M07A):
    scene-settings record; the inspector renders them in separate
    domain-specific sections and live sync maps them to native
    `PostProcessVolume`.
-4. ED-M07 cook output embeds the authored sky-atmosphere subset into the native
-   scene descriptor. ED-M08 validates runtime parity from that cooked output.
+4. ED-M07B scene v4 output carries the full required atmosphere, post-process
+   and background settings. ED-M08 validates rendered runtime parity from that
+   cooked output; it does not reimplement these field mappings.
 
 ## 6. Ownership
 
@@ -88,7 +89,7 @@ Decision (recorded for ED-M07A):
 | `Oxygen.Editor.WorldEditor` Inspector | Scene-level Sky Atmosphere, Sun Binding, Exposure, Tone Mapping, Bloom, Color Grading, and Background sections (`SelectionPolicy.SceneOnly`). |
 | `Oxygen.Editor.WorldEditor` Commands | `Scene.Environment.Edit`, undo, dirty, sync request. |
 | `Oxygen.Editor.WorldEditor` Services / `SceneEngineSync` | Scene-settings sync adapter; sun-binding, sky-atmosphere, and post-process mapping to engine API. |
-| `Oxygen.Editor.Runtime` | Engine readiness; surfaces missing API such as background color as `Unsupported`. |
+| `Oxygen.Editor.Runtime` | Engine readiness, native environment/background application and correlated observations; reports unavailable or rejected capabilities without claiming presentation. |
 
 ## 7. Data Contracts
 
