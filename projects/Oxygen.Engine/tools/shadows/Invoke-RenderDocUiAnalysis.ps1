@@ -1,298 +1,168 @@
 <#
 .SYNOPSIS
-Runs one RenderDoc UI analysis script against a capture and validates its report.
-
+Runs one RenderDoc controller analyzer in the background and validates its report.
 .DESCRIPTION
-Launches qrenderdoc with a UI-python script, serializes concurrent analysis
-through a process-wide mutex, and fails if the generated report is missing,
-stale, empty, or reports an exception.
+Uses the supported --python mode before qrenderdoc's main UI opens. A bootstrap
+always signals SystemExit; shared analysis callbacks own pure replay handles.
+No Qt/PySide calls or desktop interaction. Existing UiScriptPath callers retain
+their controller/report callback contract. Direct manual --ui-python use remains
+available; it no longer tries to close the user's UI.
+
+Environment changes apply only to the child. The host returns zero for SystemExit
+even on script failure, so successful final report and handle cleanup are required.
+Python analyzer stdout/stderr are written directly to child-specific files by
+the bootstrap. No output pipes or reader tasks are created. Native host failure
+is reported through its exit status. Termination grace is at most five seconds.
+Timeout cleanup is never counted as success.
+.EXAMPLE
+./tools/shadows/Invoke-RenderDocUiAnalysis.ps1 -CapturePath ./out/frame.rdc -UiScriptPath tools/vortex/DumpRenderDocActions.py -PassName Actions -ReportPath ./out/actions.txt
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)]
-  [string]$CapturePath,
-
-  [Parameter(Mandatory = $true)]
-  [string]$UiScriptPath,
-
-  [Parameter(Mandatory = $true)]
-  [string]$PassName,
-
-  [Parameter(Mandatory = $true)]
-  [string]$ReportPath,
-
-  [Parameter()]
+  [Parameter(Mandatory = $true)][string]$CapturePath,
+  [Parameter(Mandatory = $true)][string]$UiScriptPath,
+  [Parameter(Mandatory = $true)][string]$PassName,
+  [Parameter(Mandatory = $true)][string]$ReportPath,
   [string]$ConfigRoot = '',
-
-  [Parameter()]
-  [ValidateRange(1, 3600)]
-  [int]$AnalysisTimeoutSeconds = 180,
-
-  [Parameter()]
-  [ValidateRange(1, 300)]
-  [int]$LockTimeoutSeconds = 10,
-
-  [Parameter()]
+  [ValidateRange(1, 3600)][int]$AnalysisTimeoutSeconds = 180,
+  [ValidateRange(1, 300)][int]$LockTimeoutSeconds = 10,
   [switch]$SkipLock,
-
-  [Parameter()]
   [string]$LaunchLogPath = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'PowerShellCommon.ps1')
-. (Join-Path $PSScriptRoot 'RenderSceneBenchmarkCommon.ps1')
 
-function Set-ScopedProcessEnvironmentVariable {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$Name,
-
-    [Parameter(Mandatory = $true)]
-    [AllowEmptyString()]
-    [string]$Value,
-
-    [Parameter(Mandatory = $true)]
-    [hashtable]$OriginalValues
-  )
-
-  if (-not $OriginalValues.ContainsKey($Name)) {
-    $OriginalValues[$Name] = [System.Environment]::GetEnvironmentVariable($Name, 'Process')
-  }
-
-  [System.Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
-}
-
-function Restore-ScopedProcessEnvironmentVariables {
-  param(
-    [Parameter(Mandatory = $true)]
-    [hashtable]$OriginalValues
-  )
-
-  foreach ($entry in $OriginalValues.GetEnumerator()) {
-    [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
-  }
-}
-
-function Enter-RenderDocAnalysisLock {
-  param(
-    [Parameter()]
-    [int]$TimeoutSeconds = 10
-  )
-
+function Enter-RenderDocAnalysisLock([int]$TimeoutSeconds) {
   $mutex = New-Object System.Threading.Mutex($false, 'Global\Oxygen.Engine.RenderDocUiAnalysis')
-  $lockAcquired = $false
-
   try {
-    try {
-      $lockAcquired = $mutex.WaitOne([TimeSpan]::FromSeconds($TimeoutSeconds))
-    } catch [System.Threading.AbandonedMutexException] {
-      $lockAcquired = $true
-    }
-
-    if (-not $lockAcquired) {
-      throw "Timed out waiting for the RenderDoc analysis lock after $TimeoutSeconds second(s)."
-    }
-
-    return [pscustomobject]@{
-      Mutex = $mutex
-      LockAcquired = $true
-    }
+    try { $acquired = $mutex.WaitOne([TimeSpan]::FromSeconds($TimeoutSeconds)) }
+    catch [System.Threading.AbandonedMutexException] { $acquired = $true }
+    if (-not $acquired) { throw "Timed out waiting for the RenderDoc analysis lock after $TimeoutSeconds seconds." }
+    return $mutex
   } catch {
     $mutex.Dispose()
     throw
   }
 }
 
-function Exit-RenderDocAnalysisLock {
-  param(
-    [Parameter(Mandatory = $true)]
-    $Lock
-  )
-
-  if ($null -eq $Lock) {
-    return
-  }
-
-  try {
-    if ($Lock.LockAcquired) {
-      $Lock.Mutex.ReleaseMutex() | Out-Null
-    }
-  } finally {
-    $Lock.Mutex.Dispose()
-  }
-}
-
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $captureFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $CapturePath
-$uiScriptFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $UiScriptPath
+$analysisScriptPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $UiScriptPath
 $reportFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $ReportPath
 $renderDocExe = 'C:\Program Files\RenderDoc\qrenderdoc.exe'
-if ([string]::IsNullOrWhiteSpace($LaunchLogPath)) {
-  $LaunchLogPath = "$reportFullPath.launch.log"
+$bootstrapPath = Join-Path $PSScriptRoot 'RenderDocAnalysisBootstrap.py'
+if (-not $LaunchLogPath) { $LaunchLogPath = "$reportFullPath.launch.log" }
+$launchLog = Resolve-RepoPath -RepoRoot $repoRoot -Path $LaunchLogPath
+foreach ($file in @($renderDocExe, $captureFullPath, $analysisScriptPath, $bootstrapPath)) {
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required file not found: $file" }
 }
-$launchLogFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $LaunchLogPath
-
-if (-not (Test-Path -LiteralPath $renderDocExe)) {
-  throw "qrenderdoc.exe not found: $renderDocExe"
+$protectedPaths = @($captureFullPath, $analysisScriptPath, $bootstrapPath, $renderDocExe)
+$evidencePaths = @($reportFullPath, $launchLog, "$launchLog.stdout.log", "$launchLog.stderr.log")
+if (@($evidencePaths | Sort-Object -Unique).Count -ne $evidencePaths.Count) {
+  throw 'Report, launch log, stdout log, and stderr log paths must be distinct.'
 }
-if (-not (Test-Path -LiteralPath $captureFullPath)) {
-  throw "Capture not found: $captureFullPath"
+foreach ($destination in $evidencePaths) {
+  if ($destination -in $protectedPaths) { throw "Evidence output would replace an input: $destination" }
 }
-if (-not (Test-Path -LiteralPath $uiScriptFullPath)) {
-  throw "RenderDoc UI script not found: $uiScriptFullPath"
+if (-not $ConfigRoot) { $ConfigRoot = Join-Path $repoRoot 'out/build-ninja/analysis/renderdoc-automation-config' }
+$configParent = Resolve-RepoPath -RepoRoot $repoRoot -Path $ConfigRoot
+$configSession = Join-Path $configParent ([Guid]::NewGuid().ToString('N'))
+$appDataPath = Join-Path $configSession 'Roaming'
+$localAppDataPath = Join-Path $configSession 'Local'
+foreach ($directory in @($appDataPath, $localAppDataPath, (Split-Path -Parent $reportFullPath), (Split-Path -Parent $launchLog))) {
+  $null = New-Item -ItemType Directory -Force -Path $directory
 }
 
-if ([string]::IsNullOrWhiteSpace($ConfigRoot)) {
-  $ConfigRoot = Join-Path $repoRoot 'out\build-ninja\analysis\csm\renderdoc-automation-config'
-}
-
-$configRootFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $ConfigRoot
-$appDataPath = Join-Path $configRootFullPath 'Roaming'
-$localAppDataPath = Join-Path $configRootFullPath 'Local'
-$reportDirectory = Split-Path -Parent $reportFullPath
-$launchLogDirectory = Split-Path -Parent $launchLogFullPath
-
-New-Item -ItemType Directory -Force -Path $appDataPath | Out-Null
-New-Item -ItemType Directory -Force -Path $localAppDataPath | Out-Null
-New-Item -ItemType Directory -Force -Path $reportDirectory | Out-Null
-New-Item -ItemType Directory -Force -Path $launchLogDirectory | Out-Null
-
-$environmentSnapshot = @{}
 $analysisLock = $null
-
+$process = $null
+$started = $false
+$terminationAttempted = $false
 try {
-  if (Test-Path -LiteralPath $reportFullPath) {
-    Remove-Item -LiteralPath $reportFullPath -Force
-  }
-  if (Test-Path -LiteralPath $launchLogFullPath) {
-    Remove-Item -LiteralPath $launchLogFullPath -Force
-  }
-
-  Set-ScopedProcessEnvironmentVariable `
-    -Name 'APPDATA' `
-    -Value $appDataPath `
-    -OriginalValues $environmentSnapshot
-  Set-ScopedProcessEnvironmentVariable `
-    -Name 'LOCALAPPDATA' `
-    -Value $localAppDataPath `
-    -OriginalValues $environmentSnapshot
-  Set-ScopedProcessEnvironmentVariable `
-    -Name 'OXYGEN_RENDERDOC_PASS_NAME' `
-    -Value $PassName `
-    -OriginalValues $environmentSnapshot
-  Set-ScopedProcessEnvironmentVariable `
-    -Name 'OXYGEN_RENDERDOC_REPORT_PATH' `
-    -Value $reportFullPath `
-    -OriginalValues $environmentSnapshot
-
-  $launchStartedUtc = [datetime]::UtcNow
+  if (-not $SkipLock) { $analysisLock = Enter-RenderDocAnalysisLock $LockTimeoutSeconds }
+  if (Test-Path -LiteralPath $reportFullPath) { Remove-Item -LiteralPath $reportFullPath -Force }
+  $launchStartedUtc = [DateTime]::UtcNow
   @(
     "launch_started_utc=$($launchStartedUtc.ToString('o'))"
+    'execution_mode=replay'
     "renderdoc_exe=$renderDocExe"
-    "ui_script=$uiScriptFullPath"
+    "bootstrap=$bootstrapPath"
+    "analysis_script=$analysisScriptPath"
     "capture=$captureFullPath"
     "report=$reportFullPath"
-    "skip_lock=$($SkipLock.IsPresent)"
-    "lock_timeout_seconds=$LockTimeoutSeconds"
+    "config_session=$configSession"
     "timeout_seconds=$AnalysisTimeoutSeconds"
-  ) | Set-Content -LiteralPath $launchLogFullPath -Encoding ascii
+  ) | Set-Content -LiteralPath $launchLog -Encoding utf8
 
-  if ($SkipLock) {
-    "lock_skipped=true" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-  } else {
-    "waiting_for_lock=true" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-    $analysisLock = Enter-RenderDocAnalysisLock -TimeoutSeconds $LockTimeoutSeconds
-    "lock_acquired=true" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-  }
-
-  $process = Start-Process `
-    -FilePath $renderDocExe `
-    -ArgumentList @('--ui-python', $uiScriptFullPath, $captureFullPath) `
-    -WorkingDirectory $repoRoot `
-    -PassThru
-
-  "spawned_pid=$($process.Id)" |
-    Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-
-  Start-Sleep -Milliseconds 500
-  if ($process.HasExited) {
-    $process.Refresh()
-    "exited_immediately=true exit_code=$($process.ExitCode)" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-  } else {
-    "running_after_spawn=true" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-  }
-
-  $completed = $true
-  try {
-    Wait-Process -Id $process.Id -Timeout $AnalysisTimeoutSeconds -ErrorAction Stop
-  } catch {
-    $completed = $false
-  }
-
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $renderDocExe
+  # The only path argument is an existing .py file: it cannot contain a quote
+  # or end in a backslash. Quote it for spaces without invoking a shell. This
+  # also supports callers using Windows PowerShell/.NET Framework.
+  $startInfo.Arguments = '--python "' + $bootstrapPath + '"'
+  $startInfo.WorkingDirectory = $repoRoot
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+  $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+  $startInfo.EnvironmentVariables['APPDATA'] = $appDataPath
+  $startInfo.EnvironmentVariables['LOCALAPPDATA'] = $localAppDataPath
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_AUTOMATION_MODE'] = 'replay'
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_SCRIPT_PATH'] = $analysisScriptPath
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_CAPTURE_PATH'] = $captureFullPath
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_REPORT_PATH'] = $reportFullPath
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_PASS_NAME'] = $PassName
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_STDOUT_PATH'] = "$launchLog.stdout.log"
+  $startInfo.EnvironmentVariables['OXYGEN_RENDERDOC_STDERR_PATH'] = "$launchLog.stderr.log"
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  $started = $process.Start()
+  if (-not $started) { throw 'Could not start RenderDoc replay host.' }
+  "spawned_pid=$($process.Id)" | Add-Content -LiteralPath $launchLog -Encoding utf8
+  $completed = $process.WaitForExit($AnalysisTimeoutSeconds * 1000)
   if (-not $completed) {
-    "timed_out=true" |
-      Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-    try {
-      if (-not $process.HasExited) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-      }
-    } finally {
-      throw "qrenderdoc.exe timed out after $AnalysisTimeoutSeconds second(s) for $uiScriptFullPath"
+    'timed_out=true' | Add-Content -LiteralPath $launchLog -Encoding utf8
+    $terminationAttempted = $true
+    try { $process.Kill() } catch {
+      "kill_error=$($_.Exception.Message)" | Add-Content -LiteralPath $launchLog -Encoding utf8
     }
+    $terminated = $process.WaitForExit(5000)
+    "exited_after_kill=$terminated" | Add-Content -LiteralPath $launchLog -Encoding utf8
   }
-
-  $process.Refresh()
-  "final_exit_code=$($process.ExitCode)" |
-    Add-Content -LiteralPath $launchLogFullPath -Encoding ascii
-
-  if ($process.ExitCode -ne 0) {
-    throw "qrenderdoc.exe exited with code $($process.ExitCode) for $uiScriptFullPath"
+  if ($process.HasExited) {
+    "final_exit_code=$($process.ExitCode)" | Add-Content -LiteralPath $launchLog -Encoding utf8
   }
-
-  if (-not (Test-Path -LiteralPath $reportFullPath)) {
-    throw "RenderDoc UI analysis did not produce the expected report: $reportFullPath"
-  }
-
-  Wait-ForStableFile -Path $reportFullPath
-
+  if (-not $completed) { throw "RenderDoc replay timed out after $AnalysisTimeoutSeconds seconds; no successful completion." }
+  if ($process.ExitCode -ne 0) { throw "RenderDoc replay host exited $($process.ExitCode). See $launchLog" }
+  if (-not (Test-Path -LiteralPath $reportFullPath -PathType Leaf)) { throw "Analyzer produced no report: $reportFullPath" }
   $reportItem = Get-Item -LiteralPath $reportFullPath
-  if ($reportItem.Length -le 0) {
-    throw "RenderDoc UI analysis produced an empty report: $reportFullPath"
+  if ($reportItem.Length -le 0 -or $reportItem.LastWriteTimeUtc -lt $launchStartedUtc) {
+    throw "Analyzer report is empty or stale: $reportFullPath"
   }
-  if ($reportItem.LastWriteTimeUtc -lt $launchStartedUtc) {
-    throw "RenderDoc UI analysis did not update the report during this launch: $reportFullPath"
-  }
-
-  $exceptionLines = @(Select-String -Path $reportFullPath -Pattern '^analysis_result=exception$')
-  if ($exceptionLines.Count -gt 0) {
-    $reportPreview = (Get-Content -LiteralPath $reportFullPath -TotalCount 40) -join [Environment]::NewLine
-    throw "RenderDoc UI analysis reported an exception:`n$reportPreview"
-  }
-
-  $successLines = @(Select-String -Path $reportFullPath -Pattern '^analysis_result=success$')
-  if ($successLines.Count -ne 1) {
-    $reportPreview = (Get-Content -LiteralPath $reportFullPath -TotalCount 40) -join [Environment]::NewLine
-    throw "RenderDoc UI analysis did not report explicit success:`n$reportPreview"
-  }
-
-  $errorLines = @(Select-String -Path $reportFullPath -Pattern '^error=')
-  if ($errorLines.Count -gt 0) {
-    $reportPreview = (Get-Content -LiteralPath $reportFullPath -TotalCount 40) -join [Environment]::NewLine
-    throw "RenderDoc UI analysis reported an error:`n$reportPreview"
+  $lines = @(Get-Content -LiteralPath $reportFullPath)
+  if (@($lines | Where-Object { $_ -eq 'analysis_result=success' }).Count -ne 1 -or
+      $lines -contains 'analysis_result=exception' -or
+      $lines -notcontains 'execution_mode=replay' -or
+      $lines -notcontains 'replay_handles_shutdown=true' -or
+      @($lines | Where-Object { $_ -match '^error=' }).Count -gt 0) {
+    $preview = ($lines | Select-Object -First 40) -join [Environment]::NewLine
+    throw "Analyzer did not complete successfully with replay handles closed:`n$preview"
   }
 } finally {
-  Restore-ScopedProcessEnvironmentVariables -OriginalValues $environmentSnapshot
-  if ($null -ne $analysisLock) {
-    Exit-RenderDocAnalysisLock -Lock $analysisLock
+  if ($process) {
+    if ($started -and -not $process.HasExited -and -not $terminationAttempted) {
+      $terminationAttempted = $true
+      try { $process.Kill() } catch {
+        "cleanup_kill_error=$($_.Exception.Message)" | Add-Content -LiteralPath $launchLog -Encoding utf8
+      }
+      $terminated = $process.WaitForExit(5000)
+      "cleanup_process_exited=$terminated" | Add-Content -LiteralPath $launchLog -Encoding utf8
+    }
+    $process.Dispose()
+  }
+  if ($analysisLock) {
+    try { $analysisLock.ReleaseMutex() } finally { $analysisLock.Dispose() }
   }
 }
-
 $global:LASTEXITCODE = 0
 Write-Output "Report: $reportFullPath"

@@ -2,3 +2,8 @@ pak/
 .cooked/
 glb/
 !glb/*.glb
+reimport-sources.local.json
+.reimport-runs/
+.cooked.stage-*/
+.cooked.backup-*/
+.cooked.reimport.lock

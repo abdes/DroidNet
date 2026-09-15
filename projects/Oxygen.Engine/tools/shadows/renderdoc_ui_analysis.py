@@ -1,8 +1,8 @@
-"""Shared RenderDoc UI analysis helpers for shadow tooling.
+"""Shared RenderDoc replay analysis helpers for shadow tooling.
 
-This module is source-owned in `tools/shadows/` and is intended to work inside
-RenderDoc's embedded Python interpreter. Keep the implementation conservative
-and compatible with older embedded Python versions.
+This module is source-owned in `tools/shadows/` and works inside RenderDoc's
+embedded Python before the UI for automation, or in a manually opened UI.
+Keep the implementation compatible with older embedded Python versions.
 """
 
 import builtins
@@ -19,6 +19,7 @@ PASS_EVENT_LIMIT_ENV = "OXYGEN_RENDERDOC_PASS_EVENT_LIMIT"
 EVENT_ID_ENV = "OXYGEN_RENDERDOC_EVENT_ID"
 RESOURCE_NAME_ENV = "OXYGEN_RENDERDOC_RESOURCE_NAME"
 RESOURCE_EVENT_LIMIT_ENV = "OXYGEN_RENDERDOC_RESOURCE_EVENT_LIMIT"
+AUTOMATION_MODE_ENV = "OXYGEN_RENDERDOC_AUTOMATION_MODE"
 
 DEFAULT_PASS_EVENT_LIMIT = 24
 DEFAULT_RESOURCE_EVENT_LIMIT = 24
@@ -159,7 +160,8 @@ def ensure_ui_context():
 def renderdoc_module():
     global _RENDERDOC_MODULE
 
-    ensure_ui_context()
+    if os.environ.get(AUTOMATION_MODE_ENV) != "replay":
+        ensure_ui_context()
     if _RENDERDOC_MODULE is not None:
         return _RENDERDOC_MODULE
 
@@ -281,30 +283,6 @@ def resolve_report_path(capture_path, report_suffix):
 def write_report(report_path, report_lines):
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
-
-
-def close_ui_cleanly():
-    capture_context = get_capture_context()
-    if capture_context is None:
-        return
-
-    try:
-        if hasattr(capture_context, "IsCaptureLoaded") and capture_context.IsCaptureLoaded():
-            capture_context.CloseCapture()
-    except Exception:
-        pass
-
-    try:
-        main_window = capture_context.GetMainWindow()
-        if hasattr(main_window, "Widget"):
-            widget = main_window.Widget()
-        else:
-            widget = main_window
-        close_method = getattr(widget, "close", None)
-        if callable(close_method):
-            close_method()
-    except Exception:
-        pass
 
 
 def validate_loaded_capture(requested_capture_path):
@@ -439,9 +417,60 @@ def summarize_event_ids(records, limit=8):
     return ", ".join(tokens)
 
 
+def run_replay_script(capture_path, report_path, analysis_callback):
+    """Run a controller callback with owned capture/controller lifetimes.
+
+    The --python host has already initialised global replay. It owns global
+    shutdown after the bootstrap exits; this function owns only these handles.
+    """
+    capture = None
+    controller = None
+    report = ReportWriter(report_path)
+    failures = []
+    try:
+        if capture_path is None:
+            raise RuntimeError("Automated replay requires an explicit capture path")
+        rd = renderdoc_module()
+        capture = rd.OpenCaptureFile()
+        status = capture.OpenFile(str(capture_path), "rdc", None)
+        if getattr(status, "code", status) != rd.ResultCode.Succeeded:
+            raise RuntimeError("Could not open capture: {}".format(status))
+        if capture.LocalReplaySupport() != rd.ReplaySupport.Supported:
+            raise RuntimeError("Capture does not support local replay")
+        status, controller = capture.OpenCapture(rd.ReplayOptions(), None)
+        if getattr(status, "code", status) != rd.ResultCode.Succeeded or controller is None:
+            raise RuntimeError("Could not create replay controller: {}".format(status))
+        analysis_callback(controller, report, capture_path, report_path)
+    except BaseException:
+        failures.append(traceback.format_exc())
+    finally:
+        for label, handle in (("controller", controller), ("capture", capture)):
+            if handle is not None:
+                try:
+                    handle.Shutdown()
+                except BaseException:
+                    failures.append("{} shutdown failed:\n{}".format(label, traceback.format_exc()))
+    if failures:
+        write_report(report_path, [
+            "analysis_result=exception",
+            "execution_mode=replay",
+            "requested_capture_path={}".format(capture_path),
+            "exception_traceback:",
+            "\n".join(failures),
+        ])
+        return 1
+    report.append("execution_mode=replay")
+    report.append("replay_handles_shutdown=true")
+    report.flush()
+    return 0
+
+
 def run_ui_script(report_suffix, analysis_callback):
+    """Shared callback entry; automation uses replay, manual UI stays open."""
     requested_capture_path = resolve_capture_path()
     report_path = resolve_report_path(requested_capture_path, report_suffix)
+    if os.environ.get(AUTOMATION_MODE_ENV) == "replay":
+        return run_replay_script(requested_capture_path, report_path, analysis_callback)
     capture_context = ensure_ui_context()
 
     try:
@@ -477,8 +506,6 @@ def run_ui_script(report_suffix, analysis_callback):
                 traceback.format_exc(),
             ],
         )
-        close_ui_cleanly()
         return 1
 
-    close_ui_cleanly()
     return 0
