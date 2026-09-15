@@ -960,6 +960,8 @@ content in embedded preview and standalone runtime under controlled comparison.
 - [x] All existing mesh material slots are approved for per-instance assignment
       and clearing to mesh defaults. Slot creation/topology editing are excluded;
       canonical implementation and rendered validation remain pending.
+- [x] Scalar emission colour/HDR intensity is approved, with zero intensity off.
+      Emissive GI is outside this decision; implementation and validation remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.

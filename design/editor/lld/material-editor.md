@@ -1,6 +1,6 @@
 # Material Editor LLD
 
-Status: `ED-M05 implementation-ready`
+Status: `ED-M05 baseline; ED-M08 emission scope approved, implementation pending`
 
 ## 1. Purpose
 
@@ -123,6 +123,9 @@ V0.1 includes a real scalar PBR material baseline:
 - roughness factor.
 - alpha mode and alpha cutoff if the existing descriptor supports it.
 - double-sided flag.
+- emission colour and HDR intensity, approved for ED-M08 on 2026-09-15;
+  zero intensity disables emission. This is self-illumination, not a promise of
+  lighting surrounding objects through global illumination.
 - normal scale and occlusion strength may be shown in Advanced when texture
   refs exist, but texture editing itself is deferred.
 
@@ -176,12 +179,18 @@ one-off number boxes or one-off section chrome for this editor.
 
 ### 7.1 Schema decision
 
-ED-M05 reuses `oxygen.material.v1` (`MaterialSource` /
-`MaterialPbrMetallicRoughness` / `MaterialAlphaMode`) **as-is**. No new
-editor-only schema and no schema augmentation are required for V0.1. The
-editor reads/writes `*.omat.json` through the existing
-`MaterialSourceImporter` and a writer counterpart paired with
-`CookedMaterialWriter`.
+The ED-M05 baseline reused the managed `MaterialSource` PBR model. ED-M08's
+approved emission scope extends the canonical engine-schema authoring route;
+it cannot leave the managed model unchanged. Native material descriptors already
+provide `parameters.emissive_factor`. Keep material schema ownership in the
+engine and the managed reader/writer/cook path aligned with it.
+
+Specify the colour/intensity representation, linear-colour conversion, finite
+HDR range and native storage precision before implementation. No arbitrary
+display-colour clamp may reduce HDR intensity to `[0,1]`; no unapproved physical
+luminance unit or silently relaxed parity tolerance is implied. Migrate useful
+prior material documents to the canonical model with emission off, then remove
+old-format compatibility paths.
 
 ### 7.2 Authoring model
 
@@ -235,6 +244,8 @@ contract instead of defining a parallel cook-result type.
 | Base Color A | `PbrMetallicRoughness.BaseColorA` | `float` | `[0,1]` | Primary |
 | Metallic | `PbrMetallicRoughness.MetallicFactor` | `float` | `[0,1]` | Primary |
 | Roughness | `PbrMetallicRoughness.RoughnessFactor` | `float` | `[0,1]` | Primary |
+| Emission colour | Canonical emission colour; managed member pending implementation | RGB colour | Defined UI-to-linear conversion; contributes to native `parameters.emissive_factor` | Primary |
+| Emission intensity | Canonical emission intensity; managed member pending implementation | scalar HDR intensity | Finite, nonnegative, zero means off; native representability checked | Primary |
 | Alpha Mode | `AlphaMode` | enum `Opaque` / `Mask` / `Blend` | enum | Advanced |
 | Alpha Cutoff | `AlphaCutoff` | `float` | `[0,1]`, enabled iff `AlphaMode == Mask` | Advanced |
 | Double Sided | `DoubleSided` | `bool` | — | Advanced |
@@ -246,6 +257,20 @@ contract instead of defining a parallel cook-result type.
 Clamp policy: out-of-range numeric input is **clamped on commit** and the
 committed value is shown in the field; clamping does not produce a warning
 unless the original input was non-numeric (then `Rejected`).
+
+#### ED-M08 emission completion contract
+
+Emission remains a scalar material feature: no texture authoring, new Unlit
+mode or emissive GI is added by this decision. Ordinary PBR lighting and
+Opaque/Mask/Blend behavior continue to apply. Bloom can form a halo when enabled;
+exposure and tone mapping affect the final displayed brightness.
+
+Wire emission through edit-state copying, commands, Undo/Redo, atomic Save,
+reopen, native cooking, swatch/material preview and published scene rendering.
+Qualification requires zero/nonzero/HDR values, colour changes, alpha modes,
+exposure and bloom interactions in the native engine first and then the editor.
+The user approved the scope; these implementation and validation gates remain
+open in ED-M08.
 
 ### 7.4 Asset identity in the scene
 
