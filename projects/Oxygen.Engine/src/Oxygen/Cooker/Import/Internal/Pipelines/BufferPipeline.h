@@ -119,9 +119,12 @@ public:
     bool success = false;
   };
 
-  //! Create a buffer pipeline using the given ThreadPool.
+  //! Create a buffer pipeline using the default configuration.
+  OXGN_COOK_API explicit BufferPipeline(co::ThreadPool& thread_pool);
+
+  //! Create a buffer pipeline using the given ThreadPool and configuration.
   OXGN_COOK_API explicit BufferPipeline(
-    co::ThreadPool& thread_pool, Config config = {});
+    co::ThreadPool& thread_pool, Config config);
 
   OXGN_COOK_API ~BufferPipeline();
 
