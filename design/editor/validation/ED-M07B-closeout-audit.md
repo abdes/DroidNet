@@ -93,3 +93,11 @@ corrupt output. Pipeline tests pass 449/449; focused status/native tests pass
 14/14. After the Debug editor refresh, the user confirmed that opening Vortex
 and switching Main/NewScene2 no longer produces the repeated missing-descriptor
 exceptions. No scene migration was required.
+
+## Inspection section selection — 2026-09-15
+
+Commit `9f5c15bcb` replaces competing per-item selection bindings with one
+`SelectorBar.SelectedItem` binding. The two existing inspection UI cases now
+check control-driven and model-driven section changes; they pass in 690 ms and
+464 ms, with no additional test cases. After the Debug refresh, the user confirmed
+that the inspection-section freeze no longer reproduces.
