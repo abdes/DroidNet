@@ -221,13 +221,25 @@ evidence that the current buffers satisfy it.
 
 | Field | Tier | Type / Range | Validation | Mixed | Sync |
 | --- | --- | --- | --- | --- | --- |
-| `FieldOfView` | Primary | `float` deg, `[1, 179]`, default `60` | Clamp | Indeterminate | yes |
+| Vertical Field of View (`FieldOfView`) | Primary | `float` deg, `[1, 179]`, default `60` | Clamp | Indeterminate | yes |
 | `NearPlane` | Primary | `float` m, `> 0`, default `0.1` | Reject `<= 0`; reject `>= FarPlane` | Indeterminate | yes |
 | `FarPlane` | Primary | `float` m, `> NearPlane`, default `1000` | Reject `<= NearPlane` | Indeterminate | yes |
 | `AspectRatio` | Advanced | `float`, default `16/9` | Reject `<= 0` | Indeterminate | yes |
 
 Cross-field rule: editing `NearPlane >= FarPlane` rejects the commit; the field
 shows the diagnostic from `OXE.SCENE.PerspectiveCamera.NearFar.Invalid`.
+
+The user approved this basic perspective model for V0.1 on 2026-09-15, with pose
+provided by Transform. Do not add focal-length/sensor or aperture/shutter/ISO
+authoring; physical-camera authoring is deferred. Aspect fitting remains a
+separate pending decision, not permission to overwrite the saved ratio on resize.
+
+ED-M08 must load the explicitly chosen authored camera, including parented pose
+and non-default projection, through real native hydration. Do not select the
+first camera instead, silently normalize invalid clipping or substitute editor
+navigation. Carry all fields through commands, Undo/Redo, Save/reopen, cooking
+and observed native/editor rendering. These expanded loading/qualification gates
+remain pending; the approval is a scope decision, not evidence of implementation.
 
 #### `DirectionalLightComponent` (`SelectionPolicy.CommonComponent`)
 

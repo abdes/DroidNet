@@ -968,6 +968,9 @@ content in embedded preview and standalone runtime under controlled comparison.
 - [x] Metric centred primitive defaults are approved, including upright Quad,
       1 m outer-diameter Torus and 2 m-high Capsule. Source/API prose must match
       actual implementation; geometry changes and rendered qualification remain pending.
+- [x] Basic perspective camera authoring is approved: pose, vertical FOV,
+      aspect and near/far, with faithful explicit-camera loading. Physical-camera
+      authoring is deferred; aspect fitting and implementation/qualification remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
