@@ -541,7 +541,7 @@ its product semantics are settled in 07B.0 before implementation.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [x] 07B.7 all eleven engine generator names, including the sphere alias, use
   one semantic authority; every selectable shape passes scene/project cook (#11).
-- [ ] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
+- [x] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
   presentation and typed assignment before/after cooking pass.
 - [ ] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
   points, useful Inspect/Validate, progress/recovery and accessible layouts pass.

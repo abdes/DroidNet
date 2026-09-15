@@ -701,7 +701,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] Source/output catalog and typed-use integration pass for native glTF and
         FBX output, including independent cooked-only libraries. Remaining
         combined import/reimport command journeys are tracked under 07B.5d-f.
-- [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
+- [x] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
   - [x] Shared input/dependency and publication facts drive browser, material editor
         and both pickers. Cook/document events update status; native root and asset
@@ -768,8 +768,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         previously published names without inventing subassets. Foreign library
         copies stay read-only. Production native import/catalog and rendered
         browser/picker/menu cases pass in light/dark themes.
-  - [ ] Finish the remaining combined browser navigation/query qualification
-        journeys, including the 1,000-entry workload.
+  - [x] The full browser router/view journey with 1,000 logical entries passes
+        combined filters/search, Materials/Geometry/Scenes navigation, list/tiles,
+        Back/Forward, late row updates and exact Cook Asset/Folder command scope.
+        Physical folder navigation now resolves through declared mounts and
+        reveals collapsed ancestors; authoring, cooked and library aliases pass.
+        The final related UI run passes 36/36 and Content Browser passes 134/134.
+        [Navigation evidence](validation/ED-M07B-browser-navigation.md).
   - [x] Measure rendered list/tile response with 1,000 authored inputs and a live
         100-node viewport. Release cold loading is 1.98/1.73 s; search p95 is
         18.42/19.09 ms. The native cook, loaded geometry, current statuses and
