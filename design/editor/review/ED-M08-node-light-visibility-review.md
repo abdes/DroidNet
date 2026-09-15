@@ -230,23 +230,51 @@ LightmapGI baking. Oxygen's approved captured-sky work must invalidate the
 appropriate products when their contributing inputs change. A stale capture
 must not be mistaken for a current direct-light contribution.
 
-## 5. Smaller decisions and recommendations
+## 5. Complete V0.1 recommendation — awaiting one approval
 
-These are recommendations, **not a replacement blanket approval request**.
+The user rejected another list of unresolved subdecisions. The following is the
+complete recommended behavior for this area. It is a proposal, not an approved
+contract; there is no pending implementation choice about what these controls
+are meant to do. The user can approve it or name the behavior to change.
 
-| Separate decision | Options and recommendation | Consequence |
-| --- | --- | --- |
-| 7A. Editor-only Hide | Add a local editing hide control, or omit it. **Recommend adding it independently of authored state.** Decide its exact view/workspace behavior without touching light contribution. | Look inside a scene without changing what gets cooked or rendered standalone. |
-| 7B. Node visibility/inheritance | Retain explicit Local/Inherit semantics, or deliberately replace them with ancestor-AND. **Recommend retaining the useful existing model until a concrete authoring need justifies replacement.** | A forced-visible child may override a hidden parent under the first model; it cannot under the second. Defaults and UI exposure need their own explicit agreement. |
-| 7C. Light contribution control | A runtime light participation switch, separately labelled and preserving intensity, or no user-facing on/off control. **Recommend the independent switch.** | Turning a light off should not hide its fixture mesh, change hierarchy or erase its intensity. Do not copy Unreal's editor-time, bake-invalidating Affects World contract merely to match its name. |
-| 7D. Does node visibility additionally gate light eligibility? | Use the node's effective flag (honoring Local/Inherit), retain the extra ancestor-pruning gate, or let light participation alone decide. **Recommend honoring the effective flag for visual eligibility plus the independent light contribution gate; discuss this after 7B/7C.** | The hidden-parent/forced-visible-light case differs. This is the precise consumer policy that needs a decision, not a rewrite of all flags. |
-| 7E. Shadows | Separate object casting, light shadowing, receiver opt-out and shadow-only geometry. **Recommend independent casting/shadowing; default receivers on; decide whether an advanced receiver opt-out and shadow-only mode are worth V0.1 scope individually.** | Receiver opt-out requires actual GPU work. Existing stored receiver values alone must not establish intended appearance during migration. |
-| 7F. Atmosphere roles | Separate surface illumination from atmosphere/sun membership. **Recommend explicit destination labels and one clear V0.1 sun-binding workflow.** | A fill light can illuminate geometry without adding a sun disk; detailed role UI is a later individual choice. |
+| Control/action | Exact proposed behavior |
+| --- | --- |
+| **Hide in editor** (eye icon) | Hides selected geometry/gizmo representations and their descendants only in the editing view. Light contribution and shadow-caster eligibility remain unchanged. Store this per-user/project workspace state outside authored content; it never dirties a scene or triggers a cook. Show All clears these view overrides. Individual child hide choices survive hiding/showing a parent. |
+| **Scene Visibility: Inherit / Shown / Hidden** | The saved runtime rendering policy. Root default Shown; child default Inherit. Shown/Hidden are local overrides of the parent. Effective Hidden suppresses that node's geometry, its shadow casting and its light contribution; a locally Shown child is evaluated independently and may remain visible/illuminating under a hidden parent. Both geometry and light consumers honor the resolved flag without an extra light-only ancestor-pruning rule. |
+| **Light: Affects Scene** | The existing runtime participation meaning of `affects_world`, clearly labelled. Off stops illumination and atmospheric contribution from that light; it does not hide geometry on the node or change its intensity, colour, visibility or stored sun assignment. On participates only if the node's effective Scene Visibility permits it. Show a derived hidden-by-visibility explanation instead of implying that On guarantees illumination. |
+| **Geometry: Cast Shadows** | Independent of illumination and receiving. Off leaves the surface visible/lit but removes it as an occluder. Root/default resolved value On; children may inherit or explicitly override. Applies to supported opaque/masked casters; blended shadow casting is excluded from V0.1. |
+| **Light: Cast Shadows** | Off retains illumination but disables shadowing produced by that light. It does not change any geometry's casting/receiving settings or shadowing from other lights. Implement the control for every light offered by the V0.1 authoring contract; do not offer an ignored checkbox. |
+| **Geometry: Receive Shadows** (Advanced) | Implement the GPU effect. Off skips direct-light shadow attenuation for that surface while it remains visible and lit; its own shadow casting is unchanged. Root/default resolved value On; children may inherit or override. This does not disable ambient occlusion or turn the material into Unlit. |
+| **Scene: Sun = directional light / None** | One explicit atmospheric sun source. Other participating directional lights still illuminate geometry independently. Replace the duplicate Sun/Contributes authoring controls with this one source reference; derive native atmospheric role data through normal cooking/sync. A disabled/hidden selected sun produces no active sun contribution, retains the reference for re-enable, and does not silently promote another light. Sky-only and secondary/moon authoring are excluded from V0.1. |
+| **Camera on a hidden node** | Remains selectable and usable; visibility hides its representation, not its camera function. No generic node-activation or simulation-disable control is added. Runtime-loaded state is derived, not a saved activation flag. |
+| **Hidden versus off-screen geometry** | Authored Hidden does not cast shadows. Camera-frustum exclusion can retain a visible caster for shadows. Editor-only Hide retains caster eligibility. No authored Shadows Only/Hidden Shadow mode in V0.1; this is a decided exclusion, not an unresolved checkbox. |
 
-General activation, selection locking and editor gizmo visibility remain separate
-topics. Do not add simulation behavior to visual flags. Do not preserve legacy
-paths for compatibility: after each chosen canonical contract, migrate useful
-content, remove obsolete interpretations, and qualify the intended behavior.
+Examples: hide a roof with the editor eye to edit the room while retaining its
+shading; set its Scene Visibility to Hidden to remove it from runtime rendering
+and shadows. Turn off a lamp's Affects Scene to extinguish illumination while its
+mesh remains. Hide the whole lamp node through Scene Visibility to suppress both
+geometry and illumination, subject to explicit child overrides. Set a child's
+visibility to Shown to deliberately exempt it from an inherited hidden state.
+
+The required implementation is concrete: a separate editor view mask; canonical
+Local/Inherit serialization and mutation; matching geometry/light eligibility;
+resolver invalidation on effective flag/hierarchy changes; functional receiver
+shading; direct directional illumination independent of atmosphere selection;
+one sun source and correct capture invalidation. Normal Undo/Redo/Save/cook/load
+and engine-first/editor-second rendered tests cover every authored control.
+The developer-only qualification tools remain outside normal shipping builds.
+
+Migrate useful old content once. Used visibility/caster intent moves to explicit
+canonical values. The previously ineffective receiver flag cannot establish a
+former visual opt-out: migrate its prior rendered behavior as receiving shadows.
+Resolve old sun-role combinations to a single explicit source, reporting conflicts
+instead of guessing. Remove obsolete aliases/fields/fallback paths. There is no
+backward-compatible execution branch.
+
+This selects a complete policy rather than copying an engine wholesale: local
+editor state and separate contribution/shadow responsibilities follow common
+practice; explicit overrides retain Oxygen's useful native model. The exact
+eligibility and V0.1 feature boundaries above are the proposed Oxygen decisions.
 
 ## 6. Evidence and limits
 
