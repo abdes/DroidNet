@@ -2,12 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Docking;
 using DroidNet.Hosting.WinUI;
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Schemas;
@@ -95,7 +93,15 @@ public partial class WorkspaceViewModel
     private Task<ICookPublicationPreview?> CreatePublicationPreviewAsync(Oxygen.Editor.Projects.ProjectContext project)
         => this.cookHosting!.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
             this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject)
-                ? new WorkspacePublicationPreview(this, project) : null));
+                ? new WorkspacePublicationPreview(
+                    project,
+                    this.engineService,
+                    this.cookHosting,
+                    this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>(),
+                    this.cookedCatalog!,
+                    this.messenger,
+                    () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
+                : null));
 
     private void OnCookingRevealRequested(object? sender, EventArgs args)
     {
@@ -125,46 +131,5 @@ public partial class WorkspaceViewModel
         {
             this.LogValidatedMountFailed(exception, string.Empty);
         }
-    }
-
-    private sealed partial class WorkspacePublicationPreview(WorkspaceViewModel owner, Oxygen.Editor.Projects.ProjectContext project) : ICookPublicationPreview
-    {
-        public bool IsRuntimeAvailable { get; } = owner.engineService.State == Oxygen.Editor.Runtime.Engine.EngineServiceState.Running;
-
-        private bool IsCurrent => owner.publicationRegistration is not null && ReferenceEquals(project, owner.projectContextService.ActiveProject);
-
-        public Task PrepareReplacementAsync() => owner.cookHosting!.Dispatcher.DispatchAsync(async () =>
-        {
-            if (this.IsCurrent && this.IsRuntimeAvailable)
-            {
-                await owner.engineService.SuspendCookedContentAsync().ConfigureAwait(true);
-            }
-        });
-
-        public Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer) => owner.cookHosting!.Dispatcher.DispatchAsync(async () =>
-        {
-            if (this.IsCurrent && this.IsRuntimeAvailable)
-            {
-                var reader = writer?.CreateReader() ?? CookOutputLease.AcquireRead(project.ProjectRoot);
-                var mounts = await owner.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>()
-                    .PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
-                await owner.engineService.RefreshProjectCookedRootsAsync(mounts.Roots, mounts, keepPaused: true).ConfigureAwait(true);
-            }
-        });
-
-        public Task ResumeAsync() => owner.cookHosting!.Dispatcher.DispatchAsync(async () =>
-        {
-            if (this.IsCurrent)
-            {
-                await owner.cookedCatalog!.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-                _ = owner.messenger?.Send(new AssetsChangedMessage());
-                if (this.IsRuntimeAvailable)
-                {
-                    await owner.engineService.ResumeCookedContentAsync().ConfigureAwait(true);
-                }
-            }
-        });
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

@@ -609,6 +609,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
   - [x] Runtime publication awaits pending loads, retains readers through refresh
         and teardown, and refreshes current material bindings without scene reload.
         The user confirmed recook/tab switching and leak-free native-debug shutdown.
+  - [x] Production workspace publication updates two existing material consumers
+        through automatic Save cooking and explicit asset/folder/scene/project
+        scopes. Material creation, pre-cook discovery, typed-picker readiness,
+        current catalog status and unchanged scene history pass 5/5 packaged
+        native integration cases. Automatic publication preserves the unsaved
+        scene. [Workspace publication evidence](validation/ED-M07B-workspace-publication.md).
   - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
         matrix, including the remaining import workflows.
   - [x] The UI Automation exception flood was isolated to the computer-use helper;
