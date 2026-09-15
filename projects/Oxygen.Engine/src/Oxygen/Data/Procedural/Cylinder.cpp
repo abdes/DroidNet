@@ -7,6 +7,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <cmath>
+#include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
@@ -17,15 +19,15 @@
  z = +height/2. Its radial centre is x = y = 0.
 
  @param segments Number of radial segments (minimum 3).
- @param height Height along Z (must be > 0).
- @param radius Radius in the XY plane (must be > 0).
+ @param height Finite positive height along Z.
+ @param radius Finite positive radius in the XY plane.
  @return Vertex and index vectors, or std::nullopt for
- segment counts below three or non-positive height/radius.
+ invalid counts/dimensions or sampled edges that collapse in float32 storage.
 
  ### Performance Characteristics
 
  - Time Complexity: O(segments).
- - Output: 4*(segments+1)+2 vertices and 12*segments indices.
+ - Output: 4*segments+4 vertices and 12*segments indices.
  - Side and cap rim vertices are separate to preserve their normal/UV seams.
 
  ### Usage Example
@@ -43,23 +45,30 @@ auto oxygen::data::MakeCylinderMeshAsset(
   const unsigned int segments, const float height, const float radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
+  constexpr auto kIndicesPerSegment = 12U;
+  const auto half_height = height / 2.0F;
+  if (segments < 3
+    || segments > std::numeric_limits<uint32_t>::max() / kIndicesPerSegment
+    || !std::isfinite(height) || !std::isfinite(radius) || half_height <= 0.0F
+    || radius <= 0.0F) {
     return std::nullopt;
   }
-  constexpr float pi = std::numbers::pi_v<float>;
+  constexpr double pi = std::numbers::pi_v<double>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  float half_height = height * 0.5f;
 
   // Side vertices
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
-    float x = std::cos(theta);
-    float y = std::sin(theta);
+    const auto theta = i == segments ? 0.0 : 2.0 * pi * i / segments;
+    const auto x = static_cast<float>(std::cos(theta));
+    const auto y = static_cast<float>(std::sin(theta));
+    if (i > 0 && x * radius == vertices.back().position.x
+      && y * radius == vertices.back().position.y) {
+      return std::nullopt;
+    }
     glm::vec3 normal = { x, y, 0.0f };
     glm::vec3 tangent = { -y, x, 0.0f };
-    glm::vec3 bitangent = { 0.0f, 0.0f, 1.0f };
+    glm::vec3 bitangent = { 0.0F, 0.0F, -1.0F };
     float u = static_cast<float>(i) / static_cast<float>(segments);
 
     // Bottom (side)
@@ -102,10 +111,9 @@ auto oxygen::data::MakeCylinderMeshAsset(
   std::vector<uint32_t> bottom_cap_rim_indices;
   std::vector<uint32_t> top_cap_rim_indices;
   for (unsigned int i = 0; i < segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
-    float x = std::cos(theta);
-    float y = std::sin(theta);
+    const auto theta = 2.0 * pi * i / segments;
+    const auto x = static_cast<float>(std::cos(theta));
+    const auto y = static_cast<float>(std::sin(theta));
     float u = (x + 1.0f) * 0.5f;
     float v = (y + 1.0f) * 0.5f;
 

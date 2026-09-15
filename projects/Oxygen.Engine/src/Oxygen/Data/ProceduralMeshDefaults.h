@@ -31,8 +31,8 @@ inline constexpr float kConeHeight = 1.0F;
 inline constexpr float kConeRadius = 0.5F;
 inline constexpr unsigned int kTorusMajorSegments = 32U;
 inline constexpr unsigned int kTorusMinorSegments = 16U;
-inline constexpr float kTorusMajorRadius = 1.0F;
-inline constexpr float kTorusMinorRadius = 0.25F;
+inline constexpr float kTorusMajorRadius = 0.4F;
+inline constexpr float kTorusMinorRadius = 0.1F;
 inline constexpr float kQuadWidth = 1.0F;
 inline constexpr float kQuadHeight = 1.0F;
 

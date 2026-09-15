@@ -175,11 +175,13 @@ auto LightScene::ApplyScenePreset(const ScenePreset preset) -> void
 
 auto LightScene::ResetSceneObject(std::string_view label) -> void
 {
+  // Reference cards face +Y, using a half-turn around the canonical Quad's X
+  // axis.
   if (label == "18% Gray Card") {
     gray_card_state_ = SceneObjectState {
       .enabled = true,
       .position = Vec3 { -1.6F, 0.0F, 1.0F },
-      .rotation_deg = Vec3 { -90.0F, 0.0F, 0.0F },
+      .rotation_deg = Vec3 { -180.0F, 0.0F, 0.0F },
       .scale = Vec3 { 1.0F, 1.0F, 1.0F },
     };
     return;
@@ -188,7 +190,7 @@ auto LightScene::ResetSceneObject(std::string_view label) -> void
     white_card_state_ = SceneObjectState {
       .enabled = true,
       .position = Vec3 { 0.0F, 0.0F, 1.0F },
-      .rotation_deg = Vec3 { -90.0F, 0.0F, 0.0F },
+      .rotation_deg = Vec3 { -180.0F, 0.0F, 0.0F },
       .scale = Vec3 { 1.0F, 1.0F, 1.0F },
     };
     return;
@@ -197,7 +199,7 @@ auto LightScene::ResetSceneObject(std::string_view label) -> void
     black_card_state_ = SceneObjectState {
       .enabled = true,
       .position = Vec3 { 1.6F, 0.0F, 1.0F },
-      .rotation_deg = Vec3 { -90.0F, 0.0F, 0.0F },
+      .rotation_deg = Vec3 { -180.0F, 0.0F, 0.0F },
       .scale = Vec3 { 1.0F, 1.0F, 1.0F },
     };
     return;
@@ -257,12 +259,12 @@ auto LightScene::EnsureGeometryAssets() -> void
   const auto ground_mat = MakeSolidColorMaterial(
     "Ground", Vec4 { 0.18F, 0.18F, 0.18F, 1.0F }, 0.9F, 0.0F, false);
 
-  gray_card_geo_ = BuildQuadGeometry("GrayCard", gray_mat);
-  white_card_geo_ = BuildQuadGeometry("WhiteCard", white_mat);
-  black_card_geo_ = BuildQuadGeometry("BlackCard", black_mat);
+  gray_card_geo_ = BuildSurfaceGeometry("Quad", "GrayCard", gray_mat);
+  white_card_geo_ = BuildSurfaceGeometry("Quad", "WhiteCard", white_mat);
+  black_card_geo_ = BuildSurfaceGeometry("Quad", "BlackCard", black_mat);
   matte_sphere_geo_ = BuildSphereGeometry("MatteSphere", matte_mat);
   glossy_sphere_geo_ = BuildSphereGeometry("GlossySphere", glossy_mat);
-  ground_plane_geo_ = BuildQuadGeometry("GroundPlane", ground_mat);
+  ground_plane_geo_ = BuildSurfaceGeometry("Plane", "GroundPlane", ground_mat);
 }
 
 auto LightScene::EnsureReferenceNodes() -> void
@@ -419,7 +421,7 @@ auto LightScene::ApplySpotLightState() -> void
   }
 }
 
-auto LightScene::BuildQuadGeometry(
+auto LightScene::BuildSurfaceGeometry(std::string_view generator,
   std::string_view name, std::shared_ptr<const data::MaterialAsset> material)
   -> std::shared_ptr<const data::GeometryAsset>
 {
@@ -427,19 +429,20 @@ auto LightScene::BuildQuadGeometry(
   using oxygen::data::pak::geometry::GeometryAssetDesc;
   using oxygen::data::pak::geometry::MeshViewDesc;
 
-  auto quad_data = oxygen::data::MakeQuadMeshAsset(1.0F, 1.0F);
-  CHECK_F(quad_data.has_value());
+  auto surface_data = oxygen::data::GenerateMeshBuffers(
+    std::string(generator) + "/" + std::string(name), {});
+  CHECK_F(surface_data.has_value());
 
   auto mesh
     = MeshBuilder(0, std::string(name))
-        .WithVertices(quad_data->first)
-        .WithIndices(quad_data->second)
+        .WithVertices(surface_data->first)
+        .WithIndices(surface_data->second)
         .BeginSubMesh("full", material)
         .WithMeshView(MeshViewDesc {
           .first_index = 0,
-          .index_count = static_cast<uint32_t>(quad_data->second.size()),
+          .index_count = static_cast<uint32_t>(surface_data->second.size()),
           .first_vertex = 0,
-          .vertex_count = static_cast<uint32_t>(quad_data->first.size()),
+          .vertex_count = static_cast<uint32_t>(surface_data->first.size()),
         })
         .EndSubMesh()
         .Build();

@@ -7,6 +7,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <cmath>
+#include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
@@ -18,15 +20,15 @@
  not the cone's centre of mass.
 
  @param segments Number of radial segments (minimum 3).
- @param height Height along Z (must be > 0).
- @param radius Base radius in the XY plane (must be > 0).
+ @param height Finite positive height along Z.
+ @param radius Finite positive base radius in the XY plane.
  @return Vertex and index vectors, or std::nullopt for
- segment counts below three or non-positive height/radius.
+ invalid counts/dimensions or sampled edges that collapse in float32 storage.
 
  ### Performance Characteristics
 
  - Time Complexity: O(segments).
- - Output: 2*(segments+1)+2 vertices and 6*segments indices.
+ - Output: 2*segments+3 vertices and 6*segments indices.
  - Side and cap rim vertices are separate to preserve their normal/UV seams.
 
  ### Usage Example
@@ -44,27 +46,36 @@ auto oxygen::data::MakeConeMeshAsset(
   unsigned int segments, float height, float radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  if (segments < 3 || height <= 0.0f || radius <= 0.0f) {
+  constexpr auto kIndicesPerSegment = 6U;
+  const auto half_height = height / 2.0F;
+  if (segments < 3
+    || segments > std::numeric_limits<uint32_t>::max() / kIndicesPerSegment
+    || !std::isfinite(height) || !std::isfinite(radius) || half_height <= 0.0F
+    || radius <= 0.0F) {
     return std::nullopt;
   }
-  constexpr float pi = std::numbers::pi_v<float>;
+  constexpr double pi = std::numbers::pi_v<double>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  float half_height = height * 0.5f;
   glm::vec3 apex_pos = { 0.0f, 0.0f, half_height };
+  const auto slant = std::hypot(static_cast<double>(height), radius);
+  const auto normal_radius = static_cast<float>(height / slant);
+  const auto normal_height = static_cast<float>(radius / slant);
 
   // Side vertices (base ring)
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
-    float x = std::cos(theta);
-    float y = std::sin(theta);
+    const auto theta = i == segments ? 0.0 : 2.0 * pi * i / segments;
+    const auto x = static_cast<float>(std::cos(theta));
+    const auto y = static_cast<float>(std::sin(theta));
     float u = static_cast<float>(i) / static_cast<float>(segments);
     glm::vec3 pos = { x * radius, y * radius, -half_height };
+    if (i > 0 && pos == vertices.back().position) {
+      return std::nullopt;
+    }
     // Normal points out and up
-    glm::vec3 dir = glm::normalize(glm::vec3(x, y, radius / height));
+    glm::vec3 dir = { x * normal_radius, y * normal_radius, normal_height };
     glm::vec3 tangent = { -y, x, 0.0f };
-    glm::vec3 bitangent = glm::cross(dir, tangent);
+    glm::vec3 bitangent = -glm::cross(dir, tangent);
     vertices.push_back(Vertex {
       .position = pos,
       .normal = dir,
@@ -96,10 +107,9 @@ auto oxygen::data::MakeConeMeshAsset(
   // Base cap rim vertices
   std::vector<uint32_t> base_cap_rim_indices;
   for (unsigned int i = 0; i < segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
-    float x = std::cos(theta);
-    float y = std::sin(theta);
+    const auto theta = 2.0 * pi * i / segments;
+    const auto x = static_cast<float>(std::cos(theta));
+    const auto y = static_cast<float>(std::sin(theta));
     float u = (x + 1.0f) * 0.5f;
     float v = (y + 1.0f) * 0.5f;
     vertices.push_back(Vertex {

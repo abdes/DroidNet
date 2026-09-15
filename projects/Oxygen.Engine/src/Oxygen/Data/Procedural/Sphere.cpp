@@ -7,6 +7,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
@@ -19,7 +20,7 @@
  @param latitude_segments Number of intervals between the poles (minimum 3).
  @param longitude_segments Number of intervals around the equator (minimum 3).
  @return Vertex and index vectors, or std::nullopt for
- segment counts below three.
+ segment counts below three or unrepresentable vertex/index counts.
 
  ### Performance Characteristics
 
@@ -43,7 +44,13 @@ auto oxygen::data::MakeSphereMeshAsset(
   unsigned int latitude_segments, unsigned int longitude_segments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  if (latitude_segments < 3 || longitude_segments < 3) {
+  constexpr auto kMaxCount = std::numeric_limits<uint32_t>::max();
+  constexpr auto kIndicesPerCell = 6U;
+  if (latitude_segments < 3 || longitude_segments < 3
+    || (static_cast<uint64_t>(latitude_segments) + 1U)
+      > kMaxCount / (static_cast<uint64_t>(longitude_segments) + 1U)
+    || (static_cast<uint64_t>(latitude_segments) * longitude_segments)
+      > kMaxCount / kIndicesPerCell) {
     return std::nullopt;
   }
   std::vector<Vertex> vertices;

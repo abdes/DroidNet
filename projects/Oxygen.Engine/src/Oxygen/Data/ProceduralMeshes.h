@@ -64,6 +64,7 @@ OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(
 
 //! Creates vertex/index buffers for a square XY grid at z = 0, centred at
 //! the origin. The second segment count subdivides Y.
+//! Size must be finite and positive; unrepresentable grid cells/counts fail.
 OXGN_DATA_NDAPI auto MakePlaneMeshAsset(
   unsigned int x_segments = procedural::kPlaneXSegments,
   unsigned int z_segments = procedural::kPlaneZSegments,
@@ -72,6 +73,7 @@ OXGN_DATA_NDAPI auto MakePlaneMeshAsset(
 
 //! Creates vertex/index buffers for a Z-axis cylinder with caps at
 //! z = -height/2 and z = +height/2.
+//! Dimensions must be finite and positive; collapsed sampled edges/counts fail.
 OXGN_DATA_NDAPI auto MakeCylinderMeshAsset(
   unsigned int segments = procedural::kCylinderSegments,
   float height = procedural::kCylinderHeight,
@@ -80,6 +82,7 @@ OXGN_DATA_NDAPI auto MakeCylinderMeshAsset(
 
 //! Creates vertex/index buffers for a Z-axis cone with its base at
 //! z = -height/2 and its apex at z = +height/2.
+//! Dimensions must be finite and positive; collapsed sampled edges/counts fail.
 OXGN_DATA_NDAPI auto MakeConeMeshAsset(
   unsigned int segments = procedural::kConeSegments,
   float height = procedural::kConeHeight,
@@ -87,7 +90,10 @@ OXGN_DATA_NDAPI auto MakeConeMeshAsset(
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates vertex/index buffers for a torus centred at the origin, with its
-//! main ring in XY around the Z axis.
+//! main ring in XY around the Z axis. Default radii are 0.4 m to the tube
+//! centre and 0.1 m for the tube, giving a 1 m outer diameter.
+//! Radii must be finite and positive. Horn/spindle parameterizations remain
+//! supported; overflow or a tube lost to float32 rounding fails generation.
 OXGN_DATA_NDAPI auto MakeTorusMeshAsset(
   unsigned int major_segments = procedural::kTorusMajorSegments,
   unsigned int minor_segments = procedural::kTorusMinorSegments,
@@ -95,8 +101,9 @@ OXGN_DATA_NDAPI auto MakeTorusMeshAsset(
   float minor_radius = procedural::kTorusMinorRadius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
-//! Creates vertex/index buffers for a rectangle in XY at z = 0, centred at
-//! the origin, with width along X, height along Y and normals along +Z.
+//! Creates vertex/index buffers for an upright rectangle in XZ at y = 0,
+//! centred at the origin, with width along X, height along Z and front -Y.
+//! Dimensions must be finite and positive with representable half-extents.
 OXGN_DATA_NDAPI auto MakeQuadMeshAsset(
   float width = procedural::kQuadWidth, float height = procedural::kQuadHeight)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
