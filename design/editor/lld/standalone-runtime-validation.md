@@ -310,6 +310,47 @@ native and effective observations explicitly. Missing support for an approved
 required field fails qualification; excluding a field needs a recorded scope
 decision rather than silent omission.
 
+The non-sun rows of the [visibility contract](../review/ED-M08-node-light-visibility-review.md)
+are approved as of 2026-09-15, with **implementation and rendered qualification
+pending**. Their required observations and cases are:
+
+- Scene Visibility source mode (`Inherit / Shown / Hidden`) and resolved flag;
+  geometry Cast/Receive Shadows source mode (`Inherit / On / Off`) and resolved
+  flags. New roots resolve Shown/On/On and new children inherit. A local override
+  can differ from a hidden parent; geometry and light consumers use that same
+  resolved visibility rather than adding a light-only ancestor gate.
+- Independent light Affects Scene and light Cast Shadows. Participation Off
+  stops illumination/atmospheric contribution while preserving stored intensity,
+  colour, visibility and role assignment. Effective Hidden also suppresses
+  contribution without rewriting the light's participation setting.
+- Receiver Off skips direct-light shadow attenuation with a real GPU effect;
+  it preserves visibility, direct lighting, ambient occlusion and casting.
+  Geometry casting covers approved opaque/masked surfaces, not blended casting.
+- Hidden camera nodes remain selectable and usable. Authored Hidden removes
+  geometry from shadow submission; visible off-screen casters may remain.
+  Authored Shadows Only/Hidden Shadow modes are excluded from V0.1.
+- Effective flag and hierarchy changes invalidate directional selection and
+  affected captured-lighting products. Test visibility-only changes after a
+  populated resolver cache; existing role/flag unit tests do not prove this.
+
+Editor-only Hide is separate per-user/project workspace state outside authored
+content. It masks geometry/gizmo representations and descendants only in the
+editing main view while retaining illumination and caster eligibility. Parent
+hide/show preserves child hide choices and Show All clears the view overrides.
+Qualification verifies no source/dirty/history/cook effects and renders its
+controlled targets without workspace masks. Release preserves the current valid
+editing-view choices. Runtime-loaded `IsActive` is derived, not authored state.
+
+Migrate useful old visibility/caster values to canonical explicit modes; do not
+replace old child intent with new-creation defaults. Historically ineffective
+receiver flags migrate to their actual rendered receiving-On behavior. Remove
+obsolete representations/readers rather than testing a compatibility branch.
+These migration and view-mask changes are pending work, not existing evidence.
+
+The Sun selector row remains unapproved. Single-sun selection, secondary/moon
+and sky-only authoring boundaries, and reassignment/fallback policy must not be
+inferred from the visibility approval or frozen into this suite yet.
+
 Captured-sky lighting supporting both diffuse and specular image-based lighting
 is explicitly approved. This capability decision does not approve every related
 property/knob; remaining property decisions follow the review's one-at-a-time
@@ -573,6 +614,17 @@ preference or background validation scheduler is added.
 
 ## 12. Validation Gates
 
+- [ ] Approved visibility modes/defaults, local overrides, hierarchy propagation
+  and useful-content migration pass Save/cook/native/editor qualification.
+- [ ] Light participation, geometry casting, light shadowing and GPU receiver
+  opt-out have independent rendered effects; hidden camera nodes remain usable.
+- [ ] Editor-only Hide preserves illumination/caster eligibility and child
+  choices without source, dirty/history or cook changes. Controlled capture
+  ignores workspace masks and safely restores the current editing view.
+- [ ] Visibility/hierarchy changes invalidate cached directional membership and
+  affected lighting products; authored Hidden and off-screen shadow casters are
+  correctly distinguished. Excluded blended casting/hidden-shadow modes are
+  not exposed as authoring features.
 - [ ] Exact project/root/path/key/camera request succeeds without example content,
   restored state, name matching or synthetic content.
 - [ ] Request/build/schema/root/file mismatches fail before affected native use.

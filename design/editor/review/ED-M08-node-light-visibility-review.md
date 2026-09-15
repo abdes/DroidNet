@@ -1,8 +1,9 @@
 # ED-M08: Node visibility, light contribution and shadows
 
-Status: **source review complete; individual decisions pending**.
-Baseline: `e27baf1ae`, reviewed on 2026-09-15. No visibility implementation or
-new visibility policy was approved or changed during this review.
+Status: **visibility/contribution/shadow contract approved; sun proposal open**.
+Baseline: `e27baf1ae`, reviewed on 2026-09-15. The user subsequently approved
+section 5 except the single-sun selector. No behavior has been implemented by
+recording that approval. Source findings below describe the reviewed baseline.
 
 ## 1. Correction and scope
 
@@ -230,14 +231,15 @@ LightmapGI baking. Oxygen's approved captured-sky work must invalidate the
 appropriate products when their contributing inputs change. A stale capture
 must not be mistaken for a current direct-light contribution.
 
-## 5. Complete V0.1 recommendation — awaiting one approval
+## 5. Approved V0.1 contract — sun row excluded
 
-The user rejected another list of unresolved subdecisions. The following is the
-complete recommended behavior for this area. It is a proposal, not an approved
-contract; there is no pending implementation choice about what these controls
-are meant to do. The user can approve it or name the behavior to change.
+The user approved the following complete behavior except the sun-selector row.
+Its single-sun, secondary/moon and sky-only scope implications are not approved.
+The [celestial-light review](ED-M08-celestial-light-authoring.md) addresses that
+remaining issue. All other rows are approved contracts with implementation and
+qualification pending.
 
-| Control/action | Exact proposed behavior |
+| Control/action | Exact approved behavior (except explicitly excluded sun row) |
 | --- | --- |
 | **Hide in editor** (eye icon) | Hides selected geometry/gizmo representations and their descendants only in the editing view. Light contribution and shadow-caster eligibility remain unchanged. Store this per-user/project workspace state outside authored content; it never dirties a scene or triggers a cook. Show All clears these view overrides. Individual child hide choices survive hiding/showing a parent. |
 | **Scene Visibility: Inherit / Shown / Hidden** | The saved runtime rendering policy. Root default Shown; child default Inherit. Shown/Hidden are local overrides of the parent. Effective Hidden suppresses that node's geometry, its shadow casting and its light contribution; a locally Shown child is evaluated independently and may remain visible/illuminating under a hidden parent. Both geometry and light consumers honor the resolved flag without an extra light-only ancestor-pruning rule. |
@@ -245,7 +247,7 @@ are meant to do. The user can approve it or name the behavior to change.
 | **Geometry: Cast Shadows** | Independent of illumination and receiving. Off leaves the surface visible/lit but removes it as an occluder. Root/default resolved value On; children may inherit or explicitly override. Applies to supported opaque/masked casters; blended shadow casting is excluded from V0.1. |
 | **Light: Cast Shadows** | Off retains illumination but disables shadowing produced by that light. It does not change any geometry's casting/receiving settings or shadowing from other lights. Implement the control for every light offered by the V0.1 authoring contract; do not offer an ignored checkbox. |
 | **Geometry: Receive Shadows** (Advanced) | Implement the GPU effect. Off skips direct-light shadow attenuation for that surface while it remains visible and lit; its own shadow casting is unchanged. Root/default resolved value On; children may inherit or override. This does not disable ambient occlusion or turn the material into Unlit. |
-| **Scene: Sun = directional light / None** | One explicit atmospheric sun source. Other participating directional lights still illuminate geometry independently. Replace the duplicate Sun/Contributes authoring controls with this one source reference; derive native atmospheric role data through normal cooking/sync. A disabled/hidden selected sun produces no active sun contribution, retains the reference for re-enable, and does not silently promote another light. Sky-only and secondary/moon authoring are excluded from V0.1. |
+| **Sun selector — NOT APPROVED** | The proposed single scene-level selector is withheld. It must not remove explicit per-light designation, rule out two suns or sun-plus-moon, or establish sky-only restrictions without the celestial-role decision. |
 | **Camera on a hidden node** | Remains selectable and usable; visibility hides its representation, not its camera function. No generic node-activation or simulation-disable control is added. Runtime-loaded state is derived, not a saved activation flag. |
 | **Hidden versus off-screen geometry** | Authored Hidden does not cast shadows. Camera-frustum exclusion can retain a visible caster for shadows. Editor-only Hide retains caster eligibility. No authored Shadows Only/Hidden Shadow mode in V0.1; this is a decided exclusion, not an unresolved checkbox. |
 
@@ -260,21 +262,21 @@ The required implementation is concrete: a separate editor view mask; canonical
 Local/Inherit serialization and mutation; matching geometry/light eligibility;
 resolver invalidation on effective flag/hierarchy changes; functional receiver
 shading; direct directional illumination independent of atmosphere selection;
-one sun source and correct capture invalidation. Normal Undo/Redo/Save/cook/load
+the selected celestial-role contract once approved, and correct capture invalidation. Normal Undo/Redo/Save/cook/load
 and engine-first/editor-second rendered tests cover every authored control.
 The developer-only qualification tools remain outside normal shipping builds.
 
 Migrate useful old content once. Used visibility/caster intent moves to explicit
 canonical values. The previously ineffective receiver flag cannot establish a
 former visual opt-out: migrate its prior rendered behavior as receiving shadows.
-Resolve old sun-role combinations to a single explicit source, reporting conflicts
-instead of guessing. Remove obsolete aliases/fields/fallback paths. There is no
+Sun-role migration awaits the celestial-role contract; do not collapse useful
+two-body content to one source. Remove obsolete aliases/fields/fallback paths. There is no
 backward-compatible execution branch.
 
 This selects a complete policy rather than copying an engine wholesale: local
 editor state and separate contribution/shadow responsibilities follow common
 practice; explicit overrides retain Oxygen's useful native model. The exact
-eligibility and V0.1 feature boundaries above are the proposed Oxygen decisions.
+eligibility and non-sun V0.1 feature boundaries above are approved Oxygen decisions.
 
 ## 6. Evidence and limits
 

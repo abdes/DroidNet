@@ -4,7 +4,8 @@ Status: **interactive decisions in progress**. The user approved development-onl
 qualification, no backward compatibility, captured-sky diffuse/specular lighting,
 overrides for all existing material slots, emission colour/HDR intensity, and the
 ten-shape creation palette including Capsule, metric centred primitive defaults
-basic perspective camera authoring and Auto/Fixed aspect fitting on 2026-09-15.
+basic perspective camera authoring, Auto/Fixed aspect fitting and the complete
+visibility/contribution/shadow contract except its sun selector on 2026-09-15.
 Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
@@ -48,8 +49,9 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Metric primitive defaults and orientation | Approved; centred pivots, Z-up, dimensions in Decision 4, horizontal Plane/upright Quad; prose must match actual code; implementation pending |
 | Basic perspective camera authoring | Approved; pose, vertical FOV, aspect and near/far; exact selected-camera loading; physical-camera authoring deferred; implementation/qualification pending |
 | Auto/Fixed camera aspect fitting | Approved; Auto default for new cameras, vertical FOV retained, Fixed preserves composition with bars, no saved resize mutations; implementation pending |
-| Node/light visibility | Original lumped proposal withdrawn; source review now supplies one complete practical V0.1 behavior contract for approval; no policy approved |
-| Transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Node/light visibility, contribution and shadows | Complete practical contract approved except the sun-selector row; implementation/qualification pending |
+| Celestial-light roles | Single scene selector withheld; explicit per-light designation and two-body worlds under source/industry review |
+| Transform semantics; light tuning; exposure; grading/output; atmosphere controls | Recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -152,11 +154,11 @@ their content remains useful; they do not remain hidden compatibility state.
 | Area | Primary V0.1 | Supported advanced controls | Deferred or removed from editable UI |
 | --- | --- | --- | --- |
 | Hierarchy and transform | Name, parent, local position, rotation in degrees, scale; create/delete/duplicate/reparent, reset and multi-selection | Deliberate world/local transform operations where already supported | Raw quaternion editing, rotation-order selection, pivots, generic Static/mobility and Ignore Parent Transform switches without a complete authoring contract |
-| Visibility and editor state | Pending the separate node/light review; no combined subtree switch approved | Object casting, light shadowing and receiver controls need independent decisions | General Enabled semantics across future scripts/physics; do not repurpose `IsActive`, which means loaded in the engine |
+| Visibility and editor state | Approved local editor Hide and authored Inherit/Shown/Hidden visibility; independent Affects Scene on lights | Approved independent object casting, light shadowing and functional receiver controls | General node activation, authored shadow-only mode and blended shadow casting excluded; do not repurpose runtime-loaded `IsActive` |
 | Geometry | Approved Cube/Sphere/Capsule/IcoSphere/Plane/Quad/Cylinder/Cone/Torus palette; mesh identity, loading/missing state and qualified static imports | Approved SubdividedCube under Advanced; approved existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
 | Perspective camera | Pose, **Vertical FOV**, near/far in metres, aspect/frame ratio, explicit authored-camera selection | Preserve non-default aspect and parented cameras | Physical-camera exposure, lens/sensor/DOF controls, orthographic authoring in this slice |
 | Directional lighting | Enabled/affects scene, orientation, colour, illuminance in lux, Cast Shadows | Angular size, labelled according to its actual supported sun-disk/shadow effect | Contact Shadows without an implementation; mobility promises without matching runtime behaviour; per-light exposure compensation as a routine control |
-| Sun selection | One clear scene-level sun reference; clearing it does not disable ordinary directional illumination | Sun-disk visibility | Competing independent sun toggles, additional atmosphere slots and moon authoring |
+| Celestial-light assignment | Open: single scene selector not approved; evaluate explicit per-light atmospheric designation for one/two suns and sun-plus-moon | Native two-slot support and its rendering limitations are under review | No exclusion of secondary/moon or sky-only authoring follows from the rejected selector |
 | Shadow quality | Dependable conventional-shadow defaults | Any artist-facing override needs an approved purpose and complete implementation | Cascade count, manual splits, distribution/fades, raw bias and resolution algorithms in the normal light inspector; no new generic project-settings panel |
 | Sky and ambient light | Atmosphere enabled, sun reference, sky brightness, sky-light enabled/intensity | Aerial perspective strength/distance/start depth; captured-sky lighting | Planet radius, atmosphere height, individual scattering scale heights, ozone/planet workflows; HDRI/probe/GI authoring |
 | Exposure | Manual EV, Auto mode, compensation; mode-relevant controls | Auto EV limits, adaptation speeds and metering | Physical/ManualCamera with no physical inputs; histogram implementation ranges, calibration/target-grey internals and routine arbitrary display-gamma editing |
@@ -343,7 +345,9 @@ Do not implement the former combined switch. The user then rejected leaving
 another list of unresolved subdecisions. Section 5 of the node/light review now
 specifies one complete practical contract covering each distinct control and
 its exact effects, defaults, exclusions, migration and required engine work.
-It awaits approval as the proposed policy for this area.
+The user approved that complete contract except the sun-selector row. The
+[celestial-light review](ED-M08-celestial-light-authoring.md) now owns the remaining
+assignment question; no single-sun restriction or sun-role migration is approved.
 
 ### Why these choices
 
@@ -393,7 +397,7 @@ claims that a new renderer feature has passed visual validation.
 
 | Priority | Change | Current evidence and ownership |
 | --- | --- | --- |
-| P0 | Make directional illumination independent of atmospheric sun membership; retain one explicit atmospheric sun | Vortex `SceneRenderer.cpp` builds a single directional selection from atmosphere slot 0 and skips other directionals. Fix selection and forward/deferred consumption; do not patch the editor by tagging every light as a sun. |
+| P0 | Make directional illumination independent of atmospheric membership; implement the approved celestial-role contract | Vortex currently selects atmosphere slot 0 for direct directional lighting. The single scene-sun selector is not approved. Fix direct-light consumption without tagging ordinary lights as suns or dropping a second celestial light. |
 | P0 | Preserve selected authored-camera identity and projection | DemoShell `SceneLoaderService.cpp` currently chooses the first camera and rewrites aspect/clipping. Exact camera selection/preservation is real loading behaviour; the development driver must consume it without synthetic camera/sun injection. |
 | P0 | Preserve every approved authored field across cooking and native load | `SceneDescriptorGenerator.cs` emits only part of registered directional data. Correct mappings for the chosen canonical surface; migrate useful former authoring intent instead of carrying deprecated expert fields. |
 | P1 | Complete material-slot overrides end to end | `GeometryDescriptors.cs` and `SceneDescriptorGenerator.cs` use slot 0/one material reference. Changes need native descriptor/loader support, stable submesh-slot identity, commands, live sync, persistence, missing-asset recovery and per-slot clear semantics. |

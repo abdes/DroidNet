@@ -761,3 +761,51 @@ before standalone loading completes; the separate output read lease protects
 published files until that process exits. Test edits during warm-up, late callbacks,
 fault/cancel and scene changes. Normal one-live-scene current-revision behavior
 resumes after the capture session, not merely after restoring camera settings.
+
+## 20. Authored Visibility And Editor View Hiding
+
+Approved 2026-09-15; **implementation and rendered qualification pending**.
+The [scene authoring model](scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state)
+owns canonical Local/Inherit values and migration. The ordinary engine
+scene/rendering path owns their effective behavior; this is production behavior,
+not qualification instrumentation.
+
+- Preserve each authored Scene Visibility and geometry Cast/Receive Shadows
+  source mode. New roots resolve Shown/On/On; new children inherit. Resolve
+  local overrides through native flags without an extra ancestor-pruning gate
+  only for lights.
+- Effective Hidden suppresses that node's geometry, caster contribution and
+  lights. A locally Shown child remains independently eligible. Light Affects
+  Scene maps `affects_world`; Off removes illumination/atmospheric contribution
+  without rewriting intensity, colour, visibility or stored role assignment.
+- Light Cast Shadows requests shadowed illumination. Geometry Cast Shadows
+  controls occluders. Geometry Receive Shadows requires a shader-consumed
+  value that disables direct-light shadow attenuation while preserving direct
+  lighting, ambient occlusion and the surface's own casting. Qualify every
+  supported surface path; a CPU observation alone is insufficient.
+- Effective flag and hierarchy changes invalidate directional-light membership
+  and affected environment/capture products before use. `Scene::Update` alone
+  currently does not establish resolver invalidation; the identified gap needs
+  a focused regression and a real fix.
+- Hidden camera nodes remain usable for explicit camera selection. Do not
+  reinterpret runtime-loaded state as authored activation or stop component
+  processing through a visibility flag.
+
+Editor-only Hide is a separate **main-view representation mask**, correlated to
+the current project/document/view lifetime. It hides geometry/gizmo
+representations and descendants in the editing view; it leaves light collection,
+shadow-caster eligibility and other scene outputs unchanged. Keep its per-user/
+project workspace state outside authored assets. Preserve individual child hide
+choices across parent hide/show; Show All clears the view overrides. Do not
+route this feature through authored `SetVisibility` or publish document edits,
+dirty/history changes or cooking demand.
+
+Visible off-screen casters remain eligible for shadows. Authored Hidden cannot
+cast shadows; editor-only Hide retains eligibility. Blended shadow casting and
+authored Shadows Only/Hidden Shadow modes are excluded from V0.1. Controlled
+qualification targets use canonical authored visibility without workspace hide
+masks; capture release preserves the current valid editing-view mask.
+
+Sun selection, role counts and secondary/moon/sky-only authoring remain open.
+None of these visibility or participation rules approves automatic reassignment
+or a particular sun selector.
