@@ -4,7 +4,8 @@
 #include "Vortex/Contracts/Lighting/PositionalLightData.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowHelpers.hlsli"
+#include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
+#include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 #include "Vortex/Shared/Lighting.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
@@ -70,9 +71,8 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
         dl.atmosphere_mode_flags);
     terms.transmittance_luma = ComputePerceptualLuma(transmittance);
 
-    const ShadowFrameBindings shadow_bindings = LoadResolvedShadowFrameBindings();
-    terms.shadow_visibility = saturate(ComputeShadowVisibility(
-        shadow_bindings.sun_shadow_index, world_pos, screen_position_xy, shadow_normal_ws, L));
+    terms.shadow_visibility = saturate(ComputeDirectionalShadowVisibility(
+        world_pos, shadow_normal_ws, L));
 
     const float3 H_unorm = V + L;
     const float H_len_sq = dot(H_unorm, H_unorm);

@@ -69,12 +69,12 @@ shadow-map baseline.
 | -------- | ----- | ----- |
 | Predecessor | Stage 6 (`LightingService::BuildLightGrid`) | directional-light authority and forward-light publication already resolved |
 | **This** | **Stage 8 - Shadow Depths** | conventional directional shadow production |
-| Successor | Stage 9 (`BasePass`) | base pass does not consume the shadow product directly |
+| Successor | Stage 9 (`BasePass`) | forward shading consumes the published directional shadow product; deferred shading writes GBuffer data |
 
 The published directional shadow product is consumed later by:
 
 - Stage 12 deferred direct lighting
-- Stage 18 translucency when that family activates
+- Stage 9 forward surface shading and Stage 18 translucency
 
 ### 1.3 Architectural Authority
 
@@ -339,7 +339,7 @@ interim shape is not the long-lived Phase 4 contract.
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
 | `ShadowFrameBindings` | `LightingService` (Stage 12) | Published through `ViewFrameBindings` |
-| `ShadowFrameBindings` | `TranslucencyModule` (Stage 18) | Published through `ViewFrameBindings` when that stage activates |
+| `ShadowFrameBindings` | Forward surface shading (Stage 9), `TranslucencyModule` (Stage 18) | Same canonical publication through `ViewFrameBindings` |
 | CPU inspection view of `DirectionalShadowFrameData` | Tests / diagnostics | `InspectShadowData(ViewId)` only |
 
 Phase 4C publishes **directional** shadow data only. Local-light conventional
@@ -443,6 +443,16 @@ Lighting consumes the published directional conventional shadow product through
 `ShadowFrameBindings`. The architectural contract does not require consumers to
 know whether the underlying storage is atlas-backed, dedicated-per-cascade, or
 otherwise.
+
+`Contracts/Shadows/ShadowFrameBindings.hlsli` declares the GPU layout matching
+native `Vortex/Types/ShadowFrameBindings.h`, including the directional cascades
+and local-light arrays. Forward and deferred directional lighting both call
+`ComputeDirectionalShadowVisibility` from
+`Services/Shadows/DirectionalShadowCommon.hlsli`. Both paths therefore use the
+same cascade selection, fixed 3x3 PCF, transitions and distance fade. Authored
+depth bias is applied once by the shadow-depth pass; receivers add only the
+shared normal and world-texel offsets. Forward normal-map shading retains its
+separate geometric shadow normal from `ShadowSurfaceNormal.hlsli`.
 
 ```hlsl
 // Contracts/ShadowData.hlsli

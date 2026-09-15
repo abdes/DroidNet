@@ -15,7 +15,7 @@
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowHelpers.hlsli"
+#include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
