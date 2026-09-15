@@ -22,6 +22,12 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#  include <io.h>
+#else
+#  include <unistd.h>
+#endif
+
 #include <Luau/Compiler.h>
 #include <fmt/color.h>
 #include <fmt/format.h>
@@ -380,20 +386,34 @@ auto RunSelectedCommand(ImportCommand& active_command, int& exit_code) -> void
   }
 }
 
+auto IsInteractiveStdout() noexcept -> bool
+{
+#if defined(_WIN32)
+  return _isatty(_fileno(stdout)) != 0;
+#else
+  return isatty(fileno(stdout)) != 0;
+#endif
+}
+
 class ConsoleMessageWriter final : public IMessageWriter {
 public:
   explicit ConsoleMessageWriter(bool quiet, bool no_color)
     : quiet_(quiet)
-    , no_color_(no_color)
+    , interactive_(IsInteractiveStdout())
+    , no_color_(no_color || !interactive_)
   {
-    fmt::print(stdout, "\x1b[?25l");
-    std::cout.flush();
+    if (interactive_) {
+      fmt::print(stdout, "\x1b[?25l");
+      std::cout.flush();
+    }
   }
 
   ~ConsoleMessageWriter() override
   {
-    fmt::print(stdout, "\x1b[?25h");
-    std::cout.flush();
+    if (interactive_) {
+      fmt::print(stdout, "\x1b[?25h");
+      std::cout.flush();
+    }
   }
 
   auto Error(std::string_view message) -> bool override
@@ -401,7 +421,8 @@ public:
     std::scoped_lock lock(mutex_);
     ClearProgressLine();
     if (no_color_) {
-      std::cerr << "\r" << kErrorGlyph << ' ' << message << "\r\n";
+      std::cerr << (interactive_ ? "\r" : "") << kErrorGlyph << ' ' << message
+                << '\n';
     } else {
       fmt::print(stderr, fmt::fg(fmt::rgb(220, 38, 38)), "\r{} {}\r\n",
         kErrorGlyph, std::string(message));
@@ -415,7 +436,8 @@ public:
     std::scoped_lock lock(mutex_);
     ClearProgressLine();
     if (no_color_) {
-      std::cerr << "\r" << kWarningGlyph << ' ' << message << "\r\n";
+      std::cerr << (interactive_ ? "\r" : "") << kWarningGlyph << ' ' << message
+                << '\n';
     } else {
       fmt::print(stderr, fmt::fg(fmt::color::yellow), "\r{} {}\r\n",
         kWarningGlyph, std::string(message));
@@ -432,7 +454,7 @@ public:
     std::scoped_lock lock(mutex_);
     ClearProgressLine();
     if (no_color_) {
-      std::cout << "\r" << message << "\r\n";
+      std::cout << (interactive_ ? "\r" : "") << message << '\n';
     } else {
       fmt::print(
         stdout, fmt::fg(fmt::color::white), "\r{}\r\n", std::string(message));
@@ -446,7 +468,8 @@ public:
     std::scoped_lock lock(mutex_);
     ClearProgressLine();
     if (no_color_) {
-      std::cout << "\r" << kSuccessGlyph << ' ' << message << "\r\n";
+      std::cout << (interactive_ ? "\r" : "") << kSuccessGlyph << ' ' << message
+                << '\n';
     } else {
       fmt::print(stdout, fmt::fg(fmt::color::cyan), "\r{} {}\r\n",
         kSuccessGlyph, std::string(message));
@@ -461,8 +484,13 @@ public:
       return false;
     }
     std::scoped_lock lock(mutex_);
-    const auto frame = NextSpinnerFrame();
     const auto safe_message = SanitizeProgressMessage(message);
+    if (!interactive_) {
+      std::cout << safe_message << '\n';
+      std::cout.flush();
+      return true;
+    }
+    const auto frame = NextSpinnerFrame();
     const auto text = fmt::format("{} {}", frame, safe_message);
     const auto width = GetTerminalWidth();
     std::string line = FitToWidth(text, width);
@@ -548,6 +576,7 @@ private:
 
   std::mutex mutex_;
   const bool quiet_;
+  const bool interactive_;
   const bool no_color_;
   bool last_was_progress_ = false;
   size_t last_progress_len_ = 0U;

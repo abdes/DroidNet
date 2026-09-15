@@ -169,6 +169,9 @@ public sealed partial class InspectorControlTests
         {
             _ = run.State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
             _ = run.ImportedOutputs.Should().HaveCount(3);
+            _ = run.Messages.Should().NotContain(message => message.Text.Contains('\u001b'));
+            _ = run.Messages.Should().Contain(message => message.Text.Contains("geom-buffer:", StringComparison.Ordinal)
+                && message.Text.Length > 80 && !message.Text.EndsWith("...", StringComparison.Ordinal));
         }
         else
         {
