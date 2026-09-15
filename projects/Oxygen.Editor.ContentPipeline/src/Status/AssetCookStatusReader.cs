@@ -48,9 +48,11 @@ public sealed partial class AssetCookStatusReader(
         }
 
         var requested = assetUris.Distinct().ToArray();
-        var builtins = requested.Where(IsBuiltinIdentity).ToImmutableArray();
+        var builtinOrigins = ResolveBuiltinOutputOrigins(project, prior);
+        var requests = requested.Select(uri => (Requested: uri, Source: builtinOrigins.GetValueOrDefault(uri, uri))).ToArray();
+        var builtins = requests.Select(static item => item.Source).Where(IsBuiltinIdentity).Distinct().ToImmutableArray();
         var imports = await ImportedSourceIndex.ReadAsync(project, documents, prior, cancellationToken).ConfigureAwait(false);
-        var mapped = requested.Where(uri => !IsBuiltinIdentity(uri)).Select(uri => (Requested: uri, Resolution: imports.ResolveOutputFacts(project, uri, ContentCookInputRole.Primary))).ToArray();
+        var mapped = requests.Where(item => !IsBuiltinIdentity(item.Source)).Select(item => (item.Requested, Resolution: imports.ResolveOutputFacts(project, item.Source, ContentCookInputRole.Primary))).ToArray();
         var inputs = mapped.Select(item => item.Resolution.Source ?? CookInputResolver.Resolve(project, item.Requested, ContentCookInputRole.Primary)).ToArray();
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         var graph = await this.CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
@@ -75,7 +77,8 @@ public sealed partial class AssetCookStatusReader(
                 metadataUnavailable,
                 changed));
             return inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
-                .Concat(builtins.Select(uri => CreateBuiltinStatus(uri, products, plan, native?.Succeeded != false, metadataUnavailable))).ToArray();
+                .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
+                    CreateBuiltinStatus(item.Source, products, plan, native?.Succeeded != false, metadataUnavailable) with { AssetUri = item.Requested })).ToArray();
         }
         finally
         {
@@ -185,7 +188,7 @@ public sealed partial class AssetCookStatusReader(
 
         if (resolution.Source is null)
         {
-            return status;
+            return status with { AssetUri = requested };
         }
 
         var available = status.Outputs.Any(output => output.CookedAssetUri == requested);

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Cooking;
@@ -120,11 +122,41 @@ public sealed partial class ContentPipelineServiceTests
         _ = statuses.Should().OnlyContain(status => status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty && !status.Outputs.IsEmpty);
         _ = statuses.Should().OnlyContain(status => status.Outputs.All(output => output.SourceAssetUri == status.AssetUri));
         _ = workspace.CookCoordinator.Runs.Count.Should().Be(runCount, "origin discovery never cooks built-ins");
+        var requested = identities.Concat(statuses.SelectMany(static status => status.Outputs.Select(static output => output.CookedAssetUri))).Distinct().ToArray();
+        var missingSources = new ConcurrentQueue<string>();
+        void Observe(object? sender, FirstChanceExceptionEventArgs args)
+        {
+            if (args.Exception is FileNotFoundException { FileName: { } path } && path.StartsWith(workspace.Root, StringComparison.OrdinalIgnoreCase))
+            {
+                missingSources.Enqueue(path);
+            }
+        }
+
+        AppDomain.CurrentDomain.FirstChanceException += Observe;
+        try
+        {
+            var combined = await pipeline.ReadAsync(workspace.ProjectContext, requested, this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = missingSources.Should().BeEmpty("cooked built-in companions have engine-owned recipes, not authored JSON descriptors");
+            _ = combined.Select(static status => status.AssetUri).Should().BeEquivalentTo(requested);
+            _ = combined.Should().OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.FirstChanceException -= Observe;
+        }
+
         var shape = catalog.Geometries[0];
         var path = Path.Combine(workspace.Root, ".cooked", shape.Contribution.VirtualPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
         await File.WriteAllTextAsync(path, "unrelated replacement", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var changed = (await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
-        _ = changed.HasPublishedOutput.Should().BeTrue();
-        _ = changed.HasVerifiedOutput.Should().BeFalse("matching filenames do not prove an engine-owned output");
+        var changed = await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri, new Uri("asset://" + shape.Contribution.VirtualPath)], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = changed.Should().HaveCount(2).And.OnlyContain(
+            static status => status.HasPublishedOutput && !status.HasVerifiedOutput && status.SourcePaths.IsEmpty,
+            "both identities retain the same owner, but corrupt output is never verified");
+
+        workspace.WriteMaterial("Content/Materials/OxygenEditor_Default.omat.json", "Authored replacement");
+        Uri authoredDefault = new("asset:///Content/Materials/OxygenEditor_Default.omat.json");
+        var authored = await pipeline.ReadAsync(workspace.ProjectContext, [authoredDefault, new Uri("asset:///Content/Materials/OxygenEditor_Default.omat")], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = authored.Should().HaveCount(2).And.OnlyContain(status => status.SourcePaths.Contains(Path.Combine(workspace.Root, "Content", "Materials", "OxygenEditor_Default.omat.json")));
+        _ = authored.Select(static status => status.AssetUri).Should().Contain(authoredDefault);
     }
 }

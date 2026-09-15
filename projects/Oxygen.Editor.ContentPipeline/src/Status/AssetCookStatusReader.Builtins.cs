@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -15,6 +16,14 @@ public sealed partial class AssetCookStatusReader
     private static bool IsBuiltinIdentity(Uri uri)
         => uri.IsAbsoluteUri && string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
             && uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
+
+    private static Dictionary<Uri, Uri> ResolveBuiltinOutputOrigins(ProjectContext project, CookProvenance provenance)
+        => provenance.Products.Where(static product => IsBuiltinIdentity(product.SourceUri))
+            .SelectMany(static product => product.Outputs.Select(output => (output.Asset.CookedAssetUri, product.SourceUri)))
+            .GroupBy(static output => output.CookedAssetUri)
+            .Where(group => group.Select(static output => output.SourceUri).Distinct().Take(2).Count() == 1
+                && !CookSavedSourceReader.Exists(CookInputResolver.Resolve(project, group.Key, ContentCookInputRole.Primary).SourceAbsolutePath))
+            .ToDictionary(static group => group.Key, static group => group.First().SourceUri);
 
     private static AssetCookStatus CreateBuiltinStatus(
         Uri uri,
