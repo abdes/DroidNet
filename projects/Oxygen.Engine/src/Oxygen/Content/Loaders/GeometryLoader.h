@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -162,11 +163,13 @@ namespace detail {
     // Use GenerateMeshBuffers to get vertices/indices
     auto mesh_opt = data::GenerateMeshBuffers(
       desc.name, std::span<const std::byte>(param_blob));
-    if (mesh_opt) {
-      std::tie(vertices, indices) = std::move(*mesh_opt);
-    } else {
-      LOG_F(ERROR, "Failed to generate procedural mesh for {}", desc.name);
+    if (!mesh_opt || mesh_opt->first.empty() || mesh_opt->second.empty()) {
+      throw std::runtime_error(fmt::format(
+        "Failed to generate procedural mesh '{}': unsupported generator or "
+        "invalid parameters",
+        desc.name));
     }
+    std::tie(vertices, indices) = std::move(*mesh_opt);
   }
 
   inline auto LoadSkinnedMeshBuffers(
