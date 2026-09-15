@@ -1,6 +1,8 @@
 # ED-M07B - Safe Content Publication And Compatibility
 
-Status: `in_progress; workflow review and D1 complete; implementation underway`
+Status: `validated`
+
+Completion evidence: [workflow audit](../validation/ED-M07B-closeout-audit.md).
 
 ## 1. Purpose
 
@@ -36,6 +38,9 @@ and update it without managing generated files or mounts. The
 [diagnostics-operation-results.md](../lld/diagnostics-operation-results.md).
 
 ## 4. Identified Gaps
+
+This table records the starting gaps; the closeout audit records their completed
+implementation and validation.
 
 | Evidence in the committed source | Missing behavior | Task |
 | --- | --- | --- |
@@ -110,7 +115,7 @@ observers; those notifications never launch cooks. Imported-source closure and
 creation/Save publication now pass through the real native pipeline, shared
 catalog and typed inspector controls. Independent cooked-only glTF/FBX libraries
 also support assignment, history, Save/reopen and cooking the consuming scene.
-Combined import/reimport command journeys remain under 07B.5d-f.
+Combined import/reimport command journeys are validated under 07B.5d-f.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and
@@ -156,8 +161,8 @@ the public asset-loader drain, retains output readers through native refresh and
 teardown, and replaces existing material bindings without reloading the scene.
 Runtime 90/90 and focused packaged UI 14/14 pass. The user confirmed recook/tab
 switching and leak-free shutdown under native debugging. Workspace publication
-now uses this awaited boundary. Project-lifetime, recovery and complete user workflows
-still require their remaining integration checks.
+now uses this awaited boundary. Project-lifetime, recovery and combined user
+workflows pass the integration checks recorded in the closeout audit.
 
 Implement content-pipeline section 16 exactly: same-volume private output,
 whole-root validation, preserved unrelated entries for partial cooks, durable
@@ -229,7 +234,7 @@ configured source rows offer Reimport. Retry and Save/resume preserve retained
 source after a partial failure. Reviewed collision replacement preserves prior
 source/publication on failure; source/output catalog and typed-use integration
 pass for glTF/FBX, including cooked-only libraries. Combined import/reimport
-command journeys remain under 07B.5d-f. Native
+command journeys are validated under 07B.5d-f. Native
 numeric loading now covers glTF external buffers, GLB binary chunks and FBX,
 including unit/handedness changes, rotated parents, scalar properties and clean
 source copies. Camera-unit and retained-parent defects were reproduced and fixed;
@@ -547,7 +552,7 @@ its product semantics are settled in 07B.0 before implementation.
   points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
 - [x] 07B.5g compact single/multi-node inspector, functional component selection
   and All reset pass without changing property/history/gesture semantics.
-- [ ] 07B.5f all workflow journeys and recorded UI defects pass through the
+- [x] 07B.5f all workflow journeys and recorded UI defects pass through the
   visible editor, including resumed preview and user validation evidence.
 
 ## 10. Status Ledger Hook
