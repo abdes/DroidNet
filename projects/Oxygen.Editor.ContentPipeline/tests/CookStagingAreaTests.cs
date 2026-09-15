@@ -55,6 +55,29 @@ public sealed partial class CookStagingAreaTests
         _ = Directory.Exists(Path.Combine(project.Root, ".cooked")).Should().BeFalse();
     }
 
+    /// <summary>Brief catalog registration contention delays staging instead of failing the cook.</summary>
+    /// <returns>The asynchronous registration-race regression.</returns>
+    [TestMethod]
+    public async Task StagingWaitsForReaderRegistrationGate()
+    {
+        using var project = new StagingProject();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        cancellation.CancelAfter(TimeSpan.FromSeconds(5));
+        using (await CookOutputLease.AcquireReadAsync(project.Root, cancellation.Token).ConfigureAwait(false))
+        {
+        }
+
+        var gate = new FileStream(Path.Combine(project.Root, ".build", "cook", "publication.lock"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        await using var gateLifetime = gate.ConfigureAwait(false);
+        var pending = CookStagingArea.CreateAsync(project.Operation, ["Content"], cancellation.Token);
+        _ = pending.IsCompleted.Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "output")).Should().BeFalse();
+        await gate.DisposeAsync().ConfigureAwait(false);
+        using var staging = await pending.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        _ = staging.Roots.Should().ContainSingle();
+        _ = Directory.Exists(Path.Combine(project.Root, ".cooked")).Should().BeFalse();
+    }
+
     /// <summary>Reusing an operation identity cannot overwrite or clean up its existing staging.</summary>
     /// <returns>The asynchronous ownership regression.</returns>
     [TestMethod]

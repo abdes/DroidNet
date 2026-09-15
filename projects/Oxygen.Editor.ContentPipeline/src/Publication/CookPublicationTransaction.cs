@@ -78,7 +78,7 @@ internal sealed partial class CookPublicationTransaction
         }
 
         _ = CookStagingArea.ValidateMounts(staging.Roots.Select(static root => root.Mount));
-        using var reader = CookOutputLease.AcquireRead(operation.Project.ProjectRoot);
+        using var reader = await CookOutputLease.AcquireInspectionAsync(operation.Project.ProjectRoot, cancellationToken).ConfigureAwait(false);
         var roots = ImmutableArray.CreateBuilder<CookPublicationJournal.Root>();
         foreach (var root in staging.Roots)
         {
@@ -163,7 +163,6 @@ internal sealed partial class CookPublicationTransaction
 
                 if (preview is not null)
                 {
-                    using var read = writer is null ? CookOutputLease.AcquireRead(this.project.ProjectRoot) : null;
                     await preview.MountAsync(this.GetPublishedRoots(), writer).ConfigureAwait(false);
                     await preview.ResumeAsync().ConfigureAwait(false);
                 }

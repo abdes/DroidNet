@@ -12,6 +12,50 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Routine ownership contention must not flood the debugger with first-chance exceptions.</summary>
 public sealed partial class CookOutputLeaseTests
 {
+    /// <summary>Reader, inspection and writer registration wait for a busy gate without first-chance exceptions.</summary>
+    /// <param name="kind">The waiting registration kind.</param>
+    /// <returns>The asynchronous registration regression.</returns>
+    [TestMethod]
+    [DataRow("Preview")]
+    [DataRow("Inspection")]
+    [DataRow("Publisher")]
+    [DoNotParallelize]
+    public async Task AsyncRegistrationsWaitForBusyGateWithoutExceptions(string kind)
+    {
+        using var project = new ProjectDirectory();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        cancellation.CancelAfter(TimeSpan.FromSeconds(5));
+        using var held = await CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token).ConfigureAwait(false);
+        var exceptions = new ConcurrentQueue<Exception>();
+        void Observe(object? sender, FirstChanceExceptionEventArgs args)
+        {
+            if (args.Exception is CookOutputBusyException or IOException)
+            {
+                exceptions.Enqueue(args.Exception);
+            }
+        }
+
+        AppDomain.CurrentDomain.FirstChanceException += Observe;
+        try
+        {
+            var pending = kind switch
+            {
+                "Preview" => CookOutputLease.AcquireReadAsync(project.Root, cancellation.Token),
+                "Inspection" => CookOutputLease.AcquireInspectionAsync(project.Root, cancellation.Token),
+                _ => AcquireWaitingAsync(project.Root, publisherWaits: true, cancellation.Token),
+            };
+            await Task.Delay(120, cancellation.Token).ConfigureAwait(false);
+            _ = pending.IsCompleted.Should().BeFalse();
+            held.Dispose();
+            using var acquired = await pending.WaitAsync(cancellation.Token).ConfigureAwait(false);
+            _ = exceptions.Should().BeEmpty();
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.FirstChanceException -= Observe;
+        }
+    }
+
     /// <summary>Both sides of the publication/inspection wait use non-throwing ownership checks.</summary>
     /// <param name="publisherWaits">Whether publication waits for an existing inspection.</param>
     /// <returns>The asynchronous contention regression.</returns>
