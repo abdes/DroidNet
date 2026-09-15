@@ -863,8 +863,16 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         coalesced UI snapshots preserve full output/assets and avoid repeated
         collection scans. Pipeline 444/444 and Cooking/UI 27/27 pass; the isolated
         timing run passes 4/4. [Feedback evidence](validation/ED-M07B-cook-feedback.md).
-  - [ ] Complete the remaining combined creation/import/reimport command journeys,
-        including cooked-library dependency cooking and typed-use qualification.
+  - [x] Real Aura import dialogs drive glTF/FBX through native cooking and live
+        publication. Cancel starts no work; reviewed replacement preserves source
+        and output on Cancel, then updates the existing material on acceptance.
+        A controlled importer failure after retention leaves scoped messages in
+        Cooking; its Retry button succeeds after the original file is removed.
+        The combined native import/typed-use/lifetime run passes 25/25.
+        [Import journey evidence](validation/ED-M07B-import-dialog-journeys.md).
+  - [ ] Finish combined Save listed & Cook / save-conflict recovery.
+  - [ ] Make redirected native progress output complete plain lines without
+        terminal cursor controls or terminal-width truncation.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
