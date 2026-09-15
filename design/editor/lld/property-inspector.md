@@ -196,6 +196,15 @@ ED-M05 already owns real material creation/picking. ED-M07A fixes and proves
 consumption of that picker and the runtime override path; it does not restore
 the earlier raw-identity-only milestone limitation.
 
+ED-M08's approved creation palette is Cube, Sphere, Capsule, Cylinder, Cone,
+Plane, Quad, IcoSphere and Torus, with SubdividedCube under Advanced. Discover
+canonical authoring choices from the native catalog; the editor must not
+maintain its own generator/default list. ArrowGizmo is an internal tool resource.
+Migrate useful GeodesicSphere identities to IcoSphere and remove the alias.
+All ten creation/assignment paths require cooking and native/editor rendering;
+Capsule implementation and this broader qualification remain pending. Palette
+approval does not decide primitive dimensions, orientation or pivot defaults.
+
 #### `PerspectiveCamera` (`SelectionPolicy.CommonComponent`)
 
 | Field | Tier | Type / Range | Validation | Mixed | Sync |

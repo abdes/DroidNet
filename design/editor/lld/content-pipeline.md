@@ -1120,20 +1120,25 @@ Bounds come from the generated mesh, and material parameters come from
 contributions and the catalog artifact consumed by the editor. The editor supplies
 the project output mount; it does not reconstruct geometry or material defaults.
 
-The required set covers every named generator currently exposed by
-`Oxygen/Data/ProceduralMeshes.h` and the engine geometry descriptor schema:
-Cube, SubdividedCube, Sphere, IcoSphere, GeodesicSphere, Plane, Cylinder, Cone,
-Torus, Quad, and ArrowGizmo. GeodesicSphere is the engine's alias for IcoSphere:
-support both names/identities without presenting them as unrelated shapes.
-Use engine-owned defaults; this does not add a raw generator-parameter editor.
-Future engine additions require an explicit catalog/qualification update rather
-than silently expanding the matched release's capabilities.
+ED-M08 supersedes the ED-M07B eleven-name authoring scope with the user-approved
+ten-shape palette: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere,
+Torus and SubdividedCube. SubdividedCube is advanced creation; ArrowGizmo is an
+internal tool resource. Migrate useful GeodesicSphere references to IcoSphere,
+then remove the alias and legacy resolution path. Useful former scene uses of
+tool-only geometry migrate to ordinary geometry; no compatibility shim remains.
+The prior milestone's evidence remains historical.
 
-Existing URIs remain authored identity. SetGeometryCommand registers the native
-request generation and resolves built-ins through Oxygen.Data. Browser and picker
-choices come from the complete native catalog, including SubdividedCube and both
-IcoSphere names; managed catalogs and resolvers require supplied metadata instead
-of constructing their own built-in lists.
+Capsule must join the same native definition/generation/cook authority, not an
+editor-only primitive. The engine-owned catalog distinguishes canonical authoring
+choices from internal tools, and the editor consumes that metadata rather than
+duplicating name lists. Primitive dimensions/orientation remain under the separate
+interactive decision; this approval adds no raw generator-parameter editor.
+Future additions require explicit catalog and qualification updates.
+
+SetGeometryCommand registers the native request generation and resolves canonical
+built-ins through Oxygen.Data. Browser and picker choices use the native catalog's
+approved authoring classification, including advanced SubdividedCube; managed
+catalogs and resolvers require supplied metadata rather than constructing recipes.
 
 Discovery retains the complete native catalog under the editor's derived
 `cache/builtins/<configuration>` state directory. SDK identity changes refresh the
@@ -1164,8 +1169,10 @@ source implementation and unit tests alone do not establish rendered equivalence
 
 Required regression: assign Cylinder to a scene node, explicitly save, then Cook
 Current Scene and Cook Project. Both succeed and preserve the authored identity;
-repeat for every named generator and alias. Do not fix coverage by hiding valid
-engine-supported choices or downgrading their failure to a successful warning.
+repeat for every approved canonical authoring generator, including Capsule.
+Test useful-content migration separately; no legacy alias is a release gate.
+Every offered choice must work; do not downgrade a failed required cook to a
+successful warning or hide an approved choice to evade qualification.
 Failure diagnostics carry captured scene identity, node ID/path/name, geometry
 identity, and saved revision, and can navigate to the matching current node.
 If the node has been renamed/deleted since capture, explain that relationship

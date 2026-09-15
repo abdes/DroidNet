@@ -962,6 +962,9 @@ content in embedded preview and standalone runtime under controlled comparison.
       canonical implementation and rendered validation remain pending.
 - [x] Scalar emission colour/HDR intensity is approved, with zero intensity off.
       Emissive GI is outside this decision; implementation and validation remain pending.
+- [x] Ten-shape creation palette including Capsule is approved; SubdividedCube
+      is Advanced, ArrowGizmo internal, and GeodesicSphere migrates to IcoSphere.
+      Primitive defaults, implementation and qualification remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
