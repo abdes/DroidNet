@@ -262,11 +262,12 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 340 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot));
-        await WaitForRenderAsync().ConfigureAwait(true);
+        await WaitForCookingUiAsync(() => model.Runs.Any(item => item.Snapshot.OperationId == snapshot.OperationId), this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = model.Runs.Should().Contain(item => item.Snapshot.OperationId == snapshot.OperationId);
         _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(item => item.Text == "SavedScene");
         _ = model.SelectedRun.Should().BeSameAs(selected);
         runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot with { State = CookRunState.Succeeded, CompletedAt = DateTimeOffset.UtcNow, Revision = 1 }));
+        await WaitForCookingUiAsync(() => model.Runs.All(item => item.Snapshot.OperationId != snapshot.OperationId), this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = model.Runs.Should().NotContain(item => item.Snapshot.OperationId == snapshot.OperationId);
         model.ShowAll = true;
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -370,6 +371,44 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
         _ = scroller.VerticalOffset.Should().BeGreaterThan(360);
     });
 
+    /// <summary>A burst paints only its latest snapshot while retaining every asset and output message.</summary>
+    /// <returns>The asynchronous progress-coalescing regression.</returns>
+    [TestMethod]
+    public Task ProgressBurstsPreserveTranscriptAndAssetRowsWithoutRepeatedProjection() => EnqueueAsync(async () =>
+    {
+        var runs = new Mock<ICookRunService>();
+        using var model = CreateModel(runService: runs);
+        var selected = model.SelectedRun!;
+        var snapshot = selected.Snapshot;
+        var originalMessages = selected.Output.Count;
+        var originalAssets = selected.Assets.Count;
+        var updates = 0;
+        selected.PropertyChanged += (_, _) => ++updates;
+        for (var index = 0; index < 1000; index++)
+        {
+            var uri = new Uri("asset:///Content/Materials/M" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".omat.json");
+            snapshot = snapshot with
+            {
+                Revision = snapshot.Revision + 1,
+                Assets = snapshot.Assets.Add(uri, new(uri, ContentCookAssetKind.Material, CookAssetState.Preparing)),
+                Messages = snapshot.Messages.Add(new(snapshot.Messages.Count + 1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Preparing " + uri)),
+            };
+            runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot));
+        }
+
+        _ = updates.Should().Be(0);
+        await WaitForCookingUiAsync(() => selected.Snapshot.Revision == snapshot.Revision, this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = updates.Should().Be(1);
+        _ = model.SelectedRun.Should().BeSameAs(selected);
+        _ = selected.Output.Should().HaveCount(originalMessages + 1000);
+        _ = selected.Assets.Should().HaveCount(originalAssets + 1000);
+        var retained = selected.Assets[^1];
+        var removed = selected.Assets[0].Asset.AssetUri;
+        runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(snapshot with { Revision = snapshot.Revision + 1, Assets = snapshot.Assets.Remove(removed) }));
+        await WaitForCookingUiAsync(() => selected.Snapshot.Revision == snapshot.Revision + 1, this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = selected.Assets.Should().NotContain(row => row.Asset.AssetUri == removed).And.Contain(retained);
+    });
+
     /// <inheritdoc />
     protected override void TestSetup() => this.originalWindowSize = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Size;
 
@@ -395,6 +434,18 @@ public sealed class CookingPanelControlTests : VisualUserInterfaceTests
             _ = panel.FindDescendants().Should().Contain(cookingView).And.NotContain(browserView);
             _ = dock.Dockables.Count(value => value.IsActive).Should().Be(1);
         }
+    }
+
+    private static async Task WaitForCookingUiAsync(Func<bool> ready, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        while (!ready())
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(true);
+        }
+
+        await WaitForRenderAsync().ConfigureAwait(true);
     }
 
     private static void AssertExpandedContent(CookingPanelView view)

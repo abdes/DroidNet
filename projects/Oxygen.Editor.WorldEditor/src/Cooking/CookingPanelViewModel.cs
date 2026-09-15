@@ -23,6 +23,9 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private readonly ICookingWorkspaceActions workspace;
     private readonly HostingContext hosting;
     private readonly Dictionary<Guid, CookingRunViewModel> items = [];
+    private readonly Lock pendingLock = new();
+    private readonly Dictionary<Guid, CookRunChangedEventArgs> pendingUpdates = [];
+    private bool updateQueued;
     private bool reconciling;
     private bool disposed;
 
@@ -79,7 +82,12 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     /// <inheritdoc />
     public void Dispose()
     {
-        this.disposed = true;
+        lock (this.pendingLock)
+        {
+            this.disposed = true;
+            this.pendingUpdates.Clear();
+        }
+
         this.runs.RunChanged -= this.OnRunChanged;
         GC.SuppressFinalize(this);
     }
@@ -96,18 +104,52 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
 
     private void OnRunChanged(object? sender, CookRunChangedEventArgs args)
     {
-        if (args.Reveal)
+        lock (this.pendingLock)
         {
-            // Let the initiating menu close before activating the cook's recovery surface.
-            _ = this.hosting.Dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => this.ApplyRun(args));
+            if (this.disposed)
+            {
+                return;
+            }
+
+            if (this.pendingUpdates.TryGetValue(args.Run.OperationId, out var previous))
+            {
+                args = new(args.Run.Revision >= previous.Run.Revision ? args.Run : previous.Run, args.Reveal || previous.Reveal);
+            }
+
+            this.pendingUpdates[args.Run.OperationId] = args;
+            if (this.updateQueued)
+            {
+                return;
+            }
+
+            this.updateQueued = true;
         }
-        else if (this.hosting.Dispatcher.HasThreadAccess)
+
+        // Snapshots retain every message and asset; only redundant UI projections are coalesced.
+        // Defer until the initiating menu handler has returned before requesting panel activation.
+        if (!this.hosting.Dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, this.ApplyPendingUpdates))
         {
-            this.ApplyRun(args);
+            lock (this.pendingLock)
+            {
+                this.pendingUpdates.Clear();
+                this.updateQueued = false;
+            }
         }
-        else
+    }
+
+    private void ApplyPendingUpdates()
+    {
+        CookRunChangedEventArgs[] updates;
+        lock (this.pendingLock)
         {
-            _ = this.hosting.Dispatcher.TryEnqueue(() => this.ApplyRun(args));
+            updates = [.. this.pendingUpdates.Values];
+            this.pendingUpdates.Clear();
+            this.updateQueued = false;
+        }
+
+        foreach (var update in updates)
+        {
+            this.ApplyRun(update);
         }
     }
 

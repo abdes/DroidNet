@@ -233,6 +233,15 @@ outcome; do not report cancellation after a successful commit. Then admit other
 eligible queued requests normally. Cancelling does not disable automatic cooking
 globally or create an automatic retry loop for the same revision.
 
+### Progress Delivery
+
+Cook work yields away from the submitting synchronization context after writer
+admission. Document/UI-owned operations use their existing dispatcher boundaries.
+The panel coalesces pending snapshots by operation and revision for one dispatcher
+update, retaining any reveal request and the complete transcript/asset state in
+the latest snapshot. Row identity remains stable through indexed reconciliation;
+removed entries disappear. Progress bursts must not delay initial user feedback.
+
 ### Session History
 
 Keep summaries, diagnostic references, and each run's ordered messages available

@@ -588,7 +588,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         reached through indexed library dependencies now enter saved-input capture
         and cooking; saved priority selects the winner, and shadowed versions do
         not invalidate consumers. Both orders and status transitions pass; the
-        ContentPipeline suite passes 442/442. Embedded native keys remain distinct
+        ContentPipeline suite passes 444/444. Embedded native keys remain distinct
         from authored path references: a same-path project material with a different
         key cannot replace a cooked mesh dependency. Per-consumer provenance and
         two-scene freshness regressions preserve both identities independently.
@@ -824,6 +824,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         The narrow material header preserves title/status and all four actions.
         Packaged Release passes 33/33 with reviewed captures and clean diagnostics;
         [scale evidence](validation/ED-M07B-scaled-layouts.md).
+  - [x] Rendered cook feedback meets 100 ms for all four scopes and unchanged
+        repeats on the saved 100-node/1,000-input fixture: final samples are
+        13-35 ms. Synchronous cook verification runs off the caller thread;
+        coalesced UI snapshots preserve full output/assets and avoid repeated
+        collection scans. Pipeline 444/444 and Cooking/UI 27/27 pass; the isolated
+        timing run passes 4/4. [Feedback evidence](validation/ED-M07B-cook-feedback.md).
   - [ ] Complete the remaining combined creation/import/reimport command journeys,
         including cooked-library dependency cooking and typed-use qualification.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
