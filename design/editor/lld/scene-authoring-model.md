@@ -127,6 +127,64 @@ ED-M03 command rules:
   later explicit command option.
 - rename cannot produce empty/whitespace display names.
 
+### ED-M08 visibility and shadow source state
+
+Approved 2026-09-15; **implementation and qualification pending**. This section
+extends the earlier ED-M03 model under the accepted non-sun rows of the
+[visibility review](../review/ED-M08-node-light-visibility-review.md).
+
+Each of the following node flags preserves its own source mode:
+
+| Flag | Canonical source choices | Newly created root | Newly created child |
+| --- | --- | --- | --- |
+| Scene Visibility | Inherit / Shown / Hidden | Shown | Inherit |
+| Geometry Cast Shadows | Inherit / On / Off | On | Inherit |
+| Geometry Receive Shadows | Inherit / On / Off | On | Inherit |
+
+Local Shown/Hidden or On/Off replaces inheritance for that flag. Inherit takes
+the parent's resolved value; root/default resolution is Shown/On/On. Preserve
+the source choice independently of the current resolved boolean. This is not
+ancestor-AND visibility. Reparenting an inherited node recomputes its effective
+values; reparenting a local override retains that override. Parent edits must
+not overwrite children's stored choices. Commands publish coherent descendant
+changes, and Undo restores source modes and hierarchy before recomputation.
+
+Effective Hidden suppresses the node's geometry, its casting and its light
+contribution; a locally Shown descendant can remain eligible. Light Affects
+Scene is an independent light-component value: effective contribution requires
+both that participation setting and effective node visibility. Neither control
+rewrites the other. Light Cast Shadows controls shadowed illumination from that
+light; node Cast Shadows controls its geometry as an occluder. Receiver Off
+changes direct-light shadow attenuation only. Hidden cameras remain selectable
+and usable. These rules do not define general activation, simulation or script
+processing.
+
+**Editor-only Hide** is per-user/project workspace state outside this authored
+model. It filters geometry/gizmo representations in the editing main view and
+keeps lighting and shadow-caster eligibility. Parent hide/show preserves child
+hide choices; Show All clears the view overrides. It creates no scene dirty
+state, authoring-history entry or cooking request.
+
+**Migration is required, not a compatibility branch.** Current source DTOs and
+cooked records retain boolean flag values but cannot express Local/Inherit.
+Migrate useful visibility/caster intent into explicit canonical values, then
+save/cook the new form and remove obsolete interpretations/readers. Do not
+reinterpret every old child as Inherit merely because that is the new creation
+default. The formerly ineffective receiver flag does not prove a former visual
+opt-out: migrate its prior rendered behavior as receiving shadows. Qualify this
+with useful existing content and source-to-native observations.
+
+`SceneNode.IsActive` currently means loaded/projected into the engine and is
+rewritten by synchronization. Remove its historical authored serialization;
+derive runtime presence from the current projection. It must not migrate into
+an authored Enabled flag. Editor hide state must not migrate into Scene
+Visibility. No authored Shadows Only/Hidden Shadow mode or blended shadow
+casting is added to V0.1.
+
+Sun selection, atmospheric roles and secondary/moon/sky-only authoring remain
+separate open decisions. Preserving a light's existing assignment when its
+participation changes does not approve a particular selector or role count.
+
 ### Component Cardinality
 
 ED-M03 quick-add/create command rules:
@@ -244,6 +302,13 @@ Forbidden:
   scene graph data.
 
 ## 14. Validation Gates
+
+The approved ED-M08 extension is not closed by ED-M03 evidence. Its remaining
+gates include canonical mode round trips and one-time migration; root/child
+defaults; inherited reparenting and local overrides; independent geometry/light
+casting and receiving; hidden-camera use; separate workspace hide with no
+authoring changes; and engine-first/editor-second rendered validation. A saved
+receiver value without its GPU effect cannot satisfy a gate.
 
 ED-M03 scene model is complete when:
 

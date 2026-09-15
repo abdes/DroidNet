@@ -100,6 +100,10 @@ drafts as drafts; do not restore them to production dependencies.
 - [x] Preserve numeric/image/ownership gates and the check-then-exit intent.
 - [x] Entire workflow is development-only; a separate opted-in driver is allowed.
 - [x] Captured-sky diffuse and specular image-based lighting is required.
+- [x] Non-sun visibility/contribution/shadow behavior is approved under the
+  [visibility review](../review/ED-M08-node-light-visibility-review.md), section 5.
+  Implementation and qualification remain pending. Sun selector/roles and the
+  associated single-sun, secondary/moon and sky-only boundaries remain open.
 - [ ] Complete and accept the V0.1 scope review and reconcile PRD/authoring tables
   through explicit individual property decisions before freezing coverage or
   protocol payloads. Do not treat the captured-sky decision as package approval.
@@ -159,6 +163,11 @@ Deliver:
   automatically including every exposed field. For each field record its saved path,
   unit/enum conversion, expected native path, meaningful non-default case and
   whether it has a visible-effect case. Include node flags and slot clearing.
+  Inventory approved Local/Inherit source modes separately from effective
+  booleans: new roots are Shown with geometry casting/receiving On; children
+  Inherit. Include independent Affects Scene, geometry/light Cast Shadows and
+  functional Receive Shadows. Workspace Hide and runtime-loaded `IsActive` are
+  not authored parity fields. Do not freeze pending sun roles.
 - Hand-authored expected examples for quaternion, radians, linear colour,
   identity/index mapping and material enums; they must catch a shared adapter
   error instead of computing both sides with the same implementation.
@@ -213,6 +222,14 @@ close. All tests preserve source/output hashes and document dirty/history state.
 
 Deliver:
 
+- Implement approved visibility behavior in ordinary production owners:
+  canonical Local/Inherit round trip, matching geometry/light use of resolved
+  flags, light participation separate from visibility, and independent caster,
+  light-shadow and receiver effects. Fix effective flag/hierarchy resolver
+  invalidation and relevant captured-lighting invalidation. Migrate useful old
+  visibility/caster values; migrate ineffective receiver values to their former
+  rendered On behavior. Remove obsolete readers and saved runtime-loaded
+  `IsActive`; do not retain compatibility execution paths.
 - An opt-in native test/tool entry accepting the immutable request. Initialize
   no restored demo content, skybox, camera rig, preview sun or scene-specific
   CVar defaults. Normal RenderScene gains no validation request flag.
@@ -287,6 +304,11 @@ area alone. Do not crop comparison images, exclude bars, or relax image metrics.
 
 Deliver:
 
+- Keep approved editor-only Hide as a production editing-main-view mask with
+  per-user/project workspace persistence and no authoring dirty/history/cook
+  effects. It retains light contribution, caster eligibility and child hide
+  choices. Controlled test targets render canonical authored visibility; test
+  entry/release must not erase or apply a stale editing-view mask.
 - One opt-in development capture owner tied to project/run/document/scene/view generation.
   Capture view intent, finish any active edit gesture, pin the verified saved
   projection and camera/profile, then hold all later scene mutation delivery.
@@ -373,6 +395,15 @@ Normal product menus/resources/builds/packages contain no validation feature.
 
 ### M08.8 - Field/Rendered Qualification And Closeout
 
+- Qualify the approved visibility matrix through normal authoring, Undo/Redo,
+  Save/reopen/cook and native-engine-first/editor-second rendering: inherited
+  Hidden versus locally Shown children; new root/child defaults; independent
+  Affects Scene, geometry/light Cast Shadows and receiver opt-out; hidden usable
+  cameras; authored Hidden versus off-screen casters; editor-only Hide retaining
+  lighting/shadows with unchanged authored hashes, dirty/history and cooking.
+  Verify resolver/captured-product invalidation and useful-content migration.
+  Blended casting and authored Shadows Only/Hidden Shadow are excluded; this
+  matrix does not settle the separately pending sun-selector/role contract.
 - Run every approved field case through real authoring/Save/Cook and
   development-driven embedded/native paths. Add bounded visual cases for camera, hierarchy, every built-in and
   imported geometry, material replacement/None/Default, opacity/mask/blend,

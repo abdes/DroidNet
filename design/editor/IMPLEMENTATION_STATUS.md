@@ -976,11 +976,14 @@ content in embedded preview and standalone runtime under controlled comparison.
       values. Engine/editor implementation and qualification remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
-      The combined visibility proposal is withdrawn; the
-      [node/light review](review/ED-M08-node-light-visibility-review.md) separates
-      deliberate Local/Inherit flags, light contribution and shadow policies.
-      No visibility change is approved. Its 38 existing native checks are
-      bounded research evidence, not rendered M08 qualification.
+- [x] The complete [visibility/contribution/shadow contract](review/ED-M08-node-light-visibility-review.md)
+      is approved except its single scene-sun selector. Local editor hiding,
+      canonical Inherit/Shown/Hidden, independent light contribution/casting,
+      functional receiving and stated non-sun exclusions are approved scope;
+      implementation and rendered qualification remain pending.
+- [ ] Resolve celestial-light assignment for two suns and sun-plus-moon;
+      the [sun-selector proposal](review/ED-M08-celestial-light-authoring.md)
+      is not approved. The 38 existing research checks do not qualify new behavior.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
 - [ ] M08.2 verified preparation, root ownership and project admission.
 - [ ] M08.3 exact native loading and complete observations through opt-in tooling.

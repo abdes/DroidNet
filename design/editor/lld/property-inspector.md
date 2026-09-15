@@ -171,6 +171,41 @@ Resolved against `ISceneSelectionService.GetSelectedNodes(documentId, scene)`.
 
 ### 7.4 V0.1 Component Editors — Field Tables
 
+#### Node visibility and geometry shadows — approved ED-M08 contract
+
+Approved 2026-09-15; **implementation and rendered qualification pending**.
+The [visibility review](../review/ED-M08-node-light-visibility-review.md)
+defines the accepted behavior. Its Sun selector row and the associated
+single-sun, secondary/moon and sky-only boundaries remain open; this approval
+does not settle those roles.
+
+| Control | Presentation and source value | Required effect |
+| --- | --- | --- |
+| Scene Visibility | Primary: `Inherit / Shown / Hidden` | Resolves the node's native Local/Inherit flag. New roots default Shown; new children default Inherit. Effective Hidden removes that node's geometry, shadow casting and light contribution. A locally Shown child can override a hidden parent. |
+| Geometry: Cast Shadows | `Inherit / On / Off`, independent node flag | New roots resolve On; children inherit unless explicitly overridden. Off removes geometry as an occluder while preserving its visible surface, lighting and receiving. Supported opaque/masked casters qualify; blended shadow casting is excluded. |
+| Geometry: Receive Shadows | Advanced: `Inherit / On / Off`, independent node flag | New roots resolve On; children inherit unless explicitly overridden. Off skips direct-light shadow attenuation on the surface without changing its visibility, lighting or casting. It does not disable ambient occlusion or select Unlit. A real GPU consumer is required. |
+
+These are source modes, not three independent booleans or an ancestor-AND
+activation rule. Display the resolved value and its inherited origin; do not
+replace a stored Inherit value with the parent's current boolean. Multi-selection
+shows mixed source modes separately from differing resolved values. An edit or
+reparent resolves affected descendants coherently through the normal command,
+Undo/Redo and live-sync contracts. Geometry and lights use the same resolved
+visibility; light traversal must not add a separate hidden-ancestor gate.
+
+The **Hide in editor** eye is separate from these authored controls. It masks
+geometry/gizmo representations and their descendants in the editing main view,
+while retaining light contribution and shadow-caster eligibility. Store its
+choices in per-user/project workspace state outside authored content. It never
+dirties a scene or schedules cooking. Showing a parent retains individual child
+hide choices; Show All clears view overrides. It is not a light on/off switch.
+
+Cameras remain selectable and usable when their node is Hidden or its editor
+representation is hidden. Runtime-loaded status (`IsActive`) is derived, not a
+saved activation control. No generic node/simulation enablement, authored
+Shadows Only or Hidden Shadow mode is added. Camera-frustum exclusion can still
+retain a visible caster for shadows; authored Hidden cannot.
+
 #### `TransformComponent` (`SelectionPolicy.CommonComponent`, locked, not removable)
 
 | Field | Tier | Type / Range | Validation | Mixed | Sync |
@@ -188,6 +223,8 @@ edited Euler component during the interaction; commit re-derives quaternion.
 | --- | --- | --- | --- |
 | `Geometry` | Primary | `AssetReference<GeometryAsset>` | Asset field, populated from `IAssetCatalog`; unresolved URI shown with warning badge. |
 | Every existing material slot | Primary | Per-slot material asset reference or no instance override | Independent assignment/clearing through the existing material picker; clearing uses the mesh-assigned material. ED-M08 scope approved 2026-09-15; implementation pending. |
+| Cast Shadows | Primary | `Inherit / On / Off` node flag | Approved ED-M08 behavior above; independent of light Cast Shadows and material sidedness. Implementation pending. |
+| Receive Shadows | Advanced | `Inherit / On / Off` node flag | Approved ED-M08 receiver effect above; CPU state alone does not satisfy this control. Implementation pending. |
 | Override slot summary | Advanced | counts of `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot` | Read-only count; do not expose an unimplemented action. |
 | Submesh / LOD count | Advanced | `int`, `int` | Read-only from resolved `GeometryAsset.Lods`. |
 | `GeometryUri` raw | Raw | `string` | The persisted URI; copy-friendly diagnostic. |
@@ -264,12 +301,25 @@ view projection/content rectangle in development-only evidence.
 | `IntensityLux` | Primary | `float >= 0`, default `100_000` | Clamp `>= 0` | Indeterminate | yes |
 | `IsSunLight` | Primary | `bool`, default `true` | exclusivity in scene: see Environment | Indeterminate (mixed→`false`) | yes |
 | `EnvironmentContribution` | Primary | `bool`, default `true` | — | Indeterminate | yes |
-| `CastsShadows` | Primary | `bool` | — | Indeterminate | yes |
-| `AffectsWorld` | Advanced | `bool`, default `true` | — | Indeterminate | yes |
+| Light: Cast Shadows (`CastsShadows`) | Primary | `bool` | Off preserves illumination and other geometry/light shadow settings | Indeterminate | yes |
+| Affects Scene (`AffectsWorld`) | Primary | `bool`, default `true` | Runtime light participation, separately gated by effective Scene Visibility | Indeterminate | yes |
 | `AngularSizeRadians` | Advanced | `float >= 0`, default `0.00935` | Clamp `>= 0` | Indeterminate | yes |
 | `ExposureCompensation` | Advanced | `float`, EV stops `[-10, 10]` | Clamp | Indeterminate | yes |
 
-Sun exclusivity rule: setting `IsSunLight = true` clears the flag on every
+The approved **Affects Scene** control maps the existing `affects_world`
+participation meaning. Off stops this light's illumination and atmospheric
+contribution while retaining its stored intensity, colour, visibility and sun
+assignment. On does not override effective Hidden; show a derived visibility
+explanation instead of promising illumination. Light Cast Shadows is independent
+of the geometry Cast/Receive Shadows controls and must work for every light
+offered by V0.1. These behavior changes remain implementation work.
+
+The `IsSunLight`/`EnvironmentContribution` rows and following exclusivity rule
+describe the existing authoring baseline. The replacement sun-selector/role
+contract is pending a separate decision; neither a single-source selector nor
+secondary/moon or sky-only exclusions are approved here.
+
+Baseline sun exclusivity rule: setting `IsSunLight = true` clears the flag on every
 other `DirectionalLightComponent`, enables `EnvironmentContribution` on the
 selected light and binds it as the scene sun. Disabling `EnvironmentContribution`
 also disables `IsSunLight` and clears the scene binding when it points to that
@@ -614,6 +664,14 @@ All ED-M07A edits round-trip through existing `*Data` DTOs in
 | Directional light | `DirectionalLightData.{Color, IntensityLux, IsSunLight, EnvironmentContribution, CastsShadows, AffectsWorld, AngularSizeRadians, ExposureCompensation}` |
 | Environment | scene-level fields owned by [environment-authoring.md](./environment-authoring.md) |
 
+The table above records existing ED-M07A DTO coverage. ED-M08 adds canonical
+Local/Inherit source modes for Scene Visibility and geometry Cast/Receive
+Shadows; the current boolean DTOs/cooked records do not yet preserve those
+modes. Apply the one-time useful-content migration in
+[scene-authoring-model.md](./scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state).
+Editor-only hide choices and runtime-loaded state are excluded from authored
+scene serialization and cooking. Do not retain a legacy runtime reader branch.
+
 Round-trip rules:
 
 1. After save+reopen, every edited field equals its in-memory value
@@ -691,6 +749,24 @@ Forbidden:
 - The Geometry editor must not embed any material editing UI beyond identity.
 
 ## 14. Validation Gates
+
+Approved ED-M08 visibility/shadow gates, all **pending**:
+
+- Local/Inherit source modes and resolved values survive edit, reparent,
+  Undo/Redo, Save/reopen, cook and native/editor loading. New-root and child
+  defaults match the approved table; a locally Shown child under Hidden remains
+  eligible for geometry/light contribution.
+- Affects Scene, geometry casting, light shadowing and receiver opt-out have
+  independently verified rendered effects. Receiver Off preserves direct light,
+  ambient occlusion and the surface's own casting.
+- Editor-only Hide changes only main-view representations, retains illumination
+  and caster eligibility, preserves child choices and never changes authored
+  hashes, dirty/history state or cooking demand.
+- Hidden camera nodes remain usable. Authored Hidden, off-screen casters and
+  editor-only Hide have their distinct shadow behavior. Blended shadow casting
+  and authored hidden-shadow/shadows-only modes are not exposed.
+- Effective flag/hierarchy changes invalidate directional-light selection and
+  affected captured lighting products; stale cached membership cannot pass.
 
 ED-M07A inspector closure requires:
 
