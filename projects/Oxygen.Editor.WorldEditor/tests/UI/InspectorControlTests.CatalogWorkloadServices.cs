@@ -23,12 +23,12 @@ public sealed partial class InspectorControlTests
     {
         private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
 
-        public CatalogWorkloadServices(NativeSceneFixture fixture)
+        public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
         {
             this.Projects.Activate(ProjectContext.FromProject(fixture.Source.Project) with { AuthoringMounts = [new("Content", "Content")] });
             var files = new NativeAtomicFileStore(new RealFileSystem());
             this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
             this.Scopes = new ProjectCookScopeProvider(this.Storage);
             this.Publication = new(this.Runs, this.Projects, files);
             this.Mounts = new(this.Storage, api);

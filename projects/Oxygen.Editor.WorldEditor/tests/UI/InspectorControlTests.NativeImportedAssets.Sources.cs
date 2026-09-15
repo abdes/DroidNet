@@ -12,6 +12,15 @@ public sealed partial class InspectorControlTests
 {
     private static async Task<ContentCookResult> ImportTypedModelAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, string format, CancellationToken cancellationToken)
     {
+        var path = await WriteTypedModelSourceAsync(fixture, format, cancellationToken).ConfigureAwait(true);
+        var result = await services.Pipeline.ImportSourceAsync(new(services.Projects.ActiveProject!, path, "Triangle", new("asset:///Content/Models")), cancellationToken).ConfigureAwait(true);
+        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
+        _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
+        return result;
+    }
+
+    private static async Task<string> WriteTypedModelSourceAsync(NativeSceneFixture fixture, string format, CancellationToken cancellationToken)
+    {
         var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var source = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle." + format), cancellationToken).ConfigureAwait(true);
@@ -36,10 +45,7 @@ public sealed partial class InspectorControlTests
         }
 
         await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
-        var result = await services.Pipeline.ImportSourceAsync(new(services.Projects.ActiveProject!, path, "Triangle", new("asset:///Content/Models")), cancellationToken).ConfigureAwait(true);
-        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-        _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
-        return result;
+        return path;
     }
 
     private static async Task<ContentCookResult> CreateImportedLibraryAsync(NativeSceneFixture consumer, CatalogWorkloadServices services, string format, CancellationToken cancellationToken)
