@@ -725,7 +725,9 @@ normative in PRD section 8 and ED-M07 section 11.
 
 This section replaces the earlier direct-output publication assumption. Fixed
 published paths remain `.cooked/<Mount>/container.index.bin` and companions.
-The transaction is a required ED-M07B contract, not a claim of current code.
+ED-M07B implements and validates this transaction; see its
+[closeout audit](../validation/ED-M07B-closeout-audit.md). ED-M08 consumes these
+publication/provenance/read-lease contracts rather than creating a second writer.
 
 ### Input Capture And Serialization
 

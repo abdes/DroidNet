@@ -1,6 +1,6 @@
 # Runtime Integration LLD
 
-Status: `ED-M07 review-ready`
+Status: `ED-M07B baseline reviewed; ED-M08 capture extensions planned`
 
 ## 1. Purpose
 
@@ -580,13 +580,14 @@ cannot reinterpret accepted as presented. Runtime status uses the existing
 workspace/viewport pending/failure surface plus operation/output details. No
 new diagnostics dashboard is required.
 
-## 17. V0.1 Qualification And Publication Boundary
+## 17. Native Compatibility And Publication Boundary
 
-ED-M07B implements matched-build preflight before interop/native work, using the
-PRD's artifact/schema fingerprint. Missing/mismatched native artifacts disable
-native operations visibly while Project Browser and safe authoring/save remain
-available. The public managed boundary must be loadable without initializing
-interop merely to open the Project Browser.
+ED-M07B implements the ordinary build-compatibility policy in PRD section 9.
+Runtime startup checks Interop's recorded SDK dependencies; cooking verifies its
+tools and schemas on demand. Missing/mismatched native artifacts disable the
+affected capability visibly while Project Browser and safe authoring/save remain
+available. The public managed boundary is loadable without initializing Interop
+merely to open the Project Browser.
 
 Settings, `IEngineService`, view IDs/configuration and camera choices use managed
 contracts. `EngineSession` exposes managed operations and ownership facts;
@@ -595,15 +596,21 @@ conversion. Its factory has a managed signature and cannot be inlined into
 service construction. Omitted view options retain native defaults, and enum
 conversion preserves named meanings at the native boundary.
 
-`Oxygen.Managed.Core.Compatibility` verifies the fixed manifest against the
-host's independently resolved required inventory. Verification checks exact
-configuration, file hashes/sizes and schema identifiers, then returns an owned
-artifact lease and its portable content fingerprint. Windows read handles stay
-open through native execution and cleanup, preventing replacement between
-verification and use. Failure or cancellation releases the whole acquired set.
-The host owns inventory discovery and explicit qualification/promotion; ordinary
-compilation does not write the accepted manifest. Native bootstrap and cooker
-integration consume the same qualified artifact identity.
+`Oxygen.Managed.Core.Compatibility` reads SDK metadata recorded by the ordinary
+Interop build and verifies the independently resolved runtime inventory. Cooking
+captures its producer inventory and checks matching editor/native schemas.
+Verification checks configuration and file identities, then returns an owned
+artifact lease and portable fingerprint. Windows read handles remain open through
+native execution and cleanup, preventing replacement between verification and use.
+Failure/cancellation releases acquired ownership. There is no fixed whole-editor
+qualification manifest, promotion command or separately built probe; managed/UI
+edits do not require one in Debug or Release.
+
+ED-M08 extends on-demand verification to the installed RenderScene executable,
+its normal build dependency metadata, protocol and capture/runtime inputs.
+Producer provenance and runtime/capture identity are separate facts. An SDK or
+protocol mismatch reports the affected build/install action; testing evidence is
+not a runtime admission manifest.
 
 Publication briefly pauses preview and drains affected content reads before
 fixed cooked-root replacement. The runtime exposes the required pause/drain/
