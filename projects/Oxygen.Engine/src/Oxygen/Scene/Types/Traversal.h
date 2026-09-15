@@ -120,8 +120,8 @@ static_assert(NonMutatingSceneFilter<AcceptAllFilter>);
    unless they have the kIgnoreParentTransform flag set.
  - This ensures that world transforms remain consistent throughout the
    hierarchy.
- - If a node is configured to ignore its parent transform, its entire subtree is
-   excluded from traversal.
+ - A node that ignores its parent transform blocks inherited dirtiness, but its
+   own dirty transform and dirty descendants are still visited.
  - When a node is visited, it is expected that its parent transform is
    up-to-date, allowing it to compute its own world transform.
 */
@@ -133,18 +133,12 @@ struct DirtyTransformFilter {
 
     const auto& node = *visited_node.node_impl;
 
-    // Ignore-parent nodes are independent roots for transform propagation, so
-    // we reject their incoming parent path and prune their subtree here.
-    if (node.GetFlags().GetEffectiveValue(
-          SceneNodeFlags::kIgnoreParentTransform)) {
-      DLOG_F(2, "Rejecting subtree for node {} due to IgnoreParentTransform",
-        node.GetName());
-      return kRejectSubTree;
-    }
-    // If parent was accepted, this node must also be accepted so world
-    // transforms propagate down the hierarchy.
-    const auto parent_accepted
-      = node.AsGraphNode().IsRoot() ? false : parent_filter_result == kAccept;
+    // Independent transform roots block incoming parent dirtiness, not their
+    // own updates or dirty descendants. They still use subtree counts below.
+    const auto ignore_parent = node.GetFlags().GetEffectiveValue(
+      SceneNodeFlags::kIgnoreParentTransform);
+    const auto parent_accepted = !node.AsGraphNode().IsRoot() && !ignore_parent
+      && parent_filter_result == kAccept;
     if (parent_accepted) {
       DLOG_F(2, "Node {} accepted due to accepted parent", node.GetName());
       return kAccept;

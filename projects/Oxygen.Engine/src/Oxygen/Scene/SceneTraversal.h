@@ -516,6 +516,8 @@ auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
         }
 
         auto& flags = node_impl.GetFlags();
+        const auto previously_ignored_parent
+          = flags.GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
         if (!node_impl.AsGraphNode().IsRoot()) {
           const auto& parent_flags
             = GetScene()
@@ -530,6 +532,12 @@ auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
         for (const auto dirty_flag : flags.dirty_flags()) {
           flags.ProcessDirtyFlag(dirty_flag);
           has_dirty_flags = true;
+        }
+        if (previously_ignored_parent
+          != flags.GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform)) {
+          // Changing composition invalidates the cached world transform even
+          // when neither this node nor its parent changed local TRS.
+          node_impl.MarkTransformDirty();
         }
         if (has_dirty_flags) {
           ++processed_nodes_with_dirty_flags;
