@@ -10,6 +10,15 @@ repos:
         exclude: \.verified\.
       - id: trailing-whitespace
         exclude: \.verified\.
+      # Keep these exclusions aligned with the -text rules in .gitattributes.
+      - id: mixed-line-ending
+        name: Normalize text to LF
+        args: [--fix=lf]
+        exclude: '(?i)\.(bat|cmd|pak|7z|br|gz|tar|zip|pdf|gif|ico|jpg|png|psd|webp|woff2|exe)$'
+      - id: mixed-line-ending
+        name: Normalize batch scripts to CRLF
+        args: [--fix=crlf]
+        files: '(?i)\.(bat|cmd)$'
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.1.0

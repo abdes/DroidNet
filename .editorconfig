@@ -5,6 +5,7 @@ root = true
 # (Please don't specify an indent_size here; that has too many unintended consequences.)
 [*]
 charset = utf-8
+end_of_line = lf
 indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
@@ -14,7 +15,10 @@ spelling_exclusion_path = SpellingExclusions.dic
 file_header_template = Distributed under the MIT License. See accompanying file LICENSE or copy\nat https://opensource.org/licenses/MIT.\nSPDX-License-Identifier: MIT
 
 # Applies to all Windows batch files
-[*.bat]
+[*.[bB][aA][tT]]
+end_of_line = crlf
+
+[*.[cC][mM][dD]]
 end_of_line = crlf
 
 # PowerShell Source code
@@ -53,7 +57,6 @@ indent_size = 2
 [*.{cs,csx,cake,vb,vbx}]
 indent_size = 4
 indent_style = space
-end_of_line = crlf
 
 # Verify
 [*.{received,verified}.{txt}]
