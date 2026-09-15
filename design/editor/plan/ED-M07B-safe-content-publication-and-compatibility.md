@@ -106,8 +106,11 @@ explicit request joins. Running captures stay immutable; later requests queue
 separately. ContentPipeline 287/287 passes, including shared native publication.
 Assignment and scene activation now submit saved geometry/material demand through
 the shared transaction. Reference, document and selection changes retire obsolete
-observers; those notifications never launch cooks. Imported-source closure,
-Import/creation triggers and complete before/after preview journeys remain open.
+observers; those notifications never launch cooks. Imported-source closure and
+creation/Save publication now pass through the real native pipeline, shared
+catalog and typed inspector controls. Independent cooked-only glTF/FBX libraries
+also support assignment, history, Save/reopen and cooking the consuming scene.
+Combined import/reimport command journeys remain under 07B.5d-f.
 
 Route every cook entry point, including material helpers, through one project
 coordinator. Reject dirty participating documents, capture/hash saved inputs and
@@ -223,8 +226,10 @@ contracts; native cases prove unchanged reuse and clean-copy logical identities.
 Editor import now retains source, saves settings and cooks as one coordinator run.
 The review dialog exposes supported formats, name and authoring destination;
 configured source rows offer Reimport. Retry and Save/resume preserve retained
-source after a partial failure. Collision replacement, source/output catalog and
-typed-use integration and combined workflow qualification remain open. Native
+source after a partial failure. Reviewed collision replacement preserves prior
+source/publication on failure; source/output catalog and typed-use integration
+pass for glTF/FBX, including cooked-only libraries. Combined import/reimport
+command journeys remain under 07B.5d-f. Native
 numeric loading now covers glTF external buffers, GLB binary chunks and FBX,
 including unit/handedness changes, rotated parents, scalar properties and clean
 source copies. Camera-unit and retained-parent defects were reproduced and fixed;
@@ -241,9 +246,9 @@ project writer. It installs each complete discovered model bundle beneath `Conte
 preserves relative dependency paths and hashes, and refuses destination collisions.
 The browser uses this transaction and native publication instead of copying
 individual files through the older managed importer. Existing-name collisions
-currently require a different name or selecting the retained source for Reimport.
-Complete the explicit external replacement choice while preserving dirty-document
-protection and prior source/publication on failure.
+offer a different name or an explicitly reviewed replacement of the retained
+source. Replacement retains dirty-document protection and installs
+source/publication through the same recovery journal.
 
 Pass: wrong/missing artifact or schema fails safely; small unit/axis/handedness
 fixtures import consistently; unsupported animated/skinned/texture-bearing
@@ -528,11 +533,11 @@ its product semantics are settled in 07B.0 before implementation.
 ## 9. Validation Gates
 
 - [x] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
-- [ ] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
+- [x] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
   coalescing and cancellation cases pass.
 - [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [x] 07B.3 every required field survives native cook/load observation.
-- [ ] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
+- [x] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [x] 07B.7 all eleven engine generator names, including the sphere alias, use
   one semantic authority; every selectable shape passes scene/project cook (#11).

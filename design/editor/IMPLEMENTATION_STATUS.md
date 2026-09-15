@@ -525,7 +525,7 @@ browsing, picking, incremental execution and recovery. The user directed
 implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
 
 - [x] 07B.0 settle trigger policy and reconcile PRD/LLDs after the UX review.
-- [ ] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
+- [x] 07B.1 coherent saved snapshots, dependency freshness, incremental reuse,
       coalescing and serialized project cooks.
   - [x] Scene, material and geometry requests capture saved inputs and dependencies
         under document read gates, preserve later edits, and use private native inputs.
@@ -569,8 +569,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         indexed libraries; explicitly higher libraries still win. Scene and
         material key regressions and related native suites pass 43/43 in both
         Debug and Release, with both SDK configurations installed.
-  - [ ] Complete the remaining foreign dependency/typed-use qualification matrix
-        in 07B.1 and 07B.4.
+  - [x] Foreign import and cooked-only library outputs reach the real geometry
+        and material pickers, native assignments, Undo/Redo and Save/reopen.
+        Both glTF and FBX cases then cook the consuming scene with their indexed
+        dependencies. Exact native keys match catalog metadata; ready selections
+        submit no extra cook. [Typed-use evidence](validation/ED-M07B-typed-assets.md).
   - [x] Project-only uncooked dependencies resolve through batched native keys and
         a derived candidate-path cache. First scene cook includes the material
         without mounting its producer library. Background preparation creates no
@@ -645,7 +648,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
       Managed descriptor cases pass 16/16 and focused PakGen cases pass 43/43.
       Eight full-PakGen failures were reproduced on the unchanged baseline.
       Standalone visual parity remains ED-M08.
-- [ ] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
+- [x] 07B.4 matched artifacts, qualified static/scalar import and clean-copy reproduction.
   - [x] Normal Interop builds record native SDK identity. Startup and cooking check
         their compatibility boundaries independently of unrelated managed edits;
         artifact leases follow native ownership and drain. No qualification manifest,
@@ -695,8 +698,9 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         camera-unit and retained-parent defects are fixed. Related native suites
         pass 23/23 in both configurations; 16 final profiles validate both source
         copies. [Numeric import evidence](validation/ED-M07B-import-values.md).
-  - [ ] Complete source/output catalog and typed-use integration and the remaining
-        combined import qualification journeys.
+  - [x] Source/output catalog and typed-use integration pass for native glTF and
+        FBX output, including independent cooked-only libraries. Remaining
+        combined import/reimport command journeys are tracked under 07B.5d-f.
 - [ ] 07B.5a-c shared status, correct browser navigation/details, and consistent
       authored/built-in/cooked presentation and typed picking.
   - [x] Shared input/dependency and publication facts drive browser, material editor
@@ -771,8 +775,11 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         18.42/19.09 ms. The native cook, loaded geometry, current statuses and
         mount acknowledgment pass. [Fixture, profile and evidence](validation/ED-M07B-browser-workload.md)
         record the scope of this CPU/UI measurement.
-  - [ ] Finish cooked-only typed-use qualification and the complete assignment,
-        publication, cancellation and Save/reopen matrix.
+  - [x] Cooked-only typed-use, picker dismissal, assignment, Undo/Redo and
+        Save/reopen pass through actual inspector controls and native bindings.
+        Together with the 15 publication/lifetime cases, the combined native
+        inspector regression run passes 34/34, including all eleven built-ins
+        and mixed geometry/material selections.
 - [ ] 07B.5d-e approved triggers, safe import/save/cook flows, dockable Cooking
       progress/recovery, useful Inspect/Validate and accessible command layouts.
   - [x] The dockable Cooking panel owns session runs and scoped output, grouped
