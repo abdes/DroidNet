@@ -71,7 +71,7 @@ opt-in development executable is permitted when necessary.
 | `RuntimeNodeState`, `RuntimeEnvironmentState`, background observations | Reuse real native reads. Missing deep hierarchy/material/effective GPU observations needed solely for qualification belong in opt-in telemetry/adapters, not shipped instrumentation. |
 | Runtime `FrameCaptureSettings`; Graphics `ReadbackManager` | Reuse real GPU readback. Qualification PNG/correlation, telemetry and scheduling belong to the opt-in development adapter, not normal Runtime/Interop builds merely because they are reusable. |
 | RenderScene `main_impl.cpp` and `MainModule.cpp` | Normal demo startup restores state and substitutes preview content. Preserve it; the development driver reuses loader/render capabilities without a normal RenderScene validation flag. |
-| DemoShell `SceneLoaderService` | Reuse native loading/hydration. Current selection uses the first camera, may synthesize one, normalizes clipping values, and overwrites aspect from the viewport. Strict validation must select the exact authored camera and preserve valid saved values. Scene-only loading already works without a physics sidecar. |
+| DemoShell `SceneLoaderService` | Reuse native loading/hydration. Baseline first-camera selection, clipping normalization and unconditional viewport-aspect overwrite do not implement the approved camera contract. Select the exact authored camera and apply Auto/Fixed per view without mutating saved values; Fixed preserves its ratio/composition. Scene-only loading works without a physics sidecar. |
 | `SceneEngineSync`, `WorkspacePublicationPreview` | Reuse lifetime and full-projection contracts. Qualification-only capture hold/hooks belong to an opt-in test-host adapter. Rendering advances while that adapter holds later delivery. |
 | `InspectorControlTests.CatalogWorkloadFixture.cs` | Reuse its deterministic content-building approach. Explicitly set Manual exposure/ACES and a camera aimed at the fixture; its EV value alone does not select Manual mode. Count actual logical catalog rows and visible triangles. |
 | Status ledger | 07A/07B are complete. M02 window/dock resize and consolidated discovery evidence remain a closure dependency, not a reason to block M08 implementation. |
@@ -148,7 +148,10 @@ Deliver:
   (98 geometry, camera, sun), all approved canonical built-in choices,
   qualified small imported geometry, shared/distinct materials, hierarchy,
   and exactly 1,000 logical catalog rows. Use explicit Manual EV 9.7, ACES,
-  16:9 camera and conventional shadows; assert <=250,000 visible triangles.
+  **Fixed 16:9** camera and conventional shadows; assert <=250,000 visible triangles.
+  New cameras default Auto under [approved Decision 6](../review/ED-M08-v01-authoring-scope.md);
+  the qualification fixture deliberately authors Fixed. Include Fixed 4:3 and
+  Auto target-resize cases with unchanged saved camera/source identities.
   The historical eleven-choice catalog does not create a legacy-alias
   preservation requirement; reconcile catalog scope with canonical decisions.
 - A field-coverage manifest derived from the accepted scope review and
@@ -254,9 +257,16 @@ Deliver:
   applies fixed scene timestep through supported engine configuration. Frame zero begins only when required content,
   render uploads, camera and profile are ready. Count completed scene frames,
   not process frames or requests queued before readiness.
-- Preserve saved camera projection including aspect; the 1920x1080 target does
-  not authorize rewriting the authored camera. Both paths use the same
-  projection-to-target policy and record it.
+- Preserve authored camera aspect policy: **Auto** derives aspect per render
+  target with unchanged vertical FOV and no saved-data mutation; **Fixed** uses
+  the authored ratio and centred letterbox/pillarbox composition without crop
+  or stretch. Apply the same policy in embedded/native rendering; neither a
+  forced fixed ratio for Auto nor a target-ratio override for Fixed is valid.
+- Observe target pixel dimensions, exact integer content rectangle, authored
+  policy/ratio and effective projection aspect/vertical FOV. Compare target and
+  rectangle exactly and retain existing scalar tolerances. Fixed-frame bars are
+  composed after post-processing and exposure, outside the metering/histogram
+  input; final capture includes the complete target and bars.
 - Opt-in CPU/GPU exposure telemetry at frames 120/240/600; reading
   the authored Auto enum or a CPU placeholder is insufficient. Capture both
   image sets at those frames.
@@ -268,6 +278,10 @@ device/readback failure; capture cancellation with an in-flight GPU copy; view
 destroy/resize and runtime replacement; identical repeated captures after reset;
 manual/auto exposure frame checkpoints. No PIX/RenderDoc dependency for PNG
 capture and no test that claims headless rendering proves images.
+Include Fixed 4:3 in 1920x1080 (`240,0,1440,1080` content), Fixed 16:9 in
+1440x1080 (`0,135,1440,810`), and Auto across controlled target sizes while
+preserving vertical FOV and saved hashes. Check exposure is unaffected by bar
+area alone. Do not crop comparison images, exclude bars, or relax image metrics.
 
 ### M08.5 - Bounded Embedded Saved-Revision Session
 
@@ -290,6 +304,11 @@ Deliver:
   and project replacement invalidate capture callbacks. Same-view layout resize
   cannot alter the fixed capture target. Transfer teardown to its actual native
   owner if a bounded wait expires.
+
+For Auto cameras, derive aspect from the pinned capture target, not a changing
+editor panel. UI resize during a session does not change capture dimensions or
+profile; dedicated Auto-resize cases change the controlled target/profile
+between checks and keep each embedded/native image pair matched.
 
 Checks: edit/Undo/Redo, create/delete/reparent, slot assignment, environment change
 and repeated saves during warm-up; navigation input; resize; switching to scene,

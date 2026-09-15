@@ -970,7 +970,10 @@ content in embedded preview and standalone runtime under controlled comparison.
       actual implementation; geometry changes and rendered qualification remain pending.
 - [x] Basic perspective camera authoring is approved: pose, vertical FOV,
       aspect and near/far, with faithful explicit-camera loading. Physical-camera
-      authoring is deferred; aspect fitting and implementation/qualification remain pending.
+      authoring is deferred; implementation/qualification remain pending.
+- [x] Auto/Fixed aspect fitting is approved, Auto by default for new cameras;
+      Fixed adds bars to preserve composition. Resize does not change authored
+      values. Engine/editor implementation and qualification remain pending.
 - [ ] Decide the remaining researched authoring choices individually with the
       user before freezing the corresponding field coverage.
 - [ ] M08.1 versioned protocol, deterministic workload and field inventory.
