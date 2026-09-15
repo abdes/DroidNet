@@ -34,10 +34,10 @@ public sealed partial class OutputConsoleView
     private const StringComparison FilterComparison = StringComparison.CurrentCultureIgnoreCase;
 
     private readonly ObservableCollection<OutputLogEntry> viewItems = [];
-    private readonly Subject<NotifyCollectionChangedEventArgs> collectionChanges = new();
-    private readonly Subject<Unit> resetRequests = new();
-    private readonly IDisposable collectionChangesSubscription;
-    private readonly IDisposable resetSubscription;
+    private Subject<NotifyCollectionChangedEventArgs>? collectionChanges;
+    private Subject<Unit>? resetRequests;
+    private IDisposable? collectionChangesSubscription;
+    private IDisposable? resetSubscription;
     private Brush? accentBrush;
     private TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs>? contentChangingHandler;
     private Brush? errorBrush;
@@ -46,7 +46,7 @@ public sealed partial class OutputConsoleView
     private ScrollViewer? scrollViewer;
     private Brush? tertiaryBrush;
     private Brush? warningBrush;
-    private bool disposed;
+    private bool controlsWired;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="OutputConsoleView" /> class.
@@ -62,28 +62,6 @@ public sealed partial class OutputConsoleView
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
         this.ActualThemeChanged += this.OnActualThemeChanged;
-
-        // Collect all collection changes in a short window and process them
-        // together instead of only processing the latest event. Sampling (previous
-        // behavior) dropped intermediate Add events that arrived within the sample
-        // window, causing the UI to only ever see the last line in a high-throughput
-        // batch. Buffering preserves all events while still batching UI work.
-        this.collectionChangesSubscription = this.collectionChanges
-            .Buffer(TimeSpan.FromMilliseconds(16))
-            .Where(batch => batch.Count > 0)
-                .Subscribe(batch => _ = this.DispatcherQueue.TryEnqueue(() =>
-                {
-                    foreach (var e in batch)
-                    {
-                        this.ProcessCollectionChange(e);
-                    }
-                }));
-
-        // Throttle Reset requests to prevent flooding during high-volume rotation
-        // Use Sample instead of Throttle to ensure regular updates even under continuous load
-        this.resetSubscription = this.resetRequests
-            .Sample(TimeSpan.FromMilliseconds(100)) // Less frequent than Add events
-            .Subscribe(_ => this.DispatcherQueue.TryEnqueue(this.RebuildView));
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<FrameworkElement, bool>? predicate = null)
@@ -133,15 +111,27 @@ public sealed partial class OutputConsoleView
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         this.InitializeLoadedState();
+        this.StartCollectionProcessing();
+        this.ActualThemeChanged -= this.OnActualThemeChanged;
+        this.ActualThemeChanged += this.OnActualThemeChanged;
+        this.DetachCollectionChanged(this.ItemsSource);
+        this.AttachCollectionChanged(this.ItemsSource);
         this.BindListAndScrollViewer();
         this.RegisterContainerContentChangingHandler();
 
-        // ItemsSource is attached via OnItemsSourceChanged; avoid double subscription here
         this.RebuildView();
 
-        this.RegisterControlEventHandlers();
-        this.InitializeLevelItems();
-        this.RegisterSearchBoxHandler();
+        if (!this.controlsWired)
+        {
+            this.RegisterControlEventHandlers();
+            this.InitializeLevelItems();
+            this.RegisterSearchBoxHandler();
+            this.controlsWired = true;
+        }
+        else
+        {
+            this.SyncLevelMenuChecks();
+        }
 
         // Apply options initially
         this.ApplyInitialViewOptions();
@@ -307,12 +297,12 @@ public sealed partial class OutputConsoleView
         // For Reset (e.g., buffer rotation), throttle to prevent flooding
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
-            this.resetRequests.OnNext(Unit.Default);
+            this.resetRequests?.OnNext(Unit.Default);
             return;
         }
 
         // Push other changes to the throttled stream
-        this.collectionChanges.OnNext(e);
+        this.collectionChanges?.OnNext(e);
     }
 
     [SuppressMessage(
@@ -488,13 +478,6 @@ public sealed partial class OutputConsoleView
 
     private void Cleanup()
     {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        this.disposed = true;
-
         if (this.contentChangingHandler is { } handler)
         {
             this.List.ContainerContentChanging -= handler;
@@ -510,10 +493,7 @@ public sealed partial class OutputConsoleView
         this.DetachCollectionChanged(this.ItemsSource);
         this.ActualThemeChanged -= this.OnActualThemeChanged;
 
-        this.collectionChangesSubscription?.Dispose();
-        this.resetSubscription?.Dispose();
-        this.collectionChanges.Dispose();
-        this.resetRequests.Dispose();
+        this.StopCollectionProcessing();
     }
 
     private bool PassesFilter(OutputLogEntry item)

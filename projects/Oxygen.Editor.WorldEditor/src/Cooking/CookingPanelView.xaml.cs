@@ -23,6 +23,7 @@ public sealed partial class CookingPanelView : UserControl
     public CookingPanelView()
     {
         this.InitializeComponent();
+        this.InitializeReadingTracking();
         this.SizeChanged += this.OnSizeChanged;
         this.RunStatus.SizeChanged += (_, _) => this.UpdateHeaderWidth();
         this.RetryButton.SizeChanged += (_, _) => this.UpdateHeaderWidth();

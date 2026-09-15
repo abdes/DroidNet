@@ -220,6 +220,13 @@ public partial class OutputConsoleView
         var v = (OutputConsoleView)d;
         v.DetachCollectionChanged(e.OldValue as IEnumerable);
 
+        if (!v.isLoaded)
+        {
+            return;
+        }
+
+        v.StartCollectionProcessing();
+
         // Keep ListView bound to proxy; just rebuild its content from the new source
         v.AttachCollectionChanged(e.NewValue as IEnumerable);
         v.RebuildView();

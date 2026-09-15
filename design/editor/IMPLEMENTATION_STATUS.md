@@ -880,6 +880,12 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         controls, spinner padding or terminal-width truncation. Debug/Release
         native CLI checks preserve 217-character lines without escapes; the
         rebuilt native UI cases verify full progress paths in Cooking.
+  - [x] The shared details scroller follows appended output only at the end,
+        preserves a reader's offset after scrolling up, and restores per-run
+        position and selected messages across switching and hide/reopen. Buffered
+        console events stay scoped to their source; reopened controls resume
+        updates without duplicate handlers. The related UI/native group passes
+        32/32. [Reading-state evidence](validation/ED-M07B-cooking-reading.md).
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
   - [x] The combined Main repair starts from a published value of 0, displays
         saved -1 without clamping, preserves prior output on failure, focuses

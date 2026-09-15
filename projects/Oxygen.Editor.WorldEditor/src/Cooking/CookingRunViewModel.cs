@@ -124,6 +124,15 @@ public sealed partial class CookingRunViewModel : ObservableObject
     /// <summary>Gets the asset disclosure icon.</summary>
     public string AssetsChevron => this.IsAssetsExpanded ? "\uE70D" : "\uE76C";
 
+    /// <summary>Gets or sets a value indicating whether this run has a retained reader position.</summary>
+    internal bool HasReadingPosition { get; set; }
+
+    /// <summary>Gets or sets the shared scroller offset for this run.</summary>
+    internal double ReadingOffset { get; set; }
+
+    /// <summary>Gets or sets the selected transcript entries retained across view changes.</summary>
+    internal IReadOnlyList<OutputLogEntry> SelectedOutputEntries { get; set; } = [];
+
     /// <summary>Applies ordered state without replacing existing transcript items.</summary>
     /// <param name="next">A snapshot from the owning coordinator.</param>
     public void Apply(CookRunSnapshot next)
