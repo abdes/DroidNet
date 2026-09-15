@@ -684,13 +684,21 @@ Valid `generator` values and associated param schemas:
 | `generator` | Params | Default Params |
 | --- | --- | --- |
 | `"Cube"` | empty (no params accepted) | — |
-| `"ArrowGizmo"` | empty (no params accepted) | — |
+| `"SubdividedCube"` | `segments` (1–64); advanced authoring | `6` |
+| `"ArrowGizmo"` | empty (no params accepted); internal tool resource | — |
 | `"Sphere"` | `latitude_segments` (≥3), `longitude_segments` (≥3) | `16`, `32` |
+| `"IcoSphere"` | `subdivision_level` (0–8) | `2` |
+| `"Capsule"` | `hemisphere_segments` (1–64), `radial_segments` (3–256), total `height` (≥2×radius), `radius` (>0) | `8`, `32`, `2.0`, `0.5` |
 | `"Plane"` | `x_segments` (≥1), `z_segments` (≥1), `size` (>0) | `1`, `1`, `1.0` |
-| `"Cylinder"` | `segments` (≥3), `height` (>0), `radius` (>0) | `16`, `1.0`, `0.5` |
-| `"Cone"` | `segments` (≥3), `height` (>0), `radius` (>0) | `16`, `1.0`, `0.5` |
-| `"Torus"` | `major_segments` (≥3), `minor_segments` (≥3), `major_radius` (>0), `minor_radius` (>0) | `32`, `16`, `1.0`, `0.25` |
+| `"Cylinder"` | `segments` (≥3), `height` (>0), `radius` (>0) | `32`, `1.0`, `0.5` |
+| `"Cone"` | `segments` (≥3), `height` (>0), `radius` (>0) | `32`, `1.0`, `0.5` |
+| `"Torus"` | `major_segments` (≥3), `minor_segments` (≥3), `major_radius` (>0), `minor_radius` (>0) | `32`, `16`, `0.4`, `0.1` |
 | `"Quad"` | `width` (>0), `height` (>0) | `1.0`, `1.0` |
+
+Dimensions are finite float32 values. Plane is XY/+Z; Quad is XZ/-Y. Axial
+primitives use Z. Native generation rejects unrepresentable counts or collapsed
+dimensions. Catalog v2 carries standard/advanced/internal authoring categories;
+editor discovery excludes internal resources.
 
 The parameter blob is encoded by `BuildProceduralParamBlob` (packed binary,
 `uint32_t` / `float`) and stored verbatim in the `.ogeo` file immediately after

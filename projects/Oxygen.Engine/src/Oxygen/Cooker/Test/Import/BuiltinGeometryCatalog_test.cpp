@@ -42,6 +42,7 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
   material_validator.set_root_schema(
     LoadSchema("oxygen.material-descriptor.schema.json"));
   const auto catalog = json::parse(ExportBuiltinGeometryCatalog("Content"));
+  EXPECT_EQ(catalog.at("schema"), "oxygen.builtin-geometry-catalog.v2");
   ASSERT_EQ(catalog.at("geometries").size(),
     oxygen::data::GetBuiltinGeometryNames().size());
   const auto& material = catalog.at("default_material").at("descriptor");
@@ -79,37 +80,64 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
     if (entry.at("name") == "Capsule") {
       saw_capsule = true;
       EXPECT_EQ(entry.at("canonical_name"), "Capsule");
-      EXPECT_EQ(entry.at("asset_uri"),
-        "asset:///Engine/Generated/BasicShapes/Capsule");
+      EXPECT_EQ(
+        entry.at("asset_uri"), "asset:///Engine/Generated/BasicShapes/Capsule");
       EXPECT_EQ(descriptor.at("bounds").at("min"),
         json::array({ -0.5F, -0.5F, -1.0F }));
-      EXPECT_EQ(descriptor.at("bounds").at("max"),
-        json::array({ 0.5F, 0.5F, 1.0F }));
+      EXPECT_EQ(
+        descriptor.at("bounds").at("max"), json::array({ 0.5F, 0.5F, 1.0F }));
     }
   }
   EXPECT_TRUE(saw_capsule);
 }
 
-//! Project mount changes alter only output addressing; aliases retain authored
-//! identity.
-NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAliasIdentityArePreserved)
+//! Project mount changes alter only output addressing; every entry retains its
+//! canonical identity and native authoring classification.
+NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAuthoringCategoriesArePreserved)
 {
   const auto catalog = json::parse(ExportBuiltinGeometryCatalog("World"));
   EXPECT_EQ(catalog.at("default_material").at("virtual_path"),
     "/World/Materials/OxygenEditor_Default.omat");
-  auto saw_alias = false;
+  auto standard_count = 0U;
+  auto advanced_count = 0U;
+  auto internal_count = 0U;
+  auto saw_icosphere = false;
   for (const auto& entry : catalog.at("geometries")) {
     EXPECT_TRUE(entry.at("virtual_path")
         .get<std::string>()
         .starts_with("/World/Geometry/"));
-    if (entry.at("name") == "GeodesicSphere") {
-      saw_alias = true;
+    EXPECT_EQ(entry.at("canonical_name"), entry.at("name"));
+    const auto identity = oxygen::data::ResolveBuiltinGeometryIdentity(
+      entry.at("asset_uri").get<std::string>());
+    ASSERT_TRUE(identity.has_value());
+    using Category = oxygen::data::BuiltinGeometryAuthoringCategory;
+    switch (identity->authoring_category) {
+    case Category::kStandard:
+      ++standard_count;
+      EXPECT_EQ(entry.at("authoring_category"), "standard");
+      break;
+    case Category::kAdvanced:
+      ++advanced_count;
+      EXPECT_EQ(entry.at("authoring_category"), "advanced");
+      EXPECT_EQ(entry.at("name"), "SubdividedCube");
+      break;
+    case Category::kInternal:
+      ++internal_count;
+      EXPECT_EQ(entry.at("authoring_category"), "internal");
+      EXPECT_EQ(entry.at("name"), "ArrowGizmo");
+      break;
+    }
+    if (entry.at("name") == "IcoSphere") {
+      saw_icosphere = true;
       EXPECT_EQ(entry.at("canonical_name"), "IcoSphere");
       EXPECT_EQ(entry.at("asset_uri"),
-        "asset:///Engine/Generated/BasicShapes/GeodesicSphere");
+        "asset:///Engine/Generated/BasicShapes/IcoSphere");
     }
   }
-  EXPECT_TRUE(saw_alias);
+  EXPECT_TRUE(saw_icosphere);
+  EXPECT_EQ(standard_count, 9U);
+  EXPECT_EQ(advanced_count, 1U);
+  EXPECT_EQ(internal_count, 1U);
   EXPECT_THROW(
     ExportBuiltinGeometryCatalog("../Content"), std::invalid_argument);
   EXPECT_THROW(ExportBuiltinGeometryCatalog(""), std::invalid_argument);

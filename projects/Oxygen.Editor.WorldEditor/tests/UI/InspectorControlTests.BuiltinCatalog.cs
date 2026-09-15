@@ -21,7 +21,7 @@ namespace Oxygen.Editor.World.Tests;
 /// <summary>Exercises engine-owned choices and offline catalog notices in the actual editor views.</summary>
 public sealed partial class InspectorControlTests
 {
-    /// <summary>All eleven native names remain authorable offline, with alias text and a working retry.</summary>
+    /// <summary>The ten authoring choices remain available offline, with advanced metadata and a working retry.</summary>
     /// <returns>The asynchronous picker-availability regression.</returns>
     [TestMethod]
     public Task BuiltinPickerShowsAllNativeNamesAndRecoversItsCatalog() => EnqueueAsync(async () =>
@@ -40,9 +40,10 @@ public sealed partial class InspectorControlTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var engine = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal));
-        _ = engine.Items.Should().Equal(live.Catalog!.Geometries, (item, definition) => item.Item.Uri == definition.AssetUri);
-        _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => item.Item.IsEnabled);
-        _ = engine.Items.Single(item => string.Equals(item.Item.Name, "GeodesicSphere", StringComparison.Ordinal)).Item.DisplayType.Should().Contain("Alias of IcoSphere");
+        _ = engine.Items.Should().Equal(live.Catalog!.AuthoringGeometries, (item, definition) => item.Item.Uri == definition.AssetUri);
+        _ = engine.Items.Should().HaveCount(10).And.OnlyContain(item => item.Item.IsEnabled);
+        _ = engine.Items.Single(item => string.Equals(item.Item.Name, "SubdividedCube", StringComparison.Ordinal)).Item.DisplayType.Should().Contain("Advanced");
+        _ = engine.Items.Should().NotContain(item => string.Equals(item.Item.Name, "ArrowGizmo", StringComparison.Ordinal));
         var owner = (SplitButton)view.FindName("AssetSplitButton");
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
@@ -57,7 +58,7 @@ public sealed partial class InspectorControlTests
             await model.RetryBuiltinCatalogCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = notice.IsOpen.Should().BeFalse();
-            _ = engine.Items.Should().HaveCount(11).And.OnlyContain(item => !item.Item.DisplayType.Contains("Preview unavailable", StringComparison.Ordinal));
+            _ = engine.Items.Should().HaveCount(10).And.OnlyContain(item => !item.Item.DisplayType.Contains("Preview unavailable", StringComparison.Ordinal));
         }
         finally
         {

@@ -385,15 +385,17 @@
             "properties": {
                 "latitude_segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 },
                 "longitude_segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 }
             }
         },
-        "geodesic_sphere_params": {
+        "ico_sphere_params": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
@@ -421,15 +423,18 @@
             "properties": {
                 "x_segments": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": 1,
+                    "maximum": 4294967295
                 },
                 "z_segments": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": 1,
+                    "maximum": 4294967295
                 },
                 "size": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 }
             }
         },
@@ -439,15 +444,18 @@
             "properties": {
                 "segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 },
                 "height": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 },
                 "radius": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 }
             }
         },
@@ -457,15 +465,18 @@
             "properties": {
                 "segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 },
                 "height": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 },
                 "radius": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 }
             }
         },
@@ -506,19 +517,23 @@
             "properties": {
                 "major_segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 },
                 "minor_segments": {
                     "type": "integer",
-                    "minimum": 3
+                    "minimum": 3,
+                    "maximum": 4294967295
                 },
                 "major_radius": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 },
                 "minor_radius": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 }
             }
         },
@@ -528,11 +543,13 @@
             "properties": {
                 "width": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 },
                 "height": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 3.4028234663852886e38
                 }
             }
         },
@@ -548,7 +565,6 @@
                         "ArrowGizmo",
                         "Sphere",
                         "IcoSphere",
-                        "GeodesicSphere",
                         "Plane",
                         "Cylinder",
                         "Cone",
@@ -663,26 +679,7 @@
                     "then": {
                         "properties": {
                             "params": {
-                                "$ref": "#/definitions/geodesic_sphere_params"
-                            }
-                        }
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "generator": {
-                                "const": "GeodesicSphere"
-                            }
-                        },
-                        "required": [
-                            "generator"
-                        ]
-                    },
-                    "then": {
-                        "properties": {
-                            "params": {
-                                "$ref": "#/definitions/geodesic_sphere_params"
+                                "$ref": "#/definitions/ico_sphere_params"
                             }
                         }
                     }

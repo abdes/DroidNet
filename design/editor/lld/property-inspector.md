@@ -136,7 +136,7 @@ managed list or corrective editor rotation/scale is permitted.
 
 All use centred pivots in Oxygen's metre/Z-up coordinate system. Native buffers,
 bounds, normals, UVs and winding must satisfy these recipes. ArrowGizmo is a tool
-resource, not a creation choice. GeodesicSphere migrates to IcoSphere. Useful
+resource, not a creation choice. IcoSphere has one canonical identity. Useful
 old ArrowGizmo scene uses migrate to ordinary geometry. Recipe changes require
 matching API prose and native/editor rendered evidence.
 

@@ -459,14 +459,13 @@ built-in policy switch, generated-content cache policy and hardcoded pak fields.
 Managed descriptor generation consumes the same engine definition rather than
 maintaining independent parameters/bounds/material constants.
 
-Cover all named generators in the current engine API/schema: Cube,
-SubdividedCube, Sphere, IcoSphere, GeodesicSphere, Plane, Cylinder, Cone, Quad,
-Torus and ArrowGizmo. GeodesicSphere is an IcoSphere alias; support both identities
-and explain their relationship in discovery. Add the missing capabilities to
-the picker through the shared engine catalog. Preserve existing URIs and immediate
-preview without requiring an explicit cook first. An authored ArrowGizmo asset is geometry;
-editor-only gizmo overlays remain transient. Preserve #5 request-generation and
-scene-mutation acceptance for all cached/procedural/async paths.
+Cover the shared native procedural authority. ED-M08's canonical inventory is
+Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere, Torus and advanced
+SubdividedCube. IcoSphere has one API and catalog identity; ArrowGizmo is an
+internal tool resource. Browser and picker consume native authoring categories.
+Preserve canonical URIs and immediate preview without requiring an explicit cook
+first. Editor gizmo overlays remain transient. Preserve #5 request-generation
+and scene-mutation acceptance for all cached/procedural/async paths.
 
 Decision D3 (2026-09-13): retain the last valid engine-provided catalog as a
 derived authoring cache. If the SDK cannot provide its catalog, browser and

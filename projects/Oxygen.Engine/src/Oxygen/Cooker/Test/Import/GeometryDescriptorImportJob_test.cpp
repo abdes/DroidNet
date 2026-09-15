@@ -152,28 +152,29 @@ namespace {
     };
   }
 
-  auto MakeCapsuleDescriptor(const json& params, const float height,
-    const float radius) -> json
+  auto MakeCapsuleDescriptor(
+    const json& params, const float height, const float radius) -> json
   {
     const auto bounds = json {
       { "min", json::array({ -radius, -radius, -height * 0.5F }) },
       { "max", json::array({ radius, radius, height * 0.5F }) },
     };
-    auto procedural = json {
-      { "generator", "Capsule" }, { "mesh_name", "Capsule" }
-    };
+    auto procedural
+      = json { { "generator", "Capsule" }, { "mesh_name", "Capsule" } };
     if (!params.is_null()) {
       procedural["params"] = params;
     }
     return json {
       { "name", "Capsule" },
       { "bounds", bounds },
-      { "lods", json::array({ {
+      { "lods",
+        json::array({ {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
           { "bounds", bounds },
           { "procedural", std::move(procedural) },
-          { "submeshes", json::array({ {
+          { "submeshes",
+            json::array({ {
               { "material_ref", "/.cooked/Materials/default.omat" },
               { "views", json::array({ { { "view_ref", "__all__" } } }) },
             } }) },
@@ -1300,8 +1301,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     ASSERT_TRUE(output.has_value());
     auto bytes = ReadBinaryFile(cooked_root / *output);
 
-    constexpr auto mesh_offset
-      = sizeof(data::pak::geometry::GeometryAssetDesc);
+    constexpr auto mesh_offset = sizeof(data::pak::geometry::GeometryAssetDesc);
     constexpr auto params_offset
       = mesh_offset + sizeof(data::pak::geometry::MeshDesc);
     ASSERT_GE(bytes.size(), params_offset + 16U);
@@ -1332,9 +1332,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     ASSERT_NE(mesh, nullptr);
     ASSERT_GT(mesh->VertexCount(), 0U);
     ASSERT_GT(mesh->IndexCount(), 0U);
-    const auto expected = data::MakeCapsuleMeshAsset(
-      test_case.hemisphere_segments, test_case.radial_segments,
-      test_case.height, test_case.radius);
+    const auto expected
+      = data::MakeCapsuleMeshAsset(test_case.hemisphere_segments,
+        test_case.radial_segments, test_case.height, test_case.radius);
     ASSERT_TRUE(expected.has_value());
     const auto loaded_vertices = mesh->Vertices();
     ASSERT_EQ(loaded_vertices.size(), expected->first.size());
@@ -1404,18 +1404,20 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
-  ProceduralGeodesicSphereImportsAndRemainsLoaderCompatible)
+  ProceduralIcoSphereParametersRoundTripThroughNativeLoader)
 {
-  const auto root = MakeTempCookedRoot("procedural_geodesic_loader_compatible");
+  const auto root
+    = MakeTempCookedRoot("procedural_icosphere_loader_compatible");
   const auto source_dir = root / "Sources";
   const auto cooked_root = root / ".cooked";
-  const auto descriptor_path = source_dir / "geodesic.procedural.geometry.json";
+  const auto descriptor_path
+    = source_dir / "icosphere.procedural.geometry.json";
 
   std::filesystem::create_directories(cooked_root / "Materials");
   WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
 
   const auto descriptor_doc = json {
-    { "name", "ProceduralGeodesicSphere" },
+    { "name", "ProceduralIcoSphere" },
     { "bounds", MakeBounds() },
     { "lods",
       json::array({
@@ -1425,7 +1427,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
           { "bounds", MakeBounds() },
           { "procedural",
             {
-              { "generator", "GeodesicSphere" },
+              { "generator", "IcoSphere" },
               { "mesh_name", "SoftBall" },
               { "params", { { "subdivision_level", 2 } } },
             } },
@@ -1457,9 +1459,42 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
   ASSERT_TRUE(geometry_relpath.has_value());
 
-  const auto descriptor_bytes
+  auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
-  EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+  constexpr auto mesh_offset = sizeof(data::pak::geometry::GeometryAssetDesc);
+  constexpr auto params_offset
+    = mesh_offset + sizeof(data::pak::geometry::MeshDesc);
+  ASSERT_GE(descriptor_bytes.size(), params_offset + sizeof(uint32_t));
+  const auto mesh_desc = ReadStructAt<data::pak::geometry::MeshDesc>(
+    descriptor_bytes, mesh_offset);
+  EXPECT_TRUE(mesh_desc.IsProcedural());
+  EXPECT_STREQ(mesh_desc.name, "IcoSphere/SoftBall");
+  EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
+  EXPECT_EQ(ReadStructAt<uint32_t>(descriptor_bytes, params_offset), 2U);
+
+  auto stream = serio::MemoryStream(std::span<std::byte>(descriptor_bytes));
+  auto reader = serio::Reader(stream);
+  auto context = content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  const auto geometry = content::loaders::LoadGeometryAsset(std::move(context));
+  ASSERT_NE(geometry, nullptr);
+  ASSERT_EQ(geometry->LodCount(), 1U);
+  const auto& mesh = geometry->MeshAt(0);
+  ASSERT_NE(mesh, nullptr);
+  const auto expected = data::MakeIcoSphereMeshAsset(2);
+  ASSERT_TRUE(expected.has_value());
+  const auto vertices = mesh->Vertices();
+  ASSERT_EQ(vertices.size(), expected->first.size());
+  for (size_t index = 0; index < vertices.size(); ++index) {
+    EXPECT_EQ(vertices[index].position, expected->first[index].position);
+    EXPECT_EQ(vertices[index].normal, expected->first[index].normal);
+  }
+  const auto indices = mesh->IndexBuffer().AsU32();
+  ASSERT_EQ(indices.size(), expected->second.size());
+  for (size_t index = 0; index < indices.size(); ++index) {
+    EXPECT_EQ(indices[index], expected->second[index]);
+  }
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,

@@ -218,10 +218,3 @@ auto oxygen::data::MakeIcoSphereMeshAsset(const unsigned int subdivision_level)
 
   return { { std::move(vertices), std::move(indices) } };
 }
-
-auto oxygen::data::MakeGeodesicSphereMeshAsset(
-  const unsigned int subdivision_level)
-  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
-{
-  return MakeIcoSphereMeshAsset(subdivision_level);
-}

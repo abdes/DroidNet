@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Text.Json;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -26,8 +27,12 @@ public sealed partial class BuiltinGeometryCatalog
     /// <summary>Gets the engine default material's cook contribution.</summary>
     public BuiltinDescriptorContribution DefaultMaterial { get; }
 
-    /// <summary>Gets all supported names and aliases.</summary>
+    /// <summary>Gets all native definitions, including internal tool resources.</summary>
     public ImmutableArray<BuiltinGeometryDefinition> Geometries { get; }
+
+    /// <summary>Gets the engine's standard and advanced authoring choices.</summary>
+    public IEnumerable<BuiltinGeometryDefinition> AuthoringGeometries
+        => this.Geometries.Where(static definition => definition.AuthoringCategory != GeneratedAssetCategory.Internal);
 
     /// <summary>Reads the versioned native catalog and takes ownership of its immutable JSON payloads.</summary>
     /// <param name="json">The native catalog document.</param>
@@ -36,7 +41,7 @@ public sealed partial class BuiltinGeometryCatalog
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        if (!string.Equals(root.GetProperty("schema").GetString(), "oxygen.builtin-geometry-catalog.v1", StringComparison.Ordinal))
+        if (!string.Equals(root.GetProperty("schema").GetString(), "oxygen.builtin-geometry-catalog.v2", StringComparison.Ordinal))
         {
             throw new InvalidDataException("The engine builtin geometry catalog version is not supported.");
         }
@@ -47,7 +52,8 @@ public sealed partial class BuiltinGeometryCatalog
             new Uri(RequiredString(item, "asset_uri"), UriKind.Absolute),
             RequiredString(item, "name"),
             RequiredString(item, "canonical_name"),
-            ReadContribution(item))).ToImmutableArray();
+            ReadContribution(item),
+            ReadAuthoringCategory(item))).ToImmutableArray();
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         return geometries.Any(item => !identities.Add(item.AssetUri.AbsoluteUri))
             ? throw new InvalidDataException("The engine builtin catalog contains duplicate authored identities.")
@@ -55,17 +61,26 @@ public sealed partial class BuiltinGeometryCatalog
     }
 
     /// <summary>Preserves the complete native document for the derived discovery cache.</summary>
-    /// <returns>The native catalog JSON, including descriptor payloads and aliases.</returns>
+    /// <returns>The native catalog JSON, including internal resources and descriptor payloads.</returns>
     public string ToJson() => this.source.GetRawText();
 
     /// <summary>Finds a native definition while preserving the caller's authored URI.</summary>
     /// <param name="assetUri">The requested built-in URI.</param>
-    /// <returns>The matching definition, including aliases, or null for an unsupported name.</returns>
+    /// <returns>The matching authorable definition, or null for an unsupported or internal resource.</returns>
     public BuiltinGeometryDefinition? Find(Uri assetUri)
-        => this.Geometries.FirstOrDefault(item => string.Equals(item.AssetUri.AbsoluteUri, assetUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+        => this.AuthoringGeometries.FirstOrDefault(item => string.Equals(item.AssetUri.AbsoluteUri, assetUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+
+    private static GeneratedAssetCategory ReadAuthoringCategory(JsonElement item)
+        => RequiredString(item, "authoring_category") switch
+        {
+            "standard" => GeneratedAssetCategory.Standard,
+            "advanced" => GeneratedAssetCategory.Advanced,
+            "internal" => GeneratedAssetCategory.Internal,
+            _ => throw new InvalidDataException("The engine builtin geometry authoring category is not supported."),
+        };
 
     private static string RequiredString(JsonElement element, string name)
-        => element.GetProperty(name).GetString() is { Length: > 0 } value
+        => element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String && property.GetString() is { Length: > 0 } value
             ? value : throw new InvalidDataException($"The engine builtin catalog is missing '{name}'.");
 
     private static BuiltinDescriptorContribution ReadContribution(JsonElement item)

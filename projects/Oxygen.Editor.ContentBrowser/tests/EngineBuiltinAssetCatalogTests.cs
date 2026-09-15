@@ -30,7 +30,7 @@ public sealed class EngineBuiltinAssetCatalogTests
         _ = discovery.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).Returns(() => Task.FromResult(snapshot));
         using var catalog = new EngineBuiltinAssetCatalog(discovery.Object);
         var initial = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = initial.Should().HaveCount(12);
+        _ = initial.Should().HaveCount(11);
         var changes = new List<AssetChange>();
         using var subscription = catalog.Changes.Subscribe(changes.Add);
         snapshot = new(native, IsLastKnown: true, "Preview unavailable");
@@ -38,12 +38,14 @@ public sealed class EngineBuiltinAssetCatalogTests
         var cached = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cached.Should().Equal(initial, (current, previous) => current.Uri == previous.Uri);
         _ = cached.Should().OnlyContain(record => record.Generated!.IsLastKnown);
-        _ = changes.Should().HaveCount(12).And.OnlyContain(change => change.Kind == AssetChangeKind.Updated);
-        _ = cached.Single(record => string.Equals(record.Name, "GeodesicSphere", StringComparison.Ordinal)).Generated!.CanonicalName.Should().Be("IcoSphere");
+        _ = changes.Should().HaveCount(11).And.OnlyContain(change => change.Kind == AssetChangeKind.Updated);
+        _ = cached.Single(record => string.Equals(record.Name, "IcoSphere", StringComparison.Ordinal)).Generated!.CanonicalName.Should().Be("IcoSphere");
+        _ = cached.Should().NotContain(record => record.Generated!.AuthoringCategory == GeneratedAssetCategory.Internal);
+        _ = cached.Single(record => string.Equals(record.Name, "SubdividedCube", StringComparison.Ordinal)).Generated!.AuthoringCategory.Should().Be(GeneratedAssetCategory.Advanced);
         changes.Clear();
         snapshot = new(Catalog: null, IsLastKnown: false, "No catalog available");
         discovery.Raise(value => value.Changed += null, EventArgs.Empty);
         _ = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
-        _ = changes.Should().HaveCount(12).And.OnlyContain(change => change.Kind == AssetChangeKind.Removed);
+        _ = changes.Should().HaveCount(11).And.OnlyContain(change => change.Kind == AssetChangeKind.Removed);
     }
 }

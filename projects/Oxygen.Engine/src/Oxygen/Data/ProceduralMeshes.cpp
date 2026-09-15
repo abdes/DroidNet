@@ -362,7 +362,7 @@ auto InvokeGenerator(std::string_view generator_id,
     mesh_data = oxygen::data::MakeArrowGizmoMeshAsset();
   } else if (generator_id == "Sphere") {
     mesh_data = HandleSphereMesh(param_blob);
-  } else if (generator_id == "IcoSphere" || generator_id == "GeodesicSphere") {
+  } else if (generator_id == "IcoSphere") {
     mesh_data = HandleIcoSphereMesh(param_blob);
   } else if (generator_id == "Plane") {
     mesh_data = HandlePlaneMesh(param_blob);

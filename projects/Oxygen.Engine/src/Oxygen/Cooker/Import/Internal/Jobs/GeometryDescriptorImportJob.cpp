@@ -518,7 +518,7 @@ namespace {
           "longitude_segments", params, recipe::kSphereLongitudeSegments);
     } else if (generator == "SubdividedCube") {
       ok = write_u32("segments", params, recipe::kSubdividedCubeSegments);
-    } else if (generator == "IcoSphere" || generator == "GeodesicSphere") {
+    } else if (generator == "IcoSphere") {
       ok = write_u32(
         "subdivision_level", params, recipe::kIcoSphereSubdivisionLevel);
     } else if (generator == "Plane") {

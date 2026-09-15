@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
@@ -125,7 +126,7 @@ public sealed partial class InspectorControlTests
         {
             IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"), DisplayPath = "/Engine/Generated/Materials/Default",
             PrimaryState = AssetState.Generated, SourcePath = null, DescriptorPath = null, CookStatus = null,
-            Generated = new("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat"),
+            Generated = new("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
         };
         var copy = origin with
         {

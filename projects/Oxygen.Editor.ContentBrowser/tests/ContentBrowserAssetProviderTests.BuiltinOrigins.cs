@@ -37,7 +37,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var foreign = own with { RootFolderPath = libraryRoot, SourceIdentity = Guid.CreateVersion7(), AssetKey = new(3, 4) };
         AssetRecord[] records =
         [
-            new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath) },
+            new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath, GeneratedAssetCategory.Standard) },
             new(cookedUri) { Cooked = foreign, OverriddenCookedSources = [own] },
         ];
         var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
@@ -129,7 +129,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             WriteMaterial(workspace.SourcePath("Content/Materials/OxygenEditor_Default.omat.json"));
         }
 
-        var records = new List<AssetRecord> { new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath) }, new(cookedUri) };
+        var records = new List<AssetRecord> { new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath, GeneratedAssetCategory.Standard) }, new(cookedUri) };
         if (authored)
         {
             records.Add(new(descriptorUri));

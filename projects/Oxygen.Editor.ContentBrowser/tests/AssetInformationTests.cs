@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -48,7 +49,7 @@ public sealed class AssetInformationTests
         var builtin = CreateAsset() with
         {
             IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"), DisplayName = "Default", PrimaryState = AssetState.Generated,
-            Generated = new("Default", "material", "/Content/Materials/OxygenEditor_Default.omat"),
+            Generated = new("Default", "material", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
             SourcePath = null, DescriptorPath = null, CookStatus = null,
         };
         _ = builtin.Information.Facts.Should().ContainSingle().Which.Should().Be(new AssetInformationFact("Origin", "Oxygen built-in"));

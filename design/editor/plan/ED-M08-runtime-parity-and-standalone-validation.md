@@ -135,20 +135,14 @@ metadata and catalog output for every new record.
 Implement Capsule, upright Quad, Torus defaults and finite-parameter rejection
 through the shared procedural authority. Bounds, normals, tangents, winding,
 recipe metadata and API prose change together. Migrate duplicate atmospheric
-inputs and GeodesicSphere identities; ArrowGizmo stays an internal tool resource.
+inputs and procedural identities; ArrowGizmo stays an internal tool resource.
 
-Retire GeodesicSphere completely in favor of IcoSphere: migrate every active
-engine/editor/example/tool call site and authored asset reference, remove
-`MakeGeodesicSphereMeshAsset` and its declaration, and remove the duplicate
-catalog identity, generator dispatch, schema alternative and runtime resolution
-path. Update documentation and tests to use the canonical IcoSphere API and
-identity; recook affected content. Perform the one-time conversion during
-implementation and remove its temporary migration code afterward. Retain no
-old-name API, alias, compatibility path, migration handler, test fixture or
-documentation reference. Closure requires a repository-wide check that the
-retired identifier is absent, including managed clients, maintained examples,
-tools and historical documents. At closure, rewrite this task as the delivered
-IcoSphere contract so the plan itself retains no retired identifier.
+IcoSphere is the sole canonical API, catalog, schema and generator identity for
+the subdivided icosahedron. Native/managed callers, examples, fixtures and
+documentation use that identity. Recook converted content and remove temporary
+conversion code. Retain no duplicate alias, compatibility reader or migration
+handler. Verify the single-identity contract across the repository, including
+managed clients, maintained examples, tools and historical documents.
 
 Remove the ineffective real-time-capture toggle from canonical SkyLight records,
 adapters and demo controls. Captured sky has one source-change-driven production

@@ -56,10 +56,11 @@ public sealed partial class InspectorControlTests
 
     private static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, Uri mesh)
     {
+        var authoringGeometries = builtins.AuthoringGeometries.ToArray();
         for (var index = 0; index < 98; index++)
         {
             var node = new SceneNode(scene) { Name = "Geometry " + index.ToString(CultureInfo.InvariantCulture), IsActive = true, CastsShadows = true, ReceivesShadows = true };
-            var geometryUri = index >= 90 ? mesh : builtins.Geometries[index % builtins.Geometries.Length].AssetUri;
+            var geometryUri = index >= 90 ? mesh : authoringGeometries[index % authoringGeometries.Length].AssetUri;
             var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(geometryUri) };
             geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index))) });
             _ = node.AddComponent(geometry);

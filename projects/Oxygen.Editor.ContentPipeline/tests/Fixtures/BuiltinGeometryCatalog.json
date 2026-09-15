@@ -25,6 +25,7 @@
   "geometries": [
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Cube",
+      "authoring_category": "standard",
       "canonical_name": "Cube",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -81,6 +82,7 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/SubdividedCube",
+      "authoring_category": "advanced",
       "canonical_name": "SubdividedCube",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -137,6 +139,7 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Sphere",
+      "authoring_category": "standard",
       "canonical_name": "Sphere",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -192,7 +195,65 @@
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Sphere.ogeo"
     },
     {
+      "asset_uri": "asset:///Engine/Generated/BasicShapes/Capsule",
+      "authoring_category": "standard",
+      "canonical_name": "Capsule",
+      "descriptor": {
+        "$schema": "oxygen.geometry-descriptor.v1",
+        "bounds": {
+          "max": [
+            0.5,
+            0.5,
+            1.0
+          ],
+          "min": [
+            -0.5,
+            -0.5,
+            -1.0
+          ]
+        },
+        "lods": [
+          {
+            "bounds": {
+              "max": [
+                0.5,
+                0.5,
+                1.0
+              ],
+              "min": [
+                -0.5,
+                -0.5,
+                -1.0
+              ]
+            },
+            "mesh_type": "procedural",
+            "name": "LOD0",
+            "procedural": {
+              "generator": "Capsule",
+              "mesh_name": "Capsule",
+              "params": {}
+            },
+            "submeshes": [
+              {
+                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
+                "name": "Main",
+                "views": [
+                  {
+                    "view_ref": "__all__"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "name": "Engine_Generated_BasicShapes_Capsule"
+      },
+      "name": "Capsule",
+      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Capsule.ogeo"
+    },
+    {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/IcoSphere",
+      "authoring_category": "standard",
       "canonical_name": "IcoSphere",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -248,63 +309,8 @@
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo"
     },
     {
-      "asset_uri": "asset:///Engine/Generated/BasicShapes/GeodesicSphere",
-      "canonical_name": "IcoSphere",
-      "descriptor": {
-        "$schema": "oxygen.geometry-descriptor.v1",
-        "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
-        },
-        "lods": [
-          {
-            "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
-            },
-            "mesh_type": "procedural",
-            "name": "LOD0",
-            "procedural": {
-              "generator": "IcoSphere",
-              "mesh_name": "GeodesicSphere",
-              "params": {}
-            },
-            "submeshes": [
-              {
-                "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
-                "name": "Main",
-                "views": [
-                  {
-                    "view_ref": "__all__"
-                  }
-                ]
-              }
-            ]
-          }
-        ],
-        "name": "Engine_Generated_BasicShapes_GeodesicSphere"
-      },
-      "name": "GeodesicSphere",
-      "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_GeodesicSphere.ogeo"
-    },
-    {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Plane",
+      "authoring_category": "standard",
       "canonical_name": "Plane",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -361,6 +367,7 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Cylinder",
+      "authoring_category": "standard",
       "canonical_name": "Cylinder",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -417,6 +424,7 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Cone",
+      "authoring_category": "standard",
       "canonical_name": "Cone",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -473,33 +481,34 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Torus",
+      "authoring_category": "standard",
       "canonical_name": "Torus",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
           "max": [
-            1.25,
-            1.25,
-            0.25
+            0.5,
+            0.5,
+            0.10000000149011612
           ],
           "min": [
-            -1.25,
-            -1.25,
-            -0.25
+            -0.5,
+            -0.5,
+            -0.10000000149011612
           ]
         },
         "lods": [
           {
             "bounds": {
               "max": [
-                1.25,
-                1.25,
-                0.25
+                0.5,
+                0.5,
+                0.10000000149011612
               ],
               "min": [
-                -1.25,
-                -1.25,
-                -0.25
+                -0.5,
+                -0.5,
+                -0.10000000149011612
               ]
             },
             "mesh_type": "procedural",
@@ -529,19 +538,20 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/Quad",
+      "authoring_category": "standard",
       "canonical_name": "Quad",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
           "max": [
             0.5,
-            0.5,
-            0.0
+            0.0,
+            0.5
           ],
           "min": [
             -0.5,
-            -0.5,
-            0.0
+            0.0,
+            -0.5
           ]
         },
         "lods": [
@@ -549,13 +559,13 @@
             "bounds": {
               "max": [
                 0.5,
-                0.5,
-                0.0
+                0.0,
+                0.5
               ],
               "min": [
                 -0.5,
-                -0.5,
-                0.0
+                0.0,
+                -0.5
               ]
             },
             "mesh_type": "procedural",
@@ -585,6 +595,7 @@
     },
     {
       "asset_uri": "asset:///Engine/Generated/BasicShapes/ArrowGizmo",
+      "authoring_category": "internal",
       "canonical_name": "ArrowGizmo",
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
@@ -641,5 +652,5 @@
     }
   ],
   "mount": "Content",
-  "schema": "oxygen.builtin-geometry-catalog.v1"
+  "schema": "oxygen.builtin-geometry-catalog.v2"
 }

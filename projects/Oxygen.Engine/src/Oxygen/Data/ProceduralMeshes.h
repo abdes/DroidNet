@@ -57,11 +57,6 @@ OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(
   unsigned int subdivision_level = procedural::kIcoSphereSubdivisionLevel)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
-//! Alias of MakeIcoSphereMeshAsset for authoring/runtime readability.
-OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(
-  unsigned int subdivision_level = procedural::kIcoSphereSubdivisionLevel)
-  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
-
 //! Creates vertex/index buffers for a square XY grid at z = 0, centred at
 //! the origin. The second segment count subdivides Y.
 //! Size must be finite and positive; unrepresentable grid cells/counts fail.

@@ -25,7 +25,7 @@ using namespace oxygen::data;
 NOLINT_TEST(
   BuiltinGeometryTest, CatalogResolvesCompleteMeshesAndDefaultMaterial)
 {
-  ASSERT_EQ(GetBuiltinGeometryNames().size(), 12U);
+  ASSERT_EQ(GetBuiltinGeometryNames().size(), 11U);
   for (const auto name : GetBuiltinGeometryNames()) {
     SCOPED_TRACE(name);
     const auto uri
@@ -33,6 +33,7 @@ NOLINT_TEST(
     const auto identity = ResolveBuiltinGeometryIdentity(uri);
     ASSERT_TRUE(identity.has_value());
     EXPECT_EQ(identity->asset_uri, uri);
+    EXPECT_EQ(identity->generator, name);
     EXPECT_EQ(identity->descriptor_name,
       "Engine_Generated_BasicShapes_" + std::string(name));
     const auto geometry = ResolveBuiltinGeometry(uri);
@@ -68,7 +69,6 @@ NOLINT_TEST(
         { "Sphere", [] { return MakeSphereMeshAsset(); } },
         { "Capsule", [] { return MakeCapsuleMeshAsset(); } },
         { "IcoSphere", [] { return MakeIcoSphereMeshAsset(); } },
-        { "GeodesicSphere", [] { return MakeGeodesicSphereMeshAsset(); } },
         { "Plane", [] { return MakePlaneMeshAsset(); } },
         { "Cylinder", [] { return MakeCylinderMeshAsset(); } },
         { "Cone", [] { return MakeConeMeshAsset(); } },
@@ -97,15 +97,48 @@ NOLINT_TEST(
   }
 }
 
-//! Aliases share a recipe while retaining both existing authored URI
-//! identities.
-NOLINT_TEST(BuiltinGeometryTest, AliasAndThinPlaneSemanticsAreExplicit)
+//! The native catalog owns which built-ins are authoring choices and which
+//! remain available only to internal tools.
+NOLINT_TEST(
+  BuiltinGeometryTest, AuthoringCategoriesSeparateToolsAndAdvancedShapes)
 {
-  const auto alias = ResolveBuiltinGeometryIdentity(
-    "asset:///Engine/Generated/BasicShapes/GeodesicSphere");
-  ASSERT_TRUE(alias.has_value());
-  EXPECT_EQ(alias->generator, "IcoSphere");
-  EXPECT_EQ(alias->name, "GeodesicSphere");
+  auto standard_count = 0U;
+  auto advanced_count = 0U;
+  auto internal_count = 0U;
+  for (const auto name : GetBuiltinGeometryNames()) {
+    const auto identity = ResolveBuiltinGeometryIdentity(
+      "asset:///Engine/Generated/BasicShapes/" + std::string(name));
+    ASSERT_TRUE(identity.has_value());
+    switch (identity->authoring_category) {
+    case BuiltinGeometryAuthoringCategory::kStandard:
+      ++standard_count;
+      break;
+    case BuiltinGeometryAuthoringCategory::kAdvanced:
+      ++advanced_count;
+      EXPECT_EQ(name, "SubdividedCube");
+      break;
+    case BuiltinGeometryAuthoringCategory::kInternal:
+      ++internal_count;
+      EXPECT_EQ(name, "ArrowGizmo");
+      break;
+    }
+  }
+  EXPECT_EQ(standard_count, 9U);
+  EXPECT_EQ(advanced_count, 1U);
+  EXPECT_EQ(internal_count, 1U);
+}
+
+//! Canonical resolution is case-insensitive; thin planes keep exact bounds.
+NOLINT_TEST(
+  BuiltinGeometryTest, CanonicalIdentityAndThinPlaneSemanticsAreExplicit)
+{
+  const auto sphere = ResolveBuiltinGeometryIdentity(
+    "asset:///Engine/Generated/BasicShapes/icosphere");
+  ASSERT_TRUE(sphere.has_value());
+  EXPECT_EQ(sphere->generator, "IcoSphere");
+  EXPECT_EQ(sphere->name, "IcoSphere");
+  EXPECT_EQ(
+    sphere->asset_uri, "asset:///Engine/Generated/BasicShapes/IcoSphere");
   const auto plane
     = ResolveBuiltinGeometry("asset:///Engine/Generated/BasicShapes/Plane");
   ASSERT_NE(plane, nullptr);

@@ -4,11 +4,12 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
-/// <summary>Projects engine-owned names, aliases and catalog availability into the typed pickers.</summary>
+/// <summary>Projects engine-owned authoring choices and catalog availability into the typed pickers.</summary>
 public sealed partial class GeometryViewModel
 {
     /// <summary>Gets or sets the availability notice for engine choices.</summary>
@@ -51,12 +52,12 @@ public sealed partial class GeometryViewModel
 
         var snapshot = this.builtins.Snapshot;
         this.BuiltinCatalogNotice = snapshot.Notice;
-        var geometries = snapshot.Catalog?.Geometries.Select(definition =>
+        var geometries = snapshot.Catalog?.AuthoringGeometries.Select(definition =>
         {
-            var alias = string.Equals(definition.Name, definition.CanonicalName, StringComparison.Ordinal) ? string.Empty : $" · Alias of {definition.CanonicalName}";
+            var category = definition.AuthoringCategory == GeneratedAssetCategory.Advanced ? " · Advanced" : string.Empty;
             var availability = snapshot.IsLastKnown ? " · Preview unavailable" : this.BuiltinAvailability(definition.AssetUri);
             return CreateEngineItem(definition.Name, definition.AssetUri, definition.AssetUri.AbsolutePath)
-                with { DisplayType = "Built-in geometry" + alias + availability, };
+                with { DisplayType = "Built-in geometry" + category + availability, };
         }).ToArray() ?? [];
         for (var index = 0; index < geometries.Length; index++)
         {

@@ -51,13 +51,13 @@ public sealed class AssetIdentityGroupingTests
         _ = new AssetBrowserQuery { SearchText = "OxygenEditor_Default" }.Matches(row).Should().BeTrue();
     }
 
-    /// <summary>Native aliases with distinct authored identities are not merged by their shared canonical name.</summary>
+    /// <summary>Distinct canonical geometry identities remain independent choices.</summary>
     [TestMethod]
-    public void GeneratorAliasesKeepDistinctChoices()
+    public void CanonicalGeneratorsKeepDistinctChoices()
     {
-        var ico = CreateOrigin() with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/IcoSphere"), Kind = AssetKind.Geometry, DisplayName = "IcoSphere", Generated = new("IcoSphere", "geometry", "/Content/IcoSphere.ogeo") };
-        var geo = ico with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/GeodesicSphere"), DisplayName = "GeodesicSphere" };
-        _ = AssetIdentityGrouping.GroupBuiltins([ico, geo]).Should().Equal(ico, geo);
+        var ico = CreateOrigin() with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/IcoSphere"), Kind = AssetKind.Geometry, DisplayName = "IcoSphere", Generated = new("IcoSphere", "geometry", "/Content/IcoSphere.ogeo", GeneratedAssetCategory.Standard) };
+        var sphere = ico with { IdentityUri = AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), DisplayName = "Sphere", Generated = new("Sphere", "geometry", "/Content/Sphere.ogeo", GeneratedAssetCategory.Standard) };
+        _ = AssetIdentityGrouping.GroupBuiltins([ico, sphere]).Should().Equal(ico, sphere);
     }
 
     private static ContentBrowserAssetItem CreateOrigin()
@@ -77,7 +77,7 @@ public sealed class AssetIdentityGroupingTests
             [],
             IsSelectable: true)
         {
-            Generated = new GeneratedAssetMetadata("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat"),
+            Generated = new GeneratedAssetMetadata("Default", "oxygen.material-descriptor.v1", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
         };
 
     private static ContentBrowserAssetItem CreateCopy(ContentBrowserAssetItem origin)
