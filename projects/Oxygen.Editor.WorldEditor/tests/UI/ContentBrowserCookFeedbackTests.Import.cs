@@ -95,6 +95,7 @@ public sealed partial class ContentBrowserCookFeedbackTests
             {
                 _ = spec.PrimaryButtonText.Should().Be("Import");
                 var view = (SceneImportDialogView)spec.Content!;
+                AssertImportPlacement(view.ViewModel!);
                 view.ViewModel!.Name = "ReviewedCrate";
                 view.ViewModel.DestinationFolder = "/Content/Props";
                 _ = (await spec.PrimaryAction!().ConfigureAwait(true)).Should().BeTrue();
@@ -104,7 +105,7 @@ public sealed partial class ContentBrowserCookFeedbackTests
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
             new ViewModelToView(locator.Object),
-            new ContentBrowserState(projects),
+            CreateSceneFolderImportState(projects),
             projects,
             Mock.Of<IProjectManagerService>(),
             Mock.Of<IAuthoringTargetResolver>(),
@@ -132,4 +133,17 @@ public sealed partial class ContentBrowserCookFeedbackTests
             _ = browser.IsOperationResultVisible.Should().BeFalse();
         }
     });
+
+    private static ContentBrowserState CreateSceneFolderImportState(IProjectContextService projects)
+    {
+        var state = new ContentBrowserState(projects);
+        state.SetSelectedFolders(["/Content/Scenes"]);
+        return state;
+    }
+
+    private static void AssertImportPlacement(SceneImportDialogViewModel model)
+    {
+        _ = model.DestinationFolder.Should().Be("/Content");
+        _ = model.OutputLocations.Should().Contain("/Content/Materials/Crate").And.Contain("/Content/Geometry/Crate").And.Contain("/Content/Scenes/Crate");
+    }
 }

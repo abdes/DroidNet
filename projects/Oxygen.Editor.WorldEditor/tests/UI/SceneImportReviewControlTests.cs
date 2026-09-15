@@ -114,7 +114,7 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             _ = model.CanAccept.Should().BeTrue();
             _ = model.PrimaryButtonText.Should().Be("Replace and import");
             _ = warning.Message.Should().Contain("/Content/SourceMedia/DCC/Crate/model.gltf");
-            _ = warning.Message.Should().Contain("/Content/Models/Crate");
+            _ = warning.Message.Should().Contain("/Content/Materials/Models/Crate");
         }
 
         await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true);

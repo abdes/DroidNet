@@ -96,7 +96,12 @@ public sealed partial class ContentPipelineService
         var replacement = request.Replacement!;
         var original = replacement.Settings;
         await this.VerifyReplacementTargetAsync(operation, replacement, imports, cancellationToken).ConfigureAwait(false);
-        var source = scope.Inputs.Single() with { MountName = original.MountPoint, OutputVirtualPath = original.OutputPrefix };
+        var source = scope.Inputs.Single() with
+        {
+            MountName = original.MountPoint,
+            OutputVirtualPath = original.SchemaVersion == 2 ? original.OutputPrefixes[0] : null,
+            OutputNamespaces = original.OutputPrefixes,
+        };
         var incoming = request.ReplacementCandidatePath ?? request.SourcePath;
         if (!string.Equals(Path.GetExtension(incoming), Path.GetExtension(source.SourceAbsolutePath), StringComparison.OrdinalIgnoreCase))
         {
@@ -163,16 +168,15 @@ public sealed partial class ContentPipelineService
         }
 
         var settings = replacement.Settings;
-        var output = new Uri("asset://" + settings.OutputPrefix);
-        if (imports.ResolveFolder(operation.Project, output).Any(input => input.AssetUri != replacement.SourceUri))
+        if (settings.OutputPrefixes.Any(prefix => imports.ResolveFolder(operation.Project, new Uri("asset://" + prefix)).Any(input => input.AssetUri != replacement.SourceUri)))
         {
             throw new InvalidDataException("The replacement destination overlaps another retained source. Resolve its ownership before replacing this model.");
         }
 
         var mount = operation.Project.AuthoringMounts.Single(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase));
-        var authored = Path.Combine(operation.Project.ProjectRoot, mount.RelativePath, settings.OutputDirectory);
-        var conflict = Directory.Exists(authored) ? Directory.EnumerateFiles(authored, "*.json", SearchOption.AllDirectories)
-            .FirstOrDefault(static path => Path.GetExtension(Path.GetFileNameWithoutExtension(path)).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE") : null;
+        var conflict = settings.OutputDirectories.Select(directory => Path.Combine(operation.Project.ProjectRoot, mount.RelativePath, directory))
+            .Where(Directory.Exists).SelectMany(static directory => Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
+            .FirstOrDefault(static path => Path.GetExtension(Path.GetFileNameWithoutExtension(path)).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE");
         if (conflict is not null)
         {
             throw new InvalidDataException($"The replacement destination contains authored asset '{conflict}'. Keep it in a separate destination before replacing the model.");

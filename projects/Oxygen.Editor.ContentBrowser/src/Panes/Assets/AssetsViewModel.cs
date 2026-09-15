@@ -276,15 +276,11 @@ public partial class AssetsViewModel(
             }
 
             var selected = this.GetSelectedFolderUri();
-            var destination = Uri.UnescapeDataString(selected.AbsolutePath);
-            try
-            {
-                _ = SceneImportTarget.Resolve(project, selected, Path.GetFileNameWithoutExtension(sourcePath));
-            }
-            catch (ArgumentException)
-            {
-                destination = "/Content/Models";
-            }
+            var mount = project.AuthoringMounts.FirstOrDefault(mount => selected.AbsolutePath.StartsWith("/" + Uri.EscapeDataString(mount.Name) + "/", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(selected.AbsolutePath.Trim('/'), Uri.EscapeDataString(mount.Name), StringComparison.OrdinalIgnoreCase))
+                ?? project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
+                ?? project.AuthoringMounts[0];
+            var destination = "/" + mount.Name;
 
             var model = new SceneImportDialogViewModel(project, sourcePath, destination, dialogService);
             var view = this.VmToViewConverter.Convert(model, typeof(object), parameter: null, language: CultureInfo.CurrentUICulture.Name)

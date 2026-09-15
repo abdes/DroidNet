@@ -151,7 +151,7 @@ public sealed partial class ContentPipelineService
             var manifest = new ContentImportManifest(
                 1,
                 scope.StagingOutputRoot!,
-                new ContentImportLayout("/" + input.MountName) { DescriptorsDirectory = settings.OutputDirectory },
+                settings.CreateLayout(),
                 [
                     new ContentImportJob(
                         "model",
@@ -184,13 +184,22 @@ public sealed partial class ContentPipelineService
 
     private async Task<DiagnosticRecord?> FindImportedOutputCollisionAsync(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, CancellationToken cancellationToken)
     {
-        var prefix = settings.OutputPrefix;
+        var prefixes = settings.OutputPrefixes;
         var conflictingInput = scope.Inputs.FirstOrDefault(input => input.AssetUri != source.AssetUri
-            && input.OutputVirtualPath is { } output && (output.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                || (input.Kind == ContentCookAssetKind.ForeignSource && prefix.StartsWith(output, StringComparison.OrdinalIgnoreCase))));
+            && input.OutputVirtualPath is { } output && prefixes.Any(prefix => output.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
         if (conflictingInput is not null)
         {
             return Collision(conflictingInput.AssetUri.ToString());
+        }
+
+        foreach (var other in scope.Inputs.Where(input => input.Kind == ContentCookAssetKind.ForeignSource && input.AssetUri != source.AssetUri))
+        {
+            var otherSettings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(other.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix, cancellationToken).ConfigureAwait(false));
+            if (prefixes.Any(prefix => otherSettings.OutputPrefixes.Any(otherPrefix => prefix.StartsWith(otherPrefix, StringComparison.OrdinalIgnoreCase)
+                || otherPrefix.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
+            {
+                return Collision(other.AssetUri.ToString());
+            }
         }
 
         if (!File.Exists(Path.Combine(scope.StagingOutputRoot!, "container.index.bin")))
@@ -201,14 +210,14 @@ public sealed partial class ContentPipelineService
         var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(scope.StagingOutputRoot!, cancellationToken).ConfigureAwait(false);
         var owned = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri)?.Outputs
             .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-        var conflict = inspection.Assets.FirstOrDefault(asset => asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !owned.Contains(asset.VirtualPath));
+        var conflict = inspection.Assets.FirstOrDefault(asset => prefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) && !owned.Contains(asset.VirtualPath));
         return conflict is null ? null : Collision(conflict.VirtualPath);
 
         DiagnosticRecord Collision(string path) => new()
         {
             OperationId = operationId, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.ImportFailed, AffectedPath = source.SourceAbsolutePath, AffectedVirtualPath = source.AssetUri.AbsolutePath,
-            Message = $"Import destination '{prefix}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
+            Message = $"Import of '{settings.Name}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
         };
     }
 }

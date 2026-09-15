@@ -139,7 +139,7 @@ public sealed class SceneImportDialogViewModelTests
             _ = model.PrimaryButtonText.Should().Be("Replace and import");
             _ = model.Request!.Replacement!.SourceUri.Should().Be(new Uri("asset:///Content/SourceMedia/DCC/Crate/model.gltf"));
             _ = model.DestinationFolder.Should().Be("/Content/Models");
-            _ = model.ReplacementMessage.Should().Contain("/Content/Models/Crate");
+            _ = model.ReplacementMessage.Should().Contain("/Content/Materials/Models/Crate").And.Contain("/Content/Geometry/Models/Crate").And.Contain("/Content/Scenes/Models/Crate");
             model.Name = "Another";
             _ = model.Replacement.Should().BeNull();
             _ = model.PrimaryButtonText.Should().Be("Import");

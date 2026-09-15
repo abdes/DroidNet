@@ -911,12 +911,28 @@ worker termination until native drain and cleanup complete. The report destinati
 its hard-link alias, or a declared buffer.
 
 Native retained settings use the existing `<source>.import.json` naming
-convention with `SchemaVersion: 2` and `Importer: "Oxygen.Cooker.Scene/v1"`.
+convention with `SchemaVersion: 3` for new imports and
+`Importer: "Oxygen.Cooker.Scene/v1"`.
 The sidecar records the Content bundle/primary paths, initially discovered files
 and primary hash, output mount and exclusive destination, and explicit native
 content/unit/normal/tangent/transform policies. Legacy managed sidecars are not
 silently converted or allowed to replace existing identities. Creation uses the
 ordinary atomic file store with a missing-file baseline.
+
+New imports follow the existing type folders: `/Content/Materials/<model>`,
+`/Content/Geometry/<model>` and `/Content/Scenes/<model>`. The default review
+starts at the selected authoring mount's root, never at the selected Scenes or
+Materials folder. An optional relative group is applied within each type folder;
+the dialog shows all resulting paths before acceptance. Native mesh/material
+names already include the source-file namespace, which is not repeated when it
+matches the model folder. Bulk resource tables remain native-owned shared files.
+
+Version-2 sidecars retain their existing grouped paths on ordinary reimport.
+Relocating an existing import requires updating its authored references and
+rebuilding the affected cooked content together; changing the sidecar alone is
+insufficient because native asset keys derive from virtual paths. Ownership,
+collision checks, folder cooking and source inspection cover every disjoint
+output namespace, without claiming the whole mount for one imported model.
 
 Retained model jobs use the same captured inputs, incremental planner, staging
 and journaled root publication as descriptors. Native rediscovery runs when a

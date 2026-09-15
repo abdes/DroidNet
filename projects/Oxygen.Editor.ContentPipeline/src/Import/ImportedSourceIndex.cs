@@ -63,7 +63,7 @@ internal sealed class ImportedSourceIndex
                     {
                         var sourceRelative = Path.GetRelativePath(root, primary).Replace('\\', '/');
                         var sourceUri = new Uri(AssetUris.Scheme + ":///" + Uri.EscapeDataString(mount.Name) + "/" + string.Join('/', sourceRelative.Split('/').Select(Uri.EscapeDataString)));
-                        index.entries.Add(new(settings.OutputPrefix, sourceUri));
+                        index.entries.AddRange(settings.OutputPrefixes.Select(prefix => new Entry(prefix, sourceUri)));
                     }
                 }
                 catch (Exception failure) when (failure is InvalidDataException or System.Text.Json.JsonException or FileNotFoundException)

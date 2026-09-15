@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="PrimaryRelativePath">The primary source relative to its bundle.</param>
 /// <param name="SourceHash">The primary bytes used to discover the initial dependency set.</param>
 /// <param name="Files">The discovered bundle-relative files, including the primary.</param>
-/// <param name="OutputDirectory">The exclusively owned output directory relative to the mount.</param>
+/// <param name="OutputDirectory">The model's relative group within each type folder; version 2 stores the older common output directory.</param>
 public sealed record NativeSceneImportSettings(
     int SchemaVersion,
     string Importer,
@@ -60,9 +60,27 @@ public sealed record NativeSceneImportSettings(
     /// <summary>Gets the tangent policy for the scalar-material subset.</summary>
     public string TangentsPolicy { get; init; } = "preserve";
 
-    /// <summary>Gets the native output prefix; generated paths stay beneath it.</summary>
+    /// <summary>Gets the source-owned output directories for the persisted layout version.</summary>
     [JsonIgnore]
-    public string OutputPrefix => "/" + this.MountPoint + "/" + this.OutputDirectory.Trim('/') + "/";
+    public ImmutableArray<string> OutputDirectories => this.SchemaVersion == 2
+        ? [this.OutputDirectory]
+        : ["Materials/" + this.OutputDirectory, "Geometry/" + this.OutputDirectory, "Scenes/" + this.OutputDirectory];
+
+    /// <summary>Gets every native namespace owned by the imported source.</summary>
+    [JsonIgnore]
+    public ImmutableArray<string> OutputPrefixes => [.. this.OutputDirectories.Select(directory => "/" + this.MountPoint + "/" + directory + "/")];
+
+    /// <summary>Builds the native layout without rewriting older imported asset identities.</summary>
+    /// <returns>The layout used for this source's next cook.</returns>
+    public ContentImportLayout CreateLayout() => this.SchemaVersion == 2
+        ? new("/" + this.MountPoint) { DescriptorsDirectory = this.OutputDirectory }
+        : new("/" + this.MountPoint)
+        {
+            DescriptorsDirectory = string.Empty,
+            MaterialsDirectory = this.NamedAssetDirectory("Materials"),
+            GeometryDirectory = this.NamedAssetDirectory("Geometry"),
+            ScenesDirectory = "Scenes/" + this.OutputDirectory,
+        };
 
     /// <summary>Creates settings from a retained bundle, preserving native naming and source identities.</summary>
     /// <param name="source">The retained source and hashes.</param>
@@ -74,7 +92,7 @@ public sealed record NativeSceneImportSettings(
     {
         ArgumentNullException.ThrowIfNull(source);
         var settings = new NativeSceneImportSettings(
-            2,
+            3,
             ImporterIdentity,
             mountPoint,
             name,
@@ -148,5 +166,13 @@ public sealed record NativeSceneImportSettings(
         {
             throw new InvalidDataException("Native import settings require contained source paths, a unique output directory and valid names.");
         }
+    }
+
+    private string NamedAssetDirectory(string kind)
+    {
+        // Native mesh/material names already contain the primary file's stem.
+        var parent = string.Equals(Path.GetFileName(this.OutputDirectory), Path.GetFileNameWithoutExtension(this.PrimaryRelativePath), StringComparison.Ordinal)
+            ? Path.GetDirectoryName(this.OutputDirectory)?.Replace('\\', '/') : this.OutputDirectory;
+        return string.IsNullOrEmpty(parent) ? kind : kind + "/" + parent;
     }
 }
