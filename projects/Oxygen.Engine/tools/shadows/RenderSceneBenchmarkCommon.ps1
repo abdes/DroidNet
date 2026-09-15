@@ -187,7 +187,7 @@ function Get-CaptureRequest {
     return $null
   }
 
-  $pattern = "RenderDoc configured frame capture requested for frame $Frame"
+  $pattern = "RenderDoc configured frame-range capture started from frame $Frame for"
   $searchResults = @(Select-String -Path $Path -Pattern $pattern)
   if ($searchResults.Count -eq 0) {
     return $null
