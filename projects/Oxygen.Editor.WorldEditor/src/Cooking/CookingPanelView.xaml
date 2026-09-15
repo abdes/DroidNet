@@ -279,8 +279,12 @@
                 HorizontalScrollMode="Disabled"
                 IsVerticalScrollChainingEnabled="True"
                 VerticalScrollBarVisibility="Auto"
-                VerticalScrollMode="Auto">
-                <StackPanel Padding="0,0,6,4" Spacing="6">
+                VerticalScrollMode="Auto"
+                ViewChanged="OnDetailsViewChanged">
+                <StackPanel
+                    Padding="0,0,6,4"
+                    SizeChanged="OnDetailsContentSizeChanged"
+                    Spacing="6">
                     <TextBlock
                         AutomationProperties.LiveSetting="Polite"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
@@ -314,7 +318,7 @@
                             x:Name="CookOutput"
                             MinHeight="160"
                             AutomationProperties.Name="Selected cook messages"
-                            FollowTail="{x:Bind ViewModel.SelectedRun.FollowTail, Mode=TwoWay}"
+                            FollowTail="False"
                             IsScrollEnabled="False"
                             ItemsSource="{x:Bind ViewModel.SelectedRun.Output, Mode=OneWay}"
                             ToolbarVisibility="Collapsed"

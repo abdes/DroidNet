@@ -34,7 +34,7 @@ namespace Oxygen.Editor.World.Tests;
 [TestClass]
 [TestCategory("UITest")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class CookingPanelControlTests : VisualUserInterfaceTests
+public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
 {
     private Windows.Graphics.SizeInt32 originalWindowSize;
 
