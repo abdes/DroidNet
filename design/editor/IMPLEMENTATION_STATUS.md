@@ -595,7 +595,7 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         from authored path references: a same-path project material with a different
         key cannot replace a cooked mesh dependency. Per-consumer provenance and
         two-scene freshness regressions preserve both identities independently.
-- [ ] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
+- [x] 07B.2 staged validation, preview pause, publication, rollback/recovery and leases.
   - [x] Private-root seeding preserves unrelated content; whole-root validation
         precedes publication. Output leases exclude competing readers and writers.
         Contended inspections and publication wait without throwing first-chance
@@ -628,8 +628,13 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         asset/folder/scene/project cooks preserve native content revision and
         published file timestamps. These ten additional native integration cases
         pass alongside the five creation/shared-refresh cases.
-  - [ ] Finish the project-lifetime/recovery and complete cross-trigger integration
-        matrix, including the remaining import workflows.
+  - [x] Closing the project while a cook is queued or after native output is ready
+        cancels the old operation, preserves published bytes and releases readers.
+        Receipt-validated reopening starts a fresh engine run; the previous
+        material loads, and retry applies the newer saved material. The complete
+        publication/lifetime group passes 17/17. Import publication is covered
+        by the native typed-use cases; combined dialog/retry journeys remain in
+        07B.5d-f. [Project-closure evidence](validation/ED-M07B-project-closure.md).
   - [x] The UI Automation exception flood was isolated to the computer-use helper;
         the user confirmed it disappears with the helper stopped.
   - [x] Close the reported native scene-switch shadow-barrier failure. The native

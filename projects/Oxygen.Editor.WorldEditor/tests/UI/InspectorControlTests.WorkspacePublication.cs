@@ -181,7 +181,7 @@ public sealed partial class InspectorControlTests
             }
             else
             {
-                await verify(new(fixture, services, picker, materials, material, key), timeout.Token).ConfigureAwait(true);
+                await verify(new(fixture, services, catalog, picker, materials, material, key), timeout.Token).ConfigureAwait(true);
             }
         }
         finally
@@ -194,15 +194,18 @@ public sealed partial class InspectorControlTests
         }
     }
 
-    private sealed record PublicationScenario(NativeSceneFixture Fixture, CatalogWorkloadServices Services, MaterialPickerService Picker, MaterialDocumentService Materials, MaterialDocument Material, string Key);
+    private sealed record PublicationScenario(NativeSceneFixture Fixture, CatalogWorkloadServices Services, IProjectAssetCatalog Catalog, MaterialPickerService Picker, MaterialDocumentService Materials, MaterialDocument Material, string Key);
 
     private sealed partial class NativeSceneFixture
     {
         public IDisposable RegisterWorkspacePublication(CatalogWorkloadServices services, IProjectAssetCatalog catalog)
         {
             var project = services.Projects.ActiveProject!;
-            return services.Publication.RegisterPreview(project, () => this.hosting.Dispatcher.DispatchAsync(
-                () => Task.FromResult<ICookPublicationPreview?>(new WorkspacePublicationPreview(project, this.engine, this.hosting, services.Mounts, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject)))));
+            return services.Publication.RegisterPreview(project, () => this.CreateWorkspacePreviewAsync(services, catalog, project));
         }
+
+        public Task<ICookPublicationPreview?> CreateWorkspacePreviewAsync(CatalogWorkloadServices services, IProjectAssetCatalog catalog, Oxygen.Editor.Projects.ProjectContext project)
+            => this.hosting.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
+                new WorkspacePublicationPreview(project, this.engine, this.hosting, services.Mounts, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject))));
     }
 }

@@ -535,7 +535,7 @@ its product semantics are settled in 07B.0 before implementation.
 - [x] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
 - [x] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
   coalescing and cancellation cases pass.
-- [ ] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
+- [x] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [x] 07B.3 every required field survives native cook/load observation.
 - [x] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
