@@ -48,7 +48,7 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Metric primitive defaults and orientation | Approved; centred pivots, Z-up, dimensions in Decision 4, horizontal Plane/upright Quad; prose must match actual code; implementation pending |
 | Basic perspective camera authoring | Approved; pose, vertical FOV, aspect and near/far; exact selected-camera loading; physical-camera authoring deferred; implementation/qualification pending |
 | Auto/Fixed camera aspect fitting | Approved; Auto default for new cameras, vertical FOV retained, Fixed preserves composition with bars, no saved resize mutations; implementation pending |
-| Node/light visibility | Combined Decision 7 withdrawn; detailed source/industry review splits editor hiding, inheritance, contribution, light eligibility and shadows; no policy approved |
+| Node/light visibility | Original lumped proposal withdrawn; source review now supplies one complete practical V0.1 behavior contract for approval; no policy approved |
 | Transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
@@ -339,9 +339,11 @@ contract. Light contribution and atmosphere membership are separate controls,
 and light traversal has an additional documented subtree-filter policy. No
 visibility implementation or contract change follows from the withdrawn request.
 
-Do not implement the former combined switch. The next choices separately cover
-editor-only hiding, node Local/Inherit semantics, light contribution, light
-eligibility under node visibility, object/light shadows, and atmosphere roles.
+Do not implement the former combined switch. The user then rejected leaving
+another list of unresolved subdecisions. Section 5 of the node/light review now
+specifies one complete practical contract covering each distinct control and
+its exact effects, defaults, exclusions, migration and required engine work.
+It awaits approval as the proposed policy for this area.
 
 ### Why these choices
 
