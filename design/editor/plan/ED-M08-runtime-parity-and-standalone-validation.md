@@ -60,7 +60,7 @@ qualification.
 | `SceneEngineSync`, `WorkspacePublicationPreview` | Reuse lifetime checks and coherent full projection. Publication suspension is not the saved-revision capture session: rendering must keep advancing while later authoring delivery is held. |
 | `InspectorControlTests.CatalogWorkloadFixture.cs` | Reuse its deterministic content-building approach. Explicitly set Manual exposure/ACES and a camera aimed at the fixture; its EV value alone does not select Manual mode. Count actual logical catalog rows and visible triangles. |
 | Status ledger | 07A/07B are complete. M02 window/dock resize and consolidated discovery evidence remain a closure dependency, not a reason to block M08 implementation. |
-| Built-in status regression reported during this review | A combined browser query treated cooked built-in companions as authored JSON inputs. Retain the focused provenance-based fix and first-chance-exception regression; earlier M07 checks did not cover this combined query. Recheck normal scene opening together before native parity work. |
+| Built-in status regression reported during this review | A combined browser query treated cooked built-in companions as authored JSON inputs. Fix `267c23c9d` passes the expanded native exception regression and 449 pipeline tests. The user confirmed Vortex Main/NewScene2 switching without the exceptions after refreshing Debug. Retain this regression; earlier M07 checks did not cover the combined query. |
 
 No native build or rendered parity test was performed for this document review.
 

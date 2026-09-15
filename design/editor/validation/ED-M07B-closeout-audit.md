@@ -82,3 +82,14 @@ implemented fixes and their evidence, not a remote issue closure.
 
 Standalone rendered parity remains ED-M08. The separate ED-M02 viewport gate and
 ED-M10 release/GPU qualification are not claimed by this milestone.
+
+## Built-in status follow-up — 2026-09-15
+
+Commit `267c23c9d` fixes a combined status query that treated cooked built-in
+companions as authored JSON inputs. The original checks covered generated
+identities separately and missed this path. The expanded native regressions
+monitor first-chance exceptions, preserve authored replacements and reject
+corrupt output. Pipeline tests pass 449/449; focused status/native tests pass
+14/14. After the Debug editor refresh, the user confirmed that opening Vortex
+and switching Main/NewScene2 no longer produces the repeated missing-descriptor
+exceptions. No scene migration was required.
