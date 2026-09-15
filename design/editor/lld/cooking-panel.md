@@ -149,6 +149,9 @@ Keep Output visually distinct from the actionable issue groups above it. Output
 explains the sequence of events; issues expose the property/asset recovery actions.
 Use compact selectable message rows, wrapping long text and preserving native
 detail. Do not replace the transcript with only a generic success/failure summary.
+Redirected native output must use complete plain lines: no cursor-control
+sequences, terminal padding or terminal-width truncation. The native producer
+keeps interactive terminal presentation separate from redirected transcripts.
 
 The selected run's body scrolls while its compact header remains visible. Output
 and Assets use native Expanders that grow to fit their complete content. Neither

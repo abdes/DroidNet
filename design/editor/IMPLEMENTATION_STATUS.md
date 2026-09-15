@@ -871,8 +871,10 @@ implementation of the revised plan on 2026-09-11; D1 is accepted and reconciled.
         The combined native import/typed-use/lifetime run passes 25/25.
         [Import journey evidence](validation/ED-M07B-import-dialog-journeys.md).
   - [ ] Finish combined Save listed & Cook / save-conflict recovery.
-  - [ ] Make redirected native progress output complete plain lines without
-        terminal cursor controls or terminal-width truncation.
+  - [x] Redirected ImportTool output uses complete plain lines without cursor
+        controls, spinner padding or terminal-width truncation. Debug/Release
+        native CLI checks preserve 217-character lines without escapes; the
+        rebuilt native UI cases verify full progress paths in Cooking.
 - [ ] 07B.5f complete before/during/after workflow and user validation journeys.
 - [x] 07B.5g compact single/multi-node inspector with component filtering and
       deselect/All behavior, preserving existing edit/history contracts.
