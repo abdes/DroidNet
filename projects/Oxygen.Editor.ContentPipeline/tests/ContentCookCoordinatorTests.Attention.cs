@@ -20,11 +20,17 @@ public sealed partial class ContentCookCoordinatorTests
     public async Task NeedsSaveRevealsOnlyUserInitiatedWork(bool automatic)
     {
         using var coordinator = CreateCoordinator(CreateContextService());
-        var events = new ConcurrentQueue<CookRunChangedEventArgs>();
-        coordinator.RunChanged += (_, change) => events.Enqueue(change);
+        var needsSave = new TaskCompletionSource<CookRunChangedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.RunChanged += (_, change) =>
+        {
+            if (change.Run.State == CookRunState.NeedsSave)
+            {
+                _ = needsSave.TrySetResult(change);
+            }
+        };
         var document = new Snapshots.CookDocumentState(Guid.NewGuid(), Path.Combine(Path.GetTempPath(), "Main.oscene.json"), "Main", Revision: 2, SavedRevision: 1, IsDirty: true, SavedContentHash: "saved");
         var work = coordinator.RunCookAsync<int>(new(CookTargetKind.Project, ScopeUri: null, IsAutomatic: automatic), (_, _) => throw new CookInputsNeedSaveException([document]), CancellationToken.None);
-        var blocked = events.Single(change => change.Run.State == CookRunState.NeedsSave);
+        var blocked = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = blocked.Reveal.Should().Be(!automatic);
         await coordinator.CancelAsync(blocked.Run.OperationId).ConfigureAwait(false);
         Func<Task> cancelled = () => work;
