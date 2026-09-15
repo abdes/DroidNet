@@ -47,7 +47,7 @@ internal sealed class WorkspacePublicationPreview(
     {
         if (isCurrent() && this.IsRuntimeAvailable)
         {
-            var reader = writer?.CreateReader() ?? CookOutputLease.AcquireRead(project.ProjectRoot);
+            var reader = writer?.CreateReader() ?? await CookOutputLease.AcquireReadAsync(project.ProjectRoot, CancellationToken.None).ConfigureAwait(true);
             var mounts = await mountService.PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
             await engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts, keepPaused: true).ConfigureAwait(true);
         }

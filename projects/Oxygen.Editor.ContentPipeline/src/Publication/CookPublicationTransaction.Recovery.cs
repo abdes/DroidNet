@@ -81,8 +81,24 @@ internal sealed partial class CookPublicationTransaction
     /// <returns>Completion if current root and metadata bytes match their committed identities.</returns>
     public async Task VerifyCommittedAsync(CookOutputWriteLease? writer = null)
     {
-        using var reader = writer is null ? CookOutputLease.AcquireRead(this.project.ProjectRoot) : null;
+        using var reader = writer is null ? await CookOutputLease.AcquireInspectionAsync(this.project.ProjectRoot, CancellationToken.None).ConfigureAwait(false) : null;
         writer?.VerifyOwner(this.project.ProjectRoot);
+        await this.VerifyCommittedUnderLeaseAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Reads a committed journal while the caller's lease excludes publication.</summary>
+    /// <param name="project">The project being inspected.</param>
+    /// <param name="operationId">The journal identity.</param>
+    /// <param name="files">The metadata store.</param>
+    /// <param name="cancellationToken">Cancels inspection.</param>
+    /// <returns>The validated journal.</returns>
+    internal static Task<CookPublicationTransaction> LoadReadOnlyUnderLeaseAsync(ProjectContext project, Guid operationId, IAtomicFileStore files, CancellationToken cancellationToken)
+        => ReadJournalAsync(project, operationId, files, cancellationToken);
+
+    /// <summary>Verifies committed roots and metadata while the caller protects the generation.</summary>
+    /// <returns>Completion after all recorded content has been verified.</returns>
+    internal async Task VerifyCommittedUnderLeaseAsync()
+    {
         if (this.Phase != CookPublicationPhase.Committed)
         {
             throw new InvalidOperationException("The current publication has not committed.");
@@ -96,28 +112,13 @@ internal sealed partial class CookPublicationTransaction
             }
         }
 
-        await this.VerifyCommittedMetadataAsync(writer).ConfigureAwait(false);
+        await this.VerifyCommittedMetadataUnderLeaseAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Reads a committed journal while excluding publication.</summary>
-    /// <param name="project">The project being inspected.</param>
-    /// <param name="operationId">The journal identity.</param>
-    /// <param name="files">The metadata store.</param>
-    /// <param name="cancellationToken">Cancels inspection.</param>
-    /// <returns>The validated journal.</returns>
-    internal static async Task<CookPublicationTransaction> LoadReadOnlyAsync(ProjectContext project, Guid operationId, IAtomicFileStore files, CancellationToken cancellationToken)
-    {
-        using var reader = CookOutputLease.AcquireRead(project.ProjectRoot);
-        return await ReadJournalAsync(project, operationId, files, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Verifies generation metadata independently of product freshness checks.</summary>
-    /// <param name="writer">An already held publication writer, if any.</param>
+    /// <summary>Verifies generation metadata while the caller protects the committed generation.</summary>
     /// <returns>Completion if both committed metadata files are unchanged.</returns>
-    internal async Task VerifyCommittedMetadataAsync(CookOutputWriteLease? writer = null)
+    internal async Task VerifyCommittedMetadataUnderLeaseAsync()
     {
-        using var reader = writer is null ? CookOutputLease.AcquireRead(this.project.ProjectRoot) : null;
-        writer?.VerifyOwner(this.project.ProjectRoot);
         if (this.Phase != CookPublicationPhase.Committed)
         {
             throw new InvalidDataException("The publication has not committed.");

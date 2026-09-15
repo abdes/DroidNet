@@ -96,10 +96,10 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         var committed = false;
         try
         {
-            candidate = await this.mounts.PrepareAsync(next, CookedContentMountService.FindProjectRoots(next), CookOutputLease.AcquireRead(next.ProjectRoot), token).ConfigureAwait(true);
+            candidate = await this.mounts.PrepareAsync(next, CookedContentMountService.FindProjectRoots(next), await CookOutputLease.AcquireReadAsync(next.ProjectRoot, token).ConfigureAwait(true), token).ConfigureAwait(true);
             if (this.engine.State == EngineServiceState.Running)
             {
-                previous = await this.mounts.PrepareAsync(expected, CookedContentMountService.FindProjectRoots(expected), CookOutputLease.AcquireRead(next.ProjectRoot), token).ConfigureAwait(true);
+                previous = await this.mounts.PrepareAsync(expected, CookedContentMountService.FindProjectRoots(expected), await CookOutputLease.AcquireReadAsync(next.ProjectRoot, token).ConfigureAwait(true), token).ConfigureAwait(true);
                 this.coordinator.VerifyWriter(operation);
                 nativeTouched = true;
                 await this.engine.SuspendCookedContentAsync().ConfigureAwait(true);

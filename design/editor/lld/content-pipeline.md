@@ -797,6 +797,11 @@ The transaction is a required ED-M07B contract, not a claim of current code.
    registers the resumed runtime's reader before releasing it. A marker is
    reclaimable only after its file can be opened exclusively; a recorded PID or
    an exit signal alone does not establish released file ownership.
+   Asynchronous readers and publishers wait cancellably for the registration
+   gate using non-throwing contention checks. Finite staging and metadata reads
+   register inspection markers; persistent native readers remain distinct.
+   Verification reuses its caller's lease throughout nested journal, metadata
+   and root reads, so a waiting publisher cannot deadlock a finishing inspection.
 3. Retain previous roots under the same operation's `previous/<Mount>` directory,
    then install validated staging roots at the fixed `.cooked/<Mount>` locations.
    Same-volume directory renames and a journal protect replacement; all affected

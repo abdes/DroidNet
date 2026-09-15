@@ -20,7 +20,7 @@ public sealed partial class CookPublicationService
         for (var attempt = 0; attempt < 3; ++attempt)
         {
             await this.RecoverAsync(project, verifyCommitted: false, cancellationToken).ConfigureAwait(false);
-            var reader = CookOutputLease.AcquireRead(project.ProjectRoot);
+            var reader = await CookOutputLease.AcquireReadAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
             try
             {
                 if (await this.HasAbandonedPublicationAsync(project, cancellationToken).ConfigureAwait(false))
@@ -29,7 +29,7 @@ public sealed partial class CookPublicationService
                     continue;
                 }
 
-                await this.VerifyCurrentReceiptAsync(project, cancellationToken).ConfigureAwait(false);
+                await this.VerifyCurrentReceiptUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
                 return reader;
             }
             catch
@@ -62,7 +62,7 @@ public sealed partial class CookPublicationService
     /// <returns>Whether publication metadata remains trustworthy.</returns>
     internal async Task<bool> HasCommittedMetadataAsync(ProjectContext project, CancellationToken cancellationToken)
     {
-        using var reader = CookOutputLease.AcquireRead(project.ProjectRoot);
+        using var reader = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
         return await this.HasCommittedMetadataUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
     }
 
@@ -86,8 +86,8 @@ public sealed partial class CookPublicationService
                 return false;
             }
 
-            var transaction = await CookPublicationTransaction.LoadReadOnlyAsync(project, receipt.OperationId, files, cancellationToken).ConfigureAwait(false);
-            await transaction.VerifyCommittedMetadataAsync().ConfigureAwait(false);
+            var transaction = await CookPublicationTransaction.LoadReadOnlyUnderLeaseAsync(project, receipt.OperationId, files, cancellationToken).ConfigureAwait(false);
+            await transaction.VerifyCommittedMetadataUnderLeaseAsync().ConfigureAwait(false);
             return true;
         }
         catch (Exception exception) when (exception is InvalidDataException or JsonException or FileNotFoundException or DirectoryNotFoundException)
@@ -147,7 +147,8 @@ public sealed partial class CookPublicationService
 
         if (verifyCommitted)
         {
-            await this.VerifyCurrentReceiptAsync(project, cancellationToken).ConfigureAwait(false);
+            using var reader = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
+            await this.VerifyCurrentReceiptUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -184,9 +185,8 @@ public sealed partial class CookPublicationService
         }
     }
 
-    private async Task VerifyCurrentReceiptAsync(ProjectContext project, CancellationToken cancellationToken)
+    private async Task VerifyCurrentReceiptUnderLeaseAsync(ProjectContext project, CancellationToken cancellationToken)
     {
-        using var reader = CookOutputLease.AcquireRead(project.ProjectRoot);
         var receiptFile = await files.ReadAsync(Path.Combine(project.ProjectRoot, CookPublicationTransaction.PublicationMetadata), cancellationToken).ConfigureAwait(false);
         if (!receiptFile.Version.Exists)
         {
@@ -202,8 +202,8 @@ public sealed partial class CookPublicationService
 
         _ = CookStagingArea.ValidateMounts(receipt.Roots.Select(static root => root.Mount));
         CookOutputLease.RejectReparsePoint(Path.Combine(project.ProjectRoot, ".cooked"));
-        var current = await CookPublicationTransaction.LoadReadOnlyAsync(project, receipt.OperationId, files, cancellationToken).ConfigureAwait(false);
-        await current.VerifyCommittedAsync().ConfigureAwait(false);
+        var current = await CookPublicationTransaction.LoadReadOnlyUnderLeaseAsync(project, receipt.OperationId, files, cancellationToken).ConfigureAwait(false);
+        await current.VerifyCommittedUnderLeaseAsync().ConfigureAwait(false);
 
         foreach (var root in receipt.Roots)
         {

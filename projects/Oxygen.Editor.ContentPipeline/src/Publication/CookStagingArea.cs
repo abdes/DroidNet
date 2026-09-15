@@ -31,7 +31,7 @@ internal sealed partial class CookStagingArea : IDisposable
     public static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, IEnumerable<string> mounts, CancellationToken cancellationToken)
     {
         var names = ValidateMounts(mounts);
-        using var reader = CookOutputLease.AcquireRead(operation.Project.ProjectRoot);
+        using var reader = await CookOutputLease.AcquireInspectionAsync(operation.Project.ProjectRoot, cancellationToken).ConfigureAwait(false);
         var operationDirectory = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"));
         CookOutputLease.RejectReparsePoint(operationDirectory);
         var output = Path.Combine(operationDirectory, "output");
