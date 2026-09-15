@@ -128,7 +128,7 @@ public sealed partial class CookPublicationTransactionTests
         using var project = new PublicationProject(hadPrevious: true);
         using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var external = CookOutputLease.AcquireRead(project.Root);
+        using var external = await CookOutputLease.AcquireReadAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var preview = new Preview(project.Root);
         await using var previewLifetime = preview.ConfigureAwait(false);
         Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken);
@@ -237,13 +237,16 @@ public sealed partial class CookPublicationTransactionTests
             this.reader = null;
         }
 
-        public Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer)
+        public async Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer)
         {
             this.MountCount++;
-            this.reader = writer?.CreateReader() ?? CookOutputLease.AcquireRead(projectRoot);
+            this.reader = writer?.CreateReader() ?? await CookOutputLease.AcquireReadAsync(projectRoot, CancellationToken.None).ConfigureAwait(false);
             this.MountedRoots = roots;
             this.openFiles.AddRange(roots.Select(root => new FileStream(Path.Combine(root, "container.index.bin"), FileMode.Open, FileAccess.Read, FileShare.Read)));
-            return this.FailAllMounts || (this.FailFirstMount && this.MountCount == 1) ? Task.FromException(new IOException("Injected native mount failure")) : Task.CompletedTask;
+            if (this.FailAllMounts || (this.FailFirstMount && this.MountCount == 1))
+            {
+                throw new IOException("Injected native mount failure");
+            }
         }
 
         public Task ResumeAsync()

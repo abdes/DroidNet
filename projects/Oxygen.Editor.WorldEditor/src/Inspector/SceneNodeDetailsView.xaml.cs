@@ -82,20 +82,6 @@ public sealed partial class SceneNodeDetailsView : UserControl
         set => this.SetValue(IsAllComponentsSelectedProperty, value);
     }
 
-    /// <summary>Requests removal of the current unlocked component using the existing document command path.</summary>
-    /// <returns>Whether an applicable removal was requested.</returns>
-    public bool DeleteSelectedComponent()
-    {
-        var component = this.ViewModel?.SelectedComponent;
-        if (component is null || this.ViewModel?.DeleteComponentCommand.CanExecute(component) != true)
-        {
-            return false;
-        }
-
-        this.ViewModel.DeleteComponentCommand.Execute(component);
-        return true;
-    }
-
     /// <summary>
     /// Gets or sets the scene node to display. This control is intended to be used only when a single node is selected.
     /// </summary>
@@ -123,6 +109,20 @@ public sealed partial class SceneNodeDetailsView : UserControl
     {
         get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
         set => this.SetValue(LoggerFactoryProperty, value);
+    }
+
+    /// <summary>Requests removal of the current unlocked component using the existing document command path.</summary>
+    /// <returns>Whether an applicable removal was requested.</returns>
+    public bool DeleteSelectedComponent()
+    {
+        var component = this.ViewModel?.SelectedComponent;
+        if (component is null || this.ViewModel?.DeleteComponentCommand.CanExecute(component) != true)
+        {
+            return false;
+        }
+
+        this.ViewModel.DeleteComponentCommand.Execute(component);
+        return true;
     }
 
     private static void OnLoggerFactoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

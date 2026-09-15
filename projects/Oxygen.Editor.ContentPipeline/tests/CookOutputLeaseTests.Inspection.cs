@@ -37,7 +37,7 @@ public sealed partial class CookOutputLeaseTests
         var publishing = CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token);
         await cancellation.CancelAsync().ConfigureAwait(false);
         _ = await ((Func<Task>)(() => publishing)).Should().ThrowExactlyAsync<TaskCanceledException>().ConfigureAwait(false);
-        using var other = CookOutputLease.AcquireRead(project.Root);
+        using var other = await CookOutputLease.AcquireReadAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         Action synchronousWriter = () => CookOutputLease.AcquireWrite(project.Root).Dispose();
         _ = synchronousWriter.Should().Throw<CookOutputBusyException>();
     }
@@ -48,7 +48,7 @@ public sealed partial class CookOutputLeaseTests
     public async Task PublicationStillRejectsPersistentPreviewReaders()
     {
         using var project = new ProjectDirectory();
-        using var preview = CookOutputLease.AcquireRead(project.Root);
+        using var preview = await CookOutputLease.AcquireReadAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await ((Func<Task>)(() => CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken))).Should().ThrowExactlyAsync<CookOutputBusyException>().ConfigureAwait(false);
     }
 }
