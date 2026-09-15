@@ -238,19 +238,19 @@ public partial class ProjectLayoutViewModel(
     /// <returns>A <see cref="Task"/> representing the asynchronous refresh operation.</returns>
     public async Task NavigateToFolderAsync(IFolder folder)
     {
-        if (this.projectRoot == null)
+        ArgumentNullException.ThrowIfNull(folder);
+        var root = this.projectRoot;
+        var version = ++this.selectionRequestVersion;
+        if (root is null || this.selectionDisposed)
         {
             return;
         }
 
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-        var folderAdapter = await FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot)
-            .ConfigureAwait(true);
-        if (folderAdapter != null)
+        var path = await this.ResolveFolderNavigationPathAsync(root, folder).ConfigureAwait(true);
+        if (path is not null && this.IsSelectionRequestCurrent(version, root))
         {
-            // Use the tree control's selection API to properly select the folder
-            // The tree control will handle updating ContentBrowserState through FolderTreeItemAdapter
-            this.SelectionModel?.SelectItem(folderAdapter);
+            contentBrowserState.SetSelectedFolders([path]);
+            await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
         }
     }
 

@@ -96,7 +96,7 @@ public sealed partial class InspectorControlTests
     {
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking)]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        var projects = CreateQueryProject(cookedMount: true);
         var state = new ContentBrowserState(projects);
         state.SetSelectedFolders(["/Cooked/Content/Materials"]);
         using var model = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
@@ -136,7 +136,7 @@ public sealed partial class InspectorControlTests
         var scenes = new[] { CreateQueryAsset("Main", AssetKind.Scene, AssetCookFreshness.Current), CreateQueryAsset("Second", AssetKind.Scene, AssetCookFreshness.Current) };
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([origin, copy, .. scenes]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        var projects = CreateQueryProject(cookedMount: true);
         var state = new ContentBrowserState(projects);
         state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Materials", StringComparison.Ordinal)).IsSelected = true;
         state.Query.TypeOptions.Single(option => string.Equals(option.Label, "Scenes", StringComparison.Ordinal)).IsSelected = true;
@@ -219,13 +219,13 @@ public sealed partial class InspectorControlTests
         return provider;
     }
 
-    private static ProjectContextService CreateQueryProject()
+    private static ProjectContextService CreateQueryProject(bool cookedMount = false)
     {
         var projects = new ProjectContextService();
         projects.Activate(new()
         {
             ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = "C:/Query",
-            AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [], Scenes = [],
+            AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], Scenes = [],
         });
         return projects;
     }
