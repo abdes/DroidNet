@@ -1,7 +1,7 @@
 # Material sidedness and mirrored geometry correction
 
-Status: in progress. Authorized 2026-09-15. Renderer native validation passed;
-import regression passed. Editor recovery implementation/validation is in progress.
+Status: validated. Authorized and completed 2026-09-15. Engine tests/native demo
+validation preceded editor implementation and integrated editor validation.
 
 ## Contract and fixes
 
@@ -102,8 +102,11 @@ general glTF compliance or complete those workflows.
   geometry bytes, signed transforms, shared/material variants, parent/child
   reflections, retained attachment/animation/morph semantics, and existing full
   scene/light imports. Evidence: `artifacts/sidedness-import-regression-*` logs/XML.
-- Editor recovery implementation is in progress after the native engine gate. Its read-only assessment and
-  test plan are in `artifacts/editor-render-contract-plan.md`.
+- Editor recovery is implemented and validated: 33 native request tests passed,
+  the real editor recovered red material overrides after missing geometry was
+  reimported in the same scene session, sidedness/mirror editing and Undo/Redo
+  passed, and Save/reopen retained rendering. Detailed evidence is in
+  `design/editor/validation/material-sidedness-and-recovery.md` at repository root.
 - Prior diagnosis: `artifacts/imported-triangle-rendering-findings.md`.
 
 ### Separate existing limitations observed during validation

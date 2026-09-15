@@ -677,9 +677,210 @@ void SuccessWaitsForCurrentGeometryAndMaterialApplication() {
   Require(geometry_count == 1, "duplicate geometry completion was acknowledged");
 }
 
+void MaterialRecoversAfterGeometryFailure(bool material_first) {
+  Fixture f;
+  std::vector<uint64_t> geometry_failures;
+  std::vector<uint64_t> geometry_successes;
+  std::vector<uint64_t> material_successes;
+  int material_failures = 0;
+  SetGeometryCommand geometry(f.node.GetHandle(), "retry-geometry");
+  geometry.SetFailureCallback([&](uint64_t generation, const std::string&) {
+    geometry_failures.push_back(generation);
+  });
+  geometry.SetSuccessCallback([&](uint64_t generation) {
+    Require(f.Geometry() == f.a, "geometry recovery acknowledged before application");
+    geometry_successes.push_back(generation);
+  });
+  SetMaterialOverrideCommand material(f.node.GetHandle(), 0, "red");
+  material.SetFailureCallback([&](uint64_t, const std::string&) { ++material_failures; });
+  material.SetSuccessCallback([&](uint64_t generation) {
+    Require(f.CurrentMaterial() == f.red, "material recovery acknowledged before application");
+    material_successes.push_back(generation);
+  });
+  f.Execute(geometry);
+  f.Execute(material);
+  const auto original_geometry = f.geometry_loads.back();
+  const auto original_material = f.material_loads.back();
+  if (material_first) {
+    original_material(f.red, {});
+    f.Drain();
+    Require(material_successes.empty(), "material applied while geometry was loading");
+  }
+  original_geometry({}, "temporary geometry failure");
+  f.Drain();
+  if (!material_first) {
+    original_material(f.red, {});
+    f.Drain();
+  }
+  Require(!f.Geometry(), "failed geometry created an attachment");
+  Require(geometry_failures.size() == 1 && material_successes.empty(),
+          "failure acknowledged an unavailable material application");
+  Require(material_failures == 0, "unavailable geometry rejected an unverified slot");
+
+  // A failed publication refresh settles without discarding authored intent.
+  f.requests->Refresh(*f.scene);
+  Require(f.requests->IsRefreshPending(), "refresh finished before its completions");
+  f.material_loads.back()(f.red, {});
+  f.geometry_loads.back()({}, "geometry still unavailable");
+  f.Drain();
+  Require(!f.requests->IsRefreshPending() && !f.requests->RefreshError().empty(),
+          "failed geometry refresh did not settle with its diagnostic");
+  Require(geometry_failures.size() == 2 && material_successes.empty(),
+          "failed refresh claimed material success");
+
+  f.geometry_cache["retry-geometry"] = f.a;
+  f.material_cache["red"] = f.red;
+  f.requests->Refresh(*f.scene);
+  Require(material_successes.empty(), "cached refresh escaped the mutation boundary");
+  f.Drain();
+  Require(geometry_successes.size() == 1 && material_successes.size() == 1,
+          "publication did not recover both current requests");
+  Require(material_successes.front() > geometry_failures.back(),
+          "recovery did not acknowledge the refreshed material generation");
+  Require(!f.requests->IsRefreshPending() && f.requests->RefreshError().empty(),
+          "successful recovery retained the failed refresh state");
+  original_geometry(f.b, {});
+  original_material(f.blue, {});
+  f.Drain();
+  Require(f.Geometry() == f.a && f.CurrentMaterial() == f.red,
+          "obsolete completions reversed recovered content");
+  Require(geometry_successes.size() == 1 && material_successes.size() == 1
+            && material_failures == 0,
+          "obsolete completions produced another acknowledgement");
+}
+
+void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry() {
+  Fixture f;
+  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Drain();
+  const auto previous_geometry = f.Geometry();
+  Require(previous_geometry && previous_geometry->MeshAt(0)->SubMeshes().size() == 1,
+          "replacement scenario needs a one-slot visible geometry");
+  f.material_cache["red"] = f.red;
+  f.Material("red");
+  f.Drain();
+  int failures = 0;
+  int successes = 0;
+  f.Geometry("replacement");
+  SetMaterialOverrideCommand material(f.node.GetHandle(), 1, "blue");
+  material.SetFailureCallback([&](uint64_t, const std::string&) { ++failures; });
+  material.SetSuccessCallback([&](uint64_t) {
+    Require(f.CurrentMaterial(1) == f.blue, "replacement material acknowledged too early");
+    ++successes;
+  });
+  f.Execute(material);
+  f.material_loads.back()(f.blue, {});
+  f.geometry_loads.back()({}, "replacement load failed");
+  f.Drain();
+  Require(f.Geometry() == previous_geometry && f.CurrentMaterial() == f.red,
+          "failed replacement changed the visible content");
+  Require(failures == 0 && successes == 0,
+          "old geometry decided the failed replacement's slot validity");
+  f.geometry_cache["replacement"] = f.b;
+  f.material_cache["blue"] = f.blue;
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.Geometry() == f.b && f.CurrentMaterial(1) == f.blue,
+          "replacement publication did not apply the pending slot");
+  Require(f.CurrentMaterial() == f.red && successes == 1 && failures == 0,
+          "replacement recovery lost a surviving slot or its acknowledgement");
+}
+
+void LatestMaterialIntentWinsAfterGeometryFailure() {
+  for (const auto clear : { false, true }) {
+    Fixture f;
+    f.Geometry("retry-geometry");
+    int obsolete_successes = 0;
+    SetMaterialOverrideCommand original(f.node.GetHandle(), 0, "red");
+    original.SetSuccessCallback([&](uint64_t) { ++obsolete_successes; });
+    f.Execute(original);
+    const auto original_material = f.material_loads.back();
+    original_material(f.red, {});
+    f.geometry_loads.back()({}, "temporary failure");
+    f.Drain();
+    int latest_successes = 0;
+    SetMaterialOverrideCommand latest(f.node.GetHandle(), 0, clear ? "" : "blue");
+    latest.SetSuccessCallback([&](uint64_t) { ++latest_successes; });
+    f.Execute(latest);
+    if (!clear) {
+      f.material_loads.back()(f.blue, {});
+    }
+    f.Drain();
+    Require(latest_successes == (clear ? 1 : 0),
+            "clear did not apply immediately or material applied without geometry");
+    original_material(f.red, {});
+    f.geometry_cache["retry-geometry"] = f.a;
+    f.material_cache["red"] = f.red;
+    f.material_cache["blue"] = f.blue;
+    f.requests->Refresh(*f.scene);
+    f.Drain();
+    Require(f.Geometry() == f.a && obsolete_successes == 0,
+            "recovery acknowledged superseded material intent");
+    Require(f.CurrentMaterial() == (clear ? oxygen::data::MaterialAsset::CreateDefault() : f.blue),
+            "recovery revived an older material over the latest assignment or None");
+    Require(latest_successes == 1, "latest intent did not receive exactly one acknowledgement");
+  }
+}
+
+void ConfirmedInvalidSlotRequiresNewExplicitAssignment() {
+  Fixture f;
+  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Drain();
+  f.material_cache["red"] = f.red;
+  uint64_t failed_generation = 0;
+  uint64_t applied_generation = 0;
+  int failures = 0;
+  int successes = 0;
+  auto assign = [&] {
+    SetMaterialOverrideCommand material(f.node.GetHandle(), 1, "red");
+    material.SetFailureCallback([&](uint64_t generation, const std::string&) {
+      failed_generation = generation;
+      ++failures;
+    });
+    material.SetSuccessCallback([&](uint64_t generation) {
+      applied_generation = generation;
+      ++successes;
+    });
+    f.Execute(material);
+  };
+  assign();
+  f.Drain();
+  Require(failures == 1 && successes == 0, "known invalid slot was not rejected");
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  f.geometry_cache["replacement"] = f.b;
+  f.Geometry("replacement");
+  f.Drain();
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.CurrentMaterial(1) != f.red && failures == 1 && successes == 0,
+          "publication resurrected a terminally rejected slot");
+  assign();
+  f.Drain();
+  Require(f.CurrentMaterial(1) == f.red && successes == 1 && failures == 1,
+          "explicit fresh assignment did not replace the rejected intent");
+  Require(applied_generation > failed_generation,
+          "explicit assignment reused the rejected request generation");
+}
+
 auto RunScenario(int scenario) -> const char * {
   try {
     switch (scenario) {
+    case 28:
+      MaterialRecoversAfterGeometryFailure(true);
+      break;
+    case 29:
+      MaterialRecoversAfterGeometryFailure(false);
+      break;
+    case 30:
+      FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry();
+      break;
+    case 31:
+      LatestMaterialIntentWinsAfterGeometryFailure();
+      break;
+    case 32:
+      ConfirmedInvalidSlotRequiresNewExplicitAssignment();
+      break;
     case 26:
       SuccessfulRefreshAcknowledgesCurrentGeneration();
       break;
@@ -791,6 +992,21 @@ private:
   }
 
 public:
+  [TestMethod]
+  void LoadedMaterialRecoversAfterGeometryFailure() { Check(28); }
+
+  [TestMethod]
+  void MaterialLoadedAfterGeometryFailureRecovers() { Check(29); }
+
+  [TestMethod]
+  void FailedReplacementPreservesMaterialForItsOwnSlotLayout() { Check(30); }
+
+  [TestMethod]
+  void LatestMaterialOrClearWinsAfterGeometryRecovery() { Check(31); }
+
+  [TestMethod]
+  void ConfirmedInvalidSlotRequiresExplicitReassignment() { Check(32); }
+
   [TestMethod]
   void SuccessfulRefreshAcknowledgesCurrentGeneration() { Check(26); }
 

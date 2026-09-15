@@ -63,6 +63,7 @@ struct SceneAssetRequests::State {
     uint64_t geometry_generation = 0;
     std::string geometry_uri;
     bool geometry_pending = false;
+    bool geometry_failed = false;
     FailureCallback geometry_failure;
     SuccessCallback geometry_success;
     std::unordered_map<std::size_t, Slot> slots;
@@ -175,6 +176,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
   target.geometry_generation = generation;
   target.geometry_uri = uri;
   target.geometry_pending = true;
+  target.geometry_failed = false;
   target.geometry_failure = std::move(on_failure);
   target.geometry_success = std::move(on_success);
   return [inbox = std::weak_ptr(state_->inbox), node,
@@ -317,6 +319,7 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
       }
       target.geometry_pending = false;
       if (!result.geometry_asset || !result.error.empty()) {
+        target.geometry_failed = true;
         state_->Report(
             result.node, target.geometry_uri,
             result.error.empty() ? "asset load failed" : result.error, true,
@@ -370,7 +373,12 @@ void SceneAssetRequests::Drain(scene::Scene &scene) {
     auto renderable = node->GetRenderable();
     const auto geometry = renderable.GetGeometry();
     for (auto &[index, slot] : target.slots) {
-      if (!slot.apply || (target.geometry_pending && slot.material)) {
+      // A failed replacement leaves older geometry visible. Its slot layout
+      // cannot reject material intent for the current geometry request.
+      // Keep loaded materials waiting through unavailable geometry so a later
+      // publication can apply them; clearing still applies immediately.
+      if (!slot.apply || (slot.material &&
+          (target.geometry_pending || target.geometry_failed || !geometry))) {
         continue;
       }
       slot.apply = false;

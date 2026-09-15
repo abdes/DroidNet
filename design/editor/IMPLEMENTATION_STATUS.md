@@ -41,6 +41,10 @@ Current execution:
 1. Finish the remaining ED-M02 single-viewport surface/resize evidence.
 2. ED-M07B is validated. Its [workflow audit](validation/ED-M07B-closeout-audit.md)
    records content discovery/use, publication/recovery and native import evidence.
+   The [material-sidedness/recovery correction](validation/material-sidedness-and-recovery.md)
+   is validated: 148 engine and 33 editor request tests pass, native demo and
+   editor rendering are verified, and material recovery survives cooking in the
+   same scene session plus Undo/Redo and Save/reopen.
 3. Continue through the exact ED-M08 parity, ED-M09 interaction and ED-M10 release
    qualification plans. No later milestone is an entry dependency of an earlier one.
 
