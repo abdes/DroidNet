@@ -2,8 +2,8 @@
 
 Status: **interactive decisions in progress**. The user approved development-only
 qualification, no backward compatibility, captured-sky diffuse/specular lighting,
-overrides for all existing material slots, and emission colour/HDR intensity on
-2026-09-15. Other property choices below are recommendations, not an
+overrides for all existing material slots, emission colour/HDR intensity, and the
+ten-shape creation palette including Capsule on 2026-09-15. Other property choices below are recommendations, not an
 approved package or implemented features. Decide them individually with the user.
 
 ## 1. Recommendation
@@ -42,7 +42,8 @@ model; do not retain legacy fields or runtime fallbacks to accommodate it.
 | Captured-sky lighting with diffuse and roughness-dependent specular reflection | Approved; engine and editor implementation pending |
 | Material overrides for every existing mesh slot | Approved; independent per-instance assignment/clearing, clear restores mesh material; no slot creation/topology editing; implementation pending |
 | Scalar emission colour and HDR intensity | Approved; zero intensity disables emission, no promise of lighting surrounding objects; implementation pending |
-| Primitive picker; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
+| Ten-shape primitive creation palette | Approved; includes Capsule, SubdividedCube advanced, ArrowGizmo internal; migrate/remove GeodesicSphere alias; implementation pending |
+| Primitive defaults; camera; visibility/transform semantics; directional/sun roles; shadow controls; exposure; grading/output; atmosphere controls | Discuss individually; recommendations below are not approval |
 
 For each open decision, present the current Oxygen behaviour, recommended
 canonical design, viable alternatives, implementation cost, industry references
@@ -90,6 +91,26 @@ Verify zero/nonzero/HDR emission and changes under Manual/Auto exposure, with
 ordinary lighting, opacity/masking/blending and bloom. Native-engine evidence
 precedes editor workflow validation; implementation and evidence remain pending.
 
+### Decision 3: ten-shape primitive palette — approved
+
+The user approved Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere
+and Torus in the main creation menu, with SubdividedCube under Advanced.
+ArrowGizmo remains an internal tool resource. Useful GeodesicSphere references
+migrate to IcoSphere; remove the duplicate alias rather than retaining a legacy
+resolver. Migrate useful former ArrowGizmo scene uses to ordinary geometry.
+
+Implement Capsule in the native procedural authority and expose the same recipe
+through direct creation, catalog discovery, cooking and runtime loading. The
+editor consumes native definitions and authoring/tool classifications; it does
+not own a second list of generator names or geometry defaults. This approval
+adds a visual primitive, not physics, animation or a mesh-parameter editor.
+
+Qualify all ten choices through creation/assignment, Save/reopen, cooking and
+native/editor rendering, including material overrides. Verify migrations produce
+canonical identities and the ordinary palette contains no alias/tool rows.
+Dimensions, orientation, pivot and other generation defaults were explicitly
+left to the next decision and are not approved by the palette choice.
+
 ## 2. Approved: development qualification does not ship
 
 The whole standalone validation workflow is development-only, including its
@@ -125,7 +146,7 @@ their content remains useful; they do not remain hidden compatibility state.
 | --- | --- | --- | --- |
 | Hierarchy and transform | Name, parent, local position, rotation in degrees, scale; create/delete/duplicate/reparent, reset and multi-selection | Deliberate world/local transform operations where already supported | Raw quaternion editing, rotation-order selection, pivots, generic Static/mobility and Ignore Parent Transform switches without a complete authoring contract |
 | Visibility and editor state | Explicit **Visible in render**; separate editor selection lock/hide state where supported | Cast/receive shadows when the engine actually honours them | General Enabled semantics across future scripts/physics; do not repurpose `IsActive`, which means loaded in the engine |
-| Geometry | Mesh identity, loading/missing state, Cube/Sphere/Capsule/IcoSphere/Plane/Quad/Cylinder/Cone/Torus, qualified static imports; Capsule is a proposed addition | SubdividedCube; approved existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
+| Geometry | Approved Cube/Sphere/Capsule/IcoSphere/Plane/Quad/Cylinder/Cone/Torus palette; mesh identity, loading/missing state and qualified static imports | Approved SubdividedCube under Advanced; approved existing material slots, assign/clear override, explicit mesh default and engine default | ArrowGizmo as an ordinary asset-creation choice; duplicate GeodesicSphere alias row; adding/removing slots, topology editing, LOD/collision generation |
 | Perspective camera | Pose, **Vertical FOV**, near/far in metres, aspect/frame ratio, explicit authored-camera selection | Preserve non-default aspect and parented cameras | Physical-camera exposure, lens/sensor/DOF controls, orthographic authoring in this slice |
 | Directional lighting | Enabled/affects scene, orientation, colour, illuminance in lux, Cast Shadows | Angular size, labelled according to its actual supported sun-disk/shadow effect | Contact Shadows without an implementation; mobility promises without matching runtime behaviour; per-light exposure compensation as a routine control |
 | Sun selection | One clear scene-level sun reference; clearing it does not disable ordinary directional illumination | Sun-disk visibility | Competing independent sun toggles, additional atmosphere slots and moon authoring |
@@ -141,10 +162,9 @@ M08 merely because a mature engine supports them. Source/import limitations must
 remain explicit. Expanding material overrides does not make imported native scenes
 editable authored scene documents.
 
-Proposed primitive picker: ten canonical generator choices, including a new
-Capsule and keeping SubdividedCube under advanced creation. The smaller alternative
-uses the nine existing authoring generators and defers Capsule. If accepted,
-migrate GeodesicSphere references to IcoSphere
+Approved primitive picker: ten canonical generator choices, including a new
+Capsule and keeping SubdividedCube under advanced creation. Migrate
+GeodesicSphere references to IcoSphere
 and remove the obsolete alias from authoring resolution. ArrowGizmo can remain
 an internal tool resource for its current purpose; useful old scene uses should
 migrate to ordinary geometry. No legacy picker/resolver path remains. Qualify
@@ -162,7 +182,40 @@ These are generator choices, not a claim of distinct default silhouettes.
 Oxygen's current Plane and Quad defaults are both four-vertex XY surfaces; their
 generator parameters differ. Orienting one as a ground grid and the other as an
 upright card requires a separate explicit decision and implementation. The menu
-proposal does not silently change primitive topology, normals or orientation.
+approval does not silently change primitive topology, normals or orientation.
+
+### Decision 4 proposal: primitive defaults — awaiting choice
+
+Keep metres, Z-up and centred origins. Recommend the following starting geometry;
+transform scale remains the ordinary way to size instances in V0.1.
+
+| Primitive | Recommended size | Orientation |
+| --- | --- | --- |
+| Cube / SubdividedCube | 1 m edges | Axis-aligned |
+| Sphere / IcoSphere | 1 m diameter | Z-axis poles where applicable |
+| Cylinder / Cone | 1 m high, 1 m diameter | Long axis Z; cone tip +Z |
+| Capsule | 2 m total height, 1 m diameter | Long axis Z |
+| Torus | 1 m outer diameter, 0.2 m tube diameter | Ring in XY |
+| Plane | 1 m × 1 m | XY ground surface, front +Z |
+| Quad | 1 m × 1 m | Upright XZ card, front −Y |
+
+The viable alternative uses task-sized defaults, notably a 10 m ground Plane
+and 2 m-tall Cylinder, following familiar Unity starting sizes. Consistent sizes
+make transform scale and spatial comparisons easier to predict; larger task-sized
+defaults reduce scaling when building an initial floor or post. The recommended
+2 m Capsule is an explicit rounded-character-placeholder exception, not a promise
+of a character controller. Centred pivots avoid implicit offsets in future shared
+mesh instances; authoring pivot tools remain a separate capability.
+
+Unity and Godot distinguish a horizontal Plane from an upright Quad. Oxygen's
+axes differ, so apply that authoring convention in its Z-up coordinates rather
+than copying axis labels. Current Oxygen Quad vertices are XY despite XZ prose;
+the Torus has 2.5 m outer diameter. The recommendation requires real native
+geometry/default changes and migration, not editor-only rotations or a legacy
+generator mode. These sizes are an Oxygen design choice, not an industry-wide
+metric standard. [Unity primitive defaults](https://docs.unity3d.com/6000.0/Documentation/Manual/PrimitiveObjects.html),
+[Godot Plane](https://docs.godotengine.org/en/stable/classes/class_planemesh.html),
+[Godot Quad](https://docs.godotengine.org/en/stable/classes/class_quadmesh.html).
 
 ### Why these choices
 
@@ -274,8 +327,9 @@ command registration, module initializer or instrumentation ships.
 ## 6. Interactive decision sequence
 
 Captured-sky diffuse/specular lighting, all existing material-slot overrides,
-scalar emission colour/HDR intensity, and the build/migration policies are
-approved; do not ask for them again. Next discuss primitive choices, camera framing, scene participation
+scalar emission colour/HDR intensity, the ten-shape palette, and the build/migration
+policies are approved; do not ask for them again. Next discuss primitive defaults,
+camera framing, scene participation
 and transforms, light/sun roles, shadow controls, exposure, grading/output, and
 atmosphere controls. Split a topic when it contains independent consequential
 choices; do not request a blanket package approval.
