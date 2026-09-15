@@ -168,8 +168,11 @@ auto WindowsFileWriter::OpenFile(const std::filesystem::path& path,
     creation_disposition = OPEN_ALWAYS;
   }
 
-  // Determine share mode
-  DWORD share_mode = options.share_write ? FILE_SHARE_WRITE : 0;
+  // Readers that explicitly share writes may coexist with this writer.
+  // Readers denying writes still block it; share_write independently controls
+  // whether another writer is allowed. Delete/rename sharing remains disabled.
+  DWORD share_mode
+    = FILE_SHARE_READ | (options.share_write ? FILE_SHARE_WRITE : 0);
 
   // Open file with FILE_FLAG_OVERLAPPED for async I/O
   HANDLE file_handle = CreateFileW(path.c_str(), GENERIC_WRITE, share_mode,

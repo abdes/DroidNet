@@ -4,10 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <latch>
 
+#include <Windows.h>
+
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -27,8 +31,11 @@ protected:
   {
     loop_ = std::make_unique<ImportEventLoop>();
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
-    test_dir_
-      = std::filesystem::temp_directory_path() / "oxygen_file_writer_test";
+    static auto sequence = std::atomic_uint64_t { 0U };
+    const auto leaf = "pid-" + std::to_string(GetCurrentProcessId()) + "-case-"
+      + std::to_string(++sequence);
+    test_dir_ = std::filesystem::temp_directory_path()
+      / "oxygen_file_writer_test" / leaf;
     std::filesystem::create_directories(test_dir_);
   }
 
@@ -36,8 +43,17 @@ protected:
   {
     writer_.reset();
     loop_.reset();
+    const auto expected_parent
+      = std::filesystem::temp_directory_path() / "oxygen_file_writer_test";
+    if (test_dir_.empty() || test_dir_.parent_path() != expected_parent) {
+      ADD_FAILURE() << "Refusing to remove an unowned test directory: "
+                    << test_dir_.string();
+      return;
+    }
     std::error_code ec;
     std::filesystem::remove_all(test_dir_, ec);
+    EXPECT_FALSE(ec) << "Failed to remove " << test_dir_.string() << ": "
+                     << ec.message();
   }
 
   //! Convert string to byte span for writing.
@@ -50,8 +66,14 @@ protected:
   auto ReadFileContent(const std::filesystem::path& path) -> std::string
   {
     std::ifstream file(path, std::ios::binary);
-    return std::string(
+    if (!file.is_open()) {
+      ADD_FAILURE() << "Could not open expected output file: " << path.string();
+      return {};
+    }
+    auto content = std::string(
       std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    EXPECT_FALSE(file.bad()) << "Could not read output file: " << path.string();
+    return content;
   }
 
   std::unique_ptr<ImportEventLoop> loop_;
@@ -422,6 +444,116 @@ NOLINT_TEST_F(
 }
 
 //=== Flush Tests ===---------------------------------------------------------//
+
+//! A reader that allows writes must not cause a reciprocal sharing violation.
+NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncAllowsCooperativeReaders)
+{
+  for (const auto share_write : { false, true }) {
+    SCOPED_TRACE(share_write);
+    const auto path = test_dir_
+      / (share_write ? "shared_reader.bin" : "exclusive_reader.bin");
+    const auto original = std::string("original");
+    const auto appended = std::string(" appended");
+    {
+      auto file = std::ofstream(path, std::ios::binary);
+      file << original;
+    }
+    auto* const reader = CreateFileW(path.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL, nullptr);
+    ASSERT_NE(reader, INVALID_HANDLE_VALUE) << GetLastError();
+    [[maybe_unused]] const auto close_reader = oxygen::Finally(
+      [reader]() -> void { static_cast<void>(CloseHandle(reader)); });
+    auto callback_count = 0U;
+    auto callback_error = FileErrorInfo {};
+    auto callback_bytes = uint64_t { 0 };
+    // Run owns this full expression until the coroutine and callbacks drain.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+    co::Run(*loop_, [&]() -> Co<> {
+      writer_->WriteAtAsync(path, original.size(), ToBytes(appended),
+        WriteOptions { .share_write = share_write },
+        [&](const FileErrorInfo& error, const uint64_t count) -> void {
+          ++callback_count;
+          callback_error = error;
+          callback_bytes = count;
+        });
+      const auto result = co_await writer_->Flush();
+      EXPECT_TRUE(result.has_value());
+    });
+    EXPECT_EQ(callback_count, 1U);
+    EXPECT_EQ(callback_error.code, FileError::kOk);
+    EXPECT_EQ(callback_bytes, appended.size());
+    EXPECT_EQ(writer_->PendingCount(), 0U);
+    EXPECT_EQ(ReadFileContent(path), original + appended);
+  }
+}
+
+//! A reader's explicit write exclusion remains authoritative for both modes.
+NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncRejectsReadersDenyingWrites)
+{
+  for (const auto share_write : { false, true }) {
+    SCOPED_TRACE(share_write);
+    const auto path = test_dir_
+      / (share_write ? "protected_shared.bin" : "protected_exclusive.bin");
+    const auto original = std::string("original");
+    {
+      auto file = std::ofstream(path, std::ios::binary);
+      file << original;
+    }
+    auto* const reader = CreateFileW(path.c_str(), GENERIC_READ,
+      FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    ASSERT_NE(reader, INVALID_HANDLE_VALUE) << GetLastError();
+    [[maybe_unused]] const auto close_reader = oxygen::Finally(
+      [reader]() -> void { static_cast<void>(CloseHandle(reader)); });
+    auto callback_count = 0U;
+    auto callback_error = FileErrorInfo {};
+    auto callback_bytes = uint64_t { 1 };
+    // Run owns this full expression until the coroutine and callbacks drain.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+    co::Run(*loop_, [&]() -> Co<> {
+      writer_->WriteAtAsync(path, original.size(), ToBytes("rejected"),
+        WriteOptions { .share_write = share_write },
+        [&](const FileErrorInfo& error, const uint64_t count) -> void {
+          ++callback_count;
+          callback_error = error;
+          callback_bytes = count;
+        });
+      const auto result = co_await writer_->Flush();
+      EXPECT_TRUE(result.has_error());
+      if (result.has_error()) {
+        EXPECT_EQ(result.error().system_error.value(), ERROR_SHARING_VIOLATION);
+      }
+    });
+    EXPECT_EQ(callback_count, 1U);
+    EXPECT_NE(callback_error.code, FileError::kOk);
+    EXPECT_EQ(callback_error.system_error.value(), ERROR_SHARING_VIOLATION);
+    EXPECT_EQ(callback_bytes, 0U);
+    EXPECT_EQ(writer_->PendingCount(), 0U);
+    EXPECT_EQ(ReadFileContent(path), original);
+  }
+}
+
+//! Read sharing does not grant a second writer access when share_write is off.
+NOLINT_TEST_F(WindowsFileWriterTest, WriteAtPreservesExclusiveWriteAccess)
+{
+  const auto path = test_dir_ / "exclusive_writer.bin";
+  auto* const held_writer = CreateFileW(path.c_str(), GENERIC_WRITE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS,
+    FILE_ATTRIBUTE_NORMAL, nullptr);
+  ASSERT_NE(held_writer, INVALID_HANDLE_VALUE) << GetLastError();
+  [[maybe_unused]] const auto close_writer = oxygen::Finally(
+    [held_writer]() -> void { static_cast<void>(CloseHandle(held_writer)); });
+  // Run owns this full expression until the coroutine completes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&]() -> Co<> {
+    const auto result = co_await writer_->WriteAt(path, 0, ToBytes("rejected"));
+    EXPECT_TRUE(result.has_error());
+    if (result.has_error()) {
+      EXPECT_EQ(result.error().system_error.value(), ERROR_SHARING_VIOLATION);
+    }
+  });
+  EXPECT_EQ(std::filesystem::file_size(path), 0U);
+}
 
 //! Verify Flush waits for all pending operations.
 NOLINT_TEST_F(WindowsFileWriterTest, FlushWaitsForAllPending)
