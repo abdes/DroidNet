@@ -97,9 +97,13 @@ and explicit detach/remeter have controlled-input evidence in
 retries the latest submitted status without another owner render; removal also
 retires never-rendered view lifetimes. This increment passes 64 native cases and
 20 service/publication cases each in Debug and Release, plus four focused
-debugger cases; evidence is `lifecycle/status-retry-manifest.json`. Automatic
-detach, source-destruction continuity, inactive-owner request validation and
-implicit lifecycle events remain open; slice 4 is still in progress.
+debugger cases; evidence is `lifecycle/status-retry-manifest.json`.
+Inactive-owner validation now retains rejected dispositions across later mode
+or ownership changes while deferring diagnostics and submitted GPU work. It
+passes 68 native, 20 service, 20 publication and 39 renderer regression cases in
+each configuration, plus four focused debugger cases; evidence is
+`lifecycle/inactive-control-manifest.json`. Automatic detach, source-destruction
+continuity and implicit lifecycle events remain open; slice 4 is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

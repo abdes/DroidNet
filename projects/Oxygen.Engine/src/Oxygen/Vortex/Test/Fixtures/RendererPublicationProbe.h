@@ -17,6 +17,15 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto ExposureStateForView(
+    const PostProcessService& service, CompositionView::ViewStateHandle handle)
+    -> postprocess::ExposurePass::StateLease
+  {
+    const auto found = service.exposure_pass_->exposure_states_.find(handle);
+    return found == service.exposure_pass_->exposure_states_.end()
+      ? nullptr
+      : found->second.latest;
+  }
   static auto EnqueueExposureStatus(PostProcessService& service,
     const ExposureTransitionToken& token,
     postprocess::ExposurePass::StateLease state, const RenderContext& ctx,

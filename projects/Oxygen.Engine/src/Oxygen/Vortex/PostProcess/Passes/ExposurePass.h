@@ -33,6 +33,9 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 struct ExposureTargetData;
+namespace testing {
+  struct RendererPublicationProbe;
+}
 namespace internal {
   template <typename Payload> class PerViewStructuredPublisher;
 }
@@ -58,6 +61,7 @@ public:
     CompositionView::ViewStateHandle handle;
     PostProcessConfig config;
     std::optional<ExposureTransitionToken> transition;
+    std::optional<ExposureTransitionError> rejection;
   };
 
   struct Inputs {
@@ -70,6 +74,7 @@ public:
     bool metering_available { true };
     std::optional<ExposureTransitionToken> transition;
     const Source* source { nullptr };
+    std::optional<ExposureTransitionError> rejection;
   };
 
   struct Result {
@@ -101,6 +106,7 @@ public:
     CompositionView::ViewStateHandle view_state_handle) -> void;
 
 private:
+  friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
   struct PerViewExposureState {
     StateLease latest;
     std::optional<frame::SequenceNumber> submitted_frame;

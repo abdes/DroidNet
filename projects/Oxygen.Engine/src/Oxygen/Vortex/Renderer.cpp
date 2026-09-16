@@ -695,12 +695,50 @@ auto Renderer::CaptureExposureTransition(
   }
   if (entry.captured_frame != frame) {
     entry.captured_frame = frame;
-    entry.captured_request
-      = entry.status && entry.status->phase == ExposureTransitionPhase::kQueued
+    entry.captured_request = entry.status
+        && (entry.status->phase == ExposureTransitionPhase::kQueued
+          || entry.status->phase == ExposureTransitionPhase::kRejected)
       ? std::optional { entry.status->request }
+      : std::nullopt;
+    entry.captured_rejection = entry.status
+        && entry.status->phase == ExposureTransitionPhase::kRejected
+      ? entry.status->error
       : std::nullopt;
   }
   return entry.captured_request;
+}
+
+auto Renderer::CapturedExposureRejection(
+  CompositionView::ViewStateHandle target, frame::SequenceNumber frame) const
+  -> std::optional<ExposureTransitionError>
+{
+  std::shared_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(target);
+  return found != exposure_transitions_.end()
+      && found->second.captured_frame == frame
+    ? found->second.captured_rejection
+    : std::nullopt;
+}
+
+auto Renderer::RejectUnsubmittedExposureTransition(
+  const ExposureTransitionToken& token, const ExposureTransitionError error)
+  -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(token.target);
+  if (found == exposure_transitions_.end()
+    || found->second.lifetime != token.lifetime
+    || found->second.submitted_generation >= token.generation
+    || found->second.captured_request != token
+    || found->second.captured_rejection)
+    return;
+  auto& entry = found->second;
+  entry.captured_rejection = error;
+  if (entry.status && entry.status->request == token
+    && entry.status->phase == ExposureTransitionPhase::kQueued) {
+    entry.status->phase = ExposureTransitionPhase::kRejected;
+    entry.status->error = error;
+  }
 }
 
 auto Renderer::MarkExposureTransitionSubmitted(
@@ -2098,16 +2136,56 @@ auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
 auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
   -> std::optional<ExposureSourceIntent>
 {
+  const auto default_mode = GetRenderMode();
+  const bool diagnostic = GetShaderDebugMode() != ShaderDebugMode::kDisabled;
   std::shared_lock registration_lock(view_registration_mutex_);
   std::shared_lock state_lock(view_state_mutex_);
   const auto* root = ResolvePublishedExposureRootLocked(source_view_id);
   if (!root || root->published_view_id != source_view_id)
     return std::nullopt;
   const auto view = resolved_views_.find(source_view_id);
-  return ExposureSourceIntent { .handle = root->view_state_handle,
+  return ExposureSourceIntent { .view_id = root->published_view_id,
+    .handle = root->view_state_handle,
+    .owner = root->view_state_handle,
     .settings = root->exposure_override,
     .camera_ev = view != resolved_views_.end() ? view->second.CameraEv()
-                                               : std::optional<float> {} };
+                                               : std::optional<float> {},
+    .diagnostic = diagnostic
+      || root->render_mode_override.value_or(default_mode)
+        == RenderMode::kWireframe
+      || root->feature_profile
+        == CompositionView::ViewFeatureProfile::kDiagnosticsOnly };
+}
+
+auto Renderer::GetRegisteredExposureIntents() const
+  -> std::vector<ExposureSourceIntent>
+{
+  const auto default_mode = GetRenderMode();
+  const bool diagnostic = GetShaderDebugMode() != ShaderDebugMode::kDisabled;
+  std::shared_lock registration_lock(view_registration_mutex_);
+  std::shared_lock state_lock(view_state_mutex_);
+  auto intents = std::vector<ExposureSourceIntent> {};
+  intents.reserve(published_runtime_views_by_intent_.size());
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.view_state_handle == CompositionView::kInvalidViewStateHandle)
+      continue;
+    const auto* root
+      = ResolvePublishedExposureRootLocked(state.published_view_id);
+    CHECK_NOTNULL_F(root);
+    const auto view = resolved_views_.find(state.published_view_id);
+    intents.push_back({ .view_id = state.published_view_id,
+      .handle = state.view_state_handle,
+      .owner = root->view_state_handle,
+      .settings = state.exposure_override,
+      .camera_ev = view != resolved_views_.end() ? view->second.CameraEv()
+                                                 : std::optional<float> {},
+      .diagnostic = diagnostic
+        || state.render_mode_override.value_or(default_mode)
+          == RenderMode::kWireframe
+        || state.feature_profile
+          == CompositionView::ViewFeatureProfile::kDiagnosticsOnly });
+  }
+  return intents;
 }
 
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)

@@ -78,6 +78,7 @@ protected:
   auto TearDown() -> void override
   {
     FlushBackend();
+    registered_targets_.clear();
     last_state_.reset();
     pass_.reset();
     if (renderer_) {
@@ -281,6 +282,28 @@ protected:
   {
     pass_->RemoveViewState(ctx_.current_view.view_state_handle);
   }
+  auto PublishExposureOwner(engine::FrameContext& frame, const ViewId intent_id,
+    CompositionView::ViewStateHandle handle, scene::ExposureSettings settings,
+    ViewId source = kInvalidViewId, bool diagnostic = false) -> ViewId
+  {
+    auto texture = CreateRegisteredTexture(TextureDesc { .width = 4U,
+      .height = 4U,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    auto target = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(texture));
+    registered_targets_.push_back(target);
+    auto view = CompositionView {};
+    view.id = intent_id;
+    view.view_state_handle = handle;
+    view.render_settings.exposure = std::move(settings);
+    view.exposure_source_view_id = source;
+    view.force_wireframe = diagnostic;
+    return renderer_->PublishRuntimeCompositionView(frame,
+      { .composition_view = view,
+        .render_target = observer_ptr { target.get() } });
+  }
   auto SharedConfig(scene::ExposureSettings settings = {},
     std::optional<float> camera_ev = {}) -> PostProcessConfig
   {
@@ -312,6 +335,7 @@ protected:
       *result.exposure_buffer, ResourceStates::kShaderResource);
   }
   std::unique_ptr<Renderer> renderer_;
+  std::vector<std::shared_ptr<Framebuffer>> registered_targets_;
   std::unique_ptr<postprocess::ExposurePass> pass_;
   RenderContext ctx_;
   std::uint64_t sequence_ { 0U };
@@ -1731,6 +1755,145 @@ NOLINT_TEST_F(
   EXPECT_EQ(status->request, *pending);
   EXPECT_EQ(status->phase, ExposureTransitionPhase::kQueued);
   EXPECT_EQ(status->applied_generation, submitted->generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, InactiveInvalidRequestsCannotReactivateAfterSettingsChange)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  const auto signal = Uniform(.25F, 4U, 4U);
+  for (unsigned kind = 0U; kind < 3U; ++kind) {
+    const auto handle = CompositionView::ViewStateHandle { 50U + kind };
+    const auto intent = ViewId { 50U + kind };
+    auto settings = scene::ExposureSettings {};
+    settings.key = 12.5F;
+    settings.mode = kind == 0U ? engine::ExposureMode::kManual
+                               : engine::ExposureMode::kAuto;
+    settings.enabled = kind != 1U;
+    const auto view = PublishExposureOwner(frame, intent, handle, settings);
+    ASSERT_NE(view, kInvalidViewId);
+    const auto token = renderer_->QueueExposureTransition(handle,
+      ExposureTransitionPolicy::kSeedFromEv100, kind == 2U ? 1000.0F : 8.0F);
+    ASSERT_TRUE(token.has_value());
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    service.CaptureRegisteredExposureControls(ctx_);
+    const auto rejected = renderer_->InspectExposureTransition(handle);
+    ASSERT_TRUE(rejected.has_value());
+    EXPECT_EQ(rejected->phase, ExposureTransitionPhase::kRejected);
+    EXPECT_EQ(rejected->error,
+      kind == 2U ? ExposureTransitionError::kUnsupportedSeed
+                 : ExposureTransitionError::kNotAuto);
+    settings.enabled = true;
+    settings.mode = engine::ExposureMode::kAuto;
+    if (kind == 2U) {
+      // The formerly unsupported seed would now produce gain one; the locked
+      // target instead produces 1/16. A rejected generation must remain
+      // rejected.
+      settings.compensation_ev = 1000.0F;
+      settings.min_ev = settings.max_ev = 1004.0F;
+    }
+    ASSERT_EQ(PublishExposureOwner(frame, intent, handle, settings), view);
+    ctx_.current_view.view_id = view;
+    ctx_.current_view.view_state_handle = handle;
+    EXPECT_NEAR(ServicePixel(service, signal, settings),
+      kind == 2U ? .25F / 16.0F : .18F, 2e-5F);
+    const auto state
+      = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        service, handle);
+    ASSERT_NE(state, nullptr);
+    const auto gpu = Read<ExposureStateData>(
+      *state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(gpu.requested_generation[0], token->generation);
+    EXPECT_EQ(gpu.applied_generation[0], 0U);
+    EXPECT_NE(gpu.flags & (1U << 12U), 0U);
+    EXPECT_EQ(renderer_->RetryExposureTransition(*token),
+      ExposureTransitionPhase::kRejected);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, InactiveModeValidationCannotRejectAnObservedSubmission)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  const auto handle = CompositionView::ViewStateHandle { 50U };
+  const auto view
+    = PublishExposureOwner(frame, ViewId { 50U }, handle, settings);
+  ctx_.current_view.view_id = view;
+  ctx_.current_view.view_state_handle = handle;
+  const auto token = renderer_->QueueExposureTransition(
+    handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  Run(Uniform(.25F), settings, 0.0F, nullptr, 1.0F, true, *token);
+  service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+  vortex::testing::RendererPublicationProbe::EnqueueExposureStatus(
+    service, *token, last_state_, ctx_, sequence_);
+  settings.mode = engine::ExposureMode::kManual;
+  PublishExposureOwner(frame, ViewId { 50U }, handle, settings);
+  service.CaptureRegisteredExposureControls(ctx_);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    ExposureTransitionPhase::kQueued);
+  WaitForQueueIdle();
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    ExposureTransitionPhase::kApplied);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, InactiveDiagnosticOwnerPreservesPendingRequest)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = engine::ExposureMode::kManual;
+  const auto handle = CompositionView::ViewStateHandle { 50U };
+  const auto view = PublishExposureOwner(
+    frame, ViewId { 50U }, handle, settings, kInvalidViewId, true);
+  const auto token = renderer_->QueueExposureTransition(
+    handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  service.CaptureRegisteredExposureControls(ctx_);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    ExposureTransitionPhase::kQueued);
+  settings.mode = engine::ExposureMode::kAuto;
+  PublishExposureOwner(frame, ViewId { 50U }, handle, settings);
+  ctx_.current_view.view_id = view;
+  ctx_.current_view.view_state_handle = handle;
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), settings),
+    .25F / 256.0F, 2e-5F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, InactiveSharingConsumerRequestStaysRejectedAfterDetach)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  PublishExposureOwner(
+    frame, ViewId { 50U }, CompositionView::ViewStateHandle { 50U }, settings);
+  const auto handle = CompositionView::ViewStateHandle { 60U };
+  const auto view = PublishExposureOwner(
+    frame, ViewId { 60U }, handle, settings, ViewId { 50U });
+  const auto token = renderer_->QueueExposureTransition(
+    handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  service.CaptureRegisteredExposureControls(ctx_);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->error,
+    ExposureTransitionError::kSharedConsumer);
+  PublishExposureOwner(frame, ViewId { 60U }, handle, settings);
+  ctx_.current_view.view_id = view;
+  ctx_.current_view.view_state_handle = handle;
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U), settings), .18F, 2e-5F);
+  EXPECT_EQ(renderer_->RetryExposureTransition(*token),
+    ExposureTransitionPhase::kRejected);
 }
 
 } // namespace

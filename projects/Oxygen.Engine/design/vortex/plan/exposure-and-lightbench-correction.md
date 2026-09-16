@@ -1049,8 +1049,16 @@ queued lifetimes even before renderer/GPU state exists. The native suite passes
 and four focused debugger cases have no blocking graphics messages. The final
 submission-observation guard also passes the four affected Debug cases. Evidence
 is `lifecycle/status-retry-manifest.json`.
-Automatic detachment, destruction continuity, inactive-owner request validation
-and implicit lifecycle events remain open; slice 4 is not qualified.
+Registered inactive owners now validate captured settings/mode and ownership at
+the pre-render boundary. Never-submitted invalid requests stay rejected across
+later settings or ownership changes; already-submitted requests await GPU
+completion, and diagnostics defer pending intent. Rejected dispositions are
+carried into later GPU records without application. Debug and Release each pass
+68/68 native tests, 20/20 service tests, 20/20 publication tests and 39/39 renderer
+regressions. Four inactive-owner CDB cases have no blocking graphics messages.
+Evidence is `lifecycle/inactive-control-manifest.json`.
+Automatic detachment, destruction continuity and implicit lifecycle events
+remain open; slice 4 is not qualified.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
 
@@ -1061,9 +1069,9 @@ slice 5 work.
   behavior and manual-to-auto continuity by retaining gain.
   Remaining lifecycle coverage must include default detach/remeter, destroyed
   source continuity (including borrowed zero and never-rendered source fallback),
-  and rejecting inactive-owner requests that are invalid for captured
-  settings/mode. Acknowledgement after readback backpressure and owner inactivity
-  is covered by the status-retry checkpoint above.
+  and lifetime-safe shared prior-state selection when a handle is reused.
+  Inactive-owner validation and acknowledgement after readback backpressure are
+  covered by the checkpoints above.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,

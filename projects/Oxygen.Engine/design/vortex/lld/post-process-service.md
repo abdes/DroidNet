@@ -44,6 +44,15 @@ are superseded without reactivating them. Conflicting latest-token payloads
 and unknown/lifetime-mismatched identities are rejected. Shutdown clears the
 registry and rejects new requests/retries. Status contains no numerical gain.
 
+The pre-render capture boundary also snapshots registered inactive views.
+Requests that have never been submitted can be rejected there for accepted
+mode/settings or ownership violations. A submitted request remains governed by
+its completed GPU status; a later mode change cannot reclassify it. Diagnostic
+overrides defer validation/application. A rejected disposition remains attached
+to its generation and is carried into later GPU records, so a later valid mode,
+seed range or independent ownership cannot reactivate it. The GPU requested
+generation still records that disposition without claiming application.
+
 Explicit seeds resolve a positive log gain from the validated Auto settings at
 the requested EV, without clamping that EV to metering bounds or constructing
 linear seed luminance. Zero target uses nominal middle grey for the latent
@@ -397,7 +406,8 @@ No separate mask loader, texture cache or upload allocator is introduced.
 The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefix
 is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
 (Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
-bit 0, source initialization fallback bit 1), request generation uint2 at 80,
+bit 0, source initialization fallback bit 1, captured rejection reason in bits
+2..5), request generation uint2 at 80,
 policy at 88 (none=0, Preserve=1, Remeter=2, Seed=3), seed log gain at 92,
 status UAV at 96, borrowed prior-state SRV at 100 (invalid for owner solves),
 and view lifetime uint2 at 104. State flags add mode in bits 10..11,

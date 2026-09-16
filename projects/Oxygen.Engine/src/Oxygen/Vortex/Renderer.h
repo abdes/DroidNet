@@ -714,12 +714,18 @@ private:
     std::optional<ExposureTransitionStatus> status;
     std::optional<frame::SequenceNumber> captured_frame;
     std::optional<ExposureTransitionToken> captured_request;
+    std::optional<ExposureTransitionError> captured_rejection;
   };
   std::unordered_map<CompositionView::ViewStateHandle, ExposureTransitionEntry>
     exposure_transitions_;
 
   auto CaptureExposureTransition(CompositionView::ViewStateHandle target,
     frame::SequenceNumber frame) -> std::optional<ExposureTransitionToken>;
+  auto CapturedExposureRejection(
+    CompositionView::ViewStateHandle target, frame::SequenceNumber frame) const
+    -> std::optional<ExposureTransitionError>;
+  auto RejectUnsubmittedExposureTransition(const ExposureTransitionToken& token,
+    ExposureTransitionError error) -> void;
   auto CompleteExposureTransition(const ExposureTransitionToken& token,
     std::uint64_t applied_generation,
     std::optional<ExposureTransitionError> rejection) -> void;
@@ -730,12 +736,17 @@ private:
   auto RetireExposureTransitions(CompositionView::ViewStateHandle target)
     -> void;
   struct ExposureSourceIntent {
+    ViewId view_id { kInvalidViewId };
     CompositionView::ViewStateHandle handle;
+    CompositionView::ViewStateHandle owner;
     std::optional<scene::ExposureSettings> settings;
     std::optional<float> camera_ev;
+    bool diagnostic { false };
   };
   auto GetExposureSourceIntent(ViewId source_view_id) const
     -> std::optional<ExposureSourceIntent>;
+  auto GetRegisteredExposureIntents() const
+    -> std::vector<ExposureSourceIntent>;
 
   struct PublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };
