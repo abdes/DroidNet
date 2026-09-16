@@ -51,11 +51,16 @@ class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
   bool fail_next_exposure_recorder { false };
+  bool fail_next_frame_recorder { false };
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, bool immediate = true)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>> override
   {
+    if (fail_next_frame_recorder && name == "Vortex Exposure Frame") {
+      fail_next_frame_recorder = false;
+      return { nullptr, [](graphics::CommandRecorder*) { } };
+    }
     if (fail_next_exposure_recorder && name == "Vortex Exposure") {
       fail_next_exposure_recorder = false;
       return { nullptr, [](graphics::CommandRecorder*) { } };
@@ -2886,6 +2891,240 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(ExposureGpuTest, OffscreenFacadeSharesRootInsideFrame)
 {
   CheckOffscreenSharing(true);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameResolvePinsManualGainAndDistinctInFlightRecords)
+{
+  const auto capture = BeginOptionalCapture();
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 14.0F;
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto first = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(first, nullptr);
+  settings.manual_ev = 4.0F;
+  EXPECT_EQ(pass_->ResolveFrame(ctx_, SharedConfig(settings), {}), first);
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  ctx_.frame_slot = frame::Slot { 1U };
+  const auto second = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(second, nullptr);
+  EXPECT_NE(first->buffer, second->buffer);
+  const auto a
+    = Read<FrameExposureData>(*first->buffer, ResourceStates::kShaderResource);
+  const auto b
+    = Read<FrameExposureData>(*second->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(a.pre_exposure, 0x1p-14F);
+  EXPECT_EQ(a.one_over_pre_exposure, 0x1p14F);
+  EXPECT_EQ(a.global_exposure_state_slot, first->current_state->srv_index);
+  EXPECT_EQ(b.pre_exposure, 0x1p-4F);
+  EXPECT_EQ(b.flags, 0U);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *first->current_state->buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-14F);
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameResolveUsesGpuPriorGainAndPositiveLatentAfterZero)
+{
+  auto settings = scene::ExposureSettings {};
+  const auto signal = Uniform(.25F);
+  const auto initial = Run(signal, settings);
+  settings.target_luminance = 0.0F;
+  Run(signal, settings);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto resolved = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(resolved, nullptr);
+  const auto frame = Read<FrameExposureData>(
+    *resolved->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(frame.pre_exposure, initial.state.latent_scale);
+  EXPECT_NEAR(frame.pre_exposure * frame.one_over_pre_exposure, 1.0F, 2e-6F);
+  EXPECT_EQ(frame.flags, 0U);
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 20U };
+  const auto fresh = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(fresh, nullptr);
+  const auto bootstrap
+    = Read<FrameExposureData>(*fresh->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(bootstrap.pre_exposure, 1.0F);
+  EXPECT_EQ(bootstrap.flags, 1U);
+  const auto zero = Read<ExposureStateData>(
+    *fresh->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(zero.displayed_scale, 0.0F);
+  EXPECT_GT(zero.latent_scale, 0.0F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, FrameResolveBorrowsPriorRootAndTagsRootFallback)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto signal = Uniform(.25F);
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 10U };
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto prior = RecordShared(signal, SharedConfig(settings));
+  ASSERT_TRUE(prior.executed);
+  auto source = postprocess::ExposurePass::Source { .handle
+    = ctx_.current_view.view_state_handle,
+    .config = SharedConfig(settings) };
+  settings.manual_ev = 8.0F;
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  ASSERT_TRUE(RecordShared(signal, SharedConfig(settings)).executed);
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 20U };
+  const auto borrowed
+    = pass_->ResolveFrame(ctx_, SharedConfig(), { .source = &source });
+  ASSERT_NE(borrowed, nullptr);
+  const auto frame = Read<FrameExposureData>(
+    *borrowed->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(frame.pre_exposure, 0x1p-4F);
+  EXPECT_EQ(frame.global_exposure_state_slot, prior.state->srv_index);
+  EXPECT_EQ(frame.flags, 2U);
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 21U };
+  source.handle = CompositionView::ViewStateHandle { 30U };
+  source.config = SharedConfig(settings);
+  const auto fallback
+    = pass_->ResolveFrame(ctx_, SharedConfig(), { .source = &source });
+  ASSERT_NE(fallback, nullptr);
+  const auto fallback_frame = Read<FrameExposureData>(
+    *fallback->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(fallback_frame.pre_exposure, 1.0F);
+  EXPECT_EQ(fallback_frame.flags, 11U);
+  const auto fallback_state = Read<ExposureStateData>(
+    *fallback->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(fallback_state.displayed_scale, 0x1p-8F);
+  EXPECT_EQ(fallback_state.applied_generation[0], 0U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameResolveSeedsWithoutAcknowledgingAndRetriesRecordingFailure)
+{
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto seed
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 12.0F);
+  ASSERT_TRUE(seed.has_value());
+  static_cast<ExposureFailureGraphics&>(Backend()).fail_next_frame_recorder
+    = true;
+  EXPECT_EQ(pass_->ResolveFrame(ctx_, SharedConfig(),
+              { .transition = *seed, .lifetime = seed->lifetime }),
+    nullptr);
+  const auto resolved = pass_->ResolveFrame(
+    ctx_, SharedConfig(), { .transition = *seed, .lifetime = seed->lifetime });
+  ASSERT_NE(resolved, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*resolved->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    0x1p-12F);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *resolved->current_state->buffer, ResourceStates::kShaderResource)
+              .applied_generation[0],
+    0U);
+  EXPECT_EQ(renderer_->InspectExposureTransition(seed->target)->phase,
+    ExposureTransitionPhase::kQueued);
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  const auto fp32 = pass_->ResolveFrame(ctx_, SharedConfig(),
+    { .use_fp32 = true, .transition = *seed, .lifetime = seed->lifetime });
+  ASSERT_NE(fp32, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*fp32->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    1.0F);
+  ctx_.frame_sequence = frame::SequenceNumber { 3U };
+  auto diagnostic = SharedConfig();
+  diagnostic.temporary_unit_exposure = true;
+  const auto unit = pass_->ResolveFrame(ctx_, diagnostic, {});
+  ASSERT_NE(unit, nullptr);
+  const auto unit_frame
+    = Read<FrameExposureData>(*unit->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(unit_frame.pre_exposure, 1.0F);
+  EXPECT_EQ(unit_frame.flags, 4U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameResolvePinsQualifiedCandidateAndRejectsIneligibleCandidate)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto seed = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(seed, nullptr);
+  auto candidate = ExposureStateData {};
+  candidate.flags = 1U | 256U;
+  candidate.fp16_candidate_pre_exposure = 0.125F;
+  candidate.fp16_eligible_streak = 2U;
+  auto upload = CreateUploadBuffer(SizeBytes { sizeof(candidate) });
+  upload->Update(&candidate, sizeof(candidate), 0U);
+  {
+    auto recorder = AcquireRecorder("Qualified candidate fixture");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(
+      recorder->AdoptKnownResourceState(*seed->current_state->buffer));
+    recorder->RequireResourceState(
+      *seed->current_state->buffer, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBuffer(
+      *seed->current_state->buffer, 0U, *upload, 0U, sizeof(candidate));
+    recorder->RequireResourceStateFinal(
+      *seed->current_state->buffer, ResourceStates::kShaderResource);
+  }
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  const auto resolved = pass_->ResolveFrame(ctx_, SharedConfig(settings),
+    { .qualified_candidate = seed->current_state });
+  ASSERT_NE(resolved, nullptr);
+  const auto frame = Read<FrameExposureData>(
+    *resolved->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(frame.pre_exposure, 0.125F);
+  EXPECT_EQ(frame.one_over_pre_exposure, 8.0F);
+  EXPECT_EQ(frame.flags, 0U);
+  ctx_.frame_sequence = frame::SequenceNumber { 3U };
+  const auto invalid = pass_->ResolveFrame(ctx_, SharedConfig(settings),
+    { .qualified_candidate = resolved->current_state });
+  ASSERT_NE(invalid, nullptr);
+  const auto invalid_frame = Read<FrameExposureData>(
+    *invalid->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(invalid_frame.pre_exposure, 1.0F);
+  EXPECT_EQ(invalid_frame.flags, 1U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameResolvePreservesOperationalEndpointsAndCameraGain)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  for (const float ev : { -32.0F, 32.0F }) {
+    settings.manual_ev = ev;
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto resolved = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    ASSERT_NE(resolved, nullptr);
+    const auto frame = Read<FrameExposureData>(
+      *resolved->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(frame.pre_exposure, std::exp2(-ev));
+    EXPECT_EQ(frame.one_over_pre_exposure, std::exp2(ev));
+  }
+  settings.mode = engine::ExposureMode::kManualCamera;
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto camera
+    = pass_->ResolveFrame(ctx_, SharedConfig(settings, 16.0F), {});
+  ASSERT_NE(camera, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*camera->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    0x1p-16F);
+  settings.enabled = false;
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto disabled
+    = pass_->ResolveFrame(ctx_, SharedConfig(settings, 16.0F), {});
+  ASSERT_NE(disabled, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*disabled->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    1.0F);
 }
 
 } // namespace
