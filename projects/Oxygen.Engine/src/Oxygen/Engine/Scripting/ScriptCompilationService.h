@@ -111,6 +111,7 @@ private:
     uint32_t compression { 0 };
     uint32_t origin { 0 };
     uint64_t content_hash { 0 };
+    uint64_t payload_checksum { 0 };
   };
 
   OXGN_NGIN_NDAPI auto ExecuteCompileRequest(CompileKey compile_key,
@@ -130,7 +131,7 @@ private:
     std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void;
   OXGN_NGIN_API auto PersistCacheSnapshot(const std::vector<
     std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>& snapshot)
-    -> void;
+    -> bool;
   OXGN_NGIN_API auto EnqueueCompletion(
     CompileKey compile_key, const Result& result) -> void;
   OXGN_NGIN_API auto DrainCompletions() -> void;
@@ -150,6 +151,7 @@ private:
   mutable std::mutex l1_cache_mutex_;
   AnyCache<uint64_t, oxygen::LruEviction<uint64_t>> l1_cache_;
   std::filesystem::path persistent_cache_path_;
+  std::mutex persistent_flush_mutex_;
   mutable std::mutex persistent_cache_mutex_;
   std::unordered_map<CompileKey, PersistentIndexEntry> persistent_index_;
   std::unordered_map<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>

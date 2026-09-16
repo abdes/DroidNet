@@ -5,15 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <span>
 #include <thread>
 
+#ifdef _WIN32
+#  include <Windows.h>
+#endif
+
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/EngineTag.h>
@@ -302,6 +311,270 @@ auto CorruptCacheMagic(const std::filesystem::path& path) -> void
   stream.seekp(kMagicOffset, std::ios::beg);
   stream.write(&kCorruptByte, 1);
   stream.flush();
+}
+
+auto CompileAndStop(ScriptCompilationService& service, TestEventLoop& loop,
+  const uint64_t key, std::vector<uint8_t> source) -> ScriptCompileResult
+{
+  ScriptCompileResult result;
+  // NOLINTNEXTLINE(*capturing-lambda-*)
+  oxygen::co::Run(loop, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
+      service.Run();
+      result = co_await service.CompileAsync(ScriptCompilationService::Request {
+        .compile_key = ScriptCompilationService::CompileKey { key },
+        .source = MakeSourceBlob(std::move(source)),
+      });
+      service.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+  return result;
+}
+
+auto CompileIntoPersistentCache(const std::filesystem::path& path,
+  const uint64_t key, std::vector<uint8_t> source, std::atomic<int>& calls)
+  -> ScriptCompileResult
+{
+  TestEventLoop loop;
+  ScriptCompilationService service(observer_ptr<ThreadPool> {}, path);
+  EXPECT_TRUE(service.RegisterCompiler(
+    std::make_shared<SourceSizedCountingCompiler>(calls)));
+  return CompileAndStop(service, loop, key, std::move(source));
+}
+
+auto CacheIndexOffset(const std::filesystem::path& path) -> uint64_t
+{
+  std::ifstream input(path, std::ios::binary);
+  input.seekg(16);
+  std::array<char, sizeof(uint64_t)> bytes {};
+  input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  EXPECT_TRUE(input.good());
+  return std::bit_cast<uint64_t>(bytes);
+}
+
+template <typename T>
+auto OverwriteCacheField(const std::filesystem::path& path,
+  const uint64_t offset, const T value) -> void
+{
+  std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+  ASSERT_TRUE(file.is_open());
+  file.seekp(static_cast<std::streamoff>(offset));
+  const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
+  file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  file.flush();
+  ASSERT_TRUE(file.good());
+}
+
+#ifdef _WIN32
+NOLINT_TEST(ScriptCompilationServiceTest,
+  PersistentCacheFailedPublicationCanRetryWithoutDroppingPendingResults)
+{
+  for (const auto deferred : { false, true }) {
+    const auto path = MakeTempCachePath();
+    std::atomic<int> calls = 0;
+    ASSERT_TRUE(CompileIntoPersistentCache(path, 100U, { 1 }, calls).success);
+    const auto read_file = [&path]() -> std::vector<char> {
+      std::ifstream input(path, std::ios::binary);
+      return { std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>() };
+    };
+    const auto previous_file = read_file();
+    ASSERT_FALSE(previous_file.empty());
+
+    TestEventLoop loop;
+    ScriptCompilationService service(observer_ptr<ThreadPool> {}, path);
+    service.SetDeferredPersistence(deferred);
+    EXPECT_TRUE(service.RegisterCompiler(
+      std::make_shared<SourceSizedCountingCompiler>(calls)));
+
+    // A reader that permits reads/writes but not deletion deterministically
+    // prevents MoveFileEx replacement while leaving the old cache readable.
+    auto blocker = CreateFileW(path.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL, nullptr);
+    ASSERT_NE(blocker, INVALID_HANDLE_VALUE);
+    const auto close_blocker
+      = oxygen::ScopeGuard([&blocker]() noexcept -> void {
+          if (blocker != INVALID_HANDLE_VALUE) {
+            CloseHandle(blocker);
+          }
+        });
+
+    // NOLINTNEXTLINE(*capturing-lambda-*)
+    oxygen::co::Run(loop, [&]() -> Co<> {
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
+        service.Run();
+        for (const auto key : { 200U, 300U }) {
+          const auto result
+            = co_await service.CompileAsync(ScriptCompilationService::Request {
+              .compile_key = ScriptCompilationService::CompileKey { key },
+              .source = MakeSourceBlob({ static_cast<uint8_t>(key / 100U) }),
+            });
+          EXPECT_TRUE(result.success);
+          service.FlushPersistentCache();
+          EXPECT_EQ(read_file(), previous_file);
+        }
+        EXPECT_NE(CloseHandle(blocker), FALSE);
+        blocker = INVALID_HANDLE_VALUE;
+        service.FlushPersistentCache();
+        service.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    });
+    EXPECT_EQ(calls.load(), 3);
+
+    // No compiler is registered after restart: both failed/newer pending
+    // entries and the previously published entry must be served from disk.
+    for (const auto key : { 100U, 200U, 300U }) {
+      TestEventLoop replay_loop;
+      ScriptCompilationService reader(observer_ptr<ThreadPool> {}, path);
+      const auto result = CompileAndStop(reader, replay_loop, key, { 0 });
+      ASSERT_TRUE(result.success);
+      ASSERT_NE(result.bytecode, nullptr);
+      EXPECT_TRUE(std::ranges::equal(result.bytecode->BytesView(),
+        std::array<uint8_t, 2> { static_cast<uint8_t>(key / 100U), 0xEE }));
+      EXPECT_EQ(reader.GetCounters().l2_hits, 1U);
+      EXPECT_EQ(reader.GetCounters().compile_started, 0U);
+    }
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+  }
+}
+#endif
+
+NOLINT_TEST(ScriptCompilationServiceTest,
+  PersistentCacheRejectsPayloadAndChecksumCorruption)
+{
+  for (const auto corrupt_payload : { true, false }) {
+    const auto path = MakeTempCachePath();
+    std::atomic<int> calls = 0;
+    ASSERT_TRUE(
+      CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls).success);
+    if (corrupt_payload) {
+      OverwriteCacheField(path, 32U, uint8_t { 0x7F });
+    } else {
+      OverwriteCacheField(path, CacheIndexOffset(path) + 44U, uint64_t { 0 });
+    }
+    const auto result
+      = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
+    ASSERT_TRUE(result.success);
+    ASSERT_NE(result.bytecode, nullptr);
+    EXPECT_TRUE(std::ranges::equal(
+      result.bytecode->BytesView(), std::array<uint8_t, 4> { 1, 2, 3, 0xEE }));
+    EXPECT_EQ(calls.load(), 2);
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+  }
+}
+
+NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRejectsMalformedIndex)
+{
+  for (const auto malformed : { 0, 1, 2, 3, 4, 5, 6, 7 }) {
+    const auto path = MakeTempCachePath();
+    std::atomic<int> calls = 0;
+    ASSERT_TRUE(
+      CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls).success);
+    const auto index = CacheIndexOffset(path);
+    switch (malformed) {
+    case 0: // Older cache formats are invalidated without an old-layout reader.
+      WriteCacheVersion(path, 1U);
+      break;
+    case 1: // Index overlaps the fixed header.
+      OverwriteCacheField(path, 16U, uint64_t { 0 });
+      break;
+    case 2: // Entry count cannot fit the file's index range.
+      OverwriteCacheField(path, 24U, std::numeric_limits<uint32_t>::max());
+      break;
+    case 3: // Overflowing payload range.
+      OverwriteCacheField(
+        path, index + 8U, std::numeric_limits<uint64_t>::max());
+      break;
+    case 4: // Empty bytecode is never a valid cache entry.
+      OverwriteCacheField(path, index + 16U, uint32_t { 0 });
+      break;
+    case 5:
+      OverwriteCacheField(path, index + 20U, uint32_t { 99 });
+      break;
+    case 6:
+      OverwriteCacheField(path, index + 24U, uint32_t { 99 });
+      break;
+    case 7:
+      OverwriteCacheField(path, index + 28U, uint32_t { 99 });
+      break;
+    default:
+      FAIL() << "Unhandled malformed cache test case";
+    }
+    const auto result
+      = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(calls.load(), 2);
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+  }
+}
+
+NOLINT_TEST(ScriptCompilationServiceTest,
+  PersistentCacheReplacementInvalidatesStaleOffsetsBeforeVmDelivery)
+{
+  const auto path = MakeTempCachePath();
+  std::atomic<int> writer_calls = 0;
+  ASSERT_TRUE(
+    CompileIntoPersistentCache(path, 30U, { 3, 4 }, writer_calls).success);
+
+  // This service retains the first file's index while a second publisher adds
+  // a lower key, shifting the original payload in the shared sorted file.
+  TestEventLoop loop;
+  ScriptCompilationService stale_reader(observer_ptr<ThreadPool> {}, path);
+  std::atomic<int> reader_calls = 0;
+  EXPECT_TRUE(stale_reader.RegisterCompiler(
+    std::make_shared<SourceSizedCountingCompiler>(reader_calls)));
+  ASSERT_TRUE(
+    CompileIntoPersistentCache(path, 10U, { 9, 9, 9 }, writer_calls).success);
+
+  const auto result = CompileAndStop(stale_reader, loop, 30U, { 3, 4 });
+  ASSERT_TRUE(result.success);
+  ASSERT_NE(result.bytecode, nullptr);
+  EXPECT_TRUE(std::ranges::equal(
+    result.bytecode->BytesView(), std::array<uint8_t, 3> { 3, 4, 0xEE }));
+  EXPECT_EQ(reader_calls.load(), 1);
+  EXPECT_EQ(stale_reader.GetCounters().l2_hits, 0U);
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+}
+
+NOLINT_TEST(ScriptCompilationServiceTest,
+  PersistentCacheReplacementCannotCopyStalePayloadIntoNextSnapshot)
+{
+  const auto path = MakeTempCachePath();
+  std::atomic<int> writer_calls = 0;
+  ASSERT_TRUE(
+    CompileIntoPersistentCache(path, 30U, { 3, 4 }, writer_calls).success);
+  TestEventLoop loop;
+  ScriptCompilationService stale_reader(observer_ptr<ThreadPool> {}, path);
+  std::atomic<int> reader_calls = 0;
+  EXPECT_TRUE(stale_reader.RegisterCompiler(
+    std::make_shared<SourceSizedCountingCompiler>(reader_calls)));
+  ASSERT_TRUE(
+    CompileIntoPersistentCache(path, 10U, { 9, 9, 9 }, writer_calls).success);
+  ASSERT_TRUE(CompileAndStop(stale_reader, loop, 40U, { 4, 5 }).success);
+
+  // The stale reader's flush must skip key30, rather than checksum and publish
+  // the unrelated bytes now found at key30's old offset.
+  std::atomic<int> recovery_calls = 0;
+  const auto result
+    = CompileIntoPersistentCache(path, 30U, { 3, 4 }, recovery_calls);
+  ASSERT_TRUE(result.success);
+  ASSERT_NE(result.bytecode, nullptr);
+  EXPECT_TRUE(std::ranges::equal(
+    result.bytecode->BytesView(), std::array<uint8_t, 3> { 3, 4, 0xEE }));
+  EXPECT_EQ(recovery_calls.load(), 1);
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest, SequentialSameKeyHitsL1Cache)
