@@ -702,15 +702,26 @@ public:
 
 private:
   friend class SceneRenderer;
+  friend class PostProcessService;
   friend struct testing::RendererPublicationProbe;
 
   struct ExposureTransitionEntry {
     std::uint64_t lifetime { 0U };
     std::uint64_t generation { 0U };
     std::optional<ExposureTransitionStatus> status;
+    std::optional<frame::SequenceNumber> captured_frame;
+    std::optional<ExposureTransitionToken> captured_request;
   };
   std::unordered_map<CompositionView::ViewStateHandle, ExposureTransitionEntry>
     exposure_transitions_;
+
+  auto CaptureExposureTransition(CompositionView::ViewStateHandle target,
+    frame::SequenceNumber frame) -> std::optional<ExposureTransitionToken>;
+  auto CompleteExposureTransition(const ExposureTransitionToken& token,
+    std::uint64_t applied_generation,
+    std::optional<ExposureTransitionError> rejection) -> void;
+  auto RetireExposureTransitions(CompositionView::ViewStateHandle target)
+    -> void;
 
   struct PublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };

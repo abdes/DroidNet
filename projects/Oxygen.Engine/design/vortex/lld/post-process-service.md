@@ -122,7 +122,8 @@ State flags: history valid, initialized, meter luminance valid, meter EV valid,
 synthetic dark solve, range failure, displayed-zero target, borrowed continuity,
 and FP16 eligible occupy bits 0..8 respectively. Bit 9 records that a valid
 metered EV has ever been stored, independently of current measurement validity
-and gain initialization. Remaining bits are zero. The synthetic-dark bit also
+and gain initialization. Bits 10..11 store the active mode; bit 12 marks a
+rejected transition and bits 16..19 store its reason. Remaining bits are zero. The synthetic-dark bit also
 describes the retained EV when current metering is invalid.
 Fallback reason enum: None=0, MissingHistory=1, InvalidMeter=2,
 SourceUninitialized=3, SourceDestroyed=4, RangeFailure=5. A dark solve marks EV
@@ -144,7 +145,8 @@ remain stored on invalid input; current validity describes the current frame.
 | 56 | uint | first_failure_kind |
 | 60 | uint | fp16_eligible_streak |
 | 64 | uint2 | candidate_state_generation |
-| 72 | uint2 | reserved, zero |
+| 72 | uint | transition rejection reason (0=none, 1=not Auto, 2=unsupported seed) |
+| 76 | uint | reserved, zero |
 
 Status contains identity/eligibility, not a CPU numerical-gain authority. The
 candidate_state_generation references a retained GPU state record. Pin that
@@ -186,11 +188,12 @@ Histogram pass constants are a 64-byte structured record: source/histogram
 indices at 0/4, minimum log luminance/inverse span at 8/12, uint content
 left/top/width/height at 16/20/24/28, mode/radius at 32/36, mask index/background
 flag at 40/44, inverse P/black influence at 48/52, and zero padding at 56/60.
-The 64-byte solve record retains histogram/state indices at 0/4,
+The 112-byte unified solve record retains histogram/state indices at 0/4,
 minimum log luminance/span at 8/12, low/high percentiles at 16/20, minimum EV/D
 at 24/28 (D stored as log2), log2 up/down speed at 32/36, log2 delta/target SRV at 40/44, settings revision
-at 48 and frame sequence at 56. Both records use the existing frame-retired
-structured publisher. Compute those rate/time logarithms in CPU double precision
+at 48 and frame sequence at 56. The control tail is specified under
+[Unified solve controls](#unified-solve-controls-slice-4-implementation). Both
+records use the existing frame-retired structured publisher. Compute those rate/time logarithms in CPU double precision
 before float32 upload; zero speed/time uses sentinel -256, outside every finite
 positive binary32 logarithm. GPU adaptation compares bounded linear travel,
 then evaluates the dimensionless exponential argument in log space. This
@@ -374,3 +377,29 @@ frame-slot retirement cycle. Removing a view or changing a mask releases its
 accepted lease; frame readers still keep it alive. The binder outlives its
 leases and uses the existing graphics reclaimer for resource/descriptor release.
 No separate mask loader, texture cache or upload allocator is introduced.
+
+## Unified solve controls (slice 4 implementation)
+
+The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefix
+is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
+(Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
+bit 0), request generation uint2 at 80, policy at 88 (none=0, Preserve=1,
+Remeter=2, Seed=3), seed log gain at 92, status UAV at 96, reserved zero at 100,
+and view lifetime uint2 at 104. State flags add mode in bits 10..11,
+request rejection in bit 12 and its reason in bits 16..19 (1=not Auto,
+2=unsupported seed). The 80-byte exposure state remains unchanged in size.
+
+Each solve reads a prior immutable state and writes a different pooled record.
+Frame-slot leases prevent recycling while GPU readers are active; additional
+owners may retain a record for completed-status handling. Only a successfully
+submitted solve advances the per-view latest state. An owner writes at most
+once per logical frame; stateless invocations allocate transient records and
+retain no latest state. The shared initialization upload is removed.
+
+Completed transition records are read through the existing nonblocking readback
+manager. At most three pending records per view retain their state leases.
+Matching lifetime, frame sequence, settings revision and requested generation
+are required before acknowledging an application. An older completion may
+advance the observed applied generation but cannot consume newer queued intent.
+Destroyed views cancel their pending jobs; reused handles receive new lifetimes.
+Diagnostic records do not enqueue authored-transition acknowledgements.

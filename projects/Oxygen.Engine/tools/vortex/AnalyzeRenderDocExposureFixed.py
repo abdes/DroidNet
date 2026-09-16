@@ -70,33 +70,65 @@ def build_report(controller, report, capture_path, report_path):
         gain, expected_gain, rel_tol=2e-5, abs_tol=2**-120)
     if (not automatic and not gain_matches) or gamma != 1 or curve != 0 or bloom != 0:
         raise RuntimeError("Production tonemap constants differ from fixture")
-    if not automatic and exposure_slot != 0xFFFFFFFF:
-        raise RuntimeError("Unexpected auto-exposure buffer overrides fixed gain")
-    if automatic:
-        states = [u.descriptor for u in state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
-                  if names.get(str(u.descriptor.resource))
-                  == "Vortex.PostProcess.Exposure.State"]
-        if exposure_slot == 0xFFFFFFFF or len(states) != 1:
-            raise RuntimeError("Tonemap did not bind the Auto state")
-        raw_state = bytes(controller.GetBufferData(states[0].resource,
-                                                   states[0].byteOffset, 80))
-        displayed, target_gain, latent, latent_target = struct.unpack_from("<4f", raw_state)
-        measured_luminance, meter_ev, state_flags, fallback = struct.unpack_from("<2f2I", raw_state, 16)
-        settings_revision = struct.unpack_from("<Q", raw_state, 32)[0]
-        state_frame = struct.unpack_from("<Q", raw_state, 56)[0]
-        report.append("consumed_auto_gain={}".format(displayed))
-        report.append("latent_auto_gain={}".format(latent))
-        report.append("raw_meter_ev={}".format(meter_ev))
-        report.append("state_flags={}".format(state_flags))
-        report.append("state_settings_revision={}".format(settings_revision))
-        report.append("state_frame_sequence={}".format(state_frame))
-        if not all(math.isfinite(v) for v in (latent, displayed, meter_ev, target_gain, latent_target, measured_luminance)):
-            raise RuntimeError("Nonfinite Auto state")
-        if abs(displayed - expected_gain) > 2e-5 or state_flags & 15 != 15:
-            failures.append("Auto gain/meter differs: latent={} displayed={} EV={} flags={} expected={}".format(
-                latent, displayed, meter_ev, state_flags, expected_gain))
-        if settings_revision == 0 or state_frame == 0:
-            failures.append("GPU state did not carry settings/frame identity")
+    # Every authored mode now consumes the same GPU-owned exposure record.
+    states = [u.descriptor for u in state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+              if names.get(str(u.descriptor.resource))
+              == "Vortex.PostProcess.Exposure.State"]
+    if exposure_slot == 0xFFFFFFFF or len(states) != 1:
+        raise RuntimeError("Tonemap did not bind the unified exposure state")
+    raw_state = bytes(controller.GetBufferData(states[0].resource,
+                                               states[0].byteOffset, 80))
+    displayed, target_gain, latent, latent_target = struct.unpack_from("<4f", raw_state)
+    measured_luminance, meter_ev, state_flags, fallback = struct.unpack_from("<2f2I", raw_state, 16)
+    settings_revision = struct.unpack_from("<Q", raw_state, 32)[0]
+    state_frame = struct.unpack_from("<Q", raw_state, 56)[0]
+    report.append("consumed_gpu_gain={}".format(displayed))
+    report.append("latent_gpu_gain={}".format(latent))
+    report.append("raw_meter_ev={}".format(meter_ev))
+    report.append("state_flags={}".format(state_flags))
+    report.append("state_settings_revision={}".format(settings_revision))
+    report.append("state_frame_sequence={}".format(state_frame))
+    if not all(math.isfinite(v) for v in (latent, displayed, meter_ev, target_gain, latent_target, measured_luminance)):
+        raise RuntimeError("Nonfinite exposure state")
+    valid_flags = 15 if automatic else 3
+    if (not math.isclose(displayed, expected_gain, rel_tol=2e-5, abs_tol=2**-120)
+            or state_flags & 15 != valid_flags):
+        failures.append("GPU gain/meter differs: latent={} displayed={} EV={} flags={} expected={}".format(
+            latent, displayed, meter_ev, state_flags, expected_gain))
+    if settings_revision == 0 or state_frame == 0:
+        failures.append("GPU state did not carry settings/frame identity")
+
+    # Audit the actual solve dispatch and its immutable prior-state binding.
+    solves = []
+    for action in actions:
+        if not action.flags & rd.ActionFlags.Dispatch:
+            continue
+        controller.SetFrameEvent(action.event_id, True)
+        compute = controller.GetPipelineState()
+        reads = [u.descriptor for u in compute.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
+        solve_constants = [d for d in reads if d.byteSize == 112 and d.elementByteSize == 112]
+        if not solve_constants:
+            continue
+        if len(solve_constants) != 1:
+            raise RuntimeError("Unified solve constants not identified uniquely")
+        d = solve_constants[0]
+        raw = bytes(controller.GetBufferData(d.resource, d.byteOffset, 112))
+        previous_slot, fixed_scale, mode, controls = struct.unpack_from("<If2I", raw, 64)
+        report.append("solve_event={} previous_slot={} fixed_scale={} mode={} controls={}".format(
+            action.event_id, previous_slot, fixed_scale, mode, controls))
+        expected_mode = 2 if automatic else 3 if case == "Disabled" else 1 if case == "Camera" else 0
+        if mode != expected_mode:
+            failures.append("Unified solve mode differs from the fixture")
+        prior = [d for d in reads if names.get(str(d.resource)) == "Vortex.PostProcess.Exposure.State"]
+        if previous_slot == 0xFFFFFFFF or len(prior) != 1:
+            raise RuntimeError("Steady-state solve did not read its prior GPU state")
+        if prior[0].resource == states[0].resource:
+            failures.append("Solve overwrote its pinned prior state")
+        solves.append(action.event_id)
+    if len(solves) != 1:
+        raise RuntimeError("Expected exactly one unified exposure solve")
+    controller.SetFrameEvent(draws[0].event_id, True)
+    state = controller.GetPipelineState()
 
     textures = {str(t.resourceId): t for t in controller.GetTextures()}
     sources = [u.descriptor for u in state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)

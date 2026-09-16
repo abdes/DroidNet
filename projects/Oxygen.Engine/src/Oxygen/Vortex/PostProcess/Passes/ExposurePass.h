@@ -11,12 +11,15 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -38,6 +41,19 @@ namespace postprocess {
 
 class ExposurePass {
 public:
+  //! Frame-retained resources; the pass owns their registry/descriptor
+  //! lifetime.
+  struct StateResources {
+    std::shared_ptr<graphics::Buffer> buffer;
+    std::shared_ptr<graphics::Buffer> histogram_buffer;
+    std::shared_ptr<graphics::Buffer> status_buffer;
+    ShaderVisibleIndex status_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex histogram_uav_index { kInvalidShaderVisibleIndex };
+  };
+  using StateLease = std::shared_ptr<const StateResources>;
+
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
@@ -46,9 +62,11 @@ public:
     //! Scale of the supplied signal; scene-referred fixtures use one.
     float one_over_pre_exposure { 1.0F };
     bool metering_available { true };
+    std::optional<ExposureTransitionToken> transition;
   };
 
   struct Result {
+    StateLease state;
     bool requested { false };
     bool executed { false };
     bool used_fixed_exposure { false };
@@ -69,36 +87,27 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
     const PostProcessConfig& config, const Inputs& inputs) -> Result;
+  OXGN_VRTX_API auto OnFrameStart(
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto RemoveViewState(
     CompositionView::ViewStateHandle view_state_handle) -> void;
 
 private:
   struct PerViewExposureState {
-    std::shared_ptr<graphics::Buffer> buffer {};
-    std::shared_ptr<graphics::Buffer> histogram_buffer {};
-    ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex histogram_uav_index { kInvalidShaderVisibleIndex };
-    frame::SequenceNumber last_seen_sequence { 0U };
+    StateLease latest;
+    std::optional<frame::SequenceNumber> submitted_frame;
   };
 
   auto EnsurePipelines() -> void;
-  auto EnsureHistogramBuffer(PerViewExposureState& state) -> void;
-  auto EnsureExposureInitUploadBuffer(graphics::CommandRecorder& recorder,
-    const PostProcessConfig& config) -> void;
-  auto EnsureExposureStateForView(RenderContext& ctx,
-    graphics::CommandRecorder& recorder,
-    CompositionView::ViewStateHandle view_state_handle,
-    const PostProcessConfig& config) -> PerViewExposureState&;
+  auto AcquireState() -> std::shared_ptr<StateResources>;
+  auto EnsureHistogramBuffer(StateResources& state) -> void;
   auto UpdateHistogramConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const Inputs& inputs,
-    const PostProcessConfig& config, const PerViewExposureState& state)
-    -> void;
+    const PostProcessConfig& config, const StateResources& state) -> void;
   auto UpdateAverageConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const PostProcessConfig& config,
-    const PerViewExposureState& state, ShaderVisibleIndex targets_srv)
-    -> void;
-  auto ReleaseExposureState(PerViewExposureState& state) -> void;
+    const StateResources& state, ShaderVisibleIndex targets_srv,
+    ShaderVisibleIndex previous_srv, const Inputs& inputs) -> void;
   auto ReleaseExposureResources() -> void;
 
   Renderer& renderer_;
@@ -110,13 +119,16 @@ private:
     std::array<std::uint32_t, 16U>>>
     constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 16U>>>
+    std::array<std::uint32_t, 28U>>>
     average_constants_publisher_;
   std::optional<graphics::ComputePipelineDesc> clear_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
-  std::shared_ptr<graphics::Buffer> init_upload_buffer_ {};
-  void* exposure_init_upload_mapped_ptr_ { nullptr };
+  std::vector<std::shared_ptr<StateResources>> state_pool_;
+  std::array<std::vector<StateLease>, frame::kFramesInFlight.get()>
+    frame_states_;
+  std::unordered_map<CompositionView::ViewStateHandle, StateLease>
+    prior_states_;
   std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
     exposure_states_ {};
 };

@@ -63,6 +63,16 @@ struct AutoExposureAverageConstants {
     uint targets_srv;
     uint2 settings_revision;
     uint2 frame_sequence;
+    uint previous_state_srv;
+    float fixed_scale;
+    uint exposure_mode;
+    uint control_flags;
+    uint2 requested_generation;
+    uint transition_policy;
+    float seed_log_gain;
+    uint status_uav;
+    uint reserved;
+    uint2 view_lifetime;
 };
 
 // CPU mirror: Vortex/Types/ExposureTargetData.h (560 bytes).
@@ -396,93 +406,174 @@ static float AdaptLogGain(float previous, float target, float log_speed,
     return target - sign(difference) * remaining;
 }
 
+static bool GenerationGreater(uint2 left, uint2 right)
+{
+    return left.y > right.y || (left.y == right.y && left.x > right.x);
+}
+
+static ExposureStateData LoadPrevious(uint slot, ExposureTargetData targets)
+{
+    ExposureStateData state = (ExposureStateData)0;
+    const float initial = exp2(targets.initial_log_gain);
+    state.displayed_scale = initial;
+    state.target_scale = initial;
+    state.latent_scale = initial;
+    state.latent_target_scale = initial;
+    state.fp16_candidate_pre_exposure = 1.0;
+    state.fallback_reason = 1u;
+    if (slot == K_INVALID_BINDLESS_INDEX) return state;
+    ByteAddressBuffer source = ResourceDescriptorHeap[slot];
+    const float4 gains = asfloat(source.Load4(0u));
+    state.displayed_scale = gains.x;
+    state.target_scale = gains.y;
+    state.latent_scale = gains.z;
+    state.latent_target_scale = gains.w;
+    state.raw_metered_luminance = asfloat(source.Load(16u));
+    state.raw_metered_ev = asfloat(source.Load(20u));
+    state.flags = source.Load(24u);
+    state.fallback_reason = source.Load(28u);
+    state.settings_revision = source.Load2(32u);
+    state.requested_generation = source.Load2(40u);
+    state.applied_generation = source.Load2(48u);
+    state.frame_sequence = source.Load2(56u);
+    state.fp16_candidate_pre_exposure = asfloat(source.Load(64u));
+    state.fp16_eligible_streak = source.Load(68u);
+    state.product_layout_revision = source.Load2(72u);
+    return state;
+}
+
+static void StoreState(RWByteAddressBuffer destination, ExposureStateData state)
+{
+    destination.Store4(0u, asuint(float4(state.displayed_scale, state.target_scale,
+        state.latent_scale, state.latent_target_scale)));
+    destination.Store2(16u, asuint(float2(state.raw_metered_luminance, state.raw_metered_ev)));
+    destination.Store2(24u, uint2(state.flags, state.fallback_reason));
+    destination.Store2(32u, state.settings_revision);
+    destination.Store2(40u, state.requested_generation);
+    destination.Store2(48u, state.applied_generation);
+    destination.Store2(56u, state.frame_sequence);
+    destination.Store2(64u, uint2(asuint(state.fp16_candidate_pre_exposure), state.fp16_eligible_streak));
+    destination.Store2(72u, state.product_layout_revision);
+}
+
+static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state, AutoExposureAverageConstants pass)
+{
+    StoreState(destination,state);
+    if (pass.status_uav == K_INVALID_BINDLESS_INDEX) return;
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
+    status.Store4(0u,uint4(pass.view_lifetime,pass.frame_sequence));
+    status.Store4(16u,uint4(pass.settings_revision,state.requested_generation));
+    status.Store4(32u,uint4(state.applied_generation,state.product_layout_revision));
+    const uint flags = ((state.flags & EXPOSURE_HISTORY_VALID) != 0u ? 1u : 0u)
+        | ((state.flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u);
+    status.Store4(48u,uint4(flags,0u,0u,state.fp16_eligible_streak));
+    status.Store4(64u,uint4(pass.frame_sequence,(state.flags & EXPOSURE_REJECTION_MASK)>>EXPOSURE_REJECTION_SHIFT,0u));
+}
+
 [numthreads(1, 1, 1)]
 void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
-    (void)dispatch_thread_id;
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
-        return;
-    }
-
-    StructuredBuffer<AutoExposureAverageConstants> pass_buffer
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const AutoExposureAverageConstants pass = pass_buffer[0];
-    if (pass.histogram_buffer_index == K_INVALID_BINDLESS_INDEX
-        || pass.exposure_buffer_index == K_INVALID_BINDLESS_INDEX
-        || pass.targets_srv == K_INVALID_BINDLESS_INDEX) {
-        return;
-    }
-
-    RWByteAddressBuffer histogram_buffer
-        = ResourceDescriptorHeap[pass.histogram_buffer_index];
-    RWByteAddressBuffer exposure_buffer
-        = ResourceDescriptorHeap[pass.exposure_buffer_index];
-
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) return;
+    StructuredBuffer<AutoExposureAverageConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const AutoExposureAverageConstants pass = constants[0];
+    if (pass.exposure_buffer_index == K_INVALID_BINDLESS_INDEX || pass.targets_srv == K_INVALID_BINDLESS_INDEX) return;
+    RWByteAddressBuffer output = ResourceDescriptorHeap[pass.exposure_buffer_index];
     StructuredBuffer<ExposureTargetData> target_buffer = ResourceDescriptorHeap[pass.targets_srv];
     const ExposureTargetData targets = target_buffer[0];
-    if (targets.key_count == 0u || targets.key_count > 68u) {
+    const ExposureStateData previous = LoadPrevious(pass.previous_state_srv, targets);
+    ExposureStateData next = previous;
+    next.settings_revision = pass.settings_revision;
+    next.frame_sequence = pass.frame_sequence;
+    next.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_ZERO_TARGET | EXPOSURE_MODE_MASK);
+    next.flags |= pass.exposure_mode << EXPOSURE_MODE_SHIFT;
+    const bool new_identity = GenerationGreater(pass.requested_generation, previous.requested_generation);
+    const bool already_rejected = all(pass.requested_generation == previous.requested_generation)
+        && (previous.flags & EXPOSURE_REQUEST_REJECTED) != 0u;
+    bool new_request = pass.transition_policy != 0u
+        && GenerationGreater(pass.requested_generation, previous.applied_generation)
+        && !GenerationGreater(previous.requested_generation, pass.requested_generation) && !already_rejected;
+    if (new_identity) next.flags &= ~(EXPOSURE_REQUEST_REJECTED | EXPOSURE_REJECTION_MASK);
+    if (pass.transition_policy != 0u && !GenerationGreater(previous.requested_generation, pass.requested_generation)) {
+        next.requested_generation = pass.requested_generation;
+    }
+    if (new_request && ((pass.exposure_mode != 2u && pass.transition_policy != 1u)
+        || (pass.transition_policy == 3u && (pass.control_flags & 1u) != 0u))) {
+        const uint reason = pass.exposure_mode != 2u ? 1u : 2u;
+        next.flags = (next.flags & ~EXPOSURE_REJECTION_MASK) | EXPOSURE_REQUEST_REJECTED
+            | (reason << EXPOSURE_REJECTION_SHIFT);
+        new_request = false;
+    }
+    if (pass.exposure_mode != 2u) {
+        // Manual, physical camera and disabled all update the same GPU history.
+        next.displayed_scale = pass.fixed_scale;
+        next.target_scale = pass.fixed_scale;
+        next.latent_scale = pass.fixed_scale;
+        next.latent_target_scale = pass.fixed_scale;
+        next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
+        next.fallback_reason = 0u;
+        if (new_request) next.applied_generation = pass.requested_generation;
+        StoreSolved(output, next, pass);
         return;
     }
-    float previous_latent_gain = asfloat(exposure_buffer.Load(EXPOSURE_LATENT_SCALE_OFFSET));
-    if (!isfinite(previous_latent_gain) || previous_latent_gain <= 0.0) {
-        previous_latent_gain = exp2(targets.initial_log_gain);
+    if (targets.key_count == 0u || targets.key_count > 68u) return;
+    const bool previous_valid = (previous.flags & EXPOSURE_HISTORY_VALID) != 0u
+        && isfinite(previous.latent_scale) && previous.latent_scale > 0.0;
+    const float previous_gain = previous_valid ? previous.latent_scale : exp2(targets.initial_log_gain);
+    const float previous_log = log2(previous_gain);
+    bool dark = false;
+    bool valid_meter = false;
+    float log_luminance = 0.0;
+    if (pass.histogram_buffer_index != K_INVALID_BINDLESS_INDEX) {
+        RWByteAddressBuffer histogram = ResourceDescriptorHeap[pass.histogram_buffer_index];
+        const uint weighted = histogram.Load(METER_WEIGHTED * 4u);
+        dark = weighted > 0u && weighted == histogram.Load(METER_DARK * 4u);
+        valid_meter = dark || MeterHistogram(histogram, pass, log_luminance);
+        if (dark) log_luminance = pass.min_log_luminance;
     }
-    const float previous_log_gain = log2(previous_latent_gain);
-    const uint previous_flags = exposure_buffer.Load(EXPOSURE_FLAGS_OFFSET);
-
-    const uint weighted_count = histogram_buffer.Load(METER_WEIGHTED * 4u);
-    const bool dark = weighted_count > 0u
-        && weighted_count == histogram_buffer.Load(METER_DARK * 4u);
-    float target_log_luminance = 0.0;
-    const bool valid_meter = dark || MeterHistogram(histogram_buffer, pass, target_log_luminance);
-    if (dark) {
-        target_log_luminance = pass.min_log_luminance;
-    }
-
     const bool locked = (targets.flags & 1u) != 0u;
-    const bool zero_target = (targets.flags & 2u) != 0u;
-    const bool restoring_positive = !zero_target && (previous_flags & EXPOSURE_ZERO_TARGET) != 0u;
-    const bool has_meter_history = (previous_flags & EXPOSURE_HAS_METER_HISTORY) != 0u;
-    const float previous_ev = asfloat(exposure_buffer.Load(EXPOSURE_METER_EV_OFFSET));
-    const bool previous_dark = (previous_flags & EXPOSURE_SYNTHETIC_DARK) != 0u;
-    const float ev = dark ? pass.min_ev : target_log_luminance - log2(K_MIDDLE_GREY);
-    float log_target = previous_log_gain;
-    if (locked) {
-        log_target = targets.keys[0].y;
-    } else if (valid_meter) {
-        log_target = dark ? targets.dark_log_gain : ResolveLogTarget(targets, ev);
-    } else if (restoring_positive) {
-        log_target = has_meter_history
-            ? (previous_dark ? targets.dark_log_gain : ResolveLogTarget(targets, previous_ev))
-            : targets.initial_log_gain;
+    const bool zero = (targets.flags & 2u) != 0u;
+    const bool restoring = !zero && (previous.flags & EXPOSURE_ZERO_TARGET) != 0u;
+    const bool has_meter_history = (previous.flags & EXPOSURE_HAS_METER_HISTORY) != 0u;
+    const float ev = dark ? pass.min_ev : log_luminance - log2(K_MIDDLE_GREY);
+    float target_log = previous_log;
+    if (locked) target_log = targets.keys[0].y;
+    else if (valid_meter) target_log = dark ? targets.dark_log_gain : ResolveLogTarget(targets, ev);
+    else if (restoring) target_log = has_meter_history
+        ? ((previous.flags & EXPOSURE_SYNTHETIC_DARK) != 0u ? targets.dark_log_gain : ResolveLogTarget(targets, previous.raw_metered_ev))
+        : targets.initial_log_gain;
+    const bool seed = new_request && pass.transition_policy == 3u;
+    const bool remeter = new_request && pass.transition_policy == 2u;
+    const bool preserve = new_request && pass.transition_policy == 1u;
+    const bool mode_entry = previous_valid && ((previous.flags & EXPOSURE_MODE_MASK) >> EXPOSURE_MODE_SHIFT) != 2u;
+    const bool solve = valid_meter || locked || restoring;
+    float gain = previous_gain;
+    if (seed) gain = exp2(pass.seed_log_gain);
+    else if (locked || restoring || (remeter && valid_meter)) gain = exp2(target_log);
+    else if (!previous_valid || (previous.flags & EXPOSURE_INITIALIZED) == 0u) {
+        if (valid_meter) gain = exp2(target_log);
+    } else if (solve && !preserve && !mode_entry && !remeter) {
+        const float speed = target_log < previous_log ? pass.log2_speed_up : pass.log2_speed_down;
+        if (speed != -256.0 && pass.log2_delta_time != -256.0 && target_log != previous_log) {
+            gain = exp2(AdaptLogGain(previous_log, target_log, speed, pass.log2_delta_time, pass.log2_transition_distance));
+        }
     }
-    const bool solve = valid_meter || locked || restoring_positive;
-    const bool immediate = locked || restoring_positive
-        || (previous_flags & EXPOSURE_INITIALIZED) == 0u;
-    const float speed = log_target < previous_log_gain
-        ? pass.log2_speed_up : pass.log2_speed_down;
-    const float log_gain = !solve ? previous_log_gain : immediate ? log_target
-        : AdaptLogGain(previous_log_gain, log_target, speed, pass.log2_delta_time, pass.log2_transition_distance);
-    const float latent_gain = exp2(log_gain);
-    const float positive_target = solve ? exp2(log_target)
-        : asfloat(exposure_buffer.Load(12u));
-    exposure_buffer.Store4(0u, asuint(float4(zero_target ? 0.0 : latent_gain,
-        zero_target ? 0.0 : positive_target, latent_gain, positive_target)));
+    const float target = solve ? exp2(target_log) : seed ? gain : previous.latent_target_scale;
+    next.displayed_scale = zero ? 0.0 : gain;
+    next.target_scale = zero ? 0.0 : target;
+    next.latent_scale = gain;
+    next.latent_target_scale = target;
     if (valid_meter) {
-        exposure_buffer.Store2(16u, asuint(float2(exp2(target_log_luminance), ev)));
+        next.raw_metered_luminance = exp2(log_luminance);
+        next.raw_metered_ev = ev;
+        next.flags = (next.flags & ~EXPOSURE_SYNTHETIC_DARK) | EXPOSURE_HAS_METER_HISTORY
+            | EXPOSURE_METER_EV_VALID | (dark ? EXPOSURE_SYNTHETIC_DARK : EXPOSURE_LUMINANCE_VALID);
     }
-    uint flags = previous_flags & ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_ZERO_TARGET);
-    if (valid_meter) {
-        flags &= ~EXPOSURE_SYNTHETIC_DARK;
-        flags |= EXPOSURE_HAS_METER_HISTORY | EXPOSURE_METER_EV_VALID
-            | (dark ? EXPOSURE_SYNTHETIC_DARK : EXPOSURE_LUMINANCE_VALID);
+    if (valid_meter || locked || seed) next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
+    if (restoring && !valid_meter && !has_meter_history && !seed && !locked) next.flags &= ~EXPOSURE_INITIALIZED;
+    if (zero) next.flags |= EXPOSURE_ZERO_TARGET;
+    next.fallback_reason = valid_meter || locked || seed ? 0u : 2u;
+    if (new_request && (seed || preserve || (remeter && (valid_meter || locked)))) {
+        next.applied_generation = pass.requested_generation;
     }
-    if (valid_meter || locked) {
-        flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
-    }
-    flags |= zero_target ? EXPOSURE_ZERO_TARGET : 0u;
-    exposure_buffer.Store(EXPOSURE_FLAGS_OFFSET, flags);
-    exposure_buffer.Store(28u, valid_meter || locked ? 0u : 2u);
-    exposure_buffer.Store2(32u, pass.settings_revision);
-    exposure_buffer.Store2(56u, pass.frame_sequence);
+    StoreSolved(output, next, pass);
 }

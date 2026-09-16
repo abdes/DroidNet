@@ -1514,6 +1514,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     | RendererCapabilityFamily::kLightingData
     | RendererCapabilityFamily::kDiagnosticsAndProfiling);
   static_cast<void>(AddDirectionalLight("DiagnosticsOnlySun"));
+  renderer_->GetDiagnosticsService().SetEnabledFeatures(
+    oxygen::vortex::DiagnosticsFeature::kFrameLedger);
   renderer_->GetDiagnosticsService().BeginFrame(
     oxygen::frame::SequenceNumber { 77U });
 

@@ -706,6 +706,8 @@ public:
   }
   // Test-only failure injection hooks
   void SetFailMap(const bool v) { fail_map_ = v; }
+  void SetFailSubmission(bool value) { fail_submission_ = value; }
+  void SetFailRecording(bool value) { fail_recording_ = value; }
   void SetThrowOnCreateBuffer(const bool v) { throw_on_create_buffer_ = v; }
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
@@ -1010,13 +1012,18 @@ public:
       &root_cbv_log_, &draw_log_, &dispatch_log_, &clear_framebuffer_log_,
       &indirect_log_);
     raw->Begin();
-    return { raw, [q](CommandRecorder* p) -> void {
+    return { raw, [this, q](CommandRecorder* p) -> void {
               if (p != nullptr) {
                 auto completed = p->End();
                 if (completed != nullptr && q != nullptr) {
-                  q->Submit(completed);
-                  completed->OnSubmitted();
-                  completed->OnExecuted();
+                  if (fail_recording_) {
+                    completed->OnFailed();
+                  } else if (!fail_submission_) {
+                    q->Submit(completed);
+                    completed->OnSubmitted();
+                    GetDeferredReclaimer().RegisterDeferredAction(
+                      [completed] { completed->OnExecuted(); });
+                  }
                 }
                 delete p;
               }
@@ -1041,6 +1048,8 @@ public:
   };
   mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
   // Test injection flags (mutable to allow const CreateBuffer)
+  bool fail_submission_ { false };
+  bool fail_recording_ { false };
   mutable bool fail_map_ { false };
   mutable bool throw_on_create_buffer_ { false };
 

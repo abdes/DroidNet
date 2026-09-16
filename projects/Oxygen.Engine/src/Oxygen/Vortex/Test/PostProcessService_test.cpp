@@ -510,6 +510,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   service.Execute(context.current_view.view_id, context, textures, inputs);
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
     2U); // clear + invalid/locked solve
+  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
   requested.metering_mask = {};
   config.resolved_exposure
     = service.ResolveViewExposureSettings(Handle { 1U }, requested).resolved;
@@ -672,6 +674,44 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_EQ(rejected.resolved.authored, initial.resolved.authored);
   EXPECT_EQ(rejected.revision, initial.revision);
   EXPECT_EQ(rejected.mask, nullptr);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  ExposureHistoryAdvancesOnlyAfterSuccessfulSubmission)
+{
+  auto pass = oxygen::vortex::postprocess::ExposurePass(*renderer_);
+  auto settings = oxygen::scene::ExposureSettings {};
+  settings.mode = oxygen::engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 4.0F;
+  auto config = PostProcessConfig {};
+  config.resolved_exposure = *oxygen::scene::ResolveExposureSettings(settings);
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.current_view.view_id = ViewId { 1U };
+  context.current_view.view_state_handle
+    = oxygen::vortex::CompositionView::ViewStateHandle { 1U };
+  auto previous = pass.Execute(context, config, {});
+  ASSERT_TRUE(previous.executed);
+  for (bool recording_failure : { false, true }) {
+    context.frame_sequence
+      = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
+    graphics_->SetFailSubmission(!recording_failure);
+    graphics_->SetFailRecording(recording_failure);
+    const auto failed = pass.Execute(context, config, {});
+    EXPECT_FALSE(failed.executed);
+    EXPECT_EQ(failed.state, previous.state);
+    graphics_->SetFailSubmission(false);
+    graphics_->SetFailRecording(false);
+    const auto retry = pass.Execute(context, config, {});
+    EXPECT_TRUE(retry.executed);
+    EXPECT_NE(retry.state, failed.state);
+    const auto duplicate = pass.Execute(context, config, {});
+    EXPECT_FALSE(duplicate.executed);
+    EXPECT_EQ(duplicate.state, retry.state);
+    previous = retry;
+  }
 }
 
 } // namespace

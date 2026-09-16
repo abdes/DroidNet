@@ -83,14 +83,17 @@ independent instruments; interactive demos; automated/native acceptance.
 Status: `in_progress`, slices 1-3 qualified; slice 4 active. The bounded metering/adaptation core
 passes 35 native Debug/Release cases, 14 independent references and 134 focused
 regressions; the public-pause integration adds 36 focused checks per
-configuration and a separate native GPU case. Lifecycle work follows the
+configuration and a separate native GPU case. Unified GPU mode/history and
+explicit transition acknowledgement now pass 54 native cases per configuration
+and under CDB, with inspected Auto/Manual GPU-state consumption captures.
+Sharing and implicit lifecycle events remain open. Lifecycle work follows the
 execution plan. The [checkpoint](plan/exposure-contract-checkpoint.md)
 records slice-1 contracts. Canonical settings, public per-view overrides,
 cancellation-safe target compilation, exact fixed/camera gains and frame-safe
 post-process uploads pass 95 focused tests and 12 native arithmetic/debug-layer
 cases. The explicit frame record and pre/post descriptor pinning additionally
 pass 45 publication/runtime/ShaderBake checks and a native sky-consumer ABI probe.
-GPU P selection, S/P integration, robust metering/adaptation, lifecycle/sharing,
+GPU P selection, S/P integration, remaining lifecycle/sharing,
 FP32 runtime migration and LightBench/MultiView acceptance remain open.
 Implementation must pass each slice gate before the next. FP16 eligibility is
 per-view and separate from exposure validity; retained FP32 does not reset
