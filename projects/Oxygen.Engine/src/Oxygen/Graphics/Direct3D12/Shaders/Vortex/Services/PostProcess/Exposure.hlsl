@@ -44,7 +44,7 @@ struct AutoExposureHistogramConstants {
     uint background_enabled;
     float one_over_pre_exposure;
     float black_influence;
-    uint _pad0;
+    uint frame_exposure_srv;
     uint _pad1;
 };
 
@@ -191,7 +191,12 @@ static void MeterSample(AutoExposureHistogramConstants pass, uint2 cell)
         InterlockedAdd(s_Histogram[METER_FINITE], 1u);
         return;
     }
-    const float3 color = (sample.rgb / coverage) * pass.one_over_pre_exposure;
+    float inverse_p = pass.one_over_pre_exposure;
+    if (pass.frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_exposure_srv];
+        inverse_p = frame[0].one_over_pre_exposure;
+    }
+    const float3 color = (sample.rgb / coverage) * inverse_p;
     const float luminance = Luminance(color);
     if (!all(isfinite(color)) || !isfinite(luminance)) {
         InterlockedAdd(s_Histogram[METER_REJECTED], 1u);
@@ -677,20 +682,14 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
         state.latent_scale = source.latent_scale;
         state.latent_target_scale = source.latent_target_scale;
         state.flags = EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | EXPOSURE_BORROWED;
-    } else if (diagnostic || pass.mode != 2u) {
+    } else if (diagnostic || (!history_valid && pass.mode != 2u)) {
         const float fixed_gain = diagnostic || pass.mode == 3u ? 1.0 : pass.fixed_scale;
         state.displayed_scale = fixed_gain;
         state.target_scale = fixed_gain;
         state.latent_scale = fixed_gain;
         state.latent_target_scale = fixed_gain;
         state.flags = EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | (pass.mode << EXPOSURE_MODE_SHIFT);
-    } else if ((pass.controls & 1u) != 0u) {
-        const float seeded_gain = exp2(pass.seed_log_gain);
-        state.displayed_scale = seeded_gain;
-        state.target_scale = seeded_gain;
-        state.latent_scale = seeded_gain;
-        state.latent_target_scale = seeded_gain;
-    } else if (!history_valid) {
+    } else if (!history_valid && pass.mode == 2u && (pass.controls & 1u) == 0u) {
         flags |= 1u;
     }
     if (!borrowed && !diagnostic && (pass.controls & 2u) != 0u) {
@@ -699,6 +698,10 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
         state.flags |= EXPOSURE_ZERO_TARGET;
     }
     float p = state.displayed_scale > 0.0 ? state.displayed_scale : state.latent_scale;
+    if (!borrowed && !diagnostic) {
+        if (pass.mode != 2u) p = pass.mode == 3u ? 1.0 : pass.fixed_scale;
+        else if ((pass.controls & 1u) != 0u) p = exp2(pass.seed_log_gain);
+    }
     if (pass.candidate_srv != K_INVALID_BINDLESS_INDEX) {
         const ExposureStateData candidate = LoadPrevious(pass.candidate_srv, initial);
         if ((candidate.flags & 256u) != 0u && candidate.fp16_eligible_streak >= 2u
@@ -725,4 +728,24 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     frame.flags = flags;
     RWStructuredBuffer<FrameExposureData> output = ResourceDescriptorHeap[pass.output_uav];
     output[0] = frame;
+}
+
+// Preserve the frame's state address when the final solve could not submit.
+// Only gain and the zero-target tag change; request/meter identity is never
+// imported from a removed source or acknowledged by this fallback copy.
+[numthreads(1, 1, 1)]
+void VortexExposureFallbackCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    StructuredBuffer<ExposureFrameConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const ExposureFrameConstants pass = constants[0];
+    ByteAddressBuffer source = ResourceDescriptorHeap[pass.history_srv];
+    RWByteAddressBuffer destination = ResourceDescriptorHeap[pass.current_state_uav];
+    uint4 gains = source.Load4(0u);
+    uint flags = destination.Load(EXPOSURE_FLAGS_OFFSET) & ~EXPOSURE_ZERO_TARGET;
+    if ((pass.controls & 2u) != 0u) {
+        gains.xy = 0u.xx;
+        flags |= EXPOSURE_ZERO_TARGET;
+    }
+    destination.Store4(0u, gains);
+    destination.Store(EXPOSURE_FLAGS_OFFSET, flags);
 }

@@ -88,6 +88,7 @@ public:
     ShaderVisibleIndex metering_mask_srv { kInvalidShaderVisibleIndex };
     //! Scale of the supplied signal; scene-referred fixtures use one.
     float one_over_pre_exposure { 1.0F };
+    const FrameResources* frame_exposure { nullptr };
     bool metering_available { true };
     std::optional<ExposureTransitionToken> transition;
     const Source* source { nullptr };
@@ -97,6 +98,7 @@ public:
 
   struct Result {
     StateLease state;
+    FrameLease frame;
     bool requested { false };
     bool executed { false };
     bool used_fixed_exposure { false };
@@ -162,9 +164,12 @@ private:
   auto EnsurePipelines() -> void;
   auto PreparePublishers(RenderContext& ctx) -> void;
   auto AcquireFrame() -> std::shared_ptr<FrameResources>;
+  auto RestoreFrameFallback(RenderContext& ctx, const PostProcessConfig& config,
+    const FrameResources& frame, StateLease fallback) -> bool;
   auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
     const Inputs& inputs, StateLease previous, StateLease borrowed,
-    bool bootstrap = false, bool source_loss = false) -> StateLease;
+    bool bootstrap = false, bool source_loss = false,
+    std::shared_ptr<StateResources> reserved = {}) -> StateLease;
   auto AcquireState() -> std::shared_ptr<StateResources>;
   auto EnsureHistogramBuffer(StateResources& state) -> void;
   auto UpdateHistogramConstants(RenderContext& ctx,
@@ -193,6 +198,7 @@ private:
   std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
+  std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 12U>>>
     frame_constants_publisher_;

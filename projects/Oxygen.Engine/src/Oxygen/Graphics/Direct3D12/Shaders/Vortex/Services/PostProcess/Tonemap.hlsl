@@ -24,7 +24,7 @@ struct TonemapPassConstants
     float exposure;
     float gamma;
     float bloom_intensity;
-    float _pad0;
+    uint frame_exposure_srv;
     float3 background_color;
     uint background_enabled;
 };
@@ -43,8 +43,12 @@ static float3 ACESFitted(float3 color)
     };
 
     color = mul(kInputMat, color);
-    const float3 a = color * (color + 0.0245786) - 0.000090537;
-    const float3 b = color * (0.983729 * color + 0.4329510) + 0.238081;
+    const float3 inverse_scale = rcp(max(abs(color), 1.0));
+    const float3 scaled = color * inverse_scale;
+    const float3 a = scaled * (scaled + 0.0245786 * inverse_scale)
+        - 0.000090537 * inverse_scale * inverse_scale;
+    const float3 b = scaled * (0.983729 * scaled + 0.4329510 * inverse_scale)
+        + 0.238081 * inverse_scale * inverse_scale;
     color = a / b;
     color = mul(kOutputMat, color);
     return saturate(color);
@@ -63,7 +67,10 @@ static float3 Uncharted2Tonemap(float3 x)
     static const float D = 0.20;
     static const float E = 0.02;
     static const float F = 0.30;
-    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+    const float3 inverse_scale = rcp(max(abs(x), 1.0));
+    const float3 scaled = x * inverse_scale;
+    return ((scaled * (A * scaled + C * B * inverse_scale) + D * E * inverse_scale * inverse_scale)
+        / (scaled * (A * scaled + B * inverse_scale) + D * F * inverse_scale * inverse_scale)) - E / F;
 }
 
 static float3 Filmic(float3 color)
@@ -142,6 +149,10 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
     if (pass.exposure_buffer_index != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer exposure_buffer = ResourceDescriptorHeap[pass.exposure_buffer_index];
         exposure = max(asfloat(exposure_buffer.Load(EXPOSURE_DISPLAYED_SCALE_OFFSET)), 0.0f);
+    }
+    if (pass.frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_exposure_srv];
+        exposure *= frame[0].one_over_pre_exposure;
     }
     float3 color = MapForeground((foreground + bloom) * exposure, pass.tone_mapper, pass.gamma);
     if (pass.background_enabled != 0u) {

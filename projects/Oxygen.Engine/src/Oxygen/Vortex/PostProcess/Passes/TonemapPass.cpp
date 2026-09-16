@@ -46,7 +46,7 @@ namespace {
     float exposure;
     float gamma;
     float bloom_intensity;
-    float _pad0;
+    std::uint32_t frame_exposure_srv;
     std::array<float, 3> background_color;
     std::uint32_t background_enabled;
   };
@@ -269,6 +269,13 @@ auto TonemapPass::Record(RenderContext& ctx,
     recorder->RequireResourceState(
       *inputs.exposure_buffer, graphics::ResourceStates::kShaderResource);
   }
+  CHECK_F((inputs.frame_exposure_buffer != nullptr)
+    == inputs.frame_exposure_srv.IsValid());
+  if (inputs.frame_exposure_buffer) {
+    TrackBufferAsShaderReadable(*recorder, *inputs.frame_exposure_buffer);
+    recorder->RequireResourceState(
+      *inputs.frame_exposure_buffer, graphics::ResourceStates::kShaderResource);
+  }
   recorder->RequireResourceState(
     target_color, graphics::ResourceStates::kRenderTarget);
   recorder->FlushBarriers();
@@ -323,7 +330,7 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     .exposure = std::max(inputs.exposure_value, 0.0F),
     .gamma = std::max(inputs.gamma, 1.0e-4F),
     .bloom_intensity = std::max(inputs.bloom_intensity, 0.0F),
-    ._pad0 = 0.0F,
+    .frame_exposure_srv = inputs.frame_exposure_srv.get(),
     .background_color = {
       background_color.x,
       background_color.y,

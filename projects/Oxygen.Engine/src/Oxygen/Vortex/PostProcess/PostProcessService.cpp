@@ -453,8 +453,8 @@ auto PostProcessService::PublishBindings(const ViewId view_id,
   return slot;
 }
 
-auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
-  const SceneTextures& scene_textures, const Inputs& inputs) -> void
+auto PostProcessService::CaptureConfiguredExposure(
+  const ViewId view_id, RenderContext& ctx) -> const ExposureSettingsState&
 {
   CaptureRegisteredExposureControls(ctx);
   const auto key
@@ -502,7 +502,43 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   }
   CHECK_F(captured->second.handle == ctx.current_view.view_state_handle,
     "A captured view cannot change its exposure lifetime within a frame");
-  const auto* settings = &captured->second.settings;
+  return captured->second.settings;
+}
+
+auto PostProcessService::PrepareFrameExposure(RenderContext& ctx,
+  const bool use_fp32,
+  postprocess::ExposurePass::StateLease qualified_candidate)
+  -> postprocess::ExposurePass::FrameLease
+{
+  const auto& settings
+    = CaptureConfiguredExposure(ctx.current_view.view_id, ctx);
+  auto config = config_;
+  ApplyExposureRevision(config, settings);
+  config.temporary_unit_exposure = config.temporary_unit_exposure
+    || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+    || ctx.render_mode == RenderMode::kWireframe;
+  const auto source_handle = ctx.current_view.exposure_view_state_handle;
+  const auto* source = !config.temporary_unit_exposure
+      && source_handle != CompositionView::kInvalidViewStateHandle
+      && source_handle != ctx.current_view.view_state_handle
+    ? &CaptureSharedExposureSource(
+        ctx, ctx.current_view.exposure_view_id, source_handle)
+    : nullptr;
+  return exposure_pass_->ResolveFrame(ctx, config,
+    { .use_fp32 = use_fp32,
+      .qualified_candidate = std::move(qualified_candidate),
+      .source = source,
+      .transition = renderer_.CaptureExposureTransition(
+        ctx.current_view.view_state_handle, ctx.frame_sequence),
+      .rejection = renderer_.CapturedExposureRejection(
+        ctx.current_view.view_state_handle, ctx.frame_sequence),
+      .lifetime = settings.lifetime });
+}
+
+auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
+  const SceneTextures& scene_textures, const Inputs& inputs) -> void
+{
+  const auto* settings = &CaptureConfiguredExposure(view_id, ctx);
   auto effective_config = config_;
   ApplyExposureRevision(effective_config, *settings);
   auto mask = settings ? settings->mask : nullptr;
@@ -546,6 +582,10 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
         : std::nullopt,
       .lifetime = settings->lifetime,
     });
+  if (exposure.frame && !exposure.state) {
+    last_execution_state_ = { .tonemap_requested = true, .view_id = view_id };
+    return;
+  }
   if (transition && exposure.executed && exposure.state
     && !effective_config.temporary_unit_exposure) {
     EnqueueExposureStatus(*transition, exposure.state, ctx, settings->revision);
@@ -563,9 +603,13 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     postprocess::TonemapPass::Inputs {
       .scene_signal = inputs.scene_signal,
       .exposure_buffer = exposure.exposure_buffer,
+      .frame_exposure_buffer
+      = exposure.frame ? exposure.frame->buffer.get() : nullptr,
       .scene_signal_srv = inputs.scene_signal_srv,
       .bloom_texture_srv = bloom.bloom_texture_srv,
       .exposure_buffer_srv = exposure.exposure_buffer_srv,
+      .frame_exposure_srv
+      = exposure.frame ? exposure.frame->srv_index : kInvalidShaderVisibleIndex,
       .post_target = inputs.post_target,
       .tone_mapper = effective_config.tone_mapper,
       .exposure_value = exposure.exposure_value,

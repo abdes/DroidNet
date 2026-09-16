@@ -127,7 +127,7 @@ namespace {
     std::uint32_t background_enabled;
     float one_over_pre_exposure;
     float black_influence;
-    std::uint32_t _pad0;
+    std::uint32_t frame_exposure_srv;
     std::uint32_t _pad1;
   };
 
@@ -500,6 +500,61 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   return frame;
 }
 
+auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
+  const PostProcessConfig& config, const FrameResources& frame,
+  StateLease fallback) -> bool
+{
+  if (!fallback)
+    return true;
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return false;
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex Exposure Fallback");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  const auto track
+    = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
+        if (!recorder->IsResourceTracked(buffer)
+          && !recorder->AdoptKnownResourceState(buffer))
+          recorder->BeginTrackingResourceState(
+            buffer, graphics::ResourceStates::kCommon, false);
+        recorder->RequireResourceState(buffer, state);
+      };
+  track(*fallback->buffer, graphics::ResourceStates::kShaderResource);
+  track(
+    *frame.current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
+  const auto& settings = config.resolved_exposure->authored;
+  const auto constants = ExposureFrameConstants {
+    .current_state_uav = frame.current_state->uav_index.get(),
+    .history_srv = fallback->srv_index.get(),
+    .controls = settings.enabled && settings.mode == engine::ExposureMode::kAuto
+        && settings.target_luminance == 0.0F
+      ? 2U
+      : 0U,
+  };
+  const auto slot
+    = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+  CHECK_F(slot.IsValid());
+  recorder->FlushBarriers();
+  recorder->SetPipelineState(*fallback_pipeline_);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    slot.get(), 1U);
+  recorder->Dispatch(1U, 1U, 1U);
+  recorder->RequireResourceStateFinal(
+    *frame.current_state->buffer, graphics::ResourceStates::kShaderResource);
+  recorder.reset();
+  frame_states_[ctx.frame_slot.get()].push_back(std::move(fallback));
+  return recording && recording->IsSubmitted();
+}
+
 auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   const Inputs& inputs) -> Result
 {
@@ -524,6 +579,12 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   EnsurePipelines();
   PreparePublishers(ctx);
   const auto handle = ctx.current_view.view_state_handle;
+  if (const auto found
+    = resolved_frames_.find({ ctx.current_view.view_id, handle });
+    found != resolved_frames_.end()) {
+    result.frame = found->second;
+    CHECK_F(result.frame->current_state->owner_lifetime == inputs.lifetime);
+  }
   CHECK_F(!inputs.transition || inputs.transition->target == handle,
     "Exposure transition targets a different view state");
   auto* view = config.temporary_unit_exposure
@@ -639,13 +700,25 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     }
     frame_states_[ctx.frame_slot.get()].push_back(continuity);
   }
-  auto state = RecordState(ctx, config, inputs, previous,
-    continuity ? continuity : borrowed, false, static_cast<bool>(continuity));
+  auto solve_inputs = inputs;
+  auto reserved = std::shared_ptr<StateResources> {};
+  if (result.frame) {
+    solve_inputs.frame_exposure = result.frame.get();
+    reserved = result.frame->current_state;
+  }
+  auto state = RecordState(ctx, config, solve_inputs, previous,
+    continuity ? continuity : borrowed, false, static_cast<bool>(continuity),
+    reserved);
   if (!state) {
-    publish_result(continuity ? continuity
-        : sharing             ? borrowed
-                              : previous,
-      false);
+    const auto fallback = continuity ? continuity
+      : sharing                      ? borrowed
+                                     : previous;
+    if (result.frame && !sharing) {
+      if (RestoreFrameFallback(ctx, config, *result.frame, fallback))
+        publish_result(result.frame->current_state, false);
+    } else {
+      publish_result(fallback, false);
+    }
     return result;
   }
   if (view) {
@@ -661,8 +734,8 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
 
 auto ExposurePass::RecordState(RenderContext& ctx,
   const PostProcessConfig& config, const Inputs& inputs, StateLease previous,
-  StateLease borrowed, const bool bootstrap, const bool source_loss)
-  -> StateLease
+  StateLease borrowed, const bool bootstrap, const bool source_loss,
+  std::shared_ptr<StateResources> reserved) -> StateLease
 {
   const auto& resolved = *config.resolved_exposure;
   const bool automatic = (!borrowed || source_loss) && !bootstrap
@@ -670,7 +743,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     && resolved.authored.mode == engine::ExposureMode::kAuto;
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
-  auto state = AcquireState();
+  auto state = reserved ? std::move(reserved) : AcquireState();
   state->owner_lifetime = inputs.lifetime;
   state->borrowed_from = borrowed && !source_loss && inputs.source
     ? inputs.source->handle
@@ -715,6 +788,11 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   };
   track_buffer(*state->buffer);
   track_buffer(*state->status_buffer);
+  if (inputs.frame_exposure) {
+    track_buffer(*inputs.frame_exposure->buffer);
+    recorder->RequireResourceState(*inputs.frame_exposure->buffer,
+      graphics::ResourceStates::kShaderResource);
+  }
   recorder->RequireResourceState(
     *state->status_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder->RequireResourceState(
@@ -815,6 +893,10 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
+  if (!fallback_pipeline_) {
+    fallback_pipeline_ = BuildExposurePipeline(
+      "VortexExposureFallbackCS", "Vortex.PostProcess.Exposure.Fallback");
+  }
   if (!frame_pipeline_) {
     frame_pipeline_ = BuildExposurePipeline(
       "VortexExposureFrameCS", "Vortex.PostProcess.Exposure.Frame");
@@ -978,7 +1060,9 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
     = environment::ResolveSceneBackground(ctx).has_value() ? 1U : 0U,
     .one_over_pre_exposure = inputs.one_over_pre_exposure,
     .black_influence = config.resolved_exposure->authored.black_influence,
-    ._pad0 = 0U,
+    .frame_exposure_srv = inputs.frame_exposure
+      ? inputs.frame_exposure->srv_index.get()
+      : kInvalidShaderVisibleIndex.get(),
     ._pad1 = 0U,
   };
 
