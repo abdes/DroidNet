@@ -959,6 +959,9 @@ readers. Primary/Secondary names remain unchanged.
       records 20/20 RenderScene loads, scoped image review and the SDK/Interop
       refresh; [loading corrections](validation/ED-M08-runtime-loading.md)
       record script-cache, instance-lifetime and load-drain regression evidence.
+      The [native slot foundation](validation/ED-M08-M08.1-slot-foundation.md)
+      provides tested identity, inventory validation and revision hashing;
+      producer/provenance, wire-format and override integration remain open.
       Slot identities/provenance/overrides, camera aspect, atmospheric roles,
       float32 emission and capture-toggle removal remain open. Rendered flag
       behavior remains M08.2 work; supplemental captures do not close M08.3.
