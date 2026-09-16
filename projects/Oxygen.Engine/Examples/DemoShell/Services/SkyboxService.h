@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -124,6 +125,13 @@ public:
   auto LoadAndEquip(const std::string& file_path, const LoadOptions& options,
     const SkyLightParams& params, LoadCallback on_complete) -> void;
 
+  //! Discards pending completions without releasing the current resource.
+  //!
+  //! Call on the loader's owning thread before changing environment intent.
+  //! Canceled requests cannot pin resources, equip the scene, or publish
+  //! status.
+  auto CancelPendingLoads() noexcept -> void;
+
   //! Set the skybox resource key directly (e.g., from cooked content).
   auto SetSkyboxResourceKey(content::ResourceKey key) -> void;
 
@@ -140,11 +148,14 @@ public:
   }
 
 private:
+  struct RequestState;
   auto PinCurrentResource(content::ResourceKey key) -> bool;
   auto ReleasePinnedResource() noexcept -> void;
 
   observer_ptr<content::IAssetLoader> asset_loader_;
-  observer_ptr<scene::Scene> scene_ { nullptr };
+  std::weak_ptr<scene::Scene> scene_;
+  bool scene_bound_ { false };
+  std::shared_ptr<RequestState> request_state_;
   content::ResourceKey current_resource_key_ { 0U };
   content::ResourceKey pinned_resource_key_ { 0U };
 
