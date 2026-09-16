@@ -984,6 +984,21 @@ without allocating another generation. Implicit resets share that counter.
 Submission and GPU application remain separate, and settings/mode/ownership
 validation happens at the frame boundary as specified in section 4.1.
 
+The control foundation is implemented and CPU-qualified: renderer-issued
+queue/retry/status tokens with lifetime separation, syntax/conflict validation,
+idempotence and shutdown rejection; explicit seed log-gain resolution outside
+metering bounds; and recorder submission inspection using the existing command
+list. Scene exposure tests pass 19/19 and Commander tests 37/37. The rebuilt
+focused control/regression run passes 56/56. Evidence is
+`contract-audit/slice4-seed-tests.log`, `slice4-submission-inspection-tests.log`
+and `slice4-control-rebuilt-tests.log`. An earlier broad filter selected a stale
+PostProcessService test executable after Renderer layout changed; rebuilding
+that dependent target removed the teardown failure.
+
+The API currently queues/inspects intent; frame-boundary semantic validation,
+GPU application/acknowledgement, implicit events and source ownership are not
+yet connected. All slice-4 exit items below remain open.
+
 - [ ] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including
   recording/submission failure, invalid metering and idempotent retries.

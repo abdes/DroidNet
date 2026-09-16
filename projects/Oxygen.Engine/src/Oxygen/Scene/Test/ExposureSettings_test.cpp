@@ -238,7 +238,93 @@ NOLINT_TEST(ExposureSettingsTest, TargetKnotsCoverRetainedMeterOutsideNewWindow)
   EXPECT_LT(resolved->auto_log_targets.front().metered_ev, -21.0F);
   EXPECT_GT(resolved->auto_log_targets.back().metered_ev, 34.0F);
   settings.compensation_curve = { { 25.0F, 60.0F } };
-  EXPECT_EQ(ResolveExposureSettings(settings).error(), ExposureSettingsError::kUnsupportedGain);
+  EXPECT_EQ(ResolveExposureSettings(settings).error(),
+    ExposureSettingsError::kUnsupportedGain);
+}
+
+NOLINT_TEST(ExposureSettingsTest, ExplicitSeedDoesNotClampToMeteringBounds)
+{
+  auto settings = ExposureSettings {};
+  settings.key = 12.5F;
+  const auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  for (const float ev : { -20.0F, 0.0F, 20.0F }) {
+    const auto seed = oxygen::scene::ResolveExposureSeedLogGain(*resolved, ev);
+    ASSERT_TRUE(seed.has_value());
+    EXPECT_EQ(*seed, -ev);
+  }
+}
+
+NOLINT_TEST(
+  ExposureSettingsTest, SeedCombinesCurveBiasKeyAndTargetAtRequestedEv)
+{
+  auto settings = ExposureSettings {};
+  settings.key = 6.25F;
+  settings.target_luminance = .36F;
+  settings.compensation_ev = 2.0F;
+  settings.min_ev = 2.0F;
+  settings.max_ev = 4.0F;
+  settings.compensation_curve = { { 0.0F, 0.0F }, { 10.0F, 4.0F } };
+  const auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  const auto seed = oxygen::scene::ResolveExposureSeedLogGain(*resolved, 5.0F);
+  ASSERT_TRUE(seed.has_value());
+  // +2 bias +2 curve -5 seed EV -1 key +1 target = -1 stop.
+  EXPECT_NEAR(*seed, -1.0F, 2e-6F);
+}
+
+NOLINT_TEST(ExposureSettingsTest, SeedCancellationAvoidsLinearLuminanceOverflow)
+{
+  auto settings = ExposureSettings {};
+  settings.key = 12.5F;
+  settings.min_ev = settings.max_ev = settings.compensation_ev = 160.0F;
+  const auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  const auto seed
+    = oxygen::scene::ResolveExposureSeedLogGain(*resolved, 160.0F);
+  ASSERT_TRUE(seed.has_value());
+  EXPECT_EQ(*seed, 0.0F);
+  EXPECT_EQ(
+    oxygen::scene::ResolveExposureSeedLogGain(*resolved, 127.0F).error(),
+    ExposureSettingsError::kUnsupportedGain);
+}
+
+NOLINT_TEST(
+  ExposureSettingsTest, ZeroTargetSeedRetainsPositiveNominalLatentGain)
+{
+  auto settings = ExposureSettings {};
+  settings.key = 12.5F;
+  settings.target_luminance = 0.0F;
+  const auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  const auto seed = oxygen::scene::ResolveExposureSeedLogGain(*resolved, 8.0F);
+  ASSERT_TRUE(seed.has_value());
+  EXPECT_EQ(*seed, -8.0F);
+}
+
+NOLINT_TEST(ExposureSettingsTest, InvalidSeedAndNonAutoModesAreRejected)
+{
+  auto settings = ExposureSettings {};
+  auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(oxygen::scene::ResolveExposureSeedLogGain(
+              *resolved, std::numeric_limits<float>::infinity())
+              .error(),
+    ExposureSettingsError::kNonFinite);
+  EXPECT_EQ(
+    oxygen::scene::ResolveExposureSeedLogGain(*resolved, 100.0F).error(),
+    ExposureSettingsError::kUnsupportedGain);
+  settings.mode = oxygen::engine::ExposureMode::kManual;
+  resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(oxygen::scene::ResolveExposureSeedLogGain(*resolved, 0.0F).error(),
+    ExposureSettingsError::kSeedRequiresAuto);
+  settings.enabled = false;
+  settings.mode = oxygen::engine::ExposureMode::kAuto;
+  resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(oxygen::scene::ResolveExposureSeedLogGain(*resolved, 0.0F).error(),
+    ExposureSettingsError::kSeedRequiresAuto);
 }
 
 } // namespace

@@ -34,6 +34,29 @@ the same per-view counter. Queueing does not acknowledge GPU application;
 completed status identifies the applied generation. Validate mode/settings
 and source ownership together at the frame boundary.
 
+The public control surface uses `ExposureTransitionToken` (target, runtime
+lifetime, renderer-issued generation, policy and optional EV seed) and
+`ExposureTransitionStatus`. Syntax errors allocate no generation. A producer
+can queue intent before first rendering its persistent handle; semantic
+validation waits for its accepted frame settings and source ownership. Retry
+of the latest identical token retains its outcome; older issued generations
+are superseded without reactivating them. Conflicting latest-token payloads
+and unknown/lifetime-mismatched identities are rejected. Shutdown clears the
+registry and rejects new requests/retries. Status contains no numerical gain.
+
+Explicit seeds resolve a positive log gain from the validated Auto settings at
+the requested EV, without clamping that EV to metering bounds or constructing
+linear seed luminance. Zero target uses nominal middle grey for the latent
+seed. This scalar conversion does not itself apply a GPU transition.
+
+Before publishing an immediate exposure submission, retain the recorder's
+existing command list before closing it and inspect `IsSubmitted()` immediately
+after release.
+Recording/queue failure therefore cannot authorize publication or request
+consumption. This is submission observation, not GPU completion; completed
+status still supplies application acknowledgement. The reusable command-list
+state must not be treated as a durable receipt across frame retirement.
+
 ## Settings resolution
 
 Resolve scene defaults, physical camera parameters for ManualCamera, and explicit

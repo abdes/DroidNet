@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <limits>
 #include <memory>
 #include <stdexcept>
 
@@ -389,6 +390,111 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
     oxygen::kInvalidViewId);
   EXPECT_EQ(RendererPublicationProbe::GetViewConstantsManager(*renderer_),
     nullptr);
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  ExposureRequestsUseRendererGenerationsAndIdempotentRetry)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Policy = oxygen::vortex::ExposureTransitionPolicy;
+  using Phase = oxygen::vortex::ExposureTransitionPhase;
+  const auto first = renderer_->QueueExposureTransition(
+    Handle { 1U }, Policy::kSeedFromEv100, 14.0F);
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(first->generation, 1U);
+  EXPECT_NE(first->lifetime, 0U);
+  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
+  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
+  const auto next
+    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_EQ(next->generation, 2U);
+  EXPECT_EQ(next->lifetime, first->lifetime);
+  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kSuperseded);
+  const auto status = renderer_->InspectExposureTransition(Handle { 1U });
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->request, *next);
+  EXPECT_EQ(status->applied_generation, 0U);
+  const auto other
+    = renderer_->QueueExposureTransition(Handle { 2U }, Policy::kPreserve);
+  ASSERT_TRUE(other.has_value());
+  EXPECT_EQ(other->generation, 1U);
+  EXPECT_NE(other->lifetime, first->lifetime);
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  ConflictingAndUnknownExposureTokensCannotReplaceIntent)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Policy = oxygen::vortex::ExposureTransitionPolicy;
+  using Error = oxygen::vortex::ExposureTransitionError;
+  const auto issued = renderer_->QueueExposureTransition(
+    Handle { 1U }, Policy::kSeedFromEv100, 14.0F);
+  ASSERT_TRUE(issued.has_value());
+  auto conflict = *issued;
+  conflict.seed_ev = 15.0F;
+  EXPECT_EQ(renderer_->RetryExposureTransition(conflict).error(),
+    Error::kConflictingToken);
+  auto unknown = *issued;
+  ++unknown.generation;
+  EXPECT_EQ(
+    renderer_->RetryExposureTransition(unknown).error(), Error::kUnknownToken);
+  unknown = *issued;
+  ++unknown.lifetime;
+  EXPECT_EQ(
+    renderer_->RetryExposureTransition(unknown).error(), Error::kUnknownToken);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(Handle { 1U })->request, *issued);
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  InvalidExposureRequestSyntaxDoesNotAllocateGeneration)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Policy = oxygen::vortex::ExposureTransitionPolicy;
+  using Error = oxygen::vortex::ExposureTransitionError;
+  EXPECT_EQ(renderer_
+              ->QueueExposureTransition(
+                oxygen::vortex::CompositionView::kInvalidViewStateHandle,
+                Policy::kRemeter)
+              .error(),
+    Error::kInvalidTarget);
+  EXPECT_EQ(
+    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kSeedFromEv100)
+      .error(),
+    Error::kInvalidSeed);
+  EXPECT_EQ(
+    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kPreserve, 0.0F)
+      .error(),
+    Error::kInvalidSeed);
+  EXPECT_EQ(renderer_
+              ->QueueExposureTransition(Handle { 1U }, Policy::kSeedFromEv100,
+                std::numeric_limits<float>::infinity())
+              .error(),
+    Error::kInvalidSeed);
+  EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
+  const auto valid
+    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
+  ASSERT_TRUE(valid.has_value());
+  EXPECT_EQ(valid->generation, 1U);
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, ShutdownRejectsNewExposureRequestsAndRetries)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Policy = oxygen::vortex::ExposureTransitionPolicy;
+  using Error = oxygen::vortex::ExposureTransitionError;
+  const auto issued
+    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
+  ASSERT_TRUE(issued.has_value());
+  renderer_->OnShutdown();
+  EXPECT_EQ(
+    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter).error(),
+    Error::kRendererUnavailable);
+  EXPECT_EQ(renderer_->RetryExposureTransition(*issued).error(),
+    Error::kRendererUnavailable);
+  EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
 }
 
 } // namespace
