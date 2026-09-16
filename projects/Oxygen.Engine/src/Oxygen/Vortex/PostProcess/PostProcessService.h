@@ -8,6 +8,7 @@
 
 #include <array>
 #include <deque>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -158,7 +159,9 @@ private:
     CompositionView::ViewStateHandle handle;
     ExposureSettingsState settings;
   };
-  std::unordered_map<ViewId, CapturedExposureSettings>
+  using ExposureCaptureKey
+    = std::pair<ViewId, CompositionView::ViewStateHandle>;
+  std::map<ExposureCaptureKey, CapturedExposureSettings>
     captured_exposure_settings_;
   std::unordered_map<ViewId, postprocess::ExposurePass::Source>
     captured_exposure_sources_;

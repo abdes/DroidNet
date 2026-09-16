@@ -363,6 +363,17 @@ last publication. Reject cycles/unknown roots atomically. Source destruction
 copies borrowed displayed/positive latent gain into consumer-owned state before
 fence retirement; Auto has one continuity frame then independent metering.
 
+The offscreen scene facade accepts the same source intent IDs. It resolves a
+registered chain to its persistent root for both standalone and in-frame
+execution; missing sources, stateless participants and aliased handles fail
+validation. The borrower supplies a distinct producer-owned state handle through
+`SetViewStateHandle`; a handle owned by another registered view is rejected even
+for independent offscreen execution. A validated session
+rechecks source availability before recording and rejects execution if the
+source was removed or ownership became invalid. Frame-captured
+settings distinguish the logical view ID and state handle, since an offscreen
+intent ID can numerically equal a registered source's published ID.
+
 Format suitability remains per view even with shared exposure. One source's
 valid gain cannot authorize a consumer's FP32-to-FP16 switch. Pin numerical P
 with every HDR product and history. Auxiliary/offscreen consumers must know

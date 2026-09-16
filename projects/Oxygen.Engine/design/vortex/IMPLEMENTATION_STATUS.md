@@ -32,7 +32,7 @@ gap.
 ## 3. Current next step
 
 **Active work:** [Global exposure / LightBench / MultiView](plan/exposure-and-lightbench-correction.md),
-`in_progress`, with slices 1-3 qualified and slice 4 active. Canonical settings and
+`in_progress`, with slices 1-4 qualified and slice 5 next. Canonical settings and
 public override create/update/clear isolation are implemented; cancellation-safe
 normalized targets, fixed/camera gain propagation and frame-retired uploads
 pass 95 focused CTest entries. Twelve native arithmetic captures, floating-point
@@ -123,9 +123,15 @@ native suite passes 89 cases, including three frames in flight, and publication
 passes 22. The controlled sharing capture proves distinct source/consumer
 records, gain copying, request rejection and tonemap consumption; evidence is
 `lifecycle/demoshell-reset-manifest.json` and `lifecycle/sharing-copy-analysis.txt`.
-Offscreen facade source routing still uses the consumer's own exposure handle
-and keeps slice 4 in progress. Physical backend restoration and numerical
-bootstrap remain part of slice 5.
+Offscreen facade routing now resolves registered roots in both execution paths,
+rejects stateless/aliased ownership and preserves distinct settings when IDs
+collide. Debug and Release each pass 91 native, 22 service, 22 publication and
+11 offscreen facade tests; two debugger cases have no blocking graphics
+messages. Source history and queued requests remain unchanged on rejected
+execution. Evidence is `lifecycle/offscreen-sharing-manifest.json`; slice 4's
+controlled-input gate is qualified. Physical backend restoration, numerical
+bootstrap, full HDR migration and scene-integrated visual validation remain
+part of slice 5.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

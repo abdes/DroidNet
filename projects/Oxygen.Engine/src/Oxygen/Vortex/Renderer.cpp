@@ -2324,6 +2324,35 @@ auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
   return nullptr;
 }
 
+auto Renderer::ResolveOffscreenExposureSource(const CompositionView& view) const
+  -> std::optional<std::pair<ViewId, CompositionView::ViewStateHandle>>
+{
+  std::shared_lock lock(view_state_mutex_);
+  if (view.view_state_handle != CompositionView::kInvalidViewStateHandle
+    && std::ranges::any_of(
+      published_runtime_views_by_intent_, [&view](const auto& item) {
+        return item.first != view.id
+          && item.second.view_state_handle == view.view_state_handle;
+      }))
+    return std::nullopt;
+  if (view.exposure_source_view_id == kInvalidViewId
+    || view.exposure_source_view_id == view.id)
+    return std::pair { view.id, view.view_state_handle };
+  if (view.view_state_handle == CompositionView::kInvalidViewStateHandle)
+    return std::nullopt;
+  const auto source
+    = published_runtime_views_by_intent_.find(view.exposure_source_view_id);
+  if (source == published_runtime_views_by_intent_.end())
+    return std::nullopt;
+  const auto* root
+    = ResolvePublishedExposureRootLocked(source->second.published_view_id);
+  if (!root
+    || root->view_state_handle == CompositionView::kInvalidViewStateHandle
+    || root->view_state_handle == view.view_state_handle)
+    return std::nullopt;
+  return std::pair { root->published_view_id, root->view_state_handle };
+}
+
 auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
   -> std::optional<ExposureSourceIntent>
 {
@@ -3743,6 +3772,13 @@ auto Renderer::OffscreenSceneViewInput::SyncName() noexcept -> void
   composition_view_.name = name_storage_;
 }
 
+auto Renderer::OffscreenSceneViewInput::SetViewStateHandle(
+  const CompositionView::ViewStateHandle handle) -> OffscreenSceneViewInput&
+{
+  composition_view_.view_state_handle = handle;
+  return *this;
+}
+
 Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
   Renderer& renderer, FrameSessionInput frame_session,
   SceneSourceInput scene_source, OffscreenSceneViewInput view_intent,
@@ -3776,6 +3812,14 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
   CHECK_F(view_intent.camera.has_value(),
     "ValidatedOffscreenSceneSession requires a camera-backed view intent");
 
+  const auto exposure_source
+    = renderer_->ResolveOffscreenExposureSource(view_intent);
+  if (!exposure_source) {
+    LOG_F(ERROR,
+      "Offscreen exposure source is no longer available; execution rejected");
+    return;
+  }
+
   auto frame_session = frame_session_;
   frame_session.scene = scene_source_.scene;
   renderer_->BeginStandaloneFrameExecution(frame_session);
@@ -3804,15 +3848,11 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
   render_context.view_outputs.insert_or_assign(
     view_intent.id, output_target_.framebuffer);
 
-  const auto exposure_view_id
-    = view_intent.exposure_source_view_id != kInvalidViewId
-    ? view_intent.exposure_source_view_id
-    : view_intent.id;
   render_context.frame_views.push_back(RenderContext::ViewExecutionEntry {
     .view_id = view_intent.id,
-    .exposure_view_id = exposure_view_id,
+    .exposure_view_id = exposure_source->first,
     .view_state_handle = view_intent.view_state_handle,
-    .exposure_view_state_handle = view_intent.view_state_handle,
+    .exposure_view_state_handle = exposure_source->second,
     .is_scene_view = true,
     .is_reflection_capture = false,
     .with_atmosphere = view_intent.with_atmosphere,
@@ -3858,6 +3898,14 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   CHECK_F(view_intent.camera.has_value(),
     "ValidatedOffscreenSceneSession requires a camera-backed view intent");
 
+  const auto exposure_source
+    = renderer_->ResolveOffscreenExposureSource(view_intent);
+  if (!exposure_source) {
+    LOG_F(ERROR,
+      "Offscreen exposure source is no longer available; execution rejected");
+    return;
+  }
+
   auto& scene = *scene_source_.scene;
   scene.Update();
 
@@ -3881,15 +3929,11 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   render_context.view_outputs.insert_or_assign(
     view_intent.id, output_target_.framebuffer);
 
-  const auto exposure_view_id
-    = view_intent.exposure_source_view_id != kInvalidViewId
-    ? view_intent.exposure_source_view_id
-    : view_intent.id;
   render_context.frame_views.push_back(RenderContext::ViewExecutionEntry {
     .view_id = view_intent.id,
-    .exposure_view_id = exposure_view_id,
+    .exposure_view_id = exposure_source->first,
     .view_state_handle = view_intent.view_state_handle,
-    .exposure_view_state_handle = view_intent.view_state_handle,
+    .exposure_view_state_handle = exposure_source->second,
     .is_scene_view = true,
     .is_reflection_capture = false,
     .with_atmosphere = view_intent.with_atmosphere,
@@ -4011,6 +4055,13 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
       report.issues.push_back(ValidationIssue {
         .code = "view_intent.invalid_id",
         .message = "Offscreen scene requires a valid view id",
+      });
+    }
+    if (!renderer_->ResolveOffscreenExposureSource(view_intent)) {
+      report.issues.push_back(ValidationIssue {
+        .code = "view_intent.invalid_exposure_source",
+        .message = "Offscreen exposure requires unique state ownership; "
+                   "sharing requires distinct persistent participants",
       });
     }
     auto camera = view_intent.camera.value_or(scene::SceneNode {});

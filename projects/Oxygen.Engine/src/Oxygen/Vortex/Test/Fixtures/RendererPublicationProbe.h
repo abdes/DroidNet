@@ -18,6 +18,11 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto FrameExposureStates(const PostProcessService& service,
+    frame::Slot slot) -> std::vector<postprocess::ExposurePass::StateLease>
+  {
+    return service.exposure_pass_->frame_states_[slot.get()];
+  }
   static auto PreviousViewHistory(Renderer& renderer)
     -> internal::PreviousViewHistoryCache&
   {
