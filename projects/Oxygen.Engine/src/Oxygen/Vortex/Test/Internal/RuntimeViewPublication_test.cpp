@@ -746,4 +746,32 @@ NOLINT_TEST_F(
     oxygen::vortex::ExposureTransitionPhase::kQueued);
 }
 
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  DiscontinuityNotificationsValidateIdentityAndShutdown)
+{
+  using View = oxygen::vortex::CompositionView;
+  using Reason = oxygen::vortex::ViewDiscontinuity;
+  using Error = oxygen::vortex::ExposureTransitionError;
+  EXPECT_EQ(renderer_
+              ->NotifyViewDiscontinuity(
+                View::kInvalidViewStateHandle, Reason::kCameraCut)
+              .error(),
+    Error::kInvalidTarget);
+  EXPECT_EQ(renderer_
+              ->NotifyViewDiscontinuity(
+                View::ViewStateHandle { 11U }, static_cast<Reason>(255U))
+              .error(),
+    Error::kInvalidDiscontinuity);
+  EXPECT_TRUE(renderer_
+      ->NotifyViewDiscontinuity(
+        View::ViewStateHandle { 11U }, Reason::kCameraCut)
+      .has_value());
+  renderer_->OnShutdown();
+  EXPECT_EQ(renderer_
+              ->NotifyViewDiscontinuity(
+                View::ViewStateHandle { 11U }, Reason::kDeviceRecovery)
+              .error(),
+    Error::kRendererUnavailable);
+}
+
 } // namespace

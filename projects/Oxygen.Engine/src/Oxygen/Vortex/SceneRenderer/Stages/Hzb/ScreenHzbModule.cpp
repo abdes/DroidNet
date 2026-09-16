@@ -805,6 +805,10 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   auto& state = impl_->EnsureViewResources(
     view_id, width, height, mip_count, build_closest, build_furthest);
+  if (ctx.current_view.history_discontinuity) {
+    state.has_current_output = false;
+    state.has_previous_output = false;
+  }
   state.scene_texture_width = scene_depth_width;
   state.scene_texture_height = scene_depth_height;
   state.source_view_rect_min_x = source_origin_x;

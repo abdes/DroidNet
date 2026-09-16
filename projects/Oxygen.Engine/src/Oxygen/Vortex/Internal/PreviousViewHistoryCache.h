@@ -46,6 +46,7 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto TouchStateless(
     const CurrentState& current) const -> Snapshot;
   OXGN_VRTX_API void EndFrame();
+  OXGN_VRTX_API void Invalidate(CompositionView::ViewStateHandle handle);
 
 private:
   struct Entry {

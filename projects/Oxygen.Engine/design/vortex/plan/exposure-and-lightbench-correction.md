@@ -1078,8 +1078,19 @@ solve history, without importing source request identity or acknowledging failed
 work. Debug and Release pass 81/81 native, 21/21 service, 21/21 publication and
 39/39 renderer regressions. Six focused debugger cases have no blocking graphics
 messages. Evidence is `lifecycle/source-loss-manifest.json`.
-Implicit camera/world/device events and the remaining slice-4 integration/capture
-gates remain open; slice 4 is not qualified.
+The typed discontinuity boundary is implemented: accepted camera selection
+changes and per-view world ownership changes request default transitions; games
+can notify camera cuts or completed backend recovery. Auto remeters, explicit
+requests take precedence, diagnostics defer events, late notifications wait for
+the next capture, and borrowers invalidate local histories without resetting
+their source. Camera matrices and temporal fog/HZB reuse are invalidated.
+Debug and Release pass 88/88 native, 21/21 service and 22/22 publication tests,
+plus 117/117 rebuilt renderer/facade/environment/history regression entries.
+Seven native discontinuity debugger cases have no blocking graphics messages.
+Evidence is `lifecycle/discontinuity-manifest.json`.
+DemoShell reset wiring and the remaining slice-4 integration/capture gates remain
+open; slice 4 is not qualified. Actual backend resource restoration and the
+scene-integrated numerical bootstrap use the slice-5 recovery route.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
 
@@ -1088,10 +1099,11 @@ slice 5 work.
   recording/submission failure, invalid metering and idempotent retries.
 - [ ] Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
-  Remaining lifecycle coverage must include implicit camera/world/device events.
-  Source-destruction continuity, default detach, lifetime-safe history selection,
-  inactive-owner validation and acknowledgement after readback backpressure are
-  covered by the checkpoints above.
+  The controlled-input lifecycle cases, including discontinuity notification,
+  source destruction, default detach, lifetime-safe selection, inactive-owner
+  validation and acknowledgement backpressure, are covered by the checkpoints
+  above. Complete the remaining native integration/capture gate and DemoShell
+  reset wiring before closing the slice.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,

@@ -2185,9 +2185,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
           ? oxygen::graphics::BlendFactor::kOne
           : oxygen::graphics::BlendFactor::kSrcAlpha;
         const auto expected_dest_blend
-          = pipeline_name == "Vortex.Environment.Fog"
-          ? oxygen::graphics::BlendFactor::kSrcAlpha
-          : oxygen::graphics::BlendFactor::kInvSrcAlpha;
+          = oxygen::graphics::BlendFactor::kInvSrcAlpha;
         return !blend_state.empty()
           && std::ranges::all_of(blend_state, [&](const auto& target) {
                return target.blend_enable
@@ -2853,6 +2851,22 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(
     second_generation.volumetric_fog_temporal_history_reprojection_executed);
   EXPECT_FALSE(second_generation.volumetric_fog_temporal_history_reset);
+  ctx.current_view.history_discontinuity = true;
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 15U }, oxygen::frame::Slot { 1U });
+  ASSERT_NE(
+    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(service.GetLastViewProductGenerationState()
+      .volumetric_fog_temporal_history_reset);
+  EXPECT_FALSE(service.GetLastViewProductGenerationState()
+      .volumetric_fog_temporal_history_reprojection_executed);
+  ctx.current_view.history_discontinuity = false;
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 16U }, oxygen::frame::Slot { 2U });
+  ASSERT_NE(
+    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(service.GetLastViewProductGenerationState()
+      .volumetric_fog_temporal_history_reprojection_executed);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

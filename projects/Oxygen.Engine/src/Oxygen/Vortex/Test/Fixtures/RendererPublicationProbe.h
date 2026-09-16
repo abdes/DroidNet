@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -17,6 +18,11 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto PreviousViewHistory(Renderer& renderer)
+    -> internal::PreviousViewHistoryCache&
+  {
+    return *renderer.previous_view_history_cache_;
+  }
   static auto SelectedBorrowForView(
     const PostProcessService& service, CompositionView::ViewStateHandle handle)
     -> postprocess::ExposurePass::StateLease

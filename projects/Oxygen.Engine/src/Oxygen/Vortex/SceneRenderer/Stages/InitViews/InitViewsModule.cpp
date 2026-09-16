@@ -69,7 +69,8 @@ namespace {
       : std::optional<float> {};
     const auto& active = post_process_service
                            ->CaptureViewExposureSettings(view.view_id,
-                             view.view_state_handle, requested, camera_ev)
+                             view.view_state_handle, requested, camera_ev,
+                             false, observer_ptr<const scene::Scene> { &scene })
                            .resolved;
     // Auto gain is GPU-owned. Never derive this early scalar from inactive
     // Manual EV or independently exponentiate an authored Auto compensation.

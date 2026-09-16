@@ -553,6 +553,11 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureTransition(
     CompositionView::ViewStateHandle target) const
     -> std::optional<ExposureTransitionStatus>;
+  //! Notify a discontinuity before frame capture. Explicit exposure requests
+  //! can override its default policy; borrowing views never reset their source.
+  [[nodiscard]] OXGN_VRTX_API auto NotifyViewDiscontinuity(
+    CompositionView::ViewStateHandle target, ViewDiscontinuity reason)
+    -> std::expected<void, ExposureTransitionError>;
 
   OXGN_VRTX_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
@@ -712,6 +717,11 @@ private:
     std::uint64_t generation { 0U };
     std::uint64_t submitted_generation { 0U };
     bool implicit_request { false };
+    std::uint32_t pending_discontinuities { 0U };
+    std::uint32_t captured_discontinuities { 0U };
+    bool world_observed { false };
+    std::weak_ptr<const scene::Scene> world;
+    const scene::Scene* world_pointer { nullptr };
     std::optional<ExposureTransitionStatus> status;
     std::optional<frame::SequenceNumber> captured_frame;
     std::optional<ExposureTransitionToken> captured_request;
@@ -726,8 +736,13 @@ private:
     ExposureTransitionPolicy policy, std::optional<float> seed_ev,
     bool implicit)
     -> std::expected<ExposureTransitionToken, ExposureTransitionError>;
-  auto PrepareExposureDetach(CompositionView::ViewStateHandle target,
-    ExposureTransitionPolicy policy) -> void;
+  auto PrepareExposureTransition(CompositionView::ViewStateHandle target,
+    ExposureTransitionPolicy policy, frame::SequenceNumber frame,
+    bool suppressed) -> void;
+  auto ObserveExposureWorld(
+    CompositionView::ViewStateHandle target, const scene::Scene* world) -> void;
+  auto CapturedViewDiscontinuities(CompositionView::ViewStateHandle target,
+    frame::SequenceNumber frame) const -> std::uint32_t;
   auto EnsureExposureLifetime(CompositionView::ViewStateHandle target)
     -> std::uint64_t;
   auto EnsureExposureLifetimeLocked(CompositionView::ViewStateHandle target)
@@ -781,6 +796,8 @@ private:
     bool pending_exposure_detach { false };
     scene::ExposureSettings inherited_exposure;
     std::shared_ptr<const ExposureSourceLoss> pending_source_loss;
+    bool camera_observed { false };
+    std::optional<scene::NodeHandle> camera_identity;
   };
 
   //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.

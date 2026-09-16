@@ -112,8 +112,14 @@ passes 81 native, 21 service, 21 publication and 39 renderer regressions per
 configuration, plus six debugger cases. Coverage includes borrowed zero,
 never-rendered source fallback, diagnostic siblings, retired consumers and the
 latest selected fallback after a failed consumer copy; evidence is
-`lifecycle/source-loss-manifest.json`. Implicit camera/world/device events and
-the remaining integration/capture gates keep slice 4 in progress.
+`lifecycle/source-loss-manifest.json`. Camera/world change detection and typed
+camera-cut/backend-recovery notifications now pass 88 native, 21 service,
+22 publication and 117 renderer/facade/environment/history regression entries
+in each configuration, plus seven debugger cases. Camera/fog/HZB invalidation,
+explicit precedence, diagnostic deferral and borrower isolation are covered in
+`lifecycle/discontinuity-manifest.json`. DemoShell reset wiring and remaining
+integration/capture gates keep slice 4 in progress; physical backend restoration
+and numerical bootstrap remain part of slice 5.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

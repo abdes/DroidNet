@@ -46,6 +46,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
@@ -2668,6 +2669,36 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
     EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  ViewDiscontinuityInvalidatesPreviousHzbForOneFrame)
+{
+  const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
+  auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
+  auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
+  auto context = RenderContext {};
+  context.current_view.view_id = first_view_id_;
+  context.current_view.screen_hzb_request
+    = { .current_furthest = true, .publish_previous_furthest = true };
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  module.Execute(context, textures);
+  EXPECT_FALSE(module.GetPreviousOutput().available);
+  module.OnFrameStart();
+  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  module.Execute(context, textures);
+  EXPECT_TRUE(module.GetPreviousOutput().available);
+  module.OnFrameStart();
+  context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
+  context.current_view.history_discontinuity = true;
+  module.Execute(context, textures);
+  EXPECT_FALSE(module.GetPreviousOutput().available);
+  module.OnFrameStart();
+  context.frame_sequence = oxygen::frame::SequenceNumber { 4U };
+  context.current_view.history_discontinuity = false;
+  module.Execute(context, textures);
+  EXPECT_TRUE(module.GetPreviousOutput().available);
 }
 
 } // namespace

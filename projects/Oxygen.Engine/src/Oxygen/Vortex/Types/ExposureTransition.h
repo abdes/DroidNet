@@ -20,6 +20,12 @@ enum class ExposureTransitionPolicy : std::uint32_t {
   kSeedFromEv100,
 };
 
+enum class ViewDiscontinuity : std::uint8_t {
+  kCameraCut,
+  kWorldReplacement,
+  kDeviceRecovery,
+};
+
 enum class ExposureTransitionError : std::uint8_t {
   kInvalidTarget,
   kRendererUnavailable,
@@ -31,6 +37,7 @@ enum class ExposureTransitionError : std::uint8_t {
   kNotAuto,
   kSharedConsumer,
   kUnsupportedSeed,
+  kInvalidDiscontinuity,
 };
 
 enum class ExposureTransitionPhase : std::uint8_t {

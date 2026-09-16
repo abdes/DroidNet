@@ -285,8 +285,8 @@ auto PostProcessService::ResolveViewExposureSettings(
 auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
   const CompositionView::ViewStateHandle handle,
   const scene::ExposureSettings& requested,
-  const std::optional<float> camera_ev, const bool suppress_transitions)
-  -> const ExposureSettingsState&
+  const std::optional<float> camera_ev, const bool suppress_transitions,
+  const observer_ptr<const scene::Scene> world) -> const ExposureSettingsState&
 {
   if (const auto found = captured_exposure_settings_.find(view_id);
     found != captured_exposure_settings_.end()) {
@@ -294,18 +294,17 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
       "A captured view cannot change its exposure lifetime within a frame");
     return found->second.settings;
   }
+  renderer_.ObserveExposureWorld(handle, world.get());
   auto settings = ResolveViewExposureSettings(handle, requested, camera_ev);
   const auto owner = renderer_.GetExposureSourceIntent(view_id);
   if (owner && owner->handle == handle && owner->source_loss)
     PreserveRemovedExposureSource(owner->source_loss, handle);
-  if (!suppress_transitions) {
-    if (owner && owner->handle == handle && !owner->diagnostic)
-      renderer_.PrepareExposureDetach(handle,
-        settings.resolved.authored.enabled
-            && settings.resolved.authored.mode == engine::ExposureMode::kAuto
-          ? ExposureTransitionPolicy::kRemeter
-          : ExposureTransitionPolicy::kPreserve);
-  }
+  renderer_.PrepareExposureTransition(handle,
+    settings.resolved.authored.enabled
+        && settings.resolved.authored.mode == engine::ExposureMode::kAuto
+      ? ExposureTransitionPolicy::kRemeter
+      : ExposureTransitionPolicy::kPreserve,
+    current_sequence_, suppress_transitions || (owner && owner->diagnostic));
   static_cast<void>(
     renderer_.CaptureExposureTransition(handle, current_sequence_));
   return captured_exposure_settings_
@@ -337,8 +336,8 @@ auto PostProcessService::CaptureSharedExposureSource(const RenderContext& ctx,
             ->TryGetSystem<scene::environment::PostProcessVolume>())
         requested = post->GetExposureSettings();
     }
-    static_cast<void>(CaptureViewExposureSettings(
-      source_view_id, source_handle, requested, intent->camera_ev));
+    static_cast<void>(CaptureViewExposureSettings(source_view_id, source_handle,
+      requested, intent->camera_ev, intent->diagnostic, ctx.GetScene()));
   }
   const auto& captured = captured_exposure_settings_.at(source_view_id);
   CHECK_F(captured.handle == source_handle);
@@ -375,9 +374,9 @@ auto PostProcessService::CaptureRegisteredExposureControls(
       || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
       || (intent.handle == ctx.current_view.view_state_handle
         && ctx.render_mode == RenderMode::kWireframe);
-    const auto& captured
-      = CaptureViewExposureSettings(intent.view_id, intent.handle,
-        intent.settings.value_or(inherited), intent.camera_ev, suppressed);
+    const auto& captured = CaptureViewExposureSettings(intent.view_id,
+      intent.handle, intent.settings.value_or(inherited), intent.camera_ev,
+      suppressed, ctx.GetScene());
     const auto token
       = renderer_.CaptureExposureTransition(intent.handle, current_sequence_);
     if (!token || suppressed
@@ -478,6 +477,17 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       && source->resolved.authored == settings.resolved.authored
       && source->resolved.fixed_scale == settings.resolved.fixed_scale)
       settings = *source;
+    renderer_.ObserveExposureWorld(
+      ctx.current_view.view_state_handle, ctx.GetScene().get());
+    renderer_.PrepareExposureTransition(ctx.current_view.view_state_handle,
+      settings.resolved.authored.enabled
+          && settings.resolved.authored.mode == engine::ExposureMode::kAuto
+        ? ExposureTransitionPolicy::kRemeter
+        : ExposureTransitionPolicy::kPreserve,
+      ctx.frame_sequence,
+      config_.temporary_unit_exposure
+        || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+        || ctx.render_mode == RenderMode::kWireframe);
     static_cast<void>(renderer_.CaptureExposureTransition(
       ctx.current_view.view_state_handle, ctx.frame_sequence));
     captured = captured_exposure_settings_

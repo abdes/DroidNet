@@ -106,4 +106,10 @@ void PreviousViewHistoryCache::EndFrame()
   }
 }
 
+void PreviousViewHistoryCache::Invalidate(
+  CompositionView::ViewStateHandle handle)
+{
+  entries_.erase(handle);
+}
+
 } // namespace oxygen::vortex::internal
