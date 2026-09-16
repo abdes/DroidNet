@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen-engine.org/schemas/oxygen.cooked-scenes.schema.json",
+  "title": "Oxygen Cooked Scene Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_key", "complete", "scenes"],
+  "properties": {
+    "schema": { "const": "oxygen.cooked-scenes.v1" },
+    "source_key": { "$ref": "#/definitions/key" },
+    "complete": { "type": "boolean" },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["asset_key", "virtual_path", "descriptor_version", "complete", "nodes"],
+        "properties": {
+          "asset_key": { "$ref": "#/definitions/key" },
+          "virtual_path": { "type": "string", "pattern": "^/" },
+          "descriptor_version": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+          "complete": { "type": "boolean" },
+          "diagnostic": { "type": "string", "minLength": 1 },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["index", "node_id", "name", "parent_index", "flags"],
+              "properties": {
+                "index": { "type": "integer", "minimum": 0 },
+                "node_id": { "$ref": "#/definitions/key" },
+                "name": { "type": "string" },
+                "parent_index": { "type": "integer", "minimum": 0 },
+                "flags": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["visible", "casts_shadows", "receives_shadows"],
+                  "properties": {
+                    "visible": { "enum": ["inherit", "shown", "hidden"] },
+                    "casts_shadows": { "enum": ["inherit", "on", "off"] },
+                    "receives_shadows": { "enum": ["inherit", "on", "off"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "complete": { "const": true } } },
+            "then": { "properties": { "descriptor_version": { "type": "integer" } }, "not": { "required": ["diagnostic"] } },
+            "else": { "required": ["diagnostic"] }
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "key": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

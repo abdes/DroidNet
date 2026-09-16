@@ -7,6 +7,7 @@ from pakgen.api import BuildOptions, build_pak
 def test_manifest_includes_zero_length_warnings(tmp_path: Path):
     # Arrange: spec with two buffers, first zero-length (allowed), second also zero-length (should trigger warning)
     spec = {
+        "source_identity": "01a0a760-49bd-7075-9945-3b8f3091550e",
         "version": 6,
         "name": "ZeroLenWarnings",
         "buffers": [

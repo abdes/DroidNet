@@ -1,5 +1,6 @@
 # Scene asset with no renderables (no geometry dependencies)
 version: 7
+source_identity: "01a0a763-72e2-7339-9218-427dc8726891"
 content_version: 1
 
 buffers:

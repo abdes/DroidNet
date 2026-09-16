@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import pytest
 from pakgen.api import build_pak, BuildOptions
 from pakgen.diff import diff_spec_vs_pak_deep
 
@@ -11,6 +12,7 @@ def _write_spec(path: Path, spec: dict):
 def test_diff_material_base_color_change(tmp_path: Path):
     # Arrange: build pak with one material
     spec = {
+        "source_identity": "01a0a760-4985-74f3-9e93-1f9872cdaabd",
         "version": 6,
         "content_version": 1,
         "buffers": [],
@@ -47,9 +49,11 @@ def test_diff_material_base_color_change(tmp_path: Path):
     assert any(d.get("field") == "base_color" for d in mat_diffs)
 
 
-def test_diff_geometry_removed_submesh(tmp_path: Path):
+@pytest.mark.parametrize("mesh_type", [0, 2])
+def test_diff_geometry_removed_submesh(tmp_path: Path, mesh_type):
     # Arrange: geometry with one LOD two submeshes
     spec = {
+        "source_identity": "01a0a760-4985-74f3-9e93-1f99c7ae7012",
         "version": 6,
         "content_version": 1,
         "buffers": [],
@@ -97,6 +101,11 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
             },
         ],
     }
+    lod = spec["assets"][2]["lods"][0]
+    lod["mesh_type"] = mesh_type
+    if mesh_type == 2:
+        lod["name"] = "Sphere/Generated"
+        lod["procedural_params"] = {"data_hex": "0800000010000000"}
     spec_path = tmp_path / "spec.json"
     _write_spec(spec_path, spec)
     out_path = tmp_path / "out.pak"
@@ -132,6 +141,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
             ],
         },
     ]
+    modified_spec["assets"][2]["lods"][0]["mesh_type"] = mesh_type
     diff_res = diff_spec_vs_pak_deep(modified_spec, out_path)
     geo_diffs = diff_res["geometries"]
     assert any(d.get("issue") == "removed_submesh" for d in geo_diffs)
@@ -140,6 +150,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path):
 def test_diff_geometry_lod_count(tmp_path: Path):
     # Arrange: geometry with one LOD
     spec = {
+        "source_identity": "01a0a760-4985-74f3-9e93-1f9a1a677abf",
         "version": 6,
         "content_version": 1,
         "buffers": [],

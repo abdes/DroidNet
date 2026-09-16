@@ -4,7 +4,7 @@ import struct
 from pathlib import Path
 
 from pakgen.api import BuildOptions, build_pak, inspect_pak
-from pakgen.packing.constants import ASSET_HEADER_SIZE
+from pakgen.packing.constants import ASSET_HEADER_SIZE, SCRIPT_DESC_SIZE
 
 
 def _read_script_slot_records(
@@ -44,7 +44,8 @@ def _read_script_asset_desc(
     pak_path: Path, desc_offset: int
 ) -> tuple[str, int, int, int, str]:
     data = pak_path.read_bytes()
-    desc = data[desc_offset : desc_offset + 256]
+    desc = data[desc_offset : desc_offset + SCRIPT_DESC_SIZE]
+    assert len(desc) == 235
     name = desc[1:65].split(b"\x00", 1)[0].decode("utf-8", errors="strict")
     payload_offset = ASSET_HEADER_SIZE
     bytecode_index, source_index, flags = struct.unpack_from(
@@ -74,9 +75,11 @@ def test_scripting_records_generation(tmp_path: Path):  # noqa: N802
     slot_table = footer["tables"]["script_slot"]
     assert script_region["size"] > 0
     assert script_table["count"] == 3
-    assert script_table["entry_size"] == 32
+    # ScriptResourceDesc is Q + I + B + B + B + Q; ScriptSlotRecord is
+    # AssetKey + Q + I + i + I (PakFormat_scripting.h, packed alignment 1).
+    assert script_table["entry_size"] == 23
     assert slot_table["count"] == 3
-    assert slot_table["entry_size"] == 128
+    assert slot_table["entry_size"] == 36
 
     dir_entries = info.get("directory_entries", [])
     script_assets = [e for e in dir_entries if e["asset_type"] == 4]

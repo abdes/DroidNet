@@ -6,6 +6,7 @@ from pakgen.api import build_pak, BuildOptions
 def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     """Verify that buffer index 0 is reserved as an all-zero sentinel in the PAK."""
     spec = {
+        "source_identity": "01a0a760-497d-74e8-847a-c1cd18ae9199",
         "version": 7,
         "content_version": 1,
         "buffers": [

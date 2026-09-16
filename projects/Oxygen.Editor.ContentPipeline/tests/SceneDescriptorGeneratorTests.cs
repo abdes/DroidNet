@@ -111,7 +111,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(4);
+        _ = root.GetProperty("version").GetInt32().Should().Be(5);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
@@ -121,6 +121,100 @@ public sealed partial class SceneDescriptorGeneratorTests
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
         _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
+    }
+
+    /// <summary>Preserves saved boolean intent as explicit local source choices at every hierarchy depth.</summary>
+    /// <param name="visible">The child node's authored visibility.</param>
+    /// <param name="castsShadows">The child node's authored geometry casting flag.</param>
+    /// <param name="receivesShadows">The child node's authored geometry receiving flag.</param>
+    /// <returns>The asynchronous descriptor mapping test.</returns>
+    [TestMethod]
+    [DataRow(false, false, false)]
+    [DataRow(false, false, true)]
+    [DataRow(false, true, false)]
+    [DataRow(false, true, true)]
+    [DataRow(true, false, false)]
+    [DataRow(true, false, true)]
+    [DataRow(true, true, false)]
+    [DataRow(true, true, true)]
+    public async Task GenerateAsyncShouldPreserveLocalNodeFlagsUnderOppositeParent(
+        bool visible,
+        bool castsShadows,
+        bool receivesShadows)
+    {
+        using var workspace = new TempWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var parent = new SceneNode(scene)
+        {
+            Name = "Parent",
+            IsVisible = !visible,
+            CastsShadows = !castsShadows,
+            ReceivesShadows = !receivesShadows,
+        };
+        var child = new SceneNode(scene)
+        {
+            Name = "Child",
+            IsVisible = visible,
+            CastsShadows = castsShadows,
+            ReceivesShadows = receivesShadows,
+            IsStatic = true,
+            IsRayCastingSelectable = false,
+            IgnoreParentTransform = true,
+        };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var root = document.RootElement;
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v5");
+        _ = root.GetProperty("version").GetInt32().Should().Be(5);
+        var nodes = root.GetProperty("nodes");
+        _ = nodes.GetArrayLength().Should().Be(2);
+        _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
+        var parentFlags = nodes[0].GetProperty("flags");
+        _ = parentFlags.GetProperty("visible").GetString().Should().Be(visible ? "hidden" : "shown");
+        _ = parentFlags.GetProperty("casts_shadows").GetString().Should().Be(castsShadows ? "off" : "on");
+        _ = parentFlags.GetProperty("receives_shadows").GetString().Should().Be(receivesShadows ? "off" : "on");
+        var childFlags = nodes[1].GetProperty("flags");
+        _ = childFlags.GetProperty("visible").GetString().Should().Be(visible ? "shown" : "hidden");
+        _ = childFlags.GetProperty("casts_shadows").GetString().Should().Be(castsShadows ? "on" : "off");
+        _ = childFlags.GetProperty("receives_shadows").GetString().Should().Be(receivesShadows ? "on" : "off");
+        _ = childFlags.GetProperty("static").GetBoolean().Should().BeTrue();
+        _ = childFlags.GetProperty("ray_cast_selectable").GetBoolean().Should().BeFalse();
+        _ = childFlags.GetProperty("ignore_parent_transform").GetBoolean().Should().BeTrue();
+    }
+
+    /// <summary>Component contribution gates retain their independent boolean wire contracts.</summary>
+    /// <returns>The asynchronous descriptor mapping test.</returns>
+    [TestMethod]
+    public async Task GenerateAsyncShouldKeepRenderableAndLightFlagsBoolean()
+    {
+        using var workspace = new TempWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var node = new SceneNode(scene) { Name = "Fixture", IsVisible = false, CastsShadows = true };
+        _ = node.AddComponent(new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+        });
+        _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", CastsShadows = false });
+        scene.RootNodes.Add(node);
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var root = document.RootElement;
+        _ = root.GetProperty("nodes")[0].GetProperty("flags").GetProperty("visible").GetString().Should().Be("hidden");
+        _ = root.GetProperty("nodes")[0].GetProperty("flags").GetProperty("casts_shadows").GetString().Should().Be("on");
+        _ = root.GetProperty("renderables")[0].GetProperty("visible").GetBoolean().Should().BeFalse();
+        _ = root.GetProperty("lights").GetProperty("directional")[0].GetProperty("common").GetProperty("casts_shadows").GetBoolean().Should().BeFalse();
     }
 
     /// <summary>Emits authored atmosphere values in native units.</summary>

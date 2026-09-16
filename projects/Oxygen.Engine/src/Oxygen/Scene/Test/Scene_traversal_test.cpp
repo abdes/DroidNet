@@ -648,19 +648,9 @@ protected:
     nodeJ_ = CreateChildNode(nodeE_, "J");
     nodeK_ = CreateChildNode(nodeH_, "K");
 
-    // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(root_);
-    UpdateSingleNodeTransforms(nodeA_);
-    UpdateSingleNodeTransforms(nodeB_);
-    UpdateSingleNodeTransforms(nodeC_);
-    UpdateSingleNodeTransforms(nodeD_);
-    UpdateSingleNodeTransforms(nodeE_);
-    UpdateSingleNodeTransforms(nodeF_);
-    UpdateSingleNodeTransforms(nodeG_);
-    UpdateSingleNodeTransforms(nodeH_);
-    UpdateSingleNodeTransforms(nodeI_);
-    UpdateSingleNodeTransforms(nodeJ_);
-    UpdateSingleNodeTransforms(nodeK_);
+    // Resolve inherited flags as well as transforms before effective-value
+    // filters consume the hierarchy.
+    scene_->Update();
   }
 
   // Member variables using default constructor for SceneNode

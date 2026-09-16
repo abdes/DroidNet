@@ -10,6 +10,7 @@ from pakgen.packing.constants import ASSET_HEADER_SIZE
 
 def _spec_with_input_assets() -> dict:
     return {
+        "source_identity": "01a0a760-49b1-73b4-b0e2-1d74db502a8a",
         "version": 6,
         "content_version": 1,
         "buffers": [],
@@ -120,12 +121,13 @@ def test_v6_input_mapping_layout(tmp_path: Path):  # noqa: N802
 
     accel_key = bytes.fromhex("11" * 16)
 
-    # InputMappingContextAssetDesc: header, flags(4), then 4 InputDataTable entries.
+    # InputMappingContextAssetDesc: header, flags(4), default_priority(4),
+    # then four 16-byte InputDataTable entries (PakFormat_input.h).
     imc_desc_off = imc_entry["desc_offset"]
-    imc_desc = data[imc_desc_off : imc_desc_off + 256]
-    assert len(imc_desc) == 256
+    imc_desc = data[imc_desc_off : imc_desc_off + 175]
+    assert len(imc_desc) == 175
 
-    base = ASSET_HEADER_SIZE + 4
+    base = ASSET_HEADER_SIZE + 8
     mappings_offset, mappings_count, mappings_entry_size = struct.unpack_from(
         "<QII", imc_desc, base + 0
     )
@@ -140,16 +142,16 @@ def test_v6_input_mapping_layout(tmp_path: Path):  # noqa: N802
     )
 
     assert mappings_count == 2
-    assert mappings_entry_size == 64
+    assert mappings_entry_size == 48
     assert triggers_count == 1
-    assert triggers_entry_size == 96
+    assert triggers_entry_size == 74
     assert aux_count == 1
     assert aux_entry_size == 32
     assert strings_size > 1
     assert strings_entry_size == 1
 
     first_mapping_abs = imc_desc_off + mappings_offset
-    first_mapping = data[first_mapping_abs : first_mapping_abs + 64]
+    first_mapping = data[first_mapping_abs : first_mapping_abs + mappings_entry_size]
     assert first_mapping[:16] == accel_key
     slot_name_offset = struct.unpack_from("<I", first_mapping, 16)[0]
     assert slot_name_offset > 0

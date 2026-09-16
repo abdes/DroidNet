@@ -165,6 +165,91 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObjectWithInvalidNode_ReturnsEmpty)
 //! Test fixture for SceneNode flags scenarios.
 class SceneNodeFlagsTest : public SceneNodeTestBase { };
 
+NOLINT_TEST_F(SceneNodeFlagsTest, RootsAreLocalOnAndChildrenInheritVisualFlags)
+{
+  auto root = scene_->CreateNode("Root");
+  auto child = scene_->CreateChildNode(root, "Child");
+  ASSERT_TRUE(child.has_value());
+  const auto root_flags = root.GetFlags();
+  const auto child_flags = child->GetFlags();
+  ASSERT_TRUE(root_flags.has_value());
+  ASSERT_TRUE(child_flags.has_value());
+  scene_->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_FALSE(root_flags->get().IsInherited(flag));
+    EXPECT_TRUE(root_flags->get().GetEffectiveValue(flag));
+    EXPECT_TRUE(child_flags->get().IsInherited(flag));
+    EXPECT_TRUE(child_flags->get().GetEffectiveValue(flag));
+  }
+}
+
+NOLINT_TEST_F(SceneNodeFlagsTest, InheritedRootsResolveSceneDefaults)
+{
+  auto source = SceneNode::Flags {};
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    source.SetFlag(flag, SceneFlag {}.SetInheritedBit(true));
+  }
+  auto root = scene_->CreateNode("InheritedRoot", source);
+  scene_->Update();
+  const auto flags = root.GetFlags();
+  ASSERT_TRUE(flags.has_value());
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_TRUE(flags->get().IsInherited(flag));
+    EXPECT_TRUE(flags->get().GetEffectiveValue(flag));
+    flags->get().SetLocalValue(flag, false);
+  }
+  scene_->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_FALSE(flags->get().GetEffectiveValue(flag));
+    flags->get().SetInherited(flag, true);
+  }
+  scene_->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_TRUE(flags->get().GetEffectiveValue(flag));
+  }
+}
+
+NOLINT_TEST_F(
+  SceneNodeFlagsTest, LocalOverridesSurviveParentEditsAndReparenting)
+{
+  auto hidden = scene_->CreateNode("Hidden");
+  auto shown = scene_->CreateNode("Shown");
+  auto inherited = scene_->CreateChildNode(hidden, "Inherited");
+  auto local = scene_->CreateChildNode(hidden, "Local");
+  ASSERT_TRUE(inherited.has_value());
+  ASSERT_TRUE(local.has_value());
+  const auto hidden_flags = hidden.GetFlags();
+  const auto inherited_flags = inherited->GetFlags();
+  const auto local_flags = local->GetFlags();
+  ASSERT_TRUE(hidden_flags.has_value());
+  ASSERT_TRUE(inherited_flags.has_value());
+  ASSERT_TRUE(local_flags.has_value());
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    hidden_flags->get().SetLocalValue(flag, false);
+    local_flags->get().SetLocalValue(flag, true);
+  }
+  scene_->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_FALSE(inherited_flags->get().GetEffectiveValue(flag));
+    EXPECT_TRUE(local_flags->get().GetEffectiveValue(flag));
+    EXPECT_FALSE(local_flags->get().IsInherited(flag));
+  }
+  ASSERT_TRUE(scene_->ReparentNode(inherited.value(), shown, false));
+  scene_->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_TRUE(inherited_flags->get().IsInherited(flag));
+    EXPECT_TRUE(inherited_flags->get().GetEffectiveValue(flag));
+  }
+}
+
 /*! Test that GetFlags returns valid flags with default values.
     Scenario: Create node and verify default flag values. */
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlags_ReturnsValidFlagsWithDefaults)

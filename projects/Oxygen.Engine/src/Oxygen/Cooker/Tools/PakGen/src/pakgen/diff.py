@@ -25,6 +25,7 @@ import zlib
 
 from .packing.constants import (
     ASSET_HEADER_SIZE,
+    GEOMETRY_DESC_SIZE,
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
@@ -224,6 +225,11 @@ def _parse_geometry_variable_blob(
             mesh_type = mesh_desc[64]
             submesh_count = struct.unpack_from("<I", mesh_desc, 65)[0]
             mesh_view_total = struct.unpack_from("<I", mesh_desc, 69)[0]
+            if mesh_type == 2:
+                params_size = struct.unpack_from("<I", mesh_desc, 73)[0]
+                if offset + params_size > len(data):
+                    break
+                offset += params_size
             submeshes: List[Dict[str, Any]] = []
             for _sm in range(submesh_count):
                 if offset + SUBMESH_DESC_SIZE > len(data):
@@ -308,12 +314,11 @@ def _gather_pak_assets(
             record.update(geo)
             # Directory entry desc_size includes the full descriptor payload.
             # For geometry, the variable blob begins immediately after the
-            # fixed-size 256-byte GeometryAssetDesc.
-            var_start = e["desc_offset"] + 256
+            # current packed GeometryAssetDesc, within this descriptor payload.
             if geo.get("lod_count"):
                 record.update(
                     _parse_geometry_variable_blob(
-                        data, var_start, geo["lod_count"]
+                        desc_slice, GEOMETRY_DESC_SIZE, geo["lod_count"]
                     )
                 )
         else:

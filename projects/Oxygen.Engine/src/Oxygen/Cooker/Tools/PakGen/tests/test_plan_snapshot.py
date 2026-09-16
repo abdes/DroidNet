@@ -13,6 +13,7 @@ from snapshot_helper import assert_matches_snapshot
 
 def _spec() -> dict:
     return {
+        "source_identity": "01a0a760-499f-72ce-a053-e4e80af0526f",
         "version": 6,
         "content_version": 1,
         "textures": [

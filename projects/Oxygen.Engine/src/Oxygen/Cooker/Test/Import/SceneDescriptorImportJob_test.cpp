@@ -17,6 +17,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -122,6 +123,48 @@ namespace {
     }
   };
 
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, NodeFlagSourceModesRoundTripWithoutFlattening)
+  {
+    namespace world = data::pak::world;
+    const auto root = MakeTempCookedRoot("node_flag_source_modes");
+    auto service = AsyncImportService {};
+    [[maybe_unused]] const auto stop
+      = oxygen::Finally([&service] { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "version": 5,
+      "name": "Flags",
+      "nodes": [
+        {"name":"HiddenRoot", "flags":{
+          "visible":"hidden", "casts_shadows":"off", "receives_shadows":"on"}},
+        {"name":"InheritedChild", "parent":0},
+        {"name":"LocalChild", "parent":0, "flags":{
+          "visible":"shown", "casts_shadows":"on", "receives_shadows":"off", "static":true}},
+        {"name":"DefaultRoot"},
+        {"name":"InheritedRoot", "flags":{
+          "visible":"inherit", "casts_shadows":"inherit", "receives_shadows":"inherit"}}
+      ]
+    })"));
+    ASSERT_TRUE(report.success);
+    ASSERT_EQ(report.scenes_written, 1U);
+    const auto bytes = ReadBinaryFile(root / "Scenes/Flags.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    const auto nodes = scene.GetNodes();
+    ASSERT_EQ(nodes.size(), 5U);
+    EXPECT_EQ(nodes[0].node_flags, world::kSceneNodeFlag_ReceivesShadows);
+    EXPECT_EQ(nodes[0].inherited_flags, 0U);
+    EXPECT_EQ(nodes[1].node_flags, 0U);
+    EXPECT_EQ(nodes[1].inherited_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(nodes[2].node_flags,
+      world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
+        | world::kSceneNodeFlag_Static);
+    EXPECT_EQ(nodes[2].inherited_flags, 0U);
+    EXPECT_EQ(nodes[3].node_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(nodes[3].inherited_flags, 0U);
+    EXPECT_EQ(nodes[4].node_flags, 0U);
+    EXPECT_EQ(nodes[4].inherited_flags, world::kSceneNodeFlags_Inheritable);
+  }
+
   auto WriteIndexedReference(const std::filesystem::path& root,
     const data::AssetKey& key, const data::AssetType type) -> void
   {
@@ -146,7 +189,7 @@ namespace {
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
     const auto descriptor
-      = R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":5,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -180,7 +223,7 @@ namespace {
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
     const auto descriptor
-      = R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":5,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -215,7 +258,7 @@ namespace {
       data::AssetType::kMaterial);
     auto service = AsyncImportService {};
     auto request = MakeRequest(
-      output, R"({"version":4,"name":"Scene","nodes":[{"name":"Mesh"}],
+      output, R"({"version":5,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
     const auto report = SubmitAndWait(service, std::move(request));
@@ -241,7 +284,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 4,
+      "version": 5,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -297,7 +340,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 4,
+      "version": 5,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -327,7 +370,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 4,
+      "version": 5,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -409,7 +452,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 4,
+      "version": 5,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -542,7 +585,7 @@ namespace {
     auto document = nlohmann::json::parse(
       R"JSON(
 {
-  "version": 4,
+  "version": 5,
   "name": "Environment",
   "nodes": [
     {

@@ -49,7 +49,7 @@ def test_complete_environment_record_layout(tone, exposure, metering):
             }
         }
     )
-    assert SCENE_ASSET_VERSION_CURRENT == 4
+    assert SCENE_ASSET_VERSION_CURRENT == 5
     assert struct.unpack_from("<II", data) == (136, 2)
     assert struct.unpack_from("<III", data, 8) == (5, 104, 1)
     assert struct.unpack_from("<II", data, 20) == (tone, exposure)

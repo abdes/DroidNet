@@ -14,6 +14,7 @@ from pakgen.api import plan_dry_run
 
 def _spec_unsorted() -> dict:
     return {
+        "source_identity": "01a0a760-499a-76e6-8d8e-2f8618620b98",
         "version": 6,
         "content_version": 1,
         "textures": [

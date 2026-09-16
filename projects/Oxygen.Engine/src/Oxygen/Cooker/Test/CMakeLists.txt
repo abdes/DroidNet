@@ -42,9 +42,13 @@ gtest_program(
   "Oxygen.Cooker.InspectorMetadata.Tests"
   SOURCES
     "Import/InspectorAssetKeyMap_test.cpp"
+    "Import/InspectorRootValidation_test.cpp"
     "../Tools/Inspector/AssetKeyMap.cpp"
+    "../Tools/Inspector/RootValidation.cpp"
+    "../Tools/Inspector/SceneMetadata.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::data
     oxygen::clap
     oxygen::testing
@@ -52,7 +56,9 @@ gtest_program(
     nlohmann_json_schema_validator
 )
 target_include_directories(
-  Oxygen.Cooker.InspectorMetadata.Tests PRIVATE "${CMAKE_BINARY_DIR}/generated"
+  Oxygen.Cooker.InspectorMetadata.Tests
+  PRIVATE
+    "${CMAKE_BINARY_DIR}/generated"
 )
 
 m_gtest_program(

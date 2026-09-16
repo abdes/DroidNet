@@ -5,6 +5,7 @@ from pakgen.api import BuildOptions, build_pak, inspect_pak, validate_pak
 
 def test_v7_footer_reports_physics_region_and_table(tmp_path: Path):
     spec = {
+        "source_identity": "01a0a760-4998-7104-a6af-ba75542d07f3",
         "version": 7,
         "content_version": 1,
         "physics": [
@@ -64,7 +65,9 @@ def test_v7_footer_reports_physics_region_and_table(tmp_path: Path):
     assert physics_region["size"] > 0
     # sentinel + authored entry
     assert physics_table["count"] == 2
-    assert physics_table["entry_size"] == 48
+    # PhysicsResourceDesc: offset(8), size(4), format(1), resource key(16),
+    # SHA-256 content hash(32), packed alignment 1 (PakFormat_physics.h).
+    assert physics_table["entry_size"] == 61
 
     asset_types = {e["asset_type"] for e in info.get("directory_entries", [])}
     assert 7 in asset_types

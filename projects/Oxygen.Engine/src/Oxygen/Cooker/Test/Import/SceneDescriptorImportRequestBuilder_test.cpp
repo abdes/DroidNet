@@ -64,7 +64,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 4,
+      "version": 5,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
       "name": "DemoScene",
       "content_hashing": false,
@@ -103,7 +103,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto dir = MakeTempDir("context_root_order");
   const auto descriptor = dir / "scene.json";
   WriteTextFile(
-    descriptor, R"({"version":4,"name":"Scene","nodes":[{"name":"Root"}]})");
+    descriptor, R"({"version":5,"name":"Scene","nodes":[{"name":"Root"}]})");
   auto settings = MakeBaseSettings(descriptor);
   settings.cooked_context_roots = { "relative/root" };
   auto errors = std::ostringstream {};
@@ -127,7 +127,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "bad.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 4,
+      "version": 5,
       "name": "BadScene",
       "nodes": [
         { "name": "Root", "unexpected": true }
@@ -164,7 +164,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   const auto descriptor_path = dir / "Scenes" / "ok.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 4,
+      "version": 5,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");

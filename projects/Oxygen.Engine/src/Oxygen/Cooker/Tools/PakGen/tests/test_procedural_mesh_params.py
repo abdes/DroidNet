@@ -3,6 +3,7 @@ import struct
 from pathlib import Path
 
 from pakgen.api import BuildOptions, build_pak
+from pakgen.packing.constants import GEOMETRY_DESC_SIZE, MESH_DESC_SIZE
 
 
 def _read_directory_entries(data: bytes) -> list[dict[str, int]]:
@@ -34,6 +35,7 @@ def test_procedural_mesh_params_blob_is_emitted(tmp_path: Path):
     params_blob = bytes.fromhex(params_hex)
 
     spec = {
+        "source_identity": "01a0a760-49a5-71f4-a4e7-48d201b3add5",
         "version": 7,
         "content_version": 1,
         "buffers": [],
@@ -102,8 +104,10 @@ def test_procedural_mesh_params_blob_is_emitted(tmp_path: Path):
     geom_blob = data[desc_offset : desc_offset + desc_size]
     assert len(geom_blob) == desc_size
 
-    # Geometry descriptor is 256 bytes, then MeshDesc starts.
-    mesh_desc_off = 256
+    # Current GeometryAssetDesc is 131 bytes, followed by the 145-byte MeshDesc.
+    assert GEOMETRY_DESC_SIZE == 131
+    assert MESH_DESC_SIZE == 145
+    mesh_desc_off = GEOMETRY_DESC_SIZE
     # MeshDesc info block starts at byte 73:
     # name(64) + mesh_type(1) + submesh_count(4) + mesh_view_count(4)
     params_size_off = mesh_desc_off + 73
@@ -111,5 +115,5 @@ def test_procedural_mesh_params_blob_is_emitted(tmp_path: Path):
     assert packed_params_size == len(params_blob)
 
     # Procedural param blob is written immediately after MeshDesc.
-    params_blob_off = mesh_desc_off + 145
+    params_blob_off = mesh_desc_off + MESH_DESC_SIZE
     assert geom_blob[params_blob_off : params_blob_off + len(params_blob)] == params_blob

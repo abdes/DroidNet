@@ -2,6 +2,7 @@
 # - Defines shared material key with GREEN base color.
 # - Defines geometry key that references shared material.
 version: 7
+source_identity: "01a0a763-72dc-729b-a11b-475ce4746c55"
 content_version: 1
 
 buffers:

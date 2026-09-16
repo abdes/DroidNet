@@ -46,14 +46,10 @@ def test_pakdump_input_output_matches_expected(tmp_path: Path):  # noqa: N802
         text=True,
         check=False,
     )
-    if "Unsupported PAK format version" in proc.stderr:
-        pytest.skip("PakDump build does not yet support v7")
-    if proc.returncode != 0:
-        pytest.skip("PakDump executable is incompatible or unstable for current fixtures")
     assert proc.returncode == 0, "\n".join(
         [
             f"PakDump exited with code {proc.returncode}.",
-            "PakDump is likely stale/incompatible with current v6 input layout.",
+            "PakDump must accept the current native input layout.",
             "Rebuild Oxygen.Cooker.PakDump and rerun tests.",
             f"stdout:\n{proc.stdout}",
             f"stderr:\n{proc.stderr}",

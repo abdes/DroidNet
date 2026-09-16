@@ -142,8 +142,13 @@ namespace {
 
     scene::SceneNode::Flags flags {};
     const auto apply = [&](const SceneNodeFlags flag, const uint32_t mask) {
+      const auto inherited = (node.inherited_flags & mask) != 0U;
+      const auto local_value = (node.node_flags & mask) != 0U;
       flags = flags.SetFlag(flag,
-        SceneFlag {}.SetEffectiveValueBit((node.node_flags & mask) != 0U));
+        SceneFlag {}
+          .SetInheritedBit(inherited)
+          .SetEffectiveValueBit(local_value)
+          .SetPendingValueBit(local_value));
     };
 
     apply(SceneNodeFlags::kVisible, kSceneNodeFlag_Visible);

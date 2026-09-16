@@ -109,6 +109,35 @@ auto ValidateSchema(
   }
 }
 
+NOLINT_TEST(SceneDescriptorJsonSchemaTest, NodeFlagSourceModesAreCanonical)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  auto document
+    = json::parse(R"({"version":5,"name":"Flags","nodes":[{"flags":{}}]})");
+  for (const auto& visibility : { "inherit", "shown", "hidden" }) {
+    for (const auto& shadow : { "inherit", "on", "off" }) {
+      document["nodes"][0]["flags"]
+        = { { "visible", visibility }, { "casts_shadows", shadow },
+            { "receives_shadows", shadow }, { "static", false } };
+      auto errors = std::string {};
+      EXPECT_TRUE(ValidateSchema(*schema, document, errors)) << errors;
+    }
+  }
+  for (const auto& invalid :
+    std::vector<json> { { { "visible", true } }, { { "casts_shadows", false } },
+      { { "receives_shadows", true } }, { { "visible", "on" } },
+      { { "casts_shadows", "shown" } }, { { "visible", "local" } } }) {
+    document["nodes"][0]["flags"] = invalid;
+    auto errors = std::string {};
+    EXPECT_FALSE(ValidateSchema(*schema, document, errors)) << invalid.dump();
+  }
+  document["nodes"][0]["flags"] = json::object();
+  document["version"] = 4;
+  auto errors = std::string {};
+  EXPECT_FALSE(ValidateSchema(*schema, document, errors));
+}
+
 NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 {
   const auto repo_root = FindRepoRoot();
@@ -118,7 +147,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "version": 4,
+    "version": 5,
     "name": "DemoScene",
     "nodes": [
       { "name": "Root", "transform": { "translation": [0, 0, 0] } },
@@ -157,7 +186,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 4,
+    "version": 5,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })");
@@ -174,7 +203,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 4,
+    "version": 5,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -208,7 +237,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 4,
+    "version": 5,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -343,7 +372,7 @@ NOLINT_TEST(
   const auto base = json::parse(
     R"JSON(
 {
-  "version": 4,
+  "version": 5,
   "name": "Environment",
   "nodes": [
     {

@@ -41,7 +41,7 @@ def assert_matches_snapshot(
         return json.dumps(obj, indent=2, sort_keys=True)
 
     if update or not snapshot_path.exists():
-        snapshot_path.write_text(_dump(actual), encoding="utf-8")
+        snapshot_path.write_text(_dump(actual), encoding="utf-8", newline="\n")
         # If updating, still assert True to integrate with test run
         return
 

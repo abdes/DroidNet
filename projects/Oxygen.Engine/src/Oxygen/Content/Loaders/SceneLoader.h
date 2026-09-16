@@ -348,33 +348,28 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // Full validation (loader responsibility).
   const auto bytes_span = std::span<const std::byte>(bytes);
 
+  auto string_table = std::span<const std::byte> {};
   if (desc.scene_strings.size > 0) {
-    const auto table
+    string_table
       = bytes_span.subspan(desc.scene_strings.offset, desc.scene_strings.size);
-    if (!table.empty() && table.front() != std::byte { 0 }) {
+    if (string_table.front() != std::byte { 0 }) {
       throw std::runtime_error("scene asset string table must start with NUL");
     }
-
-    if (desc.nodes.count > 0) {
-      const auto nodes_bytes = bytes_span.subspan(desc.nodes.offset,
-        static_cast<size_t>(desc.nodes.count)
-          * sizeof(data::pak::world::NodeRecord));
-      for (uint32_t i = 0; i < desc.nodes.count; ++i) {
-        const auto node
-          = detail::ReadPackedRecord<data::pak::world::NodeRecord>(
-            nodes_bytes.subspan(
-              static_cast<size_t>(i) * sizeof(data::pak::world::NodeRecord),
-              sizeof(data::pak::world::NodeRecord)),
-            "scene node record");
-
-        if (node.parent_index >= desc.nodes.count) {
-          throw std::runtime_error("scene asset parent_index out of range");
-        }
-
-        if (node.scene_name_offset != 0) {
-          detail::ValidateStringOffset(table, node.scene_name_offset);
-        }
-      }
+  }
+  for (uint32_t index = 0; index < desc.nodes.count; ++index) {
+    const auto node = detail::ReadPackedRecord<data::pak::world::NodeRecord>(
+      bytes_span.subspan(desc.nodes.offset
+          + static_cast<size_t>(index) * sizeof(data::pak::world::NodeRecord),
+        sizeof(data::pak::world::NodeRecord)),
+      "scene node record");
+    if (!data::pak::world::HasCanonicalNodeFlags(node)) {
+      throw std::runtime_error("scene node flag source state is invalid");
+    }
+    if (node.parent_index >= desc.nodes.count) {
+      throw std::runtime_error("scene asset parent_index out of range");
+    }
+    if (node.scene_name_offset != 0) {
+      detail::ValidateStringOffset(string_table, node.scene_name_offset);
     }
   }
 

@@ -51,7 +51,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto path = MakeManifestPath("context_roots");
   const auto root = path.parent_path();
   WriteTextFile(root / "scene.json",
-    R"({"version":4,"name":"Scene","nodes":[{"name":"Root"}]})");
+    R"({"version":5,"name":"Scene","nodes":[{"name":"Root"}]})");
   WriteTextFile(path, R"({
     "version":1,"output":"out",
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
@@ -97,7 +97,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 4,
+      "version": 5,
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
@@ -161,7 +161,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 4,
+      "version": 5,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");

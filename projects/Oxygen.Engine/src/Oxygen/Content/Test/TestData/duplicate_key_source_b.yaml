@@ -1,6 +1,7 @@
 # Duplicate-key source B:
 # - Defines the SAME material key as source A, but BLUE base color.
 version: 7
+source_identity: "01a0a763-72dd-7205-914a-7d70fa48f268"
 content_version: 1
 
 buffers:

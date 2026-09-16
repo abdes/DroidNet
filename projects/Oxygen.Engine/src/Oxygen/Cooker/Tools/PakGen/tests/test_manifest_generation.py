@@ -8,6 +8,7 @@ def build_minimal(tmp_path: Path):
     spec.write_text(
         json.dumps(
             {
+                "source_identity": "01a0a760-498e-7462-9141-0e6e0575c57b",
                 "version": 6,
                 "content_version": 1,
                 "buffers": [],

@@ -11,6 +11,9 @@ Returns list of ValidationErrorRecord; empty list means success.
 
 from __future__ import annotations
 from typing import Any, List, Dict
+from ..packing.errors import PakError
+from ..packing.scene_flags import node_flag_masks
+from ..packing.source_identity import source_identity_bytes
 
 from ..packing.constants import (
     ASSET_NAME_MAX_LENGTH,
@@ -82,6 +85,10 @@ def _validate_bounds_vec3(
 
 def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     errors: List[ValidationErrorRecord] = []
+    try:
+        source_identity_bytes(spec.get("source_identity"))
+    except PakError as error:
+        _err(errors, error.code, error.message, "source_identity")
 
     # Validate schema version first
     version = spec.get("version", YAML_SCHEMA_VERSION_CURRENT)
@@ -490,6 +497,18 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         "node_id must be hex string",
                         npath + ".node_id",
                     )
+                for field in ("flags", "inherited_flags"):
+                    value = node.get(field, 0)
+                    if type(value) is not int:
+                        _err(
+                            errors, "E_TYPE", f"{field} must be an unsigned integer",
+                            npath + "." + field,
+                        )
+                    elif value < 0 or value > 0xFFFFFFFF:
+                        _err(
+                            errors, "E_RANGE", f"{field} must fit uint32",
+                            npath + "." + field,
+                        )
 
         renderables = s.get("renderables")
         if renderables is not None and not isinstance(renderables, list):
@@ -1117,6 +1136,12 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         for ni, node in enumerate(nodes):
             if not isinstance(node, dict):
                 continue
+            try:
+                node_flag_masks(node)
+            except PakError as error:
+                _err(
+                    errors, error.code, error.message, f"scenes[{si}].nodes[{ni}]"
+                )
             parent = node.get("parent")
             if parent is None:
                 if ni != 0:

@@ -53,6 +53,21 @@ public:
         .SetFlag(SceneNodeFlags::kRayCastingSelectable,
           SceneFlag {}.SetInheritedBit(true));
 
+  //! Authoring defaults for roots: explicit local Shown/Cast On/Receive On.
+  //! Also supplies the scene fallback for those three inherited root flags.
+  static constexpr auto kDefaultRootFlags
+    = Flags { kDefaultFlags }
+        .SetFlag(SceneNodeFlags::kVisible,
+          SceneFlag {}.SetEffectiveValueBit(true).SetPendingValueBit(true))
+        .SetFlag(SceneNodeFlags::kCastsShadows,
+          SceneFlag {}.SetEffectiveValueBit(true).SetPendingValueBit(true))
+        .SetFlag(SceneNodeFlags::kReceivesShadows,
+          SceneFlag {}.SetEffectiveValueBit(true).SetPendingValueBit(true));
+
+  //! New children inherit visibility and geometry shadow choices.
+  static constexpr auto kDefaultChildFlags = Flags { kDefaultFlags }.SetFlag(
+    SceneNodeFlags::kVisible, SceneFlag {}.SetInheritedBit(true));
+
   //! Efficient graph node view over a SceneNodeImpl, for hierarchy traversal
   //! and manipulation.
   /*!

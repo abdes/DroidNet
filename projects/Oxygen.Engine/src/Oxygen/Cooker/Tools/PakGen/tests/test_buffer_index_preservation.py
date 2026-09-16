@@ -6,6 +6,7 @@ from pakgen.api import BuildOptions, build_pak
 def test_buffer_indices_preserved_for_geometry(tmp_path: Path):
     # Arrange: buffers deliberately out of alphabetical order relative to names
     spec = {
+        "source_identity": "01a0a760-497b-72f9-a4b4-c1735897a9fc",
         "version": 6,
         "content_version": 1,
         "buffers": [
