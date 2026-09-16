@@ -1165,6 +1165,20 @@ Scene renderer publication still uses the CPU-prepared binding. The full HDR
 producer/consumer migration, status-qualified format selection and scene-
 integrated gates below remain open; this does not qualify slice 5.
 
+The allocation path now carries RGBA16F/RGBA32F through SceneTexturesConfig,
+the existing pool key, per-view environment allocation and matching SRV/UAV
+descriptors. Format-specific families remain distinct; depth, GBuffers, velocity
+and canonical transfer LUTs retain their formats. Compatible fog history can
+be read across the format change. SceneRenderer tests verify matching FP32
+pipeline/output artifacts, and a native storage fixture preserves RGB from
+2^-24 through 2^30 plus coverage exactly. Debug and Release pass 107 native,
+7 texture, 6 pool, 56 environment, 22 service and 22 publication tests, plus
+78 rebuilt renderer/context/facade regressions. The corrected storage fixture
+passes its debugger run without blocking graphics messages. Evidence is
+`lifecycle/formats-manifest.json`. This provides the allocation mechanism;
+status-qualified per-view mode selection and producer-domain conversion remain
+required before enabling the complete scene path.
+
 - [ ] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

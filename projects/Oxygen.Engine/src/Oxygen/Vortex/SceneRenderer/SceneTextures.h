@@ -30,6 +30,7 @@ struct SceneTexturesConfig {
   bool enable_custom_depth { false };
   std::uint32_t gbuffer_count { 4 };
   std::uint32_t msaa_sample_count { 1 };
+  Format scene_color_format { Format::kRGBA16Float };
 };
 
 enum class GBufferIndex : std::uint8_t {

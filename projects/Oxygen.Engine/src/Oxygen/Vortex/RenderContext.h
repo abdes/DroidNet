@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -145,6 +146,8 @@ struct RenderContext {
   graphics::Color wireframe_color { 1.0F, 1.0F, 1.0F, 1.0F };
 
   struct ViewSpecific {
+    //! Engine-selected HDR resource mode; absent uses the scene family default.
+    std::optional<Format> hdr_color_format;
     //! Captured camera/world/device discontinuity for this view's history.
     bool history_discontinuity { false };
     oxygen::ViewId view_id { kInvalidViewId };

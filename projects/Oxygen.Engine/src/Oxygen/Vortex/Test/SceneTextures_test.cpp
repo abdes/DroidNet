@@ -197,4 +197,23 @@ TEST(SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedA
     SceneTextureBindings::kInvalidIndex);
 }
 
+TEST(SceneTexturesContractTest, Fp32ChangesOnlySceneRadianceStorage)
+{
+  FakeGraphics graphics;
+  auto config = MakeConfig();
+  config.scene_color_format = Format::kRGBA32Float;
+  SceneTextures textures(graphics, config);
+  EXPECT_EQ(
+    textures.GetSceneColor().GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(
+    textures.GetSceneDepth().GetDescriptor().format, Format::kDepth32Stencil8);
+  EXPECT_EQ(textures.GetGBufferNormal().GetDescriptor().format,
+    Format::kR10G10B10A2UNorm);
+  EXPECT_EQ(
+    textures.GetGBufferMaterial().GetDescriptor().format, Format::kRGBA8UNorm);
+  EXPECT_EQ(textures.GetVelocity()->GetDescriptor().format, Format::kRG16Float);
+  config.scene_color_format = Format::kRGBA8UNorm;
+  EXPECT_THROW(SceneTextures::ValidateConfig(config), std::invalid_argument);
+}
+
 } // namespace

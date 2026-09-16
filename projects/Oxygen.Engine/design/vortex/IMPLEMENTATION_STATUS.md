@@ -145,6 +145,14 @@ debugger cases and the final S/P RenderDoc audit pass. Evidence is
 `lifecycle/domain-manifest.json`. Scene renderer publication, active HDR
 producer conversion, precision eligibility/status integration and scene/MultiView
 validation remain open.
+The dual-format allocation path is now implemented for SceneColor, its resolved
+artifact and per-view sky/AP/fog products, with format-correct views and
+compatible fog-history retention. Debug/Release evidence includes 107 native,
+7 texture, 6 pool, 56 environment, 22 service, 22 publication and 78 rebuilt
+renderer/context/facade regressions. The final FP32 storage debugger case has
+no blocking graphics messages; evidence is `lifecycle/formats-manifest.json`.
+This does not yet enable automatic precision admission or complete the scene
+HDR domain migration.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

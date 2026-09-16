@@ -3182,4 +3182,59 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(graphics_->indirect_log_.draws.empty());
 }
 
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  HdrModePromotesOnlyViewRadianceAndRetainsCompatibleFogHistory)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  scene->Update();
+  auto resolved = MakeResolvedView(64.0F, 64.0F);
+  auto view = oxygen::vortex::CompositionView {};
+  view.id = ViewId { 78U };
+  view.with_atmosphere = true;
+  view.with_height_fog = true;
+  auto ctx = MakeRenderContext(view.id, resolved, view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({ .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "HdrFormatFixture.ViewConstants" });
+  for (unsigned index = 0U; const auto format :
+    { Format::kRGBA16Float, Format::kRGBA32Float, Format::kRGBA16Float }) {
+    ctx.current_view.hdr_color_format = format;
+    service.OnFrameStart(oxygen::frame::SequenceNumber { index + 1U },
+      oxygen::frame::Slot { index });
+    graphics_->srv_view_log_.events.clear();
+    ASSERT_NE(
+      service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+    unsigned radiance_views = 0U;
+    for (const auto& event : graphics_->srv_view_log_.events) {
+      const auto& desc = event.texture->GetDescriptor();
+      if (desc.debug_name == "Vortex.Environment.AtmosphereSkyViewLut"
+        || desc.debug_name
+          == "Vortex.Environment.AtmosphereCameraAerialPerspective"
+        || desc.debug_name == "Vortex.Environment.IntegratedLightScattering") {
+        EXPECT_EQ(desc.format, format) << desc.debug_name;
+        EXPECT_EQ(event.view_format, format) << desc.debug_name;
+        ++radiance_views;
+      }
+      if (desc.debug_name.find("Transmittance") != std::string::npos
+        || desc.debug_name.find("MultiScattering") != std::string::npos)
+        EXPECT_EQ(desc.format, Format::kRGBA16Float);
+    }
+    EXPECT_EQ(radiance_views, 3U);
+    EXPECT_EQ(service.GetLastViewProductGenerationState()
+                .volumetric_fog_temporal_history_reprojection_executed,
+      index != 0U);
+    ++index;
+  }
+}
+
 } // namespace

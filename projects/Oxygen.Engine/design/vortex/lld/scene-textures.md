@@ -24,6 +24,9 @@
 The exposure delivery uses normal RGBA16F and bootstrap/recovery RGBA32F through
 existing texture descriptors, lease keys and PSO format keys. This section is
 the source-to-consumer migration checklist, audited at `7c44dffa8`.
+The slice-5 source refresh distinguishes active SceneRenderer-owned radiance
+from caller-owned display outputs; the unused internal composition allocator
+is not the runtime HDR owner in this checkout.
 Paths below are relative to `src/Oxygen`; shader paths begin under
 `Graphics/Direct3D12/Shaders/Vortex/`. Entries describe required migration,
 not completed implementation.
@@ -40,7 +43,7 @@ not completed implementation.
 | 8 Height fog | `Services/Environment/Fog.hlsl` | SceneColor; scale added inscattering by P, retain attenuation | Same SceneColor |
 | 9 Local fog compose | `Services/Environment/LocalFogVolumeCompose.hlsl` | SceneColor; same radiance/attenuation separation | Same SceneColor |
 | 10 Volumetric fog/history | `Vortex/Environment/Passes/VolumetricFogPass.cpp`, RGBA16F 3D; `VolumetricFog.hlsl` | Fog compose and temporal reprojection; RGB carries stored P, alpha is transmittance | Dual current/history 3D textures; convert prior RGB by P_current/P_stored before interpolation |
-| 11 Resolved / composition HDR | `Vortex/Internal/CompositionViewImpl.cpp`, RGBA16F; SceneRenderer Stage 21 resolve and lease/extraction | Stage 22, auxiliary/offscreen handoff; preserve P, generation and format until consumer fence | Dual HDR allocation, matching resolve/copy formats; post-tonemap output stays display format |
+| 11 Resolved HDR / composition handoff | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, descriptor-cloned SceneColor artifact; Stage 22 writes caller-owned composite targets | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Resolve/copy format follows SceneColor; do not promote bounded post-tonemap targets merely because a caller named them HDR |
 | 12 Bloom products | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit |
 | 13 Static processed sky cubemap | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale | Sky/IBL consumers restore resource scale; independent of view P/S | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
 | 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA16F | All atmosphere integrators; dimensionless | Unchanged; never P-scaled |
@@ -115,6 +118,18 @@ simultaneously live views and retained lease/history generations. Do not multipl
 by a guessed fixed frame count or count aliased SceneColor consumers as separate
 textures. Bandwidth increases for each actual read/write of a promoted product;
 record those passes and target-device timings in slice-5/10 reports.
+
+### Allocation contract
+
+SceneTexturesConfig and SceneTextureLeaseKey carry the actual SceneColor format;
+only RGBA16F and RGBA32F are accepted. The pool separates and reuses those
+physical families without changing depth, GBuffers or velocity formats. The
+active family propagates its HDR format to the per-view context; sky-view LUT,
+camera AP volume and volumetric-fog allocation/views use that same format.
+Canonical transmittance and unit-illuminance multiple scattering remain FP16.
+Compatible fog history remains readable across a format change through its own
+correctly typed descriptor. Runtime admission and stored-P conversion remain
+separate requirements; dual-format allocation alone does not prove eligibility.
 
 ## 1. Scope and Context
 

@@ -3424,4 +3424,46 @@ NOLINT_TEST_F(ExposureGpuTest, FrameDomainSkipsTonemapWhenFallbackCannotSubmit)
     previous);
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, Fp32SceneColorPreservesWideRangeRadianceAndCoverage)
+{
+  auto textures = SceneTextures(Backend(),
+    { .extent = { 1U, 1U }, .scene_color_format = Format::kRGBA32Float });
+  auto color = textures.GetSceneColorResource();
+  ASSERT_EQ(color->GetDescriptor().format, Format::kRGBA32Float);
+  const Pixel expected { 0x1p30F, 0x1p-24F, 1.0F, .25F };
+  auto upload = CreateUploadBuffer(SizeBytes { 256U });
+  upload->Update(expected.data(), sizeof(expected), 0U);
+  {
+    auto recorder = AcquireRecorder("FP32 SceneColor fixture upload");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    if (!recorder->AdoptKnownResourceState(*color))
+      recorder->BeginTrackingResourceState(
+        *color, color->GetDescriptor().initial_state);
+    recorder->RequireResourceState(*color, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 256U,
+        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U } },
+      *color);
+    recorder->RequireResourceStateFinal(
+      *color, ResourceStates::kShaderResource);
+  }
+  auto readback
+    = GetReadbackManager()->CreateTextureReadback("FP32 SceneColor readback");
+  {
+    auto recorder = AcquireRecorder("FP32 SceneColor fixture readback");
+    ASSERT_TRUE(recorder->AdoptKnownResourceState(*color));
+    ASSERT_TRUE(readback->EnqueueCopy(*recorder, *color, {}).has_value());
+  }
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+  Pixel actual {};
+  std::memcpy(actual.data(), mapped->Data(), sizeof(actual));
+  EXPECT_EQ(actual, expected);
+  FlushBackend();
+}
+
 } // namespace

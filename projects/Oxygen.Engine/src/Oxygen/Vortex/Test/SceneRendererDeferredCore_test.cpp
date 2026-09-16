@@ -2701,4 +2701,28 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_TRUE(module.GetPreviousOutput().available);
 }
 
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  Fp32SceneFamilyPublishesMatchingPipelineAndResolvedArtifact)
+{
+  scene_renderer_ = std::make_unique<SceneRenderer>(*renderer_, *graphics_,
+    SceneTexturesConfig { .extent = { 64U, 64U },
+      .scene_color_format = oxygen::Format::kRGBA32Float },
+    ShadingMode::kDeferred);
+  static_cast<void>(AddDirectionalLight("Fp32Sun"));
+  const auto context = RenderForView(first_view_id_, first_resolved_view_);
+  EXPECT_EQ(
+    context.current_view.hdr_color_format, oxygen::Format::kRGBA32Float);
+  const auto& extracts = scene_renderer_->GetSceneTextureExtracts();
+  ASSERT_TRUE(extracts.resolved_scene_color.valid);
+  ASSERT_NE(extracts.resolved_scene_color.texture, nullptr);
+  EXPECT_EQ(extracts.resolved_scene_color.texture->GetDescriptor().format,
+    oxygen::Format::kRGBA32Float);
+  EXPECT_TRUE(std::ranges::any_of(
+    graphics_->graphics_pipeline_log_.binds, [](const auto& bind) {
+      const auto& formats = bind.desc.FramebufferLayout().color_target_formats;
+      return !formats.empty()
+        && formats.front() == oxygen::Format::kRGBA32Float;
+    }));
+}
+
 } // namespace

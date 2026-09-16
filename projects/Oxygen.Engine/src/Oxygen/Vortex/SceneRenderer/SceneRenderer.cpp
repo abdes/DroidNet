@@ -1668,6 +1668,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     internal::PerViewScope view_scope { ctx, view_index };
     auto scene_texture_lease
       = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
+    ctx.current_view.hdr_color_format
+      = scene_texture_lease.GetKey().scene_color_format;
     auto& leased_scene_textures = scene_texture_lease.GetSceneTextures();
     active_scene_textures_ = &leased_scene_textures;
     inspected_scene_textures_ = &leased_scene_textures;
@@ -1777,6 +1779,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
   auto& scene_textures = ActiveSceneTextures();
+  ctx.current_view.hdr_color_format
+    = scene_textures.GetConfig().scene_color_format;
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
     target_extent.has_value() && *target_extent != scene_textures.GetExtent()) {
     ResizeSceneTextureFamily(*target_extent);
@@ -2846,6 +2850,8 @@ auto SceneRenderer::BuildSceneTextureLeaseKey(const RenderContext& ctx) const
   -> SceneTextureLeaseKey
 {
   auto key = SceneTextureLeaseKey::FromConfig(scene_textures_.GetConfig());
+  if (ctx.current_view.hdr_color_format)
+    key.scene_color_format = *ctx.current_view.hdr_color_format;
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
     target_extent.has_value()) {
     key.extent = *target_extent;
