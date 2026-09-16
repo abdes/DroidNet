@@ -1096,9 +1096,17 @@ The controlled sharing RenderDoc capture verifies source initialization,
 gain-only consumer copying without histogram dispatch, rejected borrower
 requests, distinct immutable records and final tonemap consumption. Evidence is
 `lifecycle/demoshell-reset-manifest.json` and `lifecycle/sharing-copy-analysis.txt`.
-The offscreen facade still routes requested sharing to the consumer's own
-exposure handle; source resolution and its integration tests remain open, so
-slice 4 is not qualified. Actual backend resource restoration and the
+The offscreen facade now resolves source intent IDs through registered chains
+to the persistent root in both standalone and in-frame execution. Validation
+and execution reject missing sources, stateless sharing and aliased owners.
+Distinct view/state capture keys prevent offscreen/published ID collisions.
+Debug and Release each pass 91/91 native, 22/22 service, 22/22 publication and
+11/11 offscreen facade tests. Native cases verify copied gains, absent consumer
+histograms, final tonemap execution and unchanged source GPU history/queued
+requests after rejected aliases or ownership changes. Two debugger cases pass
+with no blocking graphics messages. Evidence is
+`lifecycle/offscreen-sharing-manifest.json`. Slice 4 is qualified against its
+controlled-input gate. Actual backend resource restoration and the
 scene-integrated numerical bootstrap use the slice-5 recovery route.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
@@ -1112,10 +1120,10 @@ slice 5 work.
   source destruction, default detach, lifetime-safe selection, inactive-owner
   validation and acknowledgement backpressure, are covered by the checkpoints
   above. The controlled-input capture and DemoShell reset integration are also
-  qualified; offscreen source routing remains required before closing the slice.
-- [ ] Implement source-owned updates, pinned prior generations, root-source
+  qualified, including both offscreen execution paths.
+- [x] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
-  Registered composition views are qualified; complete offscreen facade routing.
+  Registered composition views and offscreen facade routing are qualified.
 - [x] Implement stateless transient state, recovery events, frame-safe uploads,
   synchronization and fence retirement using controlled float-input fixtures.
 - [x] Exercise native game-facing producers without DemoShell. Wire DemoShell's

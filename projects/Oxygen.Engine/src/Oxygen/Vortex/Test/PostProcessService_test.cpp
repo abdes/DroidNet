@@ -772,6 +772,32 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  OffscreenAndPublishedIdsDoNotAliasCapturedExposure)
+{
+  using View = oxygen::vortex::CompositionView;
+  auto service = PostProcessService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto settings = oxygen::scene::ExposureSettings {};
+  settings.mode = oxygen::engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 4.0F;
+  const auto owner = service.CaptureViewExposureSettings(
+    ViewId { 7U }, View::ViewStateHandle { 90U }, settings);
+  settings.manual_ev = 12.0F;
+  const auto consumer = service.CaptureViewExposureSettings(
+    ViewId { 7U }, View::kInvalidViewStateHandle, settings);
+  EXPECT_EQ(owner.resolved.fixed_scale, 0x1p-4F);
+  EXPECT_EQ(consumer.resolved.fixed_scale, 0x1p-12F);
+  service.RemoveViewState(ViewId { 7U }, View::kInvalidViewStateHandle);
+  EXPECT_EQ(service
+              .CaptureViewExposureSettings(
+                ViewId { 7U }, View::ViewStateHandle { 90U }, settings)
+              .resolved.fixed_scale,
+    0x1p-4F);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   StatelessCapturesAreIsolatedByLogicalViewAndRetainNoPriorFrame)
 {
   using View = oxygen::vortex::CompositionView;

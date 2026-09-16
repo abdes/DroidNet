@@ -10,6 +10,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -376,6 +377,71 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PausedFrameSessionCanFinalize)
   facade.SetOutputTarget(MakeOutputTarget());
   EXPECT_TRUE(facade.Validate().Ok());
   EXPECT_TRUE(facade.Finalize().has_value());
+}
+
+NOLINT_TEST_F(
+  OffscreenSceneFacadeTest, SharingRejectsMissingAndStatelessSources)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+  facade.SetOutputTarget(MakeOutputTarget());
+  auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+    "SharedOffscreen", ViewId { 42U }, MakeView(), camera_);
+  input.SetExposureSourceViewId(ViewId { 800U });
+  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+  facade.SetViewIntent(input);
+  EXPECT_FALSE(facade.Finalize().has_value());
+  auto frame = oxygen::engine::FrameContext {};
+  auto source = CompositionView::ForScene(ViewId { 800U }, MakeView(), camera_);
+  ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
+              { .composition_view = source,
+                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+    oxygen::kInvalidViewId);
+  EXPECT_FALSE(facade.Finalize().has_value());
+  source.view_state_handle = CompositionView::ViewStateHandle { 90U };
+  ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
+              { .composition_view = source,
+                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+    oxygen::kInvalidViewId);
+  input.SetViewStateHandle(CompositionView::kInvalidViewStateHandle);
+  facade.SetViewIntent(input);
+  // A source becoming persistent does not make a stateless borrower valid.
+  EXPECT_FALSE(facade.Finalize().has_value());
+  const auto queued
+    = renderer_->QueueExposureTransition(source.view_state_handle,
+      oxygen::vortex::ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(queued.has_value());
+  input.SetViewStateHandle(source.view_state_handle);
+  facade.SetViewIntent(input);
+  EXPECT_FALSE(facade.Finalize().has_value());
+  auto other = source;
+  other.id = ViewId { 802U };
+  other.view_state_handle = CompositionView::ViewStateHandle { 91U };
+  ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
+              { .composition_view = other,
+                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+    oxygen::kInvalidViewId);
+  input.SetViewStateHandle(other.view_state_handle);
+  facade.SetViewIntent(input);
+  EXPECT_FALSE(facade.Finalize().has_value());
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(source.view_state_handle)->request,
+    *queued);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(source.view_state_handle)->phase,
+    oxygen::vortex::ExposureTransitionPhase::kQueued);
+  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+  facade.SetViewIntent(input);
+  auto session = facade.Finalize();
+  ASSERT_TRUE(session.has_value());
+  renderer_->RemovePublishedRuntimeView(frame, source.id);
+  EXPECT_FALSE(facade.Finalize().has_value());
+  graphics_->draw_log_.draws.clear();
+  session->ExecuteNow();
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  session->ExecuteInsideFrame(frame);
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
 }
 
 } // namespace

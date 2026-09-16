@@ -347,6 +347,8 @@ public:
       -> OffscreenSceneViewInput&;
     OXGN_VRTX_API auto SetExposureSourceViewId(ViewId view_id)
       -> OffscreenSceneViewInput&;
+    OXGN_VRTX_API auto SetViewStateHandle(
+      CompositionView::ViewStateHandle handle) -> OffscreenSceneViewInput&;
 
     [[nodiscard]] auto ViewIntent() const noexcept -> const CompositionView&
     {
@@ -776,6 +778,8 @@ private:
   };
   auto GetExposureSourceIntent(ViewId source_view_id) const
     -> std::optional<ExposureSourceIntent>;
+  auto ResolveOffscreenExposureSource(const CompositionView& view) const
+    -> std::optional<std::pair<ViewId, CompositionView::ViewStateHandle>>;
   auto GetRegisteredExposureIntents() const
     -> std::vector<ExposureSourceIntent>;
 

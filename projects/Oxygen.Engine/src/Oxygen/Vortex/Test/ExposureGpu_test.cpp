@@ -67,6 +67,7 @@ public:
 
 class ExposureGpuTest : public graphics::d3d12::testing::ReadbackTestFixture {
 protected:
+  auto CheckOffscreenSharing(bool inside_frame) -> void;
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
     -> std::shared_ptr<graphics::d3d12::Graphics> override
@@ -2755,6 +2756,136 @@ NOLINT_TEST_F(ExposureGpuTest, ThreeFramesInFlightKeepDistinctExposureRecordsAnd
     for (unsigned j = i + 1U; j < frames.size(); ++j)
       EXPECT_NE(frames[i].state, frames[j].state);
   }
+}
+
+auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  auto scene = std::make_shared<scene::Scene>("OffscreenExposure", 4U);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  scene->Update();
+  auto frame = engine::FrameContext {};
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 4.0F;
+  const auto root = PublishExposureOwner(
+    frame, ViewId { 800U }, CompositionView::ViewStateHandle { 90U }, settings);
+  ASSERT_NE(root, kInvalidViewId);
+  ASSERT_NE(root, ViewId { 800U });
+  PublishExposureOwner(frame, ViewId { 801U },
+    CompositionView::ViewStateHandle { 91U }, settings, ViewId { 800U });
+  auto output = CreateRegisteredTexture(TextureDesc { .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+    "Offscreen", root, view, camera);
+  input.SetExposureSourceViewId(ViewId { 801U });
+  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession({ .frame_slot = frame::Slot { 0U },
+    .frame_sequence = frame::SequenceNumber { 1U },
+    .delta_time_seconds = 0.0F });
+  facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+  facade.SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get() } });
+  facade.SetViewIntent(input);
+  for (const auto& issue : facade.Validate().issues)
+    ADD_FAILURE() << issue.code << ": " << issue.message;
+  auto session = facade.Finalize();
+  ASSERT_TRUE(session.has_value());
+  if (inside_frame)
+    session->ExecuteInsideFrame(frame);
+  else
+    session->ExecuteNow();
+  WaitForQueueIdle();
+  auto* scene_renderer
+    = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  ASSERT_NE(scene_renderer, nullptr);
+  auto* service
+    = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+      *scene_renderer);
+  ASSERT_NE(service, nullptr);
+  EXPECT_TRUE(service->GetLastExecutionState().tonemap_executed);
+  EXPECT_FALSE(service->GetLastExecutionState().auto_exposure_requested);
+  const auto states
+    = vortex::testing::RendererPublicationProbe::FrameExposureStates(
+      *service, frame::Slot { 0U });
+  ASSERT_GE(states.size(), 2U);
+  const auto state = Read<ExposureStateData>(
+    *states.back()->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(state.displayed_scale, 0x1p-4F);
+  EXPECT_NE(state.flags & 128U, 0U);
+  EXPECT_EQ(states.back()->histogram_buffer, nullptr);
+  EXPECT_FALSE(vortex::testing::RendererPublicationProbe::HasExposureViewState(
+    *service, CompositionView::kInvalidViewStateHandle));
+  // Rejected borrowers must neither replace the source image history nor
+  // consume its queued request, including ownership changes after Finalize.
+  ctx_.current_view.view_id = root;
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 90U };
+  EXPECT_NEAR(
+    ServicePixel(*service, Uniform(.25F, 4U, 4U), settings), .25F / 16.0F, 2e-5F);
+  const auto source_state
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      *service, CompositionView::ViewStateHandle { 90U });
+  ASSERT_NE(source_state, nullptr);
+  const auto request = renderer_->QueueExposureTransition(
+    CompositionView::ViewStateHandle { 90U },
+    ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(request.has_value());
+  for (const auto handle : { CompositionView::kInvalidViewStateHandle,
+         CompositionView::ViewStateHandle { 90U },
+         CompositionView::ViewStateHandle { 91U } }) {
+    input.SetViewStateHandle(handle);
+    facade.SetViewIntent(input);
+    EXPECT_FALSE(facade.Finalize().has_value());
+  }
+  ASSERT_NE(PublishExposureOwner(frame, ViewId { 802U },
+              CompositionView::ViewStateHandle { 92U }, settings),
+    kInvalidViewId);
+  session->ExecuteNow();
+  session->ExecuteInsideFrame(frame);
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              *service, CompositionView::ViewStateHandle { 90U }),
+    source_state);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *source_state->buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-4F);
+  const auto status = renderer_->InspectExposureTransition(
+    CompositionView::ViewStateHandle { 90U });
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->request, *request);
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kQueued);
+  FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, OffscreenFacadeResolvesSharedRootDespitePublishedIdCollision)
+{
+  CheckOffscreenSharing(false);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, OffscreenFacadeSharesRootInsideFrame)
+{
+  CheckOffscreenSharing(true);
 }
 
 } // namespace

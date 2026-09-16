@@ -288,7 +288,8 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
   const std::optional<float> camera_ev, const bool suppress_transitions,
   const observer_ptr<const scene::Scene> world) -> const ExposureSettingsState&
 {
-  if (const auto found = captured_exposure_settings_.find(view_id);
+  const auto key = ExposureCaptureKey { view_id, handle };
+  if (const auto found = captured_exposure_settings_.find(key);
     found != captured_exposure_settings_.end()) {
     CHECK_F(found->second.handle == handle,
       "A captured view cannot change its exposure lifetime within a frame");
@@ -308,7 +309,7 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
   static_cast<void>(
     renderer_.CaptureExposureTransition(handle, current_sequence_));
   return captured_exposure_settings_
-    .emplace(view_id, CapturedExposureSettings { handle, std::move(settings) })
+    .emplace(key, CapturedExposureSettings { handle, std::move(settings) })
     .first->second.settings;
 }
 
@@ -323,7 +324,8 @@ auto PostProcessService::CaptureSharedExposureSource(const RenderContext& ctx,
     CHECK_F(found->second.handle == source_handle);
     return found->second;
   }
-  if (!captured_exposure_settings_.contains(source_view_id)) {
+  const auto key = ExposureCaptureKey { source_view_id, source_handle };
+  if (!captured_exposure_settings_.contains(key)) {
     const auto intent = renderer_.GetExposureSourceIntent(source_view_id);
     CHECK_F(intent && intent->handle == source_handle,
       "A shared source must identify its registered persistent root");
@@ -339,7 +341,7 @@ auto PostProcessService::CaptureSharedExposureSource(const RenderContext& ctx,
     static_cast<void>(CaptureViewExposureSettings(source_view_id, source_handle,
       requested, intent->camera_ev, intent->diagnostic, ctx.GetScene()));
   }
-  const auto& captured = captured_exposure_settings_.at(source_view_id);
+  const auto& captured = captured_exposure_settings_.at(key);
   CHECK_F(captured.handle == source_handle);
   auto config = PostProcessConfig {};
   ApplyExposureRevision(config, captured.settings);
@@ -455,7 +457,9 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> void
 {
   CaptureRegisteredExposureControls(ctx);
-  auto captured = captured_exposure_settings_.find(view_id);
+  const auto key
+    = ExposureCaptureKey { view_id, ctx.current_view.view_state_handle };
+  auto captured = captured_exposure_settings_.find(key);
   if (captured == captured_exposure_settings_.end()) {
     CHECK_F(config_.resolved_exposure.has_value());
     auto settings = ExposureSettingsState {
@@ -491,7 +495,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     static_cast<void>(renderer_.CaptureExposureTransition(
       ctx.current_view.view_state_handle, ctx.frame_sequence));
     captured = captured_exposure_settings_
-                 .emplace(view_id,
+                 .emplace(key,
                    CapturedExposureSettings {
                      ctx.current_view.view_state_handle, std::move(settings) })
                  .first;
@@ -630,7 +634,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle) -> void
 {
   published_views_.erase(view_id);
-  captured_exposure_settings_.erase(view_id);
+  captured_exposure_settings_.erase({ view_id, view_state_handle });
   exposure_settings_.erase(view_state_handle);
   pending_exposure_status_.erase(view_state_handle);
   deferred_exposure_status_.erase(view_state_handle);
