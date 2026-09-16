@@ -123,4 +123,28 @@ TEST(SceneTextureLeasePoolTest, WarmupHarnessDoesNotAllocateAfterWarmup)
   EXPECT_EQ(allocations_after_warmup, 0U);
 }
 
+TEST(
+  SceneTextureLeasePoolTest, HdrFormatsAllocateAndReuseDistinctPhysicalFamilies)
+{
+  FakeGraphics graphics;
+  SceneTextureLeasePool pool(graphics, MakeConfig());
+  const auto half_key = SceneTextureLeaseKey::FromConfig(MakeConfig());
+  auto full_config = MakeConfig();
+  full_config.scene_color_format = oxygen::Format::kRGBA32Float;
+  const auto full_key = SceneTextureLeaseKey::FromConfig(full_config);
+  EXPECT_NE(half_key, full_key);
+  auto half = pool.Acquire(half_key);
+  auto full = pool.Acquire(full_key);
+  auto* half_texture = &half.GetSceneTextures().GetSceneColor();
+  auto* full_texture = &full.GetSceneTextures().GetSceneColor();
+  EXPECT_NE(half_texture, full_texture);
+  EXPECT_EQ(half_texture->GetDescriptor().format, oxygen::Format::kRGBA16Float);
+  EXPECT_EQ(full_texture->GetDescriptor().format, oxygen::Format::kRGBA32Float);
+  full.Release();
+  auto again = pool.Acquire(full_key);
+  EXPECT_EQ(&again.GetSceneTextures().GetSceneColor(), full_texture);
+  EXPECT_EQ(half_texture->GetDescriptor().format, oxygen::Format::kRGBA16Float);
+  EXPECT_EQ(pool.GetAllocationCount(), 2U);
+}
+
 } // namespace

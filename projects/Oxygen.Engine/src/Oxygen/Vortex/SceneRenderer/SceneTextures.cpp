@@ -240,6 +240,10 @@ auto SceneTextures::GetConfig() const noexcept -> const SceneTexturesConfig&
 void SceneTextures::ValidateConfig(const SceneTexturesConfig& config)
 {
   ValidateExtent(config.extent);
+  if (config.scene_color_format != Format::kRGBA16Float
+    && config.scene_color_format != Format::kRGBA32Float) {
+    throw std::invalid_argument("SceneColor requires RGBA16F or RGBA32F");
+  }
   if (config.gbuffer_count != kActiveGBufferCount) {
     throw std::invalid_argument(
       "SceneTextures requires exactly four active GBuffers in the current "
@@ -260,7 +264,7 @@ void SceneTextures::AllocateTextures()
   ReleaseTextures();
 
   scene_color_.resource
-    = CreateTexture("SceneColor", Format::kRGBA16Float, true, true, true);
+    = CreateTexture("SceneColor", config_.scene_color_format, true, true, true);
   RegisterTexture(scene_color_);
   scene_depth_.resource
     = CreateTexture("SceneDepth", Format::kDepth32Stencil8, true, true);

@@ -130,13 +130,13 @@ namespace {
       .Build();
   }
 
-  auto MakeTextureViewDesc(const graphics::ResourceViewType view_type)
-    -> graphics::TextureViewDescription
+  auto MakeTextureViewDesc(const graphics::ResourceViewType view_type,
+    const Format format) -> graphics::TextureViewDescription
   {
     return graphics::TextureViewDescription {
       .view_type = view_type,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = Format::kRGBA16Float,
+      .format = format,
       .dimension = TextureType::kTexture2D,
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
       .is_read_only_dsv = false,
@@ -257,7 +257,7 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     .mip_levels = 1U,
     .sample_count = 1U,
     .sample_quality = 0U,
-    .format = Format::kRGBA16Float,
+    .format = ctx.current_view.hdr_color_format.value_or(Format::kRGBA16Float),
     .texture_type = TextureType::kTexture2D,
     .debug_name = "Vortex.Environment.AtmosphereSkyViewLut",
     .is_shader_resource = true,
@@ -290,7 +290,8 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   }
   const auto sky_view_srv = allocator.GetShaderVisibleIndex(srv_handle);
   registry.RegisterView(*texture, std::move(srv_handle),
-    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV));
+    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV,
+      texture->GetDescriptor().format));
 
   auto uav_handle = allocator.AllocateBindless(
     bindless::generated::kTexturesDomain,
@@ -301,7 +302,8 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   }
   const auto sky_view_uav = allocator.GetShaderVisibleIndex(uav_handle);
   registry.RegisterView(*texture, std::move(uav_handle),
-    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV));
+    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV,
+      texture->GetDescriptor().format));
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   auto constants = PassConstants {};

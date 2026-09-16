@@ -158,6 +158,7 @@ struct SrvViewCreationLog {
   struct Event {
     uint32_t index { 0 };
     const Texture* texture { nullptr };
+    Format view_format { Format::kUnknown };
   };
   std::vector<Event> events;
 };
@@ -774,8 +775,8 @@ public:
 
     protected:
       [[nodiscard]] auto CreateShaderResourceView(
-        const graphics::DescriptorAllocationHandle& view_handle,
-        Format /*format*/, TextureType /*dimension*/,
+        const graphics::DescriptorAllocationHandle& view_handle, Format format,
+        TextureType /*dimension*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
@@ -788,6 +789,7 @@ public:
           srv_view_log_->events.push_back(SrvViewCreationLog::Event {
             .index = index,
             .texture = this,
+            .view_format = format,
           });
         }
         const auto raw_view_id

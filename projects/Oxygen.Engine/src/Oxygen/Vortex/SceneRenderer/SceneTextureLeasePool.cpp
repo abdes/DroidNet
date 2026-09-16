@@ -21,6 +21,7 @@ auto SceneTextureLeaseKey::FromConfig(const SceneTexturesConfig& config)
 {
   return SceneTextureLeaseKey {
     .extent = config.extent,
+    .scene_color_format = config.scene_color_format,
     .gbuffer_count = config.gbuffer_count,
     .enable_velocity = config.enable_velocity,
     .enable_custom_depth = config.enable_custom_depth,
@@ -211,6 +212,7 @@ auto SceneTextureLeasePool::BuildConfig(const SceneTextureLeaseKey& key) const
 {
   auto config = base_config_;
   config.extent = key.extent;
+  config.scene_color_format = key.scene_color_format;
   config.enable_velocity = key.enable_velocity;
   config.enable_custom_depth = key.enable_custom_depth;
   config.gbuffer_count = key.gbuffer_count;
