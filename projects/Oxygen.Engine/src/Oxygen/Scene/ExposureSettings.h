@@ -12,8 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -51,7 +51,7 @@ struct ExposureSettings {
   float spot_meter_radius { 0.2F };
   float black_influence { 0.0F };
   float transition_distance { 1.5F };
-  data::AssetKey metering_mask {};
+  content::ResourceKey metering_mask {};
   std::vector<ExposureCompensationKey> compensation_curve {};
 
   auto operator==(const ExposureSettings&) const -> bool = default;

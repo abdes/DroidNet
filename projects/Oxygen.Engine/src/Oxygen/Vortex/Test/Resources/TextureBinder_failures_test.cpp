@@ -284,4 +284,17 @@ NOLINT_TEST_F(
     CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_allocate);
 }
 
+NOLINT_TEST_F(
+  TextureBinderFailureTest, MissingTextureNeverProducesResidentLease)
+{
+  const auto key = Loader().MintSyntheticTextureKey();
+  EXPECT_FALSE(TexBinder().HasResourceFailed(key));
+  EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
+  const auto slot = TexBinder().GetOrAllocate(key);
+  EXPECT_TRUE(slot.IsValid());
+  TexBinder().OnFrameStart();
+  EXPECT_TRUE(TexBinder().HasResourceFailed(key));
+  EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
+}
+
 } // namespace

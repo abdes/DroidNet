@@ -172,8 +172,10 @@ integer histogram mass. Retain integer and rational remainder separately.
 Integrate complete integer mass plus each boundary's fractional tail; when
 both boundaries lie inside one mass unit, return its containing bin directly.
 Never subtract float32 cumulative counts near the maximum mass: that can erase
-valid narrow intervals. This requires integer arithmetic, not optional float64
-GPU support.
+valid narrow intervals. Use two uint32 words and extended unsigned multiplication for the rational
+product; do not require optional float64 or 64-bit integer shader support.
+Shader Model 6.6 does not imply
+[Int64ShaderOps support](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_feature_data_d3d12_options1).
 Reuse existing upload/descriptor allocators and fence retirement.
 
 ## Frame sequencing and GPU lifetime
@@ -315,3 +317,30 @@ before scene integration, independent arithmetic oracles, both sharing orders,
 frames in flight, failed submission, source loss and stale acknowledgments.
 Captures must prove bound resources, barriers, state identities and actual final
 consumption. Native game fixtures must exercise the public API without DemoShell.
+
+## Metering mask residency
+
+Native exposure settings use Content ResourceKey, following the approved
+texture-resource contract. Serialized indices remain source-local and are
+hydrated by Content; GPU descriptor indices are never authored or persisted.
+PostProcessService resolves masks with the existing TextureBinder and upload
+coordinator. Only a completed, linear, single-sample 2D color texture may become
+an accepted metering mask; pending and failed loads never sample checkerboard
+or placeholder textures. An inactive mask does not delay Manual, disabled exposure or locked-range
+Auto; each accepts its validated settings immediately without mask residency.
+Unlocking Auto activates the usual atomic mask/settings acceptance gate.
+
+Accept the entire requested settings/mask revision atomically when the texture
+is ready. Pending replacement or failure retains the previous settings and
+mask, with a bounded diagnostic that distinguishes pending from failed. With
+no accepted revision, mark metering unavailable and retain Auto initialization;
+an independent locked solve still follows its normal precedence.
+
+TextureBinder's ready-texture lease retains the exact uploaded texture and SRV.
+A queued Content eviction may release CPU residency but cannot repoint the GPU
+descriptor until all leases retire. PostProcessService holds one lease per
+accepted view revision and keeps each frame's sampled leases in the existing
+frame-slot retirement cycle. Removing a view or changing a mask releases its
+accepted lease; frame readers still keep it alive. The binder outlives its
+leases and uses the existing graphics reclaimer for resource/descriptor release.
+No separate mask loader, texture cache or upload allocator is introduced.

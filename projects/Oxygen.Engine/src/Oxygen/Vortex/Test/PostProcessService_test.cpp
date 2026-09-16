@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <string_view>
@@ -22,8 +23,18 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+
+namespace oxygen::vortex::internal {
+auto RendererTagFactory::Get() noexcept -> RendererTag
+{
+  return RendererTag {};
+}
+} // namespace oxygen::vortex::internal
 
 namespace {
 
@@ -381,6 +392,286 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_TRUE(invalid.last_error.has_value());
   EXPECT_EQ(
     invalid.resolved.authored.mode, oxygen::engine::ExposureMode::kAuto);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  PendingAndFailedMaskReplacementRetainsCompleteAcceptedRevision)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Status = PostProcessService::ExposureMaskStatus;
+  auto loader = oxygen::vortex::testing::FakeAssetLoader {};
+  auto service
+    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 1U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 1U });
+  auto requested = oxygen::scene::ExposureSettings {};
+  const auto first
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  ASSERT_EQ(first.revision, 1U);
+  const auto payload
+    = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
+  requested.compensation_ev = 2.0F;
+  const auto pending
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(pending.mask_status, Status::kPending);
+  EXPECT_EQ(pending.revision, 1U);
+  EXPECT_EQ(pending.resolved.authored, first.resolved.authored);
+  auto queue = graphics_->GetCommandQueue(
+    oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
+  ASSERT_NE(queue, nullptr);
+  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 2U });
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 2U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  const auto accepted
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  ASSERT_EQ(accepted.mask_status, Status::kReady);
+  ASSERT_NE(accepted.mask, nullptr);
+  EXPECT_EQ(accepted.revision, 2U);
+  EXPECT_EQ(accepted.resolved.authored, requested);
+  const auto valid_request = requested;
+  requested.metering_mask = loader.MintSyntheticTextureKey();
+  requested.compensation_ev = -2.0F;
+  const auto replacing
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(replacing.mask_status, Status::kPending);
+  EXPECT_EQ(replacing.mask, accepted.mask);
+  EXPECT_EQ(replacing.revision, 2U);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  const auto failed
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(failed.mask_status, Status::kFailed);
+  EXPECT_EQ(failed.resolved.authored, valid_request);
+  EXPECT_EQ(failed.mask, accepted.mask);
+  EXPECT_EQ(failed.revision, 2U);
+  EXPECT_FALSE(failed.mask_error.empty());
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  InitialMaskFailureIsExplicitAndCannotDelayDisabledOrManualExposure)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Status = PostProcessService::ExposureMaskStatus;
+  auto service = PostProcessService(*renderer_);
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.metering_mask = oxygen::content::ResourceKey { 123U };
+  const auto failed
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(failed.mask_status, Status::kFailed);
+  EXPECT_EQ(failed.revision, 0U);
+  EXPECT_EQ(failed.mask, nullptr);
+  requested.enabled = false;
+  const auto disabled
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(disabled.mask_status, Status::kAbsent);
+  EXPECT_EQ(disabled.revision, 1U);
+  EXPECT_EQ(disabled.resolved.fixed_scale, 1.0F);
+  requested.enabled = true;
+  requested.mode = oxygen::engine::ExposureMode::kManual;
+  const auto manual
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(manual.mask_status, Status::kAbsent);
+  EXPECT_EQ(manual.revision, 2U);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  InitialMaskFailureSkipsHistogramAndClearingRequestRestoresMetering)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto service = PostProcessService(*renderer_);
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 1U };
+  context.current_view.view_state_handle = Handle { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.metering_mask = oxygen::content::ResourceKey { 123U };
+  const auto failed
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  auto config = PostProcessConfig {};
+  config.resolved_exposure = failed.resolved;
+  service.SetConfig(config);
+  auto textures
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
+  const auto inputs = PostProcessService::Inputs {
+    .scene_signal = &textures.GetSceneColor(),
+    .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
+  };
+  graphics_->dispatch_log_.dispatches.clear();
+  service.Execute(context.current_view.view_id, context, textures, inputs);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
+    2U); // clear + invalid/locked solve
+  requested.metering_mask = {};
+  config.resolved_exposure
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested).resolved;
+  service.SetConfig(config);
+  graphics_->dispatch_log_.dispatches.clear();
+  service.Execute(context.current_view.view_id, context, textures, inputs);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 3U);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  RecordedMaskLeaseSurvivesSettingsReplacementUntilItsFrameSlotRetires)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto loader = oxygen::vortex::testing::FakeAssetLoader {};
+  auto service
+    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 0U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto payload
+    = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
+  static_cast<void>(
+    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  auto queue = graphics_->GetCommandQueue(
+    oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
+  ASSERT_NE(queue, nullptr);
+  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 1U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 2U });
+  const auto& ready
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  ASSERT_NE(ready.mask, nullptr);
+  std::weak_ptr<const oxygen::vortex::resources::TextureBinder::ReadyTexture>
+    frame_lease = ready.mask;
+  auto config = PostProcessConfig {};
+  config.resolved_exposure = ready.resolved;
+  service.SetConfig(config);
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 1U };
+  context.current_view.view_state_handle = Handle { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
+  context.frame_slot = oxygen::frame::Slot { 2U };
+  auto textures
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
+  service.Execute(context.current_view.view_id, context, textures,
+    {
+      .scene_signal = &textures.GetSceneColor(),
+      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
+    });
+  loader.EmitTextureEviction(
+    requested.metering_mask, oxygen::content::EvictionReason::kRefCountZero);
+  requested.metering_mask = {};
+  static_cast<void>(
+    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  EXPECT_FALSE(frame_lease.expired());
+  service.RemoveViewState(ViewId { 1U }, Handle { 1U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 0U });
+  EXPECT_FALSE(frame_lease.expired());
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 5U }, oxygen::frame::Slot { 1U });
+  EXPECT_FALSE(frame_lease.expired());
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 2U });
+  EXPECT_TRUE(frame_lease.expired());
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  LockedAutoBypassesPendingAndFailedMaskWithOrWithoutAcceptedRevision)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Status = PostProcessService::ExposureMaskStatus;
+  auto loader = oxygen::vortex::testing::FakeAssetLoader {};
+  auto service
+    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  unsigned id = 1U;
+  for (bool previous : { false, true }) {
+    for (bool failure : { false, true }) {
+      const auto handle = Handle { id++ };
+      auto requested = oxygen::scene::ExposureSettings {};
+      requested.key = 12.5F;
+      if (previous) {
+        static_cast<void>(
+          service.ResolveViewExposureSettings(handle, requested));
+      }
+      requested.metering_mask = loader.MintSyntheticTextureKey();
+      EXPECT_EQ(
+        service.ResolveViewExposureSettings(handle, requested).mask_status,
+        Status::kPending);
+      if (failure) {
+        service.OnFrameStart(
+          oxygen::frame::SequenceNumber { id }, oxygen::frame::Slot { 1U });
+        EXPECT_EQ(
+          service.ResolveViewExposureSettings(handle, requested).mask_status,
+          Status::kFailed);
+      }
+      requested.min_ev = requested.max_ev = 2.0F;
+      const auto locked
+        = service.ResolveViewExposureSettings(handle, requested);
+      EXPECT_EQ(locked.mask_status, Status::kAbsent);
+      EXPECT_EQ(locked.resolved.authored.min_ev, 2.0F);
+      EXPECT_EQ(locked.resolved.authored.max_ev, 2.0F);
+      EXPECT_EQ(
+        locked.resolved.authored.metering_mask, requested.metering_mask);
+      EXPECT_EQ(locked.resolved.dark_log_gain, -2.0F);
+      EXPECT_EQ(locked.revision, previous ? 2U : 1U);
+    }
+  }
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  NonlinearMaskFormatIsRejectedAfterUploadWithoutChangingSettings)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto loader = oxygen::vortex::testing::FakeAssetLoader {};
+  auto service
+    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 0U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto requested = oxygen::scene::ExposureSettings {};
+  const auto initial
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  auto payload = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  oxygen::data::pak::core::TextureResourceDesc descriptor {};
+  std::memcpy(&descriptor, payload.data(), sizeof(descriptor));
+  descriptor.format
+    = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNormSRGB);
+  std::memcpy(payload.data(), &descriptor, sizeof(descriptor));
+  requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
+  requested.compensation_ev = 2.0F;
+  static_cast<void>(
+    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  auto queue = graphics_->GetCommandQueue(
+    oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
+  ASSERT_NE(queue, nullptr);
+  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    tag, oxygen::frame::Slot { 1U });
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 2U });
+  const auto rejected
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(
+    rejected.mask_status, PostProcessService::ExposureMaskStatus::kFailed);
+  EXPECT_EQ(rejected.resolved.authored, initial.resolved.authored);
+  EXPECT_EQ(rejected.revision, initial.revision);
+  EXPECT_EQ(rejected.mask, nullptr);
 }
 
 } // namespace
