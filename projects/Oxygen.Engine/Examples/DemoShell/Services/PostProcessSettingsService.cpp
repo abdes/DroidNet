@@ -15,6 +15,7 @@
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
@@ -762,8 +763,25 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
 
 auto PostProcessSettingsService::UpdateAutoExposureTarget() -> void { }
 
-auto PostProcessSettingsService::ResetAutoExposure(float /*initial_ev*/) -> void
+auto PostProcessSettingsService::BindVortexRenderer(
+  observer_ptr<vortex::Renderer> renderer) -> void
 {
+  vortex_renderer_ = renderer;
+}
+
+auto PostProcessSettingsService::ResetAutoExposure(const float initial_ev)
+  -> void
+{
+  if (!vortex_renderer_)
+    return;
+  for (const auto owner : vortex_renderer_->GetExposureOwners()) {
+    const auto queued = vortex_renderer_->QueueExposureTransition(
+      owner, vortex::ExposureTransitionPolicy::kSeedFromEv100, initial_ev);
+    if (!queued)
+      LOG_F(WARNING,
+        "Exposure seed request rejected for view state {} (error {})",
+        owner.get(), static_cast<unsigned>(queued.error()));
+  }
 }
 
 auto PostProcessSettingsService::GetEpoch() const noexcept -> std::uint64_t

@@ -545,6 +545,8 @@ auto DemoShell::SyncRuntimeState() -> void
     if (auto renderer_ref
       = impl_->config.engine->GetModule<vortex::Renderer>()) {
       runtime_config.renderer = observer_ptr { &renderer_ref->get() };
+      impl_->post_process_settings_service.BindVortexRenderer(
+        runtime_config.renderer);
     }
   }
   runtime_config.on_atmosphere_params_changed = nullptr;

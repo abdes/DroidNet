@@ -465,6 +465,9 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   }
 
   auto& renderer = renderer_ref->get();
+  if (impl_->post_process_settings_service)
+    impl_->post_process_settings_service->BindVortexRenderer(
+      observer_ptr { &renderer });
   if (impl_->panel_config.diagnostics && !impl_->diagnostics_panel
     && impl_->rendering_settings_service) {
     impl_->rendering_settings_service->BindVortexRenderer(

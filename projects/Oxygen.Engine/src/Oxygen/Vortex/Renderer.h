@@ -553,6 +553,10 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureTransition(
     CompositionView::ViewStateHandle target) const
     -> std::optional<ExposureTransitionStatus>;
+  //! Registered persistent source owners, in stable handle order. Borrowers
+  //! and stateless views are omitted. This contains no numerical exposure data.
+  [[nodiscard]] OXGN_VRTX_API auto GetExposureOwners() const
+    -> std::vector<CompositionView::ViewStateHandle>;
   //! Notify a discontinuity before frame capture. Explicit exposure requests
   //! can override its default policy; borrowing views never reset their source.
   [[nodiscard]] OXGN_VRTX_API auto NotifyViewDiscontinuity(

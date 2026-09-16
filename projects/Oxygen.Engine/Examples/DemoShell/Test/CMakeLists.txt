@@ -34,6 +34,11 @@ m_gtest_program(
 )
 
 m_gtest_program(EnvironmentVm SOURCES "EnvironmentVm_test.cpp")
+m_gtest_program(
+  PostProcessSettingsService
+  SOURCES
+    "PostProcessSettingsService_test.cpp"
+)
 
 m_gtest_program(
   RenderingSettingsService

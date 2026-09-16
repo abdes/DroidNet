@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <numeric>
@@ -16,6 +17,7 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
@@ -82,7 +84,30 @@ protected:
 
   auto BackendConfigJson() const -> std::string override
   {
+    if (!CapturePath().empty())
+      return R"({"enable_debug_layer":true,"frame_capture":{"provider":"renderdoc","init_mode":"search"}})";
     return R"({"enable_debug_layer":true})";
+  }
+  static auto CapturePath() -> std::string
+  {
+    char* value = nullptr;
+    std::size_t size = 0U;
+    if (_dupenv_s(&value, &size, "OXYGEN_EXPOSURE_CAPTURE") != 0 || !value)
+      return {};
+    const auto owned = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
+    return owned.get();
+  }
+  auto BeginOptionalCapture() -> observer_ptr<FrameCaptureController>
+  {
+    const auto path = CapturePath();
+    if (path.empty())
+      return {};
+    WaitForQueueIdle();
+    const auto capture = Backend().GetFrameCaptureController();
+    CHECK_F(capture && capture->IsAvailable());
+    CHECK_F(capture->SetCaptureFileTemplate(path));
+    CHECK_F(capture->StartCapture());
+    return capture;
   }
   auto PathFinderConfigJson() const -> std::string override
   {
@@ -270,6 +295,7 @@ protected:
     if (before_execute)
       before_execute();
     auto output_desc = TextureDesc {};
+    output_desc.debug_name = "ExposureServiceOutput";
     output_desc.width = output_desc.height = 4U;
     output_desc.format = Format::kRGBA32Float;
     output_desc.is_render_target = output_desc.is_shader_resource = true;
@@ -1685,8 +1711,10 @@ NOLINT_TEST_F(
     = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
       ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
   ASSERT_TRUE(token.has_value());
+  const auto signal = Uniform(.25F, 4U, 4U);
+  const auto capture = BeginOptionalCapture();
   const auto pixel
-    = ServicePixel(service, Uniform(.25F, 4U, 4U), {}, false, 0.0F, [&] {
+    = ServicePixel(service, signal, {}, false, 0.0F, [&] {
         auto source = scene::ExposureSettings {};
         source.key = 12.5F;
         source.mode = engine::ExposureMode::kManual;
@@ -1701,6 +1729,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(status.has_value());
   EXPECT_EQ(status->phase, ExposureTransitionPhase::kRejected);
   EXPECT_EQ(status->error, ExposureTransitionError::kSharedConsumer);
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
@@ -2703,6 +2733,28 @@ NOLINT_TEST_F(
   EXPECT_EQ(renderer_->InspectExposureTransition(view.view_state_handle)
               ->request.policy,
     ExposureTransitionPolicy::kRemeter);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ThreeFramesInFlightKeepDistinctExposureRecordsAndUploads)
+{
+  std::array<postprocess::ExposurePass::Result, 3> frames;
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  for (unsigned i = 0U; i < frames.size(); ++i) {
+    settings.manual_ev = 4.0F + 4.0F * i;
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { i };
+    frames[i] = RecordShared(Signal {}, SharedConfig(settings));
+    ASSERT_TRUE(frames[i].executed);
+  }
+  // No CPU fence wait occurred between the three submissions.
+  for (unsigned i = 0U; i < frames.size(); ++i) {
+    const auto state = ReadState(frames[i]);
+    EXPECT_EQ(state.displayed_scale, std::exp2(-4.0F - 4.0F * i));
+    EXPECT_EQ(state.frame_sequence[0], i + 1U);
+    for (unsigned j = i + 1U; j < frames.size(); ++j)
+      EXPECT_NE(frames[i].state, frames[j].state);
+  }
 }
 
 } // namespace

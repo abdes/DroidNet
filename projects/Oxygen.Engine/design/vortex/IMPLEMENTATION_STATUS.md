@@ -117,9 +117,15 @@ camera-cut/backend-recovery notifications now pass 88 native, 21 service,
 22 publication and 117 renderer/facade/environment/history regression entries
 in each configuration, plus seven debugger cases. Camera/fog/HZB invalidation,
 explicit precedence, diagnostic deferral and borrower isolation are covered in
-`lifecycle/discontinuity-manifest.json`. DemoShell reset wiring and remaining
-integration/capture gates keep slice 4 in progress; physical backend restoration
-and numerical bootstrap remain part of slice 5.
+`lifecycle/discontinuity-manifest.json`. DemoShell reset wiring now passes three
+reset tests and nine EnvironmentVm tests in both configurations. The Release
+native suite passes 89 cases, including three frames in flight, and publication
+passes 22. The controlled sharing capture proves distinct source/consumer
+records, gain copying, request rejection and tonemap consumption; evidence is
+`lifecycle/demoshell-reset-manifest.json` and `lifecycle/sharing-copy-analysis.txt`.
+Offscreen facade source routing still uses the consumer's own exposure handle
+and keeps slice 4 in progress. Physical backend restoration and numerical
+bootstrap remain part of slice 5.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger
