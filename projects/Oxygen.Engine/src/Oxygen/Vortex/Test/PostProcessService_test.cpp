@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <limits>
 #include <memory>
 #include <string_view>
 #include <type_traits>
@@ -250,6 +251,136 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   ASSERT_NE(bindings, nullptr);
   EXPECT_FLOAT_EQ(bindings->auto_exposure_min_ev, config.auto_exposure_min_ev);
   EXPECT_FLOAT_EQ(bindings->auto_exposure_max_ev, config.auto_exposure_max_ev);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  FixedEv14Through16ReachTonemapWithoutAGainFloor)
+{
+  auto service = PostProcessService(*renderer_);
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto framebuffer
+    = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.FixedGain");
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 43U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 11U };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
+
+  // Independent exact binary references, not a second production conversion.
+  for (const float gain : { 0x1p-14F, 0x1p-15F, 0x1p-16F }) {
+    auto config = PostProcessConfig {};
+    config.enable_auto_exposure = false;
+    config.enable_bloom = false;
+    config.fixed_exposure = gain;
+    config.tone_mapper = oxygen::engine::ToneMapper::kNone;
+    config.gamma = 1.0F;
+    service.SetConfig(config);
+    service.Execute(context.current_view.view_id, context, scene_textures,
+      PostProcessService::Inputs {
+        .scene_signal = &scene_textures.GetSceneColor(),
+        .scene_depth = &scene_textures.GetSceneDepth(),
+        .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
+        .scene_signal_srv = oxygen::ShaderVisibleIndex { 501U },
+        .scene_depth_srv = oxygen::ShaderVisibleIndex { 502U },
+      });
+
+    const auto& state = service.GetLastExecutionState();
+    ASSERT_TRUE(state.tonemap_executed);
+    EXPECT_TRUE(state.used_fixed_exposure);
+    EXPECT_EQ(state.exposure_value, gain);
+    ASSERT_NE(service.InspectBindings(context.current_view.view_id), nullptr);
+    EXPECT_EQ(
+      service.InspectBindings(context.current_view.view_id)->fixed_exposure,
+      gain);
+  }
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  InvalidExposureRevisionRetainsOnlyItsViewsPriorSettings)
+{
+  auto service = PostProcessService(*renderer_);
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.mode = oxygen::engine::ExposureMode::kManual;
+  requested.manual_ev = 14.0F;
+  requested.key = 12.5F;
+  const auto& first
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(first.revision, 1U);
+  EXPECT_EQ(first.resolved.fixed_scale, 0x1p-14F);
+  EXPECT_FALSE(first.last_error.has_value());
+
+  requested.manual_ev = 16.0F;
+  const auto& second
+    = service.ResolveViewExposureSettings(Handle { 2U }, requested);
+  EXPECT_EQ(second.resolved.fixed_scale, 0x1p-16F);
+  requested.low_percentile = requested.high_percentile;
+  const auto& rejected
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(rejected.revision, 1U);
+  EXPECT_EQ(rejected.resolved.fixed_scale, 0x1p-14F);
+  EXPECT_EQ(rejected.last_error,
+    oxygen::scene::ExposureSettingsError::kInvalidPercentiles);
+
+  service.RemoveViewState(ViewId { 1U }, Handle { 1U });
+  requested.low_percentile = 0.1F;
+  const auto& recreated
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  EXPECT_EQ(recreated.revision, 1U);
+  EXPECT_EQ(recreated.resolved.fixed_scale, 0x1p-16F);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  InvalidLowLevelFixedExposureKeepsThePreviousConfig)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.enable_auto_exposure = false;
+  config.fixed_exposure = 0x1p-14F;
+  service.SetConfig(config);
+  for (const float invalid :
+    { 0.0F, -1.0F, std::numeric_limits<float>::infinity(),
+      std::numeric_limits<float>::quiet_NaN() }) {
+    config.fixed_exposure = invalid;
+    service.SetConfig(config);
+    EXPECT_EQ(service.GetConfig().fixed_exposure, 0x1p-14F);
+  }
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  RepeatedExposureSettingsKeepRevisionAndStatelessViewsDoNotKeepSettings)
+{
+  auto service = PostProcessService(*renderer_);
+  using View = oxygen::vortex::CompositionView;
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.mode = oxygen::engine::ExposureMode::kManual;
+  requested.key = 12.5F;
+  requested.manual_ev = 14.0F;
+  static_cast<void>(service.ResolveViewExposureSettings(
+    View::ViewStateHandle { 1U }, requested));
+  EXPECT_EQ(
+    service.ResolveViewExposureSettings(View::ViewStateHandle { 1U }, requested)
+      .revision,
+    1U);
+  EXPECT_EQ(
+    service
+      .ResolveViewExposureSettings(View::kInvalidViewStateHandle, requested)
+      .resolved.fixed_scale,
+    0x1p-14F);
+  requested.key = -1.0F;
+  const auto& invalid = service.ResolveViewExposureSettings(
+    View::kInvalidViewStateHandle, requested);
+  EXPECT_EQ(invalid.revision, 0U);
+  EXPECT_TRUE(invalid.last_error.has_value());
+  EXPECT_EQ(
+    invalid.resolved.authored.mode, oxygen::engine::ExposureMode::kAuto);
 }
 
 } // namespace

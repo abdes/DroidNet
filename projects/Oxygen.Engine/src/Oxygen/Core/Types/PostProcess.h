@@ -20,7 +20,8 @@ inline constexpr float kExposureMiddleGrey = 0.18F;
 [[nodiscard]] inline auto ExposureBiasScale(
   const float compensation_ev, const float exposure_key) noexcept -> float
 {
-  return std::exp2(compensation_ev) * (exposure_key / kExposureCalibrationKey);
+  return static_cast<float>(std::exp2(static_cast<double>(compensation_ev)
+    + std::log2(static_cast<double>(exposure_key) / kExposureCalibrationKey)));
 }
 
 [[nodiscard]] inline auto Ev100ToUnitlessLuminance(const float ev100) noexcept
@@ -44,8 +45,9 @@ inline constexpr float kExposureMiddleGrey = 0.18F;
 [[nodiscard]] inline auto ExposureScaleFromEv100(const float ev100,
   const float compensation_ev, const float exposure_key) noexcept -> float
 {
-  return ExposureBiasScale(compensation_ev, exposure_key)
-    / Ev100ToUnitlessLuminance(ev100);
+  return static_cast<float>(std::exp2(
+    (static_cast<double>(compensation_ev) - static_cast<double>(ev100))
+    + std::log2(static_cast<double>(exposure_key) / kExposureCalibrationKey)));
 }
 
 //! Metering modes for auto exposure.

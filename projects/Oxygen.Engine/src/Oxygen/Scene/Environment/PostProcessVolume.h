@@ -9,6 +9,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 
 namespace oxygen::scene::environment {
 
@@ -17,16 +18,11 @@ namespace oxygen::scene::environment {
  This is a minimal, renderer-agnostic post process parameter set inspired by
  UE/Unity volume workflows.
 
- Exposure uses EV (EV100, ISO 100) and is resolved by the renderer into a
- linear
- scale using the ISO 2720 calibration formula
- $exposure = \frac{1}{12.5} \cdot 2^{-EV100}$. A display key scale is applied
- after calibration to map mid-gray to a display-friendly level.
- Manual mode uses the authored EV value, while manual camera mode consumes EV
- derived from camera aperture/shutter/ISO.
-
- The engine can later extend this with per-camera overrides or local volumes;
- for now it represents scene-global authored intent.
+ Exposure is authored in EV100 and resolved atomically per view using
+ ResolveExposureSettings. Requested fields may be edited independently; an
+ invalid combined revision does not replace the renderer's last valid revision.
+ Manual scale is 2^(compensation-EV100) * (key/12.5). The key is not an EV.
+ Physical camera exposure consumes the active camera's EV100.
 */
 class PostProcessVolume final : public EnvironmentSystem {
   OXYGEN_COMPONENT(PostProcessVolume)
@@ -40,6 +36,19 @@ public:
 
   OXYGEN_DEFAULT_COPYABLE(PostProcessVolume)
   OXYGEN_DEFAULT_MOVABLE(PostProcessVolume)
+
+  //! Replace requested exposure intent; the renderer validates it atomically.
+  auto SetExposureSettings(const ExposureSettings& settings) -> void
+  {
+    exposure_ = settings;
+  }
+
+  //! Inspect the complete requested exposure revision, including resources.
+  [[nodiscard]] auto GetExposureSettings() const noexcept
+    -> const ExposureSettings&
+  {
+    return exposure_;
+  }
 
   //! Sets the tone mapper.
   auto SetToneMapper(const engine::ToneMapper mapper) noexcept -> void
@@ -56,135 +65,135 @@ public:
   //! Sets exposure mode (manual, auto, or manual camera EV).
   auto SetExposureMode(const engine::ExposureMode mode) noexcept -> void
   {
-    exposure_mode_ = mode;
+    exposure_.mode = mode;
   }
 
   //! Gets exposure mode.
   [[nodiscard]] auto GetExposureMode() const noexcept -> engine::ExposureMode
   {
-    return exposure_mode_;
+    return exposure_.mode;
   }
 
   //! Enables or disables exposure application.
   auto SetExposureEnabled(const bool enabled) noexcept -> void
   {
-    exposure_enabled_ = enabled;
+    exposure_.enabled = enabled;
   }
 
   //! Returns whether exposure is enabled.
   [[nodiscard]] auto GetExposureEnabled() const noexcept -> bool
   {
-    return exposure_enabled_;
+    return exposure_.enabled;
   }
 
   //! Sets exposure compensation in EV (stops).
   auto SetExposureCompensationEv(const float ev) noexcept -> void
   {
-    exposure_compensation_ev_ = ev;
+    exposure_.compensation_ev = ev;
   }
 
   //! Gets exposure compensation in EV.
   [[nodiscard]] auto GetExposureCompensationEv() const noexcept -> float
   {
-    return exposure_compensation_ev_;
+    return exposure_.compensation_ev;
   }
 
   //! Sets the display key scale applied after calibration.
   auto SetExposureKey(const float exposure_key) noexcept -> void
   {
-    exposure_key_ = exposure_key;
+    exposure_.key = exposure_key;
   }
 
   //! Gets the display key scale applied after calibration.
   [[nodiscard]] auto GetExposureKey() const noexcept -> float
   {
-    return exposure_key_;
+    return exposure_.key;
   }
 
   //! Sets manual exposure EV value (EV100, ISO 100 reference).
   auto SetManualExposureEv(const float ev) noexcept -> void
   {
-    manual_exposure_ev_ = ev;
+    exposure_.manual_ev = ev;
   }
 
   //! Gets manual exposure EV value (EV100, ISO 100 reference).
   [[nodiscard]] auto GetManualExposureEv() const noexcept -> float
   {
-    return manual_exposure_ev_;
+    return exposure_.manual_ev;
   }
 
   //! Sets auto-exposure min/max EV.
   auto SetAutoExposureRangeEv(const float min_ev, const float max_ev) noexcept
     -> void
   {
-    auto_exposure_min_ev_ = min_ev;
-    auto_exposure_max_ev_ = max_ev;
+    exposure_.min_ev = min_ev;
+    exposure_.max_ev = max_ev;
   }
 
   //! Gets auto-exposure minimum EV.
   [[nodiscard]] auto GetAutoExposureMinEv() const noexcept -> float
   {
-    return auto_exposure_min_ev_;
+    return exposure_.min_ev;
   }
 
   //! Gets auto-exposure maximum EV.
   [[nodiscard]] auto GetAutoExposureMaxEv() const noexcept -> float
   {
-    return auto_exposure_max_ev_;
+    return exposure_.max_ev;
   }
 
   //! Sets auto-exposure adaptation speeds (EV per second).
   auto SetAutoExposureAdaptationSpeeds(
     const float up_ev_per_s, const float down_ev_per_s) noexcept -> void
   {
-    auto_exposure_speed_up_ = up_ev_per_s;
-    auto_exposure_speed_down_ = down_ev_per_s;
+    exposure_.speed_up = up_ev_per_s;
+    exposure_.speed_down = down_ev_per_s;
   }
 
   //! Gets auto-exposure speed up (EV per second).
   [[nodiscard]] auto GetAutoExposureSpeedUp() const noexcept -> float
   {
-    return auto_exposure_speed_up_;
+    return exposure_.speed_up;
   }
 
   //! Gets auto-exposure speed down (EV per second).
   [[nodiscard]] auto GetAutoExposureSpeedDown() const noexcept -> float
   {
-    return auto_exposure_speed_down_;
+    return exposure_.speed_down;
   }
 
   //! Sets the auto-exposure metering mode.
   auto SetAutoExposureMeteringMode(const engine::MeteringMode mode) noexcept
     -> void
   {
-    auto_exposure_metering_mode_ = mode;
+    exposure_.metering_mode = mode;
   }
 
   //! Gets the auto-exposure metering mode.
   [[nodiscard]] auto GetAutoExposureMeteringMode() const noexcept
     -> engine::MeteringMode
   {
-    return auto_exposure_metering_mode_;
+    return exposure_.metering_mode;
   }
 
   //! Sets the histogram percentiles used by auto exposure.
   auto SetAutoExposureHistogramPercentiles(
     const float low_percentile, const float high_percentile) noexcept -> void
   {
-    auto_exposure_low_percentile_ = low_percentile;
-    auto_exposure_high_percentile_ = high_percentile;
+    exposure_.low_percentile = low_percentile;
+    exposure_.high_percentile = high_percentile;
   }
 
   //! Gets the low histogram percentile used by auto exposure.
   [[nodiscard]] auto GetAutoExposureLowPercentile() const noexcept -> float
   {
-    return auto_exposure_low_percentile_;
+    return exposure_.low_percentile;
   }
 
   //! Gets the high histogram percentile used by auto exposure.
   [[nodiscard]] auto GetAutoExposureHighPercentile() const noexcept -> float
   {
-    return auto_exposure_high_percentile_;
+    return exposure_.high_percentile;
   }
 
   //! Sets the histogram luminance window used by auto exposure.
@@ -192,46 +201,46 @@ public:
     const float min_log_luminance, const float log_luminance_range) noexcept
     -> void
   {
-    auto_exposure_min_log_luminance_ = min_log_luminance;
-    auto_exposure_log_luminance_range_ = log_luminance_range;
+    exposure_.min_log_luminance = min_log_luminance;
+    exposure_.log_luminance_range = log_luminance_range;
   }
 
   //! Gets the minimum log2 luminance used by auto exposure.
   [[nodiscard]] auto GetAutoExposureMinLogLuminance() const noexcept -> float
   {
-    return auto_exposure_min_log_luminance_;
+    return exposure_.min_log_luminance;
   }
 
   //! Gets the log2 luminance range used by auto exposure.
   [[nodiscard]] auto GetAutoExposureLogLuminanceRange() const noexcept
     -> float
   {
-    return auto_exposure_log_luminance_range_;
+    return exposure_.log_luminance_range;
   }
 
   //! Sets the target average luminance used by auto exposure.
   auto SetAutoExposureTargetLuminance(const float target_luminance) noexcept
     -> void
   {
-    auto_exposure_target_luminance_ = target_luminance;
+    exposure_.target_luminance = target_luminance;
   }
 
   //! Gets the target average luminance used by auto exposure.
   [[nodiscard]] auto GetAutoExposureTargetLuminance() const noexcept -> float
   {
-    return auto_exposure_target_luminance_;
+    return exposure_.target_luminance;
   }
 
   //! Sets the spot-meter radius used by auto exposure.
   auto SetAutoExposureSpotMeterRadius(const float radius) noexcept -> void
   {
-    auto_exposure_spot_meter_radius_ = radius;
+    exposure_.spot_meter_radius = radius;
   }
 
   //! Gets the spot-meter radius used by auto exposure.
   [[nodiscard]] auto GetAutoExposureSpotMeterRadius() const noexcept -> float
   {
-    return auto_exposure_spot_meter_radius_;
+    return exposure_.spot_meter_radius;
   }
 
   //! Sets bloom intensity (unitless).
@@ -305,53 +314,7 @@ public:
 
 private:
   engine::ToneMapper tone_mapper_ = engine::ToneMapper::kAcesFitted;
-  engine::ExposureMode exposure_mode_ = engine::ExposureMode::kAuto;
-  bool exposure_enabled_ = true;
-
-  //! Exposure compensation in stops (EV).
-  //! Scale: logarithmic (base 2).
-  //! Variation: +/- 1.0 reflects a doubling/halving of final image brightness.
-  float exposure_compensation_ev_ = 0.0F;
-
-  //! Display key scale applied after EV-to-linear calibration.
-  //! Scale: linear. Maps mid-gray (18%) to a display level.
-  //! Variation: Small changes (e.g. 0.1) affect overall image brightness
-  //! without changing lighting.
-  float exposure_key_ = 10.0F;
-
-  //! Manual exposure value at ISO 100.
-  //! Scale: EV (EV100, log base 2). Typical: 13 (daylight), 0 (indoor).
-  //! Variation: +/- 1.0 reflects a doubling/halving of sensor sensitivity.
-  float manual_exposure_ev_ = 9.7F;
-
-  //! Minimum allowable exposure value for auto-exposure.
-  //! Scale: EV (EV100).
-  //! Variation: Changes define the lower limit of dark environments.
-  float auto_exposure_min_ev_ = -6.0F;
-
-  //! Maximum allowable exposure value for auto-exposure.
-  //! Scale: EV (EV100).
-  //! Variation: Changes define the upper limit for bright environments.
-  float auto_exposure_max_ev_ = 16.0F;
-
-  //! Speed of exposure increase (getting darker/entering light).
-  //! Scale: EV per second.
-  //! Variation: Small changes affect temporal stability vs responsiveness.
-  float auto_exposure_speed_up_ = 3.0F;
-
-  //! Speed of exposure decrease (getting brighter/leaving light).
-  //! Scale: EV per second.
-  //! Variation: Small changes affect temporal stability vs responsiveness.
-  float auto_exposure_speed_down_ = 1.0F;
-
-  engine::MeteringMode auto_exposure_metering_mode_
-    = engine::MeteringMode::kAverage;
-  float auto_exposure_low_percentile_ = 0.1F;
-  float auto_exposure_high_percentile_ = 0.9F;
-  float auto_exposure_min_log_luminance_ = -12.0F;
-  float auto_exposure_log_luminance_range_ = 25.0F;
-  float auto_exposure_target_luminance_ = 0.18F;
-  float auto_exposure_spot_meter_radius_ = 0.2F;
+  ExposureSettings exposure_ {};
 
   float bloom_intensity_ = 0.0F;
   float bloom_threshold_ = 1.0F;

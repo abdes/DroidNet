@@ -23,6 +23,7 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+class PostProcessService;
 
 namespace sceneprep {
 class ScenePrepPipeline;
@@ -61,7 +62,8 @@ public:
     PreparedSceneFrame prepared_frame {};
   };
 
-  OXGN_VRTX_API explicit InitViewsModule(Renderer& renderer);
+  OXGN_VRTX_API explicit InitViewsModule(
+    Renderer& renderer, observer_ptr<PostProcessService> post_process = {});
   OXGN_VRTX_API ~InitViewsModule();
 
   InitViewsModule(const InitViewsModule&) = delete;
@@ -76,6 +78,7 @@ public:
 
 private:
   Renderer& renderer_;
+  observer_ptr<PostProcessService> post_process_;
   std::unique_ptr<resources::TextureBinder> texture_binder_ {};
   std::unique_ptr<upload::TransientStructuredBuffer> current_skinned_pose_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> previous_skinned_pose_buffer_;

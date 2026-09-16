@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace oxygen::scene {
 
@@ -35,7 +35,7 @@ struct CameraExposure {
 
   //! Computes EV (EV100, ISO 100 reference) for the current exposure settings.
   /*!
-   @return EV (EV100, ISO 100 reference) for this exposure configuration.
+   @return EV100, or NaN for nonfinite/nonpositive physical camera inputs.
 
   ### Performance Characteristics
 
@@ -45,13 +45,14 @@ struct CameraExposure {
   */
   [[nodiscard]] auto GetEv() const noexcept -> float
   {
-    const float safe_aperture = std::max(aperture_f, 0.1F);
-    const float safe_shutter_rate = std::max(shutter_rate, 0.001F);
-    const float safe_iso = std::max(iso, 1.0F);
-    const float t = 1.0F / safe_shutter_rate;
-    const float ev = std::log2((safe_aperture * safe_aperture) / t)
-      - std::log2(safe_iso / 100.0F);
-    return ev;
+    if (!std::isfinite(aperture_f) || !std::isfinite(shutter_rate)
+      || !std::isfinite(iso) || aperture_f <= 0.0F || shutter_rate <= 0.0F
+      || iso <= 0.0F) {
+      return std::numeric_limits<float>::quiet_NaN();
+    }
+    return static_cast<float>(2.0 * std::log2(static_cast<double>(aperture_f))
+      + std::log2(static_cast<double>(shutter_rate))
+      - std::log2(static_cast<double>(iso) / 100.0));
   }
 };
 

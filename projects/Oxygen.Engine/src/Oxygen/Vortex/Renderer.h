@@ -558,7 +558,8 @@ public:
     CompositionView::ViewFeatureMask feature_mask = {},
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs = {},
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs = {},
-    std::string debug_name = {}) -> ViewId;
+    std::string debug_name = {},
+    std::optional<scene::ExposureSettings> exposure_override = {}) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   auto GetRigidTransformHistoryCache() noexcept
@@ -703,6 +704,7 @@ private:
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
     std::string debug_name {};
+    std::optional<scene::ExposureSettings> exposure_override;
   };
 
   struct DetachedPublishedRuntimeViewState {

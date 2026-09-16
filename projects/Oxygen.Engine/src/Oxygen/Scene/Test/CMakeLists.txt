@@ -40,6 +40,7 @@ add_test(NAME "Oxygen.Scene Link Test" COMMAND "Oxygen.Scene.LinkTest")
 include(GTestHelpers)
 
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
+m_gtest_program(ExposureSettings SOURCES "ExposureSettings_test.cpp")
 m_gtest_program(
   SceneFlags
   SOURCES

@@ -397,6 +397,10 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
   }
 
   main_view_id_ = ViewId { s_next_view_id_++ };
+  if (validation_.IsExposureFixture()) {
+    exposure_view_state_
+      = vortex::CompositionView::ViewStateHandle { s_next_exposure_state_++ };
+  }
 
   // Subscribe to Vortex Renderer attachment so we can hold an observer.
   renderer_subscription_ = engine->SubscribeModuleAttached(
@@ -617,8 +621,9 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
 
-  renderer->UpsertPublishedRuntimeView(
-    *context, main_view_id_, std::move(view_ctx), validation_.shading_mode);
+  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
+    std::move(view_ctx), validation_.shading_mode, std::nullopt,
+    exposure_view_state_);
   const auto published_view_id
     = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
   if (published_view_id != kInvalidViewId) {
@@ -687,6 +692,10 @@ auto MainModule::EnsureScene() -> void
 
   LOG_SCOPE_FUNCTION(INFO);
 
+  if (validation_.IsExposureFixture()) {
+    BuildExposureScene();
+    return;
+  }
   if (validation_.sidedness_scene) {
     BuildSidednessScene();
     return;
@@ -1060,9 +1069,60 @@ auto MainModule::BuildSidednessScene() -> void
   // NOLINTEND(*-magic-numbers)
 }
 
+auto MainModule::BuildExposureScene() -> void
+{
+  scene_ = std::make_shared<scene::Scene>("FixedExposureFixture", 8U);
+  scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& post = scene_->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  post.SetExposureEnabled(validation_.exposure_enabled);
+  post.SetExposureMode(validation_.camera_exposure
+      ? engine::ExposureMode::kManualCamera
+      : engine::ExposureMode::kManual);
+  post.SetManualExposureEv(validation_.fixed_exposure_ev);
+  post.SetExposureKey(validation_.exposure_key);
+  post.SetExposureCompensationEv(validation_.exposure_compensation);
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(1.0F);
+  post.SetBloomIntensity(0.0F);
+
+  const auto fixture = validation_.exposure_fixture;
+  const bool automatic = fixture != ValidationOptions::ExposureFixture::kFixed;
+  if (automatic) {
+    auto settings = post.GetExposureSettings();
+    settings.mode = engine::ExposureMode::kAuto;
+    settings.manual_ev = 9.7F;
+    if (fixture == ValidationOptions::ExposureFixture::kLockedAuto) {
+      settings.min_ev = settings.max_ev = validation_.fixed_exposure_ev;
+      settings.compensation_ev = validation_.fixed_exposure_ev;
+    } else {
+      settings.key = 25.0F;
+      settings.compensation_ev = 1.0e20F;
+      settings.compensation_curve = { { 0.0F, -1.0e20F } };
+      // Lock the arithmetic fixture so asset-readiness startup frames cannot
+      // turn this cancellation check into a temporal-settling experiment.
+      settings.min_ev = settings.max_ev = 0.0F;
+    }
+    post.SetExposureSettings(settings);
+  }
+
+  // Exact binary16 input, no lights/environment. The front face fills the
+  // camera so interior probes avoid silhouette and partial coverage.
+  const float input = automatic ? 0.25F : 4096.0F;
+  auto receiver = scene_->CreateNode("ExposureReceiver");
+  receiver.GetRenderable().SetGeometry(BuildCubeGeometry("ExposureReceiver",
+    "ExposureReceiver", glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F }, 1.0F, 0.0F,
+    data::MaterialDomain::kOpaque, glm::vec3 { input }));
+  receiver.GetTransform().SetLocalScale({ 100.0F, 1.0F, 100.0F });
+  SetShadowParticipation(receiver, false, false);
+  LOG_F(INFO, "Exposure fixture: input={} EV={} auto={} gamma=1 None", input,
+    validation_.fixed_exposure_ev, automatic);
+}
+
 auto MainModule::EnsureLighting() -> void
 {
-  if (!scene_ || validation_.sidedness_scene) {
+  if (!scene_ || validation_.sidedness_scene
+    || validation_.IsExposureFixture()) {
     return;
   }
 
@@ -1121,6 +1181,15 @@ auto MainModule::EnsureLighting() -> void
 auto MainModule::UpdateValidationScene(
   const observer_ptr<engine::FrameContext> context) -> void
 {
+  if (validation_.IsExposureFixture()) {
+    if (validation_.inject_invalid_exposure && context != nullptr
+      && context->GetFrameSequenceNumber().get() >= 8U) {
+      scene_->GetEnvironment()
+        ->TryGetSystem<scene::environment::PostProcessVolume>()
+        ->SetExposureKey(-1.0F);
+    }
+    return;
+  }
   if (validation_.sidedness_scene) {
     if (validation_.animate && context != nullptr) {
       const auto frame
@@ -1220,12 +1289,13 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
     CHECK_F(ok, "Failed to attach PerspectiveCamera");
   }
 
-  const glm::vec3 kCameraPosition = validation_.sidedness_scene
+  const bool chart_camera
+    = validation_.sidedness_scene || validation_.IsExposureFixture();
+  const glm::vec3 kCameraPosition = chart_camera
     ? glm::vec3 { 0.0F, -17.0F, 0.0F }
     : glm::vec3 { 0.0F, 8.0F, 4.0F };
-  const glm::vec3 kCameraTarget = validation_.sidedness_scene
-    ? glm::vec3 { 0.0F }
-    : glm::vec3 { 0.0F, 0.0F, 1.5F };
+  const glm::vec3 kCameraTarget
+    = chart_camera ? glm::vec3 { 0.0F } : glm::vec3 { 0.0F, 0.0F, 1.5F };
   camera_node_.GetTransform().SetLocalPosition(kCameraPosition);
   camera_node_.GetTransform().SetLocalRotation(
     CameraLookRotation(kCameraPosition, kCameraTarget));

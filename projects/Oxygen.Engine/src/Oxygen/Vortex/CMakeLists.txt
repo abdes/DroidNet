@@ -176,6 +176,8 @@ set(
   "Types/SyntheticSunData.h"
   "Types/VelocityPublications.h"
   "Types/ViewColorData.h"
+  "Types/ExposureTargetData.h"
+  "Types/ExposureStateData.h"
   "Types/ViewConstants.h"
   "Types/ViewFrameBindings.h"
   "Types/ViewHistoryFrameBindings.h"
@@ -357,10 +359,8 @@ target_sources(
     ${OXYGEN_VORTEX_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_VORTEX_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_VORTEX_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

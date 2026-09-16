@@ -13,11 +13,12 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
@@ -41,31 +42,40 @@ namespace {
 
   constexpr std::size_t kMatrixFloatCount = 16U;
 
-  auto ResolvePreparedFrameExposure(
-    const scene::Scene& scene,
-    const observer_ptr<const ResolvedView> resolved_view) -> float
+  auto ResolvePreparedFrameExposure(const scene::Scene& scene,
+    const RenderContext::ViewExecutionEntry& view,
+    const observer_ptr<PostProcessService> post_process_service) -> float
   {
-    const auto environment = scene.GetEnvironment();
-    if (environment == nullptr) {
+    if (post_process_service == nullptr) {
       return 1.0F;
     }
-
-    const auto post_process
-      = environment->TryGetSystem<scene::environment::PostProcessVolume>();
-    if (post_process == nullptr || !post_process->GetExposureEnabled()) {
-      return 1.0F;
+    auto requested = scene::ExposureSettings {};
+    if (const auto environment = scene.GetEnvironment();
+      environment != nullptr) {
+      if (const auto post_process
+        = environment->TryGetSystem<scene::environment::PostProcessVolume>();
+        post_process != nullptr) {
+        requested = post_process->GetExposureSettings();
+      }
     }
-
-    float ev = post_process->GetManualExposureEv();
-    if (post_process->GetExposureMode() == engine::ExposureMode::kManualCamera
-      && resolved_view != nullptr && resolved_view->CameraEv().has_value()) {
-      ev = *resolved_view->CameraEv();
+    if (view.exposure_override.has_value()) {
+      requested = *view.exposure_override;
+    } else if (view.composition_view != nullptr
+      && view.composition_view->render_settings.exposure.has_value()) {
+      requested = *view.composition_view->render_settings.exposure;
     }
-
-    return engine::ExposureScaleFromEv100(
-      ev,
-      post_process->GetExposureCompensationEv(),
-      post_process->GetExposureKey());
+    const auto camera_ev = view.resolved_view != nullptr
+      ? view.resolved_view->CameraEv()
+      : std::optional<float> {};
+    const auto& active = post_process_service
+                           ->ResolveViewExposureSettings(
+                             view.view_state_handle, requested, camera_ev)
+                           .resolved;
+    // Auto gain is GPU-owned. Never derive this early scalar from inactive
+    // Manual EV or independently exponentiate an authored Auto compensation.
+    return active.authored.mode == engine::ExposureMode::kAuto
+      ? 1.0F
+      : active.fixed_scale;
   }
 
   auto BeginResourceManagerFrame(resources::TextureBinder* const texture_binder,
@@ -506,8 +516,10 @@ namespace {
 
 } // namespace
 
-InitViewsModule::InitViewsModule(Renderer& renderer)
+InitViewsModule::InitViewsModule(
+  Renderer& renderer, const observer_ptr<PostProcessService> post_process)
   : renderer_(renderer)
+  , post_process_(post_process)
 {
   if (const auto gfx = renderer_.GetGraphics();
     gfx != nullptr && renderer_.GetAssetLoader() != nullptr) {
@@ -649,8 +661,8 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
     scene_prep_->FinalizeView(scene_prep_state_);
     PublishPreparedSceneFrame(scene_prep_state_, storage);
-    storage.prepared_frame.exposure = ResolvePreparedFrameExposure(
-      *scene, view_entry.resolved_view);
+    storage.prepared_frame.exposure
+      = ResolvePreparedFrameExposure(*scene, view_entry, post_process_);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,
       scene_prep_state_.GetDrawMetadataEmitter(),
       current_material_wpo_buffer_.get(), previous_material_wpo_buffer_.get(),

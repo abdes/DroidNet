@@ -64,6 +64,7 @@ set(
   "SceneNode.h"
   "SceneNodeImpl.h"
   "ScenePrettyPrinter.h"
+  "ExposureSettings.h"
   "Scripting/ScriptingComponent.h"
   "SceneQuery.h"
   "SceneTraversal.h"
@@ -140,6 +141,7 @@ set(
   "Internal/ScriptSlotMutationProcessor.cpp"
   "Internal/ScriptSlotMutationProcessor.h"
   "Environment/LocalFogVolume.cpp"
+  "ExposureSettings.cpp"
 )
 
 target_sources(

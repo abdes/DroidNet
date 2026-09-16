@@ -80,11 +80,12 @@ fixed gain; histogram/curve/hybrid adaptation; GPU lifecycle/sharing; all-path
 HDR migration and native MultiView; persistence/configuration; physical lights;
 independent instruments; interactive demos; automated/native acceptance.
 
-Status: slice-1 specification checkpoint complete; slice 2 is the next
-implementation step. The [checkpoint](plan/exposure-contract-checkpoint.md)
-records the 10/10 independent arithmetic audit, compiler inspection and owned
-numerical/GPU/asset/HDR contracts. Runtime implementation and native acceptance
-remain open.
+Status: `in_progress`, slice 2 foundation. The [checkpoint](plan/exposure-contract-checkpoint.md)
+records slice-1 contracts. Canonical settings, public per-view overrides,
+cancellation-safe target compilation, exact fixed/camera gains and frame-safe
+post-process uploads pass 95 focused tests and 12 native arithmetic/debug-layer
+cases. Frame-domain integration, robust metering/adaptation, lifecycle/sharing,
+FP32 runtime migration and LightBench/MultiView acceptance remain open.
 Implementation must pass each slice gate before the next. FP16 eligibility is
 per-view and separate from exposure validity; retained FP32 does not reset
 adaptation. Prior VTX-M03/M06 closure is not this package's acceptance evidence.

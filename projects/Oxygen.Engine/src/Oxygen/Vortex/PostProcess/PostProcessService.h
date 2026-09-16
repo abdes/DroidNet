@@ -69,6 +69,12 @@ public:
     float exposure_value { 1.0F };
   };
 
+  struct ExposureSettingsState {
+    scene::ResolvedExposureSettings resolved;
+    std::uint64_t revision { 0U };
+    std::optional<scene::ExposureSettingsError> last_error;
+  };
+
   OXGN_VRTX_API explicit PostProcessService(Renderer& renderer);
   OXGN_VRTX_API ~PostProcessService();
 
@@ -80,6 +86,11 @@ public:
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto SetConfig(const PostProcessConfig& config) -> void;
+  //! Resolve one complete request, retaining this view's prior valid revision.
+  [[nodiscard]] OXGN_VRTX_API auto ResolveViewExposureSettings(
+    CompositionView::ViewStateHandle handle,
+    const scene::ExposureSettings& requested,
+    std::optional<float> camera_ev = {}) -> const ExposureSettingsState&;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     const Inputs& inputs) const -> PostProcessFrameBindings;
   OXGN_VRTX_API auto PublishBindings(
@@ -116,6 +127,9 @@ private:
 
   Renderer& renderer_;
   PostProcessConfig config_ {};
+  std::unordered_map<CompositionView::ViewStateHandle, ExposureSettingsState>
+    exposure_settings_;
+  ExposureSettingsState transient_exposure_settings_ {};
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   std::unique_ptr<internal::PerViewStructuredPublisher<PostProcessFrameBindings>>
