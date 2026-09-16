@@ -12,7 +12,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
-#include "Vortex/Contracts/View/ViewColorData.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -163,18 +163,7 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         PassMultiScatteringLutSrv(pass));
 }
 
-static float GetVortexExposure()
-{
-    const ViewFrameBindings view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    if (view_bindings.view_color_frame_slot != K_INVALID_BINDLESS_INDEX)
-    {
-        const ViewColorData view_color =
-            LoadViewColorData(view_bindings.view_color_frame_slot);
-        return max(view_color.exposure, 0.0f);
-    }
-    return 1.0f;
-}
+
 
 static EnvironmentViewData LoadVortexEnvironmentViewData()
 {
@@ -221,7 +210,7 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
+    const float output_pre_exposure = max(GetPreExposure(), 1.0e-6f);
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = false;
     sampling.SampleCountIni = max(1.0f, sample_count);

@@ -80,11 +80,13 @@ fixed gain; histogram/curve/hybrid adaptation; GPU lifecycle/sharing; all-path
 HDR migration and native MultiView; persistence/configuration; physical lights;
 independent instruments; interactive demos; automated/native acceptance.
 
-Status: `in_progress`, slice 2 foundation. The [checkpoint](plan/exposure-contract-checkpoint.md)
+Status: `in_progress`, slice 3 next. The [checkpoint](plan/exposure-contract-checkpoint.md)
 records slice-1 contracts. Canonical settings, public per-view overrides,
 cancellation-safe target compilation, exact fixed/camera gains and frame-safe
 post-process uploads pass 95 focused tests and 12 native arithmetic/debug-layer
-cases. Frame-domain integration, robust metering/adaptation, lifecycle/sharing,
+cases. The explicit frame record and pre/post descriptor pinning additionally
+pass 45 publication/runtime/ShaderBake checks and a native sky-consumer ABI probe.
+GPU P selection, S/P integration, robust metering/adaptation, lifecycle/sharing,
 FP32 runtime migration and LightBench/MultiView acceptance remain open.
 Implementation must pass each slice gate before the next. FP16 eligibility is
 per-view and separate from exposure validity; retained FP32 does not reset

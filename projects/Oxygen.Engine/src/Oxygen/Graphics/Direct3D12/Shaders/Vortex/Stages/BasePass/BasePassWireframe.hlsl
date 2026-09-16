@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Stages/BasePass/BasePassGBuffer.hlsl"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 
 struct WireframePassConstants
 {
@@ -28,7 +28,7 @@ static inline float4 LoadWireframeColor()
 
     if (apply_exposure_compensation > 0.5f)
     {
-        color.rgb /= max(GetExposure(), 1.0e-6f);
+        color.rgb /= max(GetPreExposure(), 1.0e-6f);
     }
 
     return color;

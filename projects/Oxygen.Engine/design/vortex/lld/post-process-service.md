@@ -61,10 +61,10 @@ truncated generation or ViewStateHandle comparison is permitted.
 | 8 | uint | global_exposure_state_slot |
 | 12 | uint | flags |
 
-Use the existing ViewFrameBindings.view_color_frame_slot (byte 12) for this
-record, renamed frame_exposure_slot with its C++/HLSL consumers in the same
-migration. ViewFrameBindings stays 64 bytes; other slots retain offsets.
-Remove ViewColorData.exposure and GetExposure after migration. Flags: bit 0
+ViewFrameBindings.frame_exposure_slot (byte 12) references this record.
+ViewFrameBindings stays 64 bytes; other slots retain offsets. Publish one
+immutable record before scene work and retain its descriptor through post-scene
+publication. The old ViewColorData/GetExposure vocabulary is removed. Flags: bit 0
 bootstrap/recovery FP32, bit 1 borrowed prior state, bit 2 transient diagnostic
 unit gain, bit 3 source-initialization fallback. Reserved bits are zero.
 

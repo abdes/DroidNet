@@ -22,7 +22,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
@@ -211,7 +211,7 @@ float4 SampleCameraVolumeLut(
         view_data.camera_aerial_volume_depth_params.x,
         view_data.sky_aerial_luminance_aerial_start_depth_km.w,
         view_data.camera_aerial_volume_depth_params.w,
-        rcp(max(GetExposure(), 1.0e-6f)),
+        rcp(max(GetPreExposure(), 1.0e-6f)),
         near_fade_out_range_inv_depth_km);
 }
 

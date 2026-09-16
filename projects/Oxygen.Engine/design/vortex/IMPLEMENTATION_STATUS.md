@@ -32,12 +32,14 @@ gap.
 ## 3. Current next step
 
 **Active work:** [Global exposure / LightBench / MultiView](plan/exposure-and-lightbench-correction.md),
-`in_progress` at the validated slice-2 foundation. Canonical settings and
+`in_progress`, with slice 3 next. Canonical settings and
 public override create/update/clear isolation are implemented; cancellation-safe
 normalized targets, fixed/camera gain propagation and frame-retired uploads
 pass 95 focused CTest entries. Twelve native arithmetic captures, floating-point
 shader-output probes and separate debug-layer audits pass. The 80-byte Auto
-state carries settings/frame identity. Full frame-domain integration and
+state carries settings/frame identity. Explicit P/reciprocal frame publication
+and descriptor pinning pass 45 focused publication/runtime/ShaderBake checks and
+a native sky-consumer ABI probe/debug audit. GPU P selection, final S/P and
 remaining metering/lifecycle/HDR/authoring/demo acceptance remain open.
 
 **Implementation package:** `ED-M08 — V0.1 canonical authoring and rendering`.
@@ -68,7 +70,7 @@ Validated M08 LLD references are `design/vortex/lld/cubemap-processing.md` and
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |
 | --- | --- | --- | --- | --- |
-| Exposure / LightBench / MultiView | Complete global exposure and benchmark package | `in_progress` | Canonical settings, cancellation-safe targets, exact fixed/camera gains, public per-view override propagation and frame-retired shader uploads; 95 focused tests and 12 native arithmetic/pixel-history/debug-layer cases. Evidence: `out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json` and `contract-audit/slice2-foundation-tests.log`. | Remaining frame-domain binding integration, robust histogram/masks/hybrid adaptation, lifecycle/sharing, FP32 runtime eligibility, serialization (including native camera persistence), light calibration, instruments and full LightBench/MultiView acceptance. |
+| Exposure / LightBench / MultiView | Complete global exposure and benchmark package | `in_progress` | Canonical settings, cancellation-safe targets, exact fixed/camera gains, public per-view override propagation and frame-retired shader uploads; 95 foundation tests and 12 native arithmetic/pixel-history/debug-layer cases; frame descriptor pinning passes 45 publication/runtime/ShaderBake checks and a native sky ABI probe. Evidence: `out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json` and `contract-audit/slice2-foundation-tests.log`. | GPU-owned prior-history P selection and S/P integration, robust histogram/masks/hybrid adaptation, lifecycle/sharing, FP32 runtime eligibility, serialization (including native camera persistence), light calibration, instruments and full LightBench/MultiView acceptance. |
 | ED-M08 native extension | V0.1 canonical authoring and rendering | `planned` | Final rendering/IBL contracts, source-local deferred annotations and editor execution plan. | Native implementation, focused tests and visual proof outside the editor, followed by integrated editor qualification. |
 | VTX-M00 | Planning and status truth surface | `validated` | `PLAN.md` was rewritten as a milestone-first plan; this milestone/status ledger exists; restricted doc scans and `git diff --check` passed on 2026-04-25. | No open planning-status gap. |
 | VTX-M01 | Renderer Core and SceneRenderer baseline | `validated` | Vortex module, Renderer Core, publication, upload/resource substrate, SceneRenderer shell, SceneTextures, non-runtime facades, resolve/cleanup, and related tests are present and freshly validated. Build proof passed `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.SceneRendererShell.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.RenderContextMaterializer.Tests Oxygen.Vortex.RendererFacadePresets.Tests Oxygen.Vortex.RenderGraphHarnessFacade.Tests Oxygen.Vortex.SinglePassHarnessFacade.Tests Oxygen.Vortex.UploadCoordinator.Tests Oxygen.Vortex.ViewConstantsManager.Tests oxygen-examples-vortexbasic --parallel 4`. Focused CTest passed the corresponding Vortex substrate/facade suites plus `Oxygen.Vortex.LinkTest`. Runtime proof `tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m01-m03-closeout\vortexbasic-foundation -Frame 3 -RunFrames 6 -Fps 10 -BuildJobs 4` passed overall with runtime exit 0, final present nonzero, CDB/debug-layer `overall_verdict=pass`, no D3D12/DXGI errors, and no blocking warnings. | No open VTX-M01 closure gap. |

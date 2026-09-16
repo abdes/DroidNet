@@ -16,7 +16,7 @@
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Contracts/Lighting/PositionalLightData.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
@@ -196,9 +196,9 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
     const float3 unlit_color = surf.base_rgb * input.color + surf.emissive;
 #  ifdef OXYGEN_HDR_OUTPUT
-    return float4(unlit_color / max(GetExposure(), 1.0e-6f), ResolveOutputCoverage(surf.base_a));
+    return float4(unlit_color / max(GetPreExposure(), 1.0e-6f), ResolveOutputCoverage(surf.base_a));
 #  else
-    return float4(LinearToSrgb(unlit_color * GetExposure()), ResolveOutputCoverage(surf.base_a));
+    return float4(LinearToSrgb(unlit_color * GetPreExposure()), ResolveOutputCoverage(surf.base_a));
 #  endif
   }
 
@@ -252,7 +252,7 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
       && !defined(DEBUG_DIRECT_LIGHT_GATES)                                    \
       && !defined(DEBUG_DIRECT_BRDF_CORE) && !defined(DEBUG_IBL_ONLY)          \
       && !defined(DEBUG_DIRECT_PLUS_IBL)
-  final_color *= GetExposure();
+  final_color *= GetPreExposure();
 #    endif
   return float4(LinearToSrgb(final_color), ResolveOutputCoverage(surf.base_a));
 #  endif

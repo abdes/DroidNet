@@ -1,6 +1,6 @@
 # Exposure management and LightBench implementation plan
 
-Status: `in_progress` — slice 1 contract checkpoint recorded; slice 2 active.
+Status: `in_progress` — slices 1-2 checkpointed; slice 3 next.
 
 Date: 2026-09-16
 
@@ -91,7 +91,7 @@ the named slice gate before expanding to the remaining cases. Use the file map
 in section 8 to locate the owner. Review GPU bindings, barriers and lifetime
 changes before integrating another rendering family.
 
-## 2. Current implementation defects to replace
+## 2. Baseline defects and implementation owners
 
 - `Core/Types/PostProcess.h` has a coherent EV conversion, but
   `ExposurePass::Execute` floors fixed exposure at `1e-4`. At key 12.5 and
@@ -757,7 +757,7 @@ the owning module; use the existing native fixture and capture tools for GPU tes
 | 2 | `Core/Types/PostProcess.h`, `Vortex/PostProcess/Passes/ExposurePass.cpp`, `Vortex/Test/PostProcessService_test.cpp` under `src/Oxygen/` | EV14 reaches the tonemap constant unchanged |
 | 3 | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl` | Known two-bin distribution and hybrid trajectory |
 | 4 | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*` | One source update and idempotent event generation |
-| 5 | `Vortex/Types/ViewColorData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4 | Opaque/emissive output invariant under a change of P |
+| 5 | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4 | Opaque/emissive output invariant under a change of P |
 | 6 | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | One new record and one old record resolve correctly |
 | 7 | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli` | Point flux and spot angular integral match independent values |
 | 8 | `Vortex/Diagnostics/DiagnosticsService.*`, `SceneRenderer/SceneTextures.*` and existing extraction/readback owners | Known float region readback has the correct frame/view |
@@ -829,14 +829,27 @@ failed settling evidence, excluded from these twelve arithmetic cases. Robust
 metering and temporal qualification remain slice 3 work. Reproduction is in the
 [VortexBasic README](../../../Examples/VortexBasic/README.md#fixed-exposure-fixture).
 
-This is a validated foundation increment, not full package closure. Remaining
-frame-domain binding integration and the following slice gates stay open.
+The binding/publication increment completes the slice-2 interface gate:
+`FrameExposureData` replaces the overloaded ViewColorData record at byte 12 of
+the unchanged 64-byte view ABI. All existing readers use the explicit
+pre-exposure helper. Post-scene publication retains the pre-scene descriptor.
+The publication/runtime/ShaderBake checks pass 45/45; the affected shader bake
+packs 196 modules. A native default-scene probe verifies the sky shader reads
+the 16-byte record with P=2^-13 and 1/P=8192; its separate CDB audit passes.
+Evidence is under `frame-binding/` and
+`contract-audit/slice2-frame-binding-tests.log`. The fog publication assertion
+was corrected to match the existing opacity output and InvSrcAlpha blend;
+production fog blending was not changed.
+
+This does not qualify GPU-owned prior-history P selection, global-state slot
+association, S/P integration, unified mode history or full HDR migration. Those
+remain in slices 4-5; metering/adaptation and the remaining package gates stay open.
 
 - [x] Implement shared validation/resolution for native settings and view overrides,
   including zero target, coupled ranges and representable gain.
 - [x] Remove the fixed-exposure floor and propagate the exact resolved multiplier
   through constants. Add scalar, upload and native GPU regressions.
-- [ ] Introduce explicit frame exposure bindings and common state definitions,
+- [x] Introduce explicit frame exposure bindings and common state definitions,
   with compile-time CPU/HLSL size/layout checks and ShaderBake validation.
 - [x] Define native mask/curve/new-setting types for the following runtime slices.
 

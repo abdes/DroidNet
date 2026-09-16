@@ -12,7 +12,7 @@
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 // Define vertex structure to satisfy BindlessHelpers.hlsl defaults.
@@ -72,7 +72,7 @@ struct WireframePassConstants {
   // PHYSICAL BYPASS: Divide by exposure when requested.
   // This keeps unlit debug lines stable in HDR paths.
   if (apply_exposure_compensation > 0.5f) {
-    color.rgb /= max(GetExposure(), 1e-6f);
+    color.rgb /= max(GetPreExposure(), 1e-6f);
   }
 
   return color;
