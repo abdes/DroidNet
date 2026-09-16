@@ -1,180 +1,216 @@
-# Physically Based Rendering in Oxygen
+# Physically based rendering in Oxygen
 
-**Date:** 2026-02-05
-**Status:** Design / Architecture
+Updated: 2026-09-16. Mathematical specification; implementation and acceptance
+are tracked in the [exposure delivery plan](../vortex/plan/exposure-and-lightbench-correction.md).
 
-## Introduction
+## Units and working color
 
-This document captures the PBR architecture used by Oxygen, including the
-principles, data flow, and conventions required to achieve predictable,
-physically plausible results. It is intended to be the single source of
-truth for how materials, lights, exposure, and post-processing interact.
+World distance is metres. Linear working RGB uses Rec.709/sRGB primaries and
+D65 white. Luminance is `dot(rgb, (0.2126, 0.7152, 0.0722))`. Decode color
+textures before lighting; normals, metalness, roughness and mask samples are
+data. Output retains the existing tone curves, DisplayGamma and target encoding.
+Exposure is not a color-space conversion.
 
-The priorities are:
+| Quantity | Unit / meaning |
+| --- | --- |
+| Directional light / Sun | Lux, illuminance on a perpendicular receiver |
+| Point / spot light | Lumens, total flux converted to candela |
+| Sky / emissive / calibrated IBL | Scene-referred linear radiance, calibrated to nits |
+| EV100 | Logarithmic camera/meter quantity in stops |
+| Calibration key | Dimensionless bias normalization; 12.5 is not an EV |
+| Global exposure S | Linear displayed gain |
+| Pre-exposure P | Positive numerical storage scale |
 
-- **Consistency:** authored values map to stable visual outcomes.
-- **Physical plausibility:** units are explicit, and conversions are
- documented and enforced.
-- **Debuggability:** validation scenes and metrics make it easy to verify
- correctness.
+The Sun's lux value also drives atmosphere illumination. Its optional visible
+disk luminance derives from its solid angle; it is not another light. Sky tint
+and luminance apply consistently to visible sky and IBL.
 
-> **Related Documents:**
->
-> - [Physical Lighting Roadmap](physical-lighting-roadmap.md) — phased implementation plan
-> - [Forward Pipeline Design](forward-pipeline-design.md) — rendering architecture
-> - [PostProcessPanel Design](post-process-panel-design.md) — UI integration
+## Fixed and camera exposure
 
-## Lighting
+Preserve Oxygen's accepted calibration:
 
-Lighting defines how authored values are interpreted and converted into
-shader inputs. Oxygen follows a physically based model with explicit unit
-conventions and clear separation between authored values and shader-space
-quantities.
+```text
+log_bias = compensation_ev + log2(exposure_key) - log2(12.5)
+S_manual = 2^(log_bias - ev100)
+camera_ev100 = 2*log2(aperture_f) + log2(shutter_rate)
+               + log2(100) - log2(iso)
+```
 
-### Architecture overview
+Camera inputs and key must be finite and positive. Validate the complete
+settings revision atomically. Evaluate in log space to avoid intermediate
+overflow. Invalid revisions retain the previous valid revision; no arbitrary
+floor may replace a valid fixed gain. Manual modes ignore the automatic curve.
 
-- **Authoring layer (CPU):** light components store values in physical units
- and remain unit-consistent across the engine.
-- **Transport layer:** light data is packed into GPU structures without
- losing unit meaning (e.g., "lux" stays "lux").
-- **Shading layer (GPU):** unit conversions happen in shader helpers using
- explicit formulas (lux → radiance, lumens → candela → radiance).
-- **Exposure layer:** camera exposure converts scene radiance into display
-  values (EV100-based manual exposure and auto-exposure if enabled).
-- **Composition layer:** assembled via `ToneMapPass` and `CompositingPass`
-  during the `OnCompositing` phase to resolve HDR radiance into final SDR
-  pixel values.
+At key 12.5 and compensation zero, EV14/15/16 give `2^-14`, `2^-15`, `2^-16`.
+Input 4096 becomes 0.25, 0.125, 0.0625 before output mapping. The f/11,
+1/125 s, ISO100 camera gives EV100 `13.884647521936682`. DemoShell's Manual
+EV9.7 is a client default, not that camera's calculated EV. Scene creation
+retains Auto, key 10, speeds 3/1 EV/s, bounds [-6,16] and target 0.18.
 
-### Units
+## Automatic target and compensation curve
 
-Oxygen uses the following units by default:
+For valid positive percentile-trimmed geometric-mean scene luminance L:
 
-| Light Type | Authored Unit | Symbol | Notes |
-| ---------- | ------------- | ------ | ----- |
-| Directional (sun/sky) | Illuminance | lux (lm/m²) | `Sun::SetIntensityLux()` |
-| Point | Luminous flux | lumens (lm) | Via `CommonLightProperties.intensity` (see Phase 1) |
-| Spot | Luminous flux | lumens (lm) | Via `CommonLightProperties.intensity` (see Phase 1) |
-| Surface / IBL | Luminance | nits (cd/m²) | `SkySphere` + `SkyLight` luminance calibration |
-| Exposure | Exposure Value | EV100 | From aperture, shutter, ISO |
+```text
+metered_ev = log2(L) - log2(0.18)
+bounded_ev = clamp(metered_ev, min_ev, max_ev)
+curve_ev = curve(metered_ev)
+log_target = log2(target_luminance) - log2(0.18) - bounded_ev
+             + compensation_ev + curve_ev + log2(exposure_key) - log2(12.5)
+S_target = 2^log_target
+```
 
-If a light type supports an alternate unit (e.g., candela for point/spot),
-the unit must be explicit in the field name and UI label.
+Curve keys are finite `(metered_ev100, compensation_ev)` pairs, strictly
+increasing in EV, at most 64. Empty means zero; one key is constant; interpolate
+linearly and clamp to endpoint values outside the interval. Use raw metered EV,
+independent of adaptation. Equal min/max EV uses that bound for denominator and
+curve and resolves immediately without a histogram. An explicit seed owns its
+event frame before the locked solve.
 
-> **Implementation Note:** The current `CommonLightProperties.intensity` field
-> in `src/Oxygen/Scene/Light/LightCommon.h` is unitless. Phase 1 of the
-> [Physical Lighting Roadmap](physical-lighting-roadmap.md) addresses renaming and
-> documenting these fields with explicit units.
+The runtime may compile this piecewise-linear log-target function into bounded
+knots at authored curve coordinates and clamp/window boundaries. Combine all
+opposing compensation/EV terms with compensated arithmetic before exponentiation
+or float32 upload. GPU interpolation remains a function of raw metered EV.
+Do not first reconstruct a linear biased target or luminance bound: e.g. Auto
+compensation=min_ev=max_ev=160 at key 12.5 has valid unit gain despite `2^160`
+overflowing float32. A key of 25 must retain its additional one stop even when
+authored compensation and a constant curve contain opposing `1e20` values.
 
-### Conventions and formulas
+Target zero immediately displays black. Continue metering and maintain positive
+latent gain using nominal target 0.18. Never log or invert displayed zero.
+Restoring a positive target solves immediately from valid current metering,
+otherwise last valid metered EV, otherwise initialization. Disabled exposure
+publishes S=1. The [runtime LLD](../vortex/lld/post-process-service.md) owns
+transition precedence and invalid-meter handling.
 
-- **Directional light (lux):** convert illuminance to radiance in shader using
- a Lambertian model.
-- **Point light (lumens):** convert lumens → candela using total flux and
- distribution, then candela → radiance.
-- **Spot light (lumens):** distribute flux within the cone; convert to candela
- and then to radiance.
+## Metering
 
-Recommended helper set (shader library):
+Use 256 logarithmic bins and a stable normalized-content stratified grid of
+`min(width,512)*min(height,512)` samples at cell centres. Do not area-average HDR
+before binning. Weight by Average/CenterWeighted/Spot, optional bilinear
+clamp-sampled linear mask R, and coverage. Absent mask means one.
 
-- `LuxToIrradiance(float illuminance_lux)` — directional lights
-- `LumensToCandela(float flux_lm)` — point/spot lights (isotropic)
-- `CandelaToRadiance(float intensity_cd, float distance)` — attenuation
+Coverage follows tonemapping: saturated alpha with display background enabled,
+otherwise one. For positive coverage unpremultiply RGB and divide by P before
+calculating luminance. Zero coverage contributes no mass. Physical sky is scene
+signal; UI, display background and letterbox bars are excluded.
 
-> **Status:** These helpers are specified but not yet implemented in shaders.
-> See [Physical Lighting Roadmap, Phase 3](physical-lighting-roadmap.md#phase-3--lux-consistent-lighting).
+Quantize combined weight Q to [0,4095]. For continuous bin position x, scatter
+`round(Q*frac(x))` to the upper bin and the remainder to the lower. Clamp both
+indices at 255. Maximum integer mass is 1,073,479,680, safe in uint32 at 8K.
+Percentile trimming retains fractional boundary-bin mass, requires positive
+retained mass, and averages log-bin positions to form the geometric mean.
 
-### Data model
+Finite luminance at/below the lower window bound is the dark bin. Default black
+influence zero excludes it in mixed scenes. Count exact black, positive below
+window, finite, positively weighted and rejected samples separately. All finite,
+positively weighted samples in the dark bin give a valid synthetic min-EV solve;
+report luminance below-window, not an exact measurement. Zero weight, missing
+input or no finite samples is invalid. NaN/Inf/range loss is never valid black.
 
-All public fields must include the unit in the name or Doxygen comment.
+## Exact hybrid adaptation
 
-**Current Implementation:**
+Adapt positive log gain q toward qt. Let r=abs(qt-q), D be finite positive
+transition distance (default 1.5 stops), and v the selected maximum EV/s.
+SpeedUp applies when qt<q; SpeedDown when qt>q.
 
-| Class | Header | Current Field | Target Field |
-| ----- | ------ | ------------- | ------------ |
-| `Sun` | `src/Oxygen/Scene/Environment/Sun.h` | `intensity_lux_` | ✓ Complete |
-| `DirectionalLight` | `src/Oxygen/Scene/Light/DirectionalLight.h` | `common_.intensity` | `intensity_lux` |
-| `PointLight` | `src/Oxygen/Scene/Light/PointLight.h` | `common_.intensity` | `luminous_flux_lm` |
-| `SpotLight` | `src/Oxygen/Scene/Light/SpotLight.h` | `common_.intensity` | `luminous_flux_lm` |
+```text
+if r == 0 or dt == 0 or v == 0: retain q
+else:
+    t_linear = min(dt, max(r-D,0)/v)
+    r = (r-v*t_linear) * exp(-(v/D)*(dt-t_linear))
+    q_next = qt - sign(qt-q)*r
+```
 
-### Exposure and calibration
+Use finite nonnegative game delta. Pause freezes ordinary adaptation. No hidden
+delta clamp, overshoot or per-frame history clipping. Equal elapsed time under a
+constant target produces equivalent trajectories across frame schedules.
+Initialization, seeds, manual changes and remeter solves bypass speed and dt.
 
-Manual exposure uses physical camera parameters:
+## HDR domains and numerical limits
 
-- Aperture ($N$), shutter time ($t$), ISO
-- $EV100 = \log_2(\frac{N^2}{t}) - \log_2(\frac{ISO}{100})$
-- $exposure = \frac{1}{1.2} \cdot 2^{-EV100}$
+Store `C_pre=P*C_scene`, meter `C_pre/P`, apply `S/P` once to foreground and
+bloom at tonemapping. Never scale coverage, depth, transmittance or material data.
+Scene-referred bloom thresholds become P-scaled thresholds at extraction.
+Rescale reused pre-exposed RGB by `P_current/P_stored`. Canonical environment
+products stay scene-referred; existing explicit resource normalization is
+allowed, but never depends on a view's S.
 
-Exposure is expressed in **stops** (log₂ space). A change of 1 EV doubles or
-halves brightness. Auto-exposure is validated by **adaptation rate** and
-**luminance ratios**, not fixed absolute values.
+Slice-1 specified operational domain: exact black plus positive scene RGB/luminance
+in [2^-24,2^32], positive displayed/latent gain in [2^-32,2^32], P in
+[2^-32,2^32]. Target zero and disabled one retain their separate semantics.
+Validate resulting gain over curve segments and bounded EV intervals; validate
+seeds separately. These are coupled gain bounds, not independent clamps on
+EV/key/compensation. The
+[checkpoint](../vortex/plan/exposure-contract-checkpoint.md) records the adopted
+format-retention policy. This is a specified domain; native qualification is
+required before it can be reported as tested support.
 
-Auto-exposure (if enabled) must operate on scene luminance derived from the
-same unit-consistent pipeline.
+FP32 normal minimum is 2^-126. No dependence on subnormal arithmetic is permitted.
+The upper radiance bound includes the Earth-reference 133312-lux, 0.545-degree
+solar disk (approximately 1.88e9 nits); 2^24 would incorrectly exclude it.
+Scene times gain reaches at most 2^64. Evaluate the existing quadratic tone
+curves using reciprocal-polynomial form at large inputs to avoid squaring
+overflow while preserving the same curve. Upstream BRDF, integration, coverage recovery, bloom and cumulative
+writes must remain finite and respect the resulting-radiance domain. Finite
+authored light values alone do not prove this. Detect loss before narrowing.
 
-### Sky environment calibration
+FP16 normal minimum is 2^-14, positive subnormal minimum 2^-24, maximum 65504.
+One P cannot reduce a scene's dynamic-range ratio. Valid exposure history alone
+cannot authorize FP32-to-FP16 return; required signals must meet their error
+budget. See the checkpoint for the proposed persistent recovery policy.
 
-Sky environment luminance is authored explicitly in **nits (cd/m²)** and is
-applied consistently to:
+### Acceptance budgets
 
-- **Sky background** (`SkySphere::SetLuminanceNits`).
-- **IBL capture/filtering** (sky cubemap scaling during IBL generation).
-- **IBL shading** (diffuse/specular energy is derived from the calibrated
-  maps and only tinted at shading time).
+Freeze these fixture tolerances before GPU acceptance. They are targets, not
+claims of validated hardware behavior.
 
-This avoids per-sky exposure hacks and ensures a single camera EV produces
-correct relative brightness between the sun, sky, and IBL.
+| Comparison | Budget |
+| --- | --- |
+| CPU fixed gain | 2e-6 relative; powers-of-two EV14/15/16 exact |
+| GPU fixed gain / known float probe | 2e-5 relative + 2^-120 absolute; uploaded powers of two exact |
+| Histogram integer mass/counts | Exact |
+| Discretized histogram oracle | 2e-4 EV |
+| Continuous distribution versus histogram | One bin width plus 2e-4 EV |
+| Hybrid schedule equivalence | 5e-4 EV at equal elapsed time; monotone, no overshoot |
+| Single normal FP16 store | 2^-10 relative; subnormal absolute error 2^-25 in stored domain |
+| P invariance / required float products | 0.5% relative + 2e-5 absolute in the compared scene/output domain |
+| Packed material / production BRDF oracle | 2% relative + 2e-5 absolute, interior unoccluded regions |
+| UNorm8 image | One code value after independent dither, gamma and target encoding |
 
-**Default Exposure (EV100 = 9.7):**
+Sampling error is separate: compare small bright features and moving edges both
+against the exact sample positions and a full-image reference. Report the two
+errors separately; experiment-specific region and coverage criteria belong to
+LightBench. Failed acceptance is not grounds to widen tolerances.
 
-This corresponds to a typical sunny outdoor scene with:
+## Physical-light conversion
 
-- Aperture: f/11
-- Shutter: 1/125s
-- ISO: 100
+Directional lux multiplies the production BRDF and receiver cosine once.
+Point candela is `flux_lm/(4*pi)`. For spots with ci=cos(inner), co=cos(outer):
 
-### Pipeline Integration
+```text
+w(theta) = saturate((cos(theta)-co)/(ci-co))^2
+omega = 2*pi*((1-ci)+(ci-co)/3)
+I_peak = flux_lm/omega
+range_fade = saturate(1-(distance/range)^4)^2
+distance_factor = range_fade/max(distance^2, 0.001^2)
+```
 
-The PBR pipeline is implemented as a **Coroutine-based Render Graph**
-(see [Forward Pipeline Design](forward-pipeline-design.md) for complete definitions).
+Equal angles use a hard cone and `omega=2*pi*(1-co)`; reject zero solid angle.
+Zero separation returns zero before normalizing the light vector. At/beyond
+range return zero. The 1 mm guard is numerical, not an area-light model or a
+replacement for source-radius BRDF behavior. White calibration sources avoid
+tint ambiguity; RGB tint changes luminance by the working weights.
 
-1. **HDR Capture**: The main shading coroutines render raw physical radiance
-   into intermediate HDR textures (`Format::kRGBA16Float`).
-2. **Post-Process Chain**: Effects like Bloom or TAA are injected as
-   **Coroutine Contributors** during the high-dynamic-range phase.
-3. **SDR Resolution**: The `OnCompositing` phase uses physical exposure laws
-   via `ToneMapPass` to resolve the HDR intermediate into the swapchain,
-   ensuring the final image maintains physical integrity.
+Use the full production BRDF and packed material values. High roughness retains
+dielectric specular and is not Lambertian. Include G-buffer quantization and
+known range fade in independent references. Integrate the spot profile
+independently to verify total emitted flux.
 
-## Validation Scenes
+## Qualification
 
-All lighting changes should be verified against a reference scene containing:
-
-- 18% gray card
-- White and black cards
-- One calibrated directional light and one point light
-- Known camera exposure (EV100 = 9.7 recommended for outdoor)
-
-Validation criteria use luminance ratios:
-
-- Middle‑gray mapping (typically 0.18 or 0.22).
-- White point clipping in outdoor scenes (around 12–16 EV).
-- Scene‑referred luminance continuity across frames.
-
-Acceptable deviation is **±10–20% luminance error**, and auto‑exposure
-adaptation is typically **~0.1–0.2 EV per frame**.
-
-> **Reference Demo:** `Examples/LightBench` provides a validation scene
-> with calibrated lighting and exposure controls.
-
-## Glossary
-
-- **Illuminance (lux):** luminous flux per unit area; used for sun/directional.
-- **Luminous flux (lumens):** total emitted light; used for point/spot inputs.
-- **Luminous intensity (candela):** lumens per steradian.
-- **Luminance (cd/m², nits):** brightness of a surface or environment.
-- **Radiance/irradiance:** shader-space quantities derived from physical units.
-- **EV100:** exposure value normalized to ISO 100.
-- **Coroutine Contributors:** awaitable task generators that inject work into
-  the main render coroutine (see [forward_pipeline.md](forward-pipeline-design.md)).
-- **Interceptor Pattern:** architectural redirection of view outputs to HDR
-  intermediates before shading (see [forward_pipeline.md](forward-pipeline-design.md)).
+[LightBench](lightbench.md) owns seven reproducible experiments and visual
+presentation. Validate fixed gain, trajectories, reset, zero target, light units
+and HDR-domain invariance with independent oracles. Native MultiView compares
+each view alone and in a family before composition. FPS-dependent adaptation
+and broad 10-20% brightness tolerances are not acceptance criteria.

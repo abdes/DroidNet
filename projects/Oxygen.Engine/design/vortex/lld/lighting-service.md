@@ -31,6 +31,26 @@ Prior milestone evidence retains its original scope.
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Exposure-package light calibration
+
+The [PBR specification](../../renderer-core/physically-based-rendering.md#physical-light-conversion)
+owns physical equations and regularization. Directional lux supplies
+perpendicular-receiver irradiance. Point flux converts by 4*pi. Spot flux uses
+the integral of the existing squared smooth-cone profile, including the hard-cone
+limit; zero solid angle is invalid. Distance attenuation uses the existing
+quartic range fade divided by max(distance squared, 0.001 squared); zero
+separation returns zero before normalization. Keep source-radius BRDF behavior
+separate from this numerical guard.
+
+Forward and deferred consumers use one unit contract and receiver cosine once.
+Keep source packets in authored physical units until the shared conversion
+boundary; never multiply packets by view exposure. Apply frame-pinned P once
+at radiance write boundaries. Use full production BRDF and actual packed
+material values for LightBench, including dielectric specular. Independent
+spot integration, inverse-square/range-edge and directional-lux tests precede
+benchmark verdicts. The [HDR inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory)
+owns storage formats and pre-store range checks.
+
 ## 1. Scope and Context
 
 ### 1.1 What This Covers

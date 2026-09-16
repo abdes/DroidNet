@@ -31,6 +31,12 @@ gap.
 
 ## 3. Current next step
 
+**Active work:** [Global exposure / LightBench / MultiView](plan/exposure-and-lightbench-correction.md),
+Slice-1 specification checkpoint complete; slice 2 is next. The independent
+arithmetic audit passes 10/10 and the existing shader compiles under bundled
+Debug/Release DXC profiles. This is contract/compiler evidence; all new runtime
+and native visual gates remain open.
+
 **Implementation package:** `ED-M08 — V0.1 canonical authoring and rendering`.
 **Status:** `planned`; design package ready, implementation and rendered gates open.
 
@@ -59,6 +65,7 @@ Validated M08 LLD references are `design/vortex/lld/cubemap-processing.md` and
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |
 | --- | --- | --- | --- | --- |
+| Exposure / LightBench / MultiView | Complete global exposure and benchmark package | `in_progress` | Slice-1 contract checkpoint: owning designs, GPU/asset layouts, HDR inventory, 10/10 independent arithmetic audit and baseline shader Debug/Release compilation. | Slice 2 runtime foundation followed by all remaining implementation, numerical and native visual acceptance gates. |
 | ED-M08 native extension | V0.1 canonical authoring and rendering | `planned` | Final rendering/IBL contracts, source-local deferred annotations and editor execution plan. | Native implementation, focused tests and visual proof outside the editor, followed by integrated editor qualification. |
 | VTX-M00 | Planning and status truth surface | `validated` | `PLAN.md` was rewritten as a milestone-first plan; this milestone/status ledger exists; restricted doc scans and `git diff --check` passed on 2026-04-25. | No open planning-status gap. |
 | VTX-M01 | Renderer Core and SceneRenderer baseline | `validated` | Vortex module, Renderer Core, publication, upload/resource substrate, SceneRenderer shell, SceneTextures, non-runtime facades, resolve/cleanup, and related tests are present and freshly validated. Build proof passed `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.SceneRendererShell.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.RenderContextMaterializer.Tests Oxygen.Vortex.RendererFacadePresets.Tests Oxygen.Vortex.RenderGraphHarnessFacade.Tests Oxygen.Vortex.SinglePassHarnessFacade.Tests Oxygen.Vortex.UploadCoordinator.Tests Oxygen.Vortex.ViewConstantsManager.Tests oxygen-examples-vortexbasic --parallel 4`. Focused CTest passed the corresponding Vortex substrate/facade suites plus `Oxygen.Vortex.LinkTest`. Runtime proof `tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m01-m03-closeout\vortexbasic-foundation -Frame 3 -RunFrames 6 -Fps 10 -BuildJobs 4` passed overall with runtime exit 0, final present nonzero, CDB/debug-layer `overall_verdict=pass`, no D3D12/DXGI errors, and no blocking warnings. | No open VTX-M01 closure gap. |

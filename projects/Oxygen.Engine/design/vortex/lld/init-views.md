@@ -30,6 +30,26 @@ Original phase evidence remains scoped to the original prepared-scene behavior.
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Frame exposure setup
+
+For the [exposure delivery](../plan/exposure-and-lightbench-correction.md),
+InitViews no longer converts the inactive manual EV into an overloaded scalar.
+Resolve canonical scene/camera/per-view settings and transient lifecycle input
+at the frame boundary through PostProcessService. Renderer Core supplies the
+validated source/root state and pins prior generations before view execution.
+
+PostProcessService's early GPU resolve publishes immutable FrameExposureData
+through the existing view bindings before the first HDR producer. Order its UAV
+write before all SRV reads. Stage 22 writes the separate current exposure state;
+it never rewrites that frame's P. Shared readers use pinned prior source state.
+The [state and lifetime contract](post-process-service.md) owns the numerical
+solve; InitViews routes it without becoming another exposure authority.
+
+SceneRenderer selects the two-mode HDR descriptor/lease key from matching
+completed eligibility status. First unseeded/remeter/stateless Auto uses FP32.
+Resize/format changes preserve exposure; only incompatible color/camera
+histories reset. Source gain validity is not consumer-format suitability.
+
 ## 1. Scope and Context
 
 ### 1.1 What This Covers

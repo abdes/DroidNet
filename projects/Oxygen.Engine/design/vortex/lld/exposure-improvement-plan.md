@@ -13,12 +13,13 @@ mandatory delivery gate.
 
 | Subject | Owner |
 | --- | --- |
-| Exposure equations, state and hybrid response | [Execution plan section 3](../plan/exposure-and-lightbench-correction.md#3-exposure-equations-and-state); transfer durable contracts into [PostProcessService LLD](post-process-service.md) |
+| Exposure equations and hybrid response | [PBR specification](../../renderer-core/physically-based-rendering.md); runtime state/layouts in [PostProcessService LLD](post-process-service.md) |
 | View identity, transitions, sharing and HDR domains | [Execution plan section 4](../plan/exposure-and-lightbench-correction.md#4-runtime-lifecycle-and-hdr-domains); [multiview LLD](multi-view-composition.md) owns the public view boundary |
 | Histogram, masks, curves and authoring | [Execution plan section 5](../plan/exposure-and-lightbench-correction.md#5-robust-metering-and-authoring) |
 | Physical-light reference | [Execution plan section 6](../plan/exposure-and-lightbench-correction.md#6-calibrated-light-and-material-reference); [PBR specification](../../renderer-core/physically-based-rendering.md) owns engine units |
 | LightBench and MultiView behavior | [Execution plan section 7](../plan/exposure-and-lightbench-correction.md#7-lightbench-benchmark-and-multiview-visual-qualification) |
 | Measurements | [DiagnosticsService LLD](diagnostics-service.md), with experiment semantics owned by LightBench |
+| Compiler/format checkpoint | [Audit report](../plan/exposure-contract-checkpoint.md), [HDR inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory), per-view eligibility independent of gain validity |
 | Sequence and tests | [Implementation slices](../plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices) and [acceptance matrix](../plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
 
 ## 2. UE5.7 source map

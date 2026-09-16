@@ -648,10 +648,20 @@ remain distinct from that evidence.
 | 19 | `RenderDistortion` / translucent `RenderVelocities` | reserved `DistortionModule::Execute` | future DistortionModule | Distortion mesh processing, intermediate resources, and late translucent velocity production when required. |
 | 20 | `RenderLightShaftBloom` / translucency upscale | reserved `LightShaftBloomModule::Execute` | future LightShaftBloomModule | Post-translucency image-space light-shaft effects and related upscale work. |
 | 21 | `AddResolveSceneColorPass` | `ResolveSceneColor` file-separated method | SceneRenderer | ~180 lines. Implemented in a dedicated file, not a standalone module. Already active in the current Vortex runtime path. |
-| 22 | Post processing | `PostProcessService::Execute` | PostProcessService | Tone map, exposure, AA/TSR slot (consumes `SceneVelocity`), bloom, debug post. |
+| 22 | Post processing | `PostProcessService::Execute` | PostProcessService | Tone map, current exposure solve, AA/TSR slot (consumes `SceneVelocity`), bloom, debug post. |
 | 23 | `OnRenderFinish` / `QueueSceneTextureExtractions` | `PostRenderCleanup` file-separated method | SceneRenderer | SceneRenderer-owned post-render cleanup stage that invokes Renderer Core extraction/handoff helpers for history export, cleanup, and handoff completion. Already active in the current Vortex runtime path. |
 
 ### 5.2 Layer Model
+
+For the [global exposure delivery](plan/exposure-and-lightbench-correction.md),
+PostProcessService also owns the small pre-HDR GPU resolve of frame-pinned P.
+InitViews/Renderer Core route validated settings, source ownership and lifecycle
+events; they do not maintain a separate numerical exposure. Stage 22 updates
+current S, then tonemapping consumes S/P. Shared views pin prior root history,
+while HDR format suitability remains per view. Existing SceneTextures leases,
+allocators and asynchronous status retire resources at the last consuming fence.
+See the [runtime contract](lld/post-process-service.md) and
+[HDR product inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory).
 
 The Vortex layer model is best understood as an ownership and dependency
 diagram rather than as a taxonomy table. The diagram below is the authoritative

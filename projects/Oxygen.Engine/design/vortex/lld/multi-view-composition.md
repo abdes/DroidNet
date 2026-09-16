@@ -347,6 +347,37 @@ more surfaces. It is not the same as render order. It contains:
 Sorting is deterministic: surface order, then layer z-order, then submission
 order. Stable ordering is required even when several layers share z-order.
 
+### Exposure delivery extension
+
+The [PostProcessService contract](post-process-service.md) specifies one
+GPU-owned history family. Add an optional canonical exposure override to
+`CompositionView` and typed transient Preserve/Remeter/SeedFromEv100 requests
+addressed by producer-owned ViewStateHandle plus 64-bit generation. Do not
+serialize these events or mutate the shared scene for a per-view override.
+
+Resolve chains to a registered root and pin every source's prior generation
+before executing any view in a logical frame. Only the root writes it, once per
+frame. Borrowers have one frame of result latency and cannot meter/reset their
+source. Missing history uses root settings/fallback; inactive roots retain the
+last publication. Reject cycles/unknown roots atomically. Source destruction
+copies borrowed displayed/positive latent gain into consumer-owned state before
+fence retirement; Auto has one continuity frame then independent metering.
+
+Format suitability remains per view even with shared exposure. One source's
+valid gain cannot authorize a consumer's FP32-to-FP16 switch. Pin numerical P
+with every HDR product and history. Auxiliary/offscreen consumers must know
+whether a product is scene-referred, pre-exposed or already display-mapped;
+never apply a second gain or tone curve implicitly. Compatible resizing and
+format changes preserve exposure, while recreating size/format-dependent leases.
+
+Qualify ordinary lit main/PiP (`--pip-wireframe false`), standard, auxiliary,
+offscreen and feature layouts. Compare each view's pre-composition result
+against standalone rendering with equal settings/history/dt, then inspect final
+composition separately. Reorder, resize, cut/reset, hide/reopen, recreate, source
+loss, independent/shared modes and contrasting HDR ranges are required. Preserve
+documented BLACK expected diagnostic cells, UI and bars. These new gates do not
+inherit the earlier M06 structural closure.
+
 ## 6. Ownership Boundaries
 
 | Responsibility | Owner |

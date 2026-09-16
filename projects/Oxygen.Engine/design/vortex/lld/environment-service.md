@@ -30,6 +30,30 @@ evidence and unrelated engine fog-family obligations at their recorded scope.
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Exposure-domain migration contract
+
+The [HDR inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory)
+is the authoritative product/format checklist for the exposure delivery.
+Canonical transmittance, unit-illuminance multiple scattering and static IBL
+resource normalization are independent of view exposure. Sky-view LUT, camera
+AP and volumetric-fog radiance carry frame-pinned P/generation and support the
+two HDR formats. Migrate atmosphere producers and Sky/AerialPerspective consumers
+together, removing old GetExposure/inverse-exposure cancellation.
+
+Fog added RGB uses P; attenuation/transmittance remains unchanged. Reprojected
+volumetric RGB converts by P_current/P_stored before interpolation, preserving
+alpha. Resource identity includes compatible format and domain metadata; resize
+recreates products without resetting global exposure. Static cubemap CPU
+processing retains its existing source_radiance_scale and qualifies the actual
+half upload, including dark required signals, rather than only avoiding maximum
+overflow. Dynamic capture work retains its existing owning scope.
+
+Every active high-range producer participates in pre-store range/eligibility
+checks; upgrading SceneColor after an AP/fog/sky overflow cannot repair it.
+Eligibility belongs to each view even when gain is borrowed. Format retention
+does not repeatedly reset exposure. Environment resource retirement uses the
+existing leases/fences and includes outstanding history/readback readers.
+
 ## Current Implementation Status
 
 This LLD is the continuation document for the active environment lane. It is

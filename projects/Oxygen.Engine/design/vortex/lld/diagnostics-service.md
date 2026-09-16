@@ -16,6 +16,28 @@
 - No diagnostics milestone may be marked complete until implementation,
   docs/status, and validation evidence are all recorded.
 
+## Exposure measurement extension
+
+Add opt-in bounded GPU region statistics and same-frame consumed-gain probes
+through existing extraction/readback infrastructure. Results identify logical
+frame, view-state lifetime, settings/event generations, source product/domain,
+stored P, normalized content region, finite/weighted/rejected sample counts and
+validity. The requesting experiment associates its immutable revision. Reject
+late/reused identities, empty, occluded or insufficient regions; do not report
+zero as a successful missing measurement.
+
+Qualify known float values and P conversion independently before bench verdicts.
+The consumed-gain probe samples the production tonemap operation, not a CPU
+recalculation labeled measured. No extra full-resolution target. Disabled
+measurement adds no GPU dispatch or readback allocation. Enabled resources are
+bounded by requested regions and actual in-flight slots and remain alive through
+fence completion. LightBench owns expected BRDF/exposure results and verdicts.
+
+Initialization/range/FP16 eligibility status remains the single bounded
+PostProcessService path, distinct from optional benchmark measurements. Expose
+that status through diagnostics without creating a second numerical authority.
+Exact records are in [PostProcessService](post-process-service.md#gpu-record-layouts).
+
 ## 1. Executive Decision
 
 `DiagnosticsService` is the Vortex diagnostics control plane. Its job is to

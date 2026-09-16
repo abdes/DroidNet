@@ -6,6 +6,12 @@ concern and is written to the readiness criteria below.
 
 ## ED-M08 implementation references
 
+The active [exposure implementation package](../plan/exposure-and-lightbench-correction.md)
+adds complete global exposure and mandatory LightBench/MultiView qualification.
+Its [checkpoint](../plan/exposure-contract-checkpoint.md) maps mathematical,
+runtime, asset-layout and HDR-format owners. Earlier milestone closure is scoped
+to its recorded baseline, not the new acceptance matrix.
+
 The [V0.1 rendering contract](../plan/editor-v01-rendering-contract.md) and
 [captured-sky IBL contract](../plan/editor-v01-captured-sky-ibl.md) define the
 current native extension and link its owning LLDs. They activate the bounded
