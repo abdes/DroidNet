@@ -703,6 +703,35 @@ auto Renderer::CaptureExposureTransition(
   return entry.captured_request;
 }
 
+auto Renderer::MarkExposureTransitionSubmitted(
+  const ExposureTransitionToken& token) -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(token.target);
+  if (found != exposure_transitions_.end()
+    && found->second.lifetime == token.lifetime && token.generation != 0U
+    && token.generation <= found->second.generation)
+    found->second.submitted_generation
+      = std::max(found->second.submitted_generation, token.generation);
+}
+
+auto Renderer::NeedsExposureAcknowledgement(
+  const ExposureTransitionToken& token) const -> bool
+{
+  std::shared_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(token.target);
+  if (found == exposure_transitions_.end()
+    || found->second.lifetime != token.lifetime
+    || found->second.submitted_generation < token.generation
+    || !found->second.status)
+    return false;
+  const auto& status = *found->second.status;
+  return status.request.generation >= token.generation
+    && status.applied_generation < token.generation
+    && !(status.request.generation == token.generation
+      && status.phase == ExposureTransitionPhase::kRejected);
+}
+
 auto Renderer::CompleteExposureTransition(const ExposureTransitionToken& token,
   std::uint64_t applied_generation,
   std::optional<ExposureTransitionError> rejection) -> void
@@ -2126,6 +2155,7 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
     return;
   }
 
+  RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(
       detached.published_view_id, detached.view_state_handle);
@@ -2147,6 +2177,7 @@ auto Renderer::RemovePublishedRuntimeView(
   }
 
   frame_context.RemoveView(detached.published_view_id);
+  RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(
       detached.published_view_id, detached.view_state_handle);
@@ -2202,6 +2233,7 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 
   for (const auto& stale : stale_published_states) {
     frame_context.RemoveView(stale.published_view_id);
+    RetireExposureTransitions(stale.view_state_handle);
     if (scene_renderer_) {
       scene_renderer_->RemoveViewState(
         stale.published_view_id, stale.view_state_handle);

@@ -414,11 +414,19 @@ once per logical frame; stateless invocations allocate transient records and
 retain no latest state. The shared initialization upload is removed.
 
 Completed transition records are read through the existing nonblocking readback
-manager. At most three pending records per view retain their state leases.
+manager. At most three pending copies per view retain their state leases, plus
+one coalesced latest submitted record awaiting a copy. Saturation, copy-recording
+failure or readback failure retains that record for retry at frame start; an
+owner does not need to render again for its acknowledgement to complete. Later
+submitted records replace older deferred records. Submission observation is
+tracked separately from application, and only a submission observed for the
+current view lifetime can enroll an acknowledgement.
 Matching lifetime, frame sequence, settings revision and requested generation
 are required before acknowledging an application. An older completion may
 advance the observed applied generation but cannot consume newer queued intent.
-Destroyed views cancel their pending jobs; reused handles receive new lifetimes.
+Destroyed views cancel pending/deferred jobs; reused handles receive new
+lifetimes. Runtime removal also retires queued intent for views that never
+created a SceneRenderer or GPU exposure state.
 Diagnostic records do not enqueue authored-transition acknowledgements.
 
 At frame start the pass pins each owner's latest successfully submitted record.

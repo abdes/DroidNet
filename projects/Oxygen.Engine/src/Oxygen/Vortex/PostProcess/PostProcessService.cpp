@@ -68,6 +68,7 @@ PostProcessService::PostProcessService(
 PostProcessService::~PostProcessService()
 {
   pending_exposure_status_.clear();
+  deferred_exposure_status_.clear();
   captured_exposure_settings_.clear();
   captured_exposure_sources_.clear();
   // Binder owns descriptor retirement; release all its leases first.
@@ -507,6 +508,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   captured_exposure_settings_.erase(view_id);
   exposure_settings_.erase(view_state_handle);
   pending_exposure_status_.erase(view_state_handle);
+  deferred_exposure_status_.erase(view_state_handle);
   renderer_.RetireExposureTransitions(view_state_handle);
   exposure_pass_->RemoveViewState(view_state_handle);
 }
@@ -516,37 +518,74 @@ auto PostProcessService::EnqueueExposureStatus(
   postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
   const std::uint64_t settings_revision) -> void
 {
-  auto& pending = pending_exposure_status_[token.target];
-  if (pending.size() >= frame::kFramesInFlight.get())
+  renderer_.MarkExposureTransitionSubmitted(token);
+  auto job = PendingExposureStatus { std::move(state), {}, token,
+    ctx.frame_sequence.get(), settings_revision };
+  if (!IsExposureStatusNeeded(job))
     return;
+  if (!TryEnqueueExposureStatus(job)) {
+    DeferExposureStatus(std::move(job));
+  } else if (const auto older = deferred_exposure_status_.find(token.target);
+    older != deferred_exposure_status_.end()
+    && older->second.frame_sequence <= job.frame_sequence) {
+    deferred_exposure_status_.erase(older);
+  }
+}
+
+auto PostProcessService::IsExposureStatusNeeded(
+  const PendingExposureStatus& job) const -> bool
+{
+  return renderer_.NeedsExposureAcknowledgement(job.token);
+}
+
+auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
+{
+  if (!IsExposureStatusNeeded(job))
+    return;
+  job.readback.reset();
+  const auto found = deferred_exposure_status_.find(job.token.target);
+  if (found == deferred_exposure_status_.end()
+    || found->second.token.lifetime != job.token.lifetime
+    || found->second.frame_sequence <= job.frame_sequence)
+    deferred_exposure_status_.insert_or_assign(
+      job.token.target, std::move(job));
+}
+
+auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
+  -> bool
+{
+  auto& pending = pending_exposure_status_[job.token.target];
+  if (pending.size() >= frame::kFramesInFlight.get())
+    return false;
   auto gfx = renderer_.GetGraphics();
   if (!gfx)
-    return;
+    return false;
   auto manager = gfx->GetReadbackManager();
   if (!manager)
-    return;
+    return false;
   auto readback = manager->CreateBufferReadback("Exposure completed status");
   if (!readback)
-    return;
+    return false;
   auto recorder = gfx->AcquireCommandRecorder(
     gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
     "Exposure status readback");
   if (!recorder)
-    return;
+    return false;
   const auto recording = recorder->GetCommandListForInspection();
-  if (!recorder->AdoptKnownResourceState(*state->status_buffer)) {
+  if (!recorder->AdoptKnownResourceState(*job.state->status_buffer)) {
     recorder->BeginTrackingResourceState(
-      *state->status_buffer, graphics::ResourceStates::kCopySource, false);
+      *job.state->status_buffer, graphics::ResourceStates::kCopySource, false);
   }
-  const auto ticket = readback->EnqueueCopy(
-    *recorder, *state->status_buffer, { 0U, sizeof(ExposureCompletedStatus) });
+  const auto ticket = readback->EnqueueCopy(*recorder,
+    *job.state->status_buffer, { 0U, sizeof(ExposureCompletedStatus) });
   recorder.reset();
   if (!ticket || !recording || !recording->IsSubmitted()) {
     static_cast<void>(readback->Cancel());
-    return;
+    return false;
   }
-  pending.push_back({ std::move(state), std::move(readback), token,
-    ctx.frame_sequence.get(), settings_revision });
+  job.readback = std::move(readback);
+  pending.push_back(std::move(job));
+  return true;
 }
 
 auto PostProcessService::PollExposureStatus() -> void
@@ -560,36 +599,45 @@ auto PostProcessService::PollExposureStatus() -> void
       const auto ready = job.readback->IsReady();
       if (ready && !*ready)
         break;
-      if (!ready) {
-        pending.pop_front();
-        continue;
-      }
-      const auto mapped = job.readback->TryMap();
-      if (!mapped) {
-        pending.pop_front();
-        continue;
-      }
-      ExposureCompletedStatus status {};
-      if (mapped->Bytes().size() >= sizeof(status)) {
+      const auto complete = [&]() -> bool {
+        if (!ready)
+          return false;
+        const auto mapped = job.readback->TryMap();
+        if (!mapped || mapped->Bytes().size() < sizeof(ExposureCompletedStatus))
+          return false;
+        ExposureCompletedStatus status {};
         std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
-        if (integer(status.view_state_identity) == job.token.lifetime
-          && integer(status.frame_sequence) == job.frame_sequence
-          && integer(status.settings_revision) == job.settings_revision
-          && integer(status.requested_generation) == job.token.generation) {
-          std::optional<ExposureTransitionError> rejection;
-          if ((status.flags & 8U) != 0U) {
-            rejection = status.transition_rejection_reason == 1U
-              ? ExposureTransitionError::kNotAuto
-              : status.transition_rejection_reason == 3U
-              ? ExposureTransitionError::kSharedConsumer
-              : ExposureTransitionError::kUnsupportedSeed;
-          }
-          renderer_.CompleteExposureTransition(
-            job.token, integer(status.applied_generation), rejection);
+        if (integer(status.view_state_identity) != job.token.lifetime
+          || integer(status.frame_sequence) != job.frame_sequence
+          || integer(status.settings_revision) != job.settings_revision
+          || integer(status.requested_generation) != job.token.generation)
+          return false;
+        std::optional<ExposureTransitionError> rejection;
+        if ((status.flags & 8U) != 0U) {
+          rejection = status.transition_rejection_reason == 1U
+            ? ExposureTransitionError::kNotAuto
+            : status.transition_rejection_reason == 3U
+            ? ExposureTransitionError::kSharedConsumer
+            : ExposureTransitionError::kUnsupportedSeed;
         }
-      }
+        renderer_.CompleteExposureTransition(
+          job.token, integer(status.applied_generation), rejection);
+        return true;
+      };
+      if (!complete())
+        DeferExposureStatus(std::move(job));
       pending.pop_front();
     }
+  }
+  std::erase_if(pending_exposure_status_,
+    [](const auto& entry) { return entry.second.empty(); });
+  for (auto it = deferred_exposure_status_.begin();
+    it != deferred_exposure_status_.end();) {
+    if (!IsExposureStatusNeeded(it->second)
+      || TryEnqueueExposureStatus(it->second))
+      it = deferred_exposure_status_.erase(it);
+    else
+      ++it;
   }
 }
 

@@ -93,9 +93,13 @@ configuration, with four focused debugger cases; evidence is
 sharing debugger cases with no blocking messages. Both render orders,
 source-defined fallback, inactive-source retention, consumer-request rejection
 and explicit detach/remeter have controlled-input evidence in
-`lifecycle/prior-sharing-manifest.json`. Automatic detach, source-destruction
-continuity, inactive-owner request validation, readback-backpressure completion
-and implicit lifecycle events remain open; slice 4 is still in progress.
+`lifecycle/prior-sharing-manifest.json`. Backpressure completion now retains and
+retries the latest submitted status without another owner render; removal also
+retires never-rendered view lifetimes. This increment passes 64 native cases and
+20 service/publication cases each in Debug and Release, plus four focused
+debugger cases; evidence is `lifecycle/status-retry-manifest.json`. Automatic
+detach, source-destruction continuity, inactive-owner request validation and
+implicit lifecycle events remain open; slice 4 is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

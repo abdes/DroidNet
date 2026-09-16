@@ -8,6 +8,7 @@
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -16,6 +17,26 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto EnqueueExposureStatus(PostProcessService& service,
+    const ExposureTransitionToken& token,
+    postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
+    std::uint64_t settings_revision) -> void
+  {
+    service.EnqueueExposureStatus(
+      token, std::move(state), ctx, settings_revision);
+  }
+
+  static auto ExposureStatusCounts(
+    const PostProcessService& service, CompositionView::ViewStateHandle handle)
+    -> std::pair<std::size_t, std::size_t>
+  {
+    const auto pending = service.pending_exposure_status_.find(handle);
+    return { pending == service.pending_exposure_status_.end()
+        ? 0U
+        : pending->second.size(),
+      service.deferred_exposure_status_.contains(handle) ? 1U : 0U };
+  }
+
   static auto GetPostProcessService(SceneRenderer& renderer)
     -> PostProcessService*
   {

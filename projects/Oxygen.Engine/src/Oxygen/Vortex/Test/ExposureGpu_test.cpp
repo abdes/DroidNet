@@ -27,6 +27,7 @@
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
@@ -1655,6 +1656,81 @@ NOLINT_TEST_F(
   EXPECT_NEAR(detached.displayed_scale, .0225F, 2e-5F);
   EXPECT_EQ(detached.applied_generation[0], remeter->generation);
   EXPECT_EQ(detached.flags & 128U, 0U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  BackloggedStatusAcknowledgesLatestSubmissionWithoutRenderingOwnerAgain)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F);
+  std::optional<ExposureTransitionToken> latest;
+  // Withhold CPU delivery while real GPU status copies fill the bounded queue.
+  // Subsequent completed states must coalesce into one retained catch-up
+  // record.
+  for (unsigned i = 1U; i <= 6U; ++i) {
+    const auto token
+      = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+        ExposureTransitionPolicy::kSeedFromEv100, static_cast<float>(i));
+    ASSERT_TRUE(token.has_value());
+    latest = *token;
+    const auto result = Run(signal, {}, 0.0F, nullptr, 1.0F, true, *token);
+    EXPECT_EQ(result.state.applied_generation[0], token->generation);
+    vortex::testing::RendererPublicationProbe::EnqueueExposureStatus(
+      service, *token, last_state_, ctx_, sequence_);
+  }
+  const auto full
+    = vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
+      service, latest->target);
+  EXPECT_EQ(full.first, frame::kFramesInFlight.get());
+  EXPECT_EQ(full.second, 1U);
+  service.OnFrameStart(
+    frame::SequenceNumber { ++sequence_ }, frame::Slot { 1U });
+  EXPECT_EQ(renderer_->InspectExposureTransition(latest->target)->phase,
+    ExposureTransitionPhase::kQueued);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(latest->target)->applied_generation,
+    3U);
+  WaitForQueueIdle();
+  service.OnFrameStart(
+    frame::SequenceNumber { ++sequence_ }, frame::Slot { 2U });
+  const auto completed = renderer_->InspectExposureTransition(latest->target);
+  ASSERT_TRUE(completed.has_value());
+  EXPECT_EQ(completed->phase, ExposureTransitionPhase::kApplied);
+  EXPECT_EQ(completed->applied_generation, latest->generation);
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
+              service, latest->target),
+    (std::pair<std::size_t, std::size_t> { 0U, 0U }));
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, DeferredOldAcknowledgementCannotConsumeNewUnsubmittedIntent)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F);
+  std::optional<ExposureTransitionToken> submitted;
+  for (unsigned i = 0U; i < 4U; ++i) {
+    const auto token
+      = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+        ExposureTransitionPolicy::kSeedFromEv100, static_cast<float>(i));
+    ASSERT_TRUE(token.has_value());
+    submitted = *token;
+    Run(signal, {}, 0.0F, nullptr, 1.0F, true, *token);
+    vortex::testing::RendererPublicationProbe::EnqueueExposureStatus(
+      service, *token, last_state_, ctx_, sequence_);
+  }
+  const auto pending = renderer_->QueueExposureTransition(
+    submitted->target, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(pending.has_value());
+  service.OnFrameStart(
+    frame::SequenceNumber { ++sequence_ }, frame::Slot { 1U });
+  WaitForQueueIdle();
+  service.OnFrameStart(
+    frame::SequenceNumber { ++sequence_ }, frame::Slot { 2U });
+  const auto status = renderer_->InspectExposureTransition(pending->target);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->request, *pending);
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kQueued);
+  EXPECT_EQ(status->applied_generation, submitted->generation);
 }
 
 } // namespace
