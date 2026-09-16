@@ -228,4 +228,17 @@ NOLINT_TEST(
   }
 }
 
+NOLINT_TEST(ExposureSettingsTest, TargetKnotsCoverRetainedMeterOutsideNewWindow)
+{
+  auto settings = ExposureSettings {};
+  settings.min_log_luminance = 0.0F;
+  settings.log_luminance_range = 1.0F;
+  const auto resolved = ResolveExposureSettings(settings);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_LT(resolved->auto_log_targets.front().metered_ev, -21.0F);
+  EXPECT_GT(resolved->auto_log_targets.back().metered_ev, 34.0F);
+  settings.compensation_curve = { { 25.0F, 60.0F } };
+  EXPECT_EQ(ResolveExposureSettings(settings).error(), ExposureSettingsError::kUnsupportedGain);
+}
+
 } // namespace

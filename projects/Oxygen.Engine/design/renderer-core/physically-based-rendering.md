@@ -68,7 +68,7 @@ curve and resolves immediately without a histogram. An explicit seed owns its
 event frame before the locked solve.
 
 The runtime may compile this piecewise-linear log-target function into bounded
-knots at authored curve coordinates and clamp/window boundaries. Combine all
+knots at authored curve coordinates and clamp/supported-domain boundaries. Combine all
 opposing compensation/EV terms with compensated arithmetic before exponentiation
 or float32 upload. GPU interpolation remains a function of raw metered EV.
 Do not first reconstruct a linear biased target or luminance bound: e.g. Auto
@@ -95,14 +95,16 @@ otherwise one. For positive coverage unpremultiply RGB and divide by P before
 calculating luminance. Zero coverage contributes no mass. Physical sky is scene
 signal; UI, display background and letterbox bars are excluded.
 
-Quantize combined weight Q to [0,4095]. For continuous bin position x, scatter
-`round(Q*frac(x))` to the upper bin and the remainder to the lower. Clamp both
+Quantize combined weight Q to [0,4095] using `floor(weight*4095+0.5)`. For continuous bin position x, scatter
+`floor(Q*frac(x)+0.5)` to the upper bin and the remainder to the lower. Clamp both
 indices at 255. Maximum integer mass is 1,073,479,680, safe in uint32 at 8K.
 Percentile trimming retains fractional boundary-bin mass, requires positive
 retained mass, and averages log-bin positions to form the geometric mean.
 
 Finite luminance at/below the lower window bound is the dark bin. Default black
-influence zero excludes it in mixed scenes. Count exact black, positive below
+influence zero excludes it in mixed scenes. Apply influence to each classified
+dark sample as `floor(Q*influence+0.5)`; never attenuate brighter samples whose
+interpolated lower-bin mass lands in bin zero. Count exact black, positive below
 window, finite, positively weighted and rejected samples separately. All finite,
 positively weighted samples in the dark bin give a valid synthetic min-EV solve;
 report luminance below-window, not an exact measurement. Zero weight, missing

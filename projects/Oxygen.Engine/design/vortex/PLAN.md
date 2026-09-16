@@ -80,7 +80,9 @@ fixed gain; histogram/curve/hybrid adaptation; GPU lifecycle/sharing; all-path
 HDR migration and native MultiView; persistence/configuration; physical lights;
 independent instruments; interactive demos; automated/native acceptance.
 
-Status: `in_progress`, slice 3 next. The [checkpoint](plan/exposure-contract-checkpoint.md)
+Status: `in_progress`, slice 3 active. The bounded metering/adaptation core
+passes 20 native Debug/Release cases, 14 independent references and 96 focused
+regressions; remaining slice-3 acceptance is listed in the execution plan. The [checkpoint](plan/exposure-contract-checkpoint.md)
 records slice-1 contracts. Canonical settings, public per-view overrides,
 cancellation-safe target compilation, exact fixed/camera gains and frame-safe
 post-process uploads pass 95 focused tests and 12 native arithmetic/debug-layer

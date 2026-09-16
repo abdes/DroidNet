@@ -424,3 +424,21 @@ m_gtest_program(
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
 )
+
+# Production exposure compute against controlled RGBA32 inputs on native D3D12.
+if(WIN32)
+  gtest_program(
+    "Oxygen.Vortex.ExposureGpu.Tests"
+    SOURCES
+      "ExposureGpu_test.cpp"
+    DEPS
+      oxygen::vortex
+      oxygen::graphics-direct3d12
+      oxygen::testing
+  )
+  target_compile_definitions(
+    Oxygen.Vortex.ExposureGpu.Tests
+    PRIVATE
+      OXYGEN_EXPOSURE_WORKSPACE="${PROJECT_SOURCE_DIR}"
+  )
+endif()

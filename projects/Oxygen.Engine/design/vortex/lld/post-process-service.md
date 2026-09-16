@@ -90,7 +90,10 @@ unit gain, bit 3 source-initialization fallback. Reserved bits are zero.
 
 State flags: history valid, initialized, meter luminance valid, meter EV valid,
 synthetic dark solve, range failure, displayed-zero target, borrowed continuity,
-and FP16 eligible occupy bits 0..8 respectively. Remaining bits are zero.
+and FP16 eligible occupy bits 0..8 respectively. Bit 9 records that a valid
+metered EV has ever been stored, independently of current measurement validity
+and gain initialization. Remaining bits are zero. The synthetic-dark bit also
+describes the retained EV when current metering is invalid.
 Fallback reason enum: None=0, MissingHistory=1, InvalidMeter=2,
 SourceUninitialized=3, SourceDestroyed=4, RangeFailure=5. A dark solve marks EV
 valid but does not claim exact measured luminance. Last valid metered fields
@@ -125,7 +128,9 @@ A source curve key is two float32 values, eight bytes: EV at 0, compensation at 
 Resolve its compensation, calibration/target logarithms and bounded-EV
 subtraction together using compensated CPU arithmetic. Compile the resulting
 piecewise-linear log-gain target at the union of authored knots, two EV clamp
-edges and two histogram-window endpoints (at most 68 runtime keys). This is the
+edges and the two supported scene-radiance endpoints (at most 68 runtime keys).
+Covering the full supported domain preserves last-valid-EV restoration when
+the histogram window changes. This is the
 same target function evaluated at raw metered EV, with every GPU ordinate in
 [-32,32]; large cancelling authored values never require a linear intermediate.
 Seed/dark/initial solves use the same exact combination before float conversion.
@@ -135,13 +140,40 @@ uint flags at 4 (locked=1, zero-target=2), float initial_log_gain at 8,
 float dark_log_gain at 12, then 68 float2 `(raw_ev, log_gain)` entries at 16.
 Unused entries are zero. Publish it through the existing per-view transient
 structured publisher and frame slot retirement. The authored/packed limit stays
-64 keys; these additional points represent clamp/window boundaries, not new
+64 keys; these additional points represent clamp/domain boundaries, not new
 authored controls. This normalization avoids both intermediate exp2 overflow
 and loss of small key bias during large compensation cancellation.
 
 The histogram allocation has 256 uint bins followed by counters for finite,
-weighted, exact-black, positive-below-window and rejected samples (20 bytes),
-plus 12 zero padding bytes: 1056 bytes total. Counts and mass are distinct.
+weighted, weighted exact-black, weighted positive-below-window, rejected and
+weighted dark samples (24 bytes), plus eight zero padding bytes: 1056 bytes
+in total. The dark count includes finite nonpositive luminance. Classification
+uses positive quantized base weight before black influence; a zero-influence
+all-dark image therefore remains distinguishable from an empty mask. Counts
+and mass are distinct.
+
+Histogram pass constants are a 64-byte structured record: source/histogram
+indices at 0/4, minimum log luminance/inverse span at 8/12, uint content
+left/top/width/height at 16/20/24/28, mode/radius at 32/36, mask index/background
+flag at 40/44, inverse P/black influence at 48/52, and zero padding at 56/60.
+The 64-byte solve record retains histogram/state indices at 0/4,
+minimum log luminance/span at 8/12, low/high percentiles at 16/20, minimum EV/D
+at 24/28 (D stored as log2), log2 up/down speed at 32/36, log2 delta/target SRV at 40/44, settings revision
+at 48 and frame sequence at 56. Both records use the existing frame-retired
+structured publisher. Compute those rate/time logarithms in CPU double precision
+before float32 upload; zero speed/time uses sentinel -256, outside every finite
+positive binary32 logarithm. GPU adaptation compares bounded linear travel,
+then evaluates the dimensionless exponential argument in log space. This
+preserves finite answers when speed*time would overflow or a raw rate is
+subnormal. Saturate the tail only when its exponent is mathematically >=128.
+
+Compute percentile-times-total boundaries from the float32 significand and
+integer histogram mass. Retain integer and rational remainder separately.
+Integrate complete integer mass plus each boundary's fractional tail; when
+both boundaries lie inside one mass unit, return its containing bin directly.
+Never subtract float32 cumulative counts near the maximum mass: that can erase
+valid narrow intervals. This requires integer arithmetic, not optional float64
+GPU support.
 Reuse existing upload/descriptor allocators and fence retirement.
 
 ## Frame sequencing and GPU lifetime
