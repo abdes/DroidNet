@@ -185,8 +185,6 @@ auto PostProcessService::ResolveViewExposureSettings(
   const scene::ExposureSettings& requested,
   const std::optional<float> camera_ev) -> const ExposureSettingsState&
 {
-  static_cast<void>(
-    renderer_.CaptureExposureTransition(handle, current_sequence_));
   auto* state = &transient_exposure_settings_;
   if (handle == CompositionView::kInvalidViewStateHandle) {
     // Stateless views retain no settings/history. Keep only the last rejected
@@ -201,6 +199,11 @@ auto PostProcessService::ResolveViewExposureSettings(
     transient_exposure_settings_.mask_error = std::move(previous_mask_error);
   } else {
     state = &exposure_settings_[handle];
+  }
+  const auto lifetime = renderer_.EnsureExposureLifetime(handle);
+  if (state->lifetime != lifetime) {
+    *state = {};
+    state->lifetime = lifetime;
   }
   const auto candidate = scene::ResolveExposureSettings(requested, camera_ev);
   if (!candidate) {
@@ -282,7 +285,8 @@ auto PostProcessService::ResolveViewExposureSettings(
 auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
   const CompositionView::ViewStateHandle handle,
   const scene::ExposureSettings& requested,
-  const std::optional<float> camera_ev) -> const ExposureSettingsState&
+  const std::optional<float> camera_ev, const bool suppress_transitions)
+  -> const ExposureSettingsState&
 {
   if (const auto found = captured_exposure_settings_.find(view_id);
     found != captured_exposure_settings_.end()) {
@@ -291,6 +295,17 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
     return found->second.settings;
   }
   auto settings = ResolveViewExposureSettings(handle, requested, camera_ev);
+  if (!suppress_transitions) {
+    const auto owner = renderer_.GetExposureSourceIntent(view_id);
+    if (owner && owner->handle == handle && !owner->diagnostic)
+      renderer_.PrepareExposureDetach(handle,
+        settings.resolved.authored.enabled
+            && settings.resolved.authored.mode == engine::ExposureMode::kAuto
+          ? ExposureTransitionPolicy::kRemeter
+          : ExposureTransitionPolicy::kPreserve);
+  }
+  static_cast<void>(
+    renderer_.CaptureExposureTransition(handle, current_sequence_));
   return captured_exposure_settings_
     .emplace(view_id, CapturedExposureSettings { handle, std::move(settings) })
     .first->second.settings;
@@ -333,8 +348,9 @@ auto PostProcessService::CaptureSharedExposureSource(const RenderContext& ctx,
         .config = std::move(config),
         .transition
         = renderer_.CaptureExposureTransition(source_handle, current_sequence_),
-        .rejection = renderer_.CapturedExposureRejection(
-          source_handle, current_sequence_) })
+        .rejection
+        = renderer_.CapturedExposureRejection(source_handle, current_sequence_),
+        .lifetime = captured.settings.lifetime })
     .first->second;
 }
 
@@ -351,16 +367,18 @@ auto PostProcessService::CaptureRegisteredExposureControls(
       inherited = post->GetExposureSettings();
   }
   for (const auto& intent : renderer_.GetRegisteredExposureIntents()) {
-    const auto token
-      = renderer_.CaptureExposureTransition(intent.handle, current_sequence_);
-    if (!token || intent.diagnostic
+    const bool suppressed = intent.diagnostic
       || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
       || (intent.handle == ctx.current_view.view_state_handle
-        && ctx.render_mode == RenderMode::kWireframe)
+        && ctx.render_mode == RenderMode::kWireframe);
+    const auto& captured
+      = CaptureViewExposureSettings(intent.view_id, intent.handle,
+        intent.settings.value_or(inherited), intent.camera_ev, suppressed);
+    const auto token
+      = renderer_.CaptureExposureTransition(intent.handle, current_sequence_);
+    if (!token || suppressed
       || renderer_.CapturedExposureRejection(intent.handle, current_sequence_))
       continue;
-    const auto& captured = CaptureViewExposureSettings(intent.view_id,
-      intent.handle, intent.settings.value_or(inherited), intent.camera_ev);
     std::optional<ExposureTransitionError> error;
     if (intent.owner != intent.handle) {
       error = ExposureTransitionError::kSharedConsumer;
@@ -433,12 +451,15 @@ auto PostProcessService::PublishBindings(const ViewId view_id,
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> void
 {
+  CaptureRegisteredExposureControls(ctx);
   auto captured = captured_exposure_settings_.find(view_id);
   if (captured == captured_exposure_settings_.end()) {
     CHECK_F(config_.resolved_exposure.has_value());
     auto settings = ExposureSettingsState {
       .resolved = *config_.resolved_exposure,
       .revision = config_.exposure_settings_revision,
+      .lifetime
+      = renderer_.EnsureExposureLifetime(ctx.current_view.view_state_handle),
     };
     const auto accepted
       = exposure_settings_.find(ctx.current_view.view_state_handle);
@@ -448,10 +469,13 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
         == CompositionView::kInvalidViewStateHandle
       ? &transient_exposure_settings_
       : nullptr;
-    if (source && source->revision == settings.revision
+    if (source && source->lifetime == settings.lifetime
+      && source->revision == settings.revision
       && source->resolved.authored == settings.resolved.authored
       && source->resolved.fixed_scale == settings.resolved.fixed_scale)
       settings = *source;
+    static_cast<void>(renderer_.CaptureExposureTransition(
+      ctx.current_view.view_state_handle, ctx.frame_sequence));
     captured = captured_exposure_settings_
                  .emplace(view_id,
                    CapturedExposureSettings {
@@ -502,6 +526,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
         ? renderer_.CapturedExposureRejection(
             ctx.current_view.view_state_handle, ctx.frame_sequence)
         : std::nullopt,
+      .lifetime = settings->lifetime,
     });
   if (transition && exposure.executed && exposure.state
     && !effective_config.temporary_unit_exposure) {

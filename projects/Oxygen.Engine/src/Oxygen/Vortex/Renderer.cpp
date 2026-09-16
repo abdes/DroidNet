@@ -613,6 +613,14 @@ auto Renderer::QueueExposureTransition(
     return std::unexpected(*error);
   }
   std::unique_lock lock(view_state_mutex_);
+  return IssueExposureTransitionLocked(target, policy, seed_ev, false);
+}
+
+auto Renderer::IssueExposureTransitionLocked(
+  CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
+  std::optional<float> seed_ev, bool implicit)
+  -> std::expected<ExposureTransitionToken, ExposureTransitionError>
+{
   if (shutdown_called_) {
     return std::unexpected(ExposureTransitionError::kRendererUnavailable);
   }
@@ -639,7 +647,48 @@ auto Renderer::QueueExposureTransition(
   const auto applied = entry.status ? entry.status->applied_generation : 0U;
   entry.status = ExposureTransitionStatus { .request = token,
     .applied_generation = applied };
+  entry.implicit_request = implicit;
   return token;
+}
+
+auto Renderer::PrepareExposureDetach(CompositionView::ViewStateHandle target,
+  ExposureTransitionPolicy policy) -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  const auto view = std::ranges::find_if(
+    published_runtime_views_by_intent_, [target](const auto& item) {
+      return item.second.view_state_handle == target;
+    });
+  if (view == published_runtime_views_by_intent_.end()
+    || !view->second.pending_exposure_detach)
+    return;
+  const auto pending = exposure_transitions_.find(target);
+  const bool explicit_override = pending != exposure_transitions_.end()
+    && pending->second.status && !pending->second.implicit_request
+    && pending->second.status->phase == ExposureTransitionPhase::kQueued
+    && pending->second.status->request.generation
+      > pending->second.submitted_generation;
+  if (!explicit_override) {
+    const auto issued = IssueExposureTransitionLocked(target, policy, {}, true);
+    CHECK_F(
+      issued.has_value(), "Exposure detach generation could not be allocated");
+  }
+  view->second.pending_exposure_detach = false;
+}
+
+auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
+  -> std::uint64_t
+{
+  if (target == CompositionView::kInvalidViewStateHandle)
+    return 0U;
+  std::unique_lock lock(view_state_mutex_);
+  const auto [found, inserted] = exposure_transitions_.try_emplace(target);
+  if (inserted) {
+    const auto lifetime = AllocateExposureLifetime();
+    CHECK_F(lifetime.has_value(), "Exposure identity space exhausted");
+    found->second.lifetime = *lifetime;
+  }
+  return found->second.lifetime;
 }
 
 auto Renderer::RetryExposureTransition(const ExposureTransitionToken& token)
@@ -2061,6 +2110,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   }
   if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
     it != published_runtime_views_by_intent_.end()) {
+    const auto old_handle = it->second.view_state_handle;
+    const auto published = it->second.published_view_id;
     frame_context.UpdateView(it->second.published_view_id, std::move(view));
     it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
     it->second.shading_mode_override = shading_mode_override;
@@ -2073,8 +2124,21 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
     it->second.exposure_override = std::move(exposure_override);
+    it->second.pending_exposure_detach = old_handle == view_state_handle
+      && source == kInvalidViewId
+      && (it->second.pending_exposure_detach
+        || it->second.exposure_source_view_id != kInvalidViewId);
     it->second.exposure_source_view_id = source;
-    return it->second.published_view_id;
+    state_lock.unlock();
+    if (old_handle != view_state_handle) {
+      // Service retirement re-enters the transition registry. GPU/frame leases
+      // remain owned by their readers while the old lifetime is retired.
+      if (scene_renderer_)
+        scene_renderer_->RemoveViewState(published, old_handle);
+      else
+        RetireExposureTransitions(old_handle);
+    }
+    return published;
   }
 
   const auto published_view_id = frame_context.RegisterView(std::move(view));

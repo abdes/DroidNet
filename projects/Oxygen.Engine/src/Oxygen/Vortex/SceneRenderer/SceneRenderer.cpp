@@ -1421,11 +1421,16 @@ namespace {
     }
     const auto camera_ev = resolved_view != nullptr ? resolved_view->CameraEv()
                                                     : std::optional<float> {};
+    const bool diagnostic = ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+      || (captured_view
+             ? captured_view->render_mode_override.value_or(ctx.render_mode)
+             : ctx.render_mode)
+        == RenderMode::kWireframe;
     const auto& active = service.CaptureViewExposureSettings(
       captured_view ? captured_view->view_id : ctx.current_view.view_id,
       captured_view ? captured_view->view_state_handle
                     : ctx.current_view.view_state_handle,
-      requested, camera_ev);
+      requested, camera_ev, diagnostic);
     const auto& exposure = active.resolved.authored;
     config.enable_auto_exposure
       = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;

@@ -84,6 +84,7 @@ public:
   struct ExposureSettingsState {
     scene::ResolvedExposureSettings resolved;
     std::uint64_t revision { 0U };
+    std::uint64_t lifetime { 0U };
     std::optional<scene::ExposureSettingsError> last_error;
     ExposureMaskStatus mask_status { ExposureMaskStatus::kAbsent };
     content::ResourceKey requested_mask {};
@@ -113,7 +114,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto CaptureViewExposureSettings(ViewId view_id,
     CompositionView::ViewStateHandle handle,
     const scene::ExposureSettings& requested,
-    std::optional<float> camera_ev = {}) -> const ExposureSettingsState&;
+    std::optional<float> camera_ev = {}, bool suppress_transitions = false)
+    -> const ExposureSettingsState&;
   OXGN_VRTX_API auto CaptureSharedExposureSource(const RenderContext& ctx,
     ViewId source_view_id, CompositionView::ViewStateHandle source_handle)
     -> const postprocess::ExposurePass::Source&;

@@ -289,6 +289,10 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
       || handle == CompositionView::kInvalidViewStateHandle
     ? nullptr
     : &exposure_states_[handle];
+  if (view && view->latest && view->latest->owner_lifetime != inputs.lifetime) {
+    view->latest.reset();
+    view->submitted_frame.reset();
+  }
   const auto publish_result = [&](StateLease state, bool executed) {
     result.state = std::move(state);
     result.executed = executed;
@@ -314,20 +318,23 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
         && inputs.source->handle != CompositionView::kInvalidViewStateHandle,
       "A shared exposure source must be a distinct persistent root");
     if (const auto prior = prior_states_.find(inputs.source->handle);
-      prior != prior_states_.end()) {
+      prior != prior_states_.end()
+      && prior->second->owner_lifetime == inputs.source->lifetime) {
       borrowed = prior->second;
     } else if (const auto initial
       = bootstrap_states_.find(inputs.source->handle);
-      initial != bootstrap_states_.end()) {
+      initial != bootstrap_states_.end()
+      && initial->second->owner_lifetime == inputs.source->lifetime) {
       borrowed = initial->second;
     } else {
       borrowed = RecordState(ctx, inputs.source->config,
         Inputs { .metering_available = false,
           .transition = inputs.source->transition,
-          .rejection = inputs.source->rejection },
+          .rejection = inputs.source->rejection,
+          .lifetime = inputs.source->lifetime },
         {}, {}, true);
       if (borrowed)
-        bootstrap_states_.emplace(inputs.source->handle, borrowed);
+        bootstrap_states_.insert_or_assign(inputs.source->handle, borrowed);
     }
     if (!borrowed) {
       // Submission failure cannot substitute the consumer's own history.
@@ -376,6 +383,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   auto state = AcquireState();
+  state->owner_lifetime = inputs.lifetime;
   // Even an unpublished/failed attempt can contain submitted work. Retain its
   // resources through this frame slot before allowing pool reuse.
   frame_states_[ctx.frame_slot.get()].push_back(state);
@@ -745,12 +753,15 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .seed_log_gain = seed.value_or(0.0F),
     .status_uav = state.status_uav_index.get(),
     .borrowed_state_srv = borrowed_srv.get(),
-    .view_lifetime = { inputs.transition
-        ? static_cast<std::uint32_t>(inputs.transition->lifetime)
-        : 0U,
-      inputs.transition
-        ? static_cast<std::uint32_t>(inputs.transition->lifetime >> 32U)
-        : 0U },
+    .view_lifetime
+    = { static_cast<std::uint32_t>(inputs.lifetime != 0U ? inputs.lifetime
+            : inputs.transition ? inputs.transition->lifetime
+                                : 0U),
+      static_cast<std::uint32_t>(
+        (inputs.lifetime != 0U  ? inputs.lifetime
+            : inputs.transition ? inputs.transition->lifetime
+                                : 0U)
+        >> 32U) },
   };
 
   const auto slot

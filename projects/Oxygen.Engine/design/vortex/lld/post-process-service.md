@@ -331,6 +331,27 @@ A borrowing-view cut resets its camera/color histories and bootstrap, not root
 exposure. Explicit detachment remeters by default; Preserve/Seed are opt-in and
 do not revive dormant independent history.
 
+Changing a registered view from a shared source to independent exposure records
+a pending detach. At the next eligible frame capture, the renderer issues its
+generation through the same allocator as public requests: Remeter for Auto,
+Preserve for fixed/disabled modes whose solve applies the authored value.
+An explicit queued request that has not been submitted takes precedence.
+Diagnostic output defers the pending detach rather than consuming it; returning
+to sharing before capture cancels the pending detach.
+
+Captured settings, mask leases and GPU state resources carry the renderer's
+view lifetime. Own-history reuse and shared prior/initial-state lookup require
+that lifetime to match. Reusing a handle therefore cannot import old accepted
+settings or another lifetime's GPU result, even while old readers retain their
+frame-pinned resources. Completed status carries this lifetime on ordinary
+frames as well as frames containing a transition token.
+
+An accepted replacement of a published view's persistent handle retires the
+old transition lifetime, settings/mask ownership, status jobs and latest GPU
+state after releasing the registry lock. This includes becoming stateless.
+Rejected publications leave the prior owner intact. Existing frame and GPU
+reader leases remain valid through retirement.
+
 On root destruction detach all affected chains at the next boundary. Copy last
 borrowed displayed and positive latent gain into each consumer-owned state
 before retiring root resources. Auto retains that gain for one frame, then

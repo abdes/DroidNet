@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -845,6 +846,43 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     EXPECT_EQ(renderer_->InspectExposureTransition(seed->target)->phase,
       oxygen::vortex::ExposureTransitionPhase::kQueued);
   }
+}
+
+NOLINT_TEST_F(
+  PostProcessServiceBehaviorTest, ReusedLifetimeCannotRetainOldAcceptedSettings)
+{
+  using View = oxygen::vortex::CompositionView;
+  auto service = PostProcessService(*renderer_);
+  auto frame = oxygen::engine::FrameContext {};
+  const auto target = MakeFramebuffer(graphics_, "ExposureLifetime");
+  auto view = View {};
+  view.id = ViewId { 1U };
+  view.view_state_handle = View::ViewStateHandle { 1U };
+  const auto publish = [&] {
+    return renderer_->PublishRuntimeCompositionView(frame,
+      { .composition_view = view,
+        .render_target = oxygen::observer_ptr { target.get() } });
+  };
+  auto settings = oxygen::scene::ExposureSettings {};
+  settings.mode = oxygen::engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 14.0F;
+  const auto first_view = publish();
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto first = service.CaptureViewExposureSettings(
+    first_view, view.view_state_handle, settings);
+  ASSERT_EQ(first.revision, 1U);
+  renderer_->RemovePublishedRuntimeView(frame, view.id);
+  const auto next_view = publish();
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  settings.key = -1.0F;
+  const auto next = service.CaptureViewExposureSettings(
+    next_view, view.view_state_handle, settings);
+  EXPECT_NE(next.lifetime, first.lifetime);
+  EXPECT_EQ(next.revision, 0U);
+  EXPECT_EQ(next.resolved.authored.mode, oxygen::engine::ExposureMode::kAuto);
 }
 
 } // namespace
