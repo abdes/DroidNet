@@ -2,11 +2,12 @@
 
 ## Status
 
-**Sponza normal-view acceptance remains open.** Its source lights have been
-repaired and recooked, and the persisted RenderScene configuration produces a
-visible lit scene. The lit capture exposes gold-colored speckling that requires
-diagnosis. Directional-light selection and exposure qualification also remain
-open; visibility alone does not establish a correct rendering result.
+**RenderScene's preview-sun/profile workflow is accepted.** The user confirmed
+its visual/UI behavior and final Sponza sun integration on 2026-09-16. Sponza's
+non-sun lighting/rendering defects remain open; full normal-view renderer
+acceptance and exposure qualification are not implied. The
+[preview/profile record](../../../projects/Oxygen.Engine/design/vortex/plan/renderscene-preview-sun.md)
+contains the scoped closeout evidence.
 
 The final Release sweep `20260916-071101` passed load/capture acceptance for all
 20 scenes and exited zero. Every image was independently inspected: 19 show the
@@ -100,12 +101,12 @@ models: 3,537 assets and 239 non-fallback textures, with BC7/full mip chains.
 Source hashes, output hashes and the protected previous generation are retained
 under `out/build-ninja/renderscene-reimport`.
 
-RenderScene's actual local settings now retain the HDR cubemap as RGBA16F,
-specified-cubemap sky lighting, normal lit mode and automatic exposure. The
-Use Scene startup policy is unchanged. Settings backups are retained; diagnostic
-runs restore the exact settings bytes captured before those runs. A persisted
-startup run and a subsequent authored-light run use no scene, skybox, debug-mode
-or CVar CLI overrides. Both exit zero and publish valid current-key static IBL.
+The source-repair diagnostic runs used an HDR cubemap and automatic exposure;
+those images establish only their recorded inputs. The accepted preview/profile
+workflow uses explicit preview sunlight and sky atmosphere, with the HDR-map
+workaround removed. User settings were backed up before isolated fixture runs;
+manual validation used the restored user settings plus the requested Custom
+profile, atmosphere, and preview preference.
 
 The authored-light capture shows a visible courtyard with widespread gold flecks.
 Separate normal, roughness and metalness captures exit zero. Base color has no
@@ -119,14 +120,17 @@ Source inspection identifies a separate directional-selection limitation:
 the glTF importer leaves the imported directional light without environment
 participation. Runtime logs report no resolved sun. Existing glTF `oxygen`
 extras expose only contribution/shadow booleans; adding an unsupported role key
-would have no effect. No role promotion or renderer workaround was introduced.
-Canonical role import and independent directional lighting remain ED-M08 gates.
+would have no effect. The accepted RenderScene preview knob now explicitly
+borrows the existing `SUN_Light` node and assigns Primary for the runtime preview;
+turning it off restores the original role. This is an opt-in example workflow,
+not a canonical importer or renderer workaround. Canonical role import and
+independent directional lighting remain ED-M08 gates.
 
 Exposure is governed by the
 [exposure and LightBench correction plan](../../../projects/Oxygen.Engine/design/vortex/plan/exposure-and-lightbench-correction.md).
 The fixed-exposure floor, automatic initialization/history and settings precedence
 issues prevent treating this scene as an exposure calibration. No Vortex shader,
-exposure equation or runtime lighting implementation changed for this source repair.
+exposure equation or Vortex lighting implementation changed for this workflow.
 
 The [repair evidence](../../../artifacts/ed-m08/all-scenes/sponza-light-repair.json)
 records source checks, native recooking, captures, settings restoration and open
