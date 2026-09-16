@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <exception>
 #include <filesystem>
@@ -53,6 +54,17 @@ namespace oxygen::examples::render_scene {
 namespace {
   constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
   constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
+
+  auto AllocateMainViewStateHandle() -> vortex::CompositionView::ViewStateHandle
+  {
+    static std::atomic_uint64_t next_handle { 1U };
+    const auto handle = vortex::CompositionView::ViewStateHandle {
+      next_handle.fetch_add(1U, std::memory_order_relaxed)
+    };
+    CHECK_F(handle != vortex::CompositionView::kInvalidViewStateHandle,
+      "RenderScene temporal view state identity exhausted");
+    return handle;
+  }
 
   auto ToLowerAscii(std::string value) -> std::string
   {
@@ -430,6 +442,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     LOG_F(INFO,
       "RenderScene: Applying deferred scene clear at frame-start before "
       "FrameContext publication");
+    ResetMainViewState(context);
     active_scene_ = {};
     main_camera_ = {};
     scene_loader_.reset();
@@ -440,6 +453,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 
   if (shell.HasStagedScene()) {
+    ResetMainViewState(context);
     CHECK_F(shell.PublishStagedScene(),
       "expected a staged scene before frame-start publish");
     scene_published_this_frame_ = true;
@@ -460,6 +474,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   Base::OnFrameStart(context);
 
   if (!HasRenderableWindow()) {
+    ResetMainViewState(context);
     return;
   }
 
@@ -1063,8 +1078,20 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
-  if (!main_camera_.IsAlive()) {
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()
+    || !main_camera_.HasCamera()) {
+    ResetMainViewState(observer_ptr { &context });
     return;
+  }
+
+  if (!main_view_state_scene_.IsValid() || !main_view_state_camera_.IsAlive()
+    || main_view_state_camera_.GetHandle() != main_camera_.GetHandle()) {
+    // Retire the published handle before replacing it so exposure resources
+    // cannot survive into a different scene or camera under the same ViewId.
+    ResetMainViewState(observer_ptr { &context });
+    main_view_state_handle_ = AllocateMainViewStateHandle();
+    main_view_state_scene_ = active_scene_;
+    main_view_state_camera_ = main_camera_;
   }
 
   View view {};
@@ -1083,6 +1110,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   // Create the main scene view intent
   auto main_comp
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
+  main_comp.view_state_handle = main_view_state_handle_;
   main_comp.with_atmosphere = true;
   main_comp.with_height_fog = shell.IsHeightFogPassRequested();
   main_comp.with_local_fog = shell.IsLocalFogPassRequested();
@@ -1095,9 +1123,28 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
+auto MainModule::ResetMainViewState(
+  const observer_ptr<engine::FrameContext> context) -> void
+{
+  if (main_view_state_handle_
+    != vortex::CompositionView::kInvalidViewStateHandle) {
+    if (auto renderer = ResolveVortexRenderer(); renderer != nullptr) {
+      if (context != nullptr) {
+        renderer->RemovePublishedRuntimeView(*context, main_view_id_);
+      } else {
+        renderer->RemovePublishedRuntimeView(main_view_id_);
+      }
+    }
+  }
+  main_view_state_handle_ = vortex::CompositionView::kInvalidViewStateHandle;
+  main_view_state_scene_ = {};
+  main_view_state_camera_ = {};
+}
+
 auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
 {
   auto& shell = GetShell();
+  ResetMainViewState();
   active_scene_ = {};
   main_camera_ = {};
   scene_loader_.reset();

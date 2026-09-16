@@ -23,6 +23,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -37,9 +38,6 @@ namespace engine {
 namespace data {
   class SceneAsset;
   class PhysicsSceneAsset;
-}
-namespace vortex {
-  struct CompositionView;
 }
 } // namespace oxygen
 
@@ -111,6 +109,8 @@ public:
 private:
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
+  auto ResetMainViewState(observer_ptr<engine::FrameContext> context = nullptr)
+    -> void;
   auto ClearSceneRuntime(const char* reason) -> void;
   auto StageFallbackScene() -> void;
   auto ApplyStartupSkyboxToScene(
@@ -130,6 +130,12 @@ private:
   ActiveScene active_scene_;
   ViewId main_view_id_ { kInvalidViewId };
   scene::SceneNode main_camera_;
+  //! Temporal history belongs to this scene/camera session, not main_view_id_.
+  vortex::CompositionView::ViewStateHandle main_view_state_handle_ {
+    vortex::CompositionView::kInvalidViewStateHandle
+  };
+  ActiveScene main_view_state_scene_;
+  scene::SceneNode main_view_state_camera_;
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };
