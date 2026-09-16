@@ -45,6 +45,8 @@ m_gtest_program(
     "Capsule_test.cpp"
     "GeometryAsset_test.cpp"
     "IndexBufferView_test.cpp"
+    "MaterialSlotId_test.cpp"
+    "MaterialSlotInventory_test.cpp"
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"
     "MeshBuilder_test.cpp"
