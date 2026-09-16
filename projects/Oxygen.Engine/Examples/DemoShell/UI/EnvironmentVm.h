@@ -55,7 +55,17 @@ public:
   [[nodiscard]] auto GetPresetName(int index) const -> std::string_view;
   [[nodiscard]] auto GetPresetLabel() const -> std::string_view;
   [[nodiscard]] auto GetPresetIndex() const -> int;
-  auto ApplyPreset(int index) -> void;
+  [[nodiscard]] static auto FindPresetIndex(std::string_view key)
+    -> std::optional<int>;
+  [[nodiscard]] static auto GetPresetKey(int index) -> std::string_view;
+  auto ApplyPreset(int index, bool persist = true) -> void;
+  [[nodiscard]] auto SupportsPreviewSun() const -> bool;
+  [[nodiscard]] auto GetPreviewSunEnabled() const -> bool;
+  [[nodiscard]] auto IsPreviewSunActive() const -> bool;
+  [[nodiscard]] auto CanEnablePreviewSun() const -> bool;
+  auto SetPreviewSunEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetSunSourceDescription() const -> std::string;
+  [[nodiscard]] auto GetPreviewSunHelpText() const -> std::string;
 
   // SkyAtmosphere
   [[nodiscard]] auto GetSkyAtmosphereEnabled() const -> bool;

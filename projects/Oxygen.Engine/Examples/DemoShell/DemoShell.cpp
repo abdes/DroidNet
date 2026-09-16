@@ -460,13 +460,6 @@ auto DemoShell::ReapplyPostProcessSettingsToScene() -> void
   }
 
   impl_->post_process_settings_service.BindScene(scene);
-  auto& pp = impl_->post_process_settings_service;
-  pp.SetManualExposureEv(pp.GetManualExposureEv());
-  pp.SetExposureKey(pp.GetExposureKey());
-  pp.SetExposureCompensation(pp.GetExposureCompensation());
-  pp.SetExposureEnabled(pp.GetExposureEnabled());
-  pp.SetAutoExposureMeteringMode(pp.GetAutoExposureMeteringMode());
-  pp.SetExposureMode(pp.GetExposureMode());
 }
 
 auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
@@ -539,6 +532,15 @@ auto DemoShell::SyncRuntimeState() -> void
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
   runtime_config.force_environment_override
     = impl_->config.force_environment_override;
+  runtime_config.restore_environment_profile
+    = impl_->config.restore_environment_profile;
+  runtime_config.initial_environment_profile
+    = impl_->config.initial_environment_profile;
+  runtime_config.startup_skybox_path = impl_->config.startup_skybox_path;
+  runtime_config.initial_preview_sun_enabled
+    = impl_->config.initial_preview_sun_enabled;
+  runtime_config.preview_scene_ready
+    = !impl_->config.preview_scene_ready || impl_->config.preview_scene_ready();
   if (impl_->config.engine) {
     if (auto renderer_ref
       = impl_->config.engine->GetModule<vortex::Renderer>()) {
@@ -580,17 +582,6 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
   impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
-  // Re-apply post-process exposure settings after scene hydration so the
-  // freshly-built PostProcessVolume reflects persisted UI values.
-  {
-    auto& pp = impl_->post_process_settings_service;
-    pp.SetManualExposureEv(pp.GetManualExposureEv());
-    pp.SetExposureKey(pp.GetExposureKey());
-    pp.SetExposureCompensation(pp.GetExposureCompensation());
-    pp.SetExposureEnabled(pp.GetExposureEnabled());
-    pp.SetAutoExposureMeteringMode(pp.GetAutoExposureMeteringMode());
-    pp.SetExposureMode(pp.GetExposureMode());
-  }
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnSceneActivated(scene);
   }

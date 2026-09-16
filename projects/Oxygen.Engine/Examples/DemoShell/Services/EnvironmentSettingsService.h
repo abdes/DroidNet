@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,6 +19,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 #include <glm/vec3.hpp>
@@ -29,6 +31,8 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 
 #include "DemoShell/Services/DomainService.h"
+#include "DemoShell/Services/EnvironmentSceneSnapshot.h"
+#include "DemoShell/Services/PreviewSunController.h"
 
 namespace oxygen {
 namespace vortex {
@@ -54,6 +58,11 @@ struct EnvironmentRuntimeConfig {
   observer_ptr<SkyboxService> skybox_service { nullptr };
   observer_ptr<vortex::Renderer> renderer { nullptr };
   bool force_environment_override { true };
+  bool restore_environment_profile { false };
+  std::optional<int> initial_environment_profile;
+  std::string startup_skybox_path;
+  std::optional<bool> initial_preview_sun_enabled;
+  bool preview_scene_ready { true };
   std::function<void()> on_atmosphere_params_changed;
   std::function<void()> on_exposure_changed;
 };
@@ -71,10 +80,11 @@ struct EnvironmentRuntimeConfig {
 
  @see SettingsService
 */
-class EnvironmentSettingsService : public DomainService {
+class EnvironmentSettingsService : public DomainService,
+                                   private scene::ISceneObserver {
 public:
   EnvironmentSettingsService() = default;
-  virtual ~EnvironmentSettingsService() = default;
+  ~EnvironmentSettingsService() override;
 
   OXYGEN_MAKE_NON_COPYABLE(EnvironmentSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(EnvironmentSettingsService)
@@ -114,6 +124,15 @@ public:
   virtual auto SetPresetIndex(int index) -> void;
   virtual auto ActivateUseSceneMode() -> void;
   virtual auto ActivateCustomMode() -> void;
+  virtual auto RestoreCustomMode() -> void;
+  auto SetProfilePersistenceEnabled(bool enabled) -> void;
+  [[nodiscard]] auto SupportsPreviewSun() const -> bool;
+  [[nodiscard]] auto IsPreviewSunActive() const -> bool;
+  [[nodiscard]] auto GetPreviewSunEnabled() const -> bool;
+  [[nodiscard]] auto CanEnablePreviewSun() const -> bool;
+  [[nodiscard]] auto GetSunSourceDescription() const -> std::string;
+  [[nodiscard]] auto GetPreviewSunHelpText() const -> std::string;
+  auto SetPreviewSunEnabled(bool enabled) -> void;
 
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
@@ -553,7 +572,7 @@ private:
   }
 
   auto SyncFromScene() -> void;
-  auto LoadSettings() -> void;
+  auto LoadSettings(bool custom_only = false) -> void;
   auto SaveSettings() const -> void;
   auto PersistSettingsIfDirty() -> void;
   auto ValidateAndClampState() -> void;
@@ -565,7 +584,14 @@ private:
   [[nodiscard]] auto GetSelectedLocalFogVolume() const
     -> const LocalFogVolumeUiState*;
   auto ResetSunUiToDefaults() -> void;
-  auto BindSceneSun() -> void;
+  auto BindSceneSun(bool adopt_scene_values = false) -> void;
+  [[nodiscard]] auto ShouldApplyEnvironmentProfile() const -> bool;
+  auto ReconcilePreviewSun() -> void;
+  auto BindPreviewObserver(scene::Scene* scene) -> void;
+  auto OnLightChanged(const scene::NodeHandle& node_handle) noexcept
+    -> void override;
+  auto OnNodeDestroyed(const scene::NodeHandle& node_handle) noexcept
+    -> void override;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
   auto CaptureSunShadowSettingsFromLight(const scene::DirectionalLight& light)
     -> void;
@@ -588,6 +614,15 @@ private:
   static constexpr float kDefaultSunSourceAngleDeg = 0.545F;
 
   EnvironmentRuntimeConfig config_ {};
+  EnvironmentSceneSnapshot scene_snapshot_;
+  PreviewSunController preview_sun_;
+  std::weak_ptr<scene::Scene> preview_observed_scene_;
+  bool preview_reconciling_ { false };
+  bool preview_setting_initialized_ { false };
+  bool preview_sun_enabled_ { false };
+  bool preview_reconcile_pending_ { false };
+  bool restore_scene_pending_ { false };
+  bool transient_profile_ { false };
 
   int update_depth_ { 0 };
   bool settings_loaded_ { false };

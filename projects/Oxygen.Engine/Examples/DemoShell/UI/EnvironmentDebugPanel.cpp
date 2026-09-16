@@ -73,8 +73,7 @@ namespace {
   {
     exposure_ev = std::clamp(
       exposure_ev, kMinSkySphereExposureEv, kMaxSkySphereExposureEv);
-    return std::clamp(
-      std::exp2(exposure_ev), 0.0F, kMaxSkySphereIntensity);
+    return std::clamp(std::exp2(exposure_ev), 0.0F, kMaxSkySphereIntensity);
   }
 
   auto KelvinToLinearRgb(float kelvin) -> glm::vec3
@@ -181,15 +180,14 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     collapse_state_loaded_ = true;
   }
 
-  DrawRuntimeStateSection();
-
-  HandleSkyboxAutoLoad();
-
   ImGui::Spacing();
-  ImGui::SeparatorText("Presets");
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08F, 0.09F, 0.11F, 1.0F));
+  ImGui::BeginChild("##EnvironmentProfile", ImVec2(0.0F, 0.0F),
+    ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding);
+  ImGui::SeparatorText("Environment");
   const auto preset_label = environment_vm_->GetPresetLabel();
   ImGui::SetNextItemWidth(220.0F);
-  if (ImGui::BeginCombo("Environment Preset", preset_label.data())) {
+  if (ImGui::BeginCombo("Profile", preset_label.data())) {
     const int current_index = environment_vm_->GetPresetIndex();
     const int preset_count = environment_vm_->GetPresetCount();
     for (int i = 0; i < preset_count; ++i) {
@@ -199,6 +197,31 @@ auto EnvironmentDebugPanel::DrawContents() -> void
       }
     }
     ImGui::EndCombo();
+  }
+
+  if (environment_vm_->SupportsPreviewSun()) {
+    const bool available = environment_vm_->CanEnablePreviewSun();
+    bool preview = environment_vm_->GetPreviewSunEnabled();
+    ImGui::BeginDisabled(!available);
+    if (ImGui::Checkbox("Preview sun", &preview)) {
+      environment_vm_->SetPreviewSunEnabled(preview);
+    }
+    ImGui::EndDisabled();
+    const auto help = environment_vm_->GetPreviewSunHelpText();
+    ImGui::TextWrapped("%s", help.c_str());
+    ImGui::PushTextWrapPos(0.0F);
+    ImGui::TextDisabled("Scene files stay unchanged.");
+    ImGui::PopTextWrapPos();
+  } else {
+    const auto sun_source = environment_vm_->GetSunSourceDescription();
+    ImGui::TextWrapped("%s", sun_source.c_str());
+  }
+
+  ImGui::EndChild();
+  ImGui::PopStyleColor();
+
+  if (ImGui::CollapsingHeader("Runtime details")) {
+    DrawRuntimeStateSection();
   }
 
   ImGui::Separator();
@@ -269,10 +292,6 @@ void EnvironmentDebugPanel::DrawFog()
 
   ImGui::TextDisabled(
     "Controls Vortex exponential height fog for the main scene view.");
-
-  if (environment_vm_->GetFogModel() != 0) {
-    environment_vm_->SetFogModel(0);
-  }
 
   bool fog_enabled = environment_vm_->GetFogEnabled();
   if (ImGui::Checkbox("Enable Height Fog", &fog_enabled)) {
@@ -547,7 +566,8 @@ void EnvironmentDebugPanel::DrawRuntimeStateSection()
   }
 
   const bool height_fog_enabled = environment_vm_->GetFogEnabled();
-  const bool height_fog_requested = environment_vm_->GetHeightFogPassRequested();
+  const bool height_fog_requested
+    = environment_vm_->GetHeightFogPassRequested();
   ImGui::Text("Height fog:");
   ImGui::SameLine();
   if (height_fog_enabled && height_fog_requested) {
@@ -562,9 +582,8 @@ void EnvironmentDebugPanel::DrawRuntimeStateSection()
   const int sky_light_source = environment_vm_->GetSkyLightSource();
   const bool sky_light_has_cubemap
     = !environment_vm_->GetSkyLightCubemapResourceKey().IsPlaceholder();
-  const bool sky_light_can_light
-    = sky_light_enabled && sky_light_source == 1 && sky_light_has_cubemap
-    && environment_vm_->GetSkyLightDiffuse() > 0.0F
+  const bool sky_light_can_light = sky_light_enabled && sky_light_source == 1
+    && sky_light_has_cubemap && environment_vm_->GetSkyLightDiffuse() > 0.0F
     && environment_vm_->GetSkyLightIntensityMul() > 0.0F;
 
   ImGui::Text("Static SkyLight diffuse:");
@@ -580,21 +599,17 @@ void EnvironmentDebugPanel::DrawRuntimeStateSection()
 
 void EnvironmentDebugPanel::DrawSunSection()
 {
+  environment_vm_->UpdateSunLightCandidate();
+  if (!environment_vm_->GetSunLightAvailable()) {
+    ImGui::TextWrapped(environment_vm_->SupportsPreviewSun()
+        ? "Enable Preview sun above to adjust sunlight."
+        : "This scene has no sun to adjust.");
+    return;
+  }
   bool sun_enabled = environment_vm_->GetSunEnabled();
   if (ImGui::Checkbox("Enabled##Sun", &sun_enabled)) {
     environment_vm_->SetSunEnabled(sun_enabled);
   }
-
-  environment_vm_->UpdateSunLightCandidate();
-  if (!environment_vm_->GetSunLightAvailable()) {
-    ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F),
-      "No resolved scene sun is currently available.");
-  }
-  ImGui::TextDisabled(
-    "Uses the resolved primary scene sun from authored directional lights.");
-
-  const bool disable_sun_controls = !environment_vm_->GetSunLightAvailable();
-  ImGui::BeginDisabled(disable_sun_controls);
 
   ImGui::Separator();
   ImGui::Text("Direction (toward sun):");
@@ -668,10 +683,16 @@ void EnvironmentDebugPanel::DrawSunSection()
     "Slot 1 (Secondary)",
   };
   int atmosphere_light_slot = environment_vm_->GetSunAtmosphereLightSlot();
+  const bool preview_owns_role = environment_vm_->IsPreviewSunActive();
+  ImGui::BeginDisabled(preview_owns_role);
   ImGui::SetNextItemWidth(180.0F);
   if (ImGui::Combo("Atmosphere Slot", &atmosphere_light_slot,
         kAtmosphereLightSlotLabels, IM_ARRAYSIZE(kAtmosphereLightSlotLabels))) {
     environment_vm_->SetSunAtmosphereLightSlot(atmosphere_light_slot);
+  }
+  ImGui::EndDisabled();
+  if (preview_owns_role) {
+    ImGui::TextWrapped("Preview sun uses Primary to light the atmosphere.");
   }
   bool use_per_pixel_atmosphere_transmittance
     = environment_vm_->GetSunUsePerPixelAtmosphereTransmittance();
@@ -783,8 +804,6 @@ void EnvironmentDebugPanel::DrawSunSection()
       minimum_distance = std::max(distance, drag_min);
     }
   }
-
-  ImGui::EndDisabled();
 }
 
 void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
@@ -1087,7 +1106,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     } else {
       environment_vm_->SetSkySphereEnabled(false);
     }
-    skybox_auto_load_pending_ = true;
   }
 
   if (!enabled) {
@@ -1101,7 +1119,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   int sky_sphere_source = environment_vm_->GetSkySphereSource();
   if (ImGui::Combo("Source##SkySphere", &sky_sphere_source, sources, 2)) {
     environment_vm_->SetSkySphereSource(sky_sphere_source);
-    skybox_auto_load_pending_ = true;
   }
 
   if (sky_sphere_source == 0) { // Cubemap
@@ -1130,7 +1147,7 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     const bool path_active = ImGui::IsItemActive();
     if (path_changed) {
       environment_vm_->SetSkyboxPath(std::string_view(skybox_path_.data()));
-      skybox_auto_load_pending_ = true;
+
     } else if (!path_active) {
       const std::string current_path(skybox_path_.data());
       if (!skybox_path.empty() && skybox_path != current_path) {
@@ -1149,7 +1166,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       = environment_vm_->ConsumeSkyboxBrowseResult()) {
       CopyPathToBuffer(
         *selected_path, std::span(skybox_path_.data(), skybox_path_.size()));
-      skybox_auto_load_pending_ = true;
     }
 
     const char* layouts[] = { "Equirectangular", "Horizontal Cross",
@@ -1157,7 +1173,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     int skybox_layout_idx = environment_vm_->GetSkyboxLayoutIndex();
     if (ImGui::Combo("Layout##Skybox", &skybox_layout_idx, layouts, 5)) {
       environment_vm_->SetSkyboxLayoutIndex(skybox_layout_idx);
-      skybox_auto_load_pending_ = true;
     }
 
     const char* formats[] = { "RGBA8", "RGBA16F", "RGBA32F", "BC7" };
@@ -1165,18 +1180,15 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       = environment_vm_->GetSkyboxOutputFormatIndex();
     if (ImGui::Combo("Output##Skybox", &skybox_output_format_idx, formats, 4)) {
       environment_vm_->SetSkyboxOutputFormatIndex(skybox_output_format_idx);
-      skybox_auto_load_pending_ = true;
     }
 
     int skybox_face_size = environment_vm_->GetSkyboxFaceSize();
     if (ImGui::DragInt("Face Size##Skybox", &skybox_face_size, 16, 16, 4096)) {
       environment_vm_->SetSkyboxFaceSize(skybox_face_size);
-      skybox_auto_load_pending_ = true;
     }
     bool skybox_flip_y = environment_vm_->GetSkyboxFlipY();
     if (ImGui::Checkbox("Flip Y##Skybox", &skybox_flip_y)) {
       environment_vm_->SetSkyboxFlipY(skybox_flip_y);
-      skybox_auto_load_pending_ = true;
     }
 
     const bool output_is_ldr
@@ -1187,14 +1199,12 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       if (ImGui::Checkbox(
             "HDR->LDR Tonemap##Skybox", &skybox_tonemap_hdr_to_ldr)) {
         environment_vm_->SetSkyboxTonemapHdrToLdr(skybox_tonemap_hdr_to_ldr);
-        skybox_auto_load_pending_ = true;
       }
       float skybox_hdr_exposure_ev = environment_vm_->GetSkyboxHdrExposureEv();
       if (ImGui::DragFloat("HDR Exposure (EV)##Skybox", &skybox_hdr_exposure_ev,
             0.1F, 0.0F, 16.0F, "%.2F")) {
         environment_vm_->SetSkyboxHdrExposureEv(
           std::max(skybox_hdr_exposure_ev, 0.0F));
-        skybox_auto_load_pending_ = true;
       }
     }
 
@@ -1203,16 +1213,6 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
         skybox_layout_idx, skybox_output_format_idx, skybox_face_size,
         skybox_flip_y, environment_vm_->GetSkyboxTonemapHdrToLdr(),
         environment_vm_->GetSkyboxHdrExposureEv());
-      skybox_auto_load_pending_ = false;
-      last_auto_load_path_ = std::string_view(skybox_path_.data());
-      last_auto_load_layout_idx_ = skybox_layout_idx;
-      last_auto_load_output_format_idx_ = skybox_output_format_idx;
-      last_auto_load_face_size_ = skybox_face_size;
-      last_auto_load_flip_y_ = skybox_flip_y;
-      last_auto_load_tonemap_hdr_to_ldr_
-        = environment_vm_->GetSkyboxTonemapHdrToLdr();
-      last_auto_load_hdr_exposure_ev_
-        = environment_vm_->GetSkyboxHdrExposureEv();
     }
     ImGui::SameLine();
     const auto status_message = environment_vm_->GetSkyboxStatusMessage();
@@ -1247,8 +1247,7 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       SkySphereExposureEvToRadianceScale(sky_exposure_ev));
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-    ImGui::SetTooltip(
-      "Radiance scale %.6g. EV +8 = 256, EV +10 = 1024.",
+    ImGui::SetTooltip("Radiance scale %.6g. EV +8 = 256, EV +10 = 1024.",
       static_cast<double>(sky_intensity));
   }
 
@@ -1275,8 +1274,8 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 
   ImGui::PushItemWidth(150);
 
-  const char* sources[] = { "Captured Scene (Unavailable)",
-    "Specified Cubemap" };
+  const char* sources[]
+    = { "Captured Scene (Unavailable)", "Specified Cubemap" };
   int sky_light_source = environment_vm_->GetSkyLightSource();
   if (ImGui::Combo("Source##SkyLight", &sky_light_source, sources, 2)) {
     environment_vm_->SetSkyLightSource(sky_light_source);
@@ -1307,8 +1306,8 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();
-  if (ImGui::DragFloat("Diffuse Indirect", &sky_light_diffuse, 0.01F, 0.0F,
-        6.0F, "%.2F")) {
+  if (ImGui::DragFloat(
+        "Diffuse Indirect", &sky_light_diffuse, 0.01F, 0.0F, 6.0F, "%.2F")) {
     environment_vm_->SetSkyLightDiffuse(sky_light_diffuse);
   }
 
@@ -1331,59 +1330,6 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     "capture are not active runtime paths.");
 
   ImGui::PopItemWidth();
-}
-
-void EnvironmentDebugPanel::HandleSkyboxAutoLoad()
-{
-  if (!environment_vm_ || !environment_vm_->HasScene()) {
-    return;
-  }
-
-  const bool sky_sphere_enabled = environment_vm_->GetSkySphereEnabled();
-  const int sky_sphere_source = environment_vm_->GetSkySphereSource();
-  const auto auto_load_path = environment_vm_->GetSkyboxPath();
-  const bool auto_load_eligible
-    = sky_sphere_enabled && sky_sphere_source == 0 && !auto_load_path.empty();
-  const auto skybox_key = environment_vm_->GetSkyboxLastResourceKey();
-  if (!auto_load_eligible || !skybox_key.IsPlaceholder()) {
-    return;
-  }
-
-  const int skybox_layout_idx = environment_vm_->GetSkyboxLayoutIndex();
-  const int skybox_output_format_idx
-    = environment_vm_->GetSkyboxOutputFormatIndex();
-  const int skybox_face_size = environment_vm_->GetSkyboxFaceSize();
-  const bool skybox_flip_y = environment_vm_->GetSkyboxFlipY();
-  const bool auto_load_tonemap_hdr_to_ldr
-    = environment_vm_->GetSkyboxTonemapHdrToLdr();
-  const float auto_load_hdr_exposure_ev
-    = environment_vm_->GetSkyboxHdrExposureEv();
-  const bool settings_changed = last_auto_load_path_ != auto_load_path
-    || last_auto_load_layout_idx_ != skybox_layout_idx
-    || last_auto_load_output_format_idx_ != skybox_output_format_idx
-    || last_auto_load_face_size_ != skybox_face_size
-    || last_auto_load_flip_y_ != skybox_flip_y
-    || last_auto_load_tonemap_hdr_to_ldr_ != auto_load_tonemap_hdr_to_ldr
-    || last_auto_load_hdr_exposure_ev_ != auto_load_hdr_exposure_ev;
-  if (settings_changed) {
-    skybox_auto_load_pending_ = true;
-  }
-
-  if (!skybox_auto_load_pending_) {
-    return;
-  }
-
-  environment_vm_->LoadSkybox(std::string_view(auto_load_path),
-    skybox_layout_idx, skybox_output_format_idx, skybox_face_size,
-    skybox_flip_y, auto_load_tonemap_hdr_to_ldr, auto_load_hdr_exposure_ev);
-  skybox_auto_load_pending_ = false;
-  last_auto_load_path_ = auto_load_path;
-  last_auto_load_layout_idx_ = skybox_layout_idx;
-  last_auto_load_output_format_idx_ = skybox_output_format_idx;
-  last_auto_load_face_size_ = skybox_face_size;
-  last_auto_load_flip_y_ = skybox_flip_y;
-  last_auto_load_tonemap_hdr_to_ldr_ = auto_load_tonemap_hdr_to_ldr;
-  last_auto_load_hdr_exposure_ev_ = auto_load_hdr_exposure_ev;
 }
 
 auto EnvironmentDebugPanel::HasPendingChanges() const -> bool

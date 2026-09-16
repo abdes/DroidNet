@@ -73,7 +73,7 @@ namespace {
     return observer_ptr { &pp };
   }
 
-  struct PersistedPostProcessState {
+  struct ResolvedPostProcessState {
     engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
     float manual_exposure_ev { 9.7F };
     float exposure_compensation { 0.0F };
@@ -95,15 +95,15 @@ namespace {
     float gamma { 2.2F };
   };
 
-  auto ResolveSceneToneMapper(const PersistedPostProcessState& state)
+  auto ResolveSceneToneMapper(const ResolvedPostProcessState& state)
     -> engine::ToneMapper
   {
     return state.tonemapping_enabled ? state.tone_mapper
                                      : engine::ToneMapper::kNone;
   }
 
-  auto ApplyPersistedPostProcessToScene(observer_ptr<scene::Scene> scene,
-    const PersistedPostProcessState& state) -> void
+  auto ApplyResolvedPostProcessToScene(observer_ptr<scene::Scene> scene,
+    const ResolvedPostProcessState& state) -> void
   {
     const auto pp = EnsurePostProcessVolume(scene);
     if (!pp) {
@@ -130,8 +130,8 @@ namespace {
     pp->SetDisplayGamma(state.gamma);
   }
 
-  auto CapturePersistedPostProcessState(
-    const PostProcessSettingsService& service) -> PersistedPostProcessState
+  auto CaptureResolvedPostProcessState(
+    const PostProcessSettingsService& service) -> ResolvedPostProcessState
   {
     return {
       .exposure_mode = service.GetExposureMode(),
@@ -219,8 +219,32 @@ auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
 
 // Exposure
 
+auto PostProcessSettingsService::ApplyExposurePreset(
+  const engine::ExposureMode mode, const float manual_ev, const bool enabled,
+  const bool persist) -> void
+{
+  if (persist) {
+    SetManualExposureEv(manual_ev);
+    ResetAutoExposure(manual_ev);
+    SetExposureMode(mode);
+    SetExposureEnabled(enabled);
+    return;
+  }
+
+  transient_manual_exposure_ev_ = std::clamp(manual_ev, -16.0F, 24.0F);
+  transient_exposure_mode_ = ToSceneExposureMode(mode);
+  transient_exposure_enabled_ = enabled;
+  epoch_++;
+  ResetAutoExposure(manual_ev);
+  SyncScenePostProcessState();
+  UpdateAutoExposureTarget();
+}
+
 auto PostProcessSettingsService::GetExposureMode() const -> engine::ExposureMode
 {
+  if (transient_exposure_mode_.has_value()) {
+    return *transient_exposure_mode_;
+  }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const auto raw = settings->GetFloat(kExposureModeKey).value_or(0.0F);
@@ -237,6 +261,9 @@ auto PostProcessSettingsService::GetExposureMode() const -> engine::ExposureMode
 
 auto PostProcessSettingsService::GetExposureEnabled() const -> bool
 {
+  if (transient_exposure_enabled_.has_value()) {
+    return *transient_exposure_enabled_;
+  }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   return settings->GetBool(kExposureEnabledKey).value_or(true);
@@ -247,6 +274,7 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetBool(kExposureEnabledKey, enabled);
+  transient_exposure_enabled_.reset();
   epoch_++;
 
   SyncScenePostProcessState();
@@ -262,6 +290,7 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetFloat(kExposureModeKey, static_cast<float>(mode));
+  transient_exposure_mode_.reset();
   epoch_++;
 
   // Ensure target is updated when switching modes (e.g. into Auto)
@@ -272,6 +301,9 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
 
 auto PostProcessSettingsService::GetManualExposureEv() const -> float
 {
+  if (transient_manual_exposure_ev_.has_value()) {
+    return *transient_manual_exposure_ev_;
+  }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   return settings->GetFloat(kExposureManualEVKey).value_or(9.7F);
@@ -283,6 +315,7 @@ auto PostProcessSettingsService::SetManualExposureEv(float ev) -> void
   DCHECK_NOTNULL_F(settings);
   ev = std::clamp(ev, -16.0F, 24.0F);
   settings->SetFloat(kExposureManualEVKey, ev);
+  transient_manual_exposure_ev_.reset();
   epoch_++;
 
   SyncScenePostProcessState();
@@ -673,6 +706,9 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
   settings->SetFloat(kExposureModeKey, 0.0F);
   settings->SetBool(kExposureEnabledKey, true);
   settings->SetFloat(kExposureManualEVKey, 9.7F);
+  transient_exposure_mode_.reset();
+  transient_exposure_enabled_.reset();
+  transient_manual_exposure_ev_.reset();
   settings->SetFloat(kExposureCompensationKey, 0.0F);
   settings->SetFloat(kExposureKeyKey, 12.5F);
 
@@ -746,8 +782,8 @@ auto PostProcessSettingsService::GetEpoch() const noexcept -> std::uint64_t
 
 auto PostProcessSettingsService::SyncScenePostProcessState() -> void
 {
-  ApplyPersistedPostProcessToScene(
-    scene_, CapturePersistedPostProcessState(*this));
+  ApplyResolvedPostProcessToScene(
+    scene_, CaptureResolvedPostProcessState(*this));
 }
 
 } // namespace oxygen::examples::ui

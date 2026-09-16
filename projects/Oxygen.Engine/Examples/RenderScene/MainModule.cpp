@@ -221,36 +221,17 @@ namespace {
 
 } // namespace
 
-MainModule::MainModule(
-  const examples::DemoAppContext& app, const bool preview_sun_enabled)
+MainModule::MainModule(const examples::DemoAppContext& app,
+  const bool preview_sun_enabled, const std::optional<int> environment_profile)
   : Base(app)
   , last_viewport_({ 0, 0 })
   , preview_sun_enabled_(preview_sun_enabled)
+  , environment_profile_(environment_profile)
 {
   if (!app.startup_scene_name.empty()) {
     startup_scene_name_ = app.startup_scene_name;
   }
   if (!app.startup_skybox_path.empty()) {
-    startup_skybox_path_ = app.startup_skybox_path;
-    startup_skybox_layout_ = app.startup_skybox_layout;
-    startup_skybox_output_format_ = app.startup_skybox_output_format;
-    startup_skybox_face_size_ = app.startup_skybox_face_size;
-    startup_skybox_flip_y_ = app.startup_skybox_flip_y;
-    startup_skybox_tonemap_hdr_to_ldr_ = app.startup_skybox_tonemap_hdr_to_ldr;
-    startup_skybox_hdr_exposure_ev_ = app.startup_skybox_hdr_exposure_ev;
-    startup_skybox_enable_sky_sphere_ = app.startup_skybox_enable_sky_sphere;
-    startup_skybox_enable_sky_light_ = app.startup_skybox_enable_sky_light;
-    startup_sky_sphere_intensity_
-      = std::max(app.startup_sky_sphere_intensity, 0.0F);
-    startup_sky_light_intensity_mul_
-      = std::max(app.startup_sky_light_intensity_mul, 0.0F);
-    startup_sky_light_diffuse_ = std::max(app.startup_sky_light_diffuse, 0.0F);
-    startup_sky_light_specular_
-      = std::max(app.startup_sky_light_specular, 0.0F);
-    startup_sky_light_real_time_capture_enabled_
-      = app.startup_sky_light_real_time_capture_enabled;
-    startup_sky_light_tint_
-      = glm::max(app.startup_sky_light_tint, glm::vec3 { 0.0F });
     startup_sky_light_lifecycle_proof_enabled_
       = app.startup_sky_light_lifecycle_proof_enabled;
     startup_sky_light_lifecycle_disable_frame_
@@ -320,6 +301,11 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
   shell_config.force_environment_override = false;
+  shell_config.restore_environment_profile = true;
+  shell_config.initial_environment_profile = environment_profile_;
+  shell_config.startup_skybox_path = app_.startup_skybox_path;
+  shell_config.initial_preview_sun_enabled = preview_sun_enabled_;
+  shell_config.preview_scene_ready = [this] { return loaded_scene_active_; };
   shell_config.on_scene_load_requested = [this](const ui::SceneEntry& entry) {
     pending_scene_load_ = SceneLoadRequest {
       .key = entry.key,
@@ -439,6 +425,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   //   can dangle that pointer before transform propagation.
   // Keep all ownership changes here, before frame_context.SetScene(...).
   if (pending_scene_clear_) {
+    loaded_scene_active_ = false;
     LOG_F(INFO,
       "RenderScene: Applying deferred scene clear at frame-start before "
       "FrameContext publication");
@@ -457,6 +444,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     CHECK_F(shell.PublishStagedScene(),
       "expected a staged scene before frame-start publish");
     scene_published_this_frame_ = true;
+    loaded_scene_active_ = current_scene_key_.has_value();
     active_scene_ = shell.GetActiveScene();
     main_camera_ = shell.TakePublishedMainCamera();
     LOG_F(INFO, "RenderScene: Published staged scene at frame-start");
@@ -930,19 +918,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         try {
           staged_main_camera
             = co_await loader->BuildSceneAsync(*staged_scene, *swap.asset);
-          if (preview_sun_enabled_) {
-            const DefaultSceneLightingDesc preview_desc { .sun_node_name
-              = "Preview Sun" };
-            const auto preview_sun
-              = AddPreviewSunIfMissing(*staged_scene, preview_desc);
-            LOG_F(INFO, "RenderScene: Preview sun {} (scene_key={})",
-              preview_sun.IsAlive() ? "added"
-                                    : "skipped: directional light exists",
-              data::to_string(swap.scene_key));
-          } else {
-            LOG_F(INFO, "RenderScene: Preview sun disabled (scene_key={})",
-              data::to_string(swap.scene_key));
-          }
           pending_physics_sidecar_ = swap.physics_asset;
         } catch (const std::exception& ex) {
           shell.DiscardStagedScene();
@@ -978,8 +953,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           co_return;
         }
 
-        ApplyStartupSkyboxToScene(
-          staged_scene, data::to_string(swap.scene_key));
         shell.SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
@@ -1150,7 +1123,6 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   scene_loader_.reset();
   pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
-  startup_skybox_service_.reset();
   shell.SetScene(nullptr);
 }
 
@@ -1175,98 +1147,6 @@ auto MainModule::StageFallbackScene() -> void
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
-}
-
-auto MainModule::ApplyStartupSkyboxToScene(
-  observer_ptr<scene::Scene> scene, const std::string_view scene_label) -> void
-{
-  if (!scene || !startup_skybox_path_.has_value()) {
-    return;
-  }
-
-  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-  if (!asset_loader) {
-    LOG_F(WARNING,
-      "RenderScene: Startup skybox '{}' skipped for '{}' because the asset "
-      "loader is unavailable",
-      startup_skybox_path_->string(), scene_label);
-    return;
-  }
-
-  std::error_code ec;
-  if (!std::filesystem::exists(*startup_skybox_path_, ec)) {
-    LOG_F(WARNING,
-      "RenderScene: Startup skybox '{}' does not exist for scene '{}'",
-      startup_skybox_path_->string(), scene_label);
-    return;
-  }
-
-  if (startup_skybox_enable_sky_sphere_) {
-    if (auto env = scene->GetEnvironment()) {
-      if (auto atmosphere
-        = env->TryGetSystem<scene::environment::SkyAtmosphere>()) {
-        atmosphere->SetEnabled(false);
-        LOG_F(INFO,
-          "RenderScene: Disabled procedural SkyAtmosphere for startup skybox "
-          "scene '{}'",
-          scene_label);
-      }
-    }
-  }
-
-  startup_skybox_service_ = std::make_unique<SkyboxService>(
-    observer_ptr<content::IAssetLoader> { asset_loader.get() }, scene);
-
-  SkyboxService::LoadOptions options;
-  options.layout = static_cast<SkyboxService::Layout>(
-    std::clamp(startup_skybox_layout_, 0, 4));
-  options.output_format = static_cast<SkyboxService::OutputFormat>(
-    std::clamp(startup_skybox_output_format_, 0, 3));
-  options.cube_face_size = std::max(startup_skybox_face_size_, 1);
-  options.flip_y = startup_skybox_flip_y_;
-  options.tonemap_hdr_to_ldr = startup_skybox_tonemap_hdr_to_ldr_;
-  options.hdr_exposure_ev = startup_skybox_hdr_exposure_ev_;
-
-  SkyboxService::SkyLightParams params;
-  params.enable_sky_sphere = startup_skybox_enable_sky_sphere_;
-  params.enable_sky_light = startup_skybox_enable_sky_light_;
-  params.sky_sphere_intensity = startup_sky_sphere_intensity_;
-  params.intensity_mul = startup_sky_light_intensity_mul_;
-  params.diffuse_intensity = startup_sky_light_diffuse_;
-  params.specular_intensity = startup_sky_light_specular_;
-  params.real_time_capture_enabled
-    = startup_sky_light_real_time_capture_enabled_;
-  params.tint_rgb = startup_sky_light_tint_;
-  LOG_F(INFO,
-    "RenderScene: Loading startup skybox '{}' for scene '{}' (layout={} "
-    "output={} face_size={} flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} "
-    "sky_intensity={} sky_light_intensity={} sky_light_diffuse={} "
-    "sky_light_specular={} sky_light_real_time_capture={} "
-    "enable_sky_sphere={} enable_sky_light={})",
-    startup_skybox_path_->string(), scene_label, startup_skybox_layout_,
-    startup_skybox_output_format_, options.cube_face_size,
-    startup_skybox_flip_y_, startup_skybox_tonemap_hdr_to_ldr_,
-    startup_skybox_hdr_exposure_ev_, params.sky_sphere_intensity,
-    params.intensity_mul, params.diffuse_intensity, params.specular_intensity,
-    params.real_time_capture_enabled, params.enable_sky_sphere,
-    params.enable_sky_light);
-
-  startup_skybox_service_->LoadAndEquip(startup_skybox_path_->string(), options,
-    params,
-    [scene_name = std::string(scene_label)](SkyboxService::LoadResult result) {
-      if (result.success) {
-        LOG_F(INFO,
-          "RenderScene: Startup skybox equipped for scene '{}' "
-          "(resource_key={} face_size={} status='{}')",
-          scene_name, result.resource_key, result.face_size,
-          result.status_message);
-      } else {
-        LOG_F(WARNING,
-          "RenderScene: Startup skybox failed for scene '{}' (status='{}')",
-          scene_name, result.status_message);
-      }
-    });
-  scene->Update(false);
 }
 
 auto MainModule::ApplySkyLightLifecycleProofToggle(

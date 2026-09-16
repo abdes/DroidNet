@@ -54,7 +54,8 @@ public:
   using Base = oxygen::examples::DemoModuleBase;
 
   explicit MainModule(const oxygen::examples::DemoAppContext& app,
-    bool preview_sun_enabled = true);
+    bool preview_sun_enabled = false,
+    std::optional<int> environment_profile = std::nullopt);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -113,9 +114,7 @@ private:
     -> void;
   auto ClearSceneRuntime(const char* reason) -> void;
   auto StageFallbackScene() -> void;
-  auto ApplyStartupSkyboxToScene(
-    oxygen::observer_ptr<oxygen::scene::Scene> scene,
-    std::string_view scene_label) -> void;
+
   auto ApplySkyLightLifecycleProofToggle(
     oxygen::scene::Scene& scene, std::uint64_t frame_index) -> void;
 
@@ -168,27 +167,11 @@ private:
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
   std::optional<std::string> startup_scene_name_;
-  std::optional<std::filesystem::path> startup_skybox_path_;
-  int startup_skybox_layout_ { 0 };
-  int startup_skybox_output_format_ { 0 };
-  int startup_skybox_face_size_ { 512 };
-  bool startup_skybox_flip_y_ { false };
-  bool startup_skybox_tonemap_hdr_to_ldr_ { false };
-  float startup_skybox_hdr_exposure_ev_ { 0.0F };
-  bool startup_skybox_enable_sky_sphere_ { true };
-  bool startup_skybox_enable_sky_light_ { true };
-  float startup_sky_sphere_intensity_ { 1.0F };
-  float startup_sky_light_intensity_mul_ { 1.0F };
-  float startup_sky_light_diffuse_ { 1.0F };
-  float startup_sky_light_specular_ { 1.0F };
-  bool startup_sky_light_real_time_capture_enabled_ { false };
-  glm::vec3 startup_sky_light_tint_ { 1.0F, 1.0F, 1.0F };
   bool startup_sky_light_lifecycle_proof_enabled_ { false };
   std::uint32_t startup_sky_light_lifecycle_disable_frame_ { 0U };
   std::uint32_t startup_sky_light_lifecycle_enable_frame_ { 0U };
   bool startup_sky_light_lifecycle_disable_applied_ { false };
   bool startup_sky_light_lifecycle_enable_applied_ { false };
-  std::unique_ptr<SkyboxService> startup_skybox_service_;
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
@@ -196,7 +179,9 @@ private:
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_loose_index_write_times_;
   bool pending_scene_clear_ { false };
-  bool preview_sun_enabled_ { true };
+  bool preview_sun_enabled_ { false };
+  bool loaded_scene_active_ { false };
+  std::optional<int> environment_profile_;
 };
 
 } // namespace oxygen::examples::render_scene

@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <source_location>
 #include <span>
 #include <string>
@@ -49,6 +50,7 @@
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 #include "RenderScene/MainModule.h"
 
 using namespace oxygen;
@@ -97,8 +99,9 @@ template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 
 namespace {
 
-auto RegisterEngineModules(
-  oxygen::examples::DemoAppContext& app, const bool preview_sun_enabled) -> void
+auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
+  const bool preview_sun_enabled, const std::optional<int> environment_profile)
+  -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -139,7 +142,7 @@ auto RegisterEngineModules(
       engine::kScriptingModulePriority));
     register_module(
       std::make_unique<oxygen::examples::render_scene::MainModule>(
-        app, preview_sun_enabled));
+        app, preview_sun_enabled, environment_profile));
 
     register_module(std::make_unique<oxygen::vortex::Renderer>(
       app.gfx_weak, renderer_config, kRenderSceneVortexCapabilities));
@@ -147,7 +150,8 @@ auto RegisterEngineModules(
 }
 
 auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
-  const bool preview_sun_enabled) -> co::Co<int>
+  const bool preview_sun_enabled, const std::optional<int> environment_profile)
+  -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
   {
@@ -164,7 +168,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app, preview_sun_enabled);
+    RegisterEngineModules(app, preview_sun_enabled, environment_profile);
 
     n.Start([&app, &n]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -219,7 +223,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   // Initialize settings service
   const auto startup_settings = SettingsService::ForDemoApp();
   bool preview_sun_enabled
-    = startup_settings->GetBool("render_scene.preview_sun.enabled").value_or(true);
+    = startup_settings->GetBool("render_scene.preview_sun.enabled")
+        .value_or(false);
+  std::string environment_profile_key;
+  std::optional<int> environment_profile;
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U; // desired frame pacing
@@ -238,13 +245,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   try {
     const auto developer_options
       = std::make_shared<Options>("Developer options");
-    developer_options->Add(Option::WithKey("preview-sun")
-        .About("Add a preview sun to loaded scenes with no directional light")
+    auto environment_options = std::make_shared<Options>("Environment");
+    environment_options->Add(Option::WithKey("preview-sun")
+        .About("Opt in to preview sunlight: reuse a directional light or "
+               "create one when no scene sun exists")
         .Long("preview-sun")
         .WithValue<bool>()
         .DefaultValue(preview_sun_enabled)
         .UserFriendlyName("enabled")
         .StoreTo(&preview_sun_enabled)
+        .Build());
+    environment_options->Add(Option::WithKey("environment-profile")
+        .About("Startup profile: scene, custom, outdoor-sunny, outdoor-cloudy, "
+               "foggy-daylight, outdoor-dawn, outdoor-dusk")
+        .Long("environment-profile")
+        .WithValue<std::string>()
+        .StoreTo(&environment_profile_key)
         .Build());
     developer_options->Add(Option::WithKey("verify-hashes")
         .About("Enable content hash verification for mounted sources")
@@ -304,6 +320,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
             graphics_tooling_cli))
           .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
+          .WithOptions(environment_options)
           .WithOptions(
             oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
             true)
@@ -335,7 +352,24 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (!startup_skybox_path.empty()) {
       LOG_F(INFO, "Parsed startup-skybox option = {}", startup_skybox_path);
     }
-    const bool explicit_startup_skybox = !startup_skybox_path.empty();
+    if (!environment_profile_key.empty()) {
+      const auto index
+        = examples::ui::EnvironmentVm::FindPresetIndex(environment_profile_key);
+      if (!index) {
+        throw std::invalid_argument("Unknown environment profile '"
+          + environment_profile_key
+          + "'. Use scene, custom, outdoor-sunny, outdoor-cloudy, "
+            "foggy-daylight, outdoor-dawn, or outdoor-dusk.");
+      }
+      environment_profile = *index - 2;
+    }
+    if (!startup_skybox_path.empty()) {
+      if (environment_profile && *environment_profile != -1) {
+        throw std::invalid_argument(
+          "--startup-skybox requires --environment-profile custom.");
+      }
+      environment_profile = -1;
+    }
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
     }
@@ -345,65 +379,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       = ParseDirectionalShadowPolicy(directional_shadows);
     app.startup_scene_name = startup_scene_name;
     if (const auto settings = SettingsService::ForDemoApp()) {
-      const auto read_int
-        = [&](const std::string_view key, const int fallback) -> int {
-        return static_cast<int>(
-          settings->GetFloat(key).value_or(static_cast<float>(fallback)));
-      };
-      const auto read_vec3 = [&](const std::string_view prefix,
-                               const glm::vec3 fallback) -> glm::vec3 {
-        return glm::vec3 {
-          settings->GetFloat(std::string(prefix) + ".x").value_or(fallback.x),
-          settings->GetFloat(std::string(prefix) + ".y").value_or(fallback.y),
-          settings->GetFloat(std::string(prefix) + ".z").value_or(fallback.z),
-        };
-      };
-      constexpr int kSkySphereSourceCubemap = 0;
-      constexpr int kSkyLightSourceSpecifiedCubemap = 1;
-      const bool sky_sphere_enabled
-        = settings->GetBool("env.sky_sphere.enabled").value_or(false);
-      const int sky_sphere_source
-        = read_int("env.sky_sphere.source", kSkySphereSourceCubemap);
-      const bool sky_light_enabled
-        = settings->GetBool("env.sky_light.enabled").value_or(false);
-      const int sky_light_source
-        = read_int("env.sky_light.source", kSkyLightSourceSpecifiedCubemap);
-      const bool sky_sphere_requests_cubemap
-        = sky_sphere_enabled && sky_sphere_source == kSkySphereSourceCubemap;
-      const bool sky_light_requests_cubemap = sky_light_enabled
-        && sky_light_source == kSkyLightSourceSpecifiedCubemap;
-      if (!explicit_startup_skybox) {
-        app.startup_skybox_enable_sky_sphere = sky_sphere_requests_cubemap;
-        app.startup_skybox_enable_sky_light = sky_light_requests_cubemap;
-      }
-      if (startup_skybox_path.empty()) {
-        if (sky_sphere_requests_cubemap || sky_light_requests_cubemap) {
-          startup_skybox_path
-            = settings->GetString("env.skybox.path").value_or(std::string {});
-        }
-      }
-      app.startup_skybox_layout = read_int("env.skybox.layout", 0);
-      app.startup_skybox_output_format = read_int("env.skybox.output", 0);
-      app.startup_skybox_face_size = read_int("env.skybox.face_size", 512);
-      app.startup_skybox_flip_y
-        = settings->GetBool("env.skybox.flip_y").value_or(false);
-      app.startup_skybox_tonemap_hdr_to_ldr
-        = settings->GetBool("env.skybox.tonemap_hdr_to_ldr").value_or(false);
-      app.startup_skybox_hdr_exposure_ev
-        = settings->GetFloat("env.skybox.hdr_exposure_ev").value_or(0.0F);
-      app.startup_sky_sphere_intensity
-        = settings->GetFloat("env.sky_sphere.intensity").value_or(1.0F);
-      app.startup_sky_light_intensity_mul
-        = settings->GetFloat("env.sky_light.intensity_mul").value_or(1.0F);
-      app.startup_sky_light_diffuse
-        = settings->GetFloat("env.sky_light.diffuse").value_or(1.0F);
-      app.startup_sky_light_specular
-        = settings->GetFloat("env.sky_light.specular").value_or(1.0F);
-      app.startup_sky_light_real_time_capture_enabled
-        = settings->GetBool("env.sky_light.real_time_capture_enabled")
-            .value_or(false);
-      app.startup_sky_light_tint
-        = read_vec3("env.sky_light.tint", glm::vec3 { 1.0F });
       app.startup_sky_light_lifecycle_proof_enabled
         = settings->GetBool("env.sky_light.lifecycle_proof.enabled")
             .value_or(false);
@@ -420,16 +395,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
     app.startup_skybox_path = startup_skybox_path;
     if (!app.startup_skybox_path.empty()) {
-      LOG_F(INFO,
-        "Resolved startup skybox path='{}' layout={} output={} face_size={} "
-        "flip_y={} tonemap_hdr_to_ldr={} exposure_ev={} sky_intensity={} "
-        "enable_sky_sphere={} enable_sky_light={}",
-        app.startup_skybox_path, app.startup_skybox_layout,
-        app.startup_skybox_output_format, app.startup_skybox_face_size,
-        app.startup_skybox_flip_y, app.startup_skybox_tonemap_hdr_to_ldr,
-        app.startup_skybox_hdr_exposure_ev, app.startup_sky_sphere_intensity,
-        app.startup_skybox_enable_sky_sphere,
-        app.startup_skybox_enable_sky_light);
+      LOG_F(INFO, "Custom startup skybox path='{}'", app.startup_skybox_path);
     }
     LOG_F(INFO, "Resolved directional shadow policy = {}",
       app.directional_shadow_policy);
@@ -518,7 +484,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames, preview_sun_enabled));
+    const auto rc = co::Run(
+      app, AsyncMain(app, frames, preview_sun_enabled, environment_profile));
 
     app.engine->Stop();
     app.platform->Stop();

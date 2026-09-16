@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
@@ -42,6 +43,13 @@ namespace ui {
 
     //! Binds the active scene for post-process system updates.
     virtual auto BindScene(observer_ptr<scene::Scene> scene) -> void;
+
+    //! Applies the exposure fields owned by an environment preset.
+    //!
+    //! A transient preset changes runtime values without writing settings.
+    //! Later ordinary edits persist only the fields explicitly changed.
+    auto ApplyExposurePreset(engine::ExposureMode mode, float manual_ev,
+      bool enabled, bool persist = true) -> void;
 
     // Exposure
     [[nodiscard]] virtual auto GetExposureEnabled() const -> bool;
@@ -173,6 +181,9 @@ namespace ui {
 
     observer_ptr<CameraSettingsService> camera_settings_;
     observer_ptr<scene::Scene> scene_;
+    std::optional<engine::ExposureMode> transient_exposure_mode_;
+    std::optional<float> transient_manual_exposure_ev_;
+    std::optional<bool> transient_exposure_enabled_;
     mutable std::atomic_uint64_t epoch_ { 0 };
     mutable std::string last_camera_id_;
   };

@@ -274,6 +274,10 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     auto flags = authored_sun.GetFlags();
     ASSERT_TRUE(flags.has_value());
     flags->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, false);
+    // Flag writes become effective during the native scene update.
+    scene->Update(false);
+    ASSERT_FALSE(
+      flags->get().GetEffectiveValue(scene::SceneNodeFlags::kCastsShadows));
 
     service_.OnSceneActivated(*scene);
 
@@ -1543,6 +1547,470 @@ NOLINT_TEST_F(
   ASSERT_TRUE(backdrop);
   EXPECT_EQ(backdrop->GetColorRgb(), Vec3(0.05F, 0.25F, 0.75F));
   EXPECT_FALSE(environment.TryGetSystem<scene::environment::SkyAtmosphere>());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneProfileIsPureAndPreviewIsIndependentAndReversible)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -2.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetBool("env.atmo.enabled", true);
+  settings->SetBool("env.sky_sphere.enabled", true);
+  auto scene = MakeScene("Preview.SceneOnly");
+  auto candidate = CreateDirectionalLightNode(*scene, "Candidate", false);
+  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
+    1234.0F);
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = false,
+  });
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_FALSE(service_.IsPreviewSunActive());
+  EXPECT_FALSE(scene->GetEnvironment());
+  EXPECT_FALSE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+
+  service_.SetPreviewSunEnabled(true);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  EXPECT_EQ(service_.GetSunSourceDescription(),
+    "Preview sun: Candidate (scene directional)");
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_FALSE(scene->GetEnvironment());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    1234.0F);
+  EXPECT_TRUE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+
+  service_.SetPreviewSunEnabled(false);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_FALSE(service_.IsPreviewSunActive());
+  EXPECT_FALSE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    1234.0F);
+  EXPECT_FALSE(scene->GetEnvironment());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  RenderSceneCustomRestoresAtStartupAndUseSceneRestoresAuthoredState)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetBool("env.atmo.enabled", true);
+  settings->SetBool("env.sun.enabled", true);
+  settings->SetFloat("env.sun.illuminance_lx", 100000.0F);
+  settings->SetFloat("env.sun.shadow.bias", 0.03F);
+  auto scene = MakeScene("Preview.Custom");
+  auto candidate = CreateDirectionalLightNode(*scene, "Candidate", false);
+  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
+    1234.0F);
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+  });
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -1);
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  ASSERT_TRUE(scene->GetEnvironment());
+  const auto atmosphere = scene->GetEnvironment()
+                            ->TryGetSystem<scene::environment::SkyAtmosphere>();
+  ASSERT_TRUE(atmosphere);
+  EXPECT_TRUE(atmosphere->IsEnabled());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    100000.0F);
+
+  service_.ActivateUseSceneMode();
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  EXPECT_FALSE(scene->GetEnvironment());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    1234.0F);
+  EXPECT_TRUE(
+    settings->GetBool("env.settings.custom_state_present").value_or(false));
+
+  service_.RestoreCustomMode();
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -1);
+  ASSERT_TRUE(scene->GetEnvironment());
+  EXPECT_TRUE(scene->GetEnvironment()
+      ->TryGetSystem<scene::environment::SkyAtmosphere>()
+      ->IsEnabled());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    100000.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  PreviewAndProfileWaitForLoadedSceneAndDefaultToUseScene)
+{
+  ResetDemoSettings();
+  auto placeholder = MakeScene("Placeholder");
+  service_.OnSceneActivated(*placeholder);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { placeholder.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+    .preview_scene_ready = false,
+  });
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(service_.GetPresetIndex(), -2);
+  EXPECT_TRUE(placeholder->GetRootNodes().empty());
+  EXPECT_FALSE(placeholder->GetEnvironment());
+
+  auto loaded = MakeScene("Loaded");
+  service_.OnSceneActivated(*loaded);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { loaded.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+    .preview_scene_ready = true,
+  });
+  service_.ApplyPendingChanges();
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  EXPECT_EQ(
+    service_.GetSunSourceDescription(), "Preview sun: Preview Sun (created)");
+  EXPECT_EQ(loaded->GetRootNodes().size(), 1U);
+  EXPECT_FALSE(loaded->GetEnvironment());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  StartupProfileOverrideRemainsTransientUntilExplicitUserEdit)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -2.0F);
+  auto scene = MakeScene("Transient");
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_environment_profile = -1,
+    .initial_preview_sun_enabled = false,
+  });
+  service_.SetSkyAtmosphereEnabled(true);
+  service_.ApplyPendingChanges();
+  service_.SetPresetIndex(
+    0); // Flush pending persistence for the prior profile.
+  EXPECT_FLOAT_EQ(
+    settings->GetFloat("environment_preset_index").value(), -2.0F);
+  service_.SetProfilePersistenceEnabled(true);
+  service_.ActivateCustomMode();
+  service_.SetSunIlluminanceLx(4321.0F);
+  service_.ActivateUseSceneMode();
+  EXPECT_FLOAT_EQ(
+    settings->GetFloat("env.sun.illuminance_lx").value(), 4321.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SelectingCustomWithoutEditingAFieldPersistsTheSelection)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -2.0F);
+  auto scene = MakeScene("CleanCustomSelection");
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+  });
+  PersistPendingSettings(service_);
+  service_.RestoreCustomMode();
+  PersistPendingSettings(service_);
+  EXPECT_FLOAT_EQ(
+    settings->GetFloat("environment_preset_index").value(), -1.0F);
+  EXPECT_TRUE(
+    settings->GetBool("env.settings.custom_state_present").value_or(false));
+  EnvironmentSettingsService reopened;
+  reopened.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+  });
+  EXPECT_EQ(reopened.GetPresetIndex(), -1);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  EveryProfileKeepsTheSamePreviewDirectionalAndPrimaryRole)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -2.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetBool("env.atmo.enabled", true);
+  settings->SetBool("env.sun.enabled", true);
+  settings->SetFloat("env.sun.atmosphere_light_slot", 0.0F);
+  auto scene = MakeScene("SinglePreviewSource");
+  auto candidate = CreateDirectionalLightNode(*scene, "OnlyDirectional", false);
+  const auto original_handle = candidate.GetHandle();
+  candidate.GetFlags()->get().SetLocalValue(
+    scene::SceneNodeFlags::kCastsShadows, false);
+  scene->Update(false);
+  service_.OnSceneActivated(*scene);
+  ui::EnvironmentVm vm { observer_ptr { &service_ }, nullptr, nullptr };
+  vm.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+  });
+  service_.ApplyPendingChanges();
+  for (const int profile : { 1, 2, 3, 4, 5, 6, 0, 1 }) {
+    SCOPED_TRACE(profile);
+    vm.ApplyPreset(profile);
+    service_.ApplyPendingChanges();
+    ASSERT_EQ(scene->GetRootNodes().size(), 1U);
+    EXPECT_EQ(scene->GetRootNodes().front().GetHandle(), original_handle);
+    EXPECT_EQ(service_.GetSunSourceDescription(),
+      "Preview sun: OnlyDirectional (scene directional)");
+    EXPECT_TRUE(service_.IsPreviewSunActive());
+    const auto light = candidate.GetLightAs<scene::DirectionalLight>();
+    ASSERT_TRUE(light.has_value());
+    EXPECT_TRUE(light->get().IsSunLight());
+    EXPECT_EQ(light->get().GetAtmosphereLightSlot(),
+      scene::AtmosphereLightSlot::kPrimary);
+    EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
+      static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
+    const auto primary
+      = scene->GetDirectionalLightResolver().ResolvePrimarySun();
+    ASSERT_TRUE(primary.has_value());
+    EXPECT_EQ(primary->NodeHandle(), original_handle);
+    EXPECT_FALSE(candidate.GetFlags()->get().GetEffectiveValue(
+      scene::SceneNodeFlags::kCastsShadows));
+  }
+  service_.ActivateUseSceneMode();
+  service_.SetPreviewSunEnabled(false);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_EQ(candidate.GetHandle(), original_handle);
+  EXPECT_FALSE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+  EXPECT_EQ(candidate.GetLightAs<scene::DirectionalLight>()
+              ->get()
+              .GetAtmosphereLightSlot(),
+    scene::AtmosphereLightSlot::kNone);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  PublicationBeforeRuntimeConfigPreservesProfileAndPreviewOwnership)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetBool("env.atmo.enabled", true);
+  settings->SetBool("env.sun.enabled", true);
+  settings->SetFloat("env.sun.illuminance_lx", 3456.0F);
+  auto placeholder = MakeScene("Placeholder");
+  service_.OnSceneActivated(*placeholder);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { placeholder.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+    .preview_scene_ready = false,
+  });
+  service_.ApplyPendingChanges();
+  auto loaded = MakeScene("Loaded");
+  auto candidate
+    = CreateDirectionalLightNode(*loaded, "OnlyDirectional", false);
+  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
+    1234.0F);
+  service_.OnSceneActivated(*loaded);
+  // The real shell runs domain frame-start before refreshing runtime config.
+  engine::FrameContext frame;
+  service_.OnFrameStart(frame);
+  service_.SyncFromSceneIfNeeded();
+  EXPECT_FALSE(service_.IsPreviewSunActive());
+  EXPECT_FALSE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+  EXPECT_TRUE(service_.GetSkyAtmosphereEnabled());
+  EXPECT_FLOAT_EQ(service_.GetSunIlluminanceLx(), 3456.0F);
+  const EnvironmentRuntimeConfig config {
+    .scene = observer_ptr { loaded.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+    .preview_scene_ready = true,
+  };
+  service_.SetRuntimeConfig(config);
+  service_.OnFrameStart(frame);
+  service_.SetRuntimeConfig(config);
+  service_.OnFrameStart(frame);
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  EXPECT_TRUE(service_.CanEnablePreviewSun());
+  EXPECT_EQ(loaded->GetRootNodes().size(), 1U);
+  EXPECT_EQ(service_.GetSunSourceDescription(),
+    "Preview sun: OnlyDirectional (scene directional)");
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    3456.0F);
+  ASSERT_TRUE(loaded->GetEnvironment());
+  EXPECT_TRUE(loaded->GetEnvironment()
+      ->TryGetSystem<scene::environment::SkyAtmosphere>()
+      ->IsEnabled());
+  service_.ActivateUseSceneMode();
+  service_.SetPreviewSunEnabled(false);
+  service_.ApplyPendingChanges();
+  EXPECT_FALSE(loaded->GetEnvironment());
+  EXPECT_FLOAT_EQ(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
+    1234.0F);
+  EXPECT_FALSE(
+    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  NativeLightMutationImmediatelyYieldsPreviewWithoutChangingProfile)
+{
+  for (const bool reuse : { false, true }) {
+    for (const int profile : { -2, -1, 0 }) {
+      SCOPED_TRACE(reuse);
+      SCOPED_TRACE(profile);
+      ResetDemoSettings();
+      const auto settings = SettingsService::ForDemoApp();
+      settings->SetFloat(
+        "environment_preset_index", static_cast<float>(profile));
+      settings->SetBool("env.settings.custom_state_present", true);
+      settings->SetBool("env.sun.enabled", true);
+      auto scene = MakeScene("LateAuthoredSun");
+      if (reuse) {
+        CreateDirectionalLightNode(*scene, "Candidate", false);
+      }
+      EnvironmentSettingsService service;
+      service.OnSceneActivated(*scene);
+      service.SetRuntimeConfig(EnvironmentRuntimeConfig {
+        .scene = observer_ptr { scene.get() },
+        .force_environment_override = false,
+        .restore_environment_profile = true,
+        .initial_preview_sun_enabled = true,
+      });
+      service.ApplyPendingChanges();
+      ASSERT_TRUE(service.IsPreviewSunActive());
+      const auto preview
+        = FindNodeByName(*scene, reuse ? "Candidate" : "Preview Sun");
+      ASSERT_TRUE(preview);
+      auto authored
+        = CreateDirectionalLightNode(*scene, "Late Authored Sun", true);
+      authored.GetLightAs<scene::DirectionalLight>()
+        ->get()
+        .SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+      const auto sync_count = scene->GetMutationDispatchCounters().sync_calls;
+      scene->SyncObservers();
+
+      EXPECT_EQ(
+        scene->GetMutationDispatchCounters().sync_calls, sync_count + 1U);
+      EXPECT_EQ(service.GetPresetIndex(), profile);
+      EXPECT_FALSE(service.IsPreviewSunActive());
+      EXPECT_FALSE(service.CanEnablePreviewSun());
+      EXPECT_TRUE(preview->IsAlive()); // Topology is unchanged during dispatch.
+      const auto primary
+        = scene->GetDirectionalLightResolver().ResolvePrimarySun();
+      ASSERT_TRUE(primary);
+      EXPECT_EQ(primary->NodeHandle(), authored.GetHandle());
+
+      service.ApplyPendingChanges();
+      EXPECT_EQ(preview->IsAlive(), reuse);
+      EXPECT_EQ(
+        service.GetSunSourceDescription(), "Scene sun: Late Authored Sun");
+      EXPECT_EQ(service.GetPresetIndex(), profile);
+      ASSERT_TRUE(scene->DestroyNode(authored));
+      scene->SyncObservers();
+      service.ApplyPendingChanges();
+      EXPECT_TRUE(service.IsPreviewSunActive());
+      EXPECT_EQ(service.GetPresetIndex(), profile);
+      EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+    }
+  }
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  NativeUntaggedDirectionalMutationReplacesInjectionAtNextApply)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("LateDirectional");
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+    .restore_environment_profile = true,
+    .initial_preview_sun_enabled = true,
+  });
+  service_.ApplyPendingChanges();
+  ASSERT_EQ(
+    service_.GetSunSourceDescription(), "Preview sun: Preview Sun (created)");
+  auto candidate = CreateDirectionalLightNode(*scene, "Late Candidate", false);
+  scene->SyncObservers();
+  EXPECT_EQ(scene->GetRootNodes().size(), 2U);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+  EXPECT_EQ(service_.GetSunSourceDescription(),
+    "Preview sun: Late Candidate (scene directional)");
+  ASSERT_TRUE(
+    candidate.ReplaceLight(std::make_unique<scene::DirectionalLight>()));
+  scene->SyncObservers();
+  service_.ApplyPendingChanges();
+  EXPECT_TRUE(service_.IsPreviewSunActive());
+  EXPECT_EQ(scene->GetRootNodes().size(), 1U);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  PreviewObserverUnregistersOnRebindAndServiceDestruction)
+{
+  ResetDemoSettings();
+  auto first = MakeScene("OldScene");
+  auto second = MakeScene("NewScene");
+  {
+    EnvironmentSettingsService service;
+    service.OnSceneActivated(*first);
+    service.SetRuntimeConfig(EnvironmentRuntimeConfig {
+      .scene = observer_ptr { first.get() },
+      .force_environment_override = false,
+      .restore_environment_profile = true,
+      .initial_preview_sun_enabled = true,
+    });
+    service.ApplyPendingChanges();
+    service.OnSceneActivated(*second);
+    service.SetRuntimeConfig(EnvironmentRuntimeConfig {
+      .scene = observer_ptr { second.get() },
+      .force_environment_override = false,
+      .restore_environment_profile = true,
+      .initial_preview_sun_enabled = true,
+    });
+    service.ApplyPendingChanges();
+    auto unrelated = first->CreateNode("Old Scene Mutation");
+    ASSERT_TRUE(
+      unrelated.AttachLight(std::make_unique<scene::DirectionalLight>()));
+    first->SyncObservers();
+    EXPECT_TRUE(service.IsPreviewSunActive());
+    EXPECT_EQ(second->GetRootNodes().size(), 1U);
+  }
+  auto after_destroy = second->CreateNode("After Service Destruction");
+  ASSERT_TRUE(
+    after_destroy.AttachLight(std::make_unique<scene::DirectionalLight>()));
+  EXPECT_NO_THROW(second->SyncObservers());
 }
 
 } // namespace oxygen::examples::testing

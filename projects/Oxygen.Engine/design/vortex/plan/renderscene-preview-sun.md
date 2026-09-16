@@ -1,53 +1,141 @@
 # RenderScene preview sun
 
-Status: sun implementation and native validation passed (2026-09-15).
-Capture tools passed native success/failure and bounded replay-timeout checks.
+Status: **validated and closed for the preview-sun/profile workflow** on
+2026-09-16. Debug and Release builds, 97 focused tests, scripted native checks,
+and user-performed visual/UI validation support this scope. Sponza's non-sun
+lighting defects and the separate exposure correction remain open.
 
 ## Problem and approved behavior
 
-RenderScene loads imported glTF/GLB/FBX scenes that often contain no lights.
-Its environment service currently only resolves an existing sun; its activation
-helper never injects one and also forces authored sun shadows on. Persisted
-environment values deliberately yield to each newly activated scene, so they
-cannot serve as a dependable missing-light fallback.
+RenderScene must show which environment and sun are in use, what a preview will
+change, and how to return to the authored scene. Preview sun is an independent
+opt-in control across **Use Scene**, all five premades, and **Custom**. It is not
+another profile. A new settings file starts with Use Scene and preview off.
 
-The user approved adding a preview sun by default when a loaded scene has **no
-directional light**. This also illuminates intentionally dark or local-light-only
-scenes. A RenderScene option must disable it for authored lighting validation.
+Use Scene restores the loaded scene's authored environment. Its sole optional
+addition is the explicit preview-sun toggle. Premades supply their declared
+environment and exposure values; Custom restores saved environment edits.
+Switching away from Custom retains its values. An explicit environment-property
+edit becomes Custom; changing preview does not change the selected profile.
+
+Preview is available only when no directional light has `IsSunLight` or an
+explicit **Primary**/**Secondary** atmosphere slot. Hidden or disabled authored
+suns still reserve that designation. Prefer an existing directional light,
+choosing a visible candidate first; create a temporary directional only when no
+candidate exists. Source models and cooked files remain unchanged.
 
 ## Implementation boundary
 
-- RenderScene adds the preview sun to the fully built, staged runtime scene,
-  before publication and environment-service binding. The startup camera-only
-  placeholder is excluded. CLI, restored-library, and interactive-import scene
-  requests share this path.
-- Detect directional components throughout the hierarchy, including invisible
-  and disabled lights. Their presence suppresses injection without promoting or
-  changing them. Repeated preparation must not duplicate the sun.
-- Reuse DemoShell's default directional-light construction; add no atmosphere,
-  skylight, fog, or exposure overrides. Cooked content remains unchanged.
-- Read `render_scene.preview_sun.enabled` (default true) at startup;
-  `--preview-sun=true|false` overrides it for the process without persisting the
-  override. Each loaded scene owns its light; no cached fallback crosses scenes.
-- EnvironmentSettingsService binds and reads authored sun properties, including
-  disabled suns and directional-only scenes, without rewriting light or node
-  flags during activation. Scene transitions discard pending prior-scene edits.
-- Renderer, importer, and other demos retain their lighting policies. M08 is
-  outside this change.
+- `PreviewSunController` owns eligibility, deterministic candidate inspection,
+  borrowed-role restoration, and temporary-light lifetime. It checks the whole
+  hierarchy, including hidden and inactive nodes, after scene readiness.
+  Reconciliation must not duplicate lights or carry a candidate across scenes.
+  Active preview owns Primary independently of the selected profile. Native light
+  mutation observers relinquish a conflicting preview role without recursive
+  observer dispatch; temporary-node cleanup occurs in the normal apply phase.
+- Borrowing preserves intensity, color, transform, visibility, and shadows. It
+  temporarily enables world lighting, environment contribution, `IsSunLight`,
+  and Primary. Disabling restores the original flags and slot; it does not delete
+  the scene light. A new authored sun supersedes a preview.
+- A temporary `Preview Sun` uses DemoShell's default directional construction:
+  100,000 lux, warm white, 0.53-degree source angle, shadow bias 0.03, and Oxygen's
+  Z-up basis. Disabling removes it. The toggle itself adds no atmosphere, sky
+  light, fog, cubemap, or exposure adjustment. A selected profile may apply its
+  own sun and environment values afterward.
+- `EnvironmentSettingsService` owns RenderScene's persisted selection, separate
+  Custom state, preview preference, and runtime profile application.
+  `EnvironmentSceneSnapshot` restores the service-owned authored environment,
+  directional lights/rotation, and local fog when returning to Use Scene. Other
+  scene systems and topology remain intact. The startup camera-only placeholder
+  is excluded; scene changes discard stale pending work. Publication defers
+  synchronization and preview activation until runtime binding captures the
+  untouched scene, preventing temporary roles from becoming the authored baseline.
+- Skybox requests have generation and weak-lifetime guards. Switching profile or
+  source cancels pending loads before a stale completion can pin, equip, or
+  overwrite status. A stored skybox path alone must not inject a map into Use Scene.
+- UI selection and edits persist; CLI startup choices remain transient, including
+  premade exposure values. Exposure arithmetic and renderer policy belong to the
+  separate exposure correction plan, not this example UX change.
+
+## User-facing controls
+
+**Environment → Profile** precedes **Preview sun**. State-aware help is visible
+and wrapped, not confined to a tooltip:
+
+- Before a scene is ready, explain that a scene must be loaded.
+- When unavailable, name the authored sun blocking preview and explain why its
+  assignment is preserved, including hidden/off sun reservations.
+- When available and unchecked, name the candidate and describe borrowing it;
+  if no directional exists, describe creating a temporary `Preview Sun`.
+- When checked, name the actual light, distinguish borrowed from created, and
+  explain precisely what unchecking restores or removes. Explain an inactive or
+  zero-illuminance light rather than implying the checkbox guarantees brightness.
+- State that scene files stay unchanged. With no selected sun, show guidance
+  instead of ineffective editable sun controls. Keep renderer diagnostics under
+  collapsed **Runtime details**.
+
+The public CLI **Environment** help group contains:
+
+| Option | Contract |
+| --- | --- |
+| `--environment-profile <key>` | Exact keys: `scene`, `custom`, `outdoor-sunny`, `outdoor-cloudy`, `foggy-daylight`, `outdoor-dawn`, `outdoor-dusk`. Invalid keys fail with the allowed choices. |
+| `--preview-sun=true\|false` | Overrides `render_scene.preview_sun.enabled` for this process, independently of the profile. The persisted default is false. |
+
+The existing advanced `--startup-skybox <path>` routes through Custom. With no
+explicit profile it selects transient Custom; combining it with an explicit
+non-Custom profile is rejected. Runtime logs identify the resolved choices and
+preview decision. Explicit UI changes after CLI startup are ordinary saved edits.
 
 ## Validation
 
-1. Unit regressions: missing light, local-only light, untagged/disabled/hidden/
-   nested directional lights, existing sun, repeated preparation, independent
-   scenes, preserved environment, and authored sun properties on activation.
-2. Build native RenderScene and affected DemoShell tests; run affected suites.
-3. Run the refreshed `rgb_cubes` through the native app with preview on and off,
-   identical camera/exposure, isolated persisted CVars, and restored settings.
-   Retain load/publication logs and native GPU output images after readiness.
-4. Verify an authored directional-light scene receives no additional sun.
-   Exercise scene-switch/binding lifetime through regressions without desktop
-   input while the user is using the computer.
-5. Update the RenderScene operating guide with behavior, controls, and evidence.
+1. Unit regressions cover missing lights, untagged directional reuse, visible
+   candidate preference, hidden/off authored suns, Primary/Secondary blocking,
+   candidate identity, exact role restoration, scene lifetime, and idempotence.
+   Exercise profile selection, Custom restoration, Use Scene restoration,
+   transient CLI choices, preset exposure persistence, and canceled skybox work.
+2. Build native RenderScene in Debug and Release and run affected DemoShell suites.
+3. Use a dedicated lightweight native scene fixture with no directional, an
+   untagged directional, an authored Primary, and a hidden/off authored sun. Keep
+   fixture/schema/tooling under the build tree, outside normal example/SDK builds.
+4. Capture preview off/on in Use Scene and Custom, and exercise all five premades.
+   Verify the actual candidate/source, light count, appearance, restored authored
+   values, and unchanged profile when toggling preview. Inspect wrapped UI help in
+   every state; a log or unit assertion alone does not qualify its readability.
+5. Exercise Custom edits, profile switching, save/relaunch, CLI overrides without
+   saving environment/exposure changes, and stale skybox cancellation. Preserve
+   settings/CVars/history around qualification and retain before/after evidence.
+6. Use Sponza only for final integration proof after the small fixture passes.
+   Do not compensate for unrelated renderer or exposure defects with a skybox or
+   renderer changes. Keep those visual gates open with their own evidence.
+7. Update the operating guide and evidence record with the precise verified
+   scope; distinguish unit, runtime, UI, and visual outcomes.
+
+## Current qualification evidence
+
+The [closeout record](../../../../../artifacts/ed-m08/preview-profiles/closeout.json)
+identifies logs, captures, settings protection, manual acceptance and open defects.
+Native artifacts are under engine `out/build-ninja/ed-m08/preview-profiles/`.
+
+| Check | Result and boundary |
+| --- | --- |
+| Native builds | Debug succeeds in `build-debug-9.log`; Release is current in `build-release-final.log`. No renderer or exposure-arithmetic change is included. |
+| Focused tests | **97/97** across six suites: DefaultSceneLighting 10, PreviewSunController 18, EnvironmentSceneSnapshot 8, SkyboxService 6, EnvironmentSettingsService 46, EnvironmentVm 9. See `tests-debug-9.log` and XML. |
+| Dedicated fixture | **13/13** native cooking jobs and Inspector validation pass. Five small scenes cover absent, untagged, authored, hidden/off, and isolated sun-only lighting. Camera framing includes the sky; axes and identities are checked in `fixture/camera-sun-only-validation.json`. |
+| Native scenarios | **18/18** runs in `matrix-20260916-085555` exit zero and pass final preview-state, scene-publication and persistence checks. Coverage includes preview off/on, all five premades, Custom, and saved-Custom relaunch. Native embedded capture images are retained. |
+| CLI rejection | Unknown profile and conflicting Scene/skybox options exit nonzero without changing settings; see `cli-rejection-results.json`. |
+| Manual visual/UI acceptance | The user confirmed the requested help readability, Custom edit/reopen persistence, sun-only behavior, and final Sponza sun/profile checks on 2026-09-16. This is user-reported acceptance; no additional assistant-operated Sponza capture is claimed. |
+
+The native scenario matrix predates the final observer/contrast refinement; the
+97-test run and user manual acceptance cover the final implementation. Earlier
+captures with lost preview ownership are retained as failed investigation evidence,
+not final acceptance.
+
+**Remaining defects outside this closeout:** Sponza lighting/rendering from
+sources other than the Sun remains broken, as confirmed during manual acceptance.
+The user explicitly accepted closure of this workflow with that issue open.
+Exposure correction remains in
+[its owning plan](exposure-and-lightbench-correction.md). These checks do not close
+ED-M08 native data, renderer parity, captured-sky IBL, or full visual qualification.
 
 ## Capture tooling correction
 
@@ -69,7 +157,12 @@ RenderDoc's UI from appearing. Remove the failed exporter and Qt shutdown path.
   image export, and supported size limits. Failure must exit nonzero and preserve
   useful diagnostics; a report alone cannot hide an execution failure.
 
-## Evidence
+## Historical evidence: 2026-09-15 policy and capture tooling
+
+The evidence below retains its original scope: default-on injection only when no
+directional existed, before independent opt-in preview and profile restoration.
+It does not validate the current candidate-reuse or ImGui contract. The capture
+tooling results remain evidence for those tools, not new preview behavior.
 
 Workspace evidence: `artifacts/renderscene-preview-sun/evidence.json`, with
 commands, logs, settings, executable/model/capture/image hashes, and test XML.
