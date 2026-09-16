@@ -159,6 +159,37 @@ protected:
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
+  auto PublishExposureView(FrameContext& frame, const ViewId intent,
+    const oxygen::vortex::CompositionView::ViewStateHandle handle,
+    const ViewId source = oxygen::kInvalidViewId) -> ViewId
+  {
+    if (!framebuffer_)
+      framebuffer_ = MakeFramebuffer();
+    auto view = oxygen::vortex::CompositionView {};
+    view.id = intent;
+    view.name = "Exposure owner fixture";
+    view.view = MakeViewContext(view.name).view;
+    view.view_state_handle = handle;
+    view.exposure_source_view_id = source;
+    return renderer_->PublishRuntimeCompositionView(frame,
+      { .composition_view = view,
+        .render_target = oxygen::observer_ptr { framebuffer_.get() } });
+  }
+
+  auto ExposureOwner(FrameContext& frame, const ViewId published)
+    -> oxygen::vortex::CompositionView::ViewStateHandle
+  {
+    auto context = oxygen::vortex::RenderContext {};
+    RendererPublicationProbe::PopulateRenderContextViewState(
+      *renderer_, context, frame, false);
+    for (const auto& view : context.frame_views) {
+      if (view.view_id == published)
+        return view.exposure_view_state_handle;
+    }
+    ADD_FAILURE() << "Published view missing from frame";
+    return oxygen::vortex::CompositionView::kInvalidViewStateHandle;
+  }
+
   mutable std::shared_ptr<Framebuffer> framebuffer_;
   std::unique_ptr<Renderer> renderer_;
 };
@@ -495,6 +526,130 @@ NOLINT_TEST_F(
   EXPECT_EQ(renderer_->RetryExposureTransition(*issued).error(),
     Error::kRendererUnavailable);
   EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest, ExposureChainsResolveTheCurrentRoot)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  const auto first = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  const auto other = PublishExposureView(frame, ViewId { 4U }, Handle { 44U });
+  const auto middle
+    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
+  const auto leaf
+    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
+  EXPECT_EQ(ExposureOwner(frame, first), Handle { 11U });
+  EXPECT_EQ(ExposureOwner(frame, middle), Handle { 11U });
+  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 11U });
+  EXPECT_EQ(ExposureOwner(frame, other), Handle { 44U });
+  EXPECT_EQ(
+    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 4U }),
+    middle);
+  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 44U });
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, InvalidExposureEdgesAreRejectedAtomically)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  const auto root = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  const auto child
+    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
+  EXPECT_EQ(
+    PublishExposureView(frame, ViewId { 1U }, Handle { 55U }, ViewId { 2U }),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(
+    PublishExposureView(frame, ViewId { 2U }, Handle { 66U }, ViewId { 999U }),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(ExposureOwner(frame, root), Handle { 11U });
+  EXPECT_EQ(ExposureOwner(frame, child), Handle { 11U });
+  EXPECT_EQ(PublishExposureView(frame, ViewId { 3U }, Handle { 11U }),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(ViewId { 3U }),
+    oxygen::kInvalidViewId);
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, ExposureSharingRequiresPersistentParticipants)
+{
+  using View = oxygen::vortex::CompositionView;
+  using Handle = View::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  ASSERT_NE(
+    PublishExposureView(frame, ViewId { 1U }, View::kInvalidViewStateHandle),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(
+    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U }),
+    oxygen::kInvalidViewId);
+  const auto root = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  EXPECT_EQ(PublishExposureView(frame, ViewId { 2U },
+              View::kInvalidViewStateHandle, ViewId { 1U }),
+    oxygen::kInvalidViewId);
+  ASSERT_NE(
+    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U }),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(
+    PublishExposureView(frame, ViewId { 1U }, View::kInvalidViewStateHandle),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(ExposureOwner(frame, root), Handle { 11U });
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, ActiveConsumerRetainsInactiveExposureChain)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
+  const auto child
+    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
+  frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  ASSERT_EQ(
+    PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U }),
+    child);
+  EXPECT_TRUE(renderer_->PruneStalePublishedRuntimeViews(frame).empty());
+  EXPECT_EQ(ExposureOwner(frame, child), Handle { 11U });
+  renderer_->RemovePublishedRuntimeView(frame, ViewId { 3U });
+  EXPECT_EQ(renderer_->PruneStalePublishedRuntimeViews(frame).size(), 2U);
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, RemovedExposureRootDetachesEveryConsumer)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  const auto middle
+    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
+  const auto leaf
+    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
+  renderer_->RemovePublishedRuntimeView(frame, ViewId { 1U });
+  EXPECT_EQ(ExposureOwner(frame, middle), Handle { 22U });
+  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 33U });
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, RemovedIntermediateDetachesOnlyItsConsumers)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
+  PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
+  const auto leaf
+    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
+  const auto other
+    = PublishExposureView(frame, ViewId { 4U }, Handle { 44U }, ViewId { 1U });
+  renderer_->RemovePublishedRuntimeView(frame, ViewId { 2U });
+  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 33U });
+  EXPECT_EQ(ExposureOwner(frame, other), Handle { 11U });
 }
 
 } // namespace

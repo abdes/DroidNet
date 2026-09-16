@@ -80,9 +80,12 @@ Unified GPU mode history, immutable state records, stateless/diagnostic output
 and explicit transition application/acknowledgement pass 54 native cases in
 Debug, Release and CDB, plus 41 rebuilt CPU regression entries per configuration.
 Inspected Auto160 and Manual EV32 captures pass binding and final-consumption
-checks. Evidence: `lifecycle/unified-state-manifest.json`. Source sharing,
-implicit lifecycle events and full frame-boundary settings integration remain
-open; slice 4 is still in progress.
+checks. Evidence: `lifecycle/unified-state-manifest.json`. The runtime ownership
+registry additionally passes 18 publication tests in Debug and Release for
+atomic edge validation, root resolution, inactive-source retention and removal;
+evidence is `lifecycle/ownership-registry-manifest.json`. GPU borrowing and
+destruction continuity, implicit lifecycle events and full frame-boundary
+settings integration remain open; slice 4 is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

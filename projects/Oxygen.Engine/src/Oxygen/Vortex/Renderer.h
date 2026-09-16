@@ -558,6 +558,8 @@ public:
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
   OXGN_VRTX_API auto RegisterResolvedView(ViewId view_id, ResolvedView view)
     -> void;
+  //! Invalid exposure ownership leaves the registered view unchanged and
+  //! returns kInvalidViewId with a diagnostic.
   OXGN_VRTX_API auto PublishRuntimeCompositionView(
     engine::FrameContext& frame_context, const RuntimeViewPublishInput& input,
     std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
@@ -740,7 +742,13 @@ private:
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
     std::string debug_name {};
     std::optional<scene::ExposureSettings> exposure_override;
+    ViewId exposure_source_view_id { kInvalidViewId };
   };
+
+  //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.
+  auto ResolvePublishedExposureRootLocked(
+    ViewId published_view_id, ViewId forbidden = kInvalidViewId) const
+    -> const PublishedRuntimeViewState*;
 
   struct DetachedPublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };
