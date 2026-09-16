@@ -130,7 +130,9 @@ else:
     q_next = qt - sign(qt-q)*r
 ```
 
-Use finite nonnegative game delta. Pause freezes ordinary adaptation. No hidden
+Use finite nonnegative game delta through both the runtime frame entry point
+and every renderer facade. Preserve exact zero in the render context; pause
+freezes ordinary adaptation. No hidden
 delta clamp, overshoot or per-frame history clipping. Equal elapsed time under a
 constant target produces equivalent trajectories across frame schedules.
 Initialization, seeds, manual changes and remeter solves bypass speed and dt.

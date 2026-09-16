@@ -882,4 +882,36 @@ NOLINT_TEST_F(
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest, PublicPausedFrameSessionFreezesGpuAdaptation)
+{
+  const auto before = Run(Uniform(.25F));
+  auto output_desc = TextureDesc {};
+  output_desc.width = output_desc.height = 1U;
+  output_desc.format = Format::kRGBA8UNorm;
+  output_desc.is_render_target = output_desc.is_shader_resource = true;
+  output_desc.initial_state = ResourceStates::kCommon;
+  const auto output = CreateRegisteredTexture(output_desc);
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = { .width = 1.0F, .height = 1.0F };
+  auto facade = renderer_->ForSinglePassHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = frame::Slot { 0U },
+    .frame_sequence = frame::SequenceNumber { 2U },
+    .delta_time_seconds = 0.0F,
+  });
+  facade.SetResolvedView(Renderer::ResolvedViewInput {
+    .view_id = ViewId { 1U }, .value = ResolvedView { params } });
+  facade.SetOutputTarget(Renderer::OutputTargetInput {
+    .framebuffer = observer_ptr<Framebuffer> { framebuffer.get() } });
+  const auto paused = facade.Finalize();
+  ASSERT_TRUE(paused.has_value());
+  ASSERT_EQ(paused->GetRenderContext().delta_time, 0.0F);
+  const auto after
+    = Run(Uniform(8.0F), {}, paused->GetRenderContext().delta_time);
+  EXPECT_EQ(after.state.latent_scale, before.state.latent_scale);
+  EXPECT_NE(after.state.latent_target_scale, before.state.latent_target_scale);
+}
+
 } // namespace

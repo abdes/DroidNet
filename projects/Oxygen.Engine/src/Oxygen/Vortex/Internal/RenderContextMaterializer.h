@@ -69,9 +69,10 @@ public:
           "frames-in-flight range");
       }
       if (!std::isfinite(staging.frame_session->delta_time_seconds)
-        || staging.frame_session->delta_time_seconds <= 0.0F) {
+        || staging.frame_session->delta_time_seconds < 0.0F) {
         AddIssue(report, "frame_session.invalid_delta_time",
-          "Single-pass materialization requires a finite positive delta time");
+          "Single-pass materialization requires a finite nonnegative delta "
+          "time");
       }
     }
 
