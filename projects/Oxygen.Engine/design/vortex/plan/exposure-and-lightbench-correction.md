@@ -889,9 +889,8 @@ moving edges and single-pixel features. The controlled 1024x1 five-stop feature
 cases bound sampling error by 5/1024 EV plus the frozen 2e-4 EV histogram
 allowance. This measures deterministic aliasing; it is not a universal error
 bound for arbitrary scenes. Logs are `contract-audit/slice3-matrix-*-tests.log`.
-A separate debugger-backed 26-case run also passes, with no errors or blocking
-warnings; `metering/matrix-debug-layer.json` records its 26 accepted factory
-shutdown warnings. Original 20-case evidence remains unchanged.
+The expanded debugger-backed run is still pending. Only the original 20-case
+debugger-backed audit is qualified; its evidence remains unchanged.
 
 Slice 3 remains in progress for asset-backed mask request/residency/failure
 handling. Full GPU P routing and upstream range qualification remain slice 5;
