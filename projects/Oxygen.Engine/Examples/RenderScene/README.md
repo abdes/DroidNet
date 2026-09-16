@@ -191,9 +191,9 @@ CLI-selected and UI-selected runs.
 
 ## UI workflows
 
-Labels/actions below are verified against current source. **Live verification of
-this refreshed-content workflow is pending.** Retain run evidence separately
-from these operating instructions.
+Labels/actions below are verified against current source. The preview-sun and
+profile workflow has scoped automated and user-confirmed visual validation,
+recorded below. Other content workflows retain their own validation boundaries.
 
 ### Choose lighting and preview sunlight
 

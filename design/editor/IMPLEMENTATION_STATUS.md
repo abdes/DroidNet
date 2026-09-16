@@ -959,9 +959,11 @@ readers. Primary/Secondary names remain unchanged.
       records 20/20 RenderScene loads, scoped image review and the SDK/Interop
       refresh; [loading corrections](validation/ED-M08-runtime-loading.md)
       record script-cache, instance-lifetime and load-drain regression evidence.
-      Sponza's zero-intensity source lights are repaired and recooked; its lit
-      acceptance remains open for gold speckling, directional selection and the
-      separately planned exposure correction. Load success does not close it.
+      Sponza's zero-intensity source lights are repaired and recooked. The
+      [RenderScene preview/profile workflow](../../projects/Oxygen.Engine/design/vortex/plan/renderscene-preview-sun.md)
+      is accepted after 97 focused tests, native checks and user visual validation.
+      Sponza's non-sun lighting defects and exposure correction remain open;
+      this example workflow does not close canonical directional/rendering parity.
       The [native slot foundation](validation/ED-M08-M08.1-slot-foundation.md)
       provides tested identity, inventory validation and revision hashing;
       producer/provenance, wire-format and override integration remain open.
