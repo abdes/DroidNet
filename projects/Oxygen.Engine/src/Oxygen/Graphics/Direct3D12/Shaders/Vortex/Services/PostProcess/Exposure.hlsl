@@ -147,7 +147,10 @@ static void MeterSample(AutoExposureHistogramConstants pass, uint2 cell)
     }
     const float coverage = pass.background_enabled != 0u ? saturate(sample.a) : 1.0;
     float profile = 1.0;
-    const float distance = length((uv - 0.5) * 2.0);
+    // Integer offsets keep the exact centre at zero even for tiny positive
+    // radii; deriving distance from a rounded UV can move it outside the spot.
+    const float2 centered = (float2(cell * 2u + 1u) - float2(grid)) / float2(grid);
+    const float distance = length(centered);
     if (pass.metering_mode == 1u) {
         profile = saturate(1.0 - distance);
     } else if (pass.metering_mode == 2u) {

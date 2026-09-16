@@ -81,7 +81,7 @@ HDR migration and native MultiView; persistence/configuration; physical lights;
 independent instruments; interactive demos; automated/native acceptance.
 
 Status: `in_progress`, slice 3 active. The bounded metering/adaptation core
-passes 30 native Debug/Release cases, 14 independent references and 134 focused
+passes 34 native Debug/Release cases, 14 independent references and 134 focused
 regressions; remaining slice-3 acceptance is listed in the execution plan. The [checkpoint](plan/exposure-contract-checkpoint.md)
 records slice-1 contracts. Canonical settings, public per-view overrides,
 cancellation-safe target compilation, exact fixed/camera gains and frame-safe

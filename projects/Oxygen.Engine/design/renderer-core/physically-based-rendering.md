@@ -88,7 +88,9 @@ transition precedence and invalid-meter handling.
 Use 256 logarithmic bins and a stable normalized-content stratified grid of
 `min(width,512)*min(height,512)` samples at cell centres. Do not area-average HDR
 before binning. Weight by Average/CenterWeighted/Spot, optional bilinear
-clamp-sampled linear mask R, and coverage. Absent mask means one.
+clamp-sampled linear mask R, and coverage. Absent mask means one. Compute
+analytic profile distance from `(2*cell+1-grid)/grid`; integer centre offsets
+preserve exact zero for tiny positive Spot radii without UV-rounding drift.
 
 Coverage follows tonemapping: saturated alpha with display background enabled,
 otherwise one. For positive coverage unpremultiply RGB and divide by P before
