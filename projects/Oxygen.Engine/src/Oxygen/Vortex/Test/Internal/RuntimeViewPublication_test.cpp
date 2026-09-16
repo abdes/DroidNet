@@ -17,6 +17,10 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Vortex/Internal/PerViewScope.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
@@ -290,6 +294,81 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
   ASSERT_NE(second_buffer, nullptr);
   EXPECT_NE(second_buffer.get(), first_buffer.get());
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  PublishedExposureOverridesResolveIndependentlyAndCanBeUpdatedAndCleared)
+{
+  using namespace oxygen::vortex;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  auto scene
+    = std::make_shared<oxygen::scene::Scene>("ExposurePublication", 8U);
+  scene->SetEnvironment(std::make_unique<oxygen::scene::SceneEnvironment>());
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<oxygen::scene::environment::PostProcessVolume>();
+  post.SetExposureMode(oxygen::engine::ExposureMode::kManual);
+  post.SetExposureKey(12.5F);
+  post.SetManualExposureEv(10.0F);
+  auto target = MakeFramebuffer();
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
+  auto first = CompositionView {};
+  first.id = ViewId { 31U };
+  first.name = "ExposureFirst";
+  first.view = MakeViewContext("first").view;
+  first.view_state_handle = CompositionView::ViewStateHandle { 101U };
+  first.render_settings.exposure = post.GetExposureSettings();
+  first.render_settings.exposure->manual_ev = 14.0F;
+  auto second = first;
+  second.id = ViewId { 32U };
+  second.name = "ExposureSecond";
+  second.view_state_handle = CompositionView::ViewStateHandle { 102U };
+  second.render_settings.exposure->manual_ev = 16.0F;
+
+  const auto run = [&](const std::uint32_t sequence, const float first_gain) {
+    PrepareFrameContext(frame, sequence);
+    const auto publish = [&](const CompositionView& view) {
+      return renderer_->PublishRuntimeCompositionView(frame,
+        Renderer::RuntimeViewPublishInput {
+          .composition_view = view,
+          .render_target = oxygen::observer_ptr { target.get() },
+          .composite_source = oxygen::observer_ptr { target.get() },
+        });
+    };
+    const auto first_id = publish(first);
+    const auto second_id = publish(second);
+    auto context = RenderContext {};
+    context.scene = oxygen::observer_ptr { scene.get() };
+    context.frame_sequence = oxygen::frame::SequenceNumber { sequence };
+    context.frame_slot = oxygen::frame::Slot { 0U };
+    context.view_constants = MaterializeViewConstantsBuffer(first_id);
+    RendererPublicationProbe::PopulateRenderContextViewState(
+      *renderer_, context, frame, false);
+    ASSERT_EQ(context.frame_views.size(), 2U);
+    scene_renderer.OnStandaloneFrameStart(
+      context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+    for (std::size_t i = 0; i < context.frame_views.size(); ++i) {
+      internal::PerViewScope scope(context, i);
+      scene_renderer.OnRender(context);
+    }
+    const auto* service
+      = RendererPublicationProbe::GetPostProcessService(scene_renderer);
+    ASSERT_NE(service, nullptr);
+    const auto* first_bindings = service->InspectBindings(first_id);
+    const auto* second_bindings = service->InspectBindings(second_id);
+    ASSERT_NE(first_bindings, nullptr);
+    ASSERT_NE(second_bindings, nullptr);
+    EXPECT_EQ(first_bindings->fixed_exposure, first_gain);
+    EXPECT_EQ(second_bindings->fixed_exposure, 0x1p-16F);
+    EXPECT_TRUE(service->GetLastExecutionState().tonemap_executed);
+    EXPECT_EQ(post.GetManualExposureEv(), 10.0F);
+  };
+  run(1U, 0x1p-14F);
+  first.render_settings.exposure->manual_ev = 15.0F;
+  run(2U, 0x1p-15F);
+  first.render_settings.exposure.reset();
+  run(3U, 0x1p-10F);
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,

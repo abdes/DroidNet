@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
@@ -50,6 +51,8 @@ struct CompositionView {
     std::optional<RenderMode> render_mode;
     std::optional<ShaderDebugMode> shader_debug_mode;
     std::optional<DepthPrePassMode> depth_prepass_mode;
+    //! Complete view-local exposure intent; does not mutate the shared scene.
+    std::optional<scene::ExposureSettings> exposure;
   };
 
   enum class ViewKind : std::uint8_t {

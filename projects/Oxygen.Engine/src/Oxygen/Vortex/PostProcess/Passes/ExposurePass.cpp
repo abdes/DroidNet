@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <span>
@@ -25,9 +26,12 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTargetData.h>
 
 namespace oxygen::vortex::postprocess {
 
@@ -36,15 +40,11 @@ namespace {
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
   constexpr float kMinLogLuminanceRange = 1.0e-4F;
-  constexpr float kMinTargetLuminance = 1.0e-6F;
   constexpr float kMinSpotMeterRadius = 0.01F;
   constexpr std::uint32_t kHistogramBinCount = 256U;
   constexpr std::uint32_t kHistogramDispatchGroupSize = 16U;
-  constexpr std::uint32_t kPassConstantsStride = 256U;
-  constexpr std::size_t kPassConstantsSlots = 8U;
-  constexpr std::uint32_t kExposureStateElementCount = 4U;
   constexpr std::uint32_t kExposureStateBufferSizeBytes
-    = kExposureStateElementCount * sizeof(float);
+    = sizeof(ExposureStateData);
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
   {
@@ -123,10 +123,12 @@ namespace {
     float adaptation_speed_up;
     float adaptation_speed_down;
     float delta_time;
-    float target_luminance;
+    std::uint32_t targets_srv;
+    std::array<std::uint32_t, 2> settings_revision;
+    std::array<std::uint32_t, 2> frame_sequence;
   };
 
-  static_assert(sizeof(AutoExposureAverageConstants) == 48U);
+  static_assert(sizeof(AutoExposureAverageConstants) == 64U);
 
   auto BuildExposurePipeline(std::string_view entry_point,
     std::string_view debug_name) -> graphics::ComputePipelineDesc
@@ -186,13 +188,11 @@ namespace {
 ExposurePass::ExposurePass(Renderer& renderer)
   : renderer_(renderer)
 {
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 ExposurePass::~ExposurePass()
 {
   ReleaseExposureResources();
-  ReleasePassConstantsBuffer();
 
   if (init_upload_buffer_ && init_upload_buffer_->IsMapped()) {
     init_upload_buffer_->UnMap();
@@ -206,7 +206,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     .requested = config.enable_auto_exposure && inputs.scene_signal != nullptr
       && inputs.scene_signal_srv != kInvalidShaderVisibleIndex,
     .used_fixed_exposure = true,
-    .exposure_value = std::max(config.fixed_exposure, 1.0e-4F),
+    .exposure_value = config.fixed_exposure,
   };
   if (!result.requested) {
     return result;
@@ -227,7 +227,59 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   }
 
   EnsurePipelines();
-  EnsurePassConstantsBuffer();
+
+  CHECK_F(config.resolved_exposure.has_value(),
+    "Auto exposure requires resolved settings");
+  if (!target_publisher_) {
+    target_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        ExposureTargetData>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.Targets");
+  }
+  if (!constants_publisher_) {
+    constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 12U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.Constants");
+  }
+  if (!average_constants_publisher_) {
+    average_constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.SolveConstants");
+  }
+  if (target_frame_ != ctx.frame_sequence) {
+    average_constants_publisher_->OnFrameStart(
+      ctx.frame_sequence, ctx.frame_slot);
+    constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    target_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    target_frame_ = ctx.frame_sequence;
+  }
+  const auto& resolved = *config.resolved_exposure;
+  auto targets = ExposureTargetData {};
+  CHECK_LE_F(resolved.auto_log_targets.size(), targets.keys.size());
+  targets.key_count
+    = static_cast<std::uint32_t>(resolved.auto_log_targets.size());
+  targets.flags = (resolved.authored.min_ev == resolved.authored.max_ev
+                      ? ExposureTargetData::kLocked
+                      : 0U)
+    | (resolved.authored.target_luminance == 0.0F
+        ? ExposureTargetData::kZeroTarget
+        : 0U);
+  targets.initial_log_gain = resolved.initial_log_gain;
+  targets.dark_log_gain = resolved.dark_log_gain;
+  std::ranges::copy(resolved.auto_log_targets, targets.keys.begin());
+  const auto targets_srv
+    = target_publisher_->Publish(ctx.current_view.view_id, targets);
+  if (!targets_srv.IsValid()) {
+    return result;
+  }
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   auto recorder
@@ -260,7 +312,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(*clear_pipeline_);
-  UpdateHistogramConstants(*recorder, inputs, config, state);
+  UpdateHistogramConstants(ctx, *recorder, inputs, config, state);
   recorder->Dispatch(1U, 1U, 1U);
 
   recorder->RequireResourceState(
@@ -268,7 +320,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(*histogram_pipeline_);
-  UpdateHistogramConstants(*recorder, inputs, config, state);
+  UpdateHistogramConstants(ctx, *recorder, inputs, config, state);
   const auto& tex_desc = inputs.scene_signal->GetDescriptor();
   recorder->Dispatch((tex_desc.width + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
@@ -283,7 +335,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(*average_pipeline_);
-  UpdateAverageConstants(ctx, *recorder, config, state);
+  UpdateAverageConstants(ctx, *recorder, config, state, targets_srv);
   recorder->Dispatch(1U, 1U, 1U);
 
   recorder->RequireResourceStateFinal(
@@ -370,53 +422,6 @@ auto ExposurePass::EnsureHistogramBuffer(PerViewExposureState& state) -> void
     view->IsValid(), "ExposurePass: failed to register histogram UAV view");
 }
 
-auto ExposurePass::EnsurePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ != nullptr
-    && pass_constants_indices_[0].IsValid()) {
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  CHECK_NOTNULL_F(gfx.get());
-  pass_constants_buffer_ = gfx->CreateBuffer({
-    .size_bytes = kPassConstantsStride * kPassConstantsSlots,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "Vortex.PostProcess.Exposure.PassConstants",
-  });
-  CHECK_NOTNULL_F(pass_constants_buffer_.get());
-  pass_constants_buffer_->SetName("Vortex.PostProcess.Exposure.PassConstants");
-  pass_constants_mapped_ptr_ = pass_constants_buffer_->Map(
-    0, kPassConstantsStride * kPassConstantsSlots);
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_,
-    "ExposurePass: failed to map pass constants buffer");
-
-  auto& registry = gfx->GetResourceRegistry();
-  auto& allocator = gfx->GetDescriptorAllocator();
-  RegisterResourceIfNeeded(*gfx, pass_constants_buffer_);
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  for (std::size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
-    auto handle
-      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
-        graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(),
-      "ExposurePass: failed to allocate pass constants descriptor");
-    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(handle);
-
-    const auto offset = static_cast<std::uint32_t>(slot * kPassConstantsStride);
-    const auto view_desc = graphics::BufferViewDescription {
-      .view_type = graphics::ResourceViewType::kConstantBuffer,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { offset, kPassConstantsStride },
-    };
-    const auto view = registry.RegisterView(
-      *pass_constants_buffer_, std::move(handle), view_desc);
-    CHECK_F(
-      view->IsValid(), "ExposurePass: failed to register pass constants view");
-  }
-}
-
 auto ExposurePass::EnsureExposureInitUploadBuffer(
   graphics::CommandRecorder& recorder, const PostProcessConfig& config) -> void
 {
@@ -436,19 +441,21 @@ auto ExposurePass::EnsureExposureInitUploadBuffer(
       "ExposurePass: failed to map init upload buffer");
   }
 
+  CHECK_F(config.resolved_exposure.has_value(),
+    "Auto initialization requires resolved settings");
   const auto initial_exposure
-    = std::clamp(config.fixed_exposure, 1.0e-8F, 64000.0F);
-  const auto base_luminance = std::max(
-    config.auto_exposure_target_luminance / initial_exposure, 1.0e-6F);
-  const auto ev100 = engine::AverageLuminanceToEv100(base_luminance);
-  const std::array<float, kExposureStateElementCount> init_values {
-    base_luminance,
-    initial_exposure,
-    ev100,
-    0.0F,
+    = std::exp2(config.resolved_exposure->initial_log_gain);
+  const auto init_values = ExposureStateData {
+    .displayed_scale
+    = config.resolved_exposure->authored.target_luminance == 0.0F
+      ? 0.0F
+      : initial_exposure,
+    .target_scale = initial_exposure,
+    .latent_scale = initial_exposure,
+    .latent_target_scale = initial_exposure,
   };
   std::memcpy(
-    exposure_init_upload_mapped_ptr_, init_values.data(), sizeof(init_values));
+    exposure_init_upload_mapped_ptr_, &init_values, sizeof(init_values));
 
   if (!recorder.IsResourceTracked(*init_upload_buffer_)) {
     recorder.BeginTrackingResourceState(
@@ -540,11 +547,11 @@ auto ExposurePass::EnsureExposureStateForView(RenderContext& ctx,
   return state;
 }
 
-auto ExposurePass::UpdateHistogramConstants(graphics::CommandRecorder& recorder,
-  const Inputs& inputs, const PostProcessConfig& config,
-  const PerViewExposureState& state) -> void
+auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const Inputs& inputs,
+  const PostProcessConfig& config, const PerViewExposureState& state) -> void
 {
-  DCHECK_NOTNULL_F(pass_constants_mapped_ptr_);
+  DCHECK_NOTNULL_F(constants_publisher_.get());
   DCHECK_F(inputs.scene_signal != nullptr);
   const auto& desc = inputs.scene_signal->GetDescriptor();
   const auto constants = AutoExposureHistogramConstants {
@@ -565,25 +572,24 @@ auto ExposurePass::UpdateHistogramConstants(graphics::CommandRecorder& recorder,
     ._pad1 = 0U,
   };
 
-  const auto slot = pass_constants_slot_ % kPassConstantsSlots;
-  pass_constants_slot_++;
-  std::memcpy(static_cast<std::byte*>(pass_constants_mapped_ptr_)
-      + (slot * kPassConstantsStride),
-    &constants, sizeof(constants));
+  const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
+    std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+  CHECK_F(slot.IsValid(), "Exposure constants publication failed");
 
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    pass_constants_indices_[slot].get(), 1U);
+    slot.get(), 1U);
 }
 
 auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const PostProcessConfig& config,
-  const PerViewExposureState& state) -> void
+  const PerViewExposureState& state, const ShaderVisibleIndex targets_srv)
+  -> void
 {
-  DCHECK_NOTNULL_F(pass_constants_mapped_ptr_);
+  DCHECK_NOTNULL_F(average_constants_publisher_.get());
   const auto constants = AutoExposureAverageConstants {
     .histogram_buffer_index = state.histogram_uav_index.get(),
     .exposure_buffer_index = state.uav_index.get(),
@@ -599,48 +605,25 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .adaptation_speed_up = std::max(config.auto_exposure_speed_up, 0.0F),
     .adaptation_speed_down = std::max(config.auto_exposure_speed_down, 0.0F),
     .delta_time = std::max(ctx.delta_time, 0.0F),
-    .target_luminance
-    = std::max(config.auto_exposure_target_luminance, kMinTargetLuminance),
+    .targets_srv = targets_srv.get(),
+    .settings_revision
+    = { static_cast<std::uint32_t>(config.exposure_settings_revision),
+      static_cast<std::uint32_t>(config.exposure_settings_revision >> 32U) },
+    .frame_sequence = { static_cast<std::uint32_t>(ctx.frame_sequence.get()),
+      static_cast<std::uint32_t>(ctx.frame_sequence.get() >> 32U) },
   };
 
-  const auto slot = pass_constants_slot_ % kPassConstantsSlots;
-  pass_constants_slot_++;
-  std::memcpy(static_cast<std::byte*>(pass_constants_mapped_ptr_)
-      + (slot * kPassConstantsStride),
-    &constants, sizeof(constants));
+  const auto slot
+    = average_constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
+  CHECK_F(slot.IsValid(), "Exposure constants publication failed");
 
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    pass_constants_indices_[slot].get(), 1U);
-}
-
-auto ExposurePass::ReleasePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ == nullptr) {
-    pass_constants_mapped_ptr_ = nullptr;
-    pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    pass_constants_slot_ = 0U;
-    return;
-  }
-
-  if (pass_constants_buffer_->IsMapped()) {
-    pass_constants_buffer_->UnMap();
-  }
-
-  if (auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (registry.Contains(*pass_constants_buffer_)) {
-      registry.UnRegisterResource(*pass_constants_buffer_);
-    }
-  }
-
-  pass_constants_buffer_.reset();
-  pass_constants_mapped_ptr_ = nullptr;
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  pass_constants_slot_ = 0U;
+    slot.get(), 1U);
 }
 
 auto ExposurePass::ReleaseExposureState(PerViewExposureState& state) -> void

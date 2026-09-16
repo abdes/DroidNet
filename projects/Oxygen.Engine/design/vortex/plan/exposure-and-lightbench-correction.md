@@ -1,6 +1,6 @@
 # Exposure management and LightBench implementation plan
 
-Status: `in_progress` — slice 1 contract checkpoint complete; slice 2 next.
+Status: `in_progress` — slice 1 contract checkpoint recorded; slice 2 active.
 
 Date: 2026-09-16
 
@@ -801,13 +801,44 @@ qualification begins in slice 2 and remains required. See the
 
 ### Slice 2 - Implement normalized settings and fixed exposure
 
-- [ ] Implement shared validation/resolution for native settings and view overrides,
+Validated foundation (2026-09-16): canonical settings and atomic per-view
+revision retention; cancellation-safe log-target compilation; fixed/camera gain
+math; public composition and runtime-publication overrides including update/clear;
+frame-retired Exposure/Tonemap inputs; common C++/HLSL state/target layouts.
+The 80-byte Auto state carries settings revision and frame sequence. The
+FrameExposureData ABI is defined; live pre-exposure publication/consumption and
+full mode/lifecycle ownership remain in the following integration work.
+
+Focused build/tests pass 95 CTest entries across Scene exposure settings,
+PostProcessService, deferred core, runtime publication and ShaderBakeCatalog.
+The independent fixed-gain regression failed before removing the `1e-4` floor.
+Twelve native cases pass: EV14/15/16, EV+/-32 supported gain limits, compensation
+plus key, physical camera, disabled exposure, invalid revision retention,
+locked Auto +/-160 cancellation, and locked large-curve cancellation retaining
+a twofold key bias. PixelHistory checks the actual floating-point shader output
+before UNorm8 storage (including EV32), alongside uploaded/consumed gain,
+80-byte state identity, normalized target records and all Bayer phases.
+Separate CDB audits pass all twelve with zero D3D12/DXGI errors or blocking
+warnings; only the existing accepted live-factory shutdown warning remains.
+
+Evidence: `out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/`
+(`evidence-manifest.json`, twelve captures, numeric reports, PNGs and debug
+reports), with `contract-audit/slice2-foundation-tests.log` beside it.
+The earlier ordinary Auto capture under `autocurve-unsettled*` is retained as
+failed settling evidence, excluded from these twelve arithmetic cases. Robust
+metering and temporal qualification remain slice 3 work. Reproduction is in the
+[VortexBasic README](../../../Examples/VortexBasic/README.md#fixed-exposure-fixture).
+
+This is a validated foundation increment, not full package closure. Remaining
+frame-domain binding integration and the following slice gates stay open.
+
+- [x] Implement shared validation/resolution for native settings and view overrides,
   including zero target, coupled ranges and representable gain.
-- [ ] Remove the fixed-exposure floor and propagate the exact resolved multiplier
+- [x] Remove the fixed-exposure floor and propagate the exact resolved multiplier
   through constants. Add scalar, upload and native GPU regressions.
 - [ ] Introduce explicit frame exposure bindings and common state definitions,
   with compile-time CPU/HLSL size/layout checks and ShaderBake validation.
-- [ ] Define native mask/curve/new-setting types for the following runtime slices.
+- [x] Define native mask/curve/new-setting types for the following runtime slices.
 
 **Gate:** EV14/15/16, boundaries, compensation, keys and disabled exposure reach
 the GPU correctly. Invalid settings retain the previous valid revision.

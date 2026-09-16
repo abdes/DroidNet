@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Shared/ColorSpace.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 
@@ -111,8 +112,9 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
-    ConstantBuffer<TonemapPassConstants> pass
+    StructuredBuffer<TonemapPassConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const TonemapPassConstants pass = pass_buffer[0];
     if (pass.source_texture_index == K_INVALID_BINDLESS_INDEX) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
@@ -139,7 +141,7 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
     float exposure = max(pass.exposure, 0.0f);
     if (pass.exposure_buffer_index != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer exposure_buffer = ResourceDescriptorHeap[pass.exposure_buffer_index];
-        exposure = max(asfloat(exposure_buffer.Load(4)), 0.0f);
+        exposure = max(asfloat(exposure_buffer.Load(EXPOSURE_DISPLAYED_SCALE_OFFSET)), 0.0f);
     }
     float3 color = MapForeground((foreground + bloom) * exposure, pass.tone_mapper, pass.gamma);
     if (pass.background_enabled != 0u) {

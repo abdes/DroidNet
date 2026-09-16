@@ -14,6 +14,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -28,6 +29,9 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+namespace internal {
+  template <typename Payload> class PerViewStructuredPublisher;
+}
 
 namespace postprocess {
 
@@ -66,15 +70,14 @@ public:
     -> ExecutionState;
 
 private:
-  auto EnsurePassConstantsBuffer() -> void;
-  auto ReleasePassConstantsBuffer() -> void;
-  auto UpdatePassConstants(const Inputs& inputs) -> ShaderVisibleIndex;
+  auto UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
+    -> ShaderVisibleIndex;
 
   Renderer& renderer_;
-  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
-  std::byte* pass_constants_mapped_ptr_ { nullptr };
-  std::array<ShaderVisibleIndex, 8U> pass_constants_indices_ {};
-  std::size_t pass_constants_slot_ { 0U };
+  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+    std::array<std::uint32_t, 12U>>>
+    constants_publisher_;
+  std::optional<frame::SequenceNumber> constants_frame_;
 };
 
 } // namespace postprocess

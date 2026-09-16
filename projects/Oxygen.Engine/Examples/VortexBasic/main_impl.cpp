@@ -227,11 +227,52 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   try {
     auto vortex_options = std::make_shared<clap::Options>("Vortex options");
     vortex_options->Add(clap::Option::WithKey("validation-scene")
-        .About("Procedural scene: default or sidedness")
+        .About("Procedural scene: default, sidedness, exposure-fixed, "
+               "exposure-locked, or exposure-curve-cancellation")
         .Long("validation-scene")
         .WithValue<std::string>()
         .DefaultValue(std::string("default"))
         .StoreTo(&validation_scene_name)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-exposure-ev")
+        .About("Manual EV100 for the constant-4096 exposure-fixed fixture")
+        .Long("validation-exposure-ev")
+        .WithValue<float>()
+        .DefaultValue(14.0F)
+        .StoreTo(&validation.fixed_exposure_ev)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-exposure-key")
+        .Long("validation-exposure-key")
+        .WithValue<float>()
+        .DefaultValue(12.5F)
+        .StoreTo(&validation.exposure_key)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("validation-exposure-compensation")
+        .Long("validation-exposure-compensation")
+        .WithValue<float>()
+        .DefaultValue(0.0F)
+        .StoreTo(&validation.exposure_compensation)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-exposure-enabled")
+        .Long("validation-exposure-enabled")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .StoreTo(&validation.exposure_enabled)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-camera-exposure")
+        .Long("validation-camera-exposure")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .StoreTo(&validation.camera_exposure)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("validation-invalid-exposure")
+        .About(
+          "Inject an invalid key at frame 8; retain the last valid exposure")
+        .Long("validation-invalid-exposure")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .StoreTo(&validation.inject_invalid_exposure)
         .Build());
     vortex_options->Add(clap::Option::WithKey("shading-path")
         .About("Native Vortex shading path: deferred or forward")
@@ -417,7 +458,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     if (validation_scene_name != "default"
-      && validation_scene_name != "sidedness") {
+      && validation_scene_name != "sidedness"
+      && validation_scene_name != "exposure-fixed"
+      && validation_scene_name != "exposure-locked"
+      && validation_scene_name != "exposure-curve-cancellation") {
       throw std::runtime_error(
         "Unknown validation scene: " + validation_scene_name);
     }
@@ -425,6 +469,27 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       throw std::runtime_error("Unknown shading path: " + shading_path_name);
     }
     validation.sidedness_scene = validation_scene_name == "sidedness";
+    using ExposureFixture
+      = oxygen::examples::vortex_basic::ValidationOptions::ExposureFixture;
+    if (validation_scene_name == "exposure-fixed") {
+      validation.exposure_fixture = ExposureFixture::kFixed;
+    } else if (validation_scene_name == "exposure-locked") {
+      validation.exposure_fixture = ExposureFixture::kLockedAuto;
+    } else if (validation_scene_name == "exposure-curve-cancellation") {
+      validation.exposure_fixture = ExposureFixture::kCurveCancellation;
+    }
+    const float ev_limit
+      = validation.exposure_fixture == ExposureFixture::kLockedAuto ? 160.0F
+                                                                    : 32.0F;
+    if (!(validation.fixed_exposure_ev >= -ev_limit
+          && validation.fixed_exposure_ev <= ev_limit)) {
+      throw std::runtime_error(
+        "--validation-exposure-ev is outside the fixture range");
+    }
+    if (validation.IsExposureFixture() && shading_path_name != "deferred") {
+      throw std::runtime_error(
+        "exposure fixtures use the deferred emissive input");
+    }
     if (validation.normal_map && !validation.sidedness_scene) {
       throw std::runtime_error(
         "--validation-normal-map requires --validation-scene sidedness");
@@ -432,7 +497,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     validation.shading_mode = shading_path_name == "forward"
       ? oxygen::vortex::ShadingMode::kForward
       : oxygen::vortex::ShadingMode::kDeferred;
-    if (validation.sidedness_scene) {
+    if (validation.sidedness_scene || validation.IsExposureFixture()) {
       app.with_atmosphere = false;
       app.with_height_fog = false;
       app.with_local_fog = false;

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <bit>
 #include <cstring>
 #include <limits>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -221,10 +223,9 @@ namespace {
 TonemapPass::TonemapPass(Renderer& renderer)
   : renderer_(renderer)
 {
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
-TonemapPass::~TonemapPass() { ReleasePassConstantsBuffer(); }
+TonemapPass::~TonemapPass() = default;
 
 auto TonemapPass::Record(RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> ExecutionState
@@ -277,7 +278,7 @@ auto TonemapPass::Record(RenderContext& ctx,
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   recorder->SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));
-  const auto pass_constants_index = UpdatePassConstants(inputs);
+  const auto pass_constants_index = UpdatePassConstants(ctx, inputs);
   recorder->SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -295,88 +296,23 @@ auto TonemapPass::Record(RenderContext& ctx,
   return state;
 }
 
-auto TonemapPass::EnsurePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ != nullptr
-    && pass_constants_indices_[0].IsValid()) {
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  CHECK_NOTNULL_F(gfx.get());
-
-  auto& registry = gfx->GetResourceRegistry();
-  auto& allocator = gfx->GetDescriptorAllocator();
-  const auto desc = graphics::BufferDesc {
-    .size_bytes = kPassConstantsStride * kPassConstantsSlots,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "Vortex.PostProcess.Tonemap.PassConstants",
-  };
-
-  pass_constants_buffer_ = gfx->CreateBuffer(desc);
-  CHECK_NOTNULL_F(pass_constants_buffer_.get(),
-    "TonemapPass: failed to create pass constants buffer");
-  pass_constants_buffer_->SetName(desc.debug_name);
-  pass_constants_mapped_ptr_
-    = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_,
-    "TonemapPass: failed to map pass constants buffer");
-
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  registry.Register(pass_constants_buffer_);
-  for (std::size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
-    auto handle
-      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
-        graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(),
-      "TonemapPass: failed to allocate pass constants descriptor");
-    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(handle);
-
-    const auto offset = static_cast<std::uint32_t>(slot * kPassConstantsStride);
-    const auto view_desc = graphics::BufferViewDescription {
-      .view_type = graphics::ResourceViewType::kConstantBuffer,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { offset, kPassConstantsStride },
-    };
-    const auto view = registry.RegisterView(
-      *pass_constants_buffer_, std::move(handle), view_desc);
-    CHECK_F(
-      view->IsValid(), "TonemapPass: failed to register pass constants view");
-  }
-}
-
-auto TonemapPass::ReleasePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ == nullptr) {
-    pass_constants_mapped_ptr_ = nullptr;
-    pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    pass_constants_slot_ = 0U;
-    return;
-  }
-
-  if (pass_constants_buffer_->IsMapped()) {
-    pass_constants_buffer_->UnMap();
-  }
-
-  if (auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (registry.Contains(*pass_constants_buffer_)) {
-      registry.UnRegisterResource(*pass_constants_buffer_);
-    }
-  }
-
-  pass_constants_mapped_ptr_ = nullptr;
-  pass_constants_buffer_.reset();
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  pass_constants_slot_ = 0U;
-}
-
-auto TonemapPass::UpdatePassConstants(const Inputs& inputs)
+auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
   -> ShaderVisibleIndex
 {
-  EnsurePassConstantsBuffer();
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
+  if (!constants_publisher_) {
+    auto gfx = renderer_.GetGraphics();
+    CHECK_NOTNULL_F(gfx.get());
+    constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 12U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Tonemap.Constants");
+  }
+  if (constants_frame_ != ctx.frame_sequence) {
+    constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    constants_frame_ = ctx.frame_sequence;
+  }
 
   const auto background_color = inputs.background_color.value_or(Vec3 { 0.0F });
   const auto constants = TonemapPassConstants {
@@ -396,11 +332,10 @@ auto TonemapPass::UpdatePassConstants(const Inputs& inputs)
     .background_enabled = inputs.background_color.has_value() ? 1U : 0U,
   };
 
-  const auto slot = pass_constants_slot_ % kPassConstantsSlots;
-  pass_constants_slot_++;
-  std::memcpy(pass_constants_mapped_ptr_ + (slot * kPassConstantsStride),
-    &constants, sizeof(constants));
-  return pass_constants_indices_[slot];
+  const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
+    std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+  CHECK_F(slot.IsValid(), "Tonemap constants publication failed");
+  return slot;
 }
 
 } // namespace oxygen::vortex::postprocess

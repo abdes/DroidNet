@@ -1384,29 +1384,11 @@ namespace {
     };
   }
 
-  auto ResolveAuthoredExposureValue(
-    const scene::environment::PostProcessVolume& post_process,
-    const RenderContext& ctx) -> float
-  {
-    if (!post_process.GetExposureEnabled()) {
-      return 1.0F;
-    }
-
-    float ev = post_process.GetManualExposureEv();
-    if (post_process.GetExposureMode() == engine::ExposureMode::kManualCamera
-      && ctx.current_view.resolved_view != nullptr
-      && ctx.current_view.resolved_view->CameraEv().has_value()) {
-      ev = *ctx.current_view.resolved_view->CameraEv();
-    }
-
-    return engine::ExposureScaleFromEv100(ev,
-      post_process.GetExposureCompensationEv(), post_process.GetExposureKey());
-  }
-
-  auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx)
-    -> PostProcessConfig
+  auto ResolveAuthoredPostProcessConfig(
+    const RenderContext& ctx, PostProcessService& service) -> PostProcessConfig
   {
     auto config = PostProcessConfig {};
+    auto requested = scene::ExposureSettings {};
     const auto* scene = ctx.GetScene().get();
     if (scene != nullptr) {
       const auto environment = scene->GetEnvironment();
@@ -1414,40 +1396,43 @@ namespace {
         const auto post_process
           = environment->TryGetSystem<scene::environment::PostProcessVolume>();
         if (post_process) {
+          requested = post_process->GetExposureSettings();
           config.enable_bloom = post_process->GetBloomIntensity() > 0.0F;
           config.bloom_intensity = post_process->GetBloomIntensity();
           config.bloom_threshold = post_process->GetBloomThreshold();
           config.tone_mapper = post_process->GetToneMapper();
-          config.enable_auto_exposure = post_process->GetExposureEnabled()
-            && post_process->GetExposureMode() == engine::ExposureMode::kAuto;
-          config.fixed_exposure
-            = ResolveAuthoredExposureValue(*post_process, ctx);
           config.gamma = post_process->GetDisplayGamma();
-          config.metering_mode = post_process->GetAutoExposureMeteringMode();
-          config.auto_exposure_speed_up
-            = post_process->GetAutoExposureSpeedUp();
-          config.auto_exposure_speed_down
-            = post_process->GetAutoExposureSpeedDown();
-          config.auto_exposure_low_percentile
-            = post_process->GetAutoExposureLowPercentile();
-          config.auto_exposure_high_percentile
-            = post_process->GetAutoExposureHighPercentile();
-          config.auto_exposure_min_ev = post_process->GetAutoExposureMinEv();
-          config.auto_exposure_max_ev = post_process->GetAutoExposureMaxEv();
-          config.auto_exposure_min_log_luminance
-            = post_process->GetAutoExposureMinLogLuminance();
-          config.auto_exposure_log_luminance_range
-            = post_process->GetAutoExposureLogLuminanceRange();
-          config.auto_exposure_target_luminance
-            = post_process->GetAutoExposureTargetLuminance()
-            * engine::ExposureBiasScale(
-              post_process->GetExposureCompensationEv(),
-              post_process->GetExposureKey());
-          config.auto_exposure_spot_meter_radius
-            = post_process->GetAutoExposureSpotMeterRadius();
         }
       }
     }
+    if (ctx.current_view.exposure_override.has_value()) {
+      requested = *ctx.current_view.exposure_override;
+    } else if (const auto view = ctx.current_view.composition_view;
+      view != nullptr && view->render_settings.exposure.has_value()) {
+      requested = *view->render_settings.exposure;
+    }
+    const auto camera_ev = ctx.current_view.resolved_view != nullptr
+      ? ctx.current_view.resolved_view->CameraEv()
+      : std::optional<float> {};
+    const auto& active = service.ResolveViewExposureSettings(
+      ctx.current_view.view_state_handle, requested, camera_ev);
+    const auto& exposure = active.resolved.authored;
+    config.enable_auto_exposure
+      = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;
+    config.fixed_exposure = active.resolved.fixed_scale;
+    config.metering_mode = exposure.metering_mode;
+    config.auto_exposure_speed_up = exposure.speed_up;
+    config.auto_exposure_speed_down = exposure.speed_down;
+    config.auto_exposure_low_percentile = exposure.low_percentile;
+    config.auto_exposure_high_percentile = exposure.high_percentile;
+    config.auto_exposure_min_ev = exposure.min_ev;
+    config.auto_exposure_max_ev = exposure.max_ev;
+    config.auto_exposure_min_log_luminance = exposure.min_log_luminance;
+    config.auto_exposure_log_luminance_range = exposure.log_luminance_range;
+    config.auto_exposure_target_luminance = exposure.target_luminance;
+    config.auto_exposure_spot_meter_radius = exposure.spot_meter_radius;
+    config.resolved_exposure = active.resolved;
+    config.exposure_settings_revision = active.revision;
 
     if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled
       || ctx.render_mode == RenderMode::kWireframe) {
@@ -1458,7 +1443,6 @@ namespace {
       config.bloom_intensity = 0.0F;
       config.bloom_threshold = 0.0F;
     }
-
     return config;
   }
 
@@ -1503,8 +1487,13 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
 {
+  if (renderer_.HasCapability(
+        RendererCapabilityFamily::kFinalOutputComposition)) {
+    post_process_ = std::make_unique<PostProcessService>(renderer_);
+  }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
-    init_views_ = std::make_unique<InitViewsModule>(renderer_);
+    init_views_ = std::make_unique<InitViewsModule>(
+      renderer_, observer_ptr { post_process_.get() });
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
@@ -1543,10 +1532,6 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     ground_grid_pass_ = std::make_unique<GroundGridPass>(renderer_);
-  }
-  if (renderer_.HasCapability(
-        RendererCapabilityFamily::kFinalOutputComposition)) {
-    post_process_ = std::make_unique<PostProcessService>(renderer_);
   }
 }
 
@@ -2399,7 +2384,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 22: Post processing
   if (post_process_ != nullptr && wants_scene_lighting) {
-    post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));
+    post_process_->SetConfig(
+      ResolveAuthoredPostProcessConfig(ctx, *post_process_));
     auto post_target = observer_ptr<const graphics::Framebuffer> {};
     if (const auto* active_view = ctx.GetActiveViewEntry();
       active_view != nullptr) {

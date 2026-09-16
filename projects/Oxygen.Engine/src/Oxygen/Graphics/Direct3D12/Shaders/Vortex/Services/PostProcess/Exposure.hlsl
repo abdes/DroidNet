@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/View/ExposureStateData.hlsli"
 
 #define GROUP_SIZE 16
 #define HISTOGRAM_BINS 256
@@ -44,8 +45,35 @@ struct AutoExposureAverageConstants {
     float adaptation_speed_up;
     float adaptation_speed_down;
     float delta_time;
-    float target_luminance;
+    uint targets_srv;
+    uint2 settings_revision;
+    uint2 frame_sequence;
 };
+
+// CPU mirror: Vortex/Types/ExposureTargetData.h (560 bytes).
+struct ExposureTargetData {
+    uint key_count;
+    uint flags;
+    float initial_log_gain;
+    float dark_log_gain;
+    float2 keys[68];
+};
+
+static float ResolveLogTarget(ExposureTargetData targets, float raw_ev)
+{
+    if (raw_ev <= targets.keys[0].x) {
+        return targets.keys[0].y;
+    }
+    [loop]
+    for (uint i = 1u; i < targets.key_count; ++i) {
+        if (raw_ev <= targets.keys[i].x) {
+            float2 left = targets.keys[i - 1u];
+            float2 right = targets.keys[i];
+            return lerp(left.y, right.y, (raw_ev - left.x) / (right.x - left.x));
+        }
+    }
+    return targets.keys[targets.key_count - 1u].y;
+}
 
 groupshared uint s_Histogram[HISTOGRAM_BINS];
 
@@ -61,8 +89,9 @@ void ClearHistogram(uint group_index : SV_GroupIndex)
         return;
     }
 
-    ConstantBuffer<AutoExposureHistogramConstants> pass
+    StructuredBuffer<AutoExposureHistogramConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const AutoExposureHistogramConstants pass = pass_buffer[0];
     if (pass.histogram_buffer_index == K_INVALID_BINDLESS_INDEX) {
         return;
     }
@@ -86,8 +115,9 @@ void VortexExposureHistogramCS(
         return;
     }
 
-    ConstantBuffer<AutoExposureHistogramConstants> pass
+    StructuredBuffer<AutoExposureHistogramConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const AutoExposureHistogramConstants pass = pass_buffer[0];
     if (pass.source_texture_index == K_INVALID_BINDLESS_INDEX
         || pass.histogram_buffer_index == K_INVALID_BINDLESS_INDEX) {
         return;
@@ -143,10 +173,12 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    ConstantBuffer<AutoExposureAverageConstants> pass
+    StructuredBuffer<AutoExposureAverageConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const AutoExposureAverageConstants pass = pass_buffer[0];
     if (pass.histogram_buffer_index == K_INVALID_BINDLESS_INDEX
-        || pass.exposure_buffer_index == K_INVALID_BINDLESS_INDEX) {
+        || pass.exposure_buffer_index == K_INVALID_BINDLESS_INDEX
+        || pass.targets_srv == K_INVALID_BINDLESS_INDEX) {
         return;
     }
 
@@ -155,12 +187,17 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     RWByteAddressBuffer exposure_buffer
         = ResourceDescriptorHeap[pass.exposure_buffer_index];
 
-    float previous_luminance = asfloat(exposure_buffer.Load(0));
-    if (previous_luminance <= 0.0) {
-        previous_luminance = max(pass.target_luminance, 0.0001);
+    StructuredBuffer<ExposureTargetData> target_buffer = ResourceDescriptorHeap[pass.targets_srv];
+    const ExposureTargetData targets = target_buffer[0];
+    if (targets.key_count == 0u || targets.key_count > 68u) {
+        return;
     }
-    previous_luminance = max(previous_luminance, 1.0e-6);
-    const float previous_log_luminance = log2(previous_luminance);
+    float previous_latent_gain = asfloat(exposure_buffer.Load(EXPOSURE_LATENT_SCALE_OFFSET));
+    if (!isfinite(previous_latent_gain) || previous_latent_gain <= 0.0) {
+        previous_latent_gain = exp2(targets.initial_log_gain);
+    }
+    const float previous_log_gain = log2(previous_latent_gain);
+    const uint previous_flags = exposure_buffer.Load(EXPOSURE_FLAGS_OFFSET);
 
     uint count = 0;
     [unroll]
@@ -168,7 +205,8 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         count += histogram_buffer.Load(index * 4);
     }
 
-    float target_log_luminance = previous_log_luminance;
+    float target_log_luminance = asfloat(exposure_buffer.Load(EXPOSURE_METER_EV_OFFSET)) + log2(K_MIDDLE_GREY);
+    bool valid_meter = false;
     if (count > 0) {
         float low_bound = saturate(pass.low_percentile) * float(count);
         float high_bound = saturate(pass.high_percentile) * float(count);
@@ -199,32 +237,45 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         if (valid_weight > 0.0) {
             target_log_luminance = weighted_sum / valid_weight;
+            valid_meter = true;
         }
     }
 
-    const float diff = target_log_luminance - previous_log_luminance;
-    const float speed = diff > 0.0
+    const bool locked = (targets.flags & 1u) != 0u;
+    if (!valid_meter && !locked) {
+        exposure_buffer.Store(EXPOSURE_FLAGS_OFFSET,
+            previous_flags & ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID));
+        exposure_buffer.Store(28u, 2u);
+        exposure_buffer.Store2(32u, pass.settings_revision);
+        exposure_buffer.Store2(56u, pass.frame_sequence);
+        return;
+    }
+    const float ev = target_log_luminance - log2(K_MIDDLE_GREY);
+    const float log_target = locked ? targets.keys[0].y : ResolveLogTarget(targets, ev);
+    if (!isfinite(log_target) || log_target < -32.0 || log_target > 32.0) {
+        return;
+    }
+    const float diff = log_target - previous_log_gain;
+    const float speed = diff < 0.0
         ? max(pass.adaptation_speed_up, 0.0)
         : max(pass.adaptation_speed_down, 0.0);
     const float interpolation = saturate(1.0 - exp(-max(pass.delta_time, 0.0) * speed));
-    const float smoothed_log_luminance = lerp(
-        previous_log_luminance, target_log_luminance, interpolation);
-    const float min_average_luminance = K_MIDDLE_GREY * exp2(pass.min_ev);
-    const float max_average_luminance = K_MIDDLE_GREY * exp2(pass.max_ev);
-    const float average_luminance = clamp(
-        max(exp2(smoothed_log_luminance), 0.0001),
-        min_average_luminance,
-        max(max_average_luminance, min_average_luminance));
-
-    float exposure = pass.target_luminance / average_luminance;
-    exposure = clamp(exposure, 1.0e-8, 64000.0);
-    if (exposure != exposure || abs(exposure) > 1.0e6) {
-        exposure = 1.0;
+    const float log_gain = locked || (previous_flags & EXPOSURE_INITIALIZED) == 0u ? log_target
+        : lerp(previous_log_gain, log_target, interpolation);
+    const float latent_gain = exp2(log_gain);
+    const float displayed_gain = (targets.flags & 2u) != 0u ? 0.0 : latent_gain;
+    const float positive_target = exp2(log_target);
+    exposure_buffer.Store4(0u, asuint(float4(displayed_gain,
+        (targets.flags & 2u) != 0u ? 0.0 : positive_target,
+        latent_gain, positive_target)));
+    if (valid_meter) {
+        exposure_buffer.Store2(16u, asuint(float2(exp2(target_log_luminance), ev)));
     }
-
-    const float ev = log2(max(1.0e-4, average_luminance / K_MIDDLE_GREY));
-    exposure_buffer.Store(0, asuint(average_luminance));
-    exposure_buffer.Store(4, asuint(exposure));
-    exposure_buffer.Store(8, asuint(ev));
-    exposure_buffer.Store(12, count);
+    exposure_buffer.Store(EXPOSURE_FLAGS_OFFSET,
+        EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED
+        | (valid_meter ? EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID : 0u)
+        | ((targets.flags & 2u) != 0u ? EXPOSURE_ZERO_TARGET : 0u));
+    exposure_buffer.Store(28u, 0u);
+    exposure_buffer.Store2(32u, pass.settings_revision);
+    exposure_buffer.Store2(56u, pass.frame_sequence);
 }

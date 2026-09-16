@@ -133,6 +133,7 @@ struct RenderContext {
     observer_ptr<graphics::Framebuffer> render_target;
     observer_ptr<graphics::Framebuffer> composite_source;
     observer_ptr<graphics::Framebuffer> primary_target;
+    std::optional<scene::ExposureSettings> exposure_override;
   };
 
   std::unordered_map<size_t, bool> pass_enable_flags;
@@ -185,6 +186,8 @@ struct RenderContext {
     bool with_atmosphere { false };
     bool with_height_fog { false };
     bool with_local_fog { false };
+
+    std::optional<scene::ExposureSettings> exposure_override;
 
     auto Reset() noexcept -> void { *this = ViewSpecific {}; }
 

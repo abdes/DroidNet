@@ -16,6 +16,12 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto GetPostProcessService(SceneRenderer& renderer)
+    -> PostProcessService*
+  {
+    return renderer.post_process_.get();
+  }
+
   static auto GetSceneRenderer(Renderer& renderer) -> SceneRenderer*
   {
     return renderer.scene_renderer_.get();

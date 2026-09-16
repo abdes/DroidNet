@@ -46,6 +46,7 @@ public:
       .with_atmosphere = entry.with_atmosphere,
       .with_height_fog = entry.with_height_fog,
       .with_local_fog = entry.with_local_fog,
+      .exposure_override = entry.exposure_override,
     };
     if (entry.render_mode_override.has_value()) {
       ctx.render_mode = entry.render_mode_override.value();

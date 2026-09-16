@@ -6,7 +6,10 @@
 
 #pragma once
 
+#include <optional>
+
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 
 namespace oxygen::vortex {
 
@@ -29,6 +32,9 @@ struct PostProcessConfig {
   float auto_exposure_log_luminance_range { 25.0F };
   float auto_exposure_target_luminance { 0.18F };
   float auto_exposure_spot_meter_radius { 0.2F };
+  //! Canonical resolved exposure supplied by scene/view settings resolution.
+  std::optional<scene::ResolvedExposureSettings> resolved_exposure;
+  std::uint64_t exposure_settings_revision { 0U };
 };
 
 } // namespace oxygen::vortex

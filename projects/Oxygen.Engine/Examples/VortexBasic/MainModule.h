@@ -27,6 +27,7 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 
@@ -54,10 +55,27 @@ namespace oxygen::examples::vortex_basic {
 class NormalMapValidationTexture;
 
 struct ValidationOptions {
+  enum class ExposureFixture : std::uint8_t {
+    kNone,
+    kFixed,
+    kLockedAuto,
+    kCurveCancellation,
+  };
   bool sidedness_scene { false };
+  ExposureFixture exposure_fixture { ExposureFixture::kNone };
+  float fixed_exposure_ev { 14.0F };
+  float exposure_key { 12.5F };
+  float exposure_compensation { 0.0F };
+  bool exposure_enabled { true };
+  bool camera_exposure { false };
+  bool inject_invalid_exposure { false };
   bool animate { false };
   bool normal_map { false };
   vortex::ShadingMode shading_mode { vortex::ShadingMode::kDeferred };
+  [[nodiscard]] auto IsExposureFixture() const noexcept -> bool
+  {
+    return exposure_fixture != ExposureFixture::kNone;
+  }
 };
 
 //! Procedural native validation scenes for the Vortex renderer.
@@ -131,6 +149,7 @@ private:
     -> std::optional<ResolvedView>;
   auto EnsureScene() -> void;
   auto BuildSidednessScene() -> void;
+  auto BuildExposureScene() -> void;
   auto EnsureCamera(uint32_t width, uint32_t height) -> void;
   auto EnsureLighting() -> void;
   auto UpdateValidationScene(observer_ptr<engine::FrameContext> context)
@@ -162,6 +181,10 @@ private:
 
   ViewId main_view_id_ { kInvalidViewId };
   static inline std::atomic<uint64_t> s_next_view_id_ { 2000 };
+  vortex::CompositionView::ViewStateHandle exposure_view_state_ {
+    vortex::CompositionView::kInvalidViewStateHandle
+  };
+  static inline std::atomic<uint64_t> s_next_exposure_state_ { 1U };
 
   // Intermediate scene framebuffer (color-only, matching window size).
   std::shared_ptr<graphics::Framebuffer> scene_fb_;

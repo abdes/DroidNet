@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <memory>
 
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -24,6 +25,7 @@ PostProcessService::PostProcessService(Renderer& renderer)
   , bloom_pass_(std::make_unique<postprocess::BloomPass>(renderer))
   , tonemap_pass_(std::make_unique<postprocess::TonemapPass>(renderer))
 {
+  SetConfig(config_);
 }
 
 PostProcessService::~PostProcessService() = default;
@@ -61,7 +63,76 @@ auto PostProcessService::OnFrameStart(
 
 auto PostProcessService::SetConfig(const PostProcessConfig& config) -> void
 {
+  if (!config.resolved_exposure) {
+    // Low-level pass clients use the same canonical resolver as scene views.
+    auto settings = scene::ExposureSettings {};
+    settings.mode = config.enable_auto_exposure ? engine::ExposureMode::kAuto
+                                                : engine::ExposureMode::kManual;
+    if (!std::isfinite(config.fixed_exposure)
+      || config.fixed_exposure < 0x1p-32F || config.fixed_exposure > 0x1p32F) {
+      LOG_F(ERROR,
+        "Post-process fixed exposure is outside the supported gain domain");
+      return;
+    }
+    settings.manual_ev = static_cast<float>(
+      -std::log2(static_cast<double>(config.fixed_exposure)));
+    settings.key = engine::kExposureCalibrationKey;
+    settings.metering_mode = config.metering_mode;
+    settings.min_ev = config.auto_exposure_min_ev;
+    settings.max_ev = config.auto_exposure_max_ev;
+    settings.speed_up = config.auto_exposure_speed_up;
+    settings.speed_down = config.auto_exposure_speed_down;
+    settings.low_percentile = config.auto_exposure_low_percentile;
+    settings.high_percentile = config.auto_exposure_high_percentile;
+    settings.min_log_luminance = config.auto_exposure_min_log_luminance;
+    settings.log_luminance_range = config.auto_exposure_log_luminance_range;
+    settings.target_luminance = config.auto_exposure_target_luminance;
+    settings.spot_meter_radius = config.auto_exposure_spot_meter_radius;
+    const auto resolved = scene::ResolveExposureSettings(settings);
+    if (!resolved) {
+      LOG_F(ERROR, "Post-process exposure config rejected: {}",
+        scene::to_string(resolved.error()));
+      return;
+    }
+    config_ = config;
+    config_.resolved_exposure = *resolved;
+    return;
+  }
   config_ = config;
+}
+
+auto PostProcessService::ResolveViewExposureSettings(
+  const CompositionView::ViewStateHandle handle,
+  const scene::ExposureSettings& requested,
+  const std::optional<float> camera_ev) -> const ExposureSettingsState&
+{
+  auto* state = &transient_exposure_settings_;
+  if (handle == CompositionView::kInvalidViewStateHandle) {
+    transient_exposure_settings_ = {};
+  } else {
+    state = &exposure_settings_[handle];
+  }
+  const auto candidate = scene::ResolveExposureSettings(requested, camera_ev);
+  if (!candidate) {
+    if (state->last_error != candidate.error()) {
+      LOG_F(ERROR, "Exposure settings for view state {} rejected: {}",
+        handle.get(), scene::to_string(candidate.error()));
+    }
+    if (state->revision == 0U) {
+      // A new/stateless view cannot inherit another view's last active values.
+      state->resolved
+        = *scene::ResolveExposureSettings(scene::ExposureSettings {});
+    }
+    state->last_error = candidate.error();
+    return *state;
+  }
+  if (state->revision == 0U || state->resolved.authored != requested
+    || state->resolved.fixed_scale != candidate->fixed_scale) {
+    state->resolved = *candidate;
+    ++state->revision;
+  }
+  state->last_error.reset();
+  return *state;
 }
 
 auto PostProcessService::BuildBindings(const Inputs& inputs) const
@@ -158,6 +229,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle) -> void
 {
   published_views_.erase(view_id);
+  exposure_settings_.erase(view_state_handle);
   exposure_pass_->RemoveViewState(view_state_handle);
 }
 

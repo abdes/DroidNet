@@ -1740,8 +1740,9 @@ auto Renderer::PublishRuntimeCompositionView(
       : composition_view.render_settings.render_mode,
     composition_view.view_state_handle, composition_view.view_kind,
     composition_view.feature_profile, composition_view.feature_mask,
-    composition_view.produced_aux_outputs, composition_view.consumed_aux_outputs,
-    std::string(composition_view.name));
+    composition_view.produced_aux_outputs,
+    composition_view.consumed_aux_outputs, std::string(composition_view.name),
+    composition_view.render_settings.exposure);
 
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
@@ -1765,7 +1766,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const CompositionView::ViewFeatureMask feature_mask,
   std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs,
   std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs,
-  std::string debug_name) -> ViewId
+  std::string debug_name,
+  std::optional<scene::ExposureSettings> exposure_override) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
@@ -1784,6 +1786,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.produced_aux_outputs = std::move(produced_aux_outputs);
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
+    it->second.exposure_override = std::move(exposure_override);
     return it->second.published_view_id;
   }
 
@@ -1801,6 +1804,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .produced_aux_outputs = std::move(produced_aux_outputs),
         .consumed_aux_outputs = std::move(consumed_aux_outputs),
         .debug_name = std::move(debug_name),
+        .exposure_override = std::move(exposure_override),
       };
   return published_view_id;
 }
@@ -2372,6 +2376,7 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
         entry.feature_mask = state.feature_mask;
         entry.produced_aux_outputs = state.produced_aux_outputs;
         entry.consumed_aux_outputs = state.consumed_aux_outputs;
+        entry.exposure_override = state.exposure_override;
         break;
       }
     }
