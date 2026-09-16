@@ -316,6 +316,10 @@ NOLINT_TEST_F(ExposureGpuTest, ZeroSpeedAndPauseFreezeOrdinaryAdaptation)
   settings.speed_up = 0.0F;
   EXPECT_EQ(Run(signal, settings, 10.0F).state.latent_scale,
     initial.state.latent_scale);
+  settings.compensation_ev = 10.0F;
+  settings.speed_down = 0.0F;
+  EXPECT_EQ(Run(signal, settings, 10.0F).state.latent_scale,
+    initial.state.latent_scale);
 }
 
 NOLINT_TEST_F(
@@ -452,6 +456,8 @@ NOLINT_TEST_F(
   settings.metering_mode = engine::MeteringMode::kCenterWeighted;
   EXPECT_EQ(Run(signal, settings).histogram[102], 6825U);
   settings.metering_mode = engine::MeteringMode::kSpot;
+  settings.spot_meter_radius = 1.0e-20F;
+  EXPECT_EQ(Run(signal, settings).histogram[102], 4095U);
   settings.spot_meter_radius = 0.0F;
   EXPECT_EQ(Run(signal, settings).histogram[102], 4095U);
   EXPECT_EQ(Run(Uniform(.25F, 2U, 1U), settings).histogram[257], 0U);
@@ -787,6 +793,69 @@ NOLINT_TEST_F(
     EXPECT_NEAR(result.state.raw_metered_ev, -11.0 / 3.0 - std::log2(.18), 2e-4)
       << low_pixels;
   }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, DarkCountersSeparateBlackPositiveBelowWindowAndNegative)
+{
+  const auto pixels = std::array { Pixel { 0, 0, 0, 1 },
+    Pixel { 0x1p-20F, 0x1p-20F, 0x1p-20F, 1 },
+    Pixel { -.25F, -.25F, -.25F, 1 } };
+  const auto result = Run(MakeSignal(3U, 1U, pixels));
+  EXPECT_EQ(result.histogram[256], 3U);
+  EXPECT_EQ(result.histogram[257], 3U);
+  EXPECT_EQ(result.histogram[258], 1U);
+  EXPECT_EQ(result.histogram[259], 1U);
+  EXPECT_EQ(result.histogram[260], 0U);
+  EXPECT_EQ(result.histogram[261], 3U);
+  EXPECT_EQ(result.state.flags & 31U, 27U);
+  EXPECT_EQ(result.state.raw_metered_ev, -6.0F);
+  EXPECT_EQ(result.state.displayed_scale, 64.0F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  AllNonfiniteInputKeepsAutoEvZeroFallbackIndependentOfManualEv)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.manual_ev = 31.0F;
+  const auto result
+    = Run(Uniform(std::numeric_limits<float>::quiet_NaN()), settings);
+  EXPECT_EQ(result.histogram[256], 0U);
+  EXPECT_EQ(result.histogram[260], 1U);
+  EXPECT_EQ(result.state.flags & 15U, 0U);
+  EXPECT_EQ(result.state.displayed_scale, 1.0F);
+  EXPECT_EQ(result.state.latent_scale, 1.0F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ZeroTargetContinuesLatentAdaptationAndUpdatesLastValidMeter)
+{
+  auto settings = scene::ExposureSettings {};
+  Run(Uniform(.25F), settings);
+  settings.target_luminance = 0.0F;
+  const auto dark_output = Run(Uniform(8.0F), settings, 2.0F);
+  EXPECT_EQ(dark_output.state.displayed_scale, 0.0F);
+  EXPECT_EQ(dark_output.state.target_scale, 0.0F);
+  EXPECT_NEAR(dark_output.state.latent_target_scale, .0225F, 2e-6);
+  EXPECT_NEAR(std::log2(dark_output.state.latent_scale),
+    std::log2(.0225) + 1.5 * std::exp(-5.0 / 3.0), 5e-4);
+  EXPECT_NEAR(dark_output.state.raw_metered_ev, std::log2(8.0 / .18), 2e-4);
+  settings.target_luminance = .36F;
+  const auto restored
+    = Run(Uniform(0.0F), settings, 0.0F, nullptr, 1.0F, false);
+  EXPECT_NEAR(restored.state.displayed_scale, .045F, 2e-6);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, LockedCurveUsesBoundInsteadOfRawMeteredEv)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.min_ev = settings.max_ev = 2.0F;
+  settings.compensation_curve = { { 0.0F, -2.0F }, { 4.0F, 6.0F } };
+  EXPECT_NEAR(Run(Uniform(.25F), settings).state.displayed_scale, 1.0F, 2e-6);
+  EXPECT_NEAR(Run(Uniform(8.0F), settings).state.displayed_scale, 1.0F, 2e-6);
+  EXPECT_NEAR(Run(Uniform(0.0F), settings, 0.0F, nullptr, 1.0F, false)
+                .state.displayed_scale,
+    1.0F, 2e-6);
 }
 
 } // namespace

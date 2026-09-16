@@ -920,11 +920,20 @@ checks. Its PNG is byte-identical to the inspected locked-meter image.
 Evidence: `contract-audit/slice3-portable-*`, the before/after solve disassemblies,
 and `metering/portable-*`.
 
-One subsequently added edge regression remains to fix before the slice-3 gate:
-a very small positive Spot radius loses the exact centre sample because the
-current floating-point UV calculation shifts it slightly off centre. The failed
-native case is `contract-audit/slice3-small-spot-before.log`. Derive analytic
-profile distance from integer cell-centre offsets, then requalify this case.
+The exact Spot centre correction passes 34 native cases in Debug and Release.
+Analytic profile distance is computed from integer cell-centre offsets, keeping
+the true centre at zero for tiny positive radii as well as radius zero. The
+new radius=1e-20 case failed with zero mass before correction and now retains
+4095. Additional cases qualify dark subcategories, all-nonfinite EV0 fallback,
+continued positive latent adaptation under displayed zero, fixed curve input
+for locked Auto, and zero SpeedDown. The six-case debugger audit passes with
+zero errors/blocking warnings and six accepted factory shutdown warnings.
+Evidence: `contract-audit/slice3-small-spot-before.log`,
+`contract-audit/slice3-spot-final-*` and `metering/edge-debug-layer.json`.
+
+Slice 3 remains in progress during the final subnormal-curve-input audit.
+The supported authoring contract permits finite curve coordinates, including
+subnormals; interpolation must not depend on hardware subnormal arithmetic.
 Full GPU P routing/upstream range qualification remain slice 5; cooked mask
 persistence belongs to slice 6.
 
