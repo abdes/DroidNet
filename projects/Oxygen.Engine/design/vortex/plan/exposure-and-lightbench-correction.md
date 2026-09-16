@@ -1149,10 +1149,21 @@ qualifies the added entry in both profiles, and RenderDoc verifies the 48-byte
 constants ABI, distinct frame/current-state allocations, exact P/1P and retention
 of the first record after a later resolve. Evidence is
 `lifecycle/frame-resolve-manifest.json` and `lifecycle/frame-resolve-analysis.txt`.
-Renderer publication and Stage 22 do not yet consume this resolve/reserved state;
-the existing CPU-prepared frame binding remains active. The atomic HDR domain
-migration, status-qualified format selection and scene-integrated gates below
-remain open. This checkpoint does not qualify slice 5.
+The post-process service now prepares this domain and Stage 22 writes the
+reserved current state. Metering reads GPU 1/P and tonemapping applies S/P to
+foreground and bloom. Seed P selection preserves prior displayed gain until
+the solve submits; failed solves restore the correct gain into the reserved
+state without acknowledging requests or advancing history. This includes
+zero target and source loss after a failed consumer copy. An unavailable
+fallback skips tonemapping. ACES/Filmic retain their ordinary response and
+remain finite at scene-times-gain 2^64. Debug and Release each pass 106/106
+native, 22/22 service and 22/22 publication tests. Fifteen debugger cases have
+no blocking graphics messages. RenderDoc verifies the reserved-state writes,
+unchanged frame records and final S/P pixels. Evidence is
+`lifecycle/domain-manifest.json` and `lifecycle/domain-analysis.txt`.
+Scene renderer publication still uses the CPU-prepared binding. The full HDR
+producer/consumer migration, status-qualified format selection and scene-
+integrated gates below remain open; this does not qualify slice 5.
 
 - [ ] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/

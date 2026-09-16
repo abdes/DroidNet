@@ -52,11 +52,16 @@ public:
   using graphics::d3d12::Graphics::Graphics;
   bool fail_next_exposure_recorder { false };
   bool fail_next_frame_recorder { false };
+  bool fail_next_fallback_recorder { false };
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, bool immediate = true)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>> override
   {
+    if (fail_next_fallback_recorder && name == "Vortex Exposure Fallback") {
+      fail_next_fallback_recorder = false;
+      return { nullptr, [](graphics::CommandRecorder*) { } };
+    }
     if (fail_next_frame_recorder && name == "Vortex Exposure Frame") {
       fail_next_frame_recorder = false;
       return { nullptr, [](graphics::CommandRecorder*) { } };
@@ -274,7 +279,8 @@ protected:
   }
   auto ServicePixel(PostProcessService& service, const Signal& signal,
     scene::ExposureSettings settings = {}, bool diagnostic = false,
-    float dt = 0.0F, std::function<void()> before_execute = {}) -> float
+    float dt = 0.0F, std::function<void()> before_execute = {},
+    engine::ToneMapper tone_mapper = engine::ToneMapper::kNone) -> float
   {
     settings.key = 12.5F;
     ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
@@ -295,7 +301,7 @@ protected:
       = settings.enabled && settings.mode == engine::ExposureMode::kAuto;
     config.enable_bloom = false;
     config.bloom_intensity = 0.0F;
-    config.tone_mapper = engine::ToneMapper::kNone;
+    config.tone_mapper = tone_mapper;
     config.gamma = 1.0F;
     service.SetConfig(config);
     if (before_execute)
@@ -317,6 +323,8 @@ protected:
         .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
         .scene_signal_srv = signal.srv,
       });
+    if (!service.GetLastExecutionState().tonemap_executed)
+      return std::numeric_limits<float>::quiet_NaN();
     auto readback
       = GetReadbackManager()->CreateTextureReadback("Exposure service pixel");
     {
@@ -3125,6 +3133,295 @@ NOLINT_TEST_F(
     Read<FrameExposureData>(*disabled->buffer, ResourceStates::kShaderResource)
       .pre_exposure,
     1.0F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameDomainSolvesReservedStateAndAppliesManualRatio)
+{
+  const auto capture = BeginOptionalCapture();
+  auto service = PostProcessService(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  postprocess::ExposurePass::FrameLease frame;
+  for (const float ev : { 4.0F, 8.0F }) {
+    settings.manual_ev = ev;
+    const auto pixel = ServicePixel(service,
+      Uniform(.25F * std::exp2(-ev), 4U, 4U), settings, false, 0.0F, [&] {
+        frame = service.PrepareFrameExposure(ctx_, false);
+        ASSERT_NE(frame, nullptr);
+      });
+    EXPECT_NEAR(pixel, .25F * std::exp2(-ev), 2e-7F);
+    ASSERT_NE(frame, nullptr);
+    const auto state
+      = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        service, ctx_.current_view.view_state_handle);
+    EXPECT_EQ(state, frame->current_state);
+    EXPECT_EQ(
+      Read<ExposureStateData>(*state->buffer, ResourceStates::kShaderResource)
+        .displayed_scale,
+      std::exp2(-ev));
+    EXPECT_EQ(
+      Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
+        .pre_exposure,
+      std::exp2(-ev));
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameDomainMetersWithGpuReciprocalAndPreservesZeroAndDisabled)
+{
+  auto service = PostProcessService(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  postprocess::ExposurePass::FrameLease frame;
+  const auto prepare = [&] {
+    frame = service.PrepareFrameExposure(ctx_, false);
+    ASSERT_NE(frame, nullptr);
+  };
+  EXPECT_NEAR(ServicePixel(
+                service, Uniform(.25F, 4U, 4U), settings, false, 0.0F, prepare),
+    .18F, 2e-5F);
+  EXPECT_NEAR(ServicePixel(
+                service, Uniform(.18F, 4U, 4U), settings, false, 0.0F, prepare),
+    .18F, 2e-5F);
+  ASSERT_NE(frame, nullptr);
+  const auto state = Read<ExposureStateData>(
+    *frame->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_NEAR(state.raw_metered_luminance, .25F, 2e-5F);
+  const auto numerical
+    = Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource);
+  EXPECT_NEAR(numerical.pre_exposure, .72F, 2e-5F);
+  settings.target_luminance = 0.0F;
+  EXPECT_EQ(ServicePixel(
+              service, Uniform(.18F, 4U, 4U), settings, false, 0.0F, prepare),
+    0.0F);
+  settings.enabled = false;
+  EXPECT_NEAR(ServicePixel(
+                service, Uniform(.25F, 4U, 4U), settings, false, 0.0F, prepare),
+    .25F, 2e-6F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameDomainFailedSeedKeepsPriorDisplayedGainAndPendingRequest)
+{
+  auto service = PostProcessService(*renderer_);
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  const auto request
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 12.0F);
+  ASSERT_TRUE(request.has_value());
+  postprocess::ExposurePass::FrameLease frame;
+  const auto pixel = ServicePixel(
+    service, Uniform(.25F / 4096.0F, 4U, 4U), {}, false, 0.0F, [&] {
+      frame = service.PrepareFrameExposure(ctx_, false);
+      ASSERT_NE(frame, nullptr);
+      static_cast<ExposureFailureGraphics&>(Backend())
+        .fail_next_exposure_recorder = true;
+    });
+  ASSERT_NE(frame, nullptr);
+  EXPECT_NEAR(pixel, .18F, 2e-5F);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    0x1p-12F);
+  EXPECT_NEAR(Read<ExposureStateData>(
+                *frame->current_state->buffer, ResourceStates::kShaderResource)
+                .displayed_scale,
+    .72F, 2e-5F);
+  EXPECT_EQ(renderer_->InspectExposureTransition(request->target)->phase,
+    ExposureTransitionPhase::kQueued);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameDomainSharedConsumerUsesOwnerGainAndItsOwnNumericalDomain)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame_context = engine::FrameContext {};
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto root = PublishExposureOwner(frame_context, ViewId { 50U },
+    CompositionView::ViewStateHandle { 10U }, settings);
+  const auto consumer = PublishExposureOwner(frame_context, ViewId { 60U },
+    CompositionView::ViewStateHandle { 20U }, {}, ViewId { 50U });
+  ctx_.current_view.view_id = root;
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 10U };
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), settings),
+    .25F / 16.0F, 2e-7F);
+  ctx_.current_view.view_id = consumer;
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 20U };
+  ctx_.current_view.exposure_view_id = root;
+  ctx_.current_view.exposure_view_state_handle
+    = CompositionView::ViewStateHandle { 10U };
+  postprocess::ExposurePass::FrameLease frame;
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F / 16.0F, 4U, 4U), {}, false, 0.0F,
+      [&] {
+        frame = service.PrepareFrameExposure(ctx_, false);
+        ASSERT_NE(frame, nullptr);
+      }),
+    .25F / 16.0F, 2e-7F);
+  ASSERT_NE(frame, nullptr);
+  EXPECT_EQ(frame->current_state->histogram_buffer, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    0x1p-4F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameDomainToneCurvesRemainFiniteAtMaximumSceneTimesGain)
+{
+  auto service = PostProcessService(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = -32.0F;
+  for (const auto mapper : { engine::ToneMapper::kAcesFitted,
+         engine::ToneMapper::kFilmic, engine::ToneMapper::kReinhard }) {
+    const auto pixel = ServicePixel(
+      service, Uniform(0x1p32F, 4U, 4U), settings, false, 0.0F,
+      [&] { ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr); },
+      mapper);
+    EXPECT_TRUE(std::isfinite(pixel));
+    EXPECT_NEAR(pixel, 1.0F, 2e-6F);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameDomainToneCurvesPreserveOrdinaryNeutralResponse)
+{
+  auto service = PostProcessService(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto filmic = [](const double x) {
+    return (x * (.15 * x + .05) + .004) / (x * (.15 * x + .5) + .06) - .02 / .3;
+  };
+  for (const auto mapper : { engine::ToneMapper::kAcesFitted,
+         engine::ToneMapper::kFilmic, engine::ToneMapper::kReinhard }) {
+    for (const double x : { .01, .18, 1.0, 16.0 }) {
+      const double reference = mapper == engine::ToneMapper::kAcesFitted
+        ? (x * (x + .0245786) - .000090537)
+          / (x * (.983729 * x + .4329510) + .238081)
+        : mapper == engine::ToneMapper::kFilmic ? filmic(2.0 * x) / filmic(11.2)
+                                                : x / (x + 1.0);
+      const auto pixel = ServicePixel(
+        service, Uniform(static_cast<float>(x), 4U, 4U), settings, false, 0.0F,
+        [&] { ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr); },
+        mapper);
+      EXPECT_NEAR(pixel, std::clamp(reference, 0.0, 1.0), 2e-5);
+    }
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, FrameDomainFailedSolveStillHonorsZeroTarget)
+{
+  auto service = PostProcessService(*renderer_);
+  ServicePixel(service, Uniform(.25F, 4U, 4U));
+  auto settings = scene::ExposureSettings {};
+  settings.target_luminance = 0.0F;
+  postprocess::ExposurePass::FrameLease frame;
+  EXPECT_EQ(ServicePixel(service, Uniform(.18F, 4U, 4U), settings, false, 0.0F,
+              [&] {
+                frame = service.PrepareFrameExposure(ctx_, false);
+                ASSERT_NE(frame, nullptr);
+                static_cast<ExposureFailureGraphics&>(Backend())
+                  .fail_next_exposure_recorder = true;
+              }),
+    0.0F);
+  ASSERT_NE(frame, nullptr);
+  const auto current = Read<ExposureStateData>(
+    *frame->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(current.displayed_scale, 0.0F);
+  EXPECT_GT(current.latent_scale, 0.0F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FrameDomainFailedSourceLossRetainsLatestBorrowInReservedState)
+{
+  auto& service = OwnedExposureService();
+  auto publication = engine::FrameContext {};
+  const auto consumer = StartSharedServiceView(service, publication);
+  const auto consumer_handle = ctx_.current_view.view_state_handle;
+  const auto old
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      service, consumer_handle);
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 8.0F;
+  const auto root = PublishExposureOwner(publication, ViewId { 50U },
+    CompositionView::ViewStateHandle { 50U }, settings);
+  ctx_.current_view.view_id = root;
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 50U };
+  ctx_.current_view.exposure_view_state_handle
+    = CompositionView::kInvalidViewStateHandle;
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), settings),
+    .25F / 256.0F, 2e-7F);
+  ctx_.current_view.view_id = consumer;
+  ctx_.current_view.view_state_handle = consumer_handle;
+  ctx_.current_view.exposure_view_id = root;
+  ctx_.current_view.exposure_view_state_handle
+    = CompositionView::ViewStateHandle { 50U };
+  const auto fail_copy = [&] {
+    ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr);
+    static_cast<ExposureFailureGraphics&>(Backend()).fail_next_exposure_recorder
+      = true;
+  };
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F / 256.0F, 4U, 4U), {}, false,
+                0.0F, fail_copy),
+    .25F / 256.0F, 2e-7F);
+  renderer_->RemovePublishedRuntimeView(publication, ViewId { 50U });
+  ctx_.current_view.exposure_view_id = consumer;
+  ctx_.current_view.exposure_view_state_handle = consumer_handle;
+  postprocess::ExposurePass::FrameLease frame;
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), {}, false, 0.0F,
+                [&] {
+                  frame = service.PrepareFrameExposure(ctx_, true);
+                  ASSERT_NE(frame, nullptr);
+                  static_cast<ExposureFailureGraphics&>(Backend())
+                    .fail_next_exposure_recorder = true;
+                }),
+    .25F / 256.0F, 2e-7F);
+  ASSERT_NE(frame, nullptr);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *frame->current_state->buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-8F);
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              service, consumer_handle),
+    old);
+  EXPECT_EQ(
+    Read<ExposureStateData>(*old->buffer, ResourceStates::kShaderResource)
+      .displayed_scale,
+    0x1p-4F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, FrameDomainSkipsTonemapWhenFallbackCannotSubmit)
+{
+  auto service = PostProcessService(*renderer_);
+  ServicePixel(service, Uniform(.25F, 4U, 4U));
+  const auto previous
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      service, ctx_.current_view.view_state_handle);
+  static_cast<void>(
+    ServicePixel(service, Uniform(.18F, 4U, 4U), {}, false, 0.0F, [&] {
+      ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr);
+      auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+      backend.fail_next_exposure_recorder = true;
+      backend.fail_next_fallback_recorder = true;
+    }));
+  EXPECT_TRUE(service.GetLastExecutionState().tonemap_requested);
+  EXPECT_FALSE(service.GetLastExecutionState().tonemap_executed);
+  EXPECT_FALSE(service.GetLastExecutionState().wrote_visible_output);
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              service, ctx_.current_view.view_state_handle),
+    previous);
 }
 
 } // namespace

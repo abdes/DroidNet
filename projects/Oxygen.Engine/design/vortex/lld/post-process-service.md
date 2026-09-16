@@ -157,6 +157,16 @@ Candidate selection requires GPU eligibility and a streak
 of at least two; the CPU integration must additionally validate completed
 status identity, settings, event and layout before supplying that candidate.
 
+`PrepareFrameExposure` captures the service revision and resolves the record
+before its caller writes pre-exposed radiance. The subsequent solve writes the
+reserved current state, while the frame record and its P remain unchanged.
+Seed-based P selection does not replace the prior displayed gain before that
+solve submits. On solve failure, a gain-only GPU copy restores the selected
+fallback into the reserved state, including latest-borrow/source-loss continuity
+and zero-target precedence. It imports no source request identity, publishes no
+new adaptation history and acknowledges no request. If the fallback cannot
+submit, the service skips tonemapping rather than consuming an invalid state.
+
 ### ExposureStateData: 80 bytes
 
 | Offset | Type | Field / meaning |
@@ -246,7 +256,9 @@ and mass are distinct.
 Histogram pass constants are a 64-byte structured record: source/histogram
 indices at 0/4, minimum log luminance/inverse span at 8/12, uint content
 left/top/width/height at 16/20/24/28, mode/radius at 32/36, mask index/background
-flag at 40/44, inverse P/black influence at 48/52, and zero padding at 56/60.
+flag at 40/44, fixture inverse P/black influence at 48/52, frame-exposure SRV at
+56, and zero padding at 60. With a valid frame SRV, metering reads 1/P from that
+GPU record; the scalar is used only when no numerical-domain record is supplied.
 The 112-byte unified solve record retains histogram/state indices at 0/4,
 minimum log luminance/span at 8/12, low/high percentiles at 16/20, minimum EV/D
 at 24/28 (D stored as log2), log2 up/down speed at 32/36, log2 delta/target SRV at 40/44, settings revision
@@ -438,6 +450,14 @@ bloom extraction/filtering when present, and tonemapping; Stage 23 extracts and
 hands off the SceneRenderer-owned output. Apply final S/P once, including disabled
 S=1. UI/background composition remains independent. Bloom thresholds are scene
 referred. TAA/TSR slots remain future work, not implied implementation.
+
+Tonemap constants remain 48 bytes: the former padding word at byte 28 now holds
+the frame-exposure SRV (invalid means scene-referred input). The pixel shader
+multiplies current S by that record's 1/P once before mapping foreground and
+bloom. Background composition stays outside this multiplication. ACES and
+Filmic evaluate their existing quadratic ratios after dividing numerator and
+denominator by `max(1, abs(x))^2`, avoiding overflow at the supported scene-times-
+gain endpoint without changing their ordinary response.
 
 Owning tests: PostProcessService, ViewLifecycleService, SceneTextures,
 SceneRendererDeferredCore and ShaderBakeCatalog. Use controlled float inputs

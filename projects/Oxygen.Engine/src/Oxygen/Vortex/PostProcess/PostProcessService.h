@@ -127,6 +127,11 @@ public:
     const Inputs& inputs) const -> PostProcessFrameBindings;
   OXGN_VRTX_API auto PublishBindings(
     ViewId view_id, const PostProcessFrameBindings& bindings) -> ShaderVisibleIndex;
+  //! Resolve before writing pre-exposed radiance; Execute consumes this binding.
+  [[nodiscard]] OXGN_VRTX_API auto PrepareFrameExposure(RenderContext& ctx,
+    bool use_fp32,
+    postprocess::ExposurePass::StateLease qualified_candidate = {})
+    -> postprocess::ExposurePass::FrameLease;
   OXGN_VRTX_API auto Execute(
     ViewId view_id, RenderContext& ctx, const SceneTextures& scene_textures,
     const Inputs& inputs) -> void;
@@ -155,6 +160,8 @@ public:
 
 private:
   friend struct testing::RendererPublicationProbe;
+  auto CaptureConfiguredExposure(ViewId view_id, RenderContext& ctx)
+    -> const ExposureSettingsState&;
   struct CapturedExposureSettings {
     CompositionView::ViewStateHandle handle;
     ExposureSettingsState settings;

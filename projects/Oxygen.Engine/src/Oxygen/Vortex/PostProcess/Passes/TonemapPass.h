@@ -40,9 +40,11 @@ public:
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
     const graphics::Buffer* exposure_buffer { nullptr };
+    const graphics::Buffer* frame_exposure_buffer { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex bloom_texture_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex exposure_buffer_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex frame_exposure_srv { kInvalidShaderVisibleIndex };
     observer_ptr<const graphics::Framebuffer> post_target;
     engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
     float exposure_value { 1.0F };
