@@ -73,10 +73,25 @@ public sealed class ImportService : IImportService
         cancellationToken.ThrowIfCancellationRequested();
 
         var state = this.CreateState(request);
+        var sceneCookingRejected = false;
 
         try
         {
             await this.ProcessInputsAsync(state, cancellationToken).ConfigureAwait(false);
+            if (LooseCookedBuildService.FindSceneRequiringNativeCooking(state.Imported.Concat(state.UpToDateImported)) is { } scene)
+            {
+                // No managed cook has started, so neither partial output nor index repair is appropriate.
+                sceneCookingRejected = true;
+                state.HadFailure = true;
+                state.Diagnostics.Add(
+                    ImportDiagnosticSeverity.Error,
+                    code: "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED",
+                    message: $"Scene '{scene.VirtualPath}' requires the native content pipeline. Managed scene cooking is not supported.",
+                    sourcePath: scene.Source.SourcePath,
+                    virtualPath: scene.VirtualPath);
+                return state.ToResult();
+            }
+
             await BuildAsync(state, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -101,30 +116,35 @@ public sealed class ImportService : IImportService
         finally
         {
             // Keep cooked roots mountable even after partial failures by repairing file records.
-            if (!cancellationToken.IsCancellationRequested && state.HadFailure)
+            if (!sceneCookingRejected && !cancellationToken.IsCancellationRequested && state.HadFailure)
             {
-                try
-                {
-                    var mountPoints = state.Request.Inputs
-                        .Select(static i => i.MountPoint)
-                        .Where(static m => !string.IsNullOrWhiteSpace(m));
-
-                    await LooseCookedBuildService
-                        .RepairIndexFileRecordsAsync(state.Files, mountPoints!, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Respect cancellation.
-                }
-                catch (Exception ex) when (IsRecoverableImportException(ex))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ImportService] Index repair failed: {ex.Message}");
-                }
+                await TryRepairCookedIndexAsync(state, cancellationToken).ConfigureAwait(false);
             }
         }
 
         return state.ToResult();
+    }
+
+    private static async Task TryRepairCookedIndexAsync(ImportState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var mountPoints = state.Request.Inputs
+                .Select(static i => i.MountPoint)
+                .Where(static m => !string.IsNullOrWhiteSpace(m));
+
+            await LooseCookedBuildService
+                .RepairIndexFileRecordsAsync(state.Files, mountPoints!, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Respect cancellation.
+        }
+        catch (Exception ex) when (IsRecoverableImportException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine($"[ImportService] Index repair failed: {ex.Message}");
+        }
     }
 
     private static async Task BuildAsync(ImportState state, CancellationToken cancellationToken)

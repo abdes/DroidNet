@@ -15,6 +15,32 @@ namespace Oxygen.Managed.Assets.Tests;
 public sealed class LooseCookedBuildServiceTests
 {
     [TestMethod]
+    public async Task BuildIndexAsync_ShouldRejectSceneBatchBeforeAnyMountIsChanged()
+    {
+        var files = new InMemoryImportFileAccess();
+        files.AddUtf8("A/Materials/Wood.omat.json", """{"Schema":"oxygen.material.v1","Type":"PBR","Name":"Wood"}""");
+        files.AddUtf8(".cooked/A/Materials/Wood.omat", "previous descriptor");
+        files.AddUtf8(".cooked/A/container.index.bin", "previous index");
+        var source = new ImportedAssetSource("source", ReadOnlyMemory<byte>.Empty, DateTimeOffset.UnixEpoch);
+        ImportedAsset[] assets =
+        [
+            new(new AssetKey(1, 1), "/A/Materials/Wood.omat", "Material", source, [], GeneratedSourcePath: "A/Materials/Wood.omat.json"),
+            new(new AssetKey(2, 2), "/Z/Scenes/Main.oscene", "Scene", source, []),
+        ];
+        var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
+        Func<Task> action = () => build.BuildIndexAsync("C:/Fake", assets, CancellationToken.None);
+
+        _ = await action.Should().ThrowAsync<NotSupportedException>().WithMessage("*native content pipeline*").ConfigureAwait(false);
+
+        _ = files.WriteCount.Should().Be(0);
+        _ = files.TryGet(".cooked/A/Materials/Wood.omat", out var descriptor).Should().BeTrue();
+        _ = System.Text.Encoding.UTF8.GetString(descriptor).Should().Be("previous descriptor");
+        _ = files.TryGet(".cooked/A/container.index.bin", out var index).Should().BeTrue();
+        _ = System.Text.Encoding.UTF8.GetString(index).Should().Be("previous index");
+        _ = files.TryGet(".cooked/Z/Scenes/Main.oscene", out _).Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task BuildIndexesAsync_ShouldWriteContainerIndexForCookedMaterial()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
@@ -152,6 +178,8 @@ public sealed class LooseCookedBuildServiceTests
     {
         private readonly ConcurrentDictionary<string, Entry> files = new(StringComparer.Ordinal);
 
+        public int WriteCount { get; private set; }
+
         public void AddUtf8(string relativePath, string text)
         {
             ArgumentNullException.ThrowIfNull(relativePath);
@@ -207,6 +235,7 @@ public sealed class LooseCookedBuildServiceTests
         public ValueTask WriteAllBytesAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            this.WriteCount++;
             this.files[relativePath] = new Entry(bytes.ToArray(), DateTimeOffset.UtcNow);
             return ValueTask.CompletedTask;
         }

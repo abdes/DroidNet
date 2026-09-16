@@ -7,7 +7,6 @@ using System.Text.Json;
 using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Assets.Import.Geometry;
 using Oxygen.Managed.Assets.Import.Materials;
-using Oxygen.Managed.Assets.Import.Scenes;
 using Oxygen.Managed.Assets.Import.Textures;
 using SharpGLTF.Schema2;
 
@@ -40,29 +39,6 @@ internal sealed class IntermediateAssetLoader
         {
             var bytes = await this.fileAccess.ReadAllBytesAsync(asset.GeneratedSourcePath, ct).ConfigureAwait(false);
             return JsonSerializer.Deserialize<MaterialSource>(bytes.Span, JsonOptions);
-        }
-        catch (FileNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    public async Task<SceneSource?> LoadSceneAsync(ImportedAsset asset, CancellationToken ct)
-    {
-        if (asset.Payload is SceneSource ss)
-        {
-            return ss;
-        }
-
-        if (string.IsNullOrEmpty(asset.GeneratedSourcePath))
-        {
-            return null;
-        }
-
-        try
-        {
-            var bytes = await this.fileAccess.ReadAllBytesAsync(asset.GeneratedSourcePath, ct).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<SceneSource>(bytes.Span, JsonOptions);
         }
         catch (FileNotFoundException)
         {

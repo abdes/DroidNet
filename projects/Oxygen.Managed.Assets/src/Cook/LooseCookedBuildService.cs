@@ -17,6 +17,8 @@ namespace Oxygen.Managed.Assets.Cook;
 /// <remarks>
 /// MVP responsibility: write <c>container.index.bin</c> for each mount point based on descriptor files
 /// that already exist under <c>.cooked/&lt;MountPoint&gt;/</c>.
+/// Scene-containing batches are rejected before any cooked files change. Scene cooking and publication
+/// belong to the native content pipeline.
 /// </remarks>
 public sealed class LooseCookedBuildService
 {
@@ -50,6 +52,7 @@ public sealed class LooseCookedBuildService
     /// <param name="imported">Imported assets that have corresponding cooked descriptors written.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task that completes when the index has been written.</returns>
+    /// <exception cref="NotSupportedException">The batch contains a scene that requires native cooking.</exception>
     public async Task BuildIndexAsync(
         string projectRoot,
         IReadOnlyList<ImportedAsset> imported,
@@ -72,6 +75,12 @@ public sealed class LooseCookedBuildService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (FindSceneRequiringNativeCooking(imported) is { } scene)
+        {
+            throw new NotSupportedException(
+                $"Scene '{scene.VirtualPath}' requires the native content pipeline. Managed scene cooking is not supported.");
+        }
+
         var groups = imported
             .GroupBy(static a => GetMountPointFromVirtualPath(a.VirtualPath), StringComparer.Ordinal)
             .OrderBy(static g => g.Key, StringComparer.Ordinal);
@@ -83,6 +92,12 @@ public sealed class LooseCookedBuildService
             cancellationToken.ThrowIfCancellationRequested();
             await BuildSingleMountIndexAsync(files, loader, group.Key, group, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    internal static ImportedAsset? FindSceneRequiringNativeCooking(IEnumerable<ImportedAsset> imported)
+    {
+        ArgumentNullException.ThrowIfNull(imported);
+        return imported.FirstOrDefault(static asset => string.Equals(asset.AssetType, "Scene", StringComparison.OrdinalIgnoreCase));
     }
 
     internal static async Task RepairIndexFileRecordsAsync(
@@ -222,12 +237,6 @@ public sealed class LooseCookedBuildService
                 stage: "CookTexture",
                 mountPoint,
                 () => CookTextureAsync(files, loader, mountPoint, group, newFileRecords, cancellationToken))
-            .ConfigureAwait(false);
-
-        await RunBestEffortAsync(
-                stage: "CookScene",
-                mountPoint,
-                () => CookSceneAsync(files, loader, group, existingAssets.Values, cancellationToken))
             .ConfigureAwait(false);
 
         await RunBestEffortAsync(
@@ -509,57 +518,6 @@ public sealed class LooseCookedBuildService
             }
 
             await files.WriteAllBytesAsync(cookedDescriptorPath, cookedBytes, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static async Task CookSceneAsync(
-        IImportFileAccess files,
-        IntermediateAssetLoader loader,
-        IGrouping<string, ImportedAsset> group,
-        IEnumerable<AssetEntry> existingAssets,
-        CancellationToken cancellationToken)
-    {
-        var scenes = group
-            .Where(static a => string.Equals(a.AssetType, "Scene", StringComparison.Ordinal))
-            .ToList();
-
-        if (scenes.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var asset in scenes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var source = await loader.LoadSceneAsync(asset, cancellationToken).ConfigureAwait(false);
-            if (source == null)
-            {
-                continue;
-            }
-
-            var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
-            var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
-
-            var descriptor = new MemoryStream();
-            await using (descriptor.ConfigureAwait(false))
-            {
-                CookedSceneWriter.Write(descriptor, source, ResolveGeometryKey);
-            }
-
-            await files.WriteAllBytesAsync(cookedDescriptorPath, descriptor.ToArray(), cancellationToken).ConfigureAwait(false);
-        }
-
-        AssetKey? ResolveGeometryKey(string virtualPath)
-        {
-            var groupMatch = group.FirstOrDefault(a => string.Equals(a.VirtualPath, virtualPath, StringComparison.Ordinal));
-            if (groupMatch is not null)
-            {
-                return groupMatch.AssetKey;
-            }
-
-            var existingMatch = existingAssets.FirstOrDefault(a => string.Equals(a.VirtualPath, virtualPath, StringComparison.Ordinal));
-            return existingMatch?.AssetKey;
         }
     }
 

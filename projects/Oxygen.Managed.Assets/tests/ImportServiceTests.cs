@@ -15,6 +15,72 @@ namespace Oxygen.Managed.Assets.Tests;
 public sealed class ImportServiceTests
 {
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task ImportAsync_ShouldRejectSceneCookingWithoutRepairingExistingCookedFiles(bool failFast)
+    {
+        const string sourcePath = "Content/Models/Scene.glb";
+        const string indexPath = ".cooked/Content/container.index.bin";
+        const string tablePath = ".cooked/Content/resources/buffers.table";
+        var files = new InMemoryImportFileAccess();
+        _ = await SeedStaleIndexAsync(files, tablePath, indexPath, "resources/buffers.table").ConfigureAwait(false);
+        files.AddUtf8(sourcePath, "scene source");
+        _ = files.TryGet(indexPath, out var originalIndex).Should().BeTrue();
+        var writesBefore = files.WriteCount;
+        var registry = new ImporterRegistry();
+        registry.Register(new SceneOutputImporter());
+        var service = new ImportService(
+            registry,
+            fileAccessFactory: _ => files,
+            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
+
+        var request = new ImportRequest(
+            "C:/Fake",
+            [new ImportInput(sourcePath, "Content")],
+            new ImportOptions(FailFast: failFast));
+        var result = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        var diagnostic = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED").Which;
+        _ = diagnostic.Severity.Should().Be(ImportDiagnosticSeverity.Error);
+        _ = diagnostic.SourcePath.Should().Be(sourcePath);
+        _ = diagnostic.VirtualPath.Should().Be("/Content/Scenes/Main.oscene");
+        _ = files.WriteCount.Should().Be(writesBefore);
+        _ = files.TryGet(indexPath, out var unchangedIndex).Should().BeTrue();
+        _ = unchangedIndex.Should().Equal(originalIndex);
+        _ = files.TryGet(".cooked/Content/Scenes/Main.oscene", out _).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task ImportAsync_ShouldRejectCachedSceneOutputsInsteadOfReportingSuccessfulNoOp()
+    {
+        const string sourcePath = "Content/Models/Scene.glb";
+        var files = new InMemoryImportFileAccess();
+        files.AddUtf8(sourcePath, "scene source");
+        var importer = new SceneOutputImporter();
+        var registry = new ImporterRegistry();
+        registry.Register(importer);
+        var service = new ImportService(
+            registry,
+            fileAccessFactory: _ => files,
+            identityPolicyFactory: static (fileAccess, input, selected, options) => new SidecarAssetIdentityPolicy(fileAccess, input, selected, options));
+        var request = new ImportRequest("C:/Fake", [new ImportInput(sourcePath, "Content")], new ImportOptions());
+
+        var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+        _ = first.Succeeded.Should().BeFalse();
+        _ = first.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        var writesAfterFirst = files.WriteCount;
+        var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+        _ = importer.ImportCallCount.Should().Be(1);
+        _ = second.Succeeded.Should().BeFalse();
+        _ = second.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_UP_TO_DATE");
+        _ = second.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = files.WriteCount.Should().Be(writesAfterFirst);
+        _ = files.TryGet(".cooked/Content/container.index.bin", out _).Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task ImportAsync_ShouldSelectMaterialImporterAndWriteCookedOutput()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
@@ -362,6 +428,34 @@ public sealed class ImportServiceTests
         }
 
         private sealed record Entry(byte[] Bytes, DateTimeOffset LastWriteTimeUtc);
+    }
+
+    private sealed class SceneOutputImporter : IAssetImporter
+    {
+        public string Name => "SceneOutput";
+
+        public int Priority => 0;
+
+        public int ImportCallCount { get; private set; }
+
+        public bool CanImport(ImportProbe probe) => probe.Extension.Equals(".glb", StringComparison.OrdinalIgnoreCase);
+
+        public async Task<IReadOnlyList<ImportedAsset>> ImportAsync(ImportContext context, CancellationToken cancellationToken)
+        {
+            this.ImportCallCount++;
+            var bytes = await context.Files.ReadAllBytesAsync(context.Input.SourcePath, cancellationToken).ConfigureAwait(false);
+            var metadata = await context.Files.GetMetadataAsync(context.Input.SourcePath, cancellationToken).ConfigureAwait(false);
+            const string virtualPath = "/Content/Scenes/Main.oscene";
+            return
+            [
+                new ImportedAsset(
+                    context.Identity.GetOrCreateAssetKey(virtualPath, "Scene"),
+                    virtualPath,
+                    "Scene",
+                    new ImportedAssetSource(context.Input.SourcePath, SHA256.HashData(bytes.Span), metadata.LastWriteTimeUtc),
+                    [new ImportedDependency(context.Input.SourcePath, ImportedDependencyKind.SourceFile)]),
+            ];
+        }
     }
 
     private sealed class ThrowingImporter : IAssetImporter
