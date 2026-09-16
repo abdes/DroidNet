@@ -70,8 +70,7 @@ protected:
       .size = path_finder_config_json_.size(),
     };
 
-    graphics_ = std::make_shared<oxygen::graphics::d3d12::Graphics>(
-      backend_config, path_finder_config);
+    graphics_ = CreateBackend(backend_config, path_finder_config);
     ASSERT_NE(graphics_, nullptr);
 
     graphics_->CreateCommandQueues(*queue_strategy_);
@@ -98,6 +97,14 @@ protected:
   [[nodiscard]] virtual auto BackendConfigJson() const -> std::string
   {
     return "{}";
+  }
+
+  [[nodiscard]] virtual auto CreateBackend(
+    const SerializedBackendConfig& config,
+    const SerializedPathFinderConfig& paths)
+    -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>
+  {
+    return std::make_shared<oxygen::graphics::d3d12::Graphics>(config, paths);
   }
 
   [[nodiscard]] virtual auto PathFinderConfigJson() const -> std::string

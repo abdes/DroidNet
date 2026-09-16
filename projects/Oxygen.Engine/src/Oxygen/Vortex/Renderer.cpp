@@ -38,6 +38,8 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
@@ -660,7 +662,8 @@ auto Renderer::PrepareExposureDetach(CompositionView::ViewStateHandle target,
       return item.second.view_state_handle == target;
     });
   if (view == published_runtime_views_by_intent_.end()
-    || !view->second.pending_exposure_detach)
+    || (!view->second.pending_exposure_detach
+      && !view->second.pending_source_loss))
     return;
   const auto pending = exposure_transitions_.find(target);
   const bool explicit_override = pending != exposure_transitions_.end()
@@ -669,11 +672,15 @@ auto Renderer::PrepareExposureDetach(CompositionView::ViewStateHandle target,
     && pending->second.status->request.generation
       > pending->second.submitted_generation;
   if (!explicit_override) {
-    const auto issued = IssueExposureTransitionLocked(target, policy, {}, true);
+    const auto issued = IssueExposureTransitionLocked(target,
+      view->second.pending_source_loss ? ExposureTransitionPolicy::kPreserve
+                                       : policy,
+      {}, true);
     CHECK_F(
       issued.has_value(), "Exposure detach generation could not be allocated");
   }
   view->second.pending_exposure_detach = false;
+  view->second.pending_source_loss.reset();
 }
 
 auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
@@ -682,6 +689,12 @@ auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
   if (target == CompositionView::kInvalidViewStateHandle)
     return 0U;
   std::unique_lock lock(view_state_mutex_);
+  return EnsureExposureLifetimeLocked(target);
+}
+
+auto Renderer::EnsureExposureLifetimeLocked(
+  CompositionView::ViewStateHandle target) -> std::uint64_t
+{
   const auto [found, inserted] = exposure_transitions_.try_emplace(target);
   if (inserted) {
     const auto lifetime = AllocateExposureLifetime();
@@ -2066,6 +2079,13 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
 
+  auto inherited_exposure = scene::ExposureSettings {};
+  if (const auto scene = frame_context.GetScene();
+    scene && scene->GetEnvironment()) {
+    if (const auto post = scene->GetEnvironment()
+          ->TryGetSystem<scene::environment::PostProcessVolume>())
+      inherited_exposure = post->GetExposureSettings();
+  }
   std::unique_lock state_lock(view_state_mutex_);
   const auto existing = published_runtime_views_by_intent_.find(intent_view_id);
   const auto existing_id = existing != published_runtime_views_by_intent_.end()
@@ -2124,6 +2144,9 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
     it->second.exposure_override = std::move(exposure_override);
+    it->second.inherited_exposure = inherited_exposure;
+    if (old_handle != view_state_handle || source != kInvalidViewId)
+      it->second.pending_source_loss.reset();
     it->second.pending_exposure_detach = old_handle == view_state_handle
       && source == kInvalidViewId
       && (it->second.pending_exposure_detach
@@ -2157,6 +2180,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .debug_name = std::move(debug_name),
         .exposure_override = std::move(exposure_override),
         .exposure_source_view_id = source,
+        .inherited_exposure = std::move(inherited_exposure),
       };
   return published_view_id;
 }
@@ -2218,7 +2242,8 @@ auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
       || root->render_mode_override.value_or(default_mode)
         == RenderMode::kWireframe
       || root->feature_profile
-        == CompositionView::ViewFeatureProfile::kDiagnosticsOnly };
+        == CompositionView::ViewFeatureProfile::kDiagnosticsOnly,
+    .source_loss = root->pending_source_loss };
 }
 
 auto Renderer::GetRegisteredExposureIntents() const
@@ -2247,7 +2272,8 @@ auto Renderer::GetRegisteredExposureIntents() const
         || state.render_mode_override.value_or(default_mode)
           == RenderMode::kWireframe
         || state.feature_profile
-          == CompositionView::ViewFeatureProfile::kDiagnosticsOnly });
+          == CompositionView::ViewFeatureProfile::kDiagnosticsOnly,
+      .source_loss = state.pending_source_loss });
   }
   return intents;
 }
@@ -2255,38 +2281,64 @@ auto Renderer::GetRegisteredExposureIntents() const
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
   -> DetachedPublishedRuntimeViewState
 {
-  if (intent_view_id == kInvalidViewId) {
+  if (intent_view_id == kInvalidViewId)
     return {};
-  }
-
+  std::shared_lock registration_lock(view_registration_mutex_);
   std::unique_lock state_lock(view_state_mutex_);
-  if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
-    it != published_runtime_views_by_intent_.end()) {
-    const auto detached = DetachedPublishedRuntimeViewState {
-      .published_view_id = it->second.published_view_id,
-      .view_state_handle = it->second.view_state_handle,
-    };
-    // Resolve all affected chains before changing any edge.
-    auto consumers = std::vector<ViewId> {};
-    for (const auto& [intent, state] : published_runtime_views_by_intent_) {
-      if (intent != intent_view_id
-        && !ResolvePublishedExposureRootLocked(
-          state.published_view_id, detached.published_view_id))
-        consumers.push_back(intent);
+  const auto found = published_runtime_views_by_intent_.find(intent_view_id);
+  if (found == published_runtime_views_by_intent_.end())
+    return {};
+  auto detached = DetachedPublishedRuntimeViewState { .published_view_id
+    = found->second.published_view_id,
+    .view_state_handle = found->second.view_state_handle };
+  const auto* root
+    = ResolvePublishedExposureRootLocked(detached.published_view_id);
+  CHECK_NOTNULL_F(root);
+  auto loss = std::make_shared<ExposureSourceLoss>();
+  loss->source_view_id = root->published_view_id;
+  loss->source_handle = root->view_state_handle;
+  loss->source_lifetime
+    = root->view_state_handle == CompositionView::kInvalidViewStateHandle
+    ? 0U
+    : EnsureExposureLifetimeLocked(root->view_state_handle);
+  loss->settings = root->exposure_override.value_or(root->inherited_exposure);
+  if (const auto camera = resolved_views_.find(root->published_view_id);
+    camera != resolved_views_.end())
+    loss->camera_ev = camera->second.CameraEv();
+  if (const auto control = exposure_transitions_.find(root->view_state_handle);
+    control != exposure_transitions_.end() && control->second.status) {
+    const auto& status = *control->second.status;
+    if (status.phase == ExposureTransitionPhase::kQueued
+      || status.phase == ExposureTransitionPhase::kRejected) {
+      loss->transition = status.request;
+      loss->rejection = status.error;
     }
-    for (const auto consumer : consumers) {
-      published_runtime_views_by_intent_.at(consumer).exposure_source_view_id
-        = kInvalidViewId;
-      LOG_F(WARNING,
-        "Exposure source for intent view {} was removed; "
-        "detaching to independent exposure",
-        consumer);
-    }
-    published_runtime_views_by_intent_.erase(it);
-    return detached;
   }
-
-  return {};
+  // Resolve every affected chain before mutating any edge.
+  auto consumers = std::vector<ViewId> {};
+  for (const auto& [intent, state] : published_runtime_views_by_intent_) {
+    if (intent != intent_view_id
+      && !ResolvePublishedExposureRootLocked(
+        state.published_view_id, detached.published_view_id)) {
+      consumers.push_back(intent);
+      loss->consumers.push_back({ state.view_state_handle,
+        EnsureExposureLifetimeLocked(state.view_state_handle) });
+    }
+  }
+  for (const auto consumer : consumers) {
+    auto& state = published_runtime_views_by_intent_.at(consumer);
+    state.exposure_source_view_id = kInvalidViewId;
+    state.pending_exposure_detach = false;
+    state.pending_source_loss = loss;
+    LOG_F(WARNING,
+      "Exposure source for intent view {} was removed; detaching with gain "
+      "continuity",
+      consumer);
+  }
+  if (!consumers.empty())
+    detached.source_loss = std::move(loss);
+  published_runtime_views_by_intent_.erase(found);
+  return detached;
 }
 
 auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
@@ -2297,6 +2349,8 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
     return;
   }
 
+  if (scene_renderer_ && detached.source_loss)
+    scene_renderer_->PreserveRemovedExposureSource(detached.source_loss);
   RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(
@@ -2319,6 +2373,8 @@ auto Renderer::RemovePublishedRuntimeView(
   }
 
   frame_context.RemoveView(detached.published_view_id);
+  if (scene_renderer_ && detached.source_loss)
+    scene_renderer_->PreserveRemovedExposureSource(detached.source_loss);
   RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(

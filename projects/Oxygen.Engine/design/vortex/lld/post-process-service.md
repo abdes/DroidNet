@@ -360,6 +360,21 @@ zero target wins. If borrowed displayed gain was zero but local target positive,
 retain zero only for the continuity frame, then use the positive latent gain
 while awaiting a valid meter. Missing publication uses captured root fallback.
 
+Removal snapshots the root definition, pending seed/rejection and affected
+consumer lifetimes before erasing registry edges. Existing services retain the
+root's immutable GPU publication immediately; a service created later can use
+the captured initialization definition. Deferred delivery targets only the
+consumer still awaiting its event, so a diagnostic sibling cannot replay an
+already-consumed event or recreate a retired consumer.
+
+Each consumer retains its last selected borrowed state separately from its last
+successful solve. This includes direct-root fallback selected after a failed
+consumer copy; failed work does not advance its solve or transition identity.
+Continuity copies only gain fields from that selection, preserving the
+consumer's request identity and clearing foreign metering history. Its displayed
+zero is held for that event frame without taking a logarithm or reciprocal;
+the following invalid-meter frame uses the retained positive latent gain.
+
 ## Bootstrap, recovery and format eligibility
 
 Use the two modes and suitability rules in
@@ -428,7 +443,7 @@ The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefi
 is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
 (Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
 bit 0, source initialization fallback bit 1, captured rejection reason in bits
-2..5), request generation uint2 at 80,
+2..5, source-loss continuity bit 6), request generation uint2 at 80,
 policy at 88 (none=0, Preserve=1, Remeter=2, Seed=3), seed log gain at 92,
 status UAV at 96, borrowed prior-state SRV at 100 (invalid for owner solves),
 and view lifetime uint2 at 104. State flags add mode in bits 10..11,

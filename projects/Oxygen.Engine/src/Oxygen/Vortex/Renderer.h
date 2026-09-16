@@ -730,6 +730,8 @@ private:
     ExposureTransitionPolicy policy) -> void;
   auto EnsureExposureLifetime(CompositionView::ViewStateHandle target)
     -> std::uint64_t;
+  auto EnsureExposureLifetimeLocked(CompositionView::ViewStateHandle target)
+    -> std::uint64_t;
   auto CapturedExposureRejection(
     CompositionView::ViewStateHandle target, frame::SequenceNumber frame) const
     -> std::optional<ExposureTransitionError>;
@@ -751,6 +753,7 @@ private:
     std::optional<scene::ExposureSettings> settings;
     std::optional<float> camera_ev;
     bool diagnostic { false };
+    std::shared_ptr<const ExposureSourceLoss> source_loss;
   };
   auto GetExposureSourceIntent(ViewId source_view_id) const
     -> std::optional<ExposureSourceIntent>;
@@ -776,6 +779,8 @@ private:
     std::optional<scene::ExposureSettings> exposure_override;
     ViewId exposure_source_view_id { kInvalidViewId };
     bool pending_exposure_detach { false };
+    scene::ExposureSettings inherited_exposure;
+    std::shared_ptr<const ExposureSourceLoss> pending_source_loss;
   };
 
   //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.
@@ -788,6 +793,7 @@ private:
     CompositionView::ViewStateHandle view_state_handle {
       CompositionView::kInvalidViewStateHandle
     };
+    std::shared_ptr<const ExposureSourceLoss> source_loss;
   };
 
   static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {

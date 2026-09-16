@@ -1067,8 +1067,19 @@ stateless replacement and retained GPU readers. Debug and Release each pass
 75/75 native, 21/21 service, 21/21 publication and 39/39 renderer regression tests.
 Nine focused debugger cases have no blocking graphics messages. Evidence is
 `lifecycle/detach-lifetime-manifest.json`.
-Source-destruction continuity and the remaining implicit lifecycle events
-remain open; slice 4 is not qualified.
+Source-destruction continuity is implemented with captured source definitions,
+retained GPU publications and per-consumer delivery. Auto preserves one displayed
+and positive latent-gain frame, including borrowed zero; subsequent invalid
+metering uses positive latent gain. Fixed/zero-target/explicit policies retain
+their precedence. Never-rendered source fallback, chain detachment, diagnostic
+siblings and retired consumers have native coverage. The exact borrowed state
+selected after a failed consumer copy is retained separately from successful
+solve history, without importing source request identity or acknowledging failed
+work. Debug and Release pass 81/81 native, 21/21 service, 21/21 publication and
+39/39 renderer regressions. Six focused debugger cases have no blocking graphics
+messages. Evidence is `lifecycle/source-loss-manifest.json`.
+Implicit camera/world/device events and the remaining slice-4 integration/capture
+gates remain open; slice 4 is not qualified.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
 
@@ -1077,10 +1088,10 @@ slice 5 work.
   recording/submission failure, invalid metering and idempotent retries.
 - [ ] Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
-  Remaining lifecycle coverage must include destroyed-source continuity,
-  including borrowed zero and never-rendered source fallback. Default detach,
-  lifetime-safe history selection, inactive-owner validation and acknowledgement
-  after readback backpressure are covered by the checkpoints above.
+  Remaining lifecycle coverage must include implicit camera/world/device events.
+  Source-destruction continuity, default detach, lifetime-safe history selection,
+  inactive-owner validation and acknowledgement after readback backpressure are
+  covered by the checkpoints above.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,

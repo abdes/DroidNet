@@ -107,8 +107,13 @@ history/handle replacement now pass 75 native, 21 service, 21 publication and
 39 renderer regression tests per configuration, plus nine debugger cases.
 Public handle-handoff coverage includes queued/applied history, mask retirement,
 stateless replacement and retained readers; evidence is
-`lifecycle/detach-lifetime-manifest.json`. Source-destruction continuity and
-remaining implicit lifecycle events remain open; slice 4 is still in progress.
+`lifecycle/detach-lifetime-manifest.json`. Source-destruction continuity now
+passes 81 native, 21 service, 21 publication and 39 renderer regressions per
+configuration, plus six debugger cases. Coverage includes borrowed zero,
+never-rendered source fallback, diagnostic siblings, retired consumers and the
+latest selected fallback after a failed consumer copy; evidence is
+`lifecycle/source-loss-manifest.json`. Implicit camera/world/device events and
+the remaining integration/capture gates keep slice 4 in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

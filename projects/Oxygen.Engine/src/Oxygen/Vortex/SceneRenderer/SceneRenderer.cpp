@@ -2523,6 +2523,13 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
 
 void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
+void SceneRenderer::PreserveRemovedExposureSource(
+  std::shared_ptr<const ExposureSourceLoss> loss)
+{
+  if (post_process_)
+    post_process_->PreserveRemovedExposureSource(std::move(loss));
+}
+
 void SceneRenderer::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle)
 {
