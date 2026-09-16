@@ -11,6 +11,7 @@ implementation-preparation workstream.
 
 | Document | Purpose |
 | --- | --- |
+| [exposure-and-lightbench-correction.md](exposure-and-lightbench-correction.md) | Complete desktop global exposure, HDR integration, a first-class LightBench visual exposure benchmark, and mandatory MultiView visual/exposure correctness. |
 | [editor-v01-rendering-contract.md](editor-v01-rendering-contract.md) | ED-M08 native scene/light/shadow/view/post-process implementation contract; execution order belongs to the linked editor plan. |
 | [editor-v01-captured-sky-ibl.md](editor-v01-captured-sky-ibl.md) | Captured-sky diffuse/specular products, filtering, Stage 13 ownership, readiness and qualification. |
 | [editor-v01-deferred-capabilities.md](editor-v01-deferred-capabilities.md) | V0.1 exclusions and stable source-local deferred capability IDs. |
