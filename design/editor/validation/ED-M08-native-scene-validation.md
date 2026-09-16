@@ -2,10 +2,17 @@
 
 ## Status
 
+**Sponza normal-view acceptance remains open.** Its source lights have been
+repaired and recooked, and the persisted RenderScene configuration produces a
+visible lit scene. The lit capture exposes gold-colored speckling that requires
+diagnosis. Directional-light selection and exposure qualification also remain
+open; visibility alone does not establish a correct rendering result.
+
 The final Release sweep `20260916-071101` passed load/capture acceptance for all
 20 scenes and exited zero. Every image was independently inspected: 19 show the
-expected scene forms/materials; Sponza's lit image remains dark under its authored
-zero-intensity lights. All 20 results record settings and history restoration.
+expected scene forms/materials; that sweep's Sponza image is dark under its then
+zero-intensity source lights. All 20 results record settings and history
+restoration. The subsequent source repair below does not relabel those results.
 No new empty/off-target view or scene-obscuring fog blanket was observed in the
 19 visible scenes. Single images do not establish temporal stability or parity.
 
@@ -70,7 +77,7 @@ profile makes this fixture useful without claiming that the specified
 background and Fixed-bar exclusion from metering or authored post-process precedence is
 implemented.
 
-## Sponza source, camera and diagnostic image
+## Sponza source lighting and current visual limits
 
 The glTF camera and directional/spot-light attachment basis correction was
 recooked from all four original models by the maintained reimport script.
@@ -78,18 +85,58 @@ recooked from all four original models by the maintained reimport script.
 publication to the standard RenderScene cooked root; original-source hashes,
 the manifest, validation output and protected prior content are retained there.
 
-The original Sponza glTF contains 24 authored lights, all with intensity zero.
-The corrected scene has 162 native nodes, 115 renderables, six perspective
-cameras, one directional light and 23 point lights. The original artist camera
-is retained. No camera profile or authored-light override is applied; the native
-log records that the preview sun is skipped because a directional light exists.
-A dark lit image therefore remains expected for this authored lighting setup.
+The original Sponza glTF had 24 lights with intensity zero. Its source at
+`F:/projects/main_sponza/NewSponza_Main_glTF_003.gltf` now authors the directional
+light at 100,000 lux and all 23 point lights at 200 candela each. These are explicit
+baseline authoring values, not recovered exporter values or a physical-rendering
+calibration. The point named `HDRI_SKY` remains a point light. Only the 24 intensity
+scalars changed; transforms, colors, materials, cameras and geometry are preserved.
+The original bytes and a semantic comparison are retained under
+`out/build-ninja/ed-m08/sponza-settings-20260916`.
+
+The maintained reimport run `20260916-070124-09434a16` rebuilt the standard
+`Examples/RenderScene/.cooked` root and passed native validation for all four
+models: 3,537 assets and 239 non-fallback textures, with BC7/full mip chains.
+Source hashes, output hashes and the protected previous generation are retained
+under `out/build-ninja/renderscene-reimport`.
+
+RenderScene's actual local settings now retain the HDR cubemap as RGBA16F,
+specified-cubemap sky lighting, normal lit mode and automatic exposure. The
+Use Scene startup policy is unchanged. Settings backups are retained; diagnostic
+runs restore the exact settings bytes captured before those runs. A persisted
+startup run and a subsequent authored-light run use no scene, skybox, debug-mode
+or CVar CLI overrides. Both exit zero and publish valid current-key static IBL.
+
+The authored-light capture shows a visible courtyard with widespread gold flecks.
+Separate normal, roughness and metalness captures exit zero. Base color has no
+corresponding gold flecks; walls have high roughness, and the original packed
+textures contain nonzero metalness (for example, the stone-wall blue channel
+ranges from 0 to 90/255). These observations do not identify the cause or prove
+material correctness. Pixel/pass-level isolation remains required.
+
+Source inspection identifies a separate directional-selection limitation:
+`BuildFrameLightSelection` selects the resolved Primary atmosphere light, while
+the glTF importer leaves the imported directional light without environment
+participation. Runtime logs report no resolved sun. Existing glTF `oxygen`
+extras expose only contribution/shadow booleans; adding an unsupported role key
+would have no effect. No role promotion or renderer workaround was introduced.
+Canonical role import and independent directional lighting remain ED-M08 gates.
+
+Exposure is governed by the
+[exposure and LightBench correction plan](../../../projects/Oxygen.Engine/design/vortex/plan/exposure-and-lightbench-correction.md).
+The fixed-exposure floor, automatic initialization/history and settings precedence
+issues prevent treating this scene as an exposure calibration. No Vortex shader,
+exposure equation or runtime lighting implementation changed for this source repair.
+
+The [repair evidence](../../../artifacts/ed-m08/all-scenes/sponza-light-repair.json)
+records source checks, native recooking, captures, settings restoration and open
+gates. Images are embedded RenderDoc thumbnails, not replay-derived measurements.
 
 `20260916-065903` uses the existing Base Color diagnostic mode `7`. Its reviewed
 image shows the textured courtyard from the preserved artist camera. It proves
 useful geometry/material/camera inspection independently of illumination; it is
 not a lit-scene result, light parity proof or an authored-light repair. The final
-full sweep uses the normal lit mode for Sponza and retains that distinction.
+full sweep used the normal lit mode for Sponza and retains that distinction.
 
 ## Procedural workload
 
