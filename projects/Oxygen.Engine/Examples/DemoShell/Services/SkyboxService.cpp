@@ -23,40 +23,58 @@
 namespace oxygen::examples {
 namespace {
 
-auto CubeLayoutFromSkyboxLayout(const SkyboxService::Layout layout)
-  -> content::import::CubeMapImageLayout
-{
-  using content::import::CubeMapImageLayout;
+  auto CubeLayoutFromSkyboxLayout(const SkyboxService::Layout layout)
+    -> content::import::CubeMapImageLayout
+  {
+    using content::import::CubeMapImageLayout;
 
-  switch (layout) {
-  case SkyboxService::Layout::kHorizontalCross:
-    return CubeMapImageLayout::kHorizontalCross;
-  case SkyboxService::Layout::kVerticalCross:
-    return CubeMapImageLayout::kVerticalCross;
-  case SkyboxService::Layout::kHorizontalStrip:
-    return CubeMapImageLayout::kHorizontalStrip;
-  case SkyboxService::Layout::kVerticalStrip:
-    return CubeMapImageLayout::kVerticalStrip;
-  case SkyboxService::Layout::kEquirectangular:
+    switch (layout) {
+    case SkyboxService::Layout::kHorizontalCross:
+      return CubeMapImageLayout::kHorizontalCross;
+    case SkyboxService::Layout::kVerticalCross:
+      return CubeMapImageLayout::kVerticalCross;
+    case SkyboxService::Layout::kHorizontalStrip:
+      return CubeMapImageLayout::kHorizontalStrip;
+    case SkyboxService::Layout::kVerticalStrip:
+      return CubeMapImageLayout::kVerticalStrip;
+    case SkyboxService::Layout::kEquirectangular:
+      return CubeMapImageLayout::kUnknown;
+    }
     return CubeMapImageLayout::kUnknown;
   }
-  return CubeMapImageLayout::kUnknown;
-}
 
 } // namespace
+
+struct SkyboxService::RequestState {
+  SkyboxService* owner;
+  std::uint64_t generation { 0 };
+};
 
 SkyboxService::SkyboxService(observer_ptr<content::IAssetLoader> asset_loader,
   observer_ptr<scene::Scene> scene)
   : asset_loader_(asset_loader)
-  , scene_(scene)
+  , scene_(scene ? scene->weak_from_this() : std::weak_ptr<scene::Scene> {})
+  , scene_bound_(scene != nullptr)
+  , request_state_(std::make_shared<RequestState>(this))
 {
 }
 
-SkyboxService::~SkyboxService() { ReleasePinnedResource(); }
+SkyboxService::~SkyboxService()
+{
+  request_state_.reset();
+  ReleasePinnedResource();
+}
+
+auto SkyboxService::CancelPendingLoads() noexcept -> void
+{
+  ++request_state_->generation;
+}
 
 auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const LoadOptions& options, LoadCallback on_complete) -> void
 {
+  CancelPendingLoads();
+  const auto generation = request_state_->generation;
   LoadResult result;
 
   const std::filesystem::path img_path { file_path };
@@ -231,22 +249,31 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
       .key = resource_key,
       .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
     },
-    [this, on_complete = std::move(on_complete), format_name,
+    [request = std::weak_ptr(request_state_), generation, packed,
+      on_complete = std::move(on_complete), format_name,
       should_tonemap_hdr_to_ldr, tonemap_forced,
       face_size = static_cast<int>(payload.desc.width),
       mip_levels = payload.desc.mip_levels,
       resource_key](std::shared_ptr<data::TextureResource> tex) mutable {
+      const auto state = request.lock();
+      if (!state || state->generation != generation) {
+        return;
+      }
+      auto& owner = *state->owner;
+      if (owner.scene_bound_ && owner.scene_.expired()) {
+        return;
+      }
       LoadResult callback_result;
       callback_result.resource_key = resource_key;
       callback_result.face_size = face_size;
 
       if (!tex) {
         callback_result.status_message = "Skybox texture upload failed";
-      } else if (!PinCurrentResource(resource_key)) {
+      } else if (!owner.PinCurrentResource(resource_key)) {
         callback_result.status_message
           = "Skybox texture loaded but could not be pinned";
       } else {
-        current_resource_key_ = resource_key;
+        owner.current_resource_key_ = resource_key;
         callback_result.success = true;
         callback_result.status_message = std::string("Loaded (") + format_name
           + (should_tonemap_hdr_to_ldr ? ", HDR->LDR" : "")
@@ -265,9 +292,14 @@ auto SkyboxService::LoadAndEquip(const std::string& file_path,
   LoadCallback on_complete) -> void
 {
   StartLoadSkybox(file_path, options,
-    [this, params, on_complete = std::move(on_complete)](LoadResult result) {
+    [request = std::weak_ptr(request_state_), params,
+      on_complete = std::move(on_complete)](LoadResult result) {
+      const auto state = request.lock();
+      if (!state) {
+        return;
+      }
       if (result.success) {
-        ApplyToScene(params);
+        state->owner->ApplyToScene(params);
       }
       if (on_complete) {
         on_complete(std::move(result));
@@ -277,6 +309,7 @@ auto SkyboxService::LoadAndEquip(const std::string& file_path,
 
 auto SkyboxService::SetSkyboxResourceKey(content::ResourceKey key) -> void
 {
+  CancelPendingLoads();
   if (asset_loader_ && key != content::ResourceKey { 0U }
     && asset_loader_->HasTexture(key)) {
     static_cast<void>(PinCurrentResource(key));
@@ -288,12 +321,13 @@ auto SkyboxService::SetSkyboxResourceKey(content::ResourceKey key) -> void
 
 auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
 {
-  if (!scene_ || current_resource_key_ == content::ResourceKey { 0U }
+  const auto scene = scene_.lock();
+  if (!scene || current_resource_key_ == content::ResourceKey { 0U }
     || (!params.enable_sky_sphere && !params.enable_sky_light)) {
     return;
   }
 
-  auto env = scene_->GetEnvironment();
+  auto env = scene->GetEnvironment();
   if (!env) {
     auto new_env = std::make_unique<scene::SceneEnvironment>();
 
@@ -318,7 +352,7 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
       sky_light.SetTintRgb(params.tint_rgb);
     }
 
-    scene_->SetEnvironment(std::move(new_env));
+    scene->SetEnvironment(std::move(new_env));
   } else {
     if (params.enable_sky_sphere) {
       auto sky = env->TryGetSystem<scene::environment::SkySphere>();
@@ -378,11 +412,12 @@ auto SkyboxService::ReleasePinnedResource() noexcept -> void
 
 auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
 {
-  if (!scene_) {
+  const auto scene = scene_.lock();
+  if (!scene) {
     return;
   }
 
-  auto env = scene_->GetEnvironment();
+  auto env = scene->GetEnvironment();
   if (!env) {
     return;
   }
